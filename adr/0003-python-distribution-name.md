@@ -1,6 +1,6 @@
 # 0003. Python distribution name
 
-Status: proposed (needs owner decision before P1 ships Python code)
+Status: proposed; deferred while the project is closed source (ADR 0005)
 Date: 2026-10-23
 Design sections: 22.1 (Name: Python package ceteris)
 
