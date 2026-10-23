@@ -1,9 +1,11 @@
-import { type Provinces, RESOURCE_GROUPS, TERRAIN } from "./data";
+import { type Counties, type Provinces, RESOURCE_GROUPS, TERRAIN } from "./data";
 import type { CostTree } from "./engine";
 
 interface Props {
   p: Provinces;
   i: number;
+  counties: Counties | null;
+  county: number | null;
   origin: number | null;
   tree: CostTree | null;
   onClose: () => void;
@@ -12,7 +14,7 @@ interface Props {
 const num = (x: number, digits = 0) => x.toLocaleString("en", { maximumFractionDigits: digits });
 
 /** Every attribute of one province (Section 20.2, province inspector). */
-export function Inspector({ p, i, origin, tree, onClose }: Props) {
+export function Inspector({ p, i, counties, county, origin, tree, onClose }: Props) {
   const c = p.country[i];
   const rows: [string, string][] = [
     ["Province ID", p.id[i]],
@@ -29,6 +31,16 @@ export function Inspector({ p, i, origin, tree, onClose }: Props) {
     ["Development slice", p.dev_slice[i] ? "yes" : "no"],
     ...RESOURCE_GROUPS.map((g): [string, string] => [`Sites, ${g}`, String(p[`res_${g}`][i])]),
   ];
+  // A click near a border can hit a county clipped to the neighbouring province; show it only if it nests here.
+  if (counties && county !== null && counties.province[county] === i) {
+    rows.push(
+      ["County", counties.name[county] || "unnamed"],
+      ["County level", counties.level[county]],
+      ["County area", `${num(counties.area_km2[county])} km²`],
+      ["County elevation", `${num(counties.elev_mean_m[county])} m`],
+      ["County TRI", `${num(counties.tri_m[county], 1)} m`],
+    );
+  }
   if (tree && origin !== null) {
     rows.push(
       ["Origin", p.name[origin]],
