@@ -1,0 +1,1756 @@
+# Data-source licence manifest (Sections 2.5, 16, 22; ADR 0005).
+#
+# One entry per source the pipeline may read. Licences were checked on the provider's own
+# page or repository record on the `checked` date; research, not legal advice.
+#
+#   use     primary | complement | fallback | validation | rejected
+#   policy  what a public release may do: bundle | bundle-aggregates | fetch | exclude
+#   closed_source_only = true marks sources usable only while nothing is distributed
+#   (non-commercial, no licence stated, or permission needed). They must be replaced or
+#   cleared before `distribution` becomes "open"; check_sources.py enforces this.
+#
+# Validate: python3 -I python/ceteris/packs/check_sources.py
+
+[project]
+distribution = "closed"
+
+# ---------------------------------------------------------------- boundaries, geography
+
+[[source]]
+id = "natural-earth-admin1"
+name = "Natural Earth admin-1 states and provinces, 1:10m"
+provider = "Natural Earth (NACIS)"
+version = "5.1.1"
+role = "Province boundaries, global base (5.2)"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://www.naturalearthdata.com/about/terms-of-use/"
+attribution = "Made with Natural Earth (optional)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Public domain, global first-level coverage; replaces geoBoundaries as the base"
+checked = 2026-10-23
+confidence = "high"
+replaces = "geoboundaries"
+notes = "Beta layer: about half the units lack ISO/HASC codes, some countries mix levels. Current borders; the 2000 vintage is reconstructed in the pipeline."
+
+[[source]]
+id = "natural-earth"
+name = "Natural Earth physical and cultural vectors, 1:10m"
+provider = "Natural Earth (NACIS)"
+version = "5.1.2"
+role = "Coastlines, rivers, lakes, railroads, map context (5.1, 5.3)"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://www.naturalearthdata.com/about/terms-of-use/"
+attribution = "Made with Natural Earth (optional)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Public domain"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "fao-gaul-2024"
+name = "FAO Global Administrative Unit Layers 2024, level 1"
+provider = "FAO"
+version = "2024 v2.0 (updated 2025-07)"
+role = "Province boundary cross-check and substitution (5.2)"
+licence = "CC-BY-4.0"
+licence_url = "https://data.apps.fao.org/catalog/iso/34f97afc-6218-459a-971d-5af1162d318a"
+attribution = "FAO GAUL 2024; FAO logo may not be used"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0, official-source compilation aligned to UN boundaries"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Record refers to country-specific licences in a metadata file not yet read; read it before shipping geometries."
+
+[[source]]
+id = "ocha-cod-ab"
+name = "OCHA Common Operational Datasets, administrative boundaries"
+provider = "UN OCHA via HDX, national governments"
+version = "per country"
+role = "Country-level boundary refinement where available (5.2)"
+licence = "CC-BY-3.0-IGO"
+licence_url = "https://data.humdata.org/dataset?q=cod-ab"
+attribution = "Per HDX dataset page"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "167 of 170 countries CC BY IGO; about 160 countries, none for US, Canada, Western Europe, India, Japan, Australia"
+checked = 2026-10-23
+confidence = "high"
+notes = "Turkey is humanitarian use only: skip TUR. Read each dataset's CKAN license_id at build time."
+
+[[source]]
+id = "geoboundaries"
+name = "geoBoundaries gbOpen"
+provider = "William & Mary geoLab"
+version = "6.0.0"
+role = "Province boundaries (5.2), superseded as base"
+licence = "LicenseRef-geoBoundaries-per-file"
+licence_url = "https://www.geoboundaries.org/api.html"
+attribution = "Runfola et al. (2020) plus each file's boundarySource"
+commercial_use = true
+share_alike = true
+use = "complement"
+policy = "fetch"
+reason = "Licence varies per file (boundaryLicense); many ADM1 files are ODbL or CC BY-SA"
+checked = 2026-10-23
+confidence = "high"
+replaced_by = "natural-earth-admin1"
+notes = "If used, filter to files whose boundaryLicense is PD, CC0 or CC BY and record each in the pack manifest."
+
+[[source]]
+id = "gadm"
+name = "GADM"
+provider = "GADM"
+version = "4.1"
+role = "Province boundaries"
+licence = "LicenseRef-GADM"
+licence_url = "https://gadm.org/license.html"
+attribution = "n/a"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Non-commercial; redistribution needs permission. Also referenced by DOSE region keys: never bundle GADM geometries."
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "h3"
+name = "H3 hexagonal grid"
+provider = "Uber"
+version = "4.x (h3-py 4.5.0)"
+role = "Base raster grid (5.1); software dependency"
+licence = "Apache-2.0"
+licence_url = "https://github.com/uber/h3/blob/master/LICENSE"
+attribution = "Keep LICENSE and NOTICE"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Same licence as the code"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- population, settlement, night lights
+
+[[source]]
+id = "worldpop"
+name = "WorldPop unconstrained global mosaics, 1 km"
+provider = "WorldPop, University of Southampton"
+version = "2000-2020 mosaics"
+role = "Gridded population (5.1, 6.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://hub.worldpop.org/geodata/summary?id=24777"
+attribution = "WorldPop and CIESIN (2018), doi:10.5258/SOTON/WP00647"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0; rasters too large to bundle whole"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "ghsl"
+name = "Global Human Settlement Layer: GHS-POP, GHS-BUILT-S"
+provider = "European Commission JRC"
+version = "R2023A (epoch E2000)"
+role = "Population and built-up area, urban share (5.1, 6.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://human-settlement.emergency.copernicus.eu/GHSLhowToCite.php"
+attribution = "Cite the release's reference publication and the product data citation"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "dmsp-ols"
+name = "DMSP-OLS Nighttime Lights v4 stable lights"
+provider = "Earth Observation Group, Colorado School of Mines"
+version = "v4 composites, 1992-2013"
+role = "Downscaling economic activity in 2000 (5.1, 5.2)"
+licence = "CC-BY-4.0"
+licence_url = "https://eogdata.mines.edu/files/EOG_products_CC_License.pdf"
+attribution = "Made utilizing DMSP nighttime lights data produced by EOG, Payne Institute, Colorado School of Mines"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0; bundling aggregates spares users an EOG login"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "viirs-vnl"
+name = "VIIRS Nighttime Lights annual composites"
+provider = "Earth Observation Group, Colorado School of Mines"
+version = "VNL V2.1/V2.2, 2012 onward"
+role = "Downscaling after 2012; validation"
+licence = "CC-BY-4.0"
+licence_url = "https://eogdata.mines.edu/files/EOG_products_CC_License.pdf"
+attribution = "EOG notice as for DMSP, plus Elvidge et al. (2021)"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "black-marble"
+name = "NASA Black Marble VNP46A4"
+provider = "NASA GSFC, LAADS DAAC"
+version = "VNP46A4, 2012 onward"
+role = "Night lights cross-check"
+licence = "CC0-1.0"
+licence_url = "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+attribution = "Roman et al. (2018) plus product DOI (requested)"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "NASA-led mission data are CC0"
+checked = 2026-10-23
+confidence = "medium"
+
+# ---------------------------------------------------------------- land, crops, resources, energy
+
+[[source]]
+id = "gaez-v4"
+name = "FAO GAEZ v4 crop suitability and attainable yields"
+provider = "FAO and IIASA"
+version = "v4 (2021)"
+role = "Crop suitability classes (5.1, 7.2)"
+licence = "LicenseRef-FAO-GAEZ-v4"
+licence_url = "https://gaez.fao.org/pages/disclaimer"
+attribution = "FAO and IIASA. Global Agro Ecological Zones version 4 (GAEZ v4)"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "Non-commercial terms; no permissive dataset gives suitability classes. Attainable yields come from ISIMIP3a instead."
+checked = 2026-10-23
+confidence = "medium"
+closed_source_only = true
+notes = "Before opening: derive suitability from isimip3a-ggcmi and mapspam-2000, or get FAO permission (copyright@fao.org)."
+
+[[source]]
+id = "isimip3a-ggcmi"
+name = "ISIMIP3a GGCMI crop model outputs"
+provider = "ISIMIP / GGCMI"
+version = "ISIMIP3a obsclim, 1901-2016"
+role = "Attainable yields (full irrigation, high input) by crop (7.2)"
+licence = "CC0-1.0"
+licence_url = "https://www.isimip.org/gettingstarted/terms-of-use/licenses-publicly-available-isimip-data"
+attribution = "Cite ISIMIP and the crop models used (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC0; closest permissive proxy for GAEZ attainable yield"
+checked = 2026-10-23
+confidence = "high"
+replaces = "gaez-v4"
+
+[[source]]
+id = "mapspam-2000"
+name = "MapSPAM SPAM2000 (and 2005, 2010, 2020)"
+provider = "IFPRI / HarvestChoice"
+version = "SPAM2000 v3.0.7"
+role = "Harvested area, production and yield around 2000 (5.2, 7.2)"
+licence = "CC-BY-4.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/A50I2T"
+attribution = "IFPRI SPAM citation; adaptations carry the IFPRI disclaimer sentence"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0 under IFPRI default terms"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "gdhy"
+name = "Global Dataset of Historical Yields"
+provider = "Iizumi, NARO (PANGAEA)"
+version = "v1.2+v1.3 aligned, 1981-2016"
+role = "Yield time series for maize, rice, wheat, soybean; calibration targets"
+licence = "CC-BY-4.0"
+licence_url = "https://doi.pangaea.de/10.1594/PANGAEA.909132"
+attribution = "Iizumi and Sakai (2020), PANGAEA"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "earthstat"
+name = "EarthStat (Monfreda 2008, Mueller 2012)"
+provider = "University of Minnesota / McGill"
+version = "2008, 2012"
+role = "Crop area and yields around 2000"
+licence = "LicenseRef-EarthStat"
+licence_url = "https://www.earthstat.org"
+attribution = "n/a"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Research and teaching only; re-release needs permission. MapSPAM covers the role."
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "gem-trackers"
+name = "Global Energy Monitor trackers (coal, oil and gas plants, pipelines, mines)"
+provider = "Global Energy Monitor"
+version = "Latest release per tracker, pinned by date"
+role = "Energy assets (5.2, 7.7)"
+licence = "CC-BY-4.0"
+licence_url = "https://globalenergymonitor.org/creative-commons-public-license/"
+attribution = "<Tracker name>, Global Energy Monitor, <release>"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0 unless otherwise noted"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Drop rows flagged with third-party NC licences (e.g. TransitionZero solar records). Check the licence sheet in each download."
+
+[[source]]
+id = "usgs-mrds"
+name = "USGS Mineral Resources Data System"
+provider = "USGS"
+version = "Final (DS-20), frozen 2011"
+role = "Mineral deposits (5.2)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://mrdata.usgs.gov/metadata/mrds.faq.html"
+attribution = "Mason and Arndt (1996), USGS DS-20 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US federal public domain"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- transport
+
+[[source]]
+id = "osm"
+name = "OpenStreetMap"
+provider = "OpenStreetMap Foundation and contributors"
+version = "Dated planet or Geofabrik snapshot"
+role = "Roads, rail, ports, pipelines (5.3, 5.6)"
+licence = "ODbL-1.0"
+licence_url = "https://www.openstreetmap.org/copyright"
+attribution = "(c) OpenStreetMap contributors, ODbL, openstreetmap.org/copyright"
+commercial_use = true
+share_alike = true
+use = "primary"
+policy = "bundle-aggregates"
+shipped_under = "ODbL-1.0"
+reason = "Derived transport tables ship as a separate ODbL artifact, as Section 5.6 accepts"
+checked = 2026-10-23
+confidence = "high"
+notes = "Starts 2004: the 2000 network is reconstructed. The open build script satisfies ODbL 4.6 for produced works."
+
+[[source]]
+id = "grip4"
+name = "GRIP4 global roads"
+provider = "PBL / GLOBIO (Meijer et al. 2018)"
+version = "GRIP4"
+role = "Road network and density where OSM is thin (5.3)"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/6420961"
+attribution = "Meijer et al. (2018), Environmental Research Letters"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "fetch"
+reason = "About 35% of road length comes from OSM, so ODbL obligations plausibly persist; fetch until resolved"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "nga-wpi"
+name = "World Port Index (Pub. 150)"
+provider = "US National Geospatial-Intelligence Agency"
+version = "Current edition"
+role = "Ports and capacities (5.3)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://msi.nga.mil/Publications/WPI"
+attribution = "NGA World Port Index (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US government work, no copyright claimed"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "ourairports"
+name = "OurAirports"
+provider = "OurAirports"
+version = "Dated daily dump"
+role = "Airports (5.3)"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://ourairports.com/data/"
+attribution = "none required"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Released to the public domain"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "searoute"
+name = "Eurostat searoute maritime network"
+provider = "Eurostat (ORNL Global Shipping Lane Network 2000 base)"
+version = "Current"
+role = "Maritime routing graph (5.3)"
+licence = "EUPL-1.2"
+licence_url = "https://github.com/eurostat/searoute"
+attribution = "Eurostat searoute; ORNL shipping lane network"
+commercial_use = true
+share_alike = true
+use = "primary"
+policy = "fetch"
+reason = "Code is EUPL (weak copyleft); the ORNL network's own licence is unverified"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "wb-shipping-density"
+name = "Global Shipping Traffic Density"
+provider = "World Bank / IMF"
+version = "AIS Jan 2015 - Feb 2021"
+role = "Sea-lane weights and capacities (5.3, 8.4)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0037580/global-shipping-traffic-density"
+attribution = "World Bank, Global Shipping Traffic Density"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- climate, hazards
+
+[[source]]
+id = "era5"
+name = "ERA5 reanalysis"
+provider = "ECMWF, Copernicus C3S"
+version = "ERA5 single levels"
+role = "Historical weather shock tape 2000-2024 (13.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels"
+attribution = "Contains modified Copernicus Climate Change Service information <year>; Hersbach et al. (2020)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0 since 2 July 2025; aggregates spare users a CDS account"
+checked = 2026-10-23
+confidence = "high"
+notes = "CDS Terms of Use update effective 2026-10-28: recheck."
+
+[[source]]
+id = "fair"
+name = "FaIR climate emulator"
+provider = "OMS-NetZero (Smith, Leach et al.)"
+version = "2.2.5"
+role = "Climate emulator (13.2); software dependency"
+licence = "Apache-2.0"
+licence_url = "https://github.com/OMS-NetZero/FAIR/blob/master/LICENSE"
+attribution = "Keep NOTICE; cite Leach et al. (2021)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Same licence as the code"
+checked = 2026-10-23
+confidence = "high"
+notes = "Calibrated parameter sets (fair-calibrate, Zenodo) are separate data: check before use."
+
+[[source]]
+id = "usgs-comcat"
+name = "USGS ComCat earthquake catalog"
+provider = "USGS"
+version = "Live, pinned by query date"
+role = "Earthquake hazard events (13.4)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+attribution = "USGS (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US public domain"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "ncei-hazards"
+name = "NCEI/WDS Significant Earthquake and Tsunami databases"
+provider = "NOAA NCEI"
+version = "Live, pinned by query date"
+role = "Earthquake and tsunami impacts (13.4, validation)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ngdc.mgg.hazards:G012153"
+attribution = "NOAA NCEI / WDS (requested)"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "US government work, access unrestricted"
+checked = 2026-10-23
+confidence = "medium"
+replaces = "em-dat"
+notes = "Replaces EM-DAT for earthquakes and tsunamis only."
+
+[[source]]
+id = "ibtracs"
+name = "IBTrACS tropical cyclone best tracks"
+provider = "NOAA NCEI"
+version = "v04r01"
+role = "Cyclone hazard events (13.4)"
+licence = "LicenseRef-NOAA-open"
+licence_url = "https://www.ncei.noaa.gov/products/international-best-track-archive"
+attribution = "Knapp et al. (2010); IBTrACS v04"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Full and open access"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Contains RSMC data; NCEI points to WMO Resolution 40 for commercial use."
+
+[[source]]
+id = "speibase"
+name = "SPEIbase drought index"
+provider = "CSIC"
+version = "v2.11 (CRU TS 4.09), 1901-2024"
+role = "Drought hazard (13.1, 13.4)"
+licence = "ODbL-1.0"
+licence_url = "https://spei.csic.es/database.html"
+attribution = "Begueria, Vicente-Serrano et al., SPEIbase"
+commercial_use = true
+share_alike = true
+use = "primary"
+policy = "bundle-aggregates"
+shipped_under = "ODbL-1.0"
+reason = "ODbL on the provider page (Earth Engine lists CC BY 4.0); ship with the ODbL artifact"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "em-dat"
+name = "EM-DAT international disaster database"
+provider = "CRED, UCLouvain"
+version = "public.emdat.be, current"
+role = "Disaster impacts, validation only (13.4, 16)"
+licence = "LicenseRef-EM-DAT"
+licence_url = "https://doc.emdat.be/docs/legal/terms-of-use/"
+attribution = "Per the EM-DAT Attribution and Citation Policy"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "No redistribution, no derivative databases, non-commercial. No open source covers flood and multi-hazard impacts."
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+notes = "Manual logged-in download by the user; never in any artifact. Earthquakes and tsunamis use ncei-hazards instead."
+
+[[source]]
+id = "global-flood-db"
+name = "Global Flood Database"
+provider = "Cloud to Street (Tellman et al. 2021)"
+version = "v1, 2000-2018"
+role = "Flood events, validation"
+licence = "CC-BY-NC-4.0"
+licence_url = "https://developers.google.com/earth-engine/datasets/catalog/GLOBAL_FLOOD_DB_MODIS_EVENTS_V1"
+attribution = "Tellman et al. (2021), Nature"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "Non-commercial; no open flood-event source found"
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+
+[[source]]
+id = "gdis"
+name = "GDIS geocoded disasters"
+provider = "Rosvold and Buhaug, NASA SEDAC"
+version = "1.00"
+role = "Disaster geocodes"
+licence = "CC-BY-4.0"
+licence_url = "https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-pend-gdis-1.00"
+attribution = "n/a"
+commercial_use = true
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Embeds EM-DAT identifiers and locations: an EM-DAT derivative, legal risk"
+checked = 2026-10-23
+confidence = "medium"
+
+# ---------------------------------------------------------------- production, trade
+
+[[source]]
+id = "oecd-icio"
+name = "OECD Inter-Country Input-Output tables"
+provider = "OECD"
+version = "2025 edition, second revision (1995-2022)"
+role = "Production and input-output structure (7.1, 7.2)"
+licence = "LicenseRef-OECD-Terms"
+licence_url = "https://www.oecd.org/en/about/terms-conditions.html"
+attribution = "OECD (2025), Inter-Country Input-Output Database, <URL> (accessed <date>); pass on to sub-licensees"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "OECD data terms allow distribution for any purpose, including commercial"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices."
+
+[[source]]
+id = "baci"
+name = "CEPII BACI bilateral trade"
+provider = "CEPII"
+version = "202601, HS92 (1995-2024)"
+role = "Bilateral trade flows (8.3, 15.4)"
+licence = "etalab-2.0"
+licence_url = "https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=37"
+attribution = "Gaulier and Zignago (2010), CEPII WP 2010-23"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Etalab 2.0 (CC BY-like)"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "cepii-gravity"
+name = "CEPII Gravity database"
+provider = "CEPII"
+version = "1948-2020"
+role = "Distances, RTA and WTO membership by country pair (5.4, 8.5)"
+licence = "etalab-2.0"
+licence_url = "https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=8"
+attribution = "Conte, Cotterlaz and Mayer (2022), CEPII"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Etalab 2.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "wb-dta"
+name = "Deep Trade Agreements database"
+provider = "World Bank"
+version = "v2, 1958-2022"
+role = "Preferential agreement content (8.5)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0065624"
+attribution = "World Bank, Deep Trade Agreements"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "wto-tariffs"
+name = "WTO Tariff and Trade Data (IDB, CTS)"
+provider = "WTO"
+version = "Platform, about 1996 onward"
+role = "Applied MFN tariffs by product (5.4, 8.5)"
+licence = "LicenseRef-WTO-TTD"
+licence_url = "https://ttd.wto.org/docs/Terms_of_Use_WTO_Tariff_and_Trade_Data.pdf"
+attribution = "WTO Tariff and Trade Data"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "Non-commercial, no redistribution, no mass downloads. No open bilateral HS6 tariff source exists."
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+notes = "Open approximation for release: WDI MFN and applied tariff aggregates plus wb-dta and cepii-gravity agreement indicators. Asking Teti to license the Global Tariff Database would close the gap."
+
+[[source]]
+id = "unctad-trains"
+name = "UNCTAD TRAINS via WITS"
+provider = "UNCTAD and World Bank"
+version = "WITS, 2000 onward"
+role = "Preferential tariffs by country pair and product (5.4, 8.5)"
+licence = "LicenseRef-UNCTAD-TRAINS"
+licence_url = "https://wits.worldbank.org/faqs.html"
+attribution = "UNCTAD TRAINS database"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No redistribution without UNCTAD permission; login required. No open equivalent."
+checked = 2026-10-23
+confidence = "medium"
+closed_source_only = true
+
+[[source]]
+id = "teti-gtd"
+name = "Global Tariff Database"
+provider = "Feodora Teti"
+version = "v_beta1-2024-12"
+role = "Bilateral applied tariffs 1988-2021"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://feodorateti.github.io/data.html"
+attribution = "Teti (2024)"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Best coverage but no licence stated; candidate to request a licence for"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "dose"
+name = "DOSE sub-national economic output"
+provider = "PIK / MCC (Wenz et al. 2023)"
+version = "V2.14 (Zenodo 20035157)"
+role = "Province output by sector (5.2)"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/7573249"
+attribution = "Wenz et al. (2023), Scientific Data, doi:10.1038/s41597-023-02323-8"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+notes = "Region keys reference GADM: join on codes, never bundle GADM geometries."
+
+[[source]]
+id = "kummu-gdp"
+name = "Gridded GDP and HDI"
+provider = "Kummu, Taka and Guillaume (Dryad)"
+version = "v2 (2020), 1990-2015"
+role = "Gridded GDP for province downscaling (5.2)"
+licence = "CC0-1.0"
+licence_url = "https://datadryad.org/stash/dataset/doi:10.5061/dryad.dk1j0"
+attribution = "Kummu et al. (2020), doi:10.5061/dryad.dk1j0 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "chen-gdp"
+name = "1 km gridded GDP 1992-2019"
+provider = "Chen et al. (2022), figshare 17004523"
+version = "2022"
+role = "Gridded GDP cross-check"
+licence = "CC-BY-4.0"
+licence_url = "https://figshare.com/articles/dataset/17004523"
+attribution = "Chen et al. (2022), Scientific Data"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "pwt"
+name = "Penn World Table"
+provider = "Groningen Growth and Development Centre"
+version = "11.0 (1950-2023)"
+role = "Capital stocks, productivity levels (7.2, 7.5)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.rug.nl/ggdc/productivity/pwt/"
+attribution = "Feenstra, Inklaar and Timmer (2015), AER"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- macro, money, finance, fiscal
+
+[[source]]
+id = "wdi"
+name = "World Development Indicators"
+provider = "World Bank"
+version = "Current release"
+role = "Macro, social, tariff and fiscal aggregates (initialization, targets)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0037712/World-Development-Indicators"
+attribution = "The World Bank: World Development Indicators"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0 per series; replaces IMF series"
+checked = 2026-10-23
+confidence = "high"
+replaces = "imf-data"
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction."
+
+[[source]]
+id = "wb-gem"
+name = "Global Economic Monitor"
+provider = "World Bank"
+version = "Updated 2026-10-02"
+role = "Monthly exchange rates, CPI, reserves (9.2, 9.5); input to the derived regime classification"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0037798"
+attribution = "World Bank, Global Economic Monitor"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "wb-fiscal-space"
+name = "Cross-Country Database of Fiscal Space"
+provider = "World Bank Prospects Group"
+version = "Catalog version, 1990-2022"
+role = "Government debt, fiscal and primary balance (9.4, 9.6)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0065313"
+attribution = "Kose, Kurlat, Ohnsorge and Sugawara, World Bank"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+notes = "The newer 2025 version's licence is unchecked."
+
+[[source]]
+id = "wb-ids"
+name = "International Debt Statistics"
+provider = "World Bank"
+version = "Current"
+role = "External debt of low and middle-income economies (9.4, 9.5)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0038015"
+attribution = "World Bank, International Debt Statistics"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "unctadstat"
+name = "UNCTADstat"
+provider = "UNCTAD"
+version = "Current"
+role = "GDP, exchange rates, balance of payments, FDI stocks, free-market commodity prices"
+licence = "CC-BY-3.0-IGO"
+licence_url = "https://unctadstat.unctad.org/EN/About.html"
+attribution = "UNCTADstat"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 3.0 IGO site-wide"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Commodity price series: confirm no vendor exception before bundling."
+
+[[source]]
+id = "unsd-nama"
+name = "UN National Accounts Main Aggregates"
+provider = "UN Statistics Division (UNdata)"
+version = "1970-2023"
+role = "GDP gaps outside WDI"
+licence = "LicenseRef-UNdata"
+licence_url = "https://data.un.org/Host.aspx?Content=UNdataUse"
+attribution = "UNSD, National Accounts Main Aggregates Database"
+commercial_use = false
+share_alike = false
+use = "complement"
+policy = "fetch"
+reason = "Free redistribution with citation, but commercial use is not addressed; treated as not granted"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "oecd-stats"
+name = "OECD statistics (Economic Outlook, FDI, Global Revenue Statistics)"
+provider = "OECD"
+version = "Current"
+role = "OECD detail, FDI positions, tax structure for 141 economies (9.5, 9.6)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.oecd.org/en/about/oecd-open-by-default-policy.html"
+attribution = "OECD (year), <dataset>, <URL> (accessed <date>)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "OECD default licence CC BY 4.0 since July 2024; replaces UNU-WIDER GRD for tax structure"
+checked = 2026-10-23
+confidence = "medium"
+replaces = "unu-wider-grd"
+notes = "Revenue Statistics may contain ATAF and CIAT partner data: check notices."
+
+[[source]]
+id = "imf-data"
+name = "IMF IFS, WEO, GFS, CPIS, CDIS"
+provider = "IMF"
+version = "Current"
+role = "Policy rates, BoP detail, WEO forecast benchmark (15.7)"
+licence = "LicenseRef-IMF-Data"
+licence_url = "https://www.imf.org/en/About/copyright-and-terms"
+attribution = "Source: International Monetary Fund, <database>, <link>"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "Commercial reuse needs permission; bulk automated download barred. WDI covers most series; policy rates and the WEO benchmark have no open equivalent."
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+
+[[source]]
+id = "bis-stats"
+name = "BIS statistics (locational banking, policy rates, credit)"
+provider = "BIS"
+version = "Current"
+role = "Cross-border bank claims (15.7), policy rates (9.2)"
+licence = "LicenseRef-BIS-Statistics"
+licence_url = "https://data.bis.org/help/legal"
+attribution = "Source: BIS"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No-extra-charge and no-other-use conditions bind downstream users. No open bilateral banking source."
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+notes = "Open partial substitutes: UNCTADstat FDI, OECD FDI, WDI/IDS flows; Fed and ECB open data for some policy rates."
+
+[[source]]
+id = "irr-regimes"
+name = "Ilzetzki-Reinhart-Rogoff exchange-rate regime classification"
+provider = "Ilzetzki, Reinhart and Rogoff"
+version = "Stable Nov 2021 (1946-2019)"
+role = "De facto regime initialization (9.2), validation"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://www.ilzetzki.com/irr-data"
+attribution = "Ilzetzki, Reinhart and Rogoff (2019), QJE 134(2)"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No licence stated; no licensed alternative"
+checked = 2026-10-23
+confidence = "medium"
+closed_source_only = true
+notes = "Open path: derive a Shambaugh-style classification (2% band against the anchor) from wb-gem exchange rates and ship it as our own data."
+
+[[source]]
+id = "unu-wider-grd"
+name = "UNU-WIDER Government Revenue Dataset"
+provider = "UNU-WIDER"
+version = "2025"
+role = "Revenue by instrument (9.6)"
+licence = "CC-BY-NC-SA-3.0-IGO"
+licence_url = "https://www.wider.unu.edu/about/copyright"
+attribution = "UNU-WIDER (2025), GRD, doi:10.35188/UNU-WIDER/GRD-2025"
+commercial_use = false
+share_alike = true
+use = "rejected"
+policy = "exclude"
+reason = "Non-commercial share-alike; OECD Global Revenue Statistics plus WDI cover the role"
+checked = 2026-10-23
+confidence = "medium"
+replaced_by = "oecd-stats"
+
+[[source]]
+id = "pip"
+name = "Poverty and Inequality Platform (incl. percentiles)"
+provider = "World Bank"
+version = "Sep 2026"
+role = "Income distributions per pop (3.2, 15.7)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0063646"
+attribution = "World Bank, Poverty and Inequality Platform"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+replaces = "wid"
+
+[[source]]
+id = "swiid"
+name = "Standardized World Income Inequality Database"
+provider = "Frederick Solt"
+version = "Dataverse v16 (2026-04-08)"
+role = "Complete Gini panel with uncertainty"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/LM4OWF"
+attribution = "Solt (2020), Social Science Quarterly (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "wid"
+name = "World Inequality Database"
+provider = "World Inequality Lab"
+version = "Current"
+role = "Wealth distribution per pop (15.7)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://wid.world/data/"
+attribution = "WID.world and series source papers"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No licence found; PIP and SWIID cover income, nothing open covers wealth distribution"
+checked = 2026-10-23
+confidence = "low"
+closed_source_only = true
+
+[[source]]
+id = "wb-gfdd"
+name = "Global Financial Development Database, banking crisis dummy (GFDD.OI.19)"
+provider = "World Bank"
+version = "Sep 2022, through about 2017"
+role = "Banking crisis dates 2000-2017 (15.4)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0038648"
+attribution = "World Bank, Global Financial Development Database"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "CC BY 4.0 (upstream is Laeven-Valencia 2018)"
+checked = 2026-10-23
+confidence = "medium"
+
+[[source]]
+id = "esrb-crises"
+name = "European Financial Crises Database"
+provider = "ESRB / ECB"
+version = "Dec 2023"
+role = "Crisis dates, EU and EEA (15.4)"
+licence = "LicenseRef-ESRB"
+licence_url = "https://www.esrb.europa.eu/services/disclaimer/html/index.en.html"
+attribution = "ESRB, European Financial Crises Database"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "Free use with attribution, including commercial"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "laeven-valencia"
+name = "Systemic Banking Crises Database"
+provider = "Laeven and Valencia (IMF WP/26/94)"
+version = "1970-2025"
+role = "Crisis dates after 2017 (15.4)"
+licence = "LicenseRef-IMF-Content"
+licence_url = "https://www.imf.org/en/About/copyright-and-terms"
+attribution = "Laeven and Valencia (2026), IMF WP/26/94"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "IMF content terms: personal non-commercial use; wb-gfdd covers to 2017 only"
+checked = 2026-10-23
+confidence = "low"
+closed_source_only = true
+
+[[source]]
+id = "macro-nc-datasets"
+name = "Global Macro Database; Jorda-Schularick-Taylor Macrohistory"
+provider = "Muller et al.; Jorda, Schularick and Taylor"
+version = "Current"
+role = "Macro and crisis series"
+licence = "LicenseRef-NonCommercial"
+licence_url = "https://www.macrohistory.net/database/"
+attribution = "n/a"
+commercial_use = false
+share_alike = true
+use = "rejected"
+policy = "exclude"
+reason = "GMD research-use terms bar products and re-hosting; JST is CC BY-NC-SA 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- commodities
+
+[[source]]
+id = "usgs-ds140"
+name = "USGS Data Series 140, historical mineral statistics"
+provider = "USGS"
+version = "1900-2023"
+role = "Metal prices and production (7.7, 13.4)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://pubs.usgs.gov/publication/ds140"
+attribution = "USGS DS-140 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US public domain"
+checked = 2026-10-23
+confidence = "high"
+replaces = "pink-sheet"
+
+[[source]]
+id = "eia"
+name = "US EIA energy data (EIA-collected series)"
+provider = "US Energy Information Administration"
+version = "Current"
+role = "Energy prices and quantities (7.7, 15.4)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://www.eia.gov/about/copyrights_reuse.php"
+attribution = "Source: U.S. Energy Information Administration"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US public domain for EIA's own series"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily)."
+
+[[source]]
+id = "fao-ffpi"
+name = "FAO Food Price Index"
+provider = "FAO"
+version = "1990 onward"
+role = "Food price validation (15.4)"
+licence = "LicenseRef-FAO-unclear"
+licence_url = "https://www.fao.org/contact-us/terms/db-terms-of-use"
+attribution = "FAO Food Price Index"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "May not be one of FAO's CC BY 4.0 Annex 1 databases; licence reading is weak"
+checked = 2026-10-23
+confidence = "low"
+
+[[source]]
+id = "pink-sheet"
+name = "World Bank Commodity Price Data (Pink Sheet)"
+provider = "World Bank Prospects Group"
+version = "Oct 2026"
+role = "Benchmark commodity prices incl. Brent, WTI (15.4)"
+licence = "LicenseRef-WorldBank-thirdparty"
+licence_url = "https://www.worldbank.org/en/research/commodity-markets"
+attribution = "World Bank Commodity Price Data (The Pink Sheet)"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "Embeds vendor data (Bloomberg, S&P Global, Refinitiv); no explicit dataset licence"
+checked = 2026-10-23
+confidence = "medium"
+closed_source_only = true
+notes = "Open path: unctadstat commodity prices, usgs-ds140, eia."
+
+# ---------------------------------------------------------------- demography, education, labour
+
+[[source]]
+id = "un-wpp"
+name = "UN World Population Prospects"
+provider = "UN DESA Population Division"
+version = "2024"
+role = "Fertility, mortality, age structure; 2000-2023 targets (6.2)"
+licence = "CC-BY-3.0-IGO"
+licence_url = "https://population.un.org/wpp/assets/downloads.json"
+attribution = "UN DESA, Population Division (2024). World Population Prospects 2024, Online Edition."
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 3.0 IGO notice on the data overrides the general un.org terms"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "un-ims"
+name = "UN International Migrant Stock"
+provider = "UN DESA Population Division"
+version = "2024 (1990-2024, 5-year steps)"
+role = "Migrant stocks, calibration targets (6.5)"
+licence = "CC-BY-3.0-IGO"
+licence_url = "https://www.un.org/development/desa/pd/content/international-migrant-stock"
+attribution = "UN DESA, Population Division (2024). International Migrant Stock 2024."
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 3.0 IGO stated in the workbook copyright sheet"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "abel-cohen"
+name = "Bilateral international migration flow estimates"
+provider = "Abel and Cohen (figshare)"
+version = "figshare 7731233 v8; 14579241 v6"
+role = "Bilateral migration flows 1990-2020 (6.5)"
+licence = "CC-BY-4.0"
+licence_url = "https://api.figshare.com/v2/articles/7731233"
+attribution = "Abel and Cohen (2019, 2022), Scientific Data"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+notes = "Versions are re-based silently on new UN inputs: pin the version DOI."
+
+[[source]]
+id = "wic-reconstruction"
+name = "Reconstructing educational attainment 1950-2015 (WIC back-projection)"
+provider = "KC, Mamolo, Potancokova et al. (Wittgenstein Centre / IIASA), Zenodo 16927371"
+version = "V01 (Sep 2025)"
+role = "Education by age and sex, 2000 initialization (6.1, 6.3)"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/16927371"
+attribution = "KC et al. (2025), Zenodo, doi:10.5281/zenodo.16927371"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0; official WIC back-projection, replaces the unlicensed Data Explorer history"
+checked = 2026-10-23
+confidence = "high"
+notes = "147 countries; about 50 small states need imputation."
+
+[[source]]
+id = "wic-2023"
+name = "Wittgenstein Centre Human Capital projections"
+provider = "Wittgenstein Centre / IIASA, Zenodo 20447835"
+version = "WIC3.005 (2020-2100)"
+role = "Education projections, comparison benchmark beyond 2024"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/api/records/20447835"
+attribution = "KC et al. (2024), IIASA WP-24-003"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "CC BY 4.0 Zenodo files (2020 onward only)"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "barro-lee"
+name = "Barro-Lee educational attainment"
+provider = "Barro and Lee (GitHub barrolee/BarroLeeDataSet)"
+version = "v3 (1950-2015)"
+role = "Education cross-check (6.1)"
+licence = "MIT"
+licence_url = "https://github.com/barrolee/BarroLeeDataSet/blob/master/LICENSE"
+attribution = "Barro and Lee (2013), Journal of Development Economics 104"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle"
+reason = "MIT on the repository serving the data; website footer says all rights reserved"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Keep the MIT notice; confirm with the authors before opening."
+
+[[source]]
+id = "ilostat"
+name = "ILOSTAT, incl. ILO modelled estimates"
+provider = "International Labour Organization"
+version = "Bulk download, pinned by date"
+role = "Labour status by country (6.1, 6.3)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.ilo.org/rights-and-permissions"
+attribution = "Source: ILOSTAT, International Labour Organization, accessed <date>"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "ILO datasets published on or after 2023-05-03 are CC BY 4.0"
+checked = 2026-10-23
+confidence = "medium"
+notes = "ILOSTAT's own terms page was unreachable; pin a post-May-2023 download."
+
+[[source]]
+id = "kummu-subnational"
+name = "Subnational GDP per capita (admin 1 and 2) and Gini/GNI (admin 1)"
+provider = "Kummu et al.; Chrisendo, Kummu et al. (Zenodo 18429133, 16410778)"
+version = "2026 (1990-2024); 2025 (1990-2023)"
+role = "Province income levels and inequality (5.2, 6.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/18429133"
+attribution = "Kummu et al. (2026); Chrisendo et al. (2025), Zenodo"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Polygons are GADM-based: ship values keyed to our provinces only. Check whether the Gini inputs depend on GDL."
+
+[[source]]
+id = "wb-spid"
+name = "Subnational Poverty and Inequality Database"
+provider = "World Bank"
+version = "v6 (Sep 2026), 1999-2022"
+role = "Province poverty and inequality (6.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/search/dataset/0064796"
+attribution = "World Bank, SPID"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "gdl-shdi"
+name = "Global Data Lab Subnational HDI and Area Database"
+provider = "Global Data Lab, Radboud University"
+version = "1990-2022"
+role = "Subnational education and labour indicators (6.1, 6.3)"
+licence = "LicenseRef-GDL"
+licence_url = "https://globaldatalab.org/termsofuse/"
+attribution = "Smits and Permanyer (2019), Scientific Data"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "Commercial use needs written permission; no open subnational education or labour source"
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+
+[[source]]
+id = "ipums-international"
+name = "IPUMS International census microdata"
+provider = "IPUMS, University of Minnesota"
+version = "2000-round samples"
+role = "Subnational education and labour"
+licence = "LicenseRef-IPUMS"
+licence_url = "https://international.ipums.org/international/terms.shtml"
+attribution = "n/a"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Individual registration, non-commercial, no redistribution"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- institutions, parties, identity, religion
+
+[[source]]
+id = "vdem"
+name = "V-Dem country-year dataset (core V-Dem variables)"
+provider = "V-Dem Institute, University of Gothenburg"
+version = "v16 (2026), doi:10.23696/vdemds26"
+role = "Institution vector, Regimes of the World (10.1, 10.2), targets"
+licence = "CC-BY-SA-4.0"
+licence_url = "https://www.v-dem.net/data/the-v-dem-dataset/"
+attribution = "Coppedge et al. (2026), V-Dem Country-Year Dataset v16"
+commercial_use = true
+share_alike = true
+use = "primary"
+policy = "bundle-aggregates"
+shipped_under = "CC-BY-SA-4.0"
+reason = "Share-alike: derived institution tables ship as a separate CC BY-SA artifact"
+checked = 2026-10-23
+confidence = "high"
+notes = "Use V-Dem's own variables only; e_* variables from Freedom House and others cannot be relicensed."
+
+[[source]]
+id = "vparty"
+name = "V-Party"
+provider = "V-Dem Institute"
+version = "v2 (1970-2019)"
+role = "Party positions (10.5)"
+licence = "CC-BY-SA-4.0"
+licence_url = "https://www.v-dem.net/data/v-party-dataset/"
+attribution = "Lindberg et al. (2022), V-Party Dataset v2"
+commercial_use = true
+share_alike = true
+use = "primary"
+policy = "fetch"
+reason = "Licence presumed to match V-Dem but not stated; fetch until confirmed"
+checked = 2026-10-23
+confidence = "low"
+
+[[source]]
+id = "parlgov"
+name = "ParlGov"
+provider = "Doring and Manow (Harvard Dataverse)"
+version = "2024 release"
+role = "Parties, elections, cabinets for EU and OECD (10.5)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2VZ5ZC"
+attribution = "Doring and Manow (2024), ParlGov 2024 Release (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "epr-v1"
+name = "Ethnic Power Relations v1.1 and GeoEPR v1.0"
+provider = "Cederman, Min, Wimmer; Wucherpfennig et al. (Harvard Dataverse)"
+version = "EPR 1946-2005; GeoEPR 2011"
+role = "Ethnic group status and settlement areas in 2000 (6.4, 11.6)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/NDJUJM"
+attribution = "Cederman, Wimmer and Min (2010), World Politics; Wucherpfennig et al. (2011)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0 on Dataverse; covers the 2000 initialization"
+checked = 2026-10-23
+confidence = "medium"
+replaces = "epr-2021"
+notes = "Legacy 2010-2011 deposits: CC0 may be a platform default. Ends 2005."
+
+[[source]]
+id = "epr-2021"
+name = "Ethnic Power Relations Core 2021 and GeoEPR 2021"
+provider = "ETH Zurich, International Conflict Research"
+version = "2021 (1946-2021)"
+role = "Ethnic group status 2006-2021, validation (10.8, 11.6)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://icr.ethz.ch/data/epr/core/"
+attribution = "Vogt et al. (2015), Journal of Conflict Resolution 59(7)"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No licence stated; epr-v1 covers only to 2005"
+checked = 2026-10-23
+confidence = "medium"
+closed_source_only = true
+notes = "Ask ICR for written permission before opening."
+
+[[source]]
+id = "cia-factbook"
+name = "CIA World Factbook (archived editions 2000-2025)"
+provider = "US Central Intelligence Agency"
+version = "Editions 2000-2025 (discontinued Feb 2026)"
+role = "National ethnic and religious shares (6.1, 6.4), military personnel and spending"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://github.com/simonw/cia-world-factbook-2020"
+attribution = "CIA World Factbook <edition> (requested); never use the CIA seal"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "Public domain; replaces the COW World Religion Project"
+checked = 2026-10-23
+confidence = "high"
+replaces = "cow"
+notes = "Public-domain statement verified in the archived 2020 edition's FAQ; cia.gov no longer hosts it."
+
+[[source]]
+id = "hief"
+name = "Historical Index of Ethnic Fractionalization"
+provider = "Drazanova (Harvard Dataverse)"
+version = "v2.0 (1945-2013)"
+role = "Fractionalization cross-check (6.4)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/4JQRCL"
+attribution = "Drazanova (2020) (requested)"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+# ---------------------------------------------------------------- regimes, coups, conflict, military
+
+[[source]]
+id = "cline-coups"
+name = "Cline Center Coup d'Etat Project"
+provider = "University of Illinois Cline Center"
+version = "Data Bank V10 (1945 to early 2026)"
+role = "Coup frequencies, calibration targets (10.8)"
+licence = "CC-BY-4.0"
+licence_url = "https://doi.org/10.13012/B2IDB-9651987_V10"
+attribution = "Peyton et al., Cline Center Coup d'Etat Project Dataset, V10"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0 (from DataCite; landing page blocked)"
+checked = 2026-10-23
+confidence = "high"
+replaces = "powell-thyne"
+
+[[source]]
+id = "powell-thyne"
+name = "Powell and Thyne global coups"
+provider = "Powell and Thyne"
+version = "pt_20260829"
+role = "Coup events"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://jonathanmpowell.com/coups"
+attribution = "Powell and Thyne (2011), Journal of Peace Research 48(2)"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "No licence stated; the Cline Center dataset covers the role"
+checked = 2026-10-23
+confidence = "medium"
+replaced_by = "cline-coups"
+
+[[source]]
+id = "bmr"
+name = "Boix-Miller-Rosato democracy data"
+provider = "Boix, Miller, Rosato (Harvard Dataverse)"
+version = "v4.0 (1800-2020)"
+role = "Regime transitions, validation (10.8)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FENWWR"
+attribution = "Boix, Miller and Rosato (2013), Comparative Political Studies (requested)"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "wth-regimes"
+name = "Authoritarian regime types, updated (Wahman-Teorell-Hadenius)"
+provider = "Lundquist (Harvard Dataverse)"
+version = "v4.0 (Feb 2026, 1946-2024)"
+role = "Regime types, validation (10.2)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/VN3EBV"
+attribution = "Lundquist (2026), Harvard Dataverse (requested)"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Uses V-Dem's Electoral Democracy Index as a threshold: drop any copied V-Dem values or ship them under CC BY-SA."
+
+[[source]]
+id = "ucdp"
+name = "UCDP datasets incl. GED and Candidate events"
+provider = "Uppsala Conflict Data Program"
+version = "GED 26.1 (1989-2025); UCDP/PRIO ACD 26.1"
+role = "Conflict events, province-level targets; in-house forecast benchmark (11.6, 15.7)"
+licence = "CC-BY-4.0"
+licence_url = "https://ucdp.uu.se/downloads/"
+attribution = "Davies, Pettersson and Oberg (2026); Sundberg and Melander (2013)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0"
+checked = 2026-10-23
+confidence = "high"
+replaces = "views"
+
+[[source]]
+id = "views"
+name = "VIEWS conflict forecasts"
+provider = "PRIO / Uppsala"
+version = "fatalities003"
+role = "External forecast benchmark (15.7)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://viewsforecasting.org/data/"
+attribution = "VIEWS project and model paper"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "No data licence; no open third-party forecast. In-house baselines on UCDP are the open benchmark."
+checked = 2026-10-23
+confidence = "low"
+closed_source_only = true
+
+[[source]]
+id = "gmsd"
+name = "Global Military Spending Dataset (modelled estimates)"
+provider = "Barnum, Fariss, Markowitz, Morales (Harvard Dataverse)"
+version = "v9.0 (Apr 2025, 1816-2023)"
+role = "Military spending and burden (11.4)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DHMZOW"
+attribution = "Barnum et al. (2025), Global Military Spending Dataset (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0; replaces SIPRI"
+checked = 2026-10-23
+confidence = "medium"
+replaces = "sipri-milex"
+notes = "Drop the og column, which embeds original SIPRI and COW values."
+
+[[source]]
+id = "sipri-milex"
+name = "SIPRI Military Expenditure Database"
+provider = "SIPRI"
+version = "1949-2025 v1.2"
+role = "Military spending"
+licence = "LicenseRef-SIPRI"
+licence_url = "https://www.sipri.org/about/terms-and-conditions"
+attribution = "n/a"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Reproduction needs authorization, commercial use needs a paid licence; GMSD covers the role"
+checked = 2026-10-23
+confidence = "high"
+replaced_by = "gmsd"
+
+[[source]]
+id = "atop-3"
+name = "ATOP alliance data 3.0"
+provider = "Leeds et al. (Harvard Dataverse)"
+version = "3.0 (1815-2003)"
+role = "Alliances in 2000 (11.1, 11.3)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/IUUPWR"
+attribution = "Leeds et al. (2002), International Interactions"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC0 on Dataverse; covers 2000 initialization"
+checked = 2026-10-23
+confidence = "medium"
+notes = "Legacy deposit: CC0 may be a platform default. Ends 2003."
+
+[[source]]
+id = "dcad"
+name = "Defense Cooperation Agreement Dataset"
+provider = "Kinne (Harvard Dataverse)"
+version = "v1.0 (1980-2010)"
+role = "Security partnerships (11.1)"
+licence = "CC0-1.0"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DT3VTE"
+attribution = "Kinne (2020), Journal of Conflict Resolution (requested)"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle"
+reason = "CC0"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
+id = "cow"
+name = "Correlates of War (NMC, Formal Alliances, World Religion Project)"
+provider = "Correlates of War Project"
+version = "NMC 7.0; Alliances 4.1; WRP 1.1"
+role = "Capabilities benchmark (11.4), alliance validation after 2003"
+licence = "LicenseRef-COW"
+licence_url = "https://correlatesofwar.org/data-sets/"
+attribution = "Singer, Bremer and Stuckey (1972); dataset-specific citations"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "Non-commercial, dissemination needs permission. Religion moved to cia-factbook, spending to gmsd; capability comparison and post-2003 alliances have no open source."
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
+
+[[source]]
+id = "atop-5"
+name = "ATOP alliance data 5.1"
+provider = "Leeds et al."
+version = "5.1 (1815-2018)"
+role = "Alliances formed after 2003 (11.3), validation"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://www.atopdata.org"
+attribution = "Leeds et al. (2002)"
+commercial_use = false
+share_alike = false
+use = "fallback"
+policy = "fetch"
+reason = "No licence stated; atop-3 ends 2003"
+checked = 2026-10-23
+confidence = "high"
+closed_source_only = true
