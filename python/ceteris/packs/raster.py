@@ -33,11 +33,11 @@ def assign_cells(provinces: list[Province], res: int) -> tuple[list[str], np.nda
     return ids, np.array([owner[c] for c in ids], dtype=np.uint32)
 
 
-def terrain(cells: list[str], etopo: Path) -> dict[str, np.ndarray]:
+def terrain(cells: list[str], etopo: Path, depth: int = SAMPLE_DEPTH) -> dict[str, np.ndarray]:
     """Per cell: mean and standard deviation of elevation, and mean terrain ruggedness index (Riley et al. 1999)."""
     samples, of_cell = [], []
     for i, c in enumerate(cells):
-        kids = h3.cell_to_children(c, h3.get_resolution(c) + SAMPLE_DEPTH)
+        kids = h3.cell_to_children(c, h3.get_resolution(c) + depth)
         samples.extend(h3.cell_to_latlng(k) for k in sorted(kids))
         of_cell.extend([i] * len(kids))
     lat, lon = np.array(samples).T

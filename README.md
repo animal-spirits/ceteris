@@ -13,6 +13,8 @@ Phase P1 (World and map) of eleven is complete; there is no economics yet.
 - P1 gate: 4,796 provinces at 2000 borders render at 60 fps; clicking a province shows
   its attributes; the freight-cost mode colours every province by least cost per tonne
   from a chosen origin over road, rail, sea and air.
+- County layer (ADR 0009): 53,084 counties from geoBoundaries, nested in provinces and
+  drawn from zoom 4; oversized provinces are split along county borders.
 
 The data licence audit is in `python/ceteris/packs/sources.toml` (ADR 0005).
 
@@ -37,8 +39,9 @@ them (Section 19.3).
 
 ## Develop
 
-Build the world pack first (downloads about 540 MB of pinned sources into `data/cache/`
-once, then builds `data/packs/2000/` in about 25 seconds):
+Build the world pack first. It needs [tippecanoe](https://github.com/felt/tippecanoe)
+(`brew install tippecanoe`), downloads about 920 MB of pinned sources into `data/cache/`
+once, then builds `data/packs/2000/` in about 2.5 minutes:
 
 ```
 cd python && uv run python -m ceteris.packs

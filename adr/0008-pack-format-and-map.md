@@ -1,6 +1,6 @@
 # 0008. Pack format and map delivery in P1
 
-Status: accepted
+Status: accepted; amended by ADR 0009 (map geometry moved to PMTiles, pack format 2)
 Date: 2026-10-23
 Design sections: 16.1, 19.1 (Map UI, App shell, Bindings), 22.1 (App)
 

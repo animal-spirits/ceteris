@@ -8,7 +8,7 @@ import shapely
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ceteris.packs import build, geo, provinces, transport
+from ceteris.packs import build, counties, geo, provinces, transport
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "data" / "packs" / "2000"
@@ -46,6 +46,44 @@ def test_bisection_partitions_into_near_equal_groups(n, k, rng):
     assert max(sizes) - min(sizes) <= int(np.log2(k)) + 1
     again = provinces._bisect(pts, np.arange(n), k)
     assert all((a == b).all() for a, b in zip(groups, again))
+
+
+@settings(max_examples=50)
+@given(st.integers(8, 300), st.integers(2, 8), st.randoms(use_true_random=False))
+def test_weighted_bisection_balances_weight(n, k, rng):
+    pts = np.array([[rng.uniform(0, 10), rng.uniform(0, 10)] for _ in range(n)])
+    w = np.array([rng.uniform(1, 10) for _ in range(n)])
+    groups = provinces._bisect(pts, np.arange(n), k, w)
+    assert len(groups) == k and all(len(g) for g in groups)
+    assert sorted(np.concatenate(groups).tolist()) == list(range(n))
+    sums = [w[g].sum() for g in groups]
+    # Each cut lands within one item of its target; errors compound over log2(k) levels.
+    assert max(sums) - min(sums) <= 2 * (int(np.log2(k)) + 1) * w.max()
+
+
+def test_county_level_prefers_the_coarsest_level_in_range():
+    assert counties.choose_level({"ADM2": 96, "ADM3": 320}, 101) == "ADM3"
+    assert counties.choose_level({"ADM2": 428}, 16) == "ADM2"
+    assert counties.choose_level({"ADM2": 52, "ADM3": 8205}, 52) is None
+    assert counties.choose_level({"ADM2": 25}, 15) == "ADM2"
+    assert counties.choose_level({"ADM2": 76, "ADM3": 5162}, 13, override="ADM2") == "ADM2"
+
+
+def test_county_split_follows_county_borders_and_covers_the_province():
+    p = provinces.Province("X-1", "X", "XXX", "XXX", "XXX", shapely.box(0, 0, 4, 4))
+    grid = [shapely.box(x, y, x + 1, y + 1) for x in range(4) for y in range(4)]
+    parts = provinces.split_by_counties(p, 4, grid, max_area_km2=1e9, res=4)
+    assert parts is not None and len(parts) == 4
+    assert shapely.union_all([q.geom for q in parts]).symmetric_difference(p.geom).area < 1e-9
+    for q in parts:
+        assert q.geom.area == pytest.approx(4.0)
+        # Every part is a union of whole counties.
+        assert all(abs(q.geom.intersection(c).area - c.area) < 1e-9 or q.geom.intersection(c).area < 1e-9 for c in grid)
+
+
+def test_county_split_declines_with_too_few_counties():
+    p = provinces.Province("X-1", "X", "XXX", "XXX", "XXX", shapely.box(0, 0, 4, 4))
+    assert provinces.split_by_counties(p, 4, [shapely.box(0, 0, 4, 2), shapely.box(0, 2, 4, 4)], 1e9, 4) is None
 
 
 @given(st.sets(st.tuples(st.integers(0, 30), st.integers(0, 30)).filter(lambda e: e[0] != e[1]), max_size=120))
@@ -107,3 +145,9 @@ def test_pack_invariants():
     assert (kinds[: len(p)] == transport.NodeKind.PROVINCE).all()
     a, b = e["a"].to_numpy(), e["b"].to_numpy()
     assert (a < b).all() and b.max() < len(n)
+    c = ipc.open_file(PACK / "counties.arrow").read_all()
+    home = c["province"].to_numpy()
+    assert (home < len(p)).all() and (np.diff(home.astype(np.int64)) >= 0).all()
+    stats = json.loads((PACK / "manifest.json").read_text())["stats"]
+    assert stats["county_area_outside_province"] < 0.05
+    assert stats["split_by_counties"] > stats["split_by_voronoi"]

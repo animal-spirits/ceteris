@@ -1,4 +1,5 @@
-"""Build the world pack: Arrow IPC tables for the core, GeoJSON for the map, and a manifest (Section 16.1).
+"""Build the world pack: Arrow IPC tables for the core, PMTiles and attributes for the map, and a manifest
+(Section 16.1). Needs tippecanoe on PATH for the map tiles (ADR 0009).
 
     uv run python -m ceteris.packs [--out data/packs/2000]
 
@@ -8,9 +9,13 @@ Same inputs give byte-identical outputs; `manifest.json` records every table's s
 import argparse
 import hashlib
 import json
+import shutil
+import subprocess
+import tempfile
 import tomllib
 from pathlib import Path
 
+import h3
 import numpy as np
 import pyarrow as pa
 import pyogrio
@@ -18,14 +23,17 @@ import shapely
 from pyarrow import ipc
 from shapely import STRtree
 
-from . import fetch, provinces, raster, resources, transport
+from . import counties, fetch, geo, provinces, raster, resources, transport
 
 CONFIG = tomllib.loads(Path(__file__).with_name("pack.toml").read_text())
 ROOT = Path(__file__).resolve().parents[3]
-PACK_FORMAT = 1
+PACK_FORMAT = 2
 PALETTE_SIZE = 8
 # Map geometry simplification tolerance in degrees (about 1 km).
 SIMPLIFY_DEG = 0.01
+# Map tiles: zoom range, and the zoom from which counties are drawn.
+MAX_ZOOM = 9
+COUNTY_MINZOOM = 4
 
 
 def terrain_class(elev_mean_m: np.ndarray, tri_m: np.ndarray) -> np.ndarray:
@@ -60,12 +68,45 @@ def _round(geom_json: dict, digits: int = 4) -> dict:
     return {"type": geom_json["type"], "coordinates": r(geom_json["coordinates"])}
 
 
-def write_geojson(path: Path, geoms) -> str:
+def write_geojson(path: Path, geoms, minzoom: int = 0) -> None:
+    """Features numbered from 1, the map's feature IDs (tippecanoe drops ID 0)."""
+    extra = {"tippecanoe": {"minzoom": minzoom}} if minzoom else {}
     features = [
-        {"type": "Feature", "id": i, "properties": {}, "geometry": _round(shapely.geometry.mapping(g))}
+        {"type": "Feature", "id": i + 1, "properties": {}, **extra, "geometry": _round(shapely.geometry.mapping(g))}
         for i, g in enumerate(geoms)
     ]
     path.write_text(json.dumps({"type": "FeatureCollection", "features": features}, separators=(",", ":")))
+
+
+def simplify(geoms) -> np.ndarray:
+    geoms = np.array(geoms, dtype=object)
+    try:
+        return shapely.coverage_simplify(geoms, SIMPLIFY_DEG)
+    except shapely.errors.GEOSException:
+        # Clipped counties are not always a valid coverage; simplify them one by one.
+        return shapely.simplify(geoms, SIMPLIFY_DEG, preserve_topology=True)
+
+
+def write_tiles(path: Path, layers: dict[str, tuple[list, int]]) -> dict[str, str]:
+    """One PMTiles archive with a vector layer per entry: name -> (geometries, minzoom).
+
+    tippecanoe writes the same tiles in a varying order, so reproducibility is tracked by the
+    sha256 of each layer's input, which this returns.
+    """
+    inputs = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        args = ["tippecanoe", "-q", "-f", "-o", str(path), "-Z0", f"-z{MAX_ZOOM}"]
+        args += ["--no-feature-limit", "--no-tile-size-limit", "--detect-shared-borders"]
+        for name, (geoms, minzoom) in layers.items():
+            src = Path(tmp) / f"{name}.geojson"
+            write_geojson(src, geoms, minzoom)
+            inputs[f"web/map.pmtiles:{name}"] = sha256(src)
+            args += ["-L", f"{name}:{src}"]
+        subprocess.run(args, check=True)
+    return inputs
+
+
+def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -75,11 +116,45 @@ def build(out: Path) -> dict:
     for e in entries:
         fetch.fetch(e)
     admin1, admin0 = cache / "ne_10m_admin_1_states_provinces.zip", cache / "ne_10m_admin_0_countries.zip"
+    etopo = cache / "ETOPO_2022_v1_60s_N90W180_surface.tif"
 
-    provs = provinces.build(admin1, admin0, CONFIG["split_area_km2"], CONFIG["land_res"])
+    units = counties.load(cache)
+    provs = provinces.build(admin1, admin0, CONFIG["split_area_km2"], CONFIG["land_res"], units)
     n = len(provs)
+
+    # Counties: each in the province it overlaps most, clipped to it (ADR 0009).
+    home = counties.assign(units, [p.geom for p in provs], [{p.country, p.country_now} for p in provs])
+    clipped = []
+    # Misfit between the sources, over counties small enough to fit a province (larger ones must be cut).
+    fits, fits_inside = 0.0, 0.0
+    for c, h in zip(units, home):
+        if h >= 0:
+            piece = geo.polygonal(c.geom.intersection(provs[h].geom))
+            whole = geo.area_km2(c.geom)
+            if whole <= CONFIG["split_area_km2"] / 2:
+                fits += whole
+                fits_inside += geo.area_km2(piece)
+            if not piece.is_empty:
+                clipped.append((int(h), counties.County(c.iso, c.level, c.name, piece)))
+    clipped.sort(key=lambda hc: hc[0])
+    county_prov = np.array([h for h, _ in clipped], dtype=np.uint32)
+    cty = [c for _, c in clipped]
+    for c in cty:
+        c.lon, c.lat = geo.anchor(c.geom)
+    cty_area = np.array([geo.area_km2(c.geom) for c in cty])
+    ccells, cowner = raster.assign_cells(cty, CONFIG["county_res"])
+    cterr = raster.terrain(ccells, etopo, depth=0)
+    carea = raster.cell_area_km2(ccells)
+    with np.errstate(invalid="ignore"):
+        cstat = {k: raster.province_means(cowner, carea, v, len(cty)) for k, v in cterr.items()}
+    # Slivers whose only cell went to a neighbour are sampled at their anchor.
+    bare = np.flatnonzero(np.isnan(cstat["elev_mean_m"]))
+    if len(bare):
+        point = raster.terrain([h3.latlng_to_cell(cty[i].lat, cty[i].lon, raster.FINEST) for i in bare], etopo, depth=0)
+        for k, values in cstat.items():
+            values[bare] = point[k]
     cells, owner = raster.assign_cells(provs, CONFIG["land_res"])
-    terr = raster.terrain(cells, cache / "ETOPO_2022_v1_60s_N90W180_surface.tif")
+    terr = raster.terrain(cells, etopo)
     area = raster.cell_area_km2(cells)
     elev = raster.province_means(owner, area, terr["elev_mean_m"], n)
     elev_std = raster.province_means(owner, area, terr["elev_std_m"], n)
@@ -110,7 +185,8 @@ def build(out: Path) -> dict:
 
     out.mkdir(parents=True, exist_ok=True)
     web = out / "web"
-    web.mkdir(exist_ok=True)
+    shutil.rmtree(web, ignore_errors=True)
+    web.mkdir()
     hashes = {}
     hashes["provinces.arrow"] = write_table(
         out / "provinces.arrow",
@@ -178,6 +254,17 @@ def build(out: Path) -> dict:
             "chokepoint": pa.array(e[:, 5].astype(np.uint8)),
         },
     )
+    hashes["counties.arrow"] = write_table(
+        out / "counties.arrow",
+        {
+            "name": pa.array([c.name for c in cty]),
+            "country": pa.array([c.iso for c in cty]),
+            "level": pa.array([c.level for c in cty]),
+            "province": pa.array(county_prov),
+            "area_km2": pa.array(cty_area),
+            **{k: pa.array(v) for k, v in cstat.items()},
+        },
+    )
     hashes["sea_zones.arrow"] = write_table(out / "sea_zones.arrow", {"h3": pa.array(zones)})
     hashes["chokepoints.arrow"] = write_table(
         out / "chokepoints.arrow",
@@ -187,13 +274,17 @@ def build(out: Path) -> dict:
         },
     )
 
-    simple = shapely.coverage_simplify(np.array([p.geom for p in provs], dtype=object), SIMPLIFY_DEG)
-    hashes["web/provinces.geojson"] = write_geojson(web / "provinces.geojson", simple)
+    simple = simplify([p.geom for p in provs])
     groups = {}
     for i, p in enumerate(provs):
         groups.setdefault(p.country, []).append(i)
-    hashes["web/countries.geojson"] = write_geojson(
-        web / "countries.geojson", [shapely.union_all(simple[groups[c]]) for c in codes]
+    hashes |= write_tiles(
+        web / "map.pmtiles",
+        {
+            "provinces": (simple, 0),
+            "countries": ([shapely.union_all(simple[groups[c]]) for c in codes], 0),
+            "counties": (simplify([c.geom for c in cty]), COUNTY_MINZOOM),
+        },
     )
     attrs = {
         "id": [p.id for p in provs],
@@ -217,7 +308,17 @@ def build(out: Path) -> dict:
         },
     }
     (web / "provinces.json").write_text(json.dumps(attrs, separators=(",", ":"), ensure_ascii=False))
-    hashes["web/provinces.json"] = hashlib.sha256((web / "provinces.json").read_bytes()).hexdigest()
+    hashes["web/provinces.json"] = sha256(web / "provinces.json")
+    county_attrs = {
+        "name": [c.name for c in cty],
+        "level": [c.level for c in cty],
+        "province": county_prov.tolist(),
+        "area_km2": [round(float(a), 1) for a in cty_area],
+        "elev_mean_m": [round(float(v)) for v in cstat["elev_mean_m"]],
+        "tri_m": [round(float(v), 1) for v in cstat["tri_m"]],
+    }
+    (web / "counties.json").write_text(json.dumps(county_attrs, separators=(",", ":"), ensure_ascii=False))
+    hashes["web/counties.json"] = sha256(web / "counties.json")
 
     stats = extra["stats"] | {
         "provinces": n,
@@ -227,6 +328,11 @@ def build(out: Path) -> dict:
         "edges": len(graph.edges),
         "sea_zones": len(zones),
         "largest_province_km2": round(max(p.area_km2 for p in provs)),
+        "split_by_counties": len({p.id.split(".")[0] for p in provs if p.split_rule == "counties"}),
+        "split_by_voronoi": len({p.id.split(".")[0] for p in provs if p.split_rule == "voronoi"}),
+        "counties": len(cty),
+        "counties_unassigned": int((home < 0).sum()),
+        "county_area_outside_province": round(1 - fits_inside / fits, 4),
     }
     manifest = {
         "pack_format": PACK_FORMAT,
