@@ -125,6 +125,23 @@ checked = 2026-10-23
 confidence = "high"
 
 [[source]]
+id = "etopo-2022"
+name = "ETOPO 2022 global relief model, 60 arc-second surface elevation"
+provider = "NOAA NCEI"
+version = "v1 (2022)"
+role = "Elevation, slope and ruggedness on the base raster (5.1)"
+licence = "CC0-1.0"
+licence_url = "https://www.ncei.noaa.gov/products/etopo-global-relief-model"
+attribution = "NOAA National Centers for Environmental Information (2022), ETOPO 2022 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC0 per the NCEI ISO metadata record; the 466 MB raster is aggregated to H3 cells"
+checked = 2026-10-23
+confidence = "high"
+
+[[source]]
 id = "h3"
 name = "H3 hexagonal grid"
 provider = "Uber"
