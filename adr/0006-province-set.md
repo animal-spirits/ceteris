@@ -1,6 +1,6 @@
 # 0006. Province set at 2000 borders
 
-Status: accepted
+Status: accepted; amended by ADR 0009 (splits follow county borders where counties exist)
 Date: 2026-10-23
 Design sections: 5.2, 22.2 (province-splitting rule)
 

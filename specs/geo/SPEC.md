@@ -2,32 +2,36 @@
 
 Status: draft (P1 needs no human approval)
 Phase: P1
-Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1)
+Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADRs 0006 to 0009
 
 ## Purpose
 
 The world pack and `ceteris-geo`. The pack pipeline (`python/ceteris/packs`) turns pinned
 public-domain sources into provinces at 1 January 2000 borders, an H3 base raster and a
-multimodal transport graph. `ceteris-geo` loads the pack, prices graph edges per tonne from
+multimodal transport graph, and nests a county display layer in the provinces (ADR 0009).
+`ceteris-geo` loads the pack, prices graph edges per tonne from
 mode parameters, and answers least-cost path queries through a cache that is dropped when
 any edge cost changes. It owns the physical part of the generalized trade cost (5.4); the
 inventory, risk, tariff and friction terms, and the iceberg mapping, arrive with trade in P2.
 
-## Pack (built by `uv run python -m ceteris.packs`, about 25 s)
+## Pack (built by `uv run python -m ceteris.packs`, about 2.5 minutes; needs tippecanoe)
 
-Inputs are pinned by URL, sha256 and size in `fetch.toml`; same inputs give byte-identical
-outputs (`tests/golden/p1-pack.txt`). Outputs go to `data/packs/2000/` (not in git).
+Inputs are pinned by URL, sha256 and size in `fetch.toml` and `counties.lock.toml`; same inputs
+give byte-identical tables (`tests/golden/p1-pack.txt`; for the tile archive, its layer inputs).
+Outputs go to `data/packs/2000/` (not in git).
 
 | Table | Rows | Content |
 |---|---|---|
 | `provinces.arrow` | 4,796 | id, name, 2000 country and sovereign, current country, anchor lon/lat, area, elevation mean and spread, TRI, terrain class, coastal, dev-slice flag, cell, port and airport counts, rail flag, mineral site counts by group |
 | `countries.arrow` | 242 | code, name, sovereign, map colour slot |
 | `cells.arrow` | 78,483 | H3 cell (resolution 4, finer for provinces too small to own a resolution-4 centre), province, area, elevation mean and spread, TRI |
-| `nodes.arrow` | 40,522 | kind, province (u32::MAX for sea), lon/lat, label, sea zone |
-| `edges.arrow` | 134,753 | endpoints (a < b), mode, length in km, mean TRI, chokepoint id |
+| `nodes.arrow` | 40,534 | kind, province (u32::MAX for sea), lon/lat, label, sea zone |
+| `edges.arrow` | 134,810 | endpoints (a < b), mode, length in km, mean TRI, chokepoint id |
+| `counties.arrow` | 53,084 | name, current country, geoBoundaries level, province, area, elevation mean and spread, TRI (resolution-6 sampling) |
 | `sea_zones.arrow` | 725 | H3 resolution-1 parent per zone |
 | `chokepoints.arrow` | 10 | name, canal flag; edge chokepoint id k is row k - 1 |
-| `web/` | | simplified province and country GeoJSON and a columnar attribute table for the map |
+| `web/map.pmtiles` | | vector tiles, layers provinces, countries, counties (from zoom 4); feature ID = index + 1 |
+| `web/*.json` | | columnar province and county attributes for the map |
 | `manifest.json` | | config, source checksums, table sha256, build statistics |
 
 Every Arrow table carries schema metadata `pack_format`; the core refuses a mismatch.
@@ -77,6 +81,7 @@ change). `warm` computes missing trees in parallel; results are independent of t
 | Shock reversibility | Close then reopen a chokepoint: identical bits | exact | `tests/pack_properties.rs` |
 | Thread independence | Cache warmed on 1 and 8 threads: identical bits | exact | `tests/pack_properties.rs` |
 | Pack reproducibility | Rebuild gives the stored table hashes | exact | `python/tests/test_packs.py` |
+| County nesting | Every county lies in one province; of counties at most half the area limit, under 5% of area falls outside it | 5% | `python/tests/test_packs.py` |
 | Mode ordering | Default per tonne-km: sea < rail < road < air | exact | `graph.rs` unit test |
 
 ## Parameters
@@ -109,8 +114,8 @@ reference model's iceberg factors.
   repricing; mode ordering; terrain factor bounds; access and canal fees.
 - Pack properties: the invariants table above, on the built pack; skipped without one.
 - Pipeline (pytest, hypothesis): spherical area, antimeridian unwrap and wrap, split counts,
-  bisection balance and determinism, neighbour colouring, terrain classes, 2000 remapping,
-  pack table invariants.
+  bisection balance (by count and by weight) and determinism, county level choice, county
+  splits, neighbour colouring, terrain classes, 2000 remapping, pack table invariants.
 - Golden: `tests/golden/p1-geo.txt` (cost and hour bits from eight probe provinces) and
   `tests/golden/p1-pack.txt` (table hashes). Bless with `CETERIS_BLESS=1`.
 - Benchmark: `dijkstra_grid_40k` (criterion), a 40,000-node grid the size of the pack graph.
@@ -127,5 +132,6 @@ reference model's iceberg factors.
 - MRDS is about 89% United States sites: the resource mode shows coverage, not endowment.
 - Natural Earth mixes administrative levels (232 units in the United Kingdom, 193 in
   Slovenia, 16 in Germany); merging small units and population-based splitting wait for
-  gridded population in P4.
+  gridded population in P4. County granularity is uneven too (ADR 0009).
+- Whether the production app's asset protocol serves the HTTP Range requests PMTiles needs.
 - Trees cover all nodes (650 KB each); restrict to provinces and gateways when P2 warms 600.

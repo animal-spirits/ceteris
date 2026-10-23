@@ -24,7 +24,9 @@ def sha256(path: Path) -> str:
 
 
 def entries() -> list[dict]:
-    files = tomllib.loads(FETCH.read_text())["file"]
+    from . import counties
+
+    files = tomllib.loads(FETCH.read_text())["file"] + counties.entries()
     known = {s["id"] for s in tomllib.loads(SOURCES.read_text())["source"]}
     unknown = [f["name"] for f in files if f["source"] not in known]
     if unknown:
@@ -39,7 +41,7 @@ def path_of(name: str) -> Path:
 def fetch(entry: dict) -> Path:
     path = path_of(entry["name"])
     if not path.exists():
-        CACHE.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         part = path.with_suffix(path.suffix + ".part")
         print(f"fetching {entry['url']}", file=sys.stderr)
         request = urllib.request.Request(entry["url"], headers={"User-Agent": "ceteris-packs"})

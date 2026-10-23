@@ -5,6 +5,8 @@ year = 2000
 # H3 resolutions: base raster for provinces, and the sea grid of the transport graph.
 land_res = 4
 sea_res = 3
+# County statistics are sampled on cells of this resolution (about 36 km², ADR 0009).
+county_res = 6
 # Sea zones are the sea grid's parents at this resolution (ADR 0007).
 sea_zone_res = 1
 

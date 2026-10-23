@@ -92,8 +92,8 @@ notes = "Turkey is humanitarian use only: skip TUR. Read each dataset's CKAN lic
 id = "geoboundaries"
 name = "geoBoundaries gbOpen"
 provider = "William & Mary geoLab"
-version = "6.0.0"
-role = "Province boundaries (5.2), superseded as base"
+version = "6.0.0 (release commit 9469f09)"
+role = "County display layer and county-border province splits (5.2, ADR 0009)"
 licence = "LicenseRef-geoBoundaries-per-file"
 licence_url = "https://www.geoboundaries.org/api.html"
 attribution = "Runfola et al. (2020) plus each file's boundarySource"
@@ -101,11 +101,11 @@ commercial_use = true
 share_alike = true
 use = "complement"
 policy = "fetch"
-reason = "Licence varies per file (boundaryLicense); many ADM1 files are ODbL or CC BY-SA"
+reason = "Licence varies per file; about 28% of the chosen units are ODbL or CC BY-SA"
 checked = 2026-10-23
 confidence = "high"
 replaced_by = "natural-earth-admin1"
-notes = "If used, filter to files whose boundaryLicense is PD, CC0 or CC BY and record each in the pack manifest."
+notes = "Natural Earth admin-1 stays the province base. counties.lock.toml pins one ADM2 or ADM3 file per country with its licence; on opening, share-alike files ship as separate artifacts under their own licences."
 
 [[source]]
 id = "gadm"
