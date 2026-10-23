@@ -33,6 +33,21 @@ export interface Provinces {
 
 export const TERRAIN = ["Plains", "Plateau", "Hills", "Mountains"];
 
+export interface Counties {
+  name: string[];
+  level: string[];
+  province: number[];
+  area_km2: number[];
+  elev_mean_m: number[];
+  tri_m: number[];
+}
+
+export async function loadCounties(): Promise<Counties> {
+  const r = await fetch("/counties.json");
+  if (!r.ok) throw new Error("counties not found: rebuild the pack");
+  return r.json();
+}
+
 export async function loadProvinces(): Promise<Provinces> {
   const r = await fetch("/provinces.json");
   if (!r.ok) throw new Error("pack not found: build it with `uv run python -m ceteris.packs`");
