@@ -1,0 +1,73 @@
+# Files the pack pipeline downloads (Section 16.1). Each names its manifest source.
+# fetch.py verifies sha256 and size; `python -m ceteris.packs.fetch --record` fills them
+# for a new entry, which must then be reviewed and committed.
+
+[[file]]
+source = "natural-earth-admin1"
+name = "ne_10m_admin_1_states_provinces.zip"
+sha256 = "efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05"
+bytes = 14909524
+url = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_admin_0_countries.zip"
+sha256 = "ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6"
+bytes = 4930492
+url = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_0_countries.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_railroads.zip"
+sha256 = "0bce64d1bb7ce1178810f0a341322b0459acb0689a61016259ef38f75abed0a4"
+bytes = 15116579
+url = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_railroads.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_ports.zip"
+sha256 = "1824cccd897a6c2ad546abbaf1f3545d51cff4bddfbda40244a1ad1ab1e4371d"
+bytes = 51824
+url = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_ports.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_land.zip"
+sha256 = "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
+bytes = 3269070
+url = "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_geography_marine_polys.zip"
+sha256 = "a2d3395904c41e718e02c3ec5bc988712164c524c236fad32d95d282ca303b2a"
+bytes = 940563
+url = "https://naciscdn.org/naturalearth/10m/physical/ne_10m_geography_marine_polys.zip"
+
+[[file]]
+source = "natural-earth"
+name = "ne_10m_rivers_lake_centerlines.zip"
+sha256 = "ded71b01870855ccfe19b51f2ec14c9bb48fae23c0e9f3c11974d426433b5c38"
+bytes = 2079507
+url = "https://naciscdn.org/naturalearth/10m/physical/ne_10m_rivers_lake_centerlines.zip"
+
+[[file]]
+source = "etopo-2022"
+name = "ETOPO_2022_v1_60s_N90W180_surface.tif"
+sha256 = "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
+bytes = 465969062
+url = "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_surface_elev_gtif/ETOPO_2022_v1_60s_N90W180_surface.tif"
+
+[[file]]
+source = "ourairports"
+name = "airports.csv"
+sha256 = "13f1f1a6298635c816b5bedfd47f8290339cc54730b38274b475fcb261daae4c"
+bytes = 12750621
+url = "https://raw.githubusercontent.com/davidmegginson/ourairports-data/11e4de2834aff6ab54c1f8fc89b8679ea3d08418/airports.csv"
+
+[[file]]
+source = "usgs-mrds"
+name = "mrds-csv.zip"
+sha256 = "31be4baaa86b082787bc74989146183db21badf7157db39b3f0a6fe0b38a5477"
+bytes = 25791223
+url = "https://mrdata.usgs.gov/mrds/mrds-csv.zip"

@@ -3,3 +3,8 @@
 .DS_Store
 __pycache__/
 .venv/
+/data/
+app/node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/

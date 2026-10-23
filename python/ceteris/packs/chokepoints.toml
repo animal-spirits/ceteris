@@ -1,0 +1,71 @@
+# Maritime chokepoints (Section 5.3). Sea cells within radius_km of the centre are tagged with
+# the chokepoint, so closing it (a shock) closes their edges. A `link` adds a sea edge along
+# the given polyline where the H3 sea grid is too coarse to see the passage; `canal` links pay
+# a transit fee.
+
+[[chokepoint]]
+name = "Suez Canal"
+lon = 32.35
+lat = 30.6
+radius_km = 120
+canal = true
+link = [[32.30, 31.35], [32.33, 30.60], [32.55, 29.85], [33.60, 27.70], [34.10, 27.20]]
+
+[[chokepoint]]
+name = "Panama Canal"
+lon = -79.7
+lat = 9.1
+radius_km = 100
+canal = true
+link = [[-79.92, 9.38], [-79.65, 9.10], [-79.55, 8.90]]
+
+[[chokepoint]]
+name = "Turkish Straits"
+lon = 28.0
+lat = 40.7
+radius_km = 200
+link = [[29.15, 41.25], [28.98, 41.00], [28.00, 40.70], [26.40, 40.15], [26.10, 39.95]]
+
+[[chokepoint]]
+name = "Strait of Gibraltar"
+lon = -5.6
+lat = 35.95
+radius_km = 80
+link = [[-6.60, 35.80], [-5.60, 35.95], [-4.60, 36.20]]
+
+[[chokepoint]]
+name = "Danish Straits"
+lon = 11.0
+lat = 55.5
+radius_km = 150
+
+[[chokepoint]]
+name = "Strait of Dover"
+lon = 1.45
+lat = 51.0
+radius_km = 60
+
+[[chokepoint]]
+name = "Strait of Hormuz"
+lon = 56.4
+lat = 26.5
+radius_km = 100
+
+[[chokepoint]]
+name = "Bab-el-Mandeb"
+lon = 43.4
+lat = 12.6
+radius_km = 80
+link = [[42.70, 13.60], [43.40, 12.60], [44.20, 12.10]]
+
+[[chokepoint]]
+name = "Strait of Malacca"
+lon = 100.5
+lat = 2.8
+radius_km = 250
+
+[[chokepoint]]
+name = "Singapore Strait"
+lon = 103.9
+lat = 1.2
+radius_km = 60

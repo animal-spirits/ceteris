@@ -1,0 +1,42 @@
+# Reconstruction of 1 January 2000 borders from Natural Earth admin-1 (ADR 0005, ADR 0006).
+#
+# country   the economy a province belongs to (NE adm0_a3 unless remapped here)
+# sovereign the de jure sovereign: NE sov_a3 resolved to a country code, or the 2000 country
+#           for remapped provinces, unless listed under [sovereign]
+# Everything not listed keeps Natural Earth's default (de facto) assignment.
+
+# Countries that did not exist on 1 January 2000, by Natural Earth adm0_a3.
+[country]
+SDS = "SDN"  # South Sudan, independent 2011
+SRB = "YUG"  # Federal Republic of Yugoslavia until 2003
+MNE = "YUG"
+CUW = "ANT"  # Netherlands Antilles, dissolved 2010
+SXM = "ANT"
+KAB = "KAZ"  # Baikonur lease
+USG = "CUB"  # Guantanamo Bay lease
+ESB = "GBR"  # Sovereign Base Areas in Cyprus
+WSB = "GBR"
+KAS = "IND"  # Siachen Glacier
+
+# Provinces whose assignment differs from their Natural Earth country, by adm1_code.
+[province]
+"RUS-283" = "UKR"   # Crimea
+"RUS-5482" = "UKR"  # Sevastopol
+"NLD-5147" = "ANT"  # Saba
+"NLD-5148" = "ANT"  # Sint Eustatius
+"NLD-5149" = "ANT"  # Bonaire
+
+[sovereign]
+KOS = "YUG"     # UNMIK under UNSC resolution 1244
+TLS = "UNTAET"  # UN Transitional Administration in East Timor, 1999-2002
+ANT = "NLD"
+
+# Excluded from the province set: no permanent population or economy.
+[exclude]
+countries = ["ATA"]
+
+# Names for codes Natural Earth does not carry.
+[names]
+YUG = "Federal Republic of Yugoslavia"
+ANT = "Netherlands Antilles"
+UNTAET = "UN Transitional Administration in East Timor"
