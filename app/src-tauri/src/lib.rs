@@ -4,13 +4,15 @@
 use std::sync::Mutex;
 
 use ceteris_geo::graph::TransportParams;
-use ceteris_geo::pack::{Pack, default_dir};
+use ceteris_geo::pack::{Pack, default_dir, read_table, u32s};
 use ceteris_geo::paths::PathCache;
 use tauri::ipc::Response;
 
 struct Engine {
     pack: Pack,
     cache: PathCache,
+    /// Province of each county (ADR 0009).
+    county_province: Vec<u32>,
 }
 
 // Async, so path queries run off the main (UI) thread.
@@ -20,7 +22,7 @@ async fn cost_from(
     source: u32,
 ) -> Result<Response, String> {
     let mut engine = engine.lock().map_err(|e| e.to_string())?;
-    let Engine { pack, cache } = &mut *engine;
+    let Engine { pack, cache, .. } = &mut *engine;
     let n = pack.provinces.len();
     if source as usize >= n {
         return Err(format!("no province {source}"));
@@ -30,13 +32,72 @@ async fn cost_from(
     ))
 }
 
-fn setup<R: tauri::Runtime>(builder: tauri::Builder<R>, pack: Pack) -> tauri::Builder<R> {
+/// Least cost from `source` to each county's province as little-endian f32: a county-scale
+/// payload for the map benchmark.
+#[tauri::command]
+async fn county_costs(
+    engine: tauri::State<'_, Mutex<Engine>>,
+    source: u32,
+) -> Result<Response, String> {
+    let mut engine = engine.lock().map_err(|e| e.to_string())?;
+    let Engine {
+        pack,
+        cache,
+        county_province,
+    } = &mut *engine;
+    if source as usize >= pack.provinces.len() {
+        return Err(format!("no province {source}"));
+    }
+    let tree = cache.tree(&pack.graph, source);
+    let bytes: Vec<u8> = county_province
+        .iter()
+        .flat_map(|&p| (tree.cost[p as usize] as f32).to_le_bytes())
+        .collect();
+    Ok(Response::new(bytes))
+}
+
+/// Map benchmark (`CETERIS_BENCH=1`): the page asks whether to run, results go to stdout, and
+/// the app exits, since the window cannot be observed from a script.
+#[tauri::command]
+fn bench_requested<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) -> bool {
+    let on = std::env::var_os("CETERIS_BENCH").is_some();
+    if on {
+        // An occluded webview throttles animation frames; keep it in front while measuring.
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_focus();
+    }
+    on
+}
+
+#[tauri::command]
+fn bench_log(line: String) {
+    println!("CETERIS_BENCH_LOG {line}");
+}
+
+#[tauri::command]
+fn bench_report<R: tauri::Runtime>(app: tauri::AppHandle<R>, report: String) {
+    println!("CETERIS_BENCH {report}");
+    app.exit(0);
+}
+
+fn setup<R: tauri::Runtime>(
+    builder: tauri::Builder<R>,
+    pack: Pack,
+    county_province: Vec<u32>,
+) -> tauri::Builder<R> {
     builder
         .manage(Mutex::new(Engine {
             pack,
             cache: PathCache::default(),
+            county_province,
         }))
-        .invoke_handler(tauri::generate_handler![cost_from])
+        .invoke_handler(tauri::generate_handler![
+            cost_from,
+            county_costs,
+            bench_requested,
+            bench_log,
+            bench_report
+        ])
 }
 
 pub fn run() {
@@ -47,7 +108,10 @@ pub fn run() {
             dir.display()
         )
     });
-    setup(tauri::Builder::default(), pack)
+    let county_province = read_table(&dir.join("counties.arrow"))
+        .and_then(|t| u32s(&t, "province"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    setup(tauri::Builder::default(), pack, county_province)
         .run(tauri::generate_context!())
         .expect("error while running the Ceteris Paribus app");
 }
@@ -69,7 +133,7 @@ mod tests {
         let pack = Pack::load(&dir, &TransportParams::default()).unwrap();
         let n = pack.provinces.len();
         let expected = shortest(&pack.graph, 7);
-        let app = setup(mock_builder(), pack)
+        let app = setup(mock_builder(), pack, Vec::new())
             .build(mock_context(noop_assets()))
             .unwrap();
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())

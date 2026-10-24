@@ -62,6 +62,12 @@ cargo run --release -p ceteris-geo --example engine
 cd app && npm run dev
 ```
 
+To benchmark the map inside the desktop app's own webview (frame times over a camera
+flight, and the cost of recolouring every county from the core), run
+`CETERIS_BENCH=1 cargo run --release` in `app/src-tauri`. The window comes to the front,
+results print as a `CETERIS_BENCH` JSON line, and the app exits. The display must be awake:
+a sleeping display stops the webview from rendering.
+
 Other entry points: `cargo run --release -p ceteris-geo --example costs -- NLD-3485 CHN-1819`
 prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo` runs the
 benchmarks; `python3 -I python/ceteris/packs/check_sources.py` validates the licence manifest.
