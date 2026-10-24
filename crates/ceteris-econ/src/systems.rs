@@ -305,6 +305,14 @@ pub fn route(w: &mut EconWorld) {
         }
         route_good(kernel, g, &supply, &price, &active, &mut w.scratch.routed);
         let r = &w.scratch.routed;
+        w.scratch.flows.record(
+            kernel,
+            &inp.network.province_country,
+            &inp.network.gateway_country,
+            g,
+            &price,
+            r,
+        );
 
         for (o, &is_active) in active.iter().enumerate() {
             let (cell, market) = (o * N_GOODS + g, acc.market[o]);

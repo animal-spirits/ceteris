@@ -2,7 +2,9 @@
 //! the trade layer. See `specs/econ/SPEC.md`.
 
 pub mod demand;
+pub mod export;
 pub mod fixture;
+pub mod flows;
 pub mod inputs;
 pub mod labour;
 pub mod params;
