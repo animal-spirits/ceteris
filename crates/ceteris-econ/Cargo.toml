@@ -1,0 +1,16 @@
+[package]
+name = "ceteris-econ"
+description = "Production, labour, demand and the monthly economic tick for Ceteris Paribus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ceteris-core = { path = "../ceteris-core" }
+ceteris-trade = { path = "../ceteris-trade" }
+libm = "0.2.16"
+rayon = "1.12.0"
