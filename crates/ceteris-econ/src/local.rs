@@ -64,8 +64,14 @@ fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
     }
     let uncovered: f64 = users.iter().map(|&(n, b)| (n - b).max(0.0)).sum();
     if uncovered >= rest {
+        // uncovered = 0 here means rest = 0: stocks cover every need and nothing is drawn
+        let share = if uncovered > 0.0 {
+            rest / uncovered
+        } else {
+            0.0
+        };
         for (o, &(n, b)) in out.iter_mut().zip(users) {
-            *o = (n - b).max(0.0) * (rest / uncovered);
+            *o = (n - b).max(0.0) * share;
         }
         return;
     }
@@ -284,5 +290,8 @@ mod tests {
         // stocks cover the residues exactly
         split(4.0, &[(4.0, 6.0), (4.0, 0.0)], &mut out);
         assert_eq!(out, [0.0, 4.0]);
+        // no output and stocks covering every need: nothing drawn, not 0 * (0 / 0)
+        split(0.0, &[(4.0, 6.0), (2.0, 2.0)], &mut out);
+        assert_eq!(out, [0.0, 0.0]);
     }
 }
