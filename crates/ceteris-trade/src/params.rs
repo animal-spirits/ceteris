@@ -30,6 +30,12 @@ pub struct TradeParams {
     pub border_nu: f64,
     /// P43 ad valorem cost of a day in transit, lambda_g.
     pub time_cost: [f64; N_GOODS],
+    /// P44 route-choice dispersion theta_r (ADR 0017): edge factors `a = t^-theta_r`, route
+    /// costs `tau = [(I - A)^-1]^(-1/theta_r)`. Prior 41 to 182 (Fan, Lu and Luo 2021: 111.5,
+    /// s.e. 35.4), start its point estimate pending owner decision: on the P1 graph no value in
+    /// the prior brings the spectral radius below 1 (MIGRATION Task 4). Used by the pack loader
+    /// that fills `Network::route_taus`; the fixture's least-cost legs do not read it.
+    pub theta_r: f64,
 }
 
 impl Default for TradeParams {
@@ -44,6 +50,7 @@ impl Default for TradeParams {
             time_cost: [
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
+            theta_r: 111.5,
         }
     }
 }

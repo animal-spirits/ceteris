@@ -284,6 +284,7 @@ dependencies = [
  "arrow-schema",
  "blake3",
  "criterion",
+ "libm",
  "proptest",
  "rayon",
 ]

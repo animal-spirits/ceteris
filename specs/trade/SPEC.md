@@ -19,6 +19,7 @@ them only as quantities offered to and demanded from each market.
 | Develop P1-P3 on a European slice (21) | Full globe, 4,796 provinces | Owner decision; ADR 0012 |
 | Per-tick unbalanced Sinkhorn over both marginals (8.3) | Destination sourcing in value (ADR 0015): each destination spreads its spending over origins with Eaton-Kortum shares K_od p_o^-theta / Phi_d on the two-level kernel; origin markets clear the orders against output and merchant stock across ticks, one normalization per tick (ADR 0016). Balanced Sinkhorn is the S02 full solve, in the GE reference only | Flows keep the gravity form and are homogeneous of degree zero in prices; one destination normalization followed by the origin price update is one Sinkhorn sweep spread over ticks, with the same frictionless fixed point. ADRs 0013, 0015, 0016 |
 | Per-unit plus iceberg costs (5.4, A7) | Iceberg only (S05 = iceberg): tau = 1 + c w_g + lambda_g T at reference prices, the second term the time cost of transit (Hummels and Schaur 2013) standing in for 5.4's carrying cost; risk and per-unit composition effects deferred to P8 (freight) | Per-unit costs need a transport sector that owns fleets; iceberg nests exactly in the GE reference. Freight alone gives distance elasticities far below H2's range (owner decision: add the literature time cost, nothing fitted to H2) |
+| Route-choice costs with A = t^-theta, the trade elasticity (ADR 0017 as accepted) | Separate route dispersion theta_r (P44): A = t^-theta_r, then K = tau^-theta (owner decision, 2026-10-24); the fixture keeps least-cost legs (S05) | With theta the spectral radius on the P1 graph is 6.5 (coal) to 27 (machinery) at theta 5. The start value of theta_r is pending: at the prior's upper end (182) the radius is still 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 (coal) to 880,000 (machinery), driven by short sea-grid edges (MIGRATION Task 4) |
 | Utilities, construction and services traded through demand frictions (7.1) | Not traded between provinces in P2 | Province-local markets; cross-province service frictions arrive with P8 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
 | Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
@@ -33,7 +34,7 @@ them only as quantities offered to and demanded from each market.
 | Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x initial demand |
 | Last demand D (orders by class at origins), last supply Q, last sales | (province, good) | `f64` | units per month | zero |
 | Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | the data state's prices |
-| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f32` K = tau^-theta, CSR | | path costs at load; rebuilt when the graph version moves |
+| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f32` K = tau^-theta, CSR | | least-cost leg costs (S05) or route-choice factors (`Network.route_taus`, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
 | Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
@@ -49,16 +50,24 @@ Symbols: o origin province, d destination province, a and b gateways, A and B co
 g good, theta = P01, w_g weight per value (tonnes per unit, econ pack), c path cost per tonne
 (`ceteris-geo`).
 
-**Leg factors.** For a leg with least-cost path cost c (USD per tonne) and transit time T
-(days, hours along the same path / 24):
+**Leg factors.** Two sources, chosen by the network (`Network.route_taus`):
+
+- Least-cost legs (S05; the fixture): for a leg with least-cost path cost c (USD per tonne)
+  and transit time T (days, hours along the same path / 24),
+  `tau_leg,g = 1 + c * w_g + lambda_g * T` (iceberg; geo SPEC mapping at p = 1).
+- Route choice (ADR 0017, `LegTaus`, filled by the pack loader, PLAN Task 17): per good,
+  `tau_leg,g = z^(-1/theta_r)` over every walk on the transport graph with edge factors
+  `t = 1 + c_kl w_g + lambda_g hours_kl / 24` and dispersion theta_r (P44), and the transit
+  time is the route-probability-weighted hours (geo SPEC, Route choice). Domestic legs solve on
+  the country's subgraph, access and crossing legs from each gateway on the whole graph. Factors
+  below 1 are rejected (a leg would create goods).
 
 ```
-tau_leg,g = 1 + c * w_g + lambda_g * T       (iceberg, S05 = iceberg; geo SPEC mapping at p = 1)
 K_leg,g   = tau_leg,g ^ -theta
 ```
 
-lambda_g is the ad valorem cost of a day in transit (P43). Inside a province trade is costless
-(A2): K_oo = 1.
+lambda_g is the ad valorem cost of a day in transit (P43). Crossing lags use the leg's hours
+under either source. Inside a province trade is costless (A2): K_oo = 1.
 
 **Active markets.** A traded cell (o, g) has an origin market if an enterprise of province o
 produces g with positive capacity (A VA0 > 0); a local cell (d, g) has a province market if
@@ -191,6 +200,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P04 | Mode costs | geo SPEC | Literature + calibrated |
 | P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3 | Calibrated (P9) |
 | P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
+| P44 | Route-choice dispersion theta_r (ADR 0017) | 41 to 182, start 111.5: Fan, Lu and Luo (2021, pp. 21 and 23, Table 3; Table 5 p. 28), routing elasticity on China's road network from exporters' port choice and price gaps, 111.5 (s.e. 35.4; bootstrap p10 to p90 103.5 to 127.3), prior = estimate +- 2 s.e. The other route-choice models set it equal to the trade elasticity by assumption: 8 in Allen and Arkolakis (2022, p. 2936) and Fuchs and Wong (2026, pp. 16 and 36), 4 in Ganapati, Wong and Ziv (2024, p. 268; p. 254 fn. 27 names a separate route elasticity as an alternative, not estimated). Start pending owner decision: on the P1 graph the spectral radius at the prior's upper end is 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 to 880,000 (MIGRATION Task 4 report), so no value in the prior passes | Literature |
 
 Data, not parameters: weight per value w_g (BACI 2000), tariffs t (WDI applied rates, CEPII
 agreement flags), gateway set (pack).
@@ -209,7 +219,8 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 
 ## Test plan
 
-- Unit: leg factors and tariff wedges; kernel low-rank products against dense K on small
+- Unit: leg factors and tariff wedges; route-choice factors and hours used per good when the
+  network carries them (`kernel_uses_route_taus_when_present`), factors below 1 rejected; kernel low-rank products against dense K on small
   worlds; sourcing against the dense route table and closed-form Eaton-Kortum shares, dispatch
   conservation, unreachable destinations, extreme prices (proptest); pipeline slots and
   wraparound; origin clearing, rationing classes, price clip, zero-supply floor.

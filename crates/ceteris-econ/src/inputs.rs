@@ -280,6 +280,7 @@ impl EconInputs {
             domestic,
             access,
             crossings,
+            route_taus,
         } = network;
         let Countries {
             omega,
@@ -336,6 +337,20 @@ impl EconInputs {
         e.f64s(va0);
         e.f64s(l0);
         e.f64s(va_target);
+        // appended only when present, so least-cost networks keep their digest
+        if let Some(rt) = route_taus {
+            b"route-taus".iter().for_each(|&b| e.u8(b));
+            for list in [
+                &rt.domestic,
+                &rt.access,
+                &rt.crossings,
+                &rt.domestic_hours,
+                &rt.access_hours,
+                &rt.crossing_hours,
+            ] {
+                e.f64s(list.as_flattened());
+            }
+        }
         state_hash(&e.into_bytes())
     }
 }

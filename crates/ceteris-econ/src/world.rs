@@ -230,6 +230,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         c_max,
         border_nu,
         time_cost,
+        // reaches the kernel only through Network.route_taus, in the inputs digest
+        theta_r: _,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
