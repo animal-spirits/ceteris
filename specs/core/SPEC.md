@@ -84,6 +84,10 @@ prefixed with magic `CETS` and a format version. State hash = BLAKE3 of
 the hash, so identical states share one blob. `Sim::seek(t)` restores the nearest
 snapshot at or before `t` and replays. See ADR 0002 for why this is not Arrow yet.
 
+`State::restore` rebuilds a world from its encoding by calling the live world, so a
+world may keep static inputs (kernels, data) in an `Arc` outside the snapshot and
+encode only a digest of them; restore reuses the live handle.
+
 ## Invariants
 
 | Invariant | Statement | Tolerance | Checked where |
