@@ -5,7 +5,9 @@
 //! Countries 0, 1, 2 have a west and an east gateway each; the east gateway of one and the
 //! west gateway of the next form a land crossing, the outer gateways of countries 0 and 2
 //! are ports, joined by sea to each other and to the island port. Country 1 is landlocked.
-//! Every leg costs 0.02 USD per tonne-km at 40 km/h along the straight line.
+//! Land legs (domestic, access, land crossings) cost 0.02 USD per tonne-km, sea crossings
+//! (the three port-to-port lanes, including both island crossings) cost 0.002, bulk sea
+//! freight. All legs move at 40 km/h along the straight line.
 //!
 //! Crude oil (good 1) has no final demand and is an input only to chemicals, fuels and
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
@@ -18,7 +20,10 @@ use crate::params::EconParams;
 
 const MAINLAND: usize = 3;
 const PER_COUNTRY: usize = 8;
-const COST_PER_TKM: f64 = 0.02;
+/// USD per tonne-km on land legs.
+const LAND_COST_PER_TKM: f64 = 0.02;
+/// USD per tonne-km on sea crossings (bulk freight, a tenth of land).
+const SEA_COST_PER_TKM: f64 = 0.002;
 const KMH: f64 = 40.0;
 const OIL: usize = 1;
 const HEAVY: usize = 5;
@@ -44,12 +49,12 @@ const PARTICIPATION: f64 = 0.47;
 
 type Point = (f64, f64);
 
-fn leg(from: usize, to: usize, a: Point, b: Point) -> Leg {
+fn leg(from: usize, to: usize, a: Point, b: Point, cost_per_tkm: f64) -> Leg {
     let km = (a.0 - b.0).hypot(a.1 - b.1);
     Leg {
         from: from as u32,
         to: to as u32,
-        cost_per_t: COST_PER_TKM * km,
+        cost_per_t: cost_per_tkm * km,
         hours: km / KMH,
     }
 }
@@ -111,26 +116,30 @@ pub fn small_world() -> EconInputs {
     for o in 0..np {
         for d in 0..np {
             if o != d && province_country[o] == province_country[d] {
-                net.domestic.push(leg(o, d, province_at[o], province_at[d]));
+                net.domestic
+                    .push(leg(o, d, province_at[o], province_at[d], LAND_COST_PER_TKM));
             }
         }
         for (a, &gc) in gateway_country.iter().enumerate() {
             if gc == province_country[o] {
-                net.access.push(leg(o, a, province_at[o], gateway_at[a]));
+                net.access
+                    .push(leg(o, a, province_at[o], gateway_at[a], LAND_COST_PER_TKM));
             }
         }
     }
     // land crossings east of country c to west of c + 1; sea between ports 0, 5 and island 6
-    let mut pairs: Vec<(usize, usize)> =
-        (0..MAINLAND - 1).map(|c| (2 * c + 1, 2 * c + 2)).collect();
-    pairs.extend([
+    let land = (0..MAINLAND - 1).map(|c| (2 * c + 1, 2 * c + 2, LAND_COST_PER_TKM));
+    let sea = [
         (0, 2 * MAINLAND - 1),
         (0, 2 * MAINLAND),
         (2 * MAINLAND - 1, 2 * MAINLAND),
-    ]);
-    for (a, b) in pairs {
-        net.crossings.push(leg(a, b, gateway_at[a], gateway_at[b]));
-        net.crossings.push(leg(b, a, gateway_at[b], gateway_at[a]));
+    ]
+    .map(|(a, b)| (a, b, SEA_COST_PER_TKM));
+    for (a, b, rate) in land.chain(sea) {
+        net.crossings
+            .push(leg(a, b, gateway_at[a], gateway_at[b], rate));
+        net.crossings
+            .push(leg(b, a, gateway_at[b], gateway_at[a], rate));
     }
 
     let mut wedges = Wedges::none(n_countries);
@@ -239,6 +248,32 @@ mod tests {
         assert!(row.iter().all(|e| e.lag == 1));
         // land crossings are short: lag 0
         assert_eq!(k.good(4).crossings.row(1)[0].lag, 0);
+    }
+
+    #[test]
+    fn fixture_sea_legs_are_cheaper_than_land() {
+        let w = small_world();
+        let island_port = 2 * MAINLAND;
+        let (mut island_legs, mut land_legs) = (0, 0);
+        for l in &w.network.crossings {
+            let km = l.hours * KMH;
+            let touches_island = l.from as usize == island_port || l.to as usize == island_port;
+            let rate = l.cost_per_t / km;
+            if touches_island {
+                island_legs += 1;
+                assert!((rate - 0.002).abs() < 1e-12);
+            } else if rate > 0.003 {
+                land_legs += 1;
+                assert!((rate - 0.02).abs() < 1e-12);
+            }
+        }
+        assert_eq!((island_legs, land_legs), (4, 4));
+        let p = TradeParams::default();
+        let k = Kernel::build(&w.network, &w.weight, &w.wedges, &p);
+        let coal = 2;
+        for c in k.good(coal).crossings.row(island_port) {
+            assert!(c.tau < 2.5, "island coal crossing tau {}", c.tau);
+        }
     }
 
     #[test]
