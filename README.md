@@ -15,6 +15,9 @@ Phase P1 (World and map) of eleven is complete; there is no economics yet.
   from a chosen origin over road, rail, sea and air.
 - County layer (ADR 0009): 53,084 counties from geoBoundaries, nested in provinces and
   drawn from zoom 4; oversized provinces are split along county borders.
+- Map (ADR 0010): provinces are coloured by a GPU fill layer on a flat map or a globe; the
+  desktop app reads the pack from disk through `pack://`. ADR 0011 records the decision to
+  rewrite the map in Rust.
 
 The data licence audit is in `python/ceteris/packs/sources.toml` (ADR 0005).
 

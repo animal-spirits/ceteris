@@ -1,3 +1,10 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+
+export const inTauri = "__TAURI_INTERNALS__" in window;
+
+/** A file in the pack's web directory: served by pack:// in the desktop app (ADR 0010), by Vite in a browser. */
+export const packUrl = (name: string) => (inTauri ? convertFileSrc(`web/${name}`, "pack") : `${location.origin}/${name}`);
+
 // Province attributes from the pack's web/provinces.json (columnar; index = province index).
 
 export const RESOURCE_GROUPS = ["precious", "base", "ferrous", "energy", "industrial"] as const;
@@ -43,13 +50,13 @@ export interface Counties {
 }
 
 export async function loadCounties(): Promise<Counties> {
-  const r = await fetch("/counties.json");
+  const r = await fetch(packUrl("counties.json"));
   if (!r.ok) throw new Error("counties not found: rebuild the pack");
   return r.json();
 }
 
 export async function loadProvinces(): Promise<Provinces> {
-  const r = await fetch("/provinces.json");
+  const r = await fetch(packUrl("provinces.json"));
   if (!r.ok) throw new Error("pack not found: build it with `uv run python -m ceteris.packs`");
   return r.json();
 }

@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { Map as MlMap, NavigationControl, addProtocol, type FeatureIdentifier } from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { packUrl } from "./data";
+import { FillLayer, rgba } from "./fills";
 import { OCEAN } from "./modes";
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
   selected: number | null;
   origin: number | null;
   counties: boolean;
+  globe: boolean;
   onSelect: (province: number, county: number | null) => void;
 }
 
@@ -19,10 +22,11 @@ const SOURCE = "map";
 const province = (i: number): FeatureIdentifier => ({ source: SOURCE, sourceLayer: "provinces", id: i + 1 });
 const COUNTY_MINZOOM = 4;
 
-/** Vector-tiled map of provinces coloured through feature state, so a mode change never re-uploads geometry. */
-export function MapView({ fill, selected, origin, counties, onSelect }: Props) {
+/** Vector-tiled borders and labels from MapLibre; province colours from the GPU fill layer (ADR 0010). */
+export function MapView({ fill, selected, origin, counties, globe, onSelect }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
+  const fills = useRef<FillLayer | null>(null);
   // Updates wait here until the style loads; they run against whichever map is live then.
   const pending = useRef<((m: MlMap) => void)[] | null>([]);
   const marks = useRef<{ selected: number | null; origin: number | null }>({ selected: null, origin: null });
@@ -35,18 +39,16 @@ export function MapView({ fill, selected, origin, counties, onSelect }: Props) {
       container: container.current!,
       style: {
         version: 8,
-        sources: { [SOURCE]: { type: "vector", url: `pmtiles://${location.origin}/map.pmtiles` } },
+        sources: { [SOURCE]: { type: "vector", url: `pmtiles://${packUrl("map.pmtiles")}` } },
         layers: [
           { id: "ocean", type: "background", paint: { "background-color": OCEAN } },
           {
-            id: "fill",
+            // Invisible: provinces are drawn by the fill layer; this one answers clicks and hovers.
+            id: "province-hit",
             type: "fill",
             source: SOURCE,
             "source-layer": "provinces",
-            paint: {
-              "fill-color": ["coalesce", ["feature-state", "fill"], "#9a9a96"],
-              "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.8, 1],
-            },
+            paint: { "fill-opacity": 0 },
           },
           {
             // Invisible, so clicks resolve the county whether or not its borders are shown.
@@ -101,27 +103,25 @@ export function MapView({ fill, selected, origin, counties, onSelect }: Props) {
       attributionControl: { compact: true, customAttribution: "Natural Earth; geoBoundaries; NOAA ETOPO 2022; OurAirports; USGS MRDS" },
     });
     m.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
-    let hover: number | null = null;
-    m.on("mousemove", "fill", (e) => {
-      const id = e.features?.[0]?.id as number | undefined;
-      if (id === undefined || id - 1 === hover) return;
-      if (hover !== null) m.setFeatureState(province(hover), { hover: false });
-      hover = id - 1;
-      m.setFeatureState(province(hover), { hover: true });
+    const layer = new FillLayer("province-fill", packUrl("provinces.fill"));
+    fills.current = layer;
+    m.on("mousemove", "province-hit", (e) => {
+      const id = e.features?.[0]?.id;
+      if (typeof id === "number") layer.setHover(id - 1);
       m.getCanvas().style.cursor = "pointer";
     });
-    m.on("mouseleave", "fill", () => {
-      if (hover !== null) m.setFeatureState(province(hover), { hover: false });
-      hover = null;
+    m.on("mouseleave", "province-hit", () => {
+      layer.setHover(null);
       m.getCanvas().style.cursor = "";
     });
-    m.on("click", "fill", (e) => {
+    m.on("click", "province-hit", (e) => {
       const id = e.features?.[0]?.id;
       if (typeof id !== "number") return;
       const county = m.queryRenderedFeatures(e.point, { layers: ["county-hit"] })[0]?.id;
       select.current(id - 1, typeof county === "number" ? county - 1 : null);
     });
     m.on("load", () => {
+      m.addLayer(layer, "province-hit");
       const queued = pending.current ?? [];
       pending.current = null;
       queued.forEach((f) => f(m));
@@ -138,10 +138,12 @@ export function MapView({ fill, selected, origin, counties, onSelect }: Props) {
 
   useEffect(() => {
     if (!fill) return;
-    whenLoaded((m) => {
-      for (let i = 0; i < fill.length; i++) m.setFeatureState(province(i), { fill: fill[i] });
-    });
+    whenLoaded(() => fills.current?.setColours(rgba(fill)));
   }, [fill]);
+
+  useEffect(() => {
+    whenLoaded((m) => m.setProjection({ type: globe ? "globe" : "mercator" }));
+  }, [globe]);
 
   useEffect(() => {
     whenLoaded((m) => m.setLayoutProperty("county-lines", "visibility", counties ? "visible" : "none"));

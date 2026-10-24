@@ -21,6 +21,7 @@ export function App() {
   const [county, setCounty] = useState<number | null>(null);
   const [counties, setCounties] = useState<Counties | null>(null);
   const [showCounties, setShowCounties] = useState(false);
+  const [globe, setGlobe] = useState(false);
   const [origin, setOrigin] = useState<number | null>(null);
   const [tree, setTree] = useState<CostTree | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export function App() {
         selected={selected}
         origin={mode === "cost" ? origin : null}
         counties={showCounties}
+        globe={globe}
         onSelect={onSelect}
       />
       <nav className="panel modes" aria-label="Map mode">
@@ -61,6 +63,10 @@ export function App() {
         <label className="toggle">
           <input type="checkbox" checked={showCounties} onChange={(e) => setShowCounties(e.target.checked)} />
           Counties
+        </label>
+        <label className="toggle">
+          <input type="checkbox" checked={globe} onChange={(e) => setGlobe(e.target.checked)} />
+          Globe
         </label>
         {mode === "resources" && (
           <select value={group} onChange={(e) => setGroup(e.target.value as ResourceGroup | "all")} aria-label="Resource group">
