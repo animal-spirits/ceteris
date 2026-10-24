@@ -500,7 +500,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 ///
 /// | file | columns |
 /// |---|---|
-/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (P_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
+/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (the delivered unit price q_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
 /// | `run_wages` | province u32, wage f64, clip_ticks u32 (ticks the wage step clip bound) |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
 /// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |

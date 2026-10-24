@@ -59,6 +59,8 @@ home-routed output plus arrivals) and prices move on the destination gap.
 - The European-slice comparison runs on the fixture instead (full globe, ADR 0012).
 - Stability: the owner decision of 2026-10-24 (kappa1 0.02, kappa2 0) was measured on destination
   clearing with routed supply arriving late; it is re-derived under origin clearing (ADR 0019).
+  Outcome: kappa1 0.05, kappa2 0 (owner, 2026-10-24, MIGRATION Task 6), on the derived region's
+  edge kappa2 = 0, which counts as inside (owner ruling, MIGRATION Task 6).
 - Budget: the trade line drops from 30 ms to 5 ms per tick on the full pack (19.2 at rev 226).
 
 ## Consequences

@@ -26,10 +26,11 @@ pub struct TradeParams {
     /// Stability region) bounds it at 0.124 to 0.145 for the theta-12.55 goods, 0.230 to 0.278
     /// at theta 5.88 and 0.368 to 0.507 for food. Growth factor per tick of a small deviation
     /// from the fixture's GE equilibrium between ticks 300 and 600 at the per-good thetas,
-    /// kappa2 = 0 (MIGRATION Task 6; frictionless / default): at the defaults (pi^e gain 0.006)
-    /// 0.9963 / 0.9969; with pi^e = 0, kappa1 0.02: 0.9954 / 0.9954; 0.05: 0.9862 / 0.9871;
-    /// 0.1: 0.9718 / 0.9756; 0.2: 1.0000 / 1.0000 (oscillates), the same with every crossing
-    /// lag at 3 months (the full pack's cap).
+    /// kappa2 = 0 (frictionless / default): at the defaults (pi^e gain 0.006) 0.99644 /
+    /// 0.99676 on the blessed fixture (after MIGRATION Task 8; 0.9963 / 0.9969 at Task 6);
+    /// measured at MIGRATION Task 6, with pi^e = 0, kappa1 0.02: 0.9954 / 0.9954; 0.05:
+    /// 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756; 0.2: 1.0000 / 1.0000 (oscillates), the same with
+    /// every crossing lag at 3 months (the full pack's cap).
     pub kappa1: f64,
     /// P03b price response to the inventory gap, per month. Prior 0 to 0.5 (widened from 0.05
     /// by owner decision, 2026-10-24), default 0: the inventory term is off and inventories

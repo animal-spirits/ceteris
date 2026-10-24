@@ -10,17 +10,19 @@ Model changes (each with its ADR; the econ and trade specs carry the equations):
   over origins by Eaton-Kortum shares on K p_o^-theta, buyers pay the origin price (with tariff)
   at dispatch. Tariffs sit inside destination spending.
 - 0016 Origin markets clear across ticks: orders are filled against output and merchant
-  inventory, the unfilled part carries as demand_int / demand_hh. `route.rs`, `transit.rs` and
+  inventory; unfilled spending stays with the buyer, with no backlog. `route.rs`, `transit.rs` and
   `Kernel::access` are gone.
 - 0017 Route-choice trade costs: deferred past P2 (owner, 2026-10-24). S05 least-cost legs stay
   the default and `Network.route_taus` stays `None`; the module stays in the tree, tested and off.
 - 0018 and 0023 Sector trade elasticities: P01 is a theta per traded good, in classes food 2.62,
-  goods 4 and 6 5.88, goods 0, 1, 2, 5 12.55 (Caliendo and Parro 2015, 99% sample column).
+  goods 4 and 6 5.88, goods 0, 1, 2, 5 12.55 (Caliendo and Parro 2015, 99% sample column). ADR
+  0023 (the classes and their values) is an agent default under 22.2, not an owner decision.
 - 0019 Expected inflation in the price and wage rules (P45 gain 0.006).
 - 0020 Putty-clay coefficients and a same-tick chain for local goods; rationing modes include
   S11 Mixed (Pichler and Farmer 2022, Algorithm 2).
 - 0021 PIGL household demand over three categories (goods 0 and 3; 1, 2, 4, 5, 6; 7, 8, 9) with
-  lognormal pop income, and a consumption rule (P46, P47).
+  lognormal pop income (PIGL parameters P46, P47); the consumption rule (P37) is spend-all
+  in P2 (m = 1, lambda = 0).
 - 0022 Uniqueness check (AAL 2024 Theorem 1) before V1, static nesting gate, direct estimation of
   theta, border friction and mode costs (estimation lands with PLAN Task 18).
 
@@ -31,7 +33,7 @@ Owner decisions (2026-10-24):
 - Buyers use the delivered unit price q_d = 1/alpha_d in household demand, input orders and p_VA.
 - Route choice deferred past P2 (ADR 0017).
 - kappa1 0.05 (P03a) and gain 0.006 (P45); kappa2 0 unchanged.
-- S11 Mixed rationing mode added.
+- S11 Mixed rationing mode added; it fills as Priority until P4 adds essential consumption levels.
 
 Goldens re-blessed (`CETERIS_BLESS=1`): `tests/golden/p2-econ.txt` (every state hash changes:
 new state layout, sourcing, markets and pipelines) and `tests/golden/p2-fixture/` (export format

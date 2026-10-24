@@ -1,6 +1,6 @@
 # 0020. Putty-clay intermediates and within-tick rationing
 
-Status: implemented on p2-econ (MIGRATION Task 8)
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 8)
 Date: 2026-10-24
 Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 17.2 (S09, S11), 19.4
 
@@ -45,7 +45,8 @@ of within-tick rationing.
   ICIO row (one vintage). P2 output is unchanged by this step, and the golden equals S09.
 - Priority: P2 already fills enterprise input orders before household demand (controller ruling
   during Task 7). With no subsistence levels before P4, that is the review's order (essential
-  consumption, then intermediate users, then the rest). Proportional and mixed become S11.
+  consumption, then intermediate users, then the rest). Proportional and mixed become S11; Mixed
+  fills as Priority until P4 adds essential consumption levels.
 - Same-tick chain: local goods (utilities, construction, services) have no transit, so their
   production, input use and rationing run as one pass within the tick, in input-output order with
   a fixed iteration bound, so an upstream local shortage reaches downstream output in the same
