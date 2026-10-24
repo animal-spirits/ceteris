@@ -35,7 +35,7 @@ Owner decisions (2026-10-24):
 
 Goldens re-blessed (`CETERIS_BLESS=1`): `tests/golden/p2-econ.txt` (every state hash changes:
 new state layout, sourcing, markets and pipelines) and `tests/golden/p2-fixture/` (export format
-2, per-good theta, delivered-price inputs, PIGL parameters, new `pigl_check.arrow`, and the
+6, per-good theta, delivered-price inputs, PIGL parameters, new `pigl_check.arrow`, and the
 reference solution of the new model). The three tests held back since Task 1
 (`p2_fixture_matches_golden_hashes`, `fixture_export_is_current`,
 `test_fixture_reference_is_current`) run again.
