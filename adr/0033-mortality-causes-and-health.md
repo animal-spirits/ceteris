@@ -40,8 +40,10 @@ Option 2.
 ## Migration
 
 - P4: cause-group decomposition; P8: pollution and heat hazards.
-- Data: WHO Global Health Estimates (terms to audit; preferred to IHME GBD, whose licence is
-  non-commercial, ADR 0050).
+- Data: WHO Global Health Estimates. WHO's data portal states CC BY-NC-SA 3.0 IGO, which is
+  non-commercial, so GHE files stay in the research pack (ADR 0050); the release pack uses
+  World Bank re-publications under CC BY 4.0 where they exist, or published cause-group
+  parameters. IHME GBD is non-commercial too.
 
 ## Tests
 
