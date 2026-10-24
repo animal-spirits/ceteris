@@ -18,15 +18,38 @@ use crate::params::TradeParams;
 /// Q_floor as a fraction of the good's world mean Q over active cells.
 const Q_FLOOR_FRACTION: f64 = 1e-9;
 
-/// How a shortfall at an origin is shared between the two buyer classes. Index 0 of a fill
-/// pair is intermediate users, index 1 households.
+/// S11: how a shortfall is shared between the two buyer classes (`specs/trade/SPEC.md`,
+/// Deviations, rationing row). Index 0 of a fill pair is intermediate users, index 1
+/// households.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rationing {
-    /// Intermediate orders are filled first; households share what remains (DESIGN 8.2,
-    /// intermediate users by contract before the rest).
+    /// DESIGN 8.2: households' essential consumption, then intermediate users pro rata, then
+    /// the rest. P2 has no essential consumption levels (P4), so it fills as `Mixed`.
     Priority,
-    /// One fill ratio for both classes.
+    /// One fill ratio for both classes (Pichler and Farmer 2022, Algorithm 1).
     Proportional,
+    /// Intermediate users pro rata at min(1, A / D_int), households the residual
+    /// max(A - D_int, 0) / D_hh (Pichler and Farmer 2022, Algorithm 2, eqs. (12) and (15)).
+    Mixed,
+}
+
+impl Rationing {
+    /// Fill ratios `[intermediate, household]` of orders `d_int` and `d_hh` against `avail`;
+    /// 1 for a class with no orders.
+    pub fn fill(self, avail: f64, d_int: f64, d_hh: f64) -> [f64; 2] {
+        let d = d_int + d_hh;
+        if d <= avail {
+            return [1.0, 1.0];
+        }
+        match self {
+            Rationing::Proportional => [avail / d; 2],
+            // no essential consumption before P4: Priority is Mixed
+            Rationing::Priority | Rationing::Mixed if d_int > avail => {
+                [avail / d_int, if d_hh > 0.0 { 0.0 } else { 1.0 }]
+            }
+            Rationing::Priority | Rationing::Mixed => [1.0, (avail - d_int) / d_hh],
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -72,9 +95,10 @@ impl Markets {
     }
 
     /// Clears the active traded cells at the origin: D = `demand_int + demand_hh` (written to
-    /// `demand`), sales = min(D, S + Q), a shortfall shared by `rationing`, S' = S + Q - sales.
-    /// Writes the fill ratios `[intermediate, household]` into `fill[i]` for the cells it
-    /// clears, 1 for a class with no orders; other cells of `fill` are untouched.
+    /// `demand`), sales = min(D, S + Q), a shortfall shared by `rationing`
+    /// ([`Rationing::fill`]), S' = S + Q - sales. Writes the fill ratios `[intermediate,
+    /// household]` into `fill[i]` for the cells it clears, 1 for a class with no orders; other
+    /// cells of `fill` are untouched.
     pub fn clear(&mut self, rationing: Rationing, fill: &mut [[f64; 2]]) {
         assert_eq!(fill.len(), self.price.len());
         for i in 0..self.price.len() {
@@ -86,22 +110,15 @@ impl Markets {
             let d = d_int + d_hh;
             self.demand[i] = d;
             let avail = s + q;
+            fill[i] = rationing.fill(avail, d_int, d_hh);
             if d <= avail {
-                fill[i] = [1.0, 1.0];
                 self.sales[i] = d;
                 // S + (Q - D) rather than (S + Q) - D keeps S bit for bit when D = Q
                 self.inventory[i] = (s + (q - d)).max(0.0);
-                continue;
+            } else {
+                self.sales[i] = avail;
+                self.inventory[i] = 0.0;
             }
-            fill[i] = match rationing {
-                Rationing::Proportional => [avail / d; 2],
-                Rationing::Priority if d_int > avail => {
-                    [avail / d_int, if d_hh > 0.0 { 0.0 } else { 1.0 }]
-                }
-                Rationing::Priority => [1.0, (avail - d_int) / d_hh],
-            };
-            self.sales[i] = avail;
-            self.inventory[i] = 0.0;
         }
     }
 
@@ -574,6 +591,33 @@ mod tests {
         m.clear(Rationing::Proportional, &mut fill);
         assert_eq!(fill[G], [0.5, 0.5]);
         assert_eq!((m.sales[G], m.inventory[G]), (3.0, 0.0));
+    }
+
+    /// Mixed proportional/priority rationing of Pichler and Farmer (2022, Algorithm 2, eqs.
+    /// (12) and (15)) at an origin with A = S + Q: intermediate users are filled pro rata at
+    /// min(1, A / D_int), households take the residual max(A - D_int, 0) / D_hh. Without
+    /// essential consumption levels (P4), Priority fills the same.
+    #[test]
+    fn mixed_rationing_matches_definition() {
+        let mut fill = vec![[0.0; 2]; N_GOODS];
+        // A = 0.5 + 1.5 = 2 against intermediate orders 1.6: filled, households share 0.4
+        // of 2.0; against 2.5: r = 0.8, households get nothing
+        for (int, hh, want) in [(1.6, 2.0, [1.0, 0.2]), (2.5, 3.0, [0.8, 0.0])] {
+            for rationing in [Rationing::Mixed, Rationing::Priority] {
+                let (mut m, _) = one();
+                order(&mut m, G, 0.5, 1.5, int, hh);
+                m.clear(rationing, &mut fill);
+                for c in 0..2 {
+                    assert!((fill[G][c] - want[c]).abs() < 1e-15, "{rationing:?} {c}");
+                }
+                assert_eq!((m.sales[G], m.inventory[G]), (2.0, 0.0));
+            }
+        }
+        // no household orders: the intermediate fill alone
+        let (mut m, _) = one();
+        order(&mut m, G, 0.0, 1.0, 4.0, 0.0);
+        m.clear(Rationing::Mixed, &mut fill);
+        assert_eq!(fill[G], [0.25, 1.0]);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018, 0019, 0021 and 0023
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0021 and 0023
 
 ## Purpose
 
@@ -21,6 +21,8 @@ investment, finance, the state and politics are later phases.
 | Enterprises set output from demand forecasts and inventory coverage (7.3) | Price-taking enterprises move employment toward the profit-maximizing level at expected (current) prices; inventory coverage lives with the province market (trade SPEC) | Province markets absorb all output at the posted price, so firms face prices, not demand curves; this rule nests the GE optimum exactly. The forecast rule can return as a switch when firms get pricing power |
 | PIGL over five categories: food, energy, housing, manufactures, services (8.6) | PIGL over the three categories the form was estimated on, A (goods 0, 3), M (goods 1, 2, 4, 5, 6), S (goods 7, 8, 9), with a CES over goods within each (ADR 0021, controller ruling 2026-10-24) | Alder, Boppart and Mueller (2022) estimate agriculture, manufacturing and services only; crude oil, coal and utilities have no clean counterpart there and are placed by the nearest category |
 | Intermediates Leontief plus a CES energy nest (7.2) | All intermediates Leontief | The energy nest comes with energy and emissions (P8) |
+| Putty-clay intermediates: coefficients per capacity vintage, chosen at investment by a CES at P38, Leontief once installed (7.2, ADR 0020) | Each enterprise runs on its own coefficient vector (`EntData.coef`, `Layout.coef`), one vintage: its country's 2000 ICIO column, filled at load (`EconInputs::set_coefficients`). S09 `Technology::FixedLeontief` reads the country column instead. With one vintage both settings read the same numbers and run bit for bit alike, state hashes included: the switch enters the static digest only once some enterprise's coefficients differ from its country's (`putty_clay_one_vintage_equals_fixed_leontief`) | No investment in P2, so no vintage beyond the first; the vintage choice and P38 arrive with investment (7.4) |
+| Within-tick rationing, inventories as the buffer (8.2, 19.4, ADR 0020) | Local goods (utilities, construction, services): a same-tick chain at E2 per province (`local.rs`, Production below): a shortage of a local good cuts its users' output in the tick it happens. Traded goods keep their stocks and transit lags. Departures from the migration brief's chain, each needed for exact Leontief use: (1) a producer's own use of its good comes out of its output first, since cutting the producer pro rata with its users leaves the ratio of output to need unchanged and with empty stocks drives the pair to zero; (2) each user covers its residue from its own stock (the ledger holds stocks per enterprise), so the stock that counts for a good is sum min(b, n), and output is split so that each user's residue fits its stock; (3) each good's common fill is solved exactly for its users (the limit of repeating the brief's f_k), so a single shortage settles in two iterations; (4) a cycle between two local goods can still converge slowly (loop gain near 1 when both are fully used): at the bound the remaining shortage is cleared by cutting the users that produce no local good, which changes no local output, and where the producers of local goods alone do not fit, by stopping the users whose stock cannot cover them, so input use always equals coef Y exactly (MIGRATION Task 8) | ADR 0020 Mapping (owner, 2026-10-24): local goods have no transit, so their production, input use and rationing run as one pass within the tick |
 | VA over K, effective L by education, land or resources T (7.2) | Normalized CES over one fixed factor F (capital, land and resources together) and effective labour | No investment in P2, so K and T never move separately; one fixed factor keeps the reference model small |
 | Pops keyed by province, ethnic group, education, labour status (6.1) | Province x education (3 levels); labour status as employed and unemployed counts inside each pop | Ethnicity and status transitions are P4 |
 | Wage posting and matching function (8.7) | Wage moves with excess labour demand, with downward rigidity; employment rationed pro rata | Matching and occupational mobility are P4 |
@@ -99,6 +101,7 @@ employment.
 | Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
 | Output, sales, profit last tick | enterprise | `f64` | | |
+| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage: the country's 2000 ICIO column |
 | Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | one month of base input use |
 | Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u_2000) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
@@ -111,36 +114,65 @@ enterprise belongs to one province; per-province work is a contiguous slice.
 
 ## Equations
 
-**Production.** For enterprise (i, g) with country input coefficients a_kg and VA coefficient
-a_VA = 1 - sum_k a_kg (at reference prices):
+**Production.** For enterprise e = (i, g) with input coefficients coef_k (`Layout.coef`: its
+putty-clay coefficients, one vintage in P2, or its country's a_kg under S09 fixed Leontief) and
+VA coefficient a_VA = 1 - sum_k coef_k (at reference prices):
 
 ```
-Y  = min( VA / a_VA,  min_k  M_k / a_kg )                         (Leontief)
+Y  = min( VA / a_VA,  min_k M_k / coef_k )                       (Leontief)
 VA = A * VA0 * [ (1 - s_L) + s_L (L/L0)^rho ]^(1/rho)              (normalized CES, F fixed at F0)
 rho = (sigma_FL - 1) / sigma_FL                                    (P08)
 ```
 
-sigma_FL = 1 uses the Cobb-Douglas limit VA = A VA0 (L/L0)^s_L. Inputs M_k come from the
-enterprise's input stock, bought at the previous tick's market clearing; a shortfall caps Y,
-so rationing propagates through the IO network (7.3) with a one-month lag, and local goods
-(services feed services) need no same-tick solve. Each tick the enterprise orders up to an inventory position
-(stock plus goods on order, the paid shipments in its pipeline):
+sigma_FL = 1 uses the Cobb-Douglas limit VA = A VA0 (L/L0)^s_L. Traded inputs M_k come from the
+enterprise's input stock, bought at earlier ticks and delivered after transit; a shortfall caps Y
+in the tick the stock runs out, so a traded shortage reaches its users with their stocks and
+transit as the lag. Local inputs (goods 7 to 9) come from this tick's local output first and the
+enterprise's stock second, in the same-tick chain (ADR 0020, `local.rs`), run per province:
 
 ```
-order_k = max(0, (1 + cover + L_k) a_kg Y_cap - stock_k - on_order_k),    cover = 1
+Y_e = min(VA / a_VA, min over traded k of M_k / coef_k)        every enterprise of the province
+repeat up to N_LOCAL = 32 times, for each local good k:
+    R_k  = (1 - coef_kk) Y_p                                    p the producer of k: own use first
+    n_ek = coef_ek Y_e, b_ek = e's stock of k                   every other user e
+    f_k  = largest x <= 1 with x sum n_ek <= R_k + sum min(b_ek, x n_ek)
+         = the limit of f_k <- min(1, (R_k + sum min(b_ek, n_ek)) / sum n_ek) with every user cut alike
+  Y'_e = Y_e min over local k used by e (its own good left out) of f_k
+  stop when max_e |Y'_e - Y_e| <= 1e-12 Y_e; Y = Y'
+after the bound: a good still short is cleared by cutting the users that produce no local good
+(no local output moves); if its producers alone do not fit, the users their stock cannot cover stop
+draws: with output enough, every user draws n_ek from output; short, each draws max(n_ek - b_ek, 0)
+plus the rest of R_k pro rata to min(b_ek, n_ek), its stock covering the remainder
+```
+
+Y never rises. The draws are paid at the posted price at E2, count in the market's demand and
+sales, and come before household demand under every S11 setting (the chain runs before E3); at
+T3 the rest of local output is shared between enterprise orders (stock refills) and households by
+S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
+1,200 ticks, the chain binds in 6 of 30,000 province ticks in the default run (5 settle in 2
+iterations, 1 in 3; the island, ticks 27 to 33) and never in the frictionless run; with services
+feeding services at 0.3 and construction and services each other at 0.2 it binds in 287 of 3,000
+province ticks over 120 ticks, 8 of them at the bound (a utilities and construction pair with loop
+gain about 0.86; `local_chain_terminates_on_cycles`). Each tick the enterprise orders up to an
+inventory position (stock plus goods on order, the paid shipments in its pipeline):
+
+```
+order_k = max(0, (1 + cover + L_k) coef_k Y_cap - stock_k - on_order_k),    cover = 1
 ```
 
 where Y_cap = VA(L) / a_VA is capacity output at this tick's employment and L_k the expected
 months in transit of input k to the enterprise's province: the arrival slots of its sourcing
 (0 home, 1 domestic, 1 + lag a crossing) weighted by the units arriving at current shares; 0 for
-local goods (bought at the province market and delivered the same tick). Where L = 0 everywhere
-this is the two-month rule (owner decisions, 2026-10-24): planning on output cut by a short input
-would cut the next order and the next output with it, a ratchet that emptied the fixture economy
-from the data state; and a fixed target that counts goods on order cannot hold a month in
-transit. Traded inputs are bought at the delivered unit price q_k, spend = order_k q_k, so the
-units ordered are the units that arrive. At a steady state inputs do not bind and Y_cap = Y.
+local goods (bought at the province market and delivered the same tick, so their stock is a buffer
+that the chain draws only in a shortage). Where L = 0 everywhere this is the two-month rule (owner
+decisions, 2026-10-24): planning on output cut by a short input would cut the next order and the
+next output with it, a ratchet that emptied the fixture economy from the data state; and a fixed
+target that counts goods on order cannot hold a month in transit. Traded inputs are bought at the
+delivered unit price q_k, spend = order_k q_k, so the units ordered are the units that arrive. At a
+steady state inputs do not bind, Y_cap = Y, local stocks stay at their target and their orders are
+zero, so the steady state (and the GE reference) is that of the lagged rule.
 
-**Labour target.** With value-added price p_VA = (p_ig - sum_k a_kg q_ik) / a_VA, the own
+**Labour target.** With value-added price p_VA = (p_ig - sum_k coef_k q_ik) / a_VA, the own
 (origin or province market) price at current prices and the buyer prices q_ik of last tick's
 E3 (the delivered unit price of traded inputs, the posted price of local ones), the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
 
@@ -296,10 +328,10 @@ optional, 19.1).
 |---|---|---|---|---|
 | T1 | deliver (trade) | pipeline | pops' consumption, enterprise input stocks | first |
 | E1 | labour | prices, last tick's buyer prices, wages, pi^e, A | L*, L, wages, wage clip counts, unemployment | labour market |
-| E2 | produce | L, input stocks | input use, output to the province's market (Q), wages paid | production |
-| E3 | demand | pop money, prices, output, pipeline | buyer prices q and leads L, household demand, enterprise input orders | consumption demand |
+| E2 | produce | L, input stocks, local output (same-tick chain per province) | input use (local inputs drawn from this tick's output first, paid at the posted price), output to the province's market (Q), wages paid | production |
+| E3 | demand | pop money, prices, output, pipeline, E2 local draws | buyer prices q and leads L, household demand and enterprise input orders on top of the local draws | consumption demand |
 | T2 | source (trade) | traded spending, prices, kernel | orders at origin markets | inter-province trade |
-| T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales and payments | markets |
+| T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
 | E4 | distribute | enterprise and market cash flow, rebates | pop money for next tick | finance (P2 stand-in) |
@@ -319,7 +351,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Goods | Created - destroyed = change in holdings (incl. transit) | 1e-9 relative | every tick |
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
-| Leontief | Inputs used = a_kg Y | 1e-12 relative | every tick |
+| Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 relative | every tick |
 | Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
 | Determinism | Same inputs, same hashes; 1 vs 8 threads; replay from snapshots | exact | P2 acceptance |
@@ -385,6 +417,15 @@ texture fed from core columns.
 
 ## Test plan
 
+- Same-tick chain and putty-clay (ADR 0020, `p2_properties.rs`): one vintage equals fixed
+  Leontief in every state hash over 120 ticks (`putty_clay_one_vintage_equals_fixed_leontief`); a
+  50% cut of services labour with empty local stocks cuts construction output in the same tick
+  (`local_shortage_reaches_downstream_same_tick`); intermediate users draw all of a short local
+  good before households, and Priority fills intermediate orders first at origins
+  (`local_chain_respects_intermediate_priority`); cutting coal output leaves downstream output
+  unchanged in that tick and lowers it once stocks run out (`traded_shortage_still_lags`); cycles
+  among local goods (`local_chain_terminates_on_cycles`); S11 Proportional gives one fill ratio
+  (`proportional_rationing_switch`); `fill` and `split` in `local.rs`.
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
   numerical maximization, wage step and clip, rigidity on nominal cuts
   (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, income split, rounding of payments. PIGL (`demand.rs`): pop
@@ -413,8 +454,8 @@ texture fed from core columns.
 - DOSE region matching rate to Natural Earth provinces without GADM geometry; if too low,
   manufacturing falls back to gridded GDP for those countries.
 - 2000 tariff detail beyond importer x two groups (WTO IDB is closed-source only, fetch).
-- Stability on the full pack: on the fixture under origin clearing and PIGL demand small
-  deviations decay by 0.9965 (frictionless) and 0.9968 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
+- Stability on the full pack: on the fixture under origin clearing, PIGL demand and the same-tick
+  chain small deviations decay by 0.9964 (frictionless) and 0.9968 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
   0, expectation gain 0.006; trade SPEC, Stability region and P03a, P03b, P45). The slowest
   mode is the world price level, which expected inflation turns into a damped oscillation
   (trade SPEC, Nominal mode). Re-measure on the pack in Task 20.
@@ -426,6 +467,10 @@ texture fed from core columns.
   province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
   (food 0.118 for 0.120). Matching the aggregate exactly would need a per-country solve over
   its pops.
+- Same-tick chain in cycles: two local goods that each take most of the other's output converge
+  slowly (geometrically, at a loop gain near 1), and at the bound the chain clears the rest by
+  cutting the users that produce no local good rather than all users pro rata; on the fixture it
+  never reaches the bound. Measure on the pack (Task 19) and revisit the bound or the solve there.
 - Frictionless clearing wage: each labour target is capped at L^s, so where one enterprise's
   target reaches L^s, capped demand equals L^s on a whole interval of low wages; the search
   then finds no sign change and the wage is indeterminate below the true root. Searching on

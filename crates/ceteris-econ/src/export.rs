@@ -49,7 +49,7 @@ use ceteris_core::schedule::SystemId;
 use crate::demand::{CATEGORY, pigl};
 use crate::flows::WINDOW;
 use crate::inputs::EconInputs;
-use crate::params::EconParams;
+use crate::params::{EconParams, Technology};
 use crate::world::{
     EconWorld, MINOR_PER_UNIT, active_cells, base_spend, household_preferences, static_digest,
 };
@@ -60,8 +60,9 @@ use crate::world::{
 /// a list in `params.json`, and `goods.theta_class` (ADRs 0018 and 0023). 4: `params.json`
 /// has `expectation_gain`, `run_prices` and `run_wages` have `clip_ticks` (ADR 0019). 5: PIGL
 /// demand (ADR 0021): `goods.category`, `countries.gini`, the `pigl_*` parameters in
-/// `params.json`, the `pigl_check` table.
-pub const EXPORT_FORMAT: &str = "5";
+/// `params.json`, the `pigl_check` table. 6: `params.json` has `technology` (S09) and
+/// `rationing` may be `mixed` (ADR 0020).
+pub const EXPORT_FORMAT: &str = "6";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -429,6 +430,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("time_cost", "P43"),
         ("expectation_gain", "P45"),
         ("rationing", "S11"),
+        ("technology", "S09"),
     ];
     let register: Vec<String> = register
         .iter()
@@ -452,6 +454,15 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
             match p.rationing {
                 Rationing::Priority => "\"priority\"",
                 Rationing::Proportional => "\"proportional\"",
+                Rationing::Mixed => "\"mixed\"",
+            }
+            .to_string(),
+        ),
+        (
+            "technology",
+            match p.technology {
+                Technology::PuttyClay => "\"putty_clay\"",
+                Technology::FixedLeontief => "\"fixed_leontief\"",
             }
             .to_string(),
         ),
@@ -840,6 +851,7 @@ mod tests {
         );
         assert!(json.contains("\"pigl_eps\": 0.71"), "{json}");
         assert!(json.contains("\"rationing\": \"priority\""), "{json}");
+        assert!(json.contains("\"technology\": \"putty_clay\""), "{json}");
         assert!(json.contains("\"weight_floor\": 1e-100"), "{json}");
         assert!(
             json.contains(&format!("\"minor_per_unit\": {MINOR_PER_UNIT:?}")),

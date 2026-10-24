@@ -214,6 +214,7 @@ pub fn small_world() -> EconInputs {
         pops,
         enterprises: ent,
     };
+    inputs.set_coefficients();
     inputs.set_base_point(&EconParams::default().edu_eff);
     inputs
 }
