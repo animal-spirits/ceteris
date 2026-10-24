@@ -23,7 +23,7 @@ import shapely
 from pyarrow import ipc
 from shapely import STRtree
 
-from . import counties, fetch, geo, provinces, raster, resources, transport
+from . import counties, fetch, fills, geo, provinces, raster, resources, transport
 
 CONFIG = tomllib.loads(Path(__file__).with_name("pack.toml").read_text())
 ROOT = Path(__file__).resolve().parents[3]
@@ -278,14 +278,20 @@ def build(out: Path) -> dict:
     groups = {}
     for i, p in enumerate(provs):
         groups.setdefault(p.country, []).append(i)
+    county_simple = simplify([c.geom for c in cty])
     hashes |= write_tiles(
         web / "map.pmtiles",
         {
             "provinces": (simple, 0),
             "countries": ([shapely.union_all(simple[groups[c]]) for c in codes], 0),
-            "counties": (simplify([c.geom for c in cty]), COUNTY_MINZOOM),
+            "counties": (county_simple, COUNTY_MINZOOM),
         },
     )
+    # Fills share the tiles' simplified geometry, so they meet the drawn borders (ADR 0010).
+    fill_stats = {}
+    for name, geoms in (("provinces", simple), ("counties", county_simple)):
+        fill_stats[name] = fills.write(web / f"{name}.fill", geoms)
+        hashes[f"web/{name}.fill"] = sha256(web / f"{name}.fill")
     attrs = {
         "id": [p.id for p in provs],
         "name": [p.name for p in provs],
@@ -333,6 +339,7 @@ def build(out: Path) -> dict:
         "counties": len(cty),
         "counties_unassigned": int((home < 0).sum()),
         "county_area_outside_province": round(1 - fits_inside / fits, 4),
+        "fills": fill_stats,
     }
     manifest = {
         "pack_format": PACK_FORMAT,
