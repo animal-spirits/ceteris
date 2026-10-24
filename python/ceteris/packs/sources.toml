@@ -658,7 +658,7 @@ policy = "bundle-aggregates"
 reason = "OECD data terms allow distribution for any purpose, including commercial"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices."
+notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices. The 2025 ReadMe (webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/ReadMe_ICIO_small.xlsx, reachable live) lists 50 industries with B05 and B06 split."
 
 [[source]]
 id = "baci"
@@ -1771,3 +1771,41 @@ reason = "No licence stated; atop-3 ends 2003"
 checked = 2026-10-23
 confidence = "high"
 closed_source_only = true
+
+[[source]]
+id = "wits-concordance"
+name = "WITS product concordance, HS 1988/92 to ISIC Revision 3"
+provider = "World Bank WITS"
+version = "H0 to I3 (JobID-6, 2013)"
+role = "Product to industry bridge for weight per value (7.2, 15.4)"
+licence = "LicenseRef-WITS-no-licence-stated"
+licence_url = "https://wits.worldbank.org/faqs.html#Databases"
+attribution = "World Bank, World Integrated Trade Solution (WITS), product concordance H0 to I3"
+commercial_use = false
+share_alike = false
+use = "primary"
+policy = "fetch"
+reason = "No licence stated for the concordance files; the WITS usage conditions cover Comtrade, IDB and CTS data, not the correspondence tables. Only ten derived weights enter the pack."
+checked = 2026-10-24
+confidence = "low"
+closed_source_only = true
+notes = "WITS offers no HS to ISIC Revision 4 table, so the pipeline chains H0 to I3 with unsd-isic-correspondence. Before opening: confirm the terms with WITS, or rebuild the bridge from UN Comtrade-independent open sources."
+
+[[source]]
+id = "unsd-isic-correspondence"
+name = "UNSD correspondence table ISIC Rev 3.1 to ISIC Rev 4"
+provider = "United Nations Statistics Division"
+version = "ISIC31_ISIC4"
+role = "Industry revision bridge for weight per value (7.2, 15.4)"
+licence = "LicenseRef-UN-terms-of-use"
+licence_url = "https://www.un.org/en/about-us/copyright"
+attribution = "United Nations Statistics Division, ISIC Rev.3.1 to ISIC Rev.4 correspondence table"
+commercial_use = false
+share_alike = false
+use = "primary"
+policy = "fetch"
+reason = "UN copyright: all rights reserved except as the UN terms of use allow; no open licence for the classification tables. Only ten derived weights enter the pack."
+checked = 2026-10-24
+confidence = "low"
+closed_source_only = true
+notes = "Before opening: request permission from UNSD, or replace with an open correspondence."
