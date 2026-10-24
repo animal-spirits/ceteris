@@ -13,7 +13,7 @@
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{Leg, N_GOODS, Network, Wedges};
+use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -219,10 +219,61 @@ pub fn small_world() -> EconInputs {
     inputs
 }
 
+/// Machinery, which the island does not make: unreachable there in [`unreachable_island`].
+pub const UNREACHABLE: usize = 6;
+/// The one island sector that still uses [`UNREACHABLE`] in [`unreachable_island`].
+pub const ISLAND_USER: usize = 4;
+
+/// The small world with machinery unreachable at the island (Review Focus 1): no route to or
+/// from the island port for that good, every other leg at its least-cost factor (S05) under
+/// `trade`, so the island's delivered price of machinery is infinite. Of the island's sectors
+/// only light manufacturing still uses machinery; were every sector to use it, the whole
+/// island would be input capped and its labour market would have no solution. The base point
+/// does not depend on input coefficients, so it stays that of [`small_world`].
+pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
+    let mut inputs = small_world();
+    let island_port = (2 * MAINLAND) as u32;
+    let weight = inputs.weight;
+    let factors = |legs: &[Leg], crossings: bool| -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
+        legs.iter()
+            .map(|l| {
+                let cut = crossings && (l.from == island_port || l.to == island_port);
+                let tau = std::array::from_fn(|g| {
+                    if cut && g == UNREACHABLE {
+                        f64::INFINITY
+                    } else {
+                        // the kernel's least-cost factor, so every other leg is unchanged
+                        1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
+                    }
+                });
+                (tau, [l.hours; N_GOODS])
+            })
+            .unzip()
+    };
+    let net = &inputs.network;
+    let (domestic, domestic_hours) = factors(&net.domestic, false);
+    let (access, access_hours) = factors(&net.access, false);
+    let (crossings, crossing_hours) = factors(&net.crossings, true);
+    inputs.network.route_taus = Some(LegTaus {
+        domestic,
+        access,
+        crossings,
+        domestic_hours,
+        access_hours,
+        crossing_hours,
+    });
+    let island = &mut inputs.countries.io[MAINLAND];
+    for g in (0..N_GOODS).filter(|&g| g != ISLAND_USER) {
+        island[UNREACHABLE * N_GOODS + g] = 0.0;
+    }
+    inputs.set_coefficients();
+    inputs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ceteris_trade::{Kernel, TradeParams};
+    use ceteris_trade::Kernel;
 
     #[test]
     fn fixture_has_four_countries_and_twenty_five_provinces() {
@@ -296,6 +347,35 @@ mod tests {
         let oil_with_heavy = (0..25).filter(|&i| has(i, OIL) && has(i, HEAVY)).count();
         assert!(oil_without_heavy > 0 && oil_with_heavy > 0);
         assert!((0..25).any(|i| !has(i, HEAVY)));
+    }
+
+    #[test]
+    fn unreachable_island_cuts_only_the_island_machinery_crossings() {
+        let p = TradeParams::default();
+        let (plain, cut) = (small_world(), unreachable_island(&p));
+        cut.validate();
+        assert_eq!(cut.enterprises.l0, plain.enterprises.l0);
+        let kernel = |w: &EconInputs| Kernel::build(&w.network, &w.weight, &w.wedges, &p);
+        let (a, b) = (kernel(&plain), kernel(&cut));
+        let mut changed = 0;
+        for g in (0..N_GOODS).filter(|&g| ceteris_trade::goods::TRADED[g]) {
+            let (a, b) = (a.good(g), b.good(g));
+            assert_eq!(a.domestic.entries, b.domestic.entries);
+            assert_eq!(a.access.entries, b.access.entries);
+            for (x, y) in a.crossings.entries.iter().zip(&b.crossings.entries) {
+                if x != y {
+                    assert_eq!((g, y.k, y.tau), (UNREACHABLE, 0.0, f64::INFINITY));
+                    changed += 1;
+                }
+            }
+        }
+        // both sea lanes of the island, each way
+        assert_eq!(changed, 4);
+        let island = (0..cut.n_enterprises()).filter(|&e| cut.enterprises.province[e] == 24);
+        for e in island {
+            let uses = cut.coef(e, UNREACHABLE) > 0.0;
+            assert_eq!(uses, usize::from(cut.enterprises.good[e]) == ISLAND_USER);
+        }
     }
 
     #[test]

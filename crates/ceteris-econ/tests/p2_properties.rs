@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ceteris_core::sim::{Sim, State};
-use ceteris_econ::fixture::small_world;
+use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
 use ceteris_econ::inputs::EconInputs;
 use ceteris_econ::local::N_LOCAL;
 use ceteris_econ::params::Technology;
@@ -12,6 +12,7 @@ use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
     MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, static_digest, to_minor,
+    to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::TRADED;
@@ -884,5 +885,89 @@ fn putty_clay_one_vintage_equals_fixed_leontief() {
     for k in 0..N_GOODS {
         assert_eq!(fixed_world.layout().coef[e][k], inputs.a(c, k, g));
         assert_eq!(putty_world.layout().coef[e][k], inputs.coef(e, k));
+    }
+}
+
+/// Review Focus 1 at world level (`fixture::unreachable_island`): machinery has no reachable
+/// origin at the island. Its delivered price there is the only infinite one and the world
+/// price index leaves it out; island pops buy none of it and spend the rest of their money;
+/// the island's light manufacturing, its one user there, orders none, never restocks, and is
+/// capped by the stock it started with until it produces nothing; no price, wage or flow
+/// turns NaN, and the invariants hold every tick.
+#[test]
+fn unreachable_destination_buys_nothing_in_the_world() {
+    for params in [EconParams::default(), EconParams::frictionless()] {
+        let trade = TradeParams::default();
+        let mut w = EconWorld::new(Arc::new(unreachable_island(&trade)), params, trade);
+        let (inp, lay) = (w.inputs().clone(), w.layout().clone());
+        let island = inp.n_provinces() - 1;
+        let cell = island * N_GOODS + UNREACHABLE;
+        let user = producer(&w, island, ISLAND_USER);
+        let (account, buyer) = (lay.accounts.enterprise[user], inp.n_pops() + user);
+        let coef = lay.coef[user][UNREACHABLE];
+        let mut stock = w.ledger.goods(account, UNREACHABLE);
+        assert!(coef > 0.0 && stock > 0.0);
+        assert_eq!(w.price_index[cell], f64::INFINITY);
+        let mut spending = 0;
+        for tick in 0..240 {
+            w.begin_tick();
+            systems::deliver(&mut w);
+            systems::labour(&mut w);
+            systems::produce(&mut w);
+            assert!(
+                w.output[user] * coef <= stock * (1.0 + 1e-12),
+                "tick {tick}"
+            );
+            let money: Vec<f64> = lay
+                .pops(island)
+                .map(|k| to_numeraire(w.ledger.money(lay.accounts.pop[k])))
+                .collect();
+            systems::demand(&mut w);
+            for (c, p) in w.price_index.iter().enumerate() {
+                assert!(p.is_finite() == (c != cell), "tick {tick} cell {c}: {p}");
+            }
+            assert!(w.world_price_index().is_finite());
+            let prices = &w.price_index[island * N_GOODS..(island + 1) * N_GOODS];
+            for (k, money) in lay.pops(island).zip(money) {
+                let x = &w.scratch.pop_demand[k * N_GOODS..(k + 1) * N_GOODS];
+                assert_eq!(x[UNREACHABLE], 0.0);
+                let spent: f64 = (0..N_GOODS)
+                    .filter(|&g| x[g] > 0.0)
+                    .map(|g| x[g] * prices[g])
+                    .sum();
+                // a pop whose money a loss-making tick left negative buys nothing, as on the
+                // plain fixture
+                let want = money.max(0.0);
+                assert!(
+                    (spent - want).abs() <= 1e-9 * want,
+                    "tick {tick} pop {k}: spent {spent} of {money}"
+                );
+                spending += usize::from(money > 0.0);
+            }
+            assert_eq!(w.scratch.ent_spend[user * N_GOODS + UNREACHABLE], 0.0);
+            systems::source(&mut w);
+            assert_eq!(w.scratch.class_spend[cell], [0.0; 2]);
+            systems::clear(&mut w);
+            from_dispatch(&mut w, tick);
+            let held = w.ledger.goods(account, UNREACHABLE);
+            assert!(held <= stock, "tick {tick}: restocked {stock} -> {held}");
+            stock = held;
+            for b in lay.pops(island).chain([buyer]) {
+                assert_eq!(w.pipeline.on_order(b, UNREACHABLE), 0.0);
+            }
+            assert!(w.markets.price.iter().all(|p| p.is_finite() && *p > 0.0));
+            assert!(w.wage.iter().all(|x| x.is_finite() && *x > 0.0));
+            assert!(w.output.iter().chain(&w.employment).all(|x| x.is_finite()));
+            assert!(w.expected_inflation.is_finite());
+            let traded = (0..N_GOODS).filter(|&g| TRADED[g]);
+            assert!(traded.map(|g| w.pipeline.in_flight(g)).all(f64::is_finite));
+            for a in lay.accounts.enterprise.iter().chain(&lay.accounts.market) {
+                assert_eq!(w.ledger.money(*a), 0);
+            }
+        }
+        assert!(spending > 0, "no island pop had money to spend");
+        assert_eq!(w.output[user], 0.0);
+        let mut others = lay.enterprises(island).filter(|&e| e != user);
+        assert!(others.all(|e| w.output[e] > 0.0));
     }
 }
