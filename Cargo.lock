@@ -264,7 +264,11 @@ dependencies = [
 name = "ceteris-econ"
 version = "0.0.1"
 dependencies = [
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
  "ceteris-core",
+ "ceteris-geo",
  "ceteris-trade",
  "libm",
  "proptest",

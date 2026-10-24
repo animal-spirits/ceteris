@@ -14,6 +14,7 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::{Kernel, Markets, N_GOODS, Routed, TradeParams, TransitWheel};
 
 use crate::demand::ces;
+use crate::flows::FlowWindow;
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
 
@@ -125,10 +126,12 @@ pub struct Scratch {
     /// Transit delivered at T1, `[province * N_GOODS + g]`.
     pub due: Vec<f64>,
     pub routed: Routed,
+    /// Country-pair flows of the last 12 ticks, for the run export.
+    pub flows: FlowWindow,
 }
 
 impl Scratch {
-    fn new(np: usize, n_pops: usize, n_ent: usize) -> Self {
+    fn new(nc: usize, np: usize, n_pops: usize, n_ent: usize) -> Self {
         Self {
             produced: vec![0.0; n_ent],
             input_before: vec![0.0; n_ent * N_GOODS],
@@ -142,6 +145,7 @@ impl Scratch {
             spoiled: vec![0.0; np * N_GOODS],
             due: vec![0.0; np * N_GOODS],
             routed: Routed::new(),
+            flows: FlowWindow::new(nc, np),
         }
     }
 }
@@ -206,6 +210,29 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(coverage);
     e.f64s(time_cost);
     state_hash(&e.into_bytes())
+}
+
+/// Which (province, good) cells have a market, `[province * N_GOODS + g]`: final demand for
+/// the good in the province's country, or an enterprise of the province that uses it as an
+/// input. Fixed by the inputs for the whole run.
+pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
+    let mut active = vec![false; inp.n_provinces() * N_GOODS];
+    for i in 0..inp.n_provinces() {
+        let omega = &inp.countries.omega[inp.country_of(i)];
+        for g in 0..N_GOODS {
+            active[i * N_GOODS + g] = omega[g] > 0.0;
+        }
+    }
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        let sector = usize::from(inp.enterprises.good[e]);
+        for k in 0..N_GOODS {
+            if inp.a(inp.country_of(i), k, sector) > 0.0 {
+                active[i * N_GOODS + k] = true;
+            }
+        }
+    }
+    active
 }
 
 fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
@@ -306,13 +333,7 @@ impl EconWorld {
         }
 
         let mut markets = Markets::new(np);
-        for i in 0..np {
-            let c = inp.country_of(i);
-            for g in 0..N_GOODS {
-                let input = layout.enterprises(i).any(|e| inp.a(c, g, sector(e)) > 0.0);
-                markets.active[i * N_GOODS + g] = inp.countries.omega[c][g] > 0.0 || input;
-            }
-        }
+        markets.active = active_cells(inp);
 
         // base income, minted; households' base demand at prices 1
         let accounts = &layout.accounts;
@@ -374,7 +395,7 @@ impl EconWorld {
             output: vec![0.0; n_ent],
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
-            scratch: Scratch::new(np, n_pops, n_ent),
+            scratch: Scratch::new(nc, np, n_pops, n_ent),
             ledger,
             markets,
             transit: TransitWheel::new(np),
@@ -457,6 +478,7 @@ impl State for EconWorld {
     fn begin_tick(&mut self) {
         self.ledger.begin_tick();
         self.scratch.income_paid.fill(0);
+        self.scratch.flows.advance();
     }
 
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
@@ -642,7 +664,8 @@ impl State for EconWorld {
             columns.try_into().expect("seven columns");
 
         let inp = &*self.inputs;
-        let (np, n_pops, n_ent) = (inp.n_provinces(), inp.n_pops(), inp.n_enterprises());
+        let (nc, np) = (inp.n_countries(), inp.n_provinces());
+        let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
         expect_len(
             "ledger accounts",
             ledger.n_accounts(),
@@ -680,7 +703,7 @@ impl State for EconWorld {
             output,
             sales,
             profit,
-            scratch: Scratch::new(np, n_pops, n_ent),
+            scratch: Scratch::new(nc, np, n_pops, n_ent),
         })
     }
 }
