@@ -1,3 +1,5 @@
+import zipfile
+
 import numpy as np
 import pytest
 
@@ -143,6 +145,54 @@ def test_bridge_keeps_principal_links_and_drops_mining_support(tmp_path):
     assert goods.read_bridge(path) == {"1010": ["0510"], "1410": ["0810"], "2411": ["1910", "2011"]}
 
 
+def test_weights_from_baci_pins_tonnes_per_usd(tmp_path):
+    # One HS line per traded good: hs6 -> (ISIC Rev 3 class, ISIC Rev 4 class) in divisions 01, 06, 05, 10, 13, 20, 26.
+    lines = {
+        "010121": ("0111", "0111"),
+        "270900": ("1110", "0610"),
+        "270112": ("1010", "0510"),
+        "020110": ("1511", "1010"),
+        "520100": ("1711", "1310"),
+        "290110": ("2411", "2011"),
+        "850110": ("3110", "2610"),
+    }
+    # BACI v is thousands of USD, q is tonnes; k carries no leading zero. t,i,j,k,v,q.
+    rows = [
+        "2000,1,2,10121,2,3",  # good 0: 3 t for 2000 USD
+        "2000,1,3,10121,3,1",  # good 0: 1 t for 3000 USD
+        "2000,2,3,10121,100,",  # good 0: no q, out of numerator and denominator
+        "2000,1,2,10121,0.5,",  # good 0: no q, fractional value
+        "2000,1,2,270900,8,2",
+        "2000,1,2,270112,4,40",
+        "2000,1,2,20110,5,10",
+        "2000,1,2,520100,10,1",
+        "2000,1,2,290110,20,4",
+        "2000,1,2,850110,50,1",
+        "2000,1,2,999999,7,7",  # absent from the concordance
+    ]
+    baci = tmp_path / "baci.zip"
+    with zipfile.ZipFile(baci, "w") as z:
+        z.writestr("BACI_HS92_Y2000_V202601.csv", "t,i,j,k,v,q\n" + "\n".join(rows) + "\n")
+        z.writestr("BACI_HS92_Y2001_V202601.csv", "t,i,j,k,v,q\n2001,1,2,10121,1,999\n")
+    wits = tmp_path / "wits.zip"
+    with zipfile.ZipFile(wits, "w") as z:
+        text = "HS1988-92 Product Code,Product Description,ISIC Revision 3 Product Code\n"
+        text += "".join(f"{hs},x,{i3}\n" for hs, (i3, _) in lines.items())
+        z.writestr("JobID-0_Concordance_H0_to_I3.CSV", text)
+    bridge = tmp_path / "bridge.txt"
+    bridge.write_text(
+        '"ISIC31code","partialISIC31","ISIC4code","partialISIC4","Detail"\n'
+        + "".join(f'"{i3}",0,"{i4}",0,""\n' for i3, i4 in lines.values())
+    )
+
+    w = goods.weights_from_baci(baci, wits, bridge)
+
+    # tonnes / (v x 1000): the 100 and 0.5 kUSD rows without q must not enter the denominator.
+    expected = [4 / 5000, 2 / 8000, 40 / 4000, 10 / 5000, 1 / 10000, 4 / 20000, 1 / 50000]
+    assert w[:7] == pytest.approx(expected, rel=1e-12)
+    assert (w[7:] == 0).all()
+
+
 # Tests below need the downloaded BACI and concordances; CI is data-free.
 def _cached(name: str):
     path = fetch.path_of(name)
@@ -162,6 +212,8 @@ def weights():
 def test_weights_positive_for_traded(weights):
     assert weights.shape == (goods.N_GOODS,)
     assert (weights[:7] > 0).all() and np.isfinite(weights).all()
+    # Tonnes per USD: a dropped or doubled x1000 moves every weight by 1000x, out of this band.
+    assert ((weights[:7] > 1e-5) & (weights[:7] < 1e-1)).all()
 
 
 def test_local_goods_weigh_nothing(weights):
