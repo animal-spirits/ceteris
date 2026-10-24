@@ -1,6 +1,6 @@
-# 0016. Expected inflation in price and wage rules
+# 0019. Expected inflation in price and wage rules
 
-Status: proposed
+Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
 Date: 2026-10-24
 Design sections: 8.2, 8.7, 12.2, 15.3 (V1)
 
@@ -40,6 +40,23 @@ not a parameter.
   after the transition.
 - Stability: kappa pairs inside and outside the derived region behave as predicted on the
   linearized toy market.
+
+## Mapping to P2 as built
+
+- Price rule: `ceteris-trade` market.rs `reprice` gains pi^e; wage rule: `ceteris-econ`
+  labour.rs `wage_step` gains pi^e, and downward rigidity applies when the nominal step is
+  negative.
+- pi^e is the adaptive expectation of the world numeraire price index (P2 has one currency area,
+  S04 adaptive only). Its gain is a new register entry.
+- The stability region in (kappa1, kappa2) is derived for the linearized origin market of ADR
+  0016 and checked on the fixture; it replaces the measured growth factors behind the 2026-10-24
+  owner decision (kappa1 0.02, kappa2 0), which stay as start values until the derivation says
+  otherwise.
+- P03c (step clip) is already registered; runs count every tick it binds, per market, in the run
+  export.
+- Register clash: rev 180 assigns P37 to the consumption rule and P38 to the putty-clay
+  elasticity, which P2's spec used for kappa_w and delta_w. P2's entries move to the next free
+  IDs (P37 to P41 become P39 to P43), in code doc comments and specs alike.
 
 ## Consequences
 

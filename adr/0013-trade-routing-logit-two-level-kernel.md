@@ -1,6 +1,6 @@
 # 0013. Trade routing as a posted-price logit on a two-level kernel
 
-Status: accepted (owner, 2026-10-23, with `specs/trade/SPEC.md`)
+Status: superseded by 0015 and 0016 (owner, 2026-10-24); accepted 2026-10-23 with `specs/trade/SPEC.md`
 Date: 2026-10-23
 Design sections: 3.4, 5.4, 8.2, 8.3, 17 (P01, P05, P41, S02, S05), 18 (H1, H2), 19.4
 

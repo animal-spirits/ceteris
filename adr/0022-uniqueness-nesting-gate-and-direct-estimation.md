@@ -1,6 +1,6 @@
-# 0019. Uniqueness check, static nesting gate and direct estimation
+# 0022. Uniqueness check, static nesting gate and direct estimation
 
-Status: proposed
+Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
 Date: 2026-10-24
 Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate
 
@@ -21,7 +21,7 @@ gravity equations the model nests, so estimating them by simulation wastes the r
    models from the same point and reports which equilibrium each reaches instead of a 1% gap.
 2. V1 compares steady states with the custom static GE. Comparisons with CDP and KLR are sign
    and rank only, as the roadmap already states.
-3. theta_g (0015), border frictions (P05) and mode cost ratios (P04) are estimated by PPML
+3. theta_g (0018), border frictions (P05) and mode cost ratios (P04) are estimated by PPML
    structural gravity on 2000 BACI with the route-choice cost structure, in
    python/ceteris/calibrate, outside simulation-based inference.
 
@@ -35,6 +35,17 @@ gravity equations the model nests, so estimating them by simulation wastes the r
 
 The gate itself; the PPML code reproduces published estimates on a published sample before it
 runs on the pack.
+
+## Mapping to P2 as built
+
+- The uniqueness check goes in `python/ceteris/reference` and runs before V1 in
+  `python/tests/test_p2_gate.py`. P2 has no agglomeration (A5 off) and no migration.
+- V1 already compares steady states with the custom static GE (the reference model).
+- PPML on 2000 BACI with route-choice costs reuses `python/ceteris/reference/ppml.py` (Task 12,
+  which recovers a known elasticity on synthetic data). Estimation lands with the data pipeline
+  (Part D of `specs/econ/PLAN.md`), since it needs the BACI cache and the pack's costs; outputs
+  carry provenance "data".
+- The P2 gate text in `specs/econ/SPEC.md` is rewritten when this ADR lands.
 
 ## Consequences
 
