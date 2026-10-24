@@ -91,6 +91,8 @@ pub struct Layout {
     pub a_va: Vec<f64>,
     /// Pops of each country in ID order, for the tariff rebate.
     pub country_pops: Vec<Vec<u32>>,
+    /// Weights of the world price index, [`price_index_weights`].
+    pub index_weights: Vec<f64>,
 }
 
 impl Layout {
@@ -195,6 +197,14 @@ pub struct EconWorld {
     pub price_index: Vec<f64>,
     /// Wage w per province, numeraire per effective labour unit.
     pub wage: Vec<f64>,
+    /// Ticks at which the wage step clip c_max (P03c) bound, per province, since the start of
+    /// the run; a Walrasian wage (frictionless) has no step and never counts.
+    pub wage_clip_ticks: Vec<u32>,
+    /// Expected inflation pi^e of the price and wage rules (ADR 0019), log points per month:
+    /// the adaptive expectation of the world price index, updated after T4.
+    pub expected_inflation: f64,
+    /// World price index I at the last update of `expected_inflation`.
+    pub price_level: f64,
     /// Employment L per enterprise, effective labour units.
     pub employment: Vec<f64>,
     /// Employed persons per pop.
@@ -228,6 +238,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         kappa1,
         kappa2,
         c_max,
+        expectation_gain,
         border_nu,
         time_cost,
         // reaches the kernel only through Network.route_taus, in the inputs digest
@@ -242,7 +253,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.u8(u8::from(*frictionless));
     e.u8(*rationing as u8);
     e.f64s(theta);
-    e.f64s(&[*kappa1, *kappa2, *c_max, *border_nu]);
+    e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain, *border_nu]);
     e.f64s(coverage);
     e.f64s(time_cost);
     state_hash(&e.into_bytes())
@@ -276,6 +287,33 @@ pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
         }
     }
     active
+}
+
+/// Base household consumption quantities at prices 1, the weights of the world price index
+/// over buyer prices: each country's final demand shares times the province's base income
+/// (wages of the 2000 employed plus the profit pool), `[province * N_GOODS + g]`. The same
+/// weights as `ceteris.reference.io.Inputs.index_weights`, so V1 normalizes run and reference
+/// alike.
+pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+    let supply = inp.labour_supply(&params.edu_eff);
+    let mut pool = vec![0.0; inp.n_provinces()];
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        let s_l = inp.countries.s_l[inp.country_of(i)];
+        pool[i] += (1.0 - s_l) * inp.enterprises.va0[e];
+    }
+    let mut out = vec![0.0; inp.n_provinces() * N_GOODS];
+    for i in 0..inp.n_provinces() {
+        let c = inp.country_of(i);
+        let income =
+            inp.provinces.w0[i] * (1.0 - inp.countries.unemployment[c]) * supply[i] + pool[i];
+        let omega = &inp.countries.omega[c];
+        let total: f64 = omega.iter().sum();
+        for g in 0..N_GOODS {
+            out[i * N_GOODS + g] = omega[g] / total * income;
+        }
+    }
+    out
 }
 
 fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
@@ -347,6 +385,7 @@ impl EconWorld {
             })
             .collect();
         let mut layout = Layout {
+            index_weights: price_index_weights(inp, &params),
             accounts,
             pop_offsets,
             ent_offsets,
@@ -411,6 +450,9 @@ impl EconWorld {
 
         let mut w = EconWorld {
             wage: inp.provinces.w0.clone(),
+            wage_clip_ticks: vec![0; np],
+            expected_inflation: 0.0,
+            price_level: 0.0,
             employment: inp.enterprises.l0.clone(),
             employed,
             income: vec![0.0; n_pops],
@@ -430,8 +472,34 @@ impl EconWorld {
             digest,
         };
         w.refresh_price_index();
+        w.price_level = w.world_price_index();
         w.stock_base_demand(&base_income, &base_use);
         w
+    }
+
+    /// The world price index I over buyer prices ([`EconWorld::price_index`]) with the base
+    /// consumption weights of [`price_index_weights`]. Cells whose buyer price is infinite (no
+    /// reachable origin) are left out.
+    pub fn world_price_index(&self) -> f64 {
+        let (mut num, mut den) = (0.0, 0.0);
+        for (&a, &p) in self.layout.index_weights.iter().zip(&self.price_index) {
+            if p.is_finite() {
+                num += a * p;
+                den += a;
+            }
+        }
+        num / den
+    }
+
+    /// The adaptive expectation of ADR 0019, after T4: pi^e <- pi^e + g (ln(I_t / I_{t-1}) -
+    /// pi^e), I_t the world price index at this tick's buyer prices (refreshed at E3, so the
+    /// inflation observed is that of the last repricing).
+    pub fn update_expectation(&mut self) {
+        let level = self.world_price_index();
+        let inflation = libm::log(level / self.price_level);
+        self.expected_inflation +=
+            self.trade.expectation_gain * (inflation - self.expected_inflation);
+        self.price_level = level;
     }
 
     /// Origin inventories of the data state at coverage times initial demand: the orders
@@ -591,6 +659,8 @@ impl Encode for EconWorld {
         ] {
             e.f64s(column);
         }
+        e.f64s(&[self.expected_inflation, self.price_level]);
+        e.u32s(&self.wage_clip_ticks);
     }
 }
 
@@ -803,6 +873,8 @@ impl State for EconWorld {
             profit,
             price_index,
         ]: [Vec<f64>; 8] = columns.try_into().expect("eight columns");
+        let expectation = d.f64s()?;
+        let wage_clip_ticks = d.u32s()?;
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -815,6 +887,8 @@ impl State for EconWorld {
         expect_len("market provinces", markets.n_provinces(), np)?;
         expect_len("pipeline buyers", pipeline.n_buyers(), n_pops + n_ent)?;
         expect_len("wages", wage.len(), np)?;
+        expect_len("wage clip ticks", wage_clip_ticks.len(), np)?;
+        expect_len("expectation", expectation.len(), 2)?;
         expect_len("price index", price_index.len(), np * N_GOODS)?;
         for (what, column) in [("employed", &employed), ("income", &income)] {
             expect_len(what, column.len(), n_pops)?;
@@ -840,6 +914,9 @@ impl State for EconWorld {
             pipeline,
             price_index,
             wage,
+            wage_clip_ticks,
+            expected_inflation: expectation[0],
+            price_level: expectation[1],
             employment,
             employed,
             income,
@@ -1050,6 +1127,10 @@ mod tests {
         w.markets.demand[17] = 4.0;
         w.pipeline.push(3, 7, 2, 0.5);
         w.price_index[4] = 0.75;
+        w.expected_inflation = 0.004;
+        w.price_level = 1.3;
+        w.wage_clip_ticks[2] = 5;
+        w.markets.clip_ticks[17] = 3;
         let (bytes, back) = round_trip(&w);
         assert_eq!(canonical(12, &back), bytes);
         assert!(Arc::ptr_eq(&back.inputs, &w.inputs));
@@ -1057,6 +1138,10 @@ mod tests {
         assert_eq!(back.wage, w.wage);
         assert_eq!(back.pipeline, w.pipeline);
         assert_eq!(back.price_index, w.price_index);
+        assert_eq!(back.expected_inflation, w.expected_inflation);
+        assert_eq!(back.price_level, w.price_level);
+        assert_eq!(back.wage_clip_ticks, w.wage_clip_ticks);
+        assert_eq!(back.markets.clip_ticks, w.markets.clip_ticks);
     }
 
     #[test]

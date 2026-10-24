@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 3)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 4)."""
 
 import json
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from pyarrow import ipc
 
-EXPORT_FORMAT = "3"
+EXPORT_FORMAT = "4"
 
 
 @dataclass(frozen=True)

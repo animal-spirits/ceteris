@@ -11,7 +11,7 @@ use std::sync::Arc;
 use ceteris_core::sim::{SNAPSHOT_EVERY, Sim};
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
-use ceteris_econ::{EconInputs, EconParams, EconWorld};
+use ceteris_econ::{EconParams, EconWorld};
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
 use ceteris_trade::{Kernel, N_GOODS, TradeParams};
 
@@ -135,31 +135,6 @@ fn fixture_export_is_current() {
     );
 }
 
-/// Base household consumption quantities at prices 1, as `ceteris.reference.io.Inputs.index_weights`:
-/// the final demand shares of the country times the province's base income (wages of the
-/// employed plus the profit pool), `[province * N_GOODS + g]`.
-fn index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
-    let supply = inp.labour_supply(&params.edu_eff);
-    let mut pool = vec![0.0; inp.n_provinces()];
-    for e in 0..inp.n_enterprises() {
-        let i = inp.enterprises.province[e] as usize;
-        let s_l = inp.countries.s_l[inp.country_of(i)];
-        pool[i] += (1.0 - s_l) * inp.enterprises.va0[e];
-    }
-    let mut out = vec![0.0; inp.n_provinces() * N_GOODS];
-    for i in 0..inp.n_provinces() {
-        let c = inp.country_of(i);
-        let income =
-            inp.provinces.w0[i] * (1.0 - inp.countries.unemployment[c]) * supply[i] + pool[i];
-        let omega = &inp.countries.omega[c];
-        let total: f64 = omega.iter().sum();
-        for g in 0..N_GOODS {
-            out[i * N_GOODS + g] = omega[g] / total * income;
-        }
-    }
-    out
-}
-
 fn worst(deviations: impl Iterator<Item = (String, f64)>) -> (String, f64) {
     deviations.fold(
         (String::from("none"), 0.0),
@@ -188,7 +163,8 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 
 /// V1 (specs/econ/SPEC.md, Equilibrium nesting): with frictionless settings the run from the
 /// data state reaches the GE reference within 1,200 ticks. Prices and wages are divided by the
-/// world price index over consumer prices (the reference is normalized to an index of 1);
+/// world price index over consumer prices (`EconWorld::world_price_index`, the index the
+/// expectations of ADR 0019 track; the reference is normalized to an index of 1);
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good).
 #[test]
@@ -198,24 +174,19 @@ fn v1_fixture_frictionless_matches_reference() {
     let reference = fixture_dir().join("reference");
     let solution = ceteris_econ::equilibrium::Equilibrium::read(&reference).unwrap();
 
-    let params = EconParams::frictionless();
-    let inputs = small_world();
-    let weights = index_weights(&inputs, &params);
     let mut sim = Sim::new(
-        EconWorld::new(Arc::new(inputs), params.clone(), TradeParams::default()),
+        EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::frictionless(),
+            TradeParams::default(),
+        ),
         ceteris_econ::systems::schedule(),
         ceteris_econ::systems::SEED,
     );
     sim.run_until(TICKS).unwrap_or_else(|v| panic!("{v}"));
     let w = sim.world();
 
-    // consumer prices: the delivered price index of traded goods, the local price of local goods
-    let index = weights
-        .iter()
-        .zip(&w.price_index)
-        .map(|(a, p)| a * p)
-        .sum::<f64>()
-        / weights.iter().sum::<f64>();
+    let index = w.world_price_index();
 
     let (price_cell, price_dev) = worst(
         (0..w.markets.price.len())

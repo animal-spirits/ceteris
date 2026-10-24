@@ -2,7 +2,9 @@
 model). Mirrors `ceteris-trade` `source` and `dispatch` (ADRs 0015 and 0016) and `ceteris-econ` E1
 to E4 at a fixed point: frictionless wage (full employment), every origin market selling its
 output (orders = Q), every local market clearing, input stocks never binding (orders replace use),
-pops spending their whole income.
+pops spending their whole income. Expected inflation (ADR 0019) is zero at a steady state, since
+the world price index is constant there, so the price and wage rules' pi^e term leaves this
+solution unchanged.
 
 Destination d spends E_d on traded good g, households by CES at the delivered unit price
 q_d = 1 / alpha_d, alpha_d the units arriving per unit of spending (owner decision, 2026-10-24),

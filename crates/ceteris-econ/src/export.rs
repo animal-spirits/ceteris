@@ -49,8 +49,9 @@ use crate::world::{EconWorld, MINOR_PER_UNIT, active_cells, static_digest};
 /// Bumped when a table or `params.json` changes shape or meaning; the reference checks it.
 /// 2: `active` marks origin markets of traded goods, `params.json` has `rationing`,
 /// `run_prices` has `price_index` (ADRs 0015 and 0016). 3: theta per good, in `goods` and as
-/// a list in `params.json`, and `goods.theta_class` (ADRs 0018 and 0023).
-pub const EXPORT_FORMAT: &str = "3";
+/// a list in `params.json`, and `goods.theta_class` (ADRs 0018 and 0023). 4: `params.json`
+/// has `expectation_gain`, `run_prices` and `run_wages` have `clip_ticks` (ADR 0019).
+pub const EXPORT_FORMAT: &str = "4";
 
 #[derive(Debug)]
 pub struct ExportError(pub String);
@@ -369,6 +370,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", "P41"),
         ("edu_eff", "P42"),
         ("time_cost", "P43"),
+        ("expectation_gain", "P45"),
         ("rationing", "S11"),
     ];
     let register: Vec<String> = register
@@ -399,6 +401,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("kappa1", num(t.kappa1)),
         ("kappa2", num(t.kappa2)),
         ("c_max", num(t.c_max)),
+        ("expectation_gain", num(t.expectation_gain)),
         ("border_nu", num(t.border_nu)),
         ("time_cost", nums(&t.time_cost)),
     ];
@@ -424,8 +427,8 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 ///
 /// | file | columns |
 /// |---|---|
-/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (P_d of traded goods, the local price of local goods, at the last E3) |
-/// | `run_wages` | province u32, wage f64 |
+/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (P_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
+/// | `run_wages` | province u32, wage f64, clip_ticks u32 (ticks the wage step clip bound) |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
 /// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |
 /// | `run_home` | province u32, good u8, value f64, units f64 |
@@ -452,6 +455,7 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
             f64s("price", m.price.iter().copied()),
             bools("active", m.active.iter().copied()),
             f64s("price_index", world.price_index.iter().copied()),
+            u32s("clip_ticks", m.clip_ticks.iter().copied()),
         ],
     )?;
     write_table(
@@ -460,6 +464,7 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
         vec![
             u32s("province", 0..np as u32),
             f64s("wage", world.wage.iter().copied()),
+            u32s("clip_ticks", world.wage_clip_ticks.iter().copied()),
         ],
     )?;
     let e = &inputs.enterprises;
@@ -737,7 +742,7 @@ mod tests {
         );
         for id in [
             "P01", "P02", "P03a", "P03b", "P03c", "P05", "P43", "P06", "P08", "P39", "P40", "P41",
-            "P42",
+            "P42", "P45",
         ] {
             assert!(
                 json.contains(&format!("\"{id}\"")),
@@ -801,8 +806,10 @@ mod tests {
         assert_eq!(f64s(&prices, "price").unwrap(), w.markets.price);
         assert_eq!(bools(&prices, "active"), w.markets.active);
         assert_eq!(f64s(&prices, "price_index").unwrap(), w.price_index);
+        assert_eq!(u32s(&prices, "clip_ticks").unwrap(), w.markets.clip_ticks);
         let wages = table("run_wages");
         assert_eq!(f64s(&wages, "wage").unwrap(), w.wage);
+        assert_eq!(u32s(&wages, "clip_ticks").unwrap(), w.wage_clip_ticks);
         let ents = table("run_enterprises");
         assert_eq!(f64s(&ents, "employment").unwrap(), w.employment);
         assert_eq!(f64s(&ents, "output").unwrap(), w.output);

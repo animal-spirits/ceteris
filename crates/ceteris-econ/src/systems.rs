@@ -180,15 +180,15 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
 }
 
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
-/// current wage, then the wage (wage rule on excess demand, or the clearing wage when
-/// frictionless), employment toward L* and employed pops.
+/// current wage, then the wage (wage rule on expected inflation and excess demand, or the
+/// clearing wage when frictionless), employment toward L* and employed pops.
 pub fn labour(w: &mut EconWorld) {
     let (inp, lay, params) = (&*w.inputs, &*w.layout, &w.params);
     let c_max = w.trade.c_max;
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
-    let index = &w.price_index;
-    let results: Vec<(f64, Vec<f64>)> = (0..inp.n_provinces())
+    let (index, pi) = (&w.price_index, w.expected_inflation);
+    let results: Vec<(f64, Vec<f64>, bool)> = (0..inp.n_provinces())
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
@@ -215,7 +215,7 @@ pub fn labour(w: &mut EconWorld) {
                     .collect()
             };
             let w0 = wage[i];
-            let (w1, t) = if params.frictionless {
+            let (w1, t, clipped) = if params.frictionless {
                 let demand = |w: f64| -> f64 {
                     ents.clone()
                         .zip(&p_va)
@@ -227,19 +227,21 @@ pub fn labour(w: &mut EconWorld) {
                 if (demand(w1) - supply).abs() > NO_ROOT * supply {
                     w1 = w1.clamp(0.5 * w0, 2.0 * w0);
                 }
-                (w1, targets(w1))
+                (w1, targets(w1), false)
             } else {
                 let t = targets(w0);
                 let excess = (fixed_sum(&t) - supply) / supply;
-                (wage_step(w0, excess, params, c_max), t)
+                let clipped = (pi + params.kappa_w * excess).abs() > c_max;
+                (wage_step(w0, excess, pi, params, c_max), t, clipped)
             };
             let mut l = vec![0.0; t.len()];
             allocate(&t, &prev[ents], params.eta, supply, &mut l);
-            (w1, l)
+            (w1, l, clipped)
         })
         .collect();
-    for (i, (w1, l)) in results.into_iter().enumerate() {
+    for (i, (w1, l, clipped)) in results.into_iter().enumerate() {
         w.wage[i] = w1;
+        w.wage_clip_ticks[i] += u32::from(clipped);
         w.employment[lay.enterprises(i)].copy_from_slice(&l);
         let employed = fixed_sum(&l) / lay.labour_supply[i];
         for k in lay.pops(i) {
@@ -676,10 +678,12 @@ pub fn dispatch(w: &mut EconWorld) {
     w.scratch.sourced = sourced;
 }
 
-/// T4: the stock-flow price rule on every active market; cells without a market keep their
-/// price, which nothing reads.
+/// T4: the stock-flow price rule with expected inflation on every active market (cells
+/// without a market keep their price, which nothing reads), then the update of expected
+/// inflation from the world price index (ADR 0019).
 pub fn reprice(w: &mut EconWorld) {
-    w.markets.reprice(&w.trade);
+    w.markets.reprice(&w.trade, w.expected_inflation);
+    w.update_expectation();
 }
 
 /// E4: every enterprise and market pays its signed cash flow of the tick to its province's
