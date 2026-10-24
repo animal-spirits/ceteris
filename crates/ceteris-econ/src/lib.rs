@@ -7,6 +7,7 @@ pub mod inputs;
 pub mod labour;
 pub mod params;
 pub mod production;
+pub mod systems;
 pub mod world;
 
 pub use inputs::EconInputs;

@@ -267,6 +267,7 @@ dependencies = [
  "ceteris-core",
  "ceteris-trade",
  "libm",
+ "proptest",
  "rayon",
 ]
 

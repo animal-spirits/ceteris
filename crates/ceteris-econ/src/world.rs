@@ -8,10 +8,10 @@ use std::sync::Arc;
 use ceteris_core::invariant::Violation;
 use ceteris_core::ledger::{AccountId, Flow, GOODS_TOLERANCE, Ledger};
 use ceteris_core::reduce::fixed_sum;
-use ceteris_core::sim::State;
+use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, Markets, N_GOODS, TradeParams, TransitWheel};
+use ceteris_trade::{Kernel, Markets, N_GOODS, Routed, TradeParams, TransitWheel};
 
 use crate::demand::ces;
 use crate::inputs::EconInputs;
@@ -22,6 +22,10 @@ pub const MINOR_PER_UNIT: f64 = 1e4;
 
 /// Relative slack of the labour bounds (spec Invariants, Labour).
 const LABOUR_TOLERANCE: f64 = 1e-12;
+/// Relative tolerance of input use against a_kg Y (spec Invariants, Leontief).
+const LEONTIEF_TOLERANCE: f64 = 1e-12;
+/// Relative tolerance of routed mass against supply (trade SPEC Invariants, Routing mass).
+const ROUTING_TOLERANCE: f64 = 1e-12;
 
 pub const WAGE: Flow = Flow(1);
 pub const SALE: Flow = Flow(2);
@@ -82,6 +86,8 @@ pub struct Layout {
     pub ownership: Vec<f64>,
     /// Value-added coefficient a_VA = 1 - sum_k a_kg per enterprise.
     pub a_va: Vec<f64>,
+    /// Pops of each country in ID order, for the tariff rebate.
+    pub country_pops: Vec<Vec<u32>>,
 }
 
 impl Layout {
@@ -94,15 +100,61 @@ impl Layout {
     }
 }
 
+/// Per-tick evidence and buffers of the systems. Written within a tick before it is read,
+/// so it is not part of snapshots; a restored world starts with it zeroed.
+#[derive(Clone, Debug)]
+pub struct Scratch {
+    /// Output Y of each enterprise at E2.
+    pub produced: Vec<f64>,
+    /// Input stock before use and the quantity used at E2, `[enterprise * N_GOODS + k]`.
+    pub input_before: Vec<f64>,
+    pub input_used: Vec<f64>,
+    /// Traded supply routed at T2 (this tick's output) and the routed mass home + shipped,
+    /// `[province * N_GOODS + g]`.
+    pub route_supply: Vec<f64>,
+    pub route_mass: Vec<f64>,
+    /// Notional demand per pop and input orders per enterprise, by good.
+    pub pop_demand: Vec<f64>,
+    pub ent_order: Vec<f64>,
+    /// Wages, dividends and rebates paid to each pop this tick, minor units.
+    pub income_paid: Vec<i64>,
+    /// Pro rata fill per cell written by `Markets::clear`; T3 hands out sales inputs first.
+    pub fill: Vec<f64>,
+    /// Local output perished per cell at T3.
+    pub spoiled: Vec<f64>,
+    /// Transit delivered at T1, `[province * N_GOODS + g]`.
+    pub due: Vec<f64>,
+    pub routed: Routed,
+}
+
+impl Scratch {
+    fn new(np: usize, n_pops: usize, n_ent: usize) -> Self {
+        Self {
+            produced: vec![0.0; n_ent],
+            input_before: vec![0.0; n_ent * N_GOODS],
+            input_used: vec![0.0; n_ent * N_GOODS],
+            route_supply: vec![0.0; np * N_GOODS],
+            route_mass: vec![0.0; np * N_GOODS],
+            pop_demand: vec![0.0; n_pops * N_GOODS],
+            ent_order: vec![0.0; n_ent * N_GOODS],
+            income_paid: vec![0; n_pops],
+            fill: vec![0.0; np * N_GOODS],
+            spoiled: vec![0.0; np * N_GOODS],
+            due: vec![0.0; np * N_GOODS],
+            routed: Routed::new(),
+        }
+    }
+}
+
 /// The P2 world. Static parts (inputs, kernel, parameters, layout) are read-only; the
 /// public fields are the dynamic state that snapshots carry.
 #[derive(Clone, Debug)]
 pub struct EconWorld {
-    inputs: Arc<EconInputs>,
-    kernel: Arc<Kernel>,
-    params: EconParams,
-    trade: TradeParams,
-    layout: Arc<Layout>,
+    pub(crate) inputs: Arc<EconInputs>,
+    pub(crate) kernel: Arc<Kernel>,
+    pub(crate) params: EconParams,
+    pub(crate) trade: TradeParams,
+    pub(crate) layout: Arc<Layout>,
     digest: Hash,
     pub ledger: Ledger,
     /// Prices (inactive cells carry the netback), inventories, last D, Q and sales.
@@ -120,6 +172,8 @@ pub struct EconWorld {
     pub output: Vec<f64>,
     pub sales: Vec<f64>,
     pub profit: Vec<f64>,
+    /// Not state: see [`Scratch`].
+    pub scratch: Scratch,
 }
 
 /// BLAKE3 over the inputs digest and both parameter sets: everything a snapshot leaves out.
@@ -172,10 +226,11 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the 2000 data state: prices 1, base
     /// wages w0 and employment L0 from the inputs, 2000 unemployment, input stocks at one
-    /// month of base use, traded inventories at coverage times base demand, and one month of
-    /// base income (wages plus the profit share, `(1 - s_L) VA0` per enterprise) minted to
-    /// each pop. Panics on invalid inputs or a base point that does not fit the labour supply
-    /// under `params.edu_eff`.
+    /// month of base use (base output Y0 = A VA0 / a_VA), traded inventories at coverage
+    /// times base demand, and one month of base dividends (the pop's share of the profit
+    /// pool, `(1 - s_L) VA0` per enterprise) minted to each pop: tick 0 wages are paid at E2,
+    /// so tick 0 spending is one month of base income. Panics on invalid inputs or a base
+    /// point other than base employment = (1 - u) L^s under `params.edu_eff`.
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
         let inp = &*inputs;
@@ -210,6 +265,10 @@ impl EconWorld {
         let pop_offsets = offsets(&inp.pops.province, np);
         let ent_offsets = offsets(&inp.enterprises.province, np);
         let labour_supply = inp.labour_supply(&params.edu_eff);
+        let mut country_pops = vec![Vec::new(); nc];
+        for k in 0..n_pops {
+            country_pops[inp.country_of(inp.pops.province[k] as usize)].push(k as u32);
+        }
         let employed: Vec<f64> = (0..n_pops)
             .map(|k| {
                 let i = inp.pops.province[k] as usize;
@@ -222,6 +281,7 @@ impl EconWorld {
             ent_offsets,
             labour_supply,
             ownership: vec![0.0; n_pops],
+            country_pops,
             a_va: (0..n_ent)
                 .map(|e| {
                     let i = inp.enterprises.province[e] as usize;
@@ -231,11 +291,12 @@ impl EconWorld {
         };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
+            let u = inp.countries.unemployment[inp.country_of(i)];
+            let base = (1.0 - u) * layout.labour_supply[i];
             assert!(
-                l0 <= layout.labour_supply[i] * (1.0 + LABOUR_TOLERANCE),
-                "province {i}: base employment {l0} exceeds labour supply {}; \
-                 fill the base point with these education efficiencies",
-                layout.labour_supply[i]
+                (l0 / base - 1.0).abs() <= LABOUR_TOLERANCE,
+                "province {i}: base employment {l0} is not (1 - u) L^s = {base}; \
+                 fill the base point with these education efficiencies"
             );
             let effective: f64 = layout.pops(i).map(|k| edu_eff(k) * employed[k]).sum();
             assert!(effective > 0.0, "province {i} has no employed labour");
@@ -266,8 +327,9 @@ impl EconWorld {
                 .sum();
             for k in layout.pops(i) {
                 let wages = inp.provinces.w0[i] * edu_eff(k) * employed[k];
-                let income = wages + layout.ownership[k] * pool;
-                ledger.transfer(MINT, accounts.mint, accounts.pop[k], to_minor(income));
+                let dividends = layout.ownership[k] * pool;
+                ledger.transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
+                let income = wages + dividends;
                 ces(
                     &inp.countries.omega[c],
                     &[1.0; N_GOODS],
@@ -284,7 +346,7 @@ impl EconWorld {
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
             let (c, g) = (inp.country_of(i), sector(e));
-            let y0 = inp.enterprises.va0[e] / layout.a_va[e];
+            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / layout.a_va[e];
             for k in 0..N_GOODS {
                 let q = inp.a(c, k, g) * y0;
                 if q > 0.0 {
@@ -312,6 +374,7 @@ impl EconWorld {
             output: vec![0.0; n_ent],
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
+            scratch: Scratch::new(np, n_pops, n_ent),
             ledger,
             markets,
             transit: TransitWheel::new(np),
@@ -322,6 +385,15 @@ impl EconWorld {
             layout: Arc::new(layout),
             digest,
         }
+    }
+
+    /// A run of this world from the data state on the P2 schedule.
+    pub fn sim(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> Sim<EconWorld> {
+        Sim::new(
+            EconWorld::new(inputs, params, trade),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
     }
 
     pub fn inputs(&self) -> &EconInputs {
@@ -384,12 +456,17 @@ fn expect_len(what: &str, got: usize, want: usize) -> Result<(), DecodeError> {
 impl State for EconWorld {
     fn begin_tick(&mut self) {
         self.ledger.begin_tick();
+        self.scratch.income_paid.fill(0);
     }
 
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
-    /// (S >= 0 and held by the market account), transit (wheel and transit accounts agree)
-    /// and gateway clearing (money).
+    /// (S >= 0 and held by the market account), transit (wheel and transit accounts agree),
+    /// gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// [`Scratch`]: Leontief (inputs used = a_kg Y, 1e-12 relative to the larger of a_kg Y
+    /// and the stock they came from), routing mass (home + shipped = supply, 1e-12) and
+    /// income (wages, dividends and rebates credited to each pop in the journal equal its
+    /// recorded income, exact in minor units).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
         self.ledger.check(tick)?;
         let (inp, lay) = (&*self.inputs, &*self.layout);
@@ -478,6 +555,64 @@ impl State for EconWorld {
             let detail = format!("gateway account {a:?} holds {}", self.ledger.money(*a));
             return fail("gateway clearing", detail);
         }
+        for &a in &lay.accounts.gateway {
+            if let Some(g) = (0..N_GOODS).find(|&g| self.ledger.goods(a, g).abs() > GOODS_TOLERANCE)
+            {
+                let detail = format!(
+                    "gateway account {a:?} holds {} of good {g}",
+                    self.ledger.goods(a, g)
+                );
+                return fail("gateway clearing", detail);
+            }
+        }
+
+        let sc = &self.scratch;
+        for e in 0..inp.n_enterprises() {
+            let i = inp.enterprises.province[e] as usize;
+            let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
+            for k in 0..N_GOODS {
+                let want = inp.a(c, k, g) * sc.produced[e];
+                let (used, before) = (
+                    sc.input_used[e * N_GOODS + k],
+                    sc.input_before[e * N_GOODS + k],
+                );
+                let gap = (used - want).abs();
+                if gap.is_nan() || gap > LEONTIEF_TOLERANCE * want.max(before) {
+                    let detail = format!("enterprise {e} used {used} of good {k}, a Y = {want}");
+                    return fail("leontief", detail);
+                }
+            }
+        }
+
+        for (cell, (&mass, &supply)) in sc.route_mass.iter().zip(&sc.route_supply).enumerate() {
+            // the absolute floor only matters for subnormal supply, which has no relative precision
+            let gap = (mass - supply).abs();
+            if gap.is_nan() || gap > ROUTING_TOLERANCE * supply + f64::MIN_POSITIVE {
+                let detail = format!("cell {cell}: routed {mass} of supply {supply}");
+                return fail("routing mass", detail);
+            }
+        }
+
+        // pops hold the first account IDs
+        let pop_of = |a: AccountId| (a.0 as usize) < inp.n_pops();
+        let mut credited = vec![0i64; inp.n_pops()];
+        for entry in self.ledger.journal() {
+            if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
+                if pop_of(entry.to) {
+                    credited[entry.to.0 as usize] += entry.amount;
+                }
+                if pop_of(entry.from) {
+                    credited[entry.from.0 as usize] -= entry.amount;
+                }
+            }
+        }
+        if let Some(k) = (0..inp.n_pops()).find(|&k| credited[k] != sc.income_paid[k]) {
+            let detail = format!(
+                "pop {k}: journal credits {}, income paid {}",
+                credited[k], sc.income_paid[k]
+            );
+            return fail("income", detail);
+        }
         Ok(())
     }
 
@@ -545,6 +680,7 @@ impl State for EconWorld {
             output,
             sales,
             profit,
+            scratch: Scratch::new(np, n_pops, n_ent),
         })
     }
 }
@@ -624,11 +760,11 @@ mod tests {
             let u = inp.countries.unemployment[inp.country_of(inp.pops.province[k] as usize)];
             assert_eq!(w.employed[k], (1.0 - u) * inp.pops.labour_force[k]);
         }
-        // input stocks: one month of base use, a_kg VA0 / a_VA
+        // input stocks: one month of base use, a_kg A VA0 / a_VA
         for e in 0..inp.n_enterprises() {
             let i = inp.enterprises.province[e] as usize;
             let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
-            let y0 = inp.enterprises.va0[e] / inp.a_va(c, g);
+            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / inp.a_va(c, g);
             for k in 0..N_GOODS {
                 let held = w.ledger.goods(w.layout.accounts.enterprise[e], k);
                 assert!((held - inp.a(c, k, g) * y0).abs() <= 1e-12 * y0);
@@ -651,22 +787,23 @@ mod tests {
     }
 
     #[test]
-    fn world_mints_one_month_of_base_income() {
+    fn world_mints_one_month_of_base_dividends() {
         let w = world();
         let inp = small_world();
         for i in 0..25 {
-            let va: f64 = w
+            let s_l = inp.countries.s_l[inp.country_of(i)];
+            let pool: f64 = w
                 .layout
                 .enterprises(i)
-                .map(|e| inp.enterprises.va0[e])
+                .map(|e| (1.0 - s_l) * inp.enterprises.va0[e])
                 .sum();
             let minted: i64 = w
                 .layout
                 .pops(i)
                 .map(|k| w.ledger.money(w.layout.accounts.pop[k]))
                 .sum();
-            // wages plus profits are the whole base value added of the province
-            assert!((to_numeraire(minted) / va - 1.0).abs() < 1e-9);
+            // the profit pool only: tick 0 wages are paid at E2
+            assert!((to_numeraire(minted) / pool - 1.0).abs() < 1e-9);
             let shares: f64 = w.layout.pops(i).map(|k| w.layout.ownership[k]).sum();
             assert!((shares - 1.0).abs() < 1e-12);
         }
