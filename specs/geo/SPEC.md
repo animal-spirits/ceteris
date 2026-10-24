@@ -67,7 +67,11 @@ Path cost: c_od = min over paths of the sum of edge prices (Dijkstra; heap keys 
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
 
-### Route choice (P2, ADR 0017; `route_choice.rs`)
+### Route choice (ADR 0017; `route_choice.rs`): built but off
+
+Built and tested in P2 but not used: route choice is deferred past P2 (owner, 2026-10-24; ADR
+0017, Deferral) and trade keeps least-cost legs (S05). No dispersion in the P44 prior brings the
+spectral radius below 1 on the P1 graph.
 
 Per traded good g, with weight per value w_g, time cost lambda_g (trade P43) and route
 dispersion theta_r (trade P44), each edge gets an iceberg factor and a route weight
@@ -117,7 +121,7 @@ change). `warm` computes missing trees in parallel; results are independent of t
 | Pack reproducibility | Rebuild gives the stored table hashes | exact | `python/tests/test_packs.py` |
 | County nesting | Every county lies in one province; of counties at most half the area limit, under 5% of area falls outside it | 5% | `python/tests/test_packs.py` |
 | Mode ordering | Default per tonne-km: sea < rail < road < air | exact | `graph.rs` unit test |
-| Route-choice radius | Spectral radius of A below 1 for every traded good at P44 | exact (asserted) | `solve_from`; `tests/pack_properties.rs` |
+| Route-choice radius | Spectral radius of A below 1 for every traded good at P44 | exact (asserted) | `solve_from`; `tests/pack_properties.rs` (ignored while route choice is deferred) |
 
 ## Parameters
 

@@ -322,6 +322,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 - `tariffs.table(wdi, cepii_gravity, wb_dta, countries) -> pa.Table` (importer, exporter, group, rate; zero within agreements and customs unions in force on 1 Jan 2000)
 - `gateways.select(nodes, edges, provinces, trade_by_country) -> pa.Table` (node, country, kind): ports and airports clustered by k-medoids on great-circle distance (a change from the spec's path-cost rule, which needs Rust; record it in the spec's open questions), count per country proportional to sqrt(2000 trade from BACI), at least 1, total near 600; land crossings from edges whose endpoints lie in different 2000 countries, merged within 50 km
 - Tables per econ SPEC "Pack additions"
+- Leg costs stay least-cost (S05) in P2: `Network.route_taus` stays `None` (route choice deferred past P2, ADR 0017)
 - `EconInputs::from_pack`: leg costs from `ceteris_geo::paths::shortest` run in parallel from each province and gateway, keeping only same-country province entries, gateway entries and gateway-pair entries (never caching full trees: 4,796 trees would need about 3 GB); reads `econ_calib.arrow` when present, else A = 1
 - `EconInputs::network_from_graph(pack: &Pack, gateways) -> Network` (the leg-cost step alone) and `EconWorld::set_network(&mut self, net: Network)` (replaces the inputs `Arc` with the new network, rebuilds the kernel: system T0 of the trade SPEC, triggered by the caller in P2 since shocks arrive in P3)
 

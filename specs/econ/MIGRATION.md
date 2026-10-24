@@ -249,7 +249,7 @@ ADR 0022.
 - [ ] **Step 1: Write failing tests** `test_bound_reproduces_paper_examples` (the paper's worked cases: unique and non-unique parameter sets give bounds on the right side of 1), `test_trade_only_is_unique` (P2 defaults, no agglomeration or migration: bound below 1), `test_v1_mode`.
 - [ ] **Step 2: Run**; expected: FAIL. **Step 3: Implement.**
 - [ ] **Step 4: Rewrite** the P2 gate text: V1 runs in tolerance mode where the bound holds, otherwise both models start from the data state and the test reports which equilibrium each reaches; comparisons with CDP and KLR are sign and rank only.
-- [ ] **Step 5: Move** direct estimation into `specs/econ/PLAN.md` Task 18 as its first step: PPML structural gravity on 2000 BACI with route-choice costs between countries (from the pack built in Task 17) estimates theta by class (tariff coefficient), border friction P05 and mode cost ratios P04 in `python/ceteris/calibrate`, outputs with provenance "data"; it first reproduces the published estimates of Yotov, Piermartini, Monteiro and Larch (2016) on their sample (licence row in `sources.toml`). Productivity calibration then runs at the estimated values.
+- [ ] **Step 5: Move** direct estimation into `specs/econ/PLAN.md` Task 18 as its first step: PPML structural gravity on 2000 BACI with least-cost (S05) costs between countries (from the pack built in Task 17; route choice deferred past P2, ADR 0017) estimates theta by class (tariff coefficient), border friction P05 and mode cost ratios P04 in `python/ceteris/calibrate`, outputs with provenance "data"; it first reproduces the published estimates of Yotov, Piermartini, Monteiro and Larch (2016) on their sample (licence row in `sources.toml`). Productivity calibration then runs at the estimated values.
 - [ ] **Step 6: Run** the WIP check; expected: PASS.
 - [ ] **Step 7: Commit** `feat(reference): check equilibrium uniqueness before v1 and restate the p2 gate`
 
@@ -257,7 +257,7 @@ ADR 0022.
 
 **Files:**
 - Create: `CHANGELOG.md`
-- Modify: `tests/golden/p2-econ.txt`, `tests/golden/p2-fixture/**`, the three ignored or skipped tests (remove the markers), `adr/0015` to `0023` (status lines), `specs/econ/PLAN.md` (Task 19 trade budget 5 ms per tick on the full pack; `route` bench renamed `source_dispatch`; Task 17 `from_pack` fills `Network.route_taus` at P44; Task 21 register list: P39 to P47 instead of P37 to P41), `.superpowers/sdd/PLAN/progress.md` (migration done, resume at Task 13 review and Part D)
+- Modify: `tests/golden/p2-econ.txt`, `tests/golden/p2-fixture/**`, the three ignored or skipped tests (remove the markers), `adr/0015` to `0023` (status lines), `specs/econ/PLAN.md` (Task 19 trade budget 5 ms per tick on the full pack; `route` bench renamed `source_dispatch`; Task 21 register list: P39 to P47 instead of P37 to P41), `.superpowers/sdd/PLAN/progress.md` (migration done, resume at Task 13 review and Part D). The planned PLAN.md Task 17 amendment (`from_pack` fills `Network.route_taus` at P44) is dropped: route choice is deferred past P2 (ADR 0017, owner 2026-10-24), and Task 4 already wrote into Task 17 that `route_taus` stays `None`.
 
 - [ ] **Step 1: Re-bless** `cargo run -p ceteris-econ --release --bin ceteris -- export --fixture --out tests/golden/p2-fixture`, `uv run --project python python -m ceteris.reference solve --inputs tests/golden/p2-fixture --out tests/golden/p2-fixture/reference`, `CETERIS_BLESS=1 cargo test -p ceteris-econ --release --test golden`.
 - [ ] **Step 2: Remove** the ignore and skip markers; **run** `cargo test --workspace --release` and `uv run --project python --locked pytest python/tests` with no override; expected: PASS.
@@ -268,5 +268,5 @@ ADR 0022.
 
 ## Out of this plan
 
-- Full-pack route-choice taus, theta estimation and the trade budget measurement: PLAN.md Tasks 17 to 20 as amended above.
+- Theta estimation and the trade budget measurement: PLAN.md Tasks 17 to 20 as amended above. Full-pack route-choice taus are deferred past P2 (ADR 0017).
 - Refreshing the design doc for the register additions (P39 to P47) and ADR 0023: PLAN.md Task 21.

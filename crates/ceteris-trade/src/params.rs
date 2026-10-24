@@ -32,9 +32,9 @@ pub struct TradeParams {
     pub time_cost: [f64; N_GOODS],
     /// P44 route-choice dispersion theta_r (ADR 0017): edge factors `a = t^-theta_r`, route
     /// costs `tau = [(I - A)^-1]^(-1/theta_r)`. Prior 41 to 182 (Fan, Lu and Luo 2021: 111.5,
-    /// s.e. 35.4), start its point estimate pending owner decision: on the P1 graph no value in
-    /// the prior brings the spectral radius below 1 (MIGRATION Task 4). Used by the pack loader
-    /// that fills `Network::route_taus`; the fixture's least-cost legs do not read it.
+    /// s.e. 35.4), value its point estimate. Unused in P2: route choice is deferred (ADR 0017),
+    /// since no value in the prior brings the spectral radius below 1 on the P1 graph, and
+    /// `Network::route_taus` stays `None`.
     pub theta_r: f64,
 }
 

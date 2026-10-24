@@ -128,13 +128,13 @@ const TRADED: [(&str, f64, f64); 7] = [
     ("chemicals, fuels, metals", 0.0015934, 0.010),
     ("machinery", 0.00010144, 0.010),
 ];
-/// P44 start (trade `TradeParams::theta_r`; ceteris-geo does not depend on ceteris-trade).
+/// P44 point estimate (trade `TradeParams::theta_r`; ceteris-geo does not depend on ceteris-trade).
 const THETA_R: f64 = 111.5;
 
 // On the P1 graph the radius at the P44 prior's upper end (182) is 2.96 to 6.04 (MIGRATION
-// Task 4 report); run with --ignored once the owner has decided ADR 0017's open point.
+// Task 4 report, ADR 0017 Deferral).
 #[test]
-#[ignore = "P44 start pending owner decision (ADR 0017): radius above 1 across the prior"]
+#[ignore = "route choice deferred past P2 (ADR 0017)"]
 fn route_choice_radius_below_one_at_theta_r() {
     let Some(pack) = pack() else { return };
     let radii: Vec<(&str, f64)> = TRADED
