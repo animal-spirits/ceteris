@@ -1,6 +1,6 @@
 # 0022. Uniqueness check, static nesting gate and direct estimation
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 9; the estimation part lands with PLAN Task 18)
 Date: 2026-10-24
 Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate
 
@@ -38,14 +38,23 @@ runs on the pack.
 
 ## Mapping to P2 as built
 
-- The uniqueness check goes in `python/ceteris/reference` and runs before V1 in
-  `python/tests/test_p2_gate.py`. P2 has no agglomeration (A5 off) and no migration.
+- The uniqueness check is `python/ceteris/reference/uniqueness.py` (MIGRATION Task 9), Theorem 1
+  of the paper (transcribed in `specs/econ/SPEC.md`, Equilibrium nesting). No example in the paper
+  is a multi-sector model with an input-output table, so the check uses the special case of its
+  Online Appendix A.3 (Eaton-Kortum with intermediates and quasi-symmetric costs) good by good, at
+  theta_g and the good's smallest value-added share, and takes the largest radius; the SPEC lists
+  what this leaves out. P2 has no agglomeration (A5 off) and no migration; the function raises for
+  either until a phase that adds one derives its matrix. At the P2 defaults the bound is 0.932, so
+  V1 runs in tolerance mode. It runs before V1 in `python/tests/test_p2_gate.py` (PLAN Task 20);
+  its tests are in `python/tests/test_reference.py`.
 - V1 already compares steady states with the custom static GE (the reference model).
-- PPML on 2000 BACI with route-choice costs reuses `python/ceteris/reference/ppml.py` (Task 12,
-  which recovers a known elasticity on synthetic data). Estimation lands with the data pipeline
-  (Part D of `specs/econ/PLAN.md`), since it needs the BACI cache and the pack's costs; outputs
-  carry provenance "data".
-- The P2 gate text in `specs/econ/SPEC.md` is rewritten when this ADR lands.
+- PPML on 2000 BACI runs on least-cost (S05) costs between countries, not route-choice costs:
+  route choice is deferred past P2 (ADR 0017, Deferral). It reuses
+  `python/ceteris/reference/ppml.py` (Task 12, which recovers a known elasticity on synthetic
+  data) and first reproduces the published estimates of Yotov, Piermartini, Monteiro and Larch
+  (2016) on their sample. Estimation is the first step of PLAN Task 18, since it needs the BACI
+  cache and the pack's costs (Task 17); outputs carry provenance "data".
+- The P2 gate text in `specs/econ/SPEC.md` is rewritten (MIGRATION Task 9).
 
 ## Consequences
 

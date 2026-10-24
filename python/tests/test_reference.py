@@ -9,7 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import demand, io, model, ppml, sinkhorn, solve
+from ceteris.reference import demand, io, model, ppml, sinkhorn, solve, uniqueness
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
@@ -450,3 +450,73 @@ def test_distance_elasticity_from_run_flows():
     res2 = ppml.distance_elasticity(run, thin, codes)
     assert res2.n_dropped == 3 and res2.n_pairs == 40 * 39 - 3
     assert res2.elasticity == pytest.approx(res.elasticity, abs=0.02)
+
+
+def _urban(theta, alpha, beta):
+    """Section 3 urban model, one type, constant elasticity spillovers (system 13) in the form of
+    equation (8): types (workers, residents), own-location exponents theta alpha and theta beta."""
+    return uniqueness.change_of_variables(
+        gamma=np.eye(2),
+        r=np.diag([theta * alpha, theta * beta]),
+        b=np.array([[0.0, theta * beta], [theta * alpha, 0.0]]),
+    )
+
+
+def test_bound_reproduces_paper_examples():
+    """Allen, Arkolakis and Li (2024), January 2024 version: worked examples of Theorem 1."""
+    # Footnote 3 (p. 4): the stacked contraction bound is 2, the spectral radius sqrt(2/3).
+    a = np.array([[0.0, 2.0], [1.0 / 3.0, 0.0]])
+    assert uniqueness.spectral_radius(a) == pytest.approx(np.sqrt(2.0 / 3.0), rel=1e-14)
+    assert np.abs(a).sum(axis=1).max() == 2.0
+    # Footnote 6 (p. 11): x_i = sum_j K_ij x_i^beta x_j^alpha, alpha 1, beta -1/2: the change of
+    # variables (Remark 5) gives |alpha / (1 - beta)| = 2/3 where the direct bound is 1.5.
+    fn6 = uniqueness.change_of_variables(gamma=np.eye(1), r=np.array([[-0.5]]), b=np.array([[1.0]]))
+    assert uniqueness.spectral_radius(fn6) == pytest.approx(2.0 / 3.0, rel=1e-14)
+    # Section 3 (pp. 14-15, Figure 1 p. 21): theta 1, alpha = beta. The off-diagonal blocks are
+    # theta alpha / (1 - theta alpha); at 0.5 the radius is 1 (unique up to scale, part ii.b: one
+    # equilibrium in panels a, d, g); at 0.55 and 0.6 it exceeds 1 and panels f, h, i show three.
+    for alpha, radius, mode in ((0.5, 1.0, "tolerance"), (0.55, 0.55 / 0.45, "report"), (0.6, 1.5, "report")):
+        a = _urban(1.0, alpha, alpha)
+        np.testing.assert_allclose(a, [[0.0, alpha / (1 - alpha)], [alpha / (1 - alpha), 0.0]], rtol=1e-14)
+        assert uniqueness.spectral_radius(a) == pytest.approx(radius, rel=1e-12)
+        assert uniqueness.v1_mode(uniqueness.spectral_radius(a)) == mode
+    # Online Appendix A.3 (pp. 8-9): Eaton-Kortum with intermediates and quasi-symmetric costs,
+    # rho(B Gamma^-1) = (beta + theta - beta theta) / (beta + theta) < 1, theta = 1 / trade elasticity.
+    for elasticity in (0.5, 2.62, 5.88, 12.55, 100.0):
+        for beta in (0.05, 0.46, 0.73, 1.0):
+            t = 1.0 / elasticity
+            a = uniqueness.trade_with_intermediates(elasticity, beta)
+            assert uniqueness.spectral_radius(a) == pytest.approx((beta + t - beta * t) / (beta + t), rel=1e-12)
+            assert uniqueness.spectral_radius(a) < 1.0
+
+
+def test_trade_only_is_unique(inputs):
+    """P2 defaults (theta per good of the fixture export, no agglomeration, no migration): the
+    bound is below 1, so V1 runs in tolerance mode."""
+    va = uniqueness.value_added_share(inputs)
+    assert va.shape == (inputs.n_goods,) and np.all((va > 0) & (va <= 1))
+    bound = uniqueness.spectral_bound(inputs.theta, value_added_share=va)
+    traded = inputs.traded
+    want = max(
+        uniqueness.spectral_radius(uniqueness.trade_with_intermediates(inputs.theta[g], va[g])) for g in np.flatnonzero(traded)
+    )
+    assert bound == pytest.approx(want, rel=1e-14)
+    assert bound < 1.0 and uniqueness.v1_mode(bound) == "tolerance"
+    # Labour the only input (value-added share 1) gives the smaller bound theta / (1 + theta).
+    labour_only = uniqueness.spectral_bound(inputs.theta)
+    theta_max = inputs.theta[traded].max()
+    assert labour_only == pytest.approx(theta_max / (1.0 + theta_max), rel=1e-12)
+    assert labour_only <= bound
+    with pytest.raises(NotImplementedError):
+        uniqueness.spectral_bound(inputs.theta, agglomeration=0.05)
+    with pytest.raises(NotImplementedError):
+        uniqueness.spectral_bound(inputs.theta, migration=2.0)
+
+
+def test_v1_mode():
+    assert uniqueness.v1_mode(0.0) == "tolerance"
+    assert uniqueness.v1_mode(0.93) == "tolerance"
+    assert uniqueness.v1_mode(1.0) == "tolerance"
+    assert uniqueness.v1_mode(np.nextafter(1.0, 2.0)) == "report"
+    assert uniqueness.v1_mode(1.5) == "report"
+    assert uniqueness.v1_mode(float("inf")) == "report"

@@ -166,7 +166,10 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 /// world price index over consumer prices (`EconWorld::world_price_index`, the index the
 /// expectations of ADR 0019 track; the reference is normalized to an index of 1);
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
-/// good).
+/// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
+/// (`python/ceteris/reference/uniqueness.py`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
+/// special case the SPEC states) is 0.932 at the fixture's theta and value-added shares, at most
+/// 1, so one equilibrium is presumed; `test_trade_only_is_unique` checks it on the same export.
 #[test]
 fn v1_fixture_frictionless_matches_reference() {
     const TOL: f64 = 0.01;

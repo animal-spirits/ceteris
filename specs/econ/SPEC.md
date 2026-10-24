@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0021 and 0023
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016 and 0018 to 0023
 
 ## Purpose
 
@@ -292,7 +292,9 @@ initial money and comparisons use a world price index.
 ## Calibration (`ceteris calibrate p2`)
 
 1. Rust loads the pack, builds the kernel, and exports kernel legs, enterprises, pops and
-   parameters as Arrow.
+   parameters as Arrow. theta per class, the border friction P05 and the mode cost ratios P04 are
+   estimated before this, directly by PPML structural gravity on 2000 BACI with least-cost (S05)
+   costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
 2. Base point per enterprise: L0_ig = s_L VA0_ig / w0_i (base wage from the State table), so
    base wages clear base employment. The GE reference model (below) then solves in one joint
    system for prices, wages, the productivity A of every traded enterprise (equilibrium VA
@@ -383,12 +385,91 @@ design register.
 H1/V1: with frictionless settings (Walrasian wage, eta = 1, delta_w = 0) and any stable kappa,
 the run from the data state reaches the GE reference: every price and wage (index-normalized)
 within 1%, and every country-pair x good flow larger than 1e-6 of world trade within 1%. Checked
-on generated small worlds in CI and on the full pack locally.
+on generated small worlds in CI and on the full pack locally. The 1% comparison presumes one
+equilibrium: before V1 the uniqueness check below runs at the tested parameters, and V1 uses
+these tolerances only where it holds (tolerance mode; P2 gate).
+
+### Uniqueness check (ADR 0022)
+
+Source: Allen, Arkolakis and Li (2024), "On the Equilibrium Properties of Spatial Models",
+American Economic Review: Insights 6(4), 472-89. Page numbers below are those of the authors'
+January 2024 version, the one read for this spec.
+
+**Theorem 1** (p. 6), restated. N locations, H types of interaction, outcomes x in R_{++}^{N x
+H} solving
+
+    x_ih = sum_j f_ijh(x_j1, ..., x_jH)                                    (1)
+
+with f_ijh: R_{++}^H -> R_{++} differentiable, and elasticities eps_{ijh,jh'}(x_j) = d ln f_ijh /
+d ln x_jh'. Suppose an H x H matrix A bounds them: |eps_{ijh,jh'}(x_j)| <= A_hh' for all i, j,
+h, h' and all x_j > 0. rho(A) is its spectral radius. Then:
+
+- (i) if rho(A) < 1, (1) has a unique solution, and iterating (1) from any positive start
+  converges to it at rate rho(A);
+- (ii) if rho(A) = 1 and (a) for every i and every h, h' with A_hh' != 0 some j has
+  |eps_{ijh,jh'}(x_j)| < A_hh' for all x_j, then (1) has at most one solution; or (b) the
+  elasticities are constant, eps_{ijh,jh'} = alpha_hh' with |alpha_hh'| = A_hh' (f_ijh = K_ijh
+  prod_h' x_jh'^alpha_hh', K_ijh > 0), then solutions are unique column-wise up to scale (x'_.h
+  = c_h x_.h, c_h > 0);
+- (iii) if rho(A) > 1 and N >= 2H + 1, some K_ijh > 0 make the constant-elasticity system with
+  |alpha_hh'| = A_hh' have two solutions that differ beyond column-wise scale.
+
+Remark 4 (p. 10): with endogenous scalars lambda_h x_ih = sum_j f_ijh and constant elasticities,
+rho(A) <= 1 gives the conclusion of (ii.b). Remark 5 (p. 11): the constant-elasticity system
+prod_h' x_ih'^gamma_hh' = sum_j K_ijh prod_h' x_ih'^rho_hh' x_jh'^beta_hh' (equation 8) maps
+onto (1) with A = |B (Gamma - R)^-1| when Gamma - R is invertible.
+
+**Special case used.** None of the paper's examples is a multi-sector trade model with an
+input-output table, so no example's A is P2's. The nearest is Online Appendix A.3 (pp. 6-9):
+one tradeable sector, Eaton-Kortum with tariffs, tradeables made from labour (share beta) and the
+tradeables aggregate, under quasi-symmetric trade costs (kappa_ij omega_ij = tau_ij c_i r_j with
+tau symmetric). Its system in the tradeables price index and the wage (equations 29 and 30) has,
+with theta the trade elasticity (the paper's 1/theta),
+
+    Gamma = [[-theta, 0], [(1 - beta) theta, 1 + beta theta]]
+    B     = [[-(1 - beta) theta, -beta theta], [-(1 - beta) theta, -beta theta]]
+    rho(B Gamma^-1) = (1 + beta (theta - 1)) / (1 + beta theta) < 1   for theta > 0, 0 < beta <= 1
+
+(the paper's (beta + theta' - beta theta') / (beta + theta'), theta' = 1 / theta, p. 9).
+`reference/uniqueness.py` applies A.3 to each traded good on its own, at its theta_g (P01) and
+beta_g, the smallest value-added share 1 - sum_k a_kg over countries (the radius falls with
+beta), and takes the largest: `spectral_bound(theta, value_added_share=value_added_share(inp))`.
+`v1_mode(bound)` is `"tolerance"` for a bound at most 1 (parts i and ii.b), else `"report"`.
+
+Why this case, and what it leaves out: (1) goods are coupled through the Leontief input-output
+table and PIGL demand, while A.3's only intermediate is the tradeables aggregate; a joint A over
+goods needs elasticity bounds that depend on the coefficients and on income, a new derivation
+rather than the paper's; (2) value added is a normalized CES over labour and a fixed factor, A.3
+has labour alone, so beta is read as the value-added share (both factors immobile across
+provinces in P2); (3) local goods have no trade interaction and are left out; (4) quasi-symmetry
+needs symmetric leg costs and tariffs that split into importer and exporter factors, while P2's
+tariff wedge is per (importer, exporter, good) and least-cost legs (S05) need not be symmetric
+in both directions; without it A.3's three-equation form has a radius above 1 (footnote 10,
+p. 7), which by itself does not imply multiplicity. The bound is therefore a per-good check
+consistent with the paper, not a proof that P2's equilibrium is unique; V1 itself is the evidence
+that the run and the reference reach the same point.
+
+Agglomeration (A5) and migration have no mapping yet: A.2 (economic geography with spatial
+spillovers, pp. 3-6) has rho(A) <= 1 only without spillovers, and A.6 (forward-looking migration,
+pp. 12-15) is unique when alpha + beta <= 0 but has no trade costs. `spectral_bound` raises for a
+nonzero agglomeration or a migration elasticity until the phase that adds one derives its A.
+
+At the P2 defaults (P01 class values 12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88; the fixture's
+value-added shares, 0.46 to 0.73) the bound is 0.932 (chemicals, refined fuels and metals: theta
+12.55, beta 0.46); with labour the only input (beta = 1) it is 12.55 / 13.55 = 0.926. V1 runs in
+tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
 
 ## P2 gate (21.1)
 
 - V0: zero invariant violations; determinism, 1 vs 8 threads, replay.
-- V1: as above, full pack, within 1,200 ticks.
+- V1: first the uniqueness check (Equilibrium nesting) at the run's theta and the pack's
+  value-added shares. Where the bound holds (at most 1, tolerance mode) V1 applies the 1%
+  tolerances above, full pack, within 1,200 ticks. Otherwise (report mode) both models start from
+  the data state, the run frictionless for 1,200 ticks and the reference solve from
+  `model.data_state`, and the test reports which equilibrium each reaches (index-normalized
+  prices, wages and flows of each, and their largest gaps) instead of a pass or fail at 1%.
+  Comparisons with the perfect-foresight references (Caliendo-Dvorkin-Parro, Kleinman-Liu-Redding)
+  are sign and rank only: agents with heuristic expectations cannot match their transition paths.
 - H2: PPML of simulated country-pair trade (traded goods, FOB value, steady state of the default
   run) on ln distance (CEPII population-weighted) and contiguity, with exporter and importer
   effects, excluding domestic pairs: distance coefficient in -1.1 to -0.7. H2 blocks the gate
@@ -439,7 +520,10 @@ texture fed from core columns.
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
 - Python (pytest, hypothesis): ICIO aggregation preserves totals; downscaling preserves national
   VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
-  worlds; PPML recovers a known elasticity on synthetic gravity data; the reference's PIGL
+  worlds; PPML recovers a known elasticity on synthetic gravity data; the uniqueness check
+  reproduces the paper's worked examples (footnotes 3 and 6, Section 3 with Figure 1, Online
+  Appendix A.3: `test_bound_reproduces_paper_examples`), is below 1 at the P2 defaults
+  (`test_trade_only_is_unique`) and picks the V1 mode (`test_v1_mode`); the reference's PIGL
   reproduces Rust's on the export's 100 `pigl_check` draws (1e-12) and its inversion the base
   shares.
 - Acceptance: `tests/p2_acceptance.rs` (V0, V1, 100 years, determinism) and
