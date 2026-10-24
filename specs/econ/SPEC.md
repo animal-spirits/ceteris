@@ -496,6 +496,10 @@ output, profit), its pops (education, labour force, employed, income). Time cont
 pause, step, speed, driving the core in the same process. Colouring goes through the feature
 texture fed from core columns.
 
+## Outputs
+
+`ceteris run` writes `run_prices`, `run_wages`, `run_enterprises`, `run_flows`, `run_home` and `run.json` (the state at the final tick). With `--history [--history-every N]` it also writes `run_history_world`, `run_history_provinces` and `run_history_markets`, one row per sampled tick (tick 0, every N-th, the final tick) for charting the dynamics; recording only reads the state, so state hashes and the default output are unchanged. Columns: `crates/ceteris-econ/src/history.rs`.
+
 ## Test plan
 
 - Same-tick chain and putty-clay (ADR 0020, `p2_properties.rs`): one vintage equals fixed
@@ -537,6 +541,7 @@ texture fed from core columns.
   (`test_trade_only_is_unique`) and picks the V1 mode (`test_v1_mode`); the reference's PIGL
   reproduces Rust's on the export's 100 `pigl_check` draws (1e-12) and its inversion the base
   shares.
+- History (`history.rs`, `tests/history_cli.rs`): row counts at intervals 1 and 5, last row equals the run files, same state hash with and without recording, deterministic bytes, default output byte-identical.
 - Acceptance: `tests/p2_acceptance.rs` (V0, V1, 100 years, determinism) and
   `python/tests/test_p2_gate.py` (V1 comparison, H2); full-pack parts skip without a pack, as
   in P1.
