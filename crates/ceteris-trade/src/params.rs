@@ -10,17 +10,19 @@ pub struct TradeParams {
     pub coverage: [f64; N_GOODS],
     /// P03a price response to the demand-supply gap, per month. Prior 0.01 to 0.5 (widened
     /// from 0.05 by owner decision, 2026-10-24, for stability), default 0.02. Growth factor
-    /// per tick of a small deviation from the fixture's GE equilibrium (Task 7b, capacity
-    /// input orders, kappa2 = 0, frictionless / default): kappa1 0.2: 1.318 / 1.308;
-    /// 0.1: 1.090 / 1.069; 0.05: 0.981 / 0.978; 0.02: 0.989 / 0.991. With every crossing lag
-    /// at 3 months (the full pack's cap): 0.05: 1.059 / 1.058; 0.02: 0.987 / 0.997.
+    /// per tick of a small deviation from the fixture's GE equilibrium between ticks 300 and
+    /// 600 (MIGRATION Task 3: origin clearing, buyers at q_d, order-up-to with transit lead;
+    /// kappa2 = 0, frictionless / default): kappa1 0.02: 0.9956 / 0.9958; 0.05: 0.9864 /
+    /// 0.9873; 0.1: 0.9723 / 0.9759; 0.2: 1.0000 / 0.9942 (frictionless oscillates). The
+    /// same with every crossing lag at 3 months (the full pack's cap) up to kappa1 0.1;
+    /// 0.2: 1.0001 / 1.0014.
     pub kappa1: f64,
     /// P03b price response to the inventory gap, per month. Prior 0 to 0.5 (widened from 0.05
     /// by owner decision, 2026-10-24), default 0: the inventory term is off and inventories
-    /// are untargeted in P2. Any kappa2 > 0 is unstable on the fixture: at kappa1 0.05, kappa2
-    /// 0.01: 1.044 / 1.038, 0.05: 1.175 / 1.197 (also with inventory position control: 1.112
-    /// / 1.121), because the stock integrates delayed routed supply and feeds the money and
-    /// trade-balance loop.
+    /// are untargeted in P2. kappa2 = 0.05 is unstable in the default mode at kappa1 0.02
+    /// (1.0023 as built, 1.0082 at lag 3) and 0.05 (1.0054), decays at 0.1 (0.9886) and 0.2
+    /// (0.9914) as built but not at lag 3 (1.0043, 1.0000); frictionless it decays up to
+    /// kappa1 0.1 as built (0.9979, 0.9736, 0.9943).
     pub kappa2: f64,
     /// P03c price step clip in log points per month.
     pub c_max: f64,

@@ -1,5 +1,7 @@
 //! Economic parameters with their register IDs (`specs/econ/SPEC.md`, Parameters).
 
+use ceteris_trade::Rationing;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct EconParams {
     /// P06 goods substitution sigma in final demand, prior 0.3 to 0.9.
@@ -16,6 +18,9 @@ pub struct EconParams {
     pub edu_eff: [f64; 3],
     /// Walrasian wage, eta = 1 and delta_w = 0 (V1 equilibrium nesting).
     pub frictionless: bool,
+    /// S11 sharing of an origin shortfall between buyer classes: intermediate users first
+    /// (`Priority`, default, DESIGN 8.2) or one fill ratio (`Proportional`).
+    pub rationing: Rationing,
 }
 
 impl Default for EconParams {
@@ -28,6 +33,7 @@ impl Default for EconParams {
             eta: 0.3,
             edu_eff: [1.0, 1.5, 2.3],
             frictionless: false,
+            rationing: Rationing::Priority,
         }
     }
 }

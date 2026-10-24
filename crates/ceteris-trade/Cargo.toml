@@ -1,6 +1,6 @@
 [package]
 name = "ceteris-trade"
-description = "Province markets, the two-level trade kernel and merchant routing for Ceteris Paribus"
+description = "Province markets, the two-level trade kernel and destination sourcing for Ceteris Paribus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

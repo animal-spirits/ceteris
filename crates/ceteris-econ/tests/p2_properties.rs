@@ -7,10 +7,11 @@ use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
-use ceteris_econ::world::{MINOR_PER_UNIT, MINT, TARIFF, TRADE};
+use ceteris_econ::world::{MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, to_minor};
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{N_GOODS, Routed, TradeParams, route};
+use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
+use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
 use proptest::prelude::*;
 
 fn world(params: EconParams) -> EconWorld {
@@ -84,10 +85,12 @@ fn employment_within_bounds() {
     }
 }
 
-/// Multiplies prices, wages and every pop's money by `scale`; panics on ledger overflow.
+/// Multiplies prices, the price index, wages and every pop's money by `scale`; panics on
+/// ledger overflow.
 fn scaled(mut w: EconWorld, scale: i64) -> EconWorld {
     let s = scale as f64;
     w.markets.price.iter_mut().for_each(|p| *p *= s);
+    w.price_index.iter_mut().for_each(|p| *p *= s);
     w.wage.iter_mut().for_each(|x| *x *= s);
     let acc = w.layout().accounts.clone();
     for &pop in &acc.pop {
@@ -135,7 +138,7 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
         .collect();
     let in_flight = (0..N_GOODS)
         .filter(|&g| TRADED[g])
-        .map(|g| w.transit.in_flight(g))
+        .map(|g| w.pipeline.in_flight(g))
         .collect();
     let columns: Vec<(&'static str, Vec<f64>)> = vec![
         ("employment", w.employment.clone()),
@@ -189,133 +192,189 @@ fn nominal_scale_beyond_the_ledger_fails_loudly() {
     sim.run_until(1).unwrap();
 }
 
+/// Runs T1 to T3 of a tick: everything up to the dispatch of the filled orders.
+fn up_to_dispatch(w: &mut EconWorld) {
+    w.begin_tick();
+    systems::deliver(w);
+    systems::labour(w);
+    systems::produce(w);
+    systems::demand(w);
+    systems::source(w);
+    systems::clear(w);
+}
+
+/// Runs T2b to E4, then checks the invariants.
+fn from_dispatch(w: &mut EconWorld, tick: u32) {
+    systems::dispatch(w);
+    systems::reprice(w);
+    systems::distribute(w);
+    w.end_tick(tick).unwrap();
+}
+
+/// A traded cell has a market only where an enterprise of the province produces the good:
+/// nobody orders there, nothing is stocked or sold there, and its price never moves, while
+/// the province's own buyers still buy the good from other origins.
 #[test]
-fn inactive_cells_use_netback_price() {
+fn origins_without_capacity_have_no_market() {
     let mut w = world(EconParams::default());
-    for _ in 0..2 {
-        w.begin_tick();
-        systems::deliver(&mut w);
-        systems::labour(&mut w);
-        systems::produce(&mut w);
-        let before = w.markets.price.clone();
-        systems::route(&mut w);
-
-        let inp = w.inputs();
-        let np = inp.n_provinces();
-        let mut checked = 0;
-        let mut moved = false;
+    let inp = w.inputs().clone();
+    let np = inp.n_provinces();
+    let produces = |i: usize, g: usize| {
+        (0..inp.n_enterprises()).any(|e| {
+            inp.enterprises.province[e] as usize == i
+                && usize::from(inp.enterprises.good[e]) == g
+                && inp.enterprises.a[e] * inp.enterprises.va0[e] > 0.0
+        })
+    };
+    let mut without: Vec<usize> = vec![];
+    for i in 0..np {
         for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-            let mut supply = vec![0.0; np];
-            for e in 0..inp.n_enterprises() {
-                if usize::from(inp.enterprises.good[e]) == g {
-                    supply[inp.enterprises.province[e] as usize] = w.output[e];
-                }
-            }
-            let price: Vec<f64> = (0..np).map(|i| before[i * N_GOODS + g]).collect();
-            let active: Vec<bool> = (0..np).map(|i| w.markets.active[i * N_GOODS + g]).collect();
-            let mut r = Routed::new();
-            route(w.kernel(), g, &supply, &price, &active, &mut r);
-            for i in 0..np {
-                let cell = i * N_GOODS + g;
-                if active[i] {
-                    assert_eq!(w.markets.price[cell].to_bits(), before[cell].to_bits());
-                } else {
-                    assert_eq!(w.markets.price[cell].to_bits(), r.netback[i].to_bits());
-                    assert!(r.netback[i].is_finite() && r.netback[i] > 0.0);
-                    checked += usize::from(supply[i] > 0.0);
-                    moved |= r.netback[i] != before[cell];
-                }
+            let cell = i * N_GOODS + g;
+            assert_eq!(w.markets.active[cell], produces(i, g), "cell {cell}");
+            assert_eq!(active_cells(&inp)[cell], w.markets.active[cell]);
+            if !produces(i, g) {
+                without.push(cell);
             }
         }
-        assert!(checked > 0 && moved, "no inactive cell with output");
+    }
+    let buyers_without_market = without
+        .iter()
+        .filter(|&&c| inp.countries.omega[inp.country_of(c / N_GOODS)][c % N_GOODS] > 0.0)
+        .count();
+    assert!(
+        buyers_without_market > 0,
+        "no province buys a good it does not produce"
+    );
 
-        systems::demand(&mut w);
-        systems::clear(&mut w);
-        let routed = w.markets.price.clone();
-        systems::reprice(&mut w);
-        for (cell, &active) in w.markets.active.iter().enumerate() {
-            if !active {
-                assert_eq!(w.markets.price[cell].to_bits(), routed[cell].to_bits());
-            }
+    let before = w.markets.price.clone();
+    let acc = w.layout().accounts.clone();
+    for tick in 0..6 {
+        up_to_dispatch(&mut w);
+        let mut bought = 0.0;
+        for &cell in &without {
+            let (i, g) = (cell / N_GOODS, cell % N_GOODS);
+            let m = &w.markets;
+            assert_eq!(
+                (m.demand_int[cell], m.demand_hh[cell]),
+                (0.0, 0.0),
+                "cell {cell}"
+            );
+            assert_eq!(
+                (m.sales[cell], m.inventory[cell]),
+                (0.0, 0.0),
+                "cell {cell}"
+            );
+            assert_eq!(w.ledger.goods(acc.market[i], g), 0.0);
+            bought += w.scratch.class_spend[cell][HOUSEHOLD];
         }
-        systems::distribute(&mut w);
-        w.end_tick(0).unwrap();
+        assert!(
+            bought > 0.0,
+            "tick {tick}: buyers without a local market spend nothing"
+        );
+        from_dispatch(&mut w, tick);
+        for &cell in &without {
+            assert_eq!(w.markets.price[cell].to_bits(), before[cell].to_bits());
+        }
     }
 }
 
-/// T2 in minor units: destination markets pay what origin markets receive plus the tariff,
-/// and each province's totals follow the delivered values of `route` up to per-leg rounding.
+/// T2b in minor units: each buyer pays its destination market, per good, its share of its
+/// class's filled spending, origin price times (1 + t) per shipped unit, rounded half to
+/// even; markets pass the payments on to origins, gateways and rebate accounts, and gateway
+/// accounts net to zero.
 #[test]
-fn trade_is_paid_at_delivered_prices_in_minor_units() {
+fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
     for params in [EconParams::default(), EconParams::frictionless()] {
         let mut w = world(params);
-        for tick in 0..3 {
-            w.begin_tick();
-            systems::deliver(&mut w);
-            systems::labour(&mut w);
-            systems::produce(&mut w);
-            let before = w.markets.price.clone();
-            systems::route(&mut w);
+        for tick in 0..4 {
+            up_to_dispatch(&mut w);
+            let inp = w.inputs().clone();
+            let (lay, kernel) = (w.layout().clone(), w.kernel().clone());
+            let (np, n_pops) = (inp.n_provinces(), inp.n_pops());
+            let start = w.ledger.journal().len();
 
-            let inp = w.inputs();
-            let np = inp.n_provinces();
-            let acc = &w.layout().accounts;
-            let province = |a| acc.market.iter().position(|&m| m == a);
-            let (mut paid, mut received, mut tariff) = (vec![0i64; np], vec![0i64; np], 0i64);
-            for e in w.ledger.journal() {
-                if e.flow == TRADE {
-                    if let Some(d) = province(e.from) {
-                        paid[d] += e.amount;
+            // the filled value of every buyer, from its own sourcing of the class spending
+            let mut want = vec![0i64; n_pops + inp.n_enterprises()];
+            let (mut home_value, mut tariff_due, mut sourced) = (0.0, 0.0, Sourced::new());
+            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+                let cells = || (0..np).map(|d| d * N_GOODS + g);
+                let price: Vec<f64> = cells().map(|c| w.markets.price[c]).collect();
+                let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
+                let spend: Vec<[f64; 2]> = cells().map(|c| w.scratch.class_spend[c]).collect();
+                let fill: Vec<[f64; 2]> = cells().map(|c| w.scratch.fill[c]).collect();
+                source(&kernel, g, &price, &active, &spend, &mut sourced);
+                dispatch(&kernel, g, &price, &fill, &mut sourced);
+                for d in 0..np {
+                    for c in [INTERMEDIATE, HOUSEHOLD] {
+                        assert!(sourced.paid_by_class[d][c] <= spend[d][c] * (1.0 + 1e-12));
                     }
-                    if let Some(o) = province(e.to) {
-                        received[o] += e.amount;
+                    home_value += price[d] * (sourced.arrive[0][d][0] + sourced.arrive[0][d][1]);
+                    let row = |e: usize| w.scratch.ent_spend[e * N_GOODS + g];
+                    let paid = |c: usize, x: f64| {
+                        if x > 0.0 {
+                            to_minor(sourced.paid_by_class[d][c] * (x / spend[d][c]))
+                        } else {
+                            0
+                        }
+                    };
+                    for e in lay.enterprises(d) {
+                        want[n_pops + e] += paid(INTERMEDIATE, row(e));
+                    }
+                    for k in lay.pops(d) {
+                        want[k] += paid(HOUSEHOLD, w.scratch.pop_spend[k * N_GOODS + g]);
+                    }
+                }
+                let gk = kernel.good(g);
+                for a in 0..kernel.n_gateways {
+                    let lo = gk.crossings.offsets[a] as usize;
+                    for (j, e) in gk.crossings.row(a).iter().enumerate() {
+                        tariff_due += f64::from(e.tariff) * sourced.crossing_value[lo + j];
+                    }
+                }
+            }
+
+            systems::dispatch(&mut w);
+            let acc = &lay.accounts;
+            let buyer = |a| acc.pop.iter().chain(&acc.enterprise).position(|&b| b == a);
+            let market = |a| acc.market.iter().position(|&m| m == a);
+            let mut got = vec![0i64; want.len()];
+            let (mut passed, mut tariff, mut received) = (0i64, 0i64, 0i64);
+            for e in &w.ledger.journal()[start..] {
+                if e.flow == PURCHASE {
+                    got[buyer(e.from).expect("buyers pay")] += e.amount;
+                    assert!(market(e.to).is_some(), "buyers pay their market");
+                } else if e.flow == TRADE {
+                    if market(e.from).is_some() {
+                        passed += e.amount;
+                    }
+                    if market(e.to).is_some() {
+                        received += e.amount;
                     }
                 } else if e.flow == TARIFF {
-                    let d = province(e.from).expect("tariffs are paid by markets");
-                    paid[d] += e.amount;
+                    assert!(market(e.from).is_some(), "markets pay tariffs");
                     tariff += e.amount;
                 }
             }
-            let total = |v: &[i64]| v.iter().sum::<i64>();
-            assert_eq!(total(&paid), total(&received) + tariff, "tick {tick}");
-
-            let (mut want_paid, mut want_received) = (vec![0.0; np], vec![0.0; np]);
-            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-                let mut supply = vec![0.0; np];
-                for e in 0..inp.n_enterprises() {
-                    if usize::from(inp.enterprises.good[e]) == g {
-                        supply[inp.enterprises.province[e] as usize] = w.output[e];
-                    }
-                }
-                let price: Vec<f64> = (0..np).map(|i| before[i * N_GOODS + g]).collect();
-                let active: Vec<bool> =
-                    (0..np).map(|i| w.markets.active[i * N_GOODS + g]).collect();
-                let mut r = Routed::new();
-                route(w.kernel(), g, &supply, &price, &active, &mut r);
-                for i in 0..np {
-                    want_paid[i] += r.paid[i] * MINOR_PER_UNIT;
-                    want_received[i] += r.received[i] * MINOR_PER_UNIT;
-                }
+            assert_eq!(got, want, "tick {tick}: buyer payments");
+            for &g in &acc.gateway {
+                assert_eq!(w.ledger.money(g), 0, "tick {tick}: gateway nets to zero");
             }
-            // per-leg rounding: at most half a minor unit per leg and per split part
-            let near = |got: i64, want: f64| (got as f64 - want).abs() <= 1e-9 * want.abs() + 256.0;
-            for i in 0..np {
-                assert!(
-                    near(paid[i], want_paid[i]),
-                    "tick {tick} paid {i}: {} vs {}",
-                    paid[i],
-                    want_paid[i]
-                );
-                assert!(
-                    near(received[i], want_received[i]),
-                    "tick {tick} received {i}: {} vs {}",
-                    received[i],
-                    want_received[i]
-                );
-            }
+            // markets pass on what their buyers paid, less home purchases; origins receive
+            // it net of tariff; at most half a minor unit per payment and leg apart
+            let total: i64 = got.iter().sum();
+            let legs = (w.ledger.journal().len() - start) as f64;
+            let near = |a: f64, b: f64| (a - b).abs() <= 0.5 * legs + 1e-9 * b.abs();
+            let home = home_value * MINOR_PER_UNIT;
+            assert!(
+                near((passed + tariff) as f64, total as f64 - home),
+                "tick {tick}"
+            );
+            assert!(near(received as f64, total as f64 - home - tariff as f64));
+            assert!(
+                near(tariff as f64, tariff_due * MINOR_PER_UNIT),
+                "tick {tick}: tariff"
+            );
 
-            systems::demand(&mut w);
-            systems::clear(&mut w);
             systems::reprice(&mut w);
             systems::distribute(&mut w);
             w.end_tick(tick).unwrap();
@@ -323,8 +382,100 @@ fn trade_is_paid_at_delivered_prices_in_minor_units() {
     }
 }
 
+/// Capacity output VA(L) / a_VA of enterprise `e` at its current employment.
+fn capacity(w: &EconWorld, e: usize) -> f64 {
+    let (inp, lay) = (w.inputs(), w.layout());
+    let ent = &inp.enterprises;
+    let c = inp.country_of(ent.province[e] as usize);
+    let va = value_added(
+        ent.a[e],
+        ent.va0[e],
+        ent.l0[e],
+        inp.countries.s_l[c],
+        rho(w.params().sigma_fl),
+        w.employment[e],
+    );
+    va / lay.a_va[e]
+}
+
+/// The order rule of E3 for every enterprise and input: up to an inventory position of
+/// (1 + COVER + L) a_kg Y_cap, L the expected months in transit to the province,
+/// (target - stock - on order) at least zero; returns the orders that bind at zero only
+/// because of goods on order.
+fn assert_order_rule(w: &EconWorld) -> usize {
+    let (inp, lay) = (w.inputs(), w.layout());
+    let mut held_back = 0;
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
+        for (k, &traded) in TRADED.iter().enumerate() {
+            let a = inp.a(c, k, g);
+            let stock = w.ledger.goods(lay.accounts.enterprise[e], k);
+            let on_order = w.pipeline.on_order(inp.n_pops() + e, k);
+            let lead = w.scratch.lead[i * N_GOODS + k];
+            assert!(traded || lead == 0.0);
+            let gap = (1.0 + systems::COVER + lead) * a * capacity(w, e) - stock;
+            let want = if a > 0.0 {
+                (gap - on_order).max(0.0)
+            } else {
+                0.0
+            };
+            let got = w.scratch.ent_order[e * N_GOODS + k];
+            assert!(
+                (got - want).abs() <= 1e-12 * want.max(1.0),
+                "enterprise {e} good {k}: order {got}, want {want}"
+            );
+            held_back += usize::from(a > 0.0 && want == 0.0 && gap > 0.0);
+        }
+    }
+    held_back
+}
+
+/// An enterprise whose pipeline already holds its whole target position of an input orders
+/// none of it; with half a month on order it orders the rest of the gap.
+#[test]
+fn input_orders_count_goods_on_order() {
+    let mut w = world(EconParams::default());
+    w.begin_tick();
+    systems::deliver(&mut w);
+    systems::labour(&mut w);
+    systems::produce(&mut w);
+    let inp = w.inputs().clone();
+    let acc = w.layout().accounts.clone();
+    let (full, half) = (0, 1);
+    let mut checked = 0;
+    // the lead E3 will use: the prices do not move between here and E3
+    w.refresh_price_index();
+    for (e, months) in [(full, None), (half, Some(0.5))] {
+        let i = inp.enterprises.province[e] as usize;
+        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
+        for k in (0..N_GOODS).filter(|&k| TRADED[k] && inp.a(c, k, g) > 0.0) {
+            let target = 1.0 + systems::COVER + w.scratch.lead[i * N_GOODS + k];
+            let units = months.unwrap_or(target) * inp.a(c, k, g) * capacity(&w, e);
+            // in flight over three slots; the goods sit in the transit account
+            for slot in 2..=4 {
+                w.pipeline.push(slot, inp.n_pops() + e, k, units / 3.0);
+            }
+            w.ledger.create(acc.transit[k], k, units);
+            checked += 1;
+        }
+    }
+    assert!(checked >= 2, "enterprises 0 and 1 use no traded input");
+    systems::demand(&mut w);
+    assert!(
+        assert_order_rule(&w) > 0,
+        "no order held back by goods on order"
+    );
+    let i = inp.enterprises.province[full] as usize;
+    let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[full]));
+    for k in (0..N_GOODS).filter(|&k| TRADED[k] && inp.a(c, k, g) > 0.0) {
+        assert_eq!(w.scratch.ent_order[full * N_GOODS + k], 0.0);
+        assert_eq!(w.scratch.ent_spend[full * N_GOODS + k], 0.0);
+    }
+}
+
 /// Input orders plan on capacity output VA(L) / a_VA at this tick's employment, not on output
-/// cut by a short input (owner decision, Task 7b): a_kg Y_cap + (a_kg Y_cap - stock after use).
+/// cut by a short input (owner decision, Task 7b), less the goods already on order.
 #[test]
 fn input_orders_plan_on_capacity_output() {
     let mut w = world(EconParams::default());
@@ -336,43 +487,71 @@ fn input_orders_plan_on_capacity_output() {
             w.ledger.destroy(account, k, 0.5 * held);
         }
     }
-    w.begin_tick();
-    systems::deliver(&mut w);
-    systems::labour(&mut w);
-    systems::produce(&mut w);
-    systems::route(&mut w);
-    systems::demand(&mut w);
+    for tick in 0..3 {
+        w.begin_tick();
+        systems::deliver(&mut w);
+        systems::labour(&mut w);
+        systems::produce(&mut w);
+        systems::demand(&mut w);
+        let binding = (0..w.inputs().n_enterprises())
+            .filter(|&e| w.output[e] < 0.9 * capacity(&w, e))
+            .count();
+        assert!(tick > 0 || binding > 0, "no enterprise was input-bound");
+        assert_order_rule(&w);
+        systems::source(&mut w);
+        systems::clear(&mut w);
+        from_dispatch(&mut w, tick);
+    }
+}
 
-    let (inp, lay) = (w.inputs(), w.layout());
-    let mut binding = 0;
-    for e in 0..inp.n_enterprises() {
-        let i = inp.enterprises.province[e] as usize;
-        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
-        let ent = &inp.enterprises;
-        let va = value_added(
-            ent.a[e],
-            ent.va0[e],
-            ent.l0[e],
-            inp.countries.s_l[c],
-            rho(w.params().sigma_fl),
-            w.employment[e],
-        );
-        let capacity = va / lay.a_va[e];
-        binding += usize::from(w.output[e] < 0.9 * capacity);
-        for k in 0..N_GOODS {
-            let a = inp.a(c, k, g);
-            let stock = w.ledger.goods(lay.accounts.enterprise[e], k);
-            let want = if a > 0.0 {
-                (2.0 * a * capacity - stock).max(0.0)
-            } else {
-                0.0
-            };
-            let got = w.scratch.ent_order[e * N_GOODS + k];
+/// Buyers price a traded good at the delivered unit price q_d = 1 / alpha_d: spending q_d at
+/// any destination, sourced at the current prices and fully filled, delivers one unit, and
+/// the lead is the mean arrival slot of those units. Local goods keep their posted price.
+#[test]
+fn buyers_price_traded_goods_at_the_delivered_unit_price() {
+    let mut sim = sim_of(world(EconParams::default()));
+    sim.run_until(5).unwrap();
+    let mut w = sim.world().clone();
+    w.refresh_price_index();
+    let (np, kernel) = (w.inputs().n_provinces(), w.kernel().clone());
+    let mut sourced = Sourced::new();
+    let mut leads = 0;
+    for (g, &traded) in TRADED.iter().enumerate() {
+        if !traded {
+            for d in 0..np {
+                assert_eq!(
+                    w.price_index[d * N_GOODS + g],
+                    w.markets.price[d * N_GOODS + g]
+                );
+            }
+            continue;
+        }
+        let cells = || (0..np).map(|o| o * N_GOODS + g);
+        let price: Vec<f64> = cells().map(|c| w.markets.price[c]).collect();
+        let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
+        for d in 0..np {
+            let q = w.price_index[d * N_GOODS + g];
+            assert!(q.is_finite() && q > 0.0);
+            let mut spend = vec![[0.0; 2]; np];
+            spend[d] = [0.0, q];
+            source(&kernel, g, &price, &active, &spend, &mut sourced);
+            dispatch(&kernel, g, &price, &vec![[1.0; 2]; np], &mut sourced);
+            let units: Vec<f64> = sourced.arrive.iter().map(|a| a[d][HOUSEHOLD]).collect();
+            let total: f64 = units.iter().sum();
             assert!(
-                (got - want).abs() <= 1e-12 * want.max(1.0),
-                "enterprise {e} good {k}: order {got}, want {want}"
+                (total - 1.0).abs() < 1e-12,
+                "cell {}: {total}",
+                d * N_GOODS + g
             );
+            let lead: f64 = units.iter().enumerate().map(|(s, x)| s as f64 * x).sum();
+            assert!((lead - w.scratch.lead[d * N_GOODS + g]).abs() < 1e-12);
+            // q_d is at least the cheapest delivered cost, so above the CES index P_d
+            assert!(q >= sourced.price_index[d] * (1.0 - 1e-12));
+            leads += usize::from(lead > 1.0);
         }
     }
-    assert!(binding > 0, "no enterprise was input-bound");
+    assert!(
+        leads > 0,
+        "no destination waits more than a month on average"
+    );
 }

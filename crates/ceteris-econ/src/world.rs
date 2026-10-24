@@ -11,7 +11,8 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, Markets, N_GOODS, Routed, TradeParams, TransitWheel};
+use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
+use ceteris_trade::{Kernel, Markets, N_GOODS, Pipeline, Sourced, TradeParams};
 
 use crate::demand::ces;
 use crate::flows::FlowWindow;
@@ -25,8 +26,9 @@ pub const MINOR_PER_UNIT: f64 = 1e4;
 const LABOUR_TOLERANCE: f64 = 1e-12;
 /// Relative tolerance of input use against a_kg Y (spec Invariants, Leontief).
 const LEONTIEF_TOLERANCE: f64 = 1e-12;
-/// Relative tolerance of routed mass against supply (trade SPEC Invariants, Routing mass).
-const ROUTING_TOLERANCE: f64 = 1e-12;
+/// Relative tolerance of dispatched units against origin sales (trade SPEC Invariants,
+/// Dispatch mass).
+const DISPATCH_TOLERANCE: f64 = 1e-12;
 
 pub const WAGE: Flow = Flow(1);
 pub const SALE: Flow = Flow(2);
@@ -64,7 +66,7 @@ pub struct Accounts {
     /// Per gateway: international payments pass through and net to zero every tick.
     pub gateway: Vec<AccountId>,
     /// Goods in flight, one account per traded good, indexed by good (traded goods are the
-    /// first goods), mirroring the transit wheel.
+    /// first goods), mirroring the pipeline.
     pub transit: Vec<AccountId>,
     /// Per country: tariff revenue for pops by population.
     pub rebate: Vec<AccountId>,
@@ -110,41 +112,60 @@ pub struct Scratch {
     /// Input stock before use and the quantity used at E2, `[enterprise * N_GOODS + k]`.
     pub input_before: Vec<f64>,
     pub input_used: Vec<f64>,
-    /// Traded supply routed at T2 (this tick's output) and the routed mass home + shipped,
-    /// `[province * N_GOODS + g]`.
-    pub route_supply: Vec<f64>,
-    pub route_mass: Vec<f64>,
-    /// Notional demand per pop and input orders per enterprise, by good.
+    /// Units dispatched at T2b by each origin market, home purchases included,
+    /// `[province * N_GOODS + g]`: the filled orders, equal to the market's sales.
+    pub dispatched: Vec<f64>,
+    /// Notional demand per pop and input orders per enterprise in units, by good.
     pub pop_demand: Vec<f64>,
     pub ent_order: Vec<f64>,
+    /// Spending on traded goods at the delivered price index, per pop and per enterprise,
+    /// by good (0 for local goods).
+    pub pop_spend: Vec<f64>,
+    pub ent_spend: Vec<f64>,
+    /// Spending by class `[intermediate, household]` per destination cell, the sums of
+    /// `ent_spend` and `pop_spend` over the province in ID order, given to `source` at T2.
+    pub class_spend: Vec<[f64; 2]>,
     /// Wages, dividends and rebates paid to each pop this tick, minor units.
     pub income_paid: Vec<i64>,
-    /// Pro rata fill per cell written by `Markets::clear`; T3 hands out sales inputs first.
-    pub fill: Vec<f64>,
+    /// Fill ratios `[intermediate, household]` per origin cell written by `Markets::clear`.
+    pub fill: Vec<[f64; 2]>,
     /// Local output perished per cell at T3.
     pub spoiled: Vec<f64>,
-    /// Transit delivered at T1, `[province * N_GOODS + g]`.
+    /// Pipeline arrivals at T1, `[buyer * N_GOODS + g]` (pops, then enterprises).
     pub due: Vec<f64>,
-    pub routed: Routed,
+    /// Sourcing of each traded good, from T2 to its dispatch at T2b.
+    pub sourced: Vec<Sourced>,
+    /// Expected months in transit of each traded good to each destination, the arrival
+    /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
+    /// crossing 1 + lag); 0 for local goods. `[province * N_GOODS + g]`, refreshed with
+    /// [`EconWorld::price_index`].
+    pub lead: Vec<f64>,
+    /// Unit-spending sourcing of the price refresh.
+    pub unit: Sourced,
     /// Country-pair flows of the last 12 ticks, for the run export.
     pub flows: FlowWindow,
 }
 
 impl Scratch {
     fn new(nc: usize, np: usize, n_pops: usize, n_ent: usize) -> Self {
+        let n_traded = TRADED.iter().filter(|&&t| t).count();
         Self {
             produced: vec![0.0; n_ent],
             input_before: vec![0.0; n_ent * N_GOODS],
             input_used: vec![0.0; n_ent * N_GOODS],
-            route_supply: vec![0.0; np * N_GOODS],
-            route_mass: vec![0.0; np * N_GOODS],
+            dispatched: vec![0.0; np * N_GOODS],
             pop_demand: vec![0.0; n_pops * N_GOODS],
             ent_order: vec![0.0; n_ent * N_GOODS],
+            pop_spend: vec![0.0; n_pops * N_GOODS],
+            ent_spend: vec![0.0; n_ent * N_GOODS],
+            class_spend: vec![[0.0; 2]; np * N_GOODS],
             income_paid: vec![0; n_pops],
-            fill: vec![0.0; np * N_GOODS],
+            fill: vec![[1.0; 2]; np * N_GOODS],
             spoiled: vec![0.0; np * N_GOODS],
-            due: vec![0.0; np * N_GOODS],
-            routed: Routed::new(),
+            due: vec![0.0; (n_pops + n_ent) * N_GOODS],
+            sourced: (0..n_traded).map(|_| Sourced::new()).collect(),
+            lead: vec![0.0; np * N_GOODS],
+            unit: Sourced::new(),
             flows: FlowWindow::new(nc, np),
         }
     }
@@ -161,9 +182,17 @@ pub struct EconWorld {
     pub(crate) layout: Arc<Layout>,
     digest: Hash,
     pub ledger: Ledger,
-    /// Prices (inactive cells carry the netback), inventories, last D, Q and sales.
+    /// Prices (origin markets of traded goods, province markets of local goods), merchant
+    /// inventories, last D, Q and sales.
     pub markets: Markets,
-    pub transit: TransitWheel,
+    /// Goods paid for and in flight per buyer: pops `0..n_pops`, then enterprises.
+    pub pipeline: Pipeline,
+    /// Buyer prices `[province * N_GOODS + g]`: the delivered unit price q_d = 1 / alpha_d of
+    /// each traded good, the numeraire a buyer at d needs per arriving unit under the current
+    /// sourcing shares (tariffs and iceberg losses included; infinite where no active origin
+    /// is reachable), and the posted price of each local good (owner decision, 2026-10-24).
+    /// Refreshed at E3 from the prices of the moment, read by E1 of the next tick.
+    pub price_index: Vec<f64>,
     /// Wage w per province, numeraire per effective labour unit.
     pub wage: Vec<f64>,
     /// Employment L per enterprise, effective labour units.
@@ -191,6 +220,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         eta,
         edu_eff,
         frictionless,
+        rationing,
     } = params;
     let TradeParams {
         theta,
@@ -206,27 +236,35 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(&[*sigma_demand, *sigma_fl, *kappa_w, *delta_w, *eta]);
     e.f64s(edu_eff);
     e.u8(u8::from(*frictionless));
+    e.u8(*rationing as u8);
     e.f64s(&[*theta, *kappa1, *kappa2, *c_max, *border_nu]);
     e.f64s(coverage);
     e.f64s(time_cost);
     state_hash(&e.into_bytes())
 }
 
-/// Which (province, good) cells have a market, `[province * N_GOODS + g]`: final demand for
-/// the good in the province's country, or an enterprise of the province that uses it as an
-/// input. Fixed by the inputs for the whole run.
+/// Which (province, good) cells have a market, `[province * N_GOODS + g]`. A traded good's
+/// market is the origin market of the province's output: active where an enterprise of the
+/// province produces the good with positive capacity (A VA0 > 0). A local good's market is
+/// the province market: active where anyone in the province buys it (final demand in the
+/// province's country, or an enterprise of the province using it as an input). Fixed by the
+/// inputs for the whole run.
 pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
     let mut active = vec![false; inp.n_provinces() * N_GOODS];
     for i in 0..inp.n_provinces() {
         let omega = &inp.countries.omega[inp.country_of(i)];
-        for g in 0..N_GOODS {
+        for g in (0..N_GOODS).filter(|&g| !TRADED[g]) {
             active[i * N_GOODS + g] = omega[g] > 0.0;
         }
     }
+    let ent = &inp.enterprises;
     for e in 0..inp.n_enterprises() {
-        let i = inp.enterprises.province[e] as usize;
-        let sector = usize::from(inp.enterprises.good[e]);
-        for k in 0..N_GOODS {
+        let i = ent.province[e] as usize;
+        let sector = usize::from(ent.good[e]);
+        if TRADED[sector] && ent.a[e] * ent.va0[e] > 0.0 {
+            active[i * N_GOODS + sector] = true;
+        }
+        for k in (0..N_GOODS).filter(|&k| !TRADED[k]) {
             if inp.a(inp.country_of(i), k, sector) > 0.0 {
                 active[i * N_GOODS + k] = true;
             }
@@ -253,11 +291,12 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the 2000 data state: prices 1, base
     /// wages w0 and employment L0 from the inputs, 2000 unemployment, input stocks at one
-    /// month of base use (base output Y0 = A VA0 / a_VA), traded inventories at coverage
-    /// times base demand, and one month of base dividends (the pop's share of the profit
-    /// pool, `(1 - s_L) VA0` per enterprise) minted to each pop: tick 0 wages are paid at E2,
-    /// so tick 0 spending is one month of base income. Panics on invalid inputs or a base
-    /// point other than base employment = (1 - u) L^s under `params.edu_eff`.
+    /// month of base use (base output Y0 = A VA0 / a_VA), origin inventories at coverage
+    /// times initial demand (see [`EconWorld::stock_base_demand`]), nothing in flight, and one month of base dividends (the pop's
+    /// share of the profit pool, `(1 - s_L) VA0` per enterprise) minted to each pop: tick 0
+    /// wages are paid at E2, so tick 0 spending is one month of base income. Panics on
+    /// invalid inputs or a base point other than base employment = (1 - u) L^s under
+    /// `params.edu_eff`.
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
         let inp = &*inputs;
@@ -335,35 +374,23 @@ impl EconWorld {
         let mut markets = Markets::new(np);
         markets.active = active_cells(inp);
 
-        // base income, minted; households' base demand at prices 1
+        // base income, minted: the profit pool now, wages at E2
         let accounts = &layout.accounts;
-        let mut base_demand = vec![0.0; np * N_GOODS];
-        let mut x = [0.0; N_GOODS];
+        let mut base_income = vec![0.0; n_pops];
         for i in 0..np {
-            let c = inp.country_of(i);
-            let s_l = inp.countries.s_l[c];
+            let s_l = inp.countries.s_l[inp.country_of(i)];
             let pool: f64 = layout
                 .enterprises(i)
                 .map(|e| (1.0 - s_l) * inp.enterprises.va0[e])
                 .sum();
             for k in layout.pops(i) {
-                let wages = inp.provinces.w0[i] * edu_eff(k) * employed[k];
                 let dividends = layout.ownership[k] * pool;
                 ledger.transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
-                let income = wages + dividends;
-                ces(
-                    &inp.countries.omega[c],
-                    &[1.0; N_GOODS],
-                    income,
-                    params.sigma_demand,
-                    &mut x,
-                );
-                for g in 0..N_GOODS {
-                    base_demand[i * N_GOODS + g] += x[g];
-                }
+                base_income[k] = inp.provinces.w0[i] * edu_eff(k) * employed[k] + dividends;
             }
         }
-        // input stocks at one month of base use, which is also the base input order
+        // input stocks at one month of base use (Y0 = A VA0 / a_VA)
+        let mut base_use = vec![0.0; n_ent * N_GOODS];
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
             let (c, g) = (inp.country_of(i), sector(e));
@@ -372,22 +399,12 @@ impl EconWorld {
                 let q = inp.a(c, k, g) * y0;
                 if q > 0.0 {
                     ledger.create(accounts.enterprise[e], k, q);
-                    base_demand[i * N_GOODS + k] += q;
-                }
-            }
-        }
-        for i in 0..np {
-            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-                let cell = i * N_GOODS + g;
-                let stock = trade.coverage[g] * base_demand[cell];
-                if markets.active[cell] && stock > 0.0 {
-                    markets.inventory[cell] = stock;
-                    ledger.create(accounts.market[i], g, stock);
+                    base_use[e * N_GOODS + k] = q;
                 }
             }
         }
 
-        EconWorld {
+        let mut w = EconWorld {
             wage: inp.provinces.w0.clone(),
             employment: inp.enterprises.l0.clone(),
             employed,
@@ -398,14 +415,121 @@ impl EconWorld {
             scratch: Scratch::new(nc, np, n_pops, n_ent),
             ledger,
             markets,
-            transit: TransitWheel::new(np),
+            pipeline: Pipeline::new(n_pops + n_ent),
+            price_index: vec![0.0; np * N_GOODS],
             inputs,
             kernel,
             params,
             trade,
             layout: Arc::new(layout),
             digest,
+        };
+        w.refresh_price_index();
+        w.stock_base_demand(&base_income, &base_use);
+        w
+    }
+
+    /// Origin inventories of the data state at coverage times initial demand: the orders
+    /// that one month of base demand places at each origin market at the data state's
+    /// prices, households spending their base income with CES at the price index and
+    /// enterprises buying one month of base use at the index.
+    fn stock_base_demand(&mut self, base_income: &[f64], base_use: &[f64]) {
+        let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
+        let (inp, lay) = (&*inp, &*lay);
+        let np = inp.n_provinces();
+        let mut spend = vec![[0.0; 2]; np * N_GOODS];
+        let mut x = [0.0; N_GOODS];
+        for d in 0..np {
+            let row: [f64; N_GOODS] = self.price_index[d * N_GOODS..(d + 1) * N_GOODS]
+                .try_into()
+                .expect("one row of goods");
+            let omega = &inp.countries.omega[inp.country_of(d)];
+            for k in lay.pops(d) {
+                ces(
+                    omega,
+                    &row,
+                    base_income[k],
+                    self.params.sigma_demand,
+                    &mut x,
+                );
+                for g in (0..N_GOODS).filter(|&g| TRADED[g] && x[g] > 0.0) {
+                    spend[d * N_GOODS + g][HOUSEHOLD] += x[g] * row[g];
+                }
+            }
+            for e in lay.enterprises(d) {
+                for g in (0..N_GOODS).filter(|&g| TRADED[g] && row[g].is_finite()) {
+                    spend[d * N_GOODS + g][INTERMEDIATE] += base_use[e * N_GOODS + g] * row[g];
+                }
+            }
         }
+        let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
+        let mut sourced = Sourced::new();
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            for o in 0..np {
+                price[o] = self.markets.price[o * N_GOODS + g];
+                active[o] = self.markets.active[o * N_GOODS + g];
+            }
+            let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
+            source(&self.kernel, g, &price, &active, &s, &mut sourced);
+            for o in (0..np).filter(|&o| active[o]) {
+                let stock = self.trade.coverage[g] * (sourced.orders[o][0] + sourced.orders[o][1]);
+                if stock > 0.0 {
+                    self.markets.inventory[o * N_GOODS + g] = stock;
+                    self.ledger.create(lay.accounts.market[o], g, stock);
+                }
+            }
+        }
+    }
+
+    /// Recomputes [`EconWorld::price_index`] and `Scratch::lead` at the current prices. For a
+    /// traded good, every destination spends one unit, sourced over the floored origin
+    /// weights (`ceteris_trade::source`) and dispatched in full: alpha_d is the units
+    /// arriving at d, q_d = 1 / alpha_d, and the lead is the mean arrival slot of those units.
+    pub fn refresh_price_index(&mut self) {
+        let np = self.inputs.n_provinces();
+        let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
+        let (spend, fill) = (vec![[1.0, 0.0]; np], vec![[1.0; 2]; np]);
+        let sc = &mut self.scratch;
+        for (g, &traded) in TRADED.iter().enumerate() {
+            if !traded {
+                for d in 0..np {
+                    let cell = d * N_GOODS + g;
+                    self.price_index[cell] = self.markets.price[cell];
+                    sc.lead[cell] = 0.0;
+                }
+                continue;
+            }
+            for o in 0..np {
+                price[o] = self.markets.price[o * N_GOODS + g];
+                active[o] = self.markets.active[o * N_GOODS + g];
+            }
+            source(&self.kernel, g, &price, &active, &spend, &mut sc.unit);
+            dispatch(&self.kernel, g, &price, &fill, &mut sc.unit);
+            for d in 0..np {
+                let cell = d * N_GOODS + g;
+                let slots = sc.unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
+                let alpha: f64 = slots.clone().sum();
+                let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
+                (self.price_index[cell], sc.lead[cell]) = if alpha > 0.0 {
+                    (1.0 / alpha, weighted / alpha)
+                } else {
+                    (f64::INFINITY, 0.0)
+                };
+            }
+        }
+    }
+
+    /// Sets every crossing's transit lag to `lag` months (`Kernel::set_crossing_lags`), on
+    /// a world with nothing in flight. Lags only time deliveries, so steady states stay;
+    /// for nesting tests and stability studies. The lags are not in the static digest:
+    /// snapshots restore only through this world, which shares its kernel.
+    pub fn set_crossing_lags(&mut self, lag: u8) {
+        let empty = (0..N_GOODS).all(|g| self.pipeline.in_flight(g) == 0.0);
+        assert!(
+            empty,
+            "crossing lags change only on a world with nothing in flight"
+        );
+        Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
     }
 
     /// A run of this world from the data state on the P2 schedule.
@@ -449,7 +573,7 @@ impl Encode for EconWorld {
         self.digest.iter().for_each(|&b| e.u8(b));
         self.ledger.encode(e);
         self.markets.encode(e);
-        self.transit.encode(e);
+        self.pipeline.encode(e);
         for column in [
             &self.wage,
             &self.employment,
@@ -458,6 +582,7 @@ impl Encode for EconWorld {
             &self.output,
             &self.sales,
             &self.profit,
+            &self.price_index,
         ] {
             e.f64s(column);
         }
@@ -483,12 +608,12 @@ impl State for EconWorld {
 
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
-    /// (S >= 0 and held by the market account), transit (wheel and transit accounts agree),
-    /// gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// (S >= 0 and held by the market account), transit (pipeline and transit accounts
+    /// agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = a_kg Y, 1e-12 relative to the larger of a_kg Y
-    /// and the stock they came from), routing mass (home + shipped = supply, 1e-12) and
-    /// income (wages, dividends and rebates credited to each pop in the journal equal its
-    /// recorded income, exact in minor units).
+    /// and the stock they came from), dispatch mass (units dispatched = origin sales, 1e-12)
+    /// and income (wages, dividends and rebates credited to each pop in the journal equal
+    /// its recorded income, exact in minor units).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
         self.ledger.check(tick)?;
         let (inp, lay) = (&*self.inputs, &*self.layout);
@@ -560,11 +685,11 @@ impl State for EconWorld {
             }
         }
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
-            let (wheel, held) = (self.transit.in_flight(g), self.ledger.goods(account, g));
-            if (held - wheel).abs() > GOODS_TOLERANCE * wheel.max(held).max(1.0) {
+            let (flight, held) = (self.pipeline.in_flight(g), self.ledger.goods(account, g));
+            if (held - flight).abs() > GOODS_TOLERANCE * flight.max(held).max(1.0) {
                 return fail(
                     "transit",
-                    format!("good {g}: wheel {wheel}, account {held}"),
+                    format!("good {g}: pipeline {flight}, account {held}"),
                 );
             }
         }
@@ -606,12 +731,15 @@ impl State for EconWorld {
             }
         }
 
-        for (cell, (&mass, &supply)) in sc.route_mass.iter().zip(&sc.route_supply).enumerate() {
-            // the absolute floor only matters for subnormal supply, which has no relative precision
-            let gap = (mass - supply).abs();
-            if gap.is_nan() || gap > ROUTING_TOLERANCE * supply + f64::MIN_POSITIVE {
-                let detail = format!("cell {cell}: routed {mass} of supply {supply}");
-                return fail("routing mass", detail);
+        for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&self.markets.sales).enumerate() {
+            if !TRADED[cell % N_GOODS] {
+                continue;
+            }
+            // the absolute floor only matters for subnormal sales, which have no relative precision
+            let gap = (sent - sold).abs();
+            if gap.is_nan() || gap > DISPATCH_TOLERANCE * sold + f64::MIN_POSITIVE {
+                let detail = format!("cell {cell}: dispatched {sent} of sales {sold}");
+                return fail("dispatch mass", detail);
             }
         }
 
@@ -655,13 +783,21 @@ impl State for EconWorld {
         }
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d)?;
-        let transit = TransitWheel::decode(d)?;
-        let mut columns = Vec::with_capacity(7);
-        for _ in 0..7 {
+        let pipeline = Pipeline::decode(d)?;
+        let mut columns = Vec::with_capacity(8);
+        for _ in 0..8 {
             columns.push(d.f64s()?);
         }
-        let [wage, employment, employed, income, output, sales, profit]: [Vec<f64>; 7] =
-            columns.try_into().expect("seven columns");
+        let [
+            wage,
+            employment,
+            employed,
+            income,
+            output,
+            sales,
+            profit,
+            price_index,
+        ]: [Vec<f64>; 8] = columns.try_into().expect("eight columns");
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -672,8 +808,9 @@ impl State for EconWorld {
             self.ledger.n_accounts(),
         )?;
         expect_len("market provinces", markets.n_provinces(), np)?;
-        expect_len("transit provinces", transit.n_provinces(), np)?;
+        expect_len("pipeline buyers", pipeline.n_buyers(), n_pops + n_ent)?;
         expect_len("wages", wage.len(), np)?;
+        expect_len("price index", price_index.len(), np * N_GOODS)?;
         for (what, column) in [("employed", &employed), ("income", &income)] {
             expect_len(what, column.len(), n_pops)?;
         }
@@ -695,7 +832,8 @@ impl State for EconWorld {
             digest,
             ledger,
             markets,
-            transit,
+            pipeline,
+            price_index,
             wage,
             employment,
             employed,
@@ -793,17 +931,27 @@ mod tests {
                 assert!((held - inp.a(c, k, g) * y0).abs() <= 1e-12 * y0);
             }
         }
-        // traded inventories at coverage times base demand; local goods hold none
-        let p = TradeParams::default();
+        // origin inventories at coverage times initial demand; local goods and cells
+        // without a market hold none
         for i in 0..25 {
             for (g, &traded) in TRADED.iter().enumerate() {
                 let cell = i * N_GOODS + g;
                 let held = w.ledger.goods(w.layout.accounts.market[i], g);
                 assert_eq!(held, w.markets.inventory[cell]);
-                if !traded || !w.markets.active[cell] {
-                    assert_eq!(held, 0.0);
+                assert_eq!(held > 0.0, traded && w.markets.active[cell], "cell {cell}");
+            }
+        }
+        // nothing in flight; the price index starts at the data state's prices
+        assert!((0..N_GOODS).all(|g| w.pipeline.in_flight(g) == 0.0));
+        for i in 0..25 {
+            for (g, &traded) in TRADED.iter().enumerate() {
+                let p = w.price_index[i * N_GOODS + g];
+                if traded {
+                    // q_d = 1 / alpha_d at prices 1: a mean of delivered unit costs, each at
+                    // least the price 1
+                    assert!(p.is_finite() && p >= 1.0, "{i} {g}: {p}");
                 } else {
-                    assert!(held > 0.0 && p.coverage[g] > 0.0);
+                    assert_eq!(p, 1.0);
                 }
             }
         }
@@ -842,24 +990,26 @@ mod tests {
     }
 
     #[test]
-    fn world_marks_oil_cells_without_buyers_inactive() {
+    fn world_opens_origin_markets_where_enterprises_produce() {
         let w = world();
         let inp = small_world();
-        let mut inactive_with_output = 0;
+        let mut without_producer = 0;
         for i in 0..25 {
             let goods: Vec<usize> = w
                 .layout
                 .enterprises(i)
                 .map(|e| usize::from(inp.enterprises.good[e]))
                 .collect();
-            let active = w.markets.active[i * N_GOODS + 1];
-            assert_eq!(active, goods.contains(&5), "province {i}");
-            inactive_with_output += usize::from(!active && goods.contains(&1));
-            for g in [0, 3, 7, 8, 9] {
+            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+                let active = w.markets.active[i * N_GOODS + g];
+                assert_eq!(active, goods.contains(&g), "province {i} good {g}");
+                without_producer += usize::from(!active);
+            }
+            for g in [7, 8, 9] {
                 assert!(w.markets.active[i * N_GOODS + g]);
             }
         }
-        assert!(inactive_with_output > 0);
+        assert!(without_producer > 0);
     }
 
     #[test]
@@ -893,13 +1043,15 @@ mod tests {
         w.profit[4] = -1.0;
         w.markets.price[17] = 0.8;
         w.markets.demand[17] = 4.0;
-        w.transit.push(1, 2, &[0.5; 25]);
+        w.pipeline.push(3, 7, 2, 0.5);
+        w.price_index[4] = 0.75;
         let (bytes, back) = round_trip(&w);
         assert_eq!(canonical(12, &back), bytes);
         assert!(Arc::ptr_eq(&back.inputs, &w.inputs));
         assert!(Arc::ptr_eq(&back.kernel, &w.kernel));
         assert_eq!(back.wage, w.wage);
-        assert_eq!(back.transit, w.transit);
+        assert_eq!(back.pipeline, w.pipeline);
+        assert_eq!(back.price_index, w.price_index);
     }
 
     #[test]
@@ -980,7 +1132,7 @@ mod tests {
         w.markets.inventory[0] += 1.0;
         assert_eq!(w.end_tick(0).unwrap_err().invariant, "inventory");
         let mut w = fresh.clone();
-        w.transit.push(0, 0, &[1.0; 25]);
+        w.pipeline.push(1, 0, 0, 1.0);
         assert_eq!(w.end_tick(0).unwrap_err().invariant, "transit");
         let mut w = fresh;
         let (g, m) = (w.layout.accounts.gateway[0], w.layout.accounts.mint);

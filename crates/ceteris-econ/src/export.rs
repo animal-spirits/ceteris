@@ -16,7 +16,7 @@
 //! | `provinces` | province u32, country u32, population f64, w0 f64 |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
-//! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them) |
+//! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them: origin markets of traded goods, province markets of local goods) |
 //! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64 |
 //! | `kernel_domestic` | good u8, o u32, d u32, k f32, tau f64 |
 //! | `kernel_access` | good u8, province u32, gateway u32, k f32, tau f64 |
@@ -38,16 +38,18 @@ use arrow_array::{
 use arrow_ipc::writer::FileWriter;
 use arrow_schema::{Field, Schema};
 use ceteris_trade::goods::{NAME, TRADED, tariff_group};
-use ceteris_trade::route::WEIGHT_FLOOR;
-use ceteris_trade::{Kernel, N_GOODS, TradeParams};
+use ceteris_trade::source::WEIGHT_FLOOR;
+use ceteris_trade::{Kernel, N_GOODS, Rationing, TradeParams};
 
 use crate::flows::WINDOW;
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
 use crate::world::{EconWorld, MINOR_PER_UNIT, active_cells, static_digest};
 
-/// Bumped when a table or `params.json` changes shape; the reference checks it.
-pub const EXPORT_FORMAT: &str = "1";
+/// Bumped when a table or `params.json` changes shape or meaning; the reference checks it.
+/// 2: `active` marks origin markets of traded goods, `params.json` has `rationing`,
+/// `run_prices` has `price_index` (ADRs 0015 and 0016).
+pub const EXPORT_FORMAT: &str = "2";
 
 #[derive(Debug)]
 pub struct ExportError(pub String);
@@ -134,7 +136,7 @@ fn nums(xs: &[f64]) -> String {
 }
 
 /// The static economy: tables as in the module documentation, and `params.json` with both
-/// parameter sets keyed by field name (register IDs under `register`), the routing weight
+/// parameter sets keyed by field name (register IDs under `register`), the sourcing weight
 /// floor, the money minor-unit scale and the digest of everything a snapshot leaves out.
 /// `kernel` must be the kernel built from `inputs` and `trade`.
 pub fn write_inputs(
@@ -363,6 +365,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", "P41"),
         ("edu_eff", "P42"),
         ("time_cost", "P43"),
+        ("rationing", "S11"),
     ];
     let register: Vec<String> = register
         .iter()
@@ -376,6 +379,14 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", num(p.eta)),
         ("edu_eff", nums(&p.edu_eff)),
         ("frictionless", p.frictionless.to_string()),
+        (
+            "rationing",
+            match p.rationing {
+                Rationing::Priority => "\"priority\"",
+                Rationing::Proportional => "\"proportional\"",
+            }
+            .to_string(),
+        ),
     ];
     let trade = [
         ("theta", num(t.theta)),
@@ -408,7 +419,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 ///
 /// | file | columns |
 /// |---|---|
-/// | `run_prices` | province u32, good u8, price f64, active bool (inactive cells carry the netback) |
+/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (P_d of traded goods, the local price of local goods, at the last E3) |
 /// | `run_wages` | province u32, wage f64 |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
 /// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |
@@ -417,11 +428,10 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 ///
 /// Flows are the means over the last 12 ticks (fewer when the run is shorter, see
 /// `ticks_averaged`) of traded goods only, one row per (exporter, importer, good) with a
-/// positive flow, sorted. Value is what the exporter receives: the destination price times
-/// the units arriving, net of tariff (trade SPEC, Payments). Units are origin units at
-/// dispatch, before losses. Domestic pairs (exporter = importer) are the shipments between
-/// provinces of one country; `run_home` has the supply routed to stay in its province (for
-/// every traded cell, valued at the cell's price).
+/// positive flow, sorted. Value is the origin value of the shipped units, what the exporter
+/// receives (trade SPEC, Payments). Units are origin units at dispatch, before losses.
+/// Domestic pairs (exporter = importer) are the shipments between provinces of one country;
+/// `run_home` has the home purchases (for every traded cell, valued at the cell's price).
 pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
     fs::create_dir_all(dir)?;
     let inputs = world.inputs();
@@ -436,6 +446,7 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
             u8s("good", (0..m.price.len()).map(|c| (c % N_GOODS) as u8)),
             f64s("price", m.price.iter().copied()),
             bools("active", m.active.iter().copied()),
+            f64s("price_index", world.price_index.iter().copied()),
         ],
     )?;
     write_table(
@@ -702,6 +713,7 @@ mod tests {
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(json.contains("\"theta\": 5.0"), "{json}");
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
+        assert!(json.contains("\"rationing\": \"priority\""), "{json}");
         assert!(json.contains("\"weight_floor\": 1e-100"), "{json}");
         assert!(
             json.contains(&format!("\"minor_per_unit\": {MINOR_PER_UNIT:?}")),
@@ -772,6 +784,7 @@ mod tests {
         assert_eq!(prices.num_rows(), 25 * N_GOODS);
         assert_eq!(f64s(&prices, "price").unwrap(), w.markets.price);
         assert_eq!(bools(&prices, "active"), w.markets.active);
+        assert_eq!(f64s(&prices, "price_index").unwrap(), w.price_index);
         let wages = table("run_wages");
         assert_eq!(f64s(&wages, "wage").unwrap(), w.wage);
         let ents = table("run_enterprises");

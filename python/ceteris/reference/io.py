@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 1)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 2)."""
 
 import json
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from pyarrow import ipc
 
-EXPORT_FORMAT = "1"
+EXPORT_FORMAT = "2"
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class Inputs:
     unemployment: np.ndarray  # (C,)
     omega: np.ndarray  # (C, G)
     io: np.ndarray  # (C, G, G), io[c, k, g] = a_kg
-    active: np.ndarray  # (P, G) bool
+    active: np.ndarray  # (P, G) bool: origin markets of traded goods, province markets of local goods
     ent_province: np.ndarray  # (E,)
     ent_good: np.ndarray  # (E,)
     ent_a: np.ndarray  # (E,)
@@ -109,6 +109,13 @@ class Inputs:
         """(P, G) base household consumption quantities at prices 1: weights of the world price index."""
         om = self.omega_p
         return om / om.sum(axis=1, keepdims=True) * self.base_income[:, None]
+
+    @cached_property
+    def base_output(self) -> np.ndarray:
+        """(P, G) base output Y0 = A VA0 / a_VA of each cell's enterprises."""
+        out = np.zeros(self.active.shape)
+        np.add.at(out, (self.ent_province, self.ent_good), self.ent_a * self.ent_va0 / self.ent_a_va)
+        return out
 
     @cached_property
     def base_demand(self) -> np.ndarray:

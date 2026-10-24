@@ -50,75 +50,93 @@ def test_scale_invariance(inputs):
     assert scaled[row] - base[row] == pytest.approx(np.log(3.7), abs=1e-12)
 
 
+def _weights(inp: io.Inputs, p: np.ndarray, act: np.ndarray) -> np.ndarray:
+    """Floored origin weights (p / p_min)^-theta of the active origins, as `source::origin_weights`."""
+    with np.errstate(divide="ignore"):
+        w = np.where(act, (p / p[act].min()) ** -inp.theta, 0.0)
+    w[w < inp.weight_floor] = 0.0
+    return w
+
+
 def test_sinkhorn_and_dense_kernel_reproduce_equilibrium_gravity(fixture):
-    """Checks `sinkhorn.balanced` (any a K b matrix is recovered from its own marginals, so this
-    does not test the model's routing) and the dense two-level kernel against the model's low-rank
-    country-pair units at dispatch. Trade money is checked by the dense route oracle below."""
+    """S02 (ADR 0016): balanced Sinkhorn on the dense kernel, with the equilibrium's origin supplies
+    (value at origin prices) and destination expenditures (net of tariff) as marginals, reproduces
+    the sourcing flows w_o K_od E_d / Phi_d; the dense flows aggregate to the model's low-rank
+    country-pair value and units."""
     inp, eq = fixture
     countries = inp.province_country
     for g in np.flatnonzero(inp.traded):
-        k = sinkhorn.dense_kernel(inp, g)
+        k, k_net = sinkhorn.dense_kernel(inp, g), sinkhorn.dense_kernel(inp, g, net_of_tariff=True)
         p = eq.price[:, g]
-        act = inp.active[:, g]
-        pt = np.where(act, (p / p[act].max()) ** inp.theta, 0.0)
-        pt[pt < inp.weight_floor] = 0.0
-        pull = k * pt[None, :]
-        supply = eq.supply[:, g]
-        logit = supply[:, None] * pull / pull.sum(axis=1, keepdims=True)
-        flows = sinkhorn.balanced(k, supply, logit.sum(axis=0))
-        big = logit > 1e-12 * logit.sum()
-        np.testing.assert_allclose(flows[big], logit[big], rtol=1e-8)
-        assert np.abs(flows[~big]).max(initial=0.0) <= 1e-10 * logit.sum()
-        # The dense logit aggregates to the low-rank model's country-pair units.
-        shipped = logit.copy()
+        w = _weights(inp, p, inp.active[:, g])
+        phi = w @ k
+        flows = w[:, None] * k_net * (eq.expenditure[:, g] / phi)[None, :]
+        supply = p * eq.supply[:, g]
+        # the origin markets clear: what destinations send them is their output at their price
+        np.testing.assert_allclose(flows.sum(axis=1), supply, rtol=1e-8, atol=1e-12 * supply.sum())
+        solved = sinkhorn.balanced(k_net, supply, flows.sum(axis=0))
+        big = flows > 1e-12 * flows.sum()
+        np.testing.assert_allclose(solved[big], flows[big], rtol=1e-8)
+        assert np.abs(solved[~big]).max(initial=0.0) <= 1e-10 * flows.sum()
+        shipped = flows.copy()
         np.fill_diagonal(shipped, 0.0)
-        pairs = np.zeros((inp.n_countries, inp.n_countries))
-        np.add.at(pairs, (countries[:, None], countries[None, :]), shipped)
-        np.testing.assert_allclose(eq.units_by_country_pair_good[:, :, g], pairs, rtol=1e-9, atol=1e-9 * pairs.sum())
+        for got, per in (
+            (eq.flows_by_country_pair_good, np.ones_like(p)),
+            (eq.units_by_country_pair_good, np.where(p > 0, p, 1.0)),
+        ):
+            pairs = np.zeros((inp.n_countries, inp.n_countries))
+            np.add.at(pairs, (countries[:, None], countries[None, :]), shipped / per[:, None])
+            np.testing.assert_allclose(got[:, :, g], pairs, rtol=1e-9, atol=1e-9 * pairs.sum())
 
 
-def dense_route_oracle(inp: io.Inputs, price: np.ndarray, supply: np.ndarray) -> dict:
+def dense_route_oracle(inp: io.Inputs, price: np.ndarray, spend: np.ndarray) -> dict:
     """Every route enumerated from the exported legs: home, o -> d inside a country, and
-    o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination pays
-    p_d per arriving unit, t / (1 + t) of it is tariff, the rest goes to the origin."""
+    o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination d
+    spends E_d over routes by K w_o / Phi_d; the buyer pays p_o (1 + t) per shipped unit, t / (1 + t)
+    of it is tariff, the origin receives p_o per unit; d receives the units over the route's tau."""
     n_p, n_g = price.shape
-    out = {key: np.zeros((n_p, n_g)) for key in ("home", "arrive", "paid", "received", "tariff", "netback")}
+    keys = ("orders", "home", "arrive", "paid", "received", "tariff", "index")
+    out = {key: np.zeros((n_p, n_g)) for key in keys}
     n_c, country = inp.n_countries, inp.province_country
     out["pair_value"], out["pair_units"] = np.zeros((n_c, n_c, n_g)), np.zeros((n_c, n_c, n_g))
     dom, acc, cro = inp.domestic, inp.access, inp.crossing
     for g in np.flatnonzero(inp.traded):
-        p, act = price[:, g], inp.active[:, g]
-        pt = np.where(act, (p / p[act].max()) ** inp.theta, 0.0)
-        pt[pt < inp.weight_floor] = 0.0
-        legs_out = [[] for _ in range(n_p)]  # o -> d: (d, k, tau, tariff)
+        p = price[:, g]
+        w = _weights(inp, p, inp.active[:, g])
+        routes = [(o, o, 1.0, 1.0, 0.0) for o in range(n_p)]  # (o, d, k, tau, tariff)
         for j in np.flatnonzero(dom.good == g):
-            legs_out[dom.row[j]].append((dom.col[j], dom.k[j], dom.tau[j], 0.0))
+            routes.append((dom.row[j], dom.col[j], dom.k[j], dom.tau[j], 0.0))
         gate_in = [[] for _ in range(inp.n_gateways)]  # b -> d: (d, k, tau)
         for j in np.flatnonzero(acc.good == g):
             gate_in[acc.col[j]].append((acc.row[j], acc.k[j], acc.tau[j]))
         for ja in np.flatnonzero(acc.good == g):
             o, a = acc.row[ja], acc.col[ja]
             for jc in np.flatnonzero((cro.good == g) & (cro.row == a)):
-                b, t = cro.col[jc], cro.tariff[jc]
-                for d, k_bd, tau_bd in gate_in[b]:
+                for d, k_bd, tau_bd in gate_in[cro.col[jc]]:
                     k = acc.k[ja] * cro.k[jc] * k_bd
                     tau = acc.tau[ja] * cro.tau[jc] * cro.border_tau[jc] * tau_bd
-                    legs_out[o].append((d, k, tau, t))
-        for o in range(n_p):
-            routes = [(o, 1.0, 1.0, 0.0), *legs_out[o]]
-            weights = np.array([k * pt[d] for d, k, _, _ in routes])
-            share = weights / weights.sum()
-            out["netback"][o, g] = sum(s * p[d] / (tau * (1 + t)) for s, (d, _, tau, t) in zip(share, routes))
-            out["home"][o, g] = supply[o, g] * share[0]
-            for s, (d, _, tau, t) in zip(share[1:], routes[1:]):
-                got = supply[o, g] * s / tau
-                delivered = p[d] * got
-                out["arrive"][d, g] += got
-                out["paid"][d, g] += delivered
-                out["tariff"][d, g] += delivered * t / (1 + t)
-                out["received"][o, g] += delivered / (1 + t)
-                out["pair_value"][country[o], country[d], g] += delivered / (1 + t)
-                out["pair_units"][country[o], country[d], g] += supply[o, g] * s
+                    routes.append((o, d, k, tau, cro.tariff[jc]))
+        phi = np.zeros(n_p)
+        for o, d, k, _, _ in routes:
+            phi[d] += k * w[o]
+        alpha = np.zeros(n_p)
+        for o, d, k, tau, t in routes:
+            if w[o] == 0.0:
+                continue
+            x = spend[d, g] * k * w[o] / phi[d]
+            units = x / (p[o] * (1.0 + t))
+            alpha[d] += k * w[o] / phi[d] / (p[o] * (1.0 + t) * tau)
+            out["orders"][o, g] += units
+            out["arrive"][d, g] += units / tau
+            out["paid"][d, g] += x
+            out["tariff"][d, g] += x * t / (1.0 + t)
+            out["received"][o, g] += x / (1.0 + t)
+            if o == d:
+                out["home"][d, g] += units
+            else:
+                out["pair_value"][country[o], country[d], g] += x / (1.0 + t)
+                out["pair_units"][country[o], country[d], g] += units
+        out["index"][:, g] = 1.0 / alpha
     return out
 
 
@@ -127,11 +145,11 @@ def test_trade_money_matches_dense_route_oracle(inputs):
     assert np.any(inp.crossing.tariff > 0)
     rng = np.random.default_rng(11)
     price = np.exp(rng.uniform(-2.3, 2.3, (inp.n_provinces, inp.n_goods)))
-    supply = np.where(inp.traded[None, :], rng.uniform(0.0, 1e6, price.shape), 0.0)
-    want = dense_route_oracle(inp, price, supply)
-    pt, v, u, pi, dest, onward, netback = model._routing(inp, price)
-    got = model._flows(inp, price, supply, pt, v, u, pi, dest, onward)
-    got["netback"] = netback
+    spend = np.where(inp.traded[None, :], rng.uniform(0.0, 1e6, price.shape), 0.0)
+    want = dense_route_oracle(inp, price, spend)
+    src = model._sourcing(inp, price)
+    got = model._flows(inp, price, spend, src)
+    got["index"] = src["index"]
     traded = inp.traded
     for key, w in want.items():
         np.testing.assert_allclose(got[key][..., traded], w[..., traded], rtol=1e-10, atol=1e-13 * np.abs(w).max(), err_msg=key)
@@ -187,7 +205,13 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
 def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u):
     inp = two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u)
     eq = solve.equilibrium(inp)
-    np.testing.assert_allclose(eq.price[:, 0], [1.0, 1.0], rtol=1e-9)
+    # Buyers pay the delivered unit price q = 1 / alpha: a unit of spending buys home at p and the
+    # other province's good at p tau, with sourcing shares 1 / (1 + k) and k / (1 + k); the world
+    # index is q, normalized to 1.
+    k = float(np.float32(tau**-theta))
+    p = (1.0 + k / tau) / (1.0 + k)
+    np.testing.assert_allclose(eq.price[:, 0], [p, p], rtol=1e-9)
+    np.testing.assert_allclose(eq.consumer_price[:, 0], [1.0, 1.0], rtol=1e-9)
     # Full employment at the marginal product of labour; per province VA0 = 100, L0 = (1 - u) L^s.
     rho = (sigma_fl - 1.0) / sigma_fl
     l0 = (1.0 - u) * labour
@@ -200,13 +224,12 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
         y = a * 100.0 * bracket ** (1.0 / rho)
         w = a * 100.0 * bracket ** (1.0 / rho - 1.0) * s_l * x ** (rho - 1.0) / l0
     np.testing.assert_allclose(eq.output, np.full(4, y / 2), rtol=1e-9)
-    np.testing.assert_allclose(eq.wage, [w, w], rtol=1e-9)
-    # Logit split between home and the other province.
-    k = float(np.float32(tau**-theta))
+    np.testing.assert_allclose(eq.wage, [p * w, p * w], rtol=1e-9)
+    # Each province spends its income p y over the two origins by the sourcing shares.
     np.testing.assert_allclose(eq.home_units[:, 0], y / (1.0 + k), rtol=1e-9)
     assert eq.units_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k), rel=1e-9)
-    # delivered pricing: the destination pays p = 1 per arriving unit
-    assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k) / tau, rel=1e-9)
+    # value is the origin value of the shipped units
+    assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * p * y * k / (1.0 + k), rel=1e-9)
 
 
 @pytest.mark.skip(reason="re-blessed in MIGRATION Task 10 (ADRs 0015-0022)")

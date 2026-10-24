@@ -48,13 +48,36 @@ fn one_vs_eight_threads_identical() {
     );
 }
 
+/// Replay from every snapshot on a world with every crossing at lag 3, so goods sit in all
+/// four pipeline slots at every snapshot after the first (Review Focus 3): domestic
+/// shipments in the next slot, crossings dispatched over the last three ticks in the others.
 #[test]
 fn replay_from_every_snapshot() {
-    let mut sim = run(4, TICKS);
+    let mut world = EconWorld::new(
+        Arc::new(small_world()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    world.set_crossing_lags(3);
+    let mut sim = Sim::new(
+        world,
+        ceteris_econ::systems::schedule(),
+        ceteris_econ::systems::SEED,
+    );
+    sim.run_until(TICKS).unwrap_or_else(|v| panic!("{v}"));
     let reference = sim.snapshot_hashes();
     let final_hash = sim.state_hash();
     for &(t, _) in &reference {
         sim.seek(t).unwrap();
+        if t > 0 {
+            let p = &sim.world().pipeline;
+            for slot in 1..=4 {
+                assert!(
+                    p.scheduled(slot).iter().any(|&x| x > 0.0),
+                    "tick {t}: pipeline slot {slot} empty"
+                );
+            }
+        }
         sim.run_until((t + SNAPSHOT_EVERY).min(TICKS)).unwrap();
         assert_eq!(sim.snapshot_hashes(), reference, "replay from tick {t}");
     }
@@ -165,8 +188,9 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 
 /// V1 (specs/econ/SPEC.md, Equilibrium nesting): with frictionless settings the run from the
 /// data state reaches the GE reference within 1,200 ticks. Prices and wages are divided by the
-/// world price index (the reference is normalized to an index of 1); flows are the mean of the
-/// last 12 ticks, joined with the reference on (exporter, importer, good).
+/// world price index over consumer prices (the reference is normalized to an index of 1);
+/// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
+/// good).
 #[test]
 fn v1_fixture_frictionless_matches_reference() {
     const TOL: f64 = 0.01;
@@ -185,9 +209,10 @@ fn v1_fixture_frictionless_matches_reference() {
     sim.run_until(TICKS).unwrap_or_else(|v| panic!("{v}"));
     let w = sim.world();
 
+    // consumer prices: the delivered price index of traded goods, the local price of local goods
     let index = weights
         .iter()
-        .zip(&w.markets.price)
+        .zip(&w.price_index)
         .map(|(a, p)| a * p)
         .sum::<f64>()
         / weights.iter().sum::<f64>();

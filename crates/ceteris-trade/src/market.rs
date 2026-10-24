@@ -35,15 +35,13 @@ pub struct Markets {
     /// Merchant stock S carried into the next tick; always 0 for local goods.
     pub inventory: Vec<f64>,
     /// Total orders D, read by `reprice`. [`Markets::clear`] writes it as
-    /// `demand_int + demand_hh` on the cells it clears; for local cells (and
-    /// `clear_pro_rata`) the caller sets it.
+    /// `demand_int + demand_hh` on the cells it clears; for local cells the caller sets it.
     pub demand: Vec<f64>,
     /// Orders by intermediate users at the origin, in units at the origin.
     pub demand_int: Vec<f64>,
     /// Orders by households at the origin, in units at the origin.
     pub demand_hh: Vec<f64>,
-    /// Supply Q: this tick's output (traded) or local output. Under `clear_pro_rata`,
-    /// home-routed supply plus arrivals.
+    /// Supply Q: this tick's output (traded) or local output.
     pub supply: Vec<f64>,
     pub sales: Vec<f64>,
     pub active: Vec<bool>,
@@ -100,31 +98,6 @@ impl Markets {
             };
             self.sales[i] = avail;
             self.inventory[i] = 0.0;
-        }
-    }
-
-    /// Destination clearing of P2 before ADR 0016, used by econ until MIGRATION Task 3, which
-    /// removes it. Clears the active traded cells: sales = min(D, S + Q), a shortfall rationed
-    /// pro rata, S' = S + Q - sales. Writes the fill ratio min(1, (S + Q) / D), 1 when D = 0,
-    /// into `fill[i]` for the cells it clears; other cells of `fill` are untouched.
-    pub fn clear_pro_rata(&mut self, fill: &mut [f64]) {
-        assert_eq!(fill.len(), self.price.len());
-        for i in 0..self.price.len() {
-            if !self.active[i] || !TRADED[i % N_GOODS] {
-                continue;
-            }
-            let (s, q, d) = (self.inventory[i], self.supply[i], self.demand[i]);
-            let avail = s + q;
-            if d > avail {
-                fill[i] = avail / d;
-                self.sales[i] = avail;
-                self.inventory[i] = 0.0;
-            } else {
-                fill[i] = 1.0;
-                self.sales[i] = d;
-                // S + (Q - D) rather than (S + Q) - D keeps S bit for bit when D = Q
-                self.inventory[i] = (s + (q - d)).max(0.0);
-            }
         }
     }
 
@@ -243,31 +216,27 @@ mod tests {
         (Markets::new(1), rule())
     }
 
+    /// Stock S, supply Q and demand D at a cell; on a traded cell D is household orders.
     fn set(m: &mut Markets, g: usize, s: f64, q: f64, d: f64) {
         m.inventory[g] = s;
         m.supply[g] = q;
         m.demand[g] = d;
+        m.demand_int[g] = 0.0;
+        m.demand_hh[g] = d;
     }
 
-    #[test]
-    fn pro_rata_fill_when_short() {
-        let (mut m, _) = one();
-        set(&mut m, G, 0.5, 1.5, 4.0);
-        let mut fill = vec![0.0; N_GOODS];
-        m.clear_pro_rata(&mut fill);
-        assert_eq!(fill[G], 0.5);
-        assert_eq!(m.sales[G], 2.0);
-        assert_eq!(m.inventory[G], 0.0);
-        // a buyer's allocation is fill x notional demand
-        assert_eq!(fill[G] * 3.0, 1.5);
+    /// Origin clearing with one fill ratio; the household fill of every cell it clears.
+    fn clear(m: &mut Markets) -> Vec<f64> {
+        let mut fill = vec![[f64::NAN; 2]; m.price.len()];
+        m.clear(Rationing::Proportional, &mut fill);
+        fill.iter().map(|f| f[1]).collect()
     }
 
     #[test]
     fn inventory_absorbs_glut() {
         let (mut m, _) = one();
         set(&mut m, G, 1.0, 5.0, 2.0);
-        let mut fill = vec![0.0; N_GOODS];
-        m.clear_pro_rata(&mut fill);
+        let fill = clear(&mut m);
         assert_eq!(fill[G], 1.0);
         assert_eq!(m.sales[G], 2.0);
         assert_eq!(m.inventory[G], 4.0);
@@ -277,8 +246,7 @@ mod tests {
     fn zero_demand_fills_fully_and_stocks_supply() {
         let (mut m, _) = one();
         set(&mut m, G, 1.0, 2.0, 0.0);
-        let mut fill = vec![0.0; N_GOODS];
-        m.clear_pro_rata(&mut fill);
+        let fill = clear(&mut m);
         assert_eq!((fill[G], m.sales[G], m.inventory[G]), (1.0, 0.0, 3.0));
     }
 
@@ -286,8 +254,7 @@ mod tests {
     fn stock_alone_serves_demand_without_supply() {
         let (mut m, _) = one();
         set(&mut m, G, 3.0, 0.0, 2.0);
-        let mut fill = vec![0.0; N_GOODS];
-        m.clear_pro_rata(&mut fill);
+        let fill = clear(&mut m);
         assert_eq!((fill[G], m.sales[G], m.inventory[G]), (1.0, 2.0, 1.0));
     }
 
@@ -296,8 +263,7 @@ mod tests {
         let (mut m, p) = one();
         // unclipped: D = 1.1 Q with the stock ending on target S* = 2 D
         set(&mut m, G, 2.3, 1.0, 1.1);
-        let mut fill = vec![0.0; N_GOODS];
-        m.clear_pro_rata(&mut fill);
+        clear(&mut m);
         // S' = 2.3 + 1.0 - 1.1 = 2.2 = S*, so only the flow term: 0.2 * 0.1
         let before = m.price[G];
         m.reprice(&p);
@@ -308,14 +274,14 @@ mod tests {
         // clipped: huge excess demand rises by exactly exp(c_max)
         let (mut m, p) = one();
         set(&mut m, G, 0.0, 1.0, 50.0);
-        m.clear_pro_rata(&mut fill);
+        clear(&mut m);
         m.reprice(&p);
         assert_eq!(m.price[G], libm::exp(p.c_max));
 
         // clipped below: glut with stock far above target falls by exactly exp(-c_max)
         let (mut m, p) = one();
         set(&mut m, G, 100.0, 10.0, 0.1);
-        m.clear_pro_rata(&mut fill);
+        clear(&mut m);
         m.reprice(&p);
         assert_eq!(m.price[G], libm::exp(-p.c_max));
     }
@@ -355,10 +321,9 @@ mod tests {
         set(&mut m, L, 0.0, 1.0, 2.0);
         m.active[N_GOODS + G] = false;
         m.price[N_GOODS + G] = 3.0;
-        let mut fill = vec![-1.0; 2 * N_GOODS];
-        m.clear_pro_rata(&mut fill);
+        let fill = clear(&mut m);
         assert_eq!(fill[G], 0.5);
-        assert_eq!((fill[N_GOODS + G], fill[L]), (-1.0, -1.0));
+        assert!(fill[N_GOODS + G].is_nan() && fill[L].is_nan());
         assert_eq!((m.sales[N_GOODS + G], m.sales[L]), (0.0, 0.0));
         m.reprice(&rule());
         assert_eq!(m.price[N_GOODS + G], 3.0);
@@ -375,7 +340,7 @@ mod tests {
         }
         let mut fill = vec![0.0; 2 * N_GOODS];
         for _ in 0..50 {
-            m.clear_pro_rata(&mut fill);
+            fill = clear(&mut m);
             m.reprice(&p);
             assert!(m.price.iter().all(|x| x.is_finite() && *x > 0.0));
             assert!(m.inventory.iter().all(|&s| s >= 0.0));
@@ -395,7 +360,7 @@ mod tests {
         let (mut m, p) = one();
         set(&mut m, G, 0.0, 0.0, 4.0);
         m.price[G] = 2.5;
-        m.clear_pro_rata(&mut [0.0; N_GOODS]);
+        clear(&mut m);
         m.reprice(&p);
         assert_eq!(m.price[G], 2.5);
     }
@@ -409,7 +374,7 @@ mod tests {
         set(&mut m, N_GOODS + G, 0.0, 0.0, 1.0);
         set(&mut m, 2 * N_GOODS + G, 0.0, 1e12, 1.0);
         m.active[2 * N_GOODS + G] = false;
-        m.clear_pro_rata(&mut vec![0.0; 3 * N_GOODS]);
+        clear(&mut m);
         m.reprice(&p);
         // province 1: floor = 1e-9 * 2, flow term 0.2 * 1 / 2e-9 clips; stock term pushes down
         // from S' = 0 vs S* = 2 (kappa2 * 1) but the clip still binds upward
@@ -427,6 +392,7 @@ mod tests {
                 let i = pi * N_GOODS + g;
                 let dd = d * (1.0 + g as f64 / 7.0);
                 m.demand[i] = dd;
+                m.demand_hh[i] = dd;
                 m.supply[i] = dd;
                 m.inventory[i] = p.coverage[g] * dd;
                 m.price[i] = 1.0 + 0.1 * (pi + g) as f64;
@@ -434,10 +400,9 @@ mod tests {
         }
         let before = m.price.clone();
         let stock = m.inventory.clone();
-        let mut fill = vec![0.0; 2 * N_GOODS];
         let mut spoiled = vec![0.0; 2 * N_GOODS];
         for _ in 0..10 {
-            m.clear_pro_rata(&mut fill);
+            clear(&mut m);
             m.clear_local(&mut spoiled);
             m.reprice(&p);
         }
@@ -460,7 +425,7 @@ mod tests {
             set(&mut m, g, s, q, d);
         }
         let before: Vec<f64> = (0..3).map(|g| m.inventory[g] + m.supply[g]).collect();
-        m.clear_pro_rata(&mut [0.0; N_GOODS]);
+        clear(&mut m);
         for (g, b) in before.iter().enumerate() {
             assert!((m.sales[g] + m.inventory[g] - b).abs() < 1e-12);
         }
@@ -562,7 +527,7 @@ mod tests {
         let mut m = Markets::new(2);
         set(&mut m, G, 1.0, 2.0, 3.0);
         m.active[5] = false;
-        m.clear_pro_rata(&mut [0.0; 2 * N_GOODS]);
+        clear(&mut m);
         order(&mut m, N_GOODS + G, 0.5, 1.0, 2.0, 0.25);
         let mut e = Encoder::default();
         m.encode(&mut e);

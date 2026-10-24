@@ -59,6 +59,16 @@ impl Pipeline {
         &self.due
     }
 
+    /// Goods delivered `ticks` from now (1 to 4) if nothing more is pushed,
+    /// `[buyer * N_GOODS + g]`.
+    pub fn scheduled(&self, ticks: usize) -> &[f64] {
+        assert!(
+            (1..=SLOTS).contains(&ticks),
+            "slot {ticks} outside 1 to {SLOTS}"
+        );
+        &self.slots[(self.cursor + ticks - 1) % SLOTS]
+    }
+
     /// Goods of `g` on order for `buyer`, over every slot.
     pub fn on_order(&self, buyer: usize, g: usize) -> f64 {
         self.slots.iter().map(|s| s[buyer * N_GOODS + g]).sum()
@@ -172,6 +182,23 @@ mod tests {
         }
         assert_eq!(p.pop_due()[0], 5.0);
         assert!(p.pop_due().iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn scheduled_shows_what_each_pop_delivers() {
+        let mut p = Pipeline::new(2);
+        p.pop_due();
+        p.pop_due();
+        for slot in 1..=SLOTS {
+            p.push(slot, 1, 2, slot as f64);
+        }
+        for ticks in 1..=SLOTS {
+            assert_eq!(p.scheduled(ticks)[N_GOODS + 2], ticks as f64);
+        }
+        for ticks in 1..=SLOTS {
+            let want = p.scheduled(1).to_vec();
+            assert_eq!(p.pop_due(), want, "pop {ticks}");
+        }
     }
 
     #[test]
