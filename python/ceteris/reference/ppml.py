@@ -17,8 +17,11 @@ class Elasticity:
     contiguity: float
     se_elasticity: float  # Eicker-Huber-White
     se_contiguity: float
-    n_pairs: int  # ordered non-domestic pairs estimated
-    n_dropped: int  # pairs without a usable distance or contiguity
+    n_pairs: int  # ordered non-domestic pairs actually estimated
+    n_dropped: int  # pairs without a usable distance or contiguity (before estimation)
+    n_separated_rows: int  # estimable pairs removed because their exporter or importer has no positive flow
+    n_separated_exporters: int  # countries that lost all their exporter rows (zero exports)
+    n_separated_importers: int  # countries that lost all their importer rows (zero imports)
 
 
 def _deviance(y: np.ndarray, mu: np.ndarray) -> float:
@@ -79,16 +82,32 @@ def _irls(y: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     raise RuntimeError(f"PPML did not converge in {MAX_ITER} iterations")
 
 
+@dataclass(frozen=True)
+class Separation:
+    n_rows: int
+    n_exporters: int
+    n_importers: int
+
+
 def _fit(
     flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, regressors: Mapping[str, np.ndarray]
-) -> tuple[dict[str, float], dict[str, float]]:
+) -> tuple[dict[str, float], dict[str, float], Separation]:
     y = np.asarray(flows, dtype=np.float64)
     exporter, importer = np.asarray(exporter), np.asarray(importer)
     names = list(regressors)
     r = np.column_stack([np.asarray(regressors[k], dtype=np.float64) for k in names])
     if np.any(y < 0) or not np.all(np.isfinite(y)) or not np.all(np.isfinite(r)):
         raise ValueError("flows must be finite and nonnegative, regressors finite")
+    if len(y) == 0:
+        raise ValueError("no observations")
     keep = _active(y, exporter, importer)
+    if not keep.any():
+        raise ValueError("no observation survives: every exporter or importer has zero total flow")
+    separation = Separation(
+        int((~keep).sum()),
+        len(np.unique(exporter)) - len(np.unique(exporter[keep])),
+        len(np.unique(importer)) - len(np.unique(importer[keep])),
+    )
     y, r, exporter, importer = y[keep], r[keep], exporter[keep], importer[keep]
     scale = y.mean()  # slopes are invariant to it; it only shifts the fixed effects
     y = y / scale
@@ -98,7 +117,7 @@ def _fit(
     meat = x.T @ (x * ((y - mu) ** 2)[:, None])
     se = np.sqrt(np.diag(bread @ meat @ bread))
     k = len(names)
-    return dict(zip(names, beta[:k].tolist())), dict(zip(names, se[:k].tolist()))
+    return dict(zip(names, beta[:k].tolist())), dict(zip(names, se[:k].tolist())), separation
 
 
 def fit(flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, regressors: Mapping[str, np.ndarray]) -> dict[str, float]:
@@ -111,7 +130,7 @@ def fit_robust(
     flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, regressors: Mapping[str, np.ndarray]
 ) -> tuple[dict[str, float], dict[str, float]]:
     """`fit` plus Eicker-Huber-White standard errors (HC0, no clustering)."""
-    return _fit(flows, exporter, importer, regressors)
+    return _fit(flows, exporter, importer, regressors)[:2]
 
 
 def _column(table, name: str) -> np.ndarray:
@@ -153,7 +172,7 @@ def distance_elasticity(run_flows, gravity_table, iso3: Sequence[str]) -> Elasti
         dist[i], contig[i] = lookup.get((iso3[o], iso3[d]), (np.nan, np.nan))
     ok = np.isfinite(dist) & (dist > 0) & np.isfinite(contig)
 
-    coef, se = _fit(
+    coef, se, sep = _fit(
         pair_value[o_idx[ok] * n + d_idx[ok]],
         o_idx[ok],
         d_idx[ok],
@@ -164,6 +183,9 @@ def distance_elasticity(run_flows, gravity_table, iso3: Sequence[str]) -> Elasti
         contiguity=coef["contig"],
         se_elasticity=se["ln_distw"],
         se_contiguity=se["contig"],
-        n_pairs=int(ok.sum()),
+        n_pairs=int(ok.sum()) - sep.n_rows,
         n_dropped=int((~ok).sum()),
+        n_separated_rows=sep.n_rows,
+        n_separated_exporters=sep.n_exporters,
+        n_separated_importers=sep.n_importers,
     )
