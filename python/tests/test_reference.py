@@ -9,7 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import io, model, ppml, sinkhorn, solve
+from ceteris.reference import demand, io, model, ppml, sinkhorn, solve
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
@@ -74,7 +74,9 @@ def test_sinkhorn_and_dense_kernel_reproduce_equilibrium_gravity(fixture):
         supply = p * eq.supply[:, g]
         # the origin markets clear: what destinations send them is their output at their price
         np.testing.assert_allclose(flows.sum(axis=1), supply, rtol=1e-8, atol=1e-12 * supply.sum())
-        solved = sinkhorn.balanced(k_net, supply, flows.sum(axis=0))
+        # balanced on the flows' own row sums: the solve's tolerance leaves supply inconsistent with
+        # the column sums at about 1e-11, beyond what balancing to Sinkhorn's 1e-14 can absorb
+        solved = sinkhorn.balanced(k_net, flows.sum(axis=1), flows.sum(axis=0))
         big = flows > 1e-12 * flows.sum()
         np.testing.assert_allclose(solved[big], flows[big], rtol=1e-8)
         assert np.abs(solved[~big]).max(initial=0.0) <= 1e-10 * flows.sum()
@@ -169,11 +171,44 @@ def test_trade_money_matches_dense_route_oracle(inputs):
         np.testing.assert_allclose(got[key][..., traded], w[..., traded], rtol=1e-10, atol=1e-13 * np.abs(w).max(), err_msg=key)
 
 
+def test_pigl_matches_rust(inputs):
+    """The reference's PIGL (its own inversion of the country weights, its shares) reproduces
+    `demand::pigl` on the export's `pigl_check` draws: prices (some unreachable), money per person
+    far from base on both sides (clamped shares), income dispersion."""
+    t = pa_ipc.open_file(str(FIXTURE / "pigl_check.arrow")).read_all()
+    n_g = inputs.n_goods
+    country = t["country"].to_numpy().astype(np.int64)
+    money, sigma = t["money"].to_numpy(), t["sigma"].to_numpy()
+    price = np.stack([t[f"price_{g}"].to_numpy() for g in range(n_g)], axis=1)
+    want = np.stack([t[f"x_{g}"].to_numpy() for g in range(n_g)], axis=1)
+    assert len(money) == 100 and np.isinf(price).any()
+    share = demand.shares(inputs.pigl_weights, country, price, money, sigma, inputs.category, inputs.sigma_demand, inputs.pigl)
+    got = demand.quantities(share, price, money)
+    np.testing.assert_array_equal(got == 0, want == 0)
+    np.testing.assert_allclose(got, want, rtol=1e-12, atol=0)
+    # shares within [0, 1] adding up, also where the raw PIGL shares left the interval
+    np.testing.assert_allclose(share.sum(axis=1), 1.0, rtol=1e-14)
+    assert np.all((share >= 0) & (share <= 1))
+
+
+def test_pigl_inversion_reproduces_base_shares(inputs):
+    inp = inputs
+    w = inp.pigl_weights
+    c = np.arange(inp.n_countries)
+    share = demand.shares(
+        w, c, np.ones((inp.n_countries, inp.n_goods)), inp.base_spend, inp.sigma_income, inp.category, inp.sigma_demand, inp.pigl
+    )
+    np.testing.assert_allclose(share, inp.omega / inp.omega.sum(axis=1, keepdims=True), rtol=0, atol=1e-12)
+    assert np.all(w.omega[:, 0] == 0) and np.all(w.scale > 0)
+
+
 def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.Inputs:
     """One traded good, one country, two identical provinces joined by a domestic leg, with the
     Rust base point: L0 = (1 - u) L^s, w0 = s_L VA0 / L0. Each province has two half-size
     enterprises: with a single one, the target's cap at L^s leaves labour demand at or below
-    supply for every low wage, so no wage clears uniquely."""
+    supply for every low wage, so no wage clears uniquely. The good is the only one of PIGL
+    category S, so the inversion gives z = 0 (no category A demand) and demand is homothetic: the
+    province spends its whole income on it, whatever the pops' incomes."""
     k = np.float32(tau**-theta).astype(np.float64)
     one = np.ones(2)
     l0 = (1.0 - u) * labour / 2.0
@@ -181,6 +216,8 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
     return io.Inputs(
         theta=np.array([theta]),
         sigma_demand=sigma_demand,
+        pigl=demand.Pigl(sigma_b=0.26, phi=0.0, gamma=0.71, theta=np.array([0.634, 0.082, 0.284]), eps=0.71),
+        category=np.array([2]),
         sigma_fl=sigma_fl,
         weight_floor=1e-100,
         traded=np.array([True]),
@@ -191,6 +228,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         w0=s_l * 50.0 / l0 * one,
         s_l=np.array([s_l]),
         unemployment=np.array([u]),
+        gini=np.array([0.35]),
         omega=np.array([[1.0]]),
         io=np.zeros((1, 1, 1)),
         active=np.ones((2, 1), dtype=bool),
@@ -199,6 +237,9 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         ent_a=np.full(4, a),
         ent_va0=np.full(4, 50.0),
         ent_l0=np.full(4, l0),
+        pop_province=np.array([0, 0, 1, 1]),
+        pop_effective=np.array([0.3, 0.7, 0.3, 0.7]) * labour,
+        pop_population=np.array([4e5, 6e5, 4e5, 6e5]),
         domestic=io.Entries(np.zeros(2, dtype=np.int64), np.array([0, 1]), np.array([1, 0]), k * one, tau * one),
         access=empty,
         crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4),

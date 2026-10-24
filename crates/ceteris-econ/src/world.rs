@@ -14,10 +14,10 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
 use ceteris_trade::{Kernel, Markets, N_GOODS, Pipeline, Sourced, TradeParams};
 
-use crate::demand::ces;
+use crate::demand::{PiglWeights, invert_pigl, lognormal_sigma, pigl};
 use crate::flows::FlowWindow;
 use crate::inputs::EconInputs;
-use crate::params::EconParams;
+use crate::params::{EconParams, Pigl};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 pub const MINOR_PER_UNIT: f64 = 1e4;
@@ -93,6 +93,11 @@ pub struct Layout {
     pub country_pops: Vec<Vec<u32>>,
     /// Weights of the world price index, [`price_index_weights`].
     pub index_weights: Vec<f64>,
+    /// PIGL weights per country, inverted at load from its final demand shares at prices 1
+    /// and its base spending per person ([`base_spend`]).
+    pub pigl: Vec<PiglWeights>,
+    /// Log income dispersion sigma of every pop of a country, from the country's Gini.
+    pub sigma_income: Vec<f64>,
 }
 
 impl Layout {
@@ -102,6 +107,37 @@ impl Layout {
 
     pub fn enterprises(&self, i: usize) -> Range<usize> {
         self.ent_offsets[i] as usize..self.ent_offsets[i + 1] as usize
+    }
+
+    /// Pop `k`'s demand at buyer prices `price` from its money balance `money`: PIGL at its
+    /// mean spending per person, money / population, over its country's lognormal income
+    /// (ADR 0021). Nothing without money.
+    pub fn pop_demand(
+        &self,
+        inp: &EconInputs,
+        params: &EconParams,
+        k: usize,
+        price: &[f64; N_GOODS],
+        money: f64,
+        out: &mut [f64; N_GOODS],
+    ) {
+        *out = [0.0; N_GOODS];
+        if money <= 0.0 {
+            return;
+        }
+        let c = inp.country_of(inp.pops.province[k] as usize);
+        let people = inp.pops.population[k];
+        pigl(
+            &self.pigl[c],
+            price,
+            money / people,
+            self.sigma_income[c],
+            params,
+            out,
+        );
+        for x in out.iter_mut() {
+            *x *= people;
+        }
     }
 }
 
@@ -224,6 +260,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     // destructured so a new parameter cannot be left out of the digest
     let EconParams {
         sigma_demand,
+        pigl,
         sigma_fl,
         kappa_w,
         delta_w,
@@ -249,6 +286,15 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
     e.f64s(&[*sigma_demand, *sigma_fl, *kappa_w, *delta_w, *eta]);
+    let Pigl {
+        sigma_b,
+        phi,
+        gamma,
+        theta: pigl_theta,
+        eps,
+    } = pigl;
+    e.f64s(&[*sigma_b, *phi, *gamma, *eps]);
+    e.f64s(pigl_theta);
     e.f64s(edu_eff);
     e.u8(u8::from(*frictionless));
     e.u8(*rationing as u8);
@@ -289,12 +335,10 @@ pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
     active
 }
 
-/// Base household consumption quantities at prices 1, the weights of the world price index
-/// over buyer prices: each country's final demand shares times the province's base income
-/// (wages of the 2000 employed plus the profit pool), `[province * N_GOODS + g]`. The same
-/// weights as `ceteris.reference.io.Inputs.index_weights`, so V1 normalizes run and reference
-/// alike.
-pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+/// Household income per province in the data state: wages of the 2000 employed,
+/// w0 (1 - u) L^s, plus the profit pool sum (1 - s_L) VA0. As
+/// `ceteris.reference.io.Inputs.base_income`.
+pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let supply = inp.labour_supply(&params.edu_eff);
     let mut pool = vec![0.0; inp.n_provinces()];
     for e in 0..inp.n_enterprises() {
@@ -302,11 +346,59 @@ pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
         let s_l = inp.countries.s_l[inp.country_of(i)];
         pool[i] += (1.0 - s_l) * inp.enterprises.va0[e];
     }
+    (0..inp.n_provinces())
+        .map(|i| {
+            let u = inp.countries.unemployment[inp.country_of(i)];
+            inp.provinces.w0[i] * (1.0 - u) * supply[i] + pool[i]
+        })
+        .collect()
+}
+
+/// Base spending per person of each country: its provinces' [`base_income`] over its pops'
+/// population. As `ceteris.reference.io.Inputs.base_spend`.
+pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+    let nc = inp.n_countries();
+    let (mut spend, mut people) = (vec![0.0; nc], vec![0.0; nc]);
+    for (i, income) in base_income(inp, params).into_iter().enumerate() {
+        spend[inp.country_of(i)] += income;
+    }
+    for k in 0..inp.n_pops() {
+        people[inp.country_of(inp.pops.province[k] as usize)] += inp.pops.population[k];
+    }
+    spend.iter().zip(&people).map(|(s, n)| s / n).collect()
+}
+
+/// Per country, the PIGL weights inverted from its final demand shares at prices 1 and its
+/// [`base_spend`], and the log income dispersion of its pops from its Gini (ADR 0021). Panics
+/// where a country's shares cannot be inverted (`invert_pigl`).
+pub fn household_preferences(
+    inp: &EconInputs,
+    params: &EconParams,
+) -> (Vec<PiglWeights>, Vec<f64>) {
+    let sigma: Vec<f64> = inp
+        .countries
+        .gini
+        .iter()
+        .map(|&g| lognormal_sigma(g))
+        .collect();
+    let weights = base_spend(inp, params)
+        .iter()
+        .enumerate()
+        .map(|(c, &m)| invert_pigl(&inp.countries.omega[c], m, sigma[c], params))
+        .collect();
+    (weights, sigma)
+}
+
+/// Base household consumption quantities at prices 1, the weights of the world price index
+/// over buyer prices: each country's final demand shares times the province's
+/// [`base_income`], `[province * N_GOODS + g]`. The same weights as
+/// `ceteris.reference.io.Inputs.index_weights`, so V1 normalizes run and reference alike.
+pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+    let base = base_income(inp, params);
     let mut out = vec![0.0; inp.n_provinces() * N_GOODS];
     for i in 0..inp.n_provinces() {
         let c = inp.country_of(i);
-        let income =
-            inp.provinces.w0[i] * (1.0 - inp.countries.unemployment[c]) * supply[i] + pool[i];
+        let income = base[i];
         let omega = &inp.countries.omega[c];
         let total: f64 = omega.iter().sum();
         for g in 0..N_GOODS {
@@ -384,8 +476,11 @@ impl EconWorld {
                 (1.0 - inp.countries.unemployment[inp.country_of(i)]) * inp.pops.labour_force[k]
             })
             .collect();
+        let (pigl, sigma_income) = household_preferences(inp, &params);
         let mut layout = Layout {
             index_weights: price_index_weights(inp, &params),
+            pigl,
+            sigma_income,
             accounts,
             pop_offsets,
             ent_offsets,
@@ -504,7 +599,7 @@ impl EconWorld {
 
     /// Origin inventories of the data state at coverage times initial demand: the orders
     /// that one month of base demand places at each origin market at the data state's
-    /// prices, households spending their base income with CES at the price index and
+    /// prices, households spending their base income with PIGL at the price index and
     /// enterprises buying one month of base use at the index.
     fn stock_base_demand(&mut self, base_income: &[f64], base_use: &[f64]) {
         let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
@@ -516,15 +611,8 @@ impl EconWorld {
             let row: [f64; N_GOODS] = self.price_index[d * N_GOODS..(d + 1) * N_GOODS]
                 .try_into()
                 .expect("one row of goods");
-            let omega = &inp.countries.omega[inp.country_of(d)];
             for k in lay.pops(d) {
-                ces(
-                    omega,
-                    &row,
-                    base_income[k],
-                    self.params.sigma_demand,
-                    &mut x,
-                );
+                lay.pop_demand(inp, &self.params, k, &row, base_income[k], &mut x);
                 for g in (0..N_GOODS).filter(|&g| TRADED[g] && x[g] > 0.0) {
                     spend[d * N_GOODS + g][HOUSEHOLD] += x[g] * row[g];
                 }

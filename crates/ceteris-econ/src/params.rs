@@ -2,10 +2,42 @@
 
 use ceteris_trade::Rationing;
 
+/// The multi-sector PIGL of Alder, Boppart and Mueller (2022), eqs. (19), (21) and (22), over
+/// the categories of `demand::CATEGORY`. Start values: their pooled PIGL estimates (Tables 3
+/// and A3, column 3), `specs/econ/SPEC.md`, Final demand.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pigl {
+    /// P46 substitution sigma_B of the aggregator B(P) of the homothetic term.
+    pub sigma_b: f64,
+    /// P46 substitution phi of the aggregator Dtilde(P); 0 is its Leontief limit, where the
+    /// aggregator is linear, sum_c theta_c P_c.
+    pub phi: f64,
+    /// P46 curvature gamma of D(P) in Dtilde(P) / B(P).
+    pub gamma: f64,
+    /// P46 weights theta_c of Dtilde(P), categories A, M, S; they sum to 1.
+    pub theta: [f64; 3],
+    /// P47 Engel parameter eps.
+    pub eps: f64,
+}
+
+impl Default for Pigl {
+    fn default() -> Self {
+        Self {
+            sigma_b: 0.26,
+            phi: 0.0,
+            gamma: 0.71,
+            theta: [0.634, 0.082, 0.284],
+            eps: 0.71,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct EconParams {
-    /// P06 goods substitution sigma in final demand, prior 0.3 to 0.9.
+    /// P06 goods substitution sigma within a final demand category, prior 0.3 to 0.9.
     pub sigma_demand: f64,
+    /// P46 and P47: PIGL across final demand categories (ADR 0021).
+    pub pigl: Pigl,
     /// P08 capital-labour (F-L) substitution sigma_FL, prior 0.5 to 1.2.
     pub sigma_fl: f64,
     /// P39 wage adjustment speed kappa_w, per month.
@@ -27,6 +59,7 @@ impl Default for EconParams {
     fn default() -> Self {
         Self {
             sigma_demand: 0.6,
+            pigl: Pigl::default(),
             sigma_fl: 0.8,
             kappa_w: 0.1,
             delta_w: 0.5,

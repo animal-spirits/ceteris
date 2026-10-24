@@ -6,12 +6,12 @@ pops spending their whole income. Expected inflation (ADR 0019) is zero at a ste
 the world price index is constant there, so the price and wage rules' pi^e term leaves this
 solution unchanged.
 
-Destination d spends E_d on traded good g, households by CES at the delivered unit price
-q_d = 1 / alpha_d, alpha_d the units arriving per unit of spending (owner decision, 2026-10-24),
-and enterprises a Y q_d, so arrivals replace use; X_od = E_d K_od w_o / Phi_d with
-w_o = (p_o / p_min)^-theta_g (floored; theta per good, ADR 0018), K carrying the tariff on
-crossings. Origin o ships X_od / (p_o (1 + t)) units and receives p_o per unit, the importer's
-rebate account t p_o.
+Destination d spends E_d on traded good g, households (each pop by PIGL across categories and CES
+within them, ADR 0021) at the delivered unit price q_d = 1 / alpha_d, alpha_d the units arriving
+per unit of spending (owner decision, 2026-10-24), and enterprises a Y q_d, so arrivals replace
+use; X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (floored; theta per good, ADR
+0018), K carrying the tariff on crossings. Origin o ships X_od / (p_o (1 + t)) units and receives
+p_o per unit, the importer's rebate account t p_o.
 
 Unknowns x: ln p of every active (province, good) cell in row-major order (origin markets of
 traded goods, province markets of local goods), then ln w per province. Equations: excess demand
@@ -27,9 +27,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .demand import shares as pigl_shares
 from .io import Inputs
 
 RHO_CD = 1e-9  # Cobb-Douglas threshold on |rho|, as `production.rs`
+REBATE_TOL = 1e-15  # relative change of every country's rebate that ends the income iteration
+MAX_REBATE_ITERATIONS = 200
 MARKET_FLOOR = 1e-12  # added to D and Q, relative to the cell's base size: ln(D / Q) stays finite
 
 
@@ -257,26 +260,37 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
     local_use = np.zeros((n_p, n_g))
     np.add.at(local_use, ep, np.where(inp.traded[None, :], 0.0, use))
 
-    # E3, households: CES shares at consumer prices, unreachable goods left out
-    om = inp.omega_p
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        buy = (om > 0) & np.isfinite(consumer)
-        weight = np.where(buy, om * np.where(buy, consumer, 1.0) ** (1.0 - inp.sigma_demand), 0.0)
-    share = weight / weight.sum(axis=1, keepdims=True)
-
-    # E4: income = wages w L^s + profits + rebates; rebates are the tariff share of spending, so
-    # income solves a linear system by country
+    # E3, households: PIGL per pop (ADR 0021) at its province's consumer prices and its mean income
+    # per person. E4: a pop earns its effective-labour share e_k LF_k / L^s of its province's wages
+    # w L^s and profits, and its population share of its country's rebate, the tariff share of
+    # spending; rebates depend on household spending, so income is a fixed point.
     duty_share = _flows(inp, price, np.ones((n_p, n_g)), src)["tariff"]  # tariff per unit spent
     c = inp.province_country
-    country_pop = np.bincount(c, inp.population, inp.n_countries)
-    rebate_of = inp.population / country_pop[c]  # province's share of its country's rebate
-    same = c[:, None] == c[None, :]
-    m = np.where(same, rebate_of[:, None] * (duty_share * share).sum(axis=1)[None, :], 0.0)
-    fixed = wage * inp.labour_supply + _sum(ep, profit, n_p)
-    from_inputs = np.where(same, rebate_of[:, None] * (duty_share * spend_int).sum(axis=1)[None, :], 0.0).sum(axis=1)
-    income = np.linalg.solve(np.eye(n_p) - m, fixed + from_inputs)
+    kp = inp.pop_province
+    kc = c[kp]
+    people = inp.pop_population
+    country_people = np.bincount(kc, people, inp.n_countries)
+    earned = inp.pop_effective / inp.labour_supply[kp] * (wage * inp.labour_supply + _sum(ep, profit, n_p))[kp]
+    from_inputs = np.bincount(c, (duty_share * spend_int).sum(axis=1), inp.n_countries)
+    prices_k = consumer[kp]
+    sigma_k = inp.sigma_income[kc]
+    rebate = np.zeros(inp.n_countries)
+    for _ in range(MAX_REBATE_ITERATIONS):
+        pop_income = earned + people / country_people[kc] * rebate[kc]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            per_person = np.where(people > 0, pop_income / people, 0.0)
+        share = pigl_shares(inp.pigl_weights, kc, prices_k, per_person, sigma_k, inp.category, inp.sigma_demand, inp.pigl)
+        pop_spend = np.where(pop_income[:, None] > 0, share * pop_income[:, None], 0.0)
+        spend_hh = np.zeros((n_p, n_g))
+        np.add.at(spend_hh, kp, pop_spend)
+        nxt = from_inputs + np.bincount(c, (duty_share * spend_hh).sum(axis=1), inp.n_countries)
+        done = np.all(np.abs(nxt - rebate) <= REBATE_TOL * np.maximum(np.abs(nxt), 1e-300))
+        rebate = nxt
+        if done:
+            break
+    pop_income = earned + people / country_people[kc] * rebate[kc]
+    income = np.bincount(kp, pop_income, n_p)
 
-    spend_hh = share * income[:, None]
     spend = np.where(traded, spend_hh + spend_int, 0.0)
     f = _flows(inp, price, spend, src)
     with np.errstate(divide="ignore", invalid="ignore"):

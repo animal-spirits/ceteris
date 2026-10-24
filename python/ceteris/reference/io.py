@@ -8,7 +8,9 @@ from pathlib import Path
 import numpy as np
 from pyarrow import ipc
 
-EXPORT_FORMAT = "4"
+from . import demand
+
+EXPORT_FORMAT = "5"
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,9 @@ class Entries:
 @dataclass(frozen=True)
 class Inputs:
     theta: np.ndarray  # (G,) P01 per good, 0 for local goods (ADR 0018)
-    sigma_demand: float
+    sigma_demand: float  # P06, within a PIGL category
+    pigl: demand.Pigl  # P46, P47
+    category: np.ndarray  # (G,) PIGL category of each good
     sigma_fl: float
     weight_floor: float
     traded: np.ndarray  # (G,) bool
@@ -40,6 +44,7 @@ class Inputs:
     w0: np.ndarray  # (P,)
     s_l: np.ndarray  # (C,)
     unemployment: np.ndarray  # (C,)
+    gini: np.ndarray  # (C,)
     omega: np.ndarray  # (C, G)
     io: np.ndarray  # (C, G, G), io[c, k, g] = a_kg
     active: np.ndarray  # (P, G) bool: origin markets of traded goods, province markets of local goods
@@ -48,6 +53,9 @@ class Inputs:
     ent_a: np.ndarray  # (E,)
     ent_va0: np.ndarray  # (E,)
     ent_l0: np.ndarray  # (E,)
+    pop_province: np.ndarray  # (K,)
+    pop_effective: np.ndarray  # (K,) e_k LF_k: the pop's share of its province's wages and dividends
+    pop_population: np.ndarray  # (K,)
     domestic: Entries
     access: Entries
     crossing: Entries
@@ -103,6 +111,24 @@ class Inputs:
         u = self.unemployment[self.province_country]
         pool = np.bincount(self.ent_province, (1.0 - self.ent_s_l) * self.ent_va0, self.n_provinces)
         return self.w0 * (1.0 - u) * self.labour_supply + pool
+
+    @cached_property
+    def base_spend(self) -> np.ndarray:
+        """(C,) base spending per person: base income over the pops' population, as `world::base_spend`."""
+        c = self.province_country
+        return np.bincount(c, self.base_income, self.n_countries) / np.bincount(
+            c[self.pop_province], self.pop_population, self.n_countries
+        )
+
+    @cached_property
+    def sigma_income(self) -> np.ndarray:
+        """(C,) log income dispersion of every pop of a country, from its Gini."""
+        return demand.lognormal_sigma(self.gini)
+
+    @cached_property
+    def pigl_weights(self) -> demand.Weights:
+        """PIGL weights per country, as `world::household_preferences`."""
+        return demand.invert(self.omega, self.base_spend, self.sigma_income, self.category, self.pigl)
 
     @cached_property
     def index_weights(self) -> np.ndarray:
@@ -167,6 +193,14 @@ def load(directory: Path | str) -> Inputs:
     inp = Inputs(
         theta=goods["theta"].astype(np.float64),
         sigma_demand=float(params["econ"]["sigma_demand"]),
+        pigl=demand.Pigl(
+            sigma_b=float(params["econ"]["pigl_sigma_b"]),
+            phi=float(params["econ"]["pigl_phi"]),
+            gamma=float(params["econ"]["pigl_gamma"]),
+            theta=np.asarray(params["econ"]["pigl_theta"], dtype=np.float64),
+            eps=float(params["econ"]["pigl_eps"]),
+        ),
+        category=goods["category"].astype(np.int64),
         sigma_fl=float(params["econ"]["sigma_fl"]),
         weight_floor=float(params["weight_floor"]),
         traded=goods["traded"].astype(bool),
@@ -177,6 +211,7 @@ def load(directory: Path | str) -> Inputs:
         w0=provinces["w0"].astype(np.float64),
         s_l=countries["s_l"],
         unemployment=countries["unemployment"],
+        gini=countries["gini"],
         omega=np.stack([countries[f"omega_{g}"] for g in range(n_goods)], axis=1),
         io=a,
         active=act,
@@ -185,6 +220,9 @@ def load(directory: Path | str) -> Inputs:
         ent_a=ent["a"].astype(np.float64),
         ent_va0=ent["va0"].astype(np.float64),
         ent_l0=ent["l0"].astype(np.float64),
+        pop_province=pop_province,
+        pop_effective=edu_eff[pops["edu"]] * pops["labour_force"],
+        pop_population=pops["population"].astype(np.float64),
         domestic=_entries(_table(d / "kernel_domestic.arrow"), "o", "d"),
         access=_entries(_table(d / "kernel_access.arrow"), "province", "gateway"),
         crossing=_entries(_table(d / "kernel_crossing.arrow"), "a", "b", crossing=True),
@@ -205,3 +243,4 @@ def validate(inp: Inputs) -> None:
         raise ValueError(f"inactive local cells with an enterprise: {np.argwhere(stuck).tolist()}")
     if np.any(inp.ent_a_va <= 0):
         raise ValueError("an enterprise has a nonpositive value-added coefficient")
+    _ = inp.pigl_weights  # raises where a country's final demand shares are outside the PIGL form

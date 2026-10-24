@@ -1,6 +1,6 @@
 # 0021. PIGL demand and a household consumption rule
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 7)
 Date: 2026-10-24
 Design sections: 8.6, 17.1 (P06, P07, P37), 17.2 (S03), 19.4
 
@@ -42,16 +42,33 @@ Option 2 by default, option 1 as S03. Total spending follows the buffer-stock ru
 
 ## Mapping to P2 as built
 
-P2 uses homothetic CES over the 10 goods (`ceteris-econ` demand.rs), an approved spec deviation
-that this ADR reverses.
+P2 used homothetic CES over the 10 goods (`ceteris-econ` demand.rs), an approved spec deviation
+that this ADR reverses. MIGRATION Task 7 implements it as follows (controller ruling,
+2026-10-24, which replaces the earlier agent default of PIGL over the 10 goods).
 
-- Categories are the 10 P2 goods (agent default): PIGL shares per good, weights backed out from
-  each country's 2000 final demand shares by exact inversion.
-- Each pop's income is lognormal: mu from its mean income, sigma^2 from its country's 2000 Gini
-  (sigma = sqrt(2) Phi^(-1)((G + 1) / 2)), a new pack column with its own source row.
-- P06 and P07 become the PIGL price and Engel parameters; spend-all (m = 1, lambda = 0) is P2's
-  current rule, so the consumption rule adds no behaviour yet.
-- The GE reference mirrors PIGL demand.
+- Form: Alder, Boppart and Mueller (2022), PIGL as Special Case I of their eq. (12) with price
+  functions (19) and (21) and shares (22), transcribed with equation and page numbers in the
+  econ SPEC, Final demand. Its price parameters are three (sigma_B, phi, gamma) and its Engel
+  parameter one (eps), so P06 and P07 cannot carry them: P46 (sigma_B, phi, gamma, with the
+  Dtilde weights theta) and P47 (eps) are added. P06 stays the goods substitution within a
+  category; P07 stays the S03 row.
+- Categories: the paper's three, A (goods 0, 3), M (goods 1, 2, 4, 5, 6), S (goods 7, 8, 9),
+  with a CES over goods within each at P06, weights from the 2000 within-category shares.
+  Crude oil, coal and utilities have no clean counterpart in the paper.
+- Parameter sources: theta (0.634, 0.082, 0.284), omega_A = 0, sigma_B 0.26, gamma 0.71, eps
+  0.71 and phi 0 from the pooled PIGL column (Tables 3 and A3, column 3). phi = 0 is the
+  continuous limit of the Dtilde aggregator, linear in prices.
+- Per country, exact inversion at prices 1 and base spending per person: z = Omega_A /
+  theta_A sets the country's scale lambda = nu / kappa, omega_M and omega_S follow from the
+  category shares; a negative weight stops the load, never clipped.
+- Each pop's income is lognormal: mean its money per person, sigma = sqrt(2) Phi^(-1)((G + 1)
+  / 2) from its country's 2000 Gini (`Countries.gini`; pack column in PLAN Task 15, WDI
+  SI.POV.GINI or WIID). Pop demand is the share equation integrated in closed form through
+  E[y^(1 - eps)]; tests use 64-node Gauss-Hermite quadrature rather than Monte Carlo.
+- Spend-all (m = 1, lambda = 0) is P2's current rule, so the consumption rule adds no behaviour
+  yet.
+- The GE reference mirrors PIGL demand per pop, with income by effective labour share and
+  rebates by population as the Rust world pays them.
 
 ## Consequences
 
