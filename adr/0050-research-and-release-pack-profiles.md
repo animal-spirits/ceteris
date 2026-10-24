@@ -68,9 +68,17 @@ get written confirmation before relying on it for release.
 Second scan (2026-10-24, beyond the economic core). More sources with restrictive or unclear
 terms, several underpinning existing or proposed layers:
 
-- Ethnic Power Relations and GeoEPR: no licence stated, so all rights reserved by default. They
-  key every pop (6.1); request written permission now, not before release.
-- WCDE v3 (Wittgenstein Centre): a custom licence; request written permission (ADR 0032).
+- Ethnic Power Relations: EPR v1.1 and GeoEPR 2011 on Harvard Dataverse are CC0 (possibly a
+  platform default) and cover the 2000 initialization; EPR Core 2021 and GeoEPR 2021 state no
+  licence, so all rights are reserved by default, and they carry group status after 2005 (10.8,
+  11.6). Request written permission now: confirm the legacy CC0, and allow the 2021 versions
+  fetched from ICR with province aggregates in public packs.
+- Wittgenstein Centre: the Zenodo WIC3.005 release (V15, September 2026) is CC BY 4.0 and holds
+  education-specific fertility, survival, education shares and sex ratios at birth for
+  2020-2100, which covers most of ADR 0032. The Data Explorer v3 states no licence (IIASA:
+  "Open Access. Pending specific license."). Ask for attainment progression ratios and
+  education mortality differentials under CC BY if they are not in the files, and for the
+  Explorer's terms.
 - WHO data portal: CC BY-NC-SA 3.0 IGO, non-commercial (ADRs 0033, 0061).
 - World Values Survey and European Values Study: non-profit use only, no redistribution (ADR
   0055).
