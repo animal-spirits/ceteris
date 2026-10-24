@@ -31,7 +31,7 @@ class Equilibrium:
     supply: np.ndarray  # (P, G) traded output routed from each cell
     home_value: np.ndarray  # (P, G) supply routed to stay home, at the origin price
     home_units: np.ndarray  # (P, G)
-    flows_by_country_pair_good: np.ndarray  # (C, C, G) FOB value, exporter x importer
+    flows_by_country_pair_good: np.ndarray  # (C, C, G) value the exporter receives, exporter x importer
     units_by_country_pair_good: np.ndarray  # (C, C, G) origin units at dispatch
     income: np.ndarray  # (P,) household income
     price_index: float
@@ -81,8 +81,10 @@ def _legs(inp: Inputs):
 
 
 def _routing(inp: Inputs, price: np.ndarray):
-    """Route weights (p / p_max)^theta with the weight floor, access sums v, u, Pi and the
-    per-unit netback of every cell, as `route.rs` computes them. Good-major (G, P) and (G * N)."""
+    """Route weights (p / p_max)^theta with the weight floor, access sums v, u, Pi, delivered value
+    per unit at destination and origin gateways, and the per-unit netback
+    sum share p_d / (tau (1 + t)) of every cell, as `route.rs` computes them. Good-major (G, P)
+    and (G * N)."""
     n_p, n_g, n_n = inp.n_provinces, inp.n_goods, inp.n_gateways
     dom, acc, cro = inp.domestic, inp.access, inp.crossing
     d_from, d_to, a_prov, a_gate, c_from, c_to = _legs(inp)
@@ -99,10 +101,10 @@ def _routing(inp: Inputs, price: np.ndarray):
     u = _sum(c_from, cro.k * v[c_to], n_g * n_n)
     pi = ptf + _sum(d_from, dom.k * ptf[d_to], n_g * n_p) + _sum(a_prov, acc.k * u[a_gate], n_g * n_p)
 
-    # destination value per unit entering gateway b, then per unit leaving gateway a
+    # delivered value per unit entering gateway b, then net of tariff per unit entering gateway a
     dest = _sum(a_gate, acc.k * ptf[a_prov] * pf[a_prov] / acc.tau, n_g * n_n)
     dest = np.divide(dest, v, out=np.zeros_like(v), where=v > 0)
-    onward = _sum(c_from, cro.k * v[c_to] * dest[c_to] / (cro.tau * cro.border_tau), n_g * n_n)
+    onward = _sum(c_from, cro.k * v[c_to] * dest[c_to] / (cro.tau * cro.border_tau * (1.0 + cro.tariff)), n_g * n_n)
     onward = np.divide(onward, u, out=np.zeros_like(u), where=u > 0)
     back = (
         ptf * pf
@@ -110,13 +112,15 @@ def _routing(inp: Inputs, price: np.ndarray):
         + _sum(a_prov, acc.k * u[a_gate] * onward[a_gate] / acc.tau, n_g * n_p)
     )
     netback = np.divide(back, pi, out=np.zeros_like(pi), where=pi > 0)
-    return pt, v, u, pi, netback.reshape(n_g, n_p).T
+    return pt, v, u, pi, dest, onward, netback.reshape(n_g, n_p).T
 
 
-def _flows(inp: Inputs, price: np.ndarray, supply: np.ndarray, pt, v, u, pi) -> dict:
-    """Shipments of `supply` (P, G) under the merchant logit: home flow, arrivals (destination
-    units after every leg's loss), FOB received and paid, tariffs by destination, and country-pair
-    value and origin units as `flows.rs` records them."""
+def _flows(inp: Inputs, price: np.ndarray, supply: np.ndarray, pt, v, u, pi, dest, onward) -> dict:
+    """Shipments of `supply` (P, G) under the merchant logit and their payments at delivered
+    prices (`route.rs`): home flow (unpaid), arrivals (destination units after every leg's loss);
+    each destination pays p_d per arriving unit (`paid`), a tariff share t / (1 + t) of that goes
+    to the rebate (`tariff`), the rest to the origin (`received`); country-pair value (what
+    origins receive) and origin units as `flows.rs` records them."""
     n_p, n_g, n_n, n_c = inp.n_provinces, inp.n_goods, inp.n_gateways, inp.n_countries
     dom, acc, cro = inp.domestic, inp.access, inp.crossing
     d_from, d_to, a_prov, a_gate, c_from, c_to = _legs(inp)
@@ -127,27 +131,30 @@ def _flows(inp: Inputs, price: np.ndarray, supply: np.ndarray, pt, v, u, pi) -> 
     home = np.where(pi > 0, scale * ptf, sf)
     x_dom = scale[d_from] * dom.k * ptf[d_to]
     x_out = scale[a_prov] * acc.k * u[a_gate]
+    dom_value = pf[d_to] * x_dom / dom.tau
 
     gate_units = _sum(a_gate, x_out / acc.tau, n_g * n_n)
-    gate_value = _sum(a_gate, pf[a_prov] * x_out, n_g * n_n)
     gate_origin = _sum(a_gate, x_out, n_g * n_n)
     share = np.divide(cro.k * v[c_to], u[c_from], out=np.zeros(len(c_from)), where=u[c_from] > 0)
-    cross_value = gate_value[c_from] * share
-    at_units = _sum(c_to, gate_units[c_from] * share / (cro.tau * cro.border_tau), n_g * n_n)
-    at_value = _sum(c_to, cross_value, n_g * n_n)
-    at_tariff = _sum(c_to, cro.tariff * cross_value, n_g * n_n)
+    got = gate_units[c_from] * share / (cro.tau * cro.border_tau)
+    cross_value = got * dest[c_to] / (1.0 + cro.tariff)
+    at_units = _sum(c_to, got, n_g * n_n)
+    # share of the value delivered through b that is not tariff: the same for every destination
+    net = np.divide(_sum(c_to, got / (1.0 + cro.tariff), n_g * n_n), at_units, out=np.zeros_like(at_units), where=at_units > 0)
     last = np.divide(acc.k * ptf[a_prov], v[a_gate], out=np.zeros(len(a_gate)), where=v[a_gate] > 0)
+    got_in = at_units[a_gate] * last / acc.tau
+    delivered = pf[a_prov] * got_in
 
-    arrive = _sum(d_to, x_dom / dom.tau, n_g * n_p) + _sum(a_prov, at_units[a_gate] * last / acc.tau, n_g * n_p)
-    received = _sum(d_from, pf[d_from] * x_dom, n_g * n_p) + _sum(a_prov, pf[a_prov] * x_out, n_g * n_p)
-    paid = _sum(d_to, pf[d_from] * x_dom, n_g * n_p) + _sum(a_prov, at_value[a_gate] * last, n_g * n_p)
-    tariff = _sum(a_prov, at_tariff[a_gate] * last, n_g * n_p)
+    arrive = _sum(d_to, x_dom / dom.tau, n_g * n_p) + _sum(a_prov, got_in, n_g * n_p)
+    received = _sum(d_from, dom_value, n_g * n_p) + _sum(a_prov, x_out / acc.tau * onward[a_gate], n_g * n_p)
+    paid = _sum(d_to, dom_value, n_g * n_p) + _sum(a_prov, delivered, n_g * n_p)
+    tariff = _sum(a_prov, delivered * (1.0 - net[a_gate]), n_g * n_p)
 
     pc, gc = inp.province_country, inp.gateway_country
     n_pairs = n_c * n_c * n_g
     pair_dom = (pc[dom.row] * n_c + pc[dom.col]) * n_g + dom.good
     pair_int = (gc[cro.row] * n_c + gc[cro.col]) * n_g + cro.good
-    value = _sum(pair_dom, pf[d_from] * x_dom, n_pairs) + _sum(pair_int, cross_value, n_pairs)
+    value = _sum(pair_dom, dom_value, n_pairs) + _sum(pair_int, cross_value, n_pairs)
     units = _sum(pair_dom, x_dom, n_pairs) + _sum(pair_int, gate_origin[c_from] * share, n_pairs)
 
     def cells(a):
@@ -192,7 +199,7 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
     """Every quantity of the steady state at prices and wages `x`."""
     n_p, n_g = inp.n_provinces, inp.n_goods
     price, wage = _split(x, inp)
-    pt, v, u, pi, netback = _routing(inp, price)
+    pt, v, u, pi, dest, onward, netback = _routing(inp, price)
     price = np.where(~inp.active & inp.traded[None, :], netback, price)
 
     # E1, E2: frictionless labour target and output; sale at the cell's price, inputs at local prices
@@ -210,20 +217,20 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
     routed = np.where(inp.traded[None, :], out, 0.0)
 
     # T2: routing; T1: home flow plus arrivals make up Q of traded goods
-    f = _flows(inp, price, routed, pt, v, u, pi)
+    f = _flows(inp, price, routed, pt, v, u, pi, dest, onward)
     q = np.where(inp.traded[None, :], f["home"] + f["arrive"], out)
     inputs = np.zeros((n_p, n_g))
     np.add.at(inputs, ep, inp.ent_inputs * y[:, None])
 
-    # E4: wages w L^s, profits, market cash flow (supply valued at the posted price), rebates
+    # E4: wages w L^s, profits, market cash flow (supply valued at the posted price, trade at
+    # delivered prices), rebates
     profit = sale * y - wage[ep] * l_star - cost * y
     tariff = f["tariff"].sum(axis=1)
     market = (
         np.where(inp.active, price * q, 0.0).sum(axis=1)
         - _sum(ep, sale * y, n_p)
         + f["received"].sum(axis=1)
-        - f["paid"].sum(axis=1)
-        - tariff
+        - f["paid"].sum(axis=1)  # tariff included
     )
     c = inp.province_country
     country_tariff = np.bincount(c, tariff, inp.n_countries)

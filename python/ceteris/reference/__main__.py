@@ -55,7 +55,7 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
             "exporter_country": pa.array(ex, pa.uint32()),
             "importer_country": pa.array(im, pa.uint32()),
             "good": pa.array(g, pa.uint8()),
-            "fob_value": pa.array(eq.flows_by_country_pair_good[ex, im, g], pa.float64()),
+            "value": pa.array(eq.flows_by_country_pair_good[ex, im, g], pa.float64()),
             "units": pa.array(eq.units_by_country_pair_good[ex, im, g], pa.float64()),
         },
     )
@@ -65,7 +65,7 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
         {
             "province": pa.array(cell_p[traded], pa.uint32()),
             "good": pa.array(cell_g[traded], pa.uint8()),
-            "fob_value": pa.array(eq.home_value.ravel()[traded], pa.float64()),
+            "value": pa.array(eq.home_value.ravel()[traded], pa.float64()),
             "units": pa.array(eq.home_units.ravel()[traded], pa.float64()),
         },
     )

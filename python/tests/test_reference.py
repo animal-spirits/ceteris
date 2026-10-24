@@ -21,7 +21,7 @@ def fixture(inputs):
     return inputs, solve.equilibrium(inputs)
 
 
-@pytest.mark.xfail(strict=True, reason="FOB payment rule has no fixture equilibrium; delivered pricing pending")
+@pytest.mark.xfail(strict=True, reason="fixture non-viable; netback producer price and sea costs pending")
 def test_residual_zero_at_solution(fixture):
     inp, eq = fixture
     r = model.residual(eq.x, inp)
@@ -47,7 +47,7 @@ def test_scale_invariance(inputs):
     assert scaled[row] - base[row] == pytest.approx(np.log(3.7), abs=1e-12)
 
 
-@pytest.mark.xfail(strict=True, reason="FOB payment rule has no fixture equilibrium; delivered pricing pending")
+@pytest.mark.xfail(strict=True, reason="fixture non-viable; netback producer price and sea costs pending")
 def test_balanced_sinkhorn_matches_logit_at_equilibrium(fixture):
     inp, eq = fixture
     countries = inp.province_country
@@ -64,12 +64,12 @@ def test_balanced_sinkhorn_matches_logit_at_equilibrium(fixture):
         big = logit > 1e-12 * logit.sum()
         np.testing.assert_allclose(flows[big], logit[big], rtol=1e-8)
         assert np.abs(flows[~big]).max(initial=0.0) <= 1e-10 * logit.sum()
-        # The dense logit aggregates to the low-rank model's country-pair flows.
-        shipped = logit * p[:, None]
+        # The dense logit aggregates to the low-rank model's country-pair units.
+        shipped = logit.copy()
         np.fill_diagonal(shipped, 0.0)
         pairs = np.zeros((inp.n_countries, inp.n_countries))
         np.add.at(pairs, (countries[:, None], countries[None, :]), shipped)
-        np.testing.assert_allclose(eq.flows_by_country_pair_good[:, :, g], pairs, rtol=1e-9, atol=1e-9 * pairs.sum())
+        np.testing.assert_allclose(eq.units_by_country_pair_good[:, :, g], pairs, rtol=1e-9, atol=1e-9 * pairs.sum())
 
 
 def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.Inputs:
@@ -140,4 +140,5 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     k = float(np.float32(tau**-theta))
     np.testing.assert_allclose(eq.home_units[:, 0], y / (1.0 + k), rtol=1e-9)
     assert eq.units_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k), rel=1e-9)
-    assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k), rel=1e-9)
+    # delivered pricing: the destination pays p = 1 per arriving unit
+    assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k) / tau, rel=1e-9)
