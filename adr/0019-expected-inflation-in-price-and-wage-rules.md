@@ -1,6 +1,6 @@
 # 0019. Expected inflation in price and wage rules
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 6)
 Date: 2026-10-24
 Design sections: 8.2, 8.7, 12.2, 15.3 (V1)
 

@@ -45,6 +45,9 @@ pub struct Markets {
     pub supply: Vec<f64>,
     pub sales: Vec<f64>,
     pub active: Vec<bool>,
+    /// Ticks at which the step clip c_max (P03c) bound at the cell, counted by `reprice`
+    /// since the start of the run.
+    pub clip_ticks: Vec<u32>,
 }
 
 impl Markets {
@@ -60,6 +63,7 @@ impl Markets {
             supply: vec![0.0; n],
             sales: vec![0.0; n],
             active: vec![true; n],
+            clip_ticks: vec![0; n],
         }
     }
 
@@ -119,12 +123,14 @@ impl Markets {
         }
     }
 
-    /// Price step of spec 8.2 for every active cell, after clearing:
-    /// dlnp = clip(kappa1 (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_max, c_max),
+    /// Price step of spec 8.2 for every active cell, after clearing, with the merchants'
+    /// expected inflation pi^e (ADR 0019):
+    /// dlnp = clip(pi^e + kappa1 (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_max, c_max),
     /// S* = coverage D, Q_eff and S*_eff floored at 1e-9 of the good's world mean Q over
     /// active cells. Local goods have coverage 0 so the stock term is absent. A good whose
-    /// world mean Q is 0 keeps its prices.
-    pub fn reprice(&mut self, p: &TradeParams) {
+    /// world mean Q is 0 keeps its prices. Each cell whose step is clipped counts the tick in
+    /// `clip_ticks`.
+    pub fn reprice(&mut self, p: &TradeParams, expected_inflation: f64) {
         let mut floor = [0.0; N_GOODS];
         let mut count = [0usize; N_GOODS];
         for (i, &q) in self.supply.iter().enumerate() {
@@ -142,10 +148,13 @@ impl Markets {
                 continue;
             }
             let (q, d) = (self.supply[i], self.demand[i]);
-            let mut dlnp = p.kappa1 * (d - q) / q.max(floor[g]);
+            let mut dlnp = expected_inflation + p.kappa1 * (d - q) / q.max(floor[g]);
             if p.coverage[g] > 0.0 {
                 let target = p.coverage[g] * d;
                 dlnp -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
+            }
+            if dlnp.abs() > p.c_max {
+                self.clip_ticks[i] += 1;
             }
             self.price[i] *= libm::exp(dlnp.clamp(-p.c_max, p.c_max));
         }
@@ -162,6 +171,7 @@ impl Encode for Markets {
         e.f64s(&self.supply);
         e.f64s(&self.sales);
         e.bools(&self.active);
+        e.u32s(&self.clip_ticks);
     }
 }
 
@@ -176,6 +186,7 @@ impl Decode for Markets {
             supply: d.f64s()?,
             sales: d.f64s()?,
             active: d.bools()?,
+            clip_ticks: d.u32s()?,
         };
         let n = m.price.len();
         let lens = [
@@ -186,6 +197,7 @@ impl Decode for Markets {
             m.supply.len(),
             m.sales.len(),
             m.active.len(),
+            m.clip_ticks.len(),
         ];
         if !n.is_multiple_of(N_GOODS) || lens.iter().any(|&l| l != n) {
             return Err(DecodeError(format!("market arrays {n} and {lens:?}")));
@@ -266,7 +278,7 @@ mod tests {
         clear(&mut m);
         // S' = 2.3 + 1.0 - 1.1 = 2.2 = S*, so only the flow term: 0.2 * 0.1
         let before = m.price[G];
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         let want = before * libm::exp(0.2 * (1.1 - 1.0));
         assert!((m.price[G] - want).abs() < 1e-12, "{}", m.price[G]);
         assert!(m.price[G] > before);
@@ -275,15 +287,71 @@ mod tests {
         let (mut m, p) = one();
         set(&mut m, G, 0.0, 1.0, 50.0);
         clear(&mut m);
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         assert_eq!(m.price[G], libm::exp(p.c_max));
 
         // clipped below: glut with stock far above target falls by exactly exp(-c_max)
         let (mut m, p) = one();
         set(&mut m, G, 100.0, 10.0, 0.1);
         clear(&mut m);
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         assert_eq!(m.price[G], libm::exp(-p.c_max));
+    }
+
+    #[test]
+    fn reprice_adds_expected_inflation() {
+        // traded: D = Q and S' = S* = 2 D; local: D = Q
+        let (mut m, p) = one();
+        set(&mut m, G, 2.0, 1.0, 1.0);
+        set(&mut m, L, 0.0, 1.0, 1.0);
+        clear(&mut m);
+        let mut spoiled = vec![0.0; N_GOODS];
+        m.clear_local(&mut spoiled);
+        assert_eq!(m.inventory[G], p.coverage[G] * m.demand[G]);
+        let pi = 0.0123;
+        m.reprice(&p, pi);
+        for c in [G, L] {
+            assert_eq!(m.price[c], libm::exp(pi), "cell {c}");
+        }
+        assert_eq!(m.clip_ticks[G], 0);
+        // deflation expected: the same, below 1
+        let (mut m, p) = one();
+        set(&mut m, G, 2.0, 1.0, 1.0);
+        clear(&mut m);
+        m.reprice(&p, -0.004);
+        assert_eq!(m.price[G], libm::exp(-0.004));
+    }
+
+    #[test]
+    fn clip_ticks_count_bindings() {
+        let mut m = Markets::new(2);
+        let p = rule();
+        let cells = [G, N_GOODS + G, L, N_GOODS + L];
+        // excess demand clips up, a glut clips down, a balanced cell does not clip
+        let tick = |m: &mut Markets, pi: f64| {
+            set(m, G, 0.0, 1.0, 50.0);
+            set(m, N_GOODS + G, 100.0, 10.0, 0.1);
+            set(m, L, 0.0, 1.0, 1.0);
+            set(m, N_GOODS + L, 0.0, 1.0, 1.0);
+            clear(m);
+            let mut spoiled = vec![0.0; 2 * N_GOODS];
+            m.clear_local(&mut spoiled);
+            m.reprice(&p, pi);
+            cells.map(|c| m.clip_ticks[c])
+        };
+        assert_eq!(tick(&mut m, 0.0), [1, 1, 0, 0]);
+        assert_eq!(tick(&mut m, 0.0), [2, 2, 0, 0]);
+        // expected inflation beyond the clip binds on the balanced cells too
+        assert_eq!(tick(&mut m, 0.5), [3, 3, 1, 1]);
+        assert_eq!(m.price[L], libm::exp(p.c_max));
+        // an inactive cell never counts
+        m.active[N_GOODS + L] = false;
+        assert_eq!(tick(&mut m, -0.5), [4, 4, 2, 1]);
+        let others: u32 = (0..2 * N_GOODS)
+            .filter(|c| !cells.contains(c))
+            .map(|c| m.clip_ticks[c])
+            .sum();
+        assert_eq!(others, 0);
     }
 
     #[test]
@@ -295,7 +363,7 @@ mod tests {
         let mut spoiled = vec![0.0; N_GOODS];
         m.clear_local(&mut spoiled);
         assert_eq!(m.inventory[L], 0.0);
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         assert!((m.price[L] - libm::exp(0.2 * 0.1)).abs() < 1e-12);
     }
 
@@ -325,7 +393,7 @@ mod tests {
         assert_eq!(fill[G], 0.5);
         assert!(fill[N_GOODS + G].is_nan() && fill[L].is_nan());
         assert_eq!((m.sales[N_GOODS + G], m.sales[L]), (0.0, 0.0));
-        m.reprice(&rule());
+        m.reprice(&rule(), 0.0);
         assert_eq!(m.price[N_GOODS + G], 3.0);
     }
 
@@ -341,7 +409,7 @@ mod tests {
         let mut fill = vec![0.0; 2 * N_GOODS];
         for _ in 0..50 {
             fill = clear(&mut m);
-            m.reprice(&p);
+            m.reprice(&p, 0.0);
             assert!(m.price.iter().all(|x| x.is_finite() && *x > 0.0));
             assert!(m.inventory.iter().all(|&s| s >= 0.0));
             for g in 0..7 {
@@ -361,7 +429,7 @@ mod tests {
         set(&mut m, G, 0.0, 0.0, 4.0);
         m.price[G] = 2.5;
         clear(&mut m);
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         assert_eq!(m.price[G], 2.5);
     }
 
@@ -375,7 +443,7 @@ mod tests {
         set(&mut m, 2 * N_GOODS + G, 0.0, 1e12, 1.0);
         m.active[2 * N_GOODS + G] = false;
         clear(&mut m);
-        m.reprice(&p);
+        m.reprice(&p, 0.0);
         // province 1: floor = 1e-9 * 2, flow term 0.2 * 1 / 2e-9 clips; stock term pushes down
         // from S' = 0 vs S* = 2 (kappa2 * 1) but the clip still binds upward
         assert_eq!(m.price[N_GOODS + G], libm::exp(p.c_max));
@@ -404,7 +472,7 @@ mod tests {
         for _ in 0..10 {
             clear(&mut m);
             m.clear_local(&mut spoiled);
-            m.reprice(&p);
+            m.reprice(&p, 0.0);
         }
         for (a, b) in m.price.iter().zip(&before) {
             assert_eq!(a.to_bits(), b.to_bits());
@@ -547,6 +615,7 @@ mod tests {
             e.f64s(&[0.0; N_GOODS]);
         }
         e.bools(&[true; 3]);
+        e.u32s(&[0; N_GOODS]);
         let bytes = e.into_bytes();
         assert!(Markets::decode(&mut Decoder::new(&bytes)).is_err());
     }

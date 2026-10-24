@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 and 0023
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018, 0019 and 0023
 
 ## Purpose
 
@@ -101,6 +101,7 @@ employment.
 | Output, sales, profit last tick | enterprise | `f64` | | |
 | Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | one month of base input use |
 | Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u_2000) L^s_i) |
+| Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
 | Accounts | pops, enterprises, rebate (one per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
 
@@ -154,11 +155,19 @@ checks the closed form against numerical maximization. Employment moves toward t
 L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t exceeds L^s_i, all are scaled down pro
 rata.
 
-**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i:
+**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, expected inflation pi^e
+(trade SPEC, Origin market; ADR 0019):
 
 ```
-dlnw = clip( kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
+dlnw = clip( pi^e + kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
 ```
+
+Unit pass-through of pi^e is a homogeneity restriction, not a parameter; downward rigidity
+applies to nominal cuts, so a real cut that is a nominal rise is not damped. pi^e tracks the
+world price index over buyer prices with base consumption weights; cells whose buyer price is
+infinite (no reachable origin) are left out of the index (owner ruling, MIGRATION Task 6), so a
+change in reachability moves its weights. c_max is P03c; every tick the clip binds is counted
+per province (`clip_ticks` in `run_wages`).
 
 Frictionless mode (V1): w_i solves sum_g L*_ig(w) = L^s_i exactly (monotone in w; safeguarded
 Newton in ln w), and eta = 1. The unemployment rate u_i = 1 - sum_g L_ig / L^s_i applies equally
@@ -224,13 +233,13 @@ optional, 19.1).
 | System ID | Name | Reads | Writes | Position (4.4) |
 |---|---|---|---|---|
 | T1 | deliver (trade) | pipeline | pops' consumption, enterprise input stocks | first |
-| E1 | labour | prices, last tick's buyer prices, wages, A | L*, L, wages, unemployment | labour market |
+| E1 | labour | prices, last tick's buyer prices, wages, pi^e, A | L*, L, wages, wage clip counts, unemployment | labour market |
 | E2 | produce | L, input stocks | input use, output to the province's market (Q), wages paid | production |
 | E3 | demand | pop money, prices, output, pipeline | buyer prices q and leads L, household demand, enterprise input orders | consumption demand |
 | T2 | source (trade) | traded spending, prices, kernel | orders at origin markets | inter-province trade |
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
-| T4 | reprice (trade) | D, Q, S | prices | markets |
+| T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
 | E4 | distribute | enterprise and market cash flow, rebates | pop money for next tick | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
@@ -310,11 +319,13 @@ texture fed from core columns.
 ## Test plan
 
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
-  numerical maximization, wage step and clip, frictionless wage root, CES demand shares,
+  numerical maximization, wage step and clip, rigidity on nominal cuts
+  (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, CES demand shares,
   income split, rounding of payments.
 - Property (proptest): money and goods conservation through a full tick on random small
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
-  identical).
+  identical; pi^e is a log difference and stays); pi^e follows the world price index
+  (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
 - Python (pytest, hypothesis): ICIO aggregation preserves totals; downscaling preserves national
   VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
   worlds; PPML recovers a known elasticity on synthetic gravity data.
@@ -331,8 +342,10 @@ texture fed from core columns.
   manufacturing falls back to gridded GDP for those countries.
 - 2000 tariff detail beyond importer x two groups (WTO IDB is closed-source only, fetch).
 - Stability on the full pack: on the fixture under origin clearing small deviations decay by
-  0.9956 (frictionless) and 0.9958 (default) per tick at the P2 defaults, the same with every
-  crossing lag at 3 (trade SPEC, P03a, P03b). Re-measure on the pack in Task 20.
+  0.9963 (frictionless) and 0.9969 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
+  0, expectation gain 0.006; trade SPEC, Stability region and P03a, P03b, P45). The slowest
+  mode is the world price level, which expected inflation turns into a damped oscillation
+  (trade SPEC, Nominal mode). Re-measure on the pack in Task 20.
 - The run from the data state passes through a deep coal-led shortage before it converges (the
   equilibrium's coal output is about twice base output and intermediate demand is inelastic in
   units); V1 holds on the fixture at 1,200 ticks.

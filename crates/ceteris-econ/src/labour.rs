@@ -10,10 +10,11 @@ const MAX_ITER: usize = 200;
 /// Relative tolerance on the wage.
 const TOL: f64 = 1e-13;
 
-/// P39, P40: dlnw = clip(kappa_w x, -c_max, c_max), scaled by (1 - delta_w) when negative.
-/// `excess` is x_i = (sum L* - L^s) / L^s. Returns the new wage.
-pub fn wage_step(w: f64, excess: f64, p: &EconParams, c_max: f64) -> f64 {
-    let mut dlnw = (p.kappa_w * excess).clamp(-c_max, c_max);
+/// P39, P40: dlnw = clip(pi^e + kappa_w x, -c_max, c_max), scaled by (1 - delta_w) when
+/// negative: downward rigidity applies to nominal cuts (ADR 0019). `excess` is
+/// x_i = (sum L* - L^s) / L^s, `expected_inflation` pi^e. Returns the new wage.
+pub fn wage_step(w: f64, excess: f64, expected_inflation: f64, p: &EconParams, c_max: f64) -> f64 {
+    let mut dlnw = (expected_inflation + p.kappa_w * excess).clamp(-c_max, c_max);
     if dlnw < 0.0 {
         dlnw *= 1.0 - p.delta_w;
     }
@@ -120,20 +121,38 @@ mod tests {
     #[test]
     fn wage_step_rigidity_halves_cuts() {
         let p = EconParams::default();
-        let up = wage_step(2.0, 0.5, &p, 0.1);
+        let up = wage_step(2.0, 0.5, 0.0, &p, 0.1);
         assert!((up - 2.0 * libm::exp(0.05)).abs() < 1e-15);
-        let down = wage_step(2.0, -0.5, &p, 0.1);
+        let down = wage_step(2.0, -0.5, 0.0, &p, 0.1);
         assert!((down - 2.0 * libm::exp(-0.025)).abs() < 1e-15);
         // Clip applies before rigidity.
-        let big_down = wage_step(2.0, -10.0, &p, 0.1);
+        let big_down = wage_step(2.0, -10.0, 0.0, &p, 0.1);
         assert!((big_down - 2.0 * libm::exp(-0.05)).abs() < 1e-15);
-        let big_up = wage_step(2.0, 10.0, &p, 0.1);
+        let big_up = wage_step(2.0, 10.0, 0.0, &p, 0.1);
         assert!((big_up - 2.0 * libm::exp(0.1)).abs() < 1e-15);
         // Frictionless: no rigidity.
         let f = EconParams::frictionless();
-        let down = wage_step(2.0, -0.5, &f, 0.1);
+        let down = wage_step(2.0, -0.5, 0.0, &f, 0.1);
         assert!((down - 2.0 * libm::exp(-0.05)).abs() < 1e-15);
-        assert_eq!(wage_step(2.0, 0.0, &p, 0.1), 2.0);
+        assert_eq!(wage_step(2.0, 0.0, 0.0, &p, 0.1), 2.0);
+    }
+
+    #[test]
+    fn wage_rigidity_applies_to_nominal_cuts() {
+        let p = EconParams::default();
+        // a real cut that is a nominal rise: no rigidity, 0.02 - 0.1 * 0.1
+        let w = wage_step(2.0, -0.1, 0.02, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(0.01)).abs() < 1e-15);
+        // a nominal cut: halved, (0.02 - 0.1 * 0.5) / 2
+        let w = wage_step(2.0, -0.5, 0.02, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(-0.015)).abs() < 1e-15);
+        // expected deflation turns full employment into a nominal cut
+        let w = wage_step(2.0, 0.0, -0.01, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(-0.005)).abs() < 1e-15);
+        // with no excess the wage moves by pi^e; the clip applies to the sum
+        let w = wage_step(2.0, 0.0, 0.03, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(0.03)).abs() < 1e-15);
+        assert!((wage_step(2.0, 0.5, 0.08, &p, 0.1) - 2.0 * libm::exp(0.1)).abs() < 1e-15);
     }
 
     const ENTERPRISES: [(f64, f64, f64, f64, f64); 4] = [

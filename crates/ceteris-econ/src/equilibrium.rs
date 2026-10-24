@@ -117,13 +117,14 @@ impl EconWorld {
 
     /// Moves a world fresh from [`EconWorld::new`] (crossing lags may have been set) to the
     /// steady state of `solution`, at the start of a tick: its prices (cells without a market
-    /// keep price 1), wages, employment and output; the price index at those prices; every
-    /// buyer's pipeline holding the shipments of the last ticks; input stocks such that this
-    /// tick's orders (up to the inventory position of E3) replace exactly one month of use,
-    /// traded inputs bought at the delivered unit price, a Y q_d; origin
-    /// inventories at coverage of output; and each pop holding last tick's dividends and
-    /// rebates, so that with this tick's wages it spends exactly its steady-state income
-    /// (found by iterating, since rebates and market cash depend on spending).
+    /// keep price 1), wages, employment and output; the price index at those prices and the
+    /// world price level, with no expected inflation; every buyer's pipeline holding the
+    /// shipments of the last ticks; input stocks such that this tick's orders (up to the
+    /// inventory position of E3) replace exactly one month of use, traded inputs bought at the
+    /// delivered unit price, a Y q_d; origin inventories at coverage of output; and each pop
+    /// holding last tick's dividends and rebates, so that with this tick's wages it spends
+    /// exactly its steady-state income (found by iterating, since rebates and market cash
+    /// depend on spending).
     ///
     /// The solution must come from the export of these inputs with these structural
     /// parameters (adjustment speeds, the frictionless and rationing switches are free);
@@ -187,6 +188,9 @@ impl EconWorld {
             }
         }
         self.refresh_price_index();
+        // a steady state has no inflation: pi^e = 0 and the level at the solution's prices
+        self.expected_inflation = 0.0;
+        self.price_level = self.world_price_index();
         let price = |cell: usize| self.markets.price[cell];
         let index = self.price_index.clone();
         let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();

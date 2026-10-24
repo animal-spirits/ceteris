@@ -85,12 +85,14 @@ fn employment_within_bounds() {
     }
 }
 
-/// Multiplies prices, the price index, wages and every pop's money by `scale`; panics on
-/// ledger overflow.
+/// Multiplies prices, the price index, the last world price level, wages and every pop's
+/// money by `scale`; panics on ledger overflow. Expected inflation is a log difference and
+/// stays.
 fn scaled(mut w: EconWorld, scale: i64) -> EconWorld {
     let s = scale as f64;
     w.markets.price.iter_mut().for_each(|p| *p *= s);
     w.price_index.iter_mut().for_each(|p| *p *= s);
+    w.price_level *= s;
     w.wage.iter_mut().for_each(|x| *x *= s);
     let acc = w.layout().accounts.clone();
     for &pop in &acc.pop {
@@ -183,6 +185,54 @@ fn homogeneity_of_degree_zero() {
             assert_same(what, &a, &b, &size);
         }
     }
+}
+
+/// pi^e <- pi^e + g (ln(I_t / I_{t-1}) - pi^e) after T4, I the world price index at the
+/// buyer prices of the tick (ADR 0019).
+#[test]
+fn expected_inflation_follows_the_world_index() {
+    let mut sim = sim_of(world(EconParams::default()));
+    let g = sim.world().trade().expectation_gain;
+    assert!(g > 0.0 && g < 1.0);
+    let mut level = sim.world().world_price_index();
+    assert_eq!(sim.world().price_level, level);
+    assert_eq!(sim.world().expected_inflation, 0.0);
+    let mut pi = 0.0;
+    for tick in 0..36 {
+        sim.step().unwrap();
+        let w = sim.world();
+        let now = w.world_price_index();
+        pi += g * (libm::log(now / level) - pi);
+        assert_eq!(w.price_level, now, "tick {tick}");
+        assert!((w.expected_inflation - pi).abs() <= 1e-15, "tick {tick}");
+        level = now;
+    }
+    assert!(pi.abs() > 1e-6, "the data state never moved the index");
+}
+
+/// Expected inflation above c_max makes every price step and every nominal wage step bind;
+/// a Walrasian wage has no step to clip.
+#[test]
+fn world_counts_clip_bindings() {
+    for params in [EconParams::default(), EconParams::frictionless()] {
+        let frictionless = params.frictionless;
+        let mut w = world(params);
+        w.expected_inflation = 10.0;
+        let mut sim = sim_of(w);
+        sim.step().unwrap();
+        let w = sim.world();
+        for (c, &active) in w.markets.active.iter().enumerate() {
+            assert_eq!(w.markets.clip_ticks[c], u32::from(active), "cell {c}");
+        }
+        let want = u32::from(!frictionless);
+        assert!(w.wage_clip_ticks.iter().all(|&n| n == want));
+    }
+    let mut sim = sim_of(world(EconParams::default()));
+    sim.run_until(120).unwrap();
+    let w = sim.world();
+    let counts = w.markets.clip_ticks.iter().chain(&w.wage_clip_ticks);
+    assert!(counts.clone().all(|&n| n <= 120));
+    assert!(counts.clone().any(|&n| n > 0), "the data state never clips");
 }
 
 #[test]
