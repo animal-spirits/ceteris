@@ -55,7 +55,8 @@ crates/ceteris-econ/
   src/bin/ceteris.rs  export | run
   tests/p2_properties.rs  tests/golden.rs  tests/p2_acceptance.rs  benches/econ.rs
 python/ceteris/packs/econ/  goods.py icio.py people.py downscale.py tariffs.py gateways.py build.py
-python/ceteris/reference/   io.py model.py solve.py sinkhorn.py calibrate.py ppml.py __main__.py
+python/ceteris/reference/   io.py model.py solve.py sinkhorn.py calibrate.py ppml.py uniqueness.py __main__.py
+python/ceteris/calibrate/   gravity.py (direct estimation, ADR 0022)
 python/tests/  test_econ_pack.py test_reference.py test_p2_gate.py
 tests/golden/  p2-econ.txt  p2-pack.txt  p2-fixture/ (export + reference solution)
 ```
@@ -338,14 +339,15 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 ### Task 18: Calibration
 
-**Files:** Create `python/ceteris/reference/calibrate.py`; modify `__main__.py`
+**Files:** Create `python/ceteris/calibrate/{__init__,gravity}.py`, `python/ceteris/reference/calibrate.py`; modify `__main__.py`, `python/ceteris/packs/sources.toml` (the Yotov et al. sample's licence row, added with its fetch)
 
 **Interfaces:** Produces `calibrate.productivity(inp: Inputs) -> (a: np.ndarray, residuals)`: one joint Newton-Krylov solve for ln p, ln w, ln A of traded enterprises (equilibrium VA = `va_target`) and ln A per (country, local good) (national VA = ICIO); `python -m ceteris.reference calibrate --pack data/packs/2000` runs `cargo run --release --bin ceteris -- export --pack ...` to a temp dir, solves, writes `data/packs/2000/econ_calib.arrow`, prints the residual summary (count and largest relative miss).
 
-- [ ] **Step 1: Write failing test** `test_calibration_recovers_fixture_productivity` (perturb the fixture's A, export, calibrate against its own equilibrium VA: recovered A within 1e-8).
-- [ ] **Step 2: Implement; run** the test; expected: PASS.
-- [ ] **Step 3: Run** calibration on the full pack; record residual counts in `tests/golden/p2-pack.txt` alongside the `econ_calib.arrow` hash (bless).
-- [ ] **Step 4: Commit** `feat(reference): calibrate p2 productivity against 2000 value added`
+- [ ] **Step 1: Estimate trade costs directly (ADR 0022)** in `python/ceteris/calibrate/gravity.py`, PPML from `reference/ppml.py`. First `test_gravity_reproduces_yotov_2016`: the code reproduces the published PPML estimates of Yotov, Piermartini, Monteiro and Larch (2016, "An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model", WTO and UNCTAD) on their sample, to the printed precision (fetched to the cache with its licence row in `sources.toml`; skips without the cache). Then PPML structural gravity on 2000 BACI per theta class (ADR 0023), exporter and importer fixed effects, with costs between countries the least-cost (S05) costs of the pack built in Task 17 (route choice is deferred past P2, ADR 0017): minus the coefficient on ln(1 + tariff) is the class's theta, a border term on a sample with domestic flows (2000 ICIO output less exports) gives the border friction P05, and the S05 path length by mode gives the mode cost ratios P04. Outputs enter the pack with provenance "data" (not "calibrated") and the P01, P04 and P05 rows of the registers say so. Commit `feat(calibrate): estimate theta, border friction and mode costs by ppml on 2000 baci`.
+- [ ] **Step 2: Write failing test** `test_calibration_recovers_fixture_productivity` (perturb the fixture's A, export, calibrate against its own equilibrium VA: recovered A within 1e-8). Productivity calibration runs at the Step 1 estimates.
+- [ ] **Step 3: Implement; run** the test; expected: PASS.
+- [ ] **Step 4: Run** calibration on the full pack; record residual counts in `tests/golden/p2-pack.txt` alongside the `econ_calib.arrow` hash (bless).
+- [ ] **Step 5: Commit** `feat(reference): calibrate p2 productivity against 2000 value added`
 
 ### Task 19: Benchmarks
 
@@ -363,7 +365,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Interfaces:** Consumes everything above.
 
-- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (runs `ceteris run --pack ... --ticks 1200 --frictionless`, solves the reference, applies the V1 tolerances of the econ SPEC), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
+- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (first `uniqueness.spectral_bound` at the pack's theta and `uniqueness.value_added_share`, then runs `ceteris run --pack ... --ticks 1200 --frictionless` and solves the reference from the data state; `uniqueness.v1_mode` picks the check: in tolerance mode the V1 tolerances of the econ SPEC, in report mode a report of which equilibrium each model reaches, per the econ SPEC P2 gate), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
 - [ ] **Step 2: Run** `cargo test -p ceteris-econ --release --test p2_acceptance` and `uv run --project python pytest python/tests/test_p2_gate.py`.
 - [ ] **Step 3: If V1 fails,** use superpowers:systematic-debugging; no parameter changes to pass. **If H2 misses, stop and report the estimate to the owner before changing anything** (owner decision, ADR 0013).
 - [ ] **Step 4: Commit** `test(econ): add the p2 gate on the full pack`
