@@ -6,13 +6,13 @@ pub struct EconParams {
     pub sigma_demand: f64,
     /// P08 capital-labour (F-L) substitution sigma_FL, prior 0.5 to 1.2.
     pub sigma_fl: f64,
-    /// P37 wage adjustment speed kappa_w, per month.
+    /// P39 wage adjustment speed kappa_w, per month.
     pub kappa_w: f64,
-    /// P38 downward wage rigidity delta_w.
+    /// P40 downward wage rigidity delta_w.
     pub delta_w: f64,
-    /// P39 employment adjustment speed eta, per month.
+    /// P41 employment adjustment speed eta, per month.
     pub eta: f64,
-    /// P40 education efficiency e_k: below secondary, secondary, tertiary.
+    /// P42 education efficiency e_k: below secondary, secondary, tertiary.
     pub edu_eff: [f64; 3],
     /// Walrasian wage, eta = 1 and delta_w = 0 (V1 equilibrium nesting).
     pub frictionless: bool,

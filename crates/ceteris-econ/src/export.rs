@@ -358,11 +358,11 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("border_nu", "P05"),
         ("sigma_demand", "P06"),
         ("sigma_fl", "P08"),
-        ("kappa_w", "P37"),
-        ("delta_w", "P38"),
-        ("eta", "P39"),
-        ("edu_eff", "P40"),
-        ("time_cost", "P41"),
+        ("kappa_w", "P39"),
+        ("delta_w", "P40"),
+        ("eta", "P41"),
+        ("edu_eff", "P42"),
+        ("time_cost", "P43"),
     ];
     let register: Vec<String> = register
         .iter()
@@ -708,8 +708,8 @@ mod tests {
             "{json}"
         );
         for id in [
-            "P01", "P02", "P03a", "P03b", "P03c", "P05", "P41", "P06", "P08", "P37", "P38", "P39",
-            "P40",
+            "P01", "P02", "P03a", "P03b", "P03c", "P05", "P43", "P06", "P08", "P39", "P40", "P41",
+            "P42",
         ] {
             assert!(
                 json.contains(&format!("\"{id}\"")),

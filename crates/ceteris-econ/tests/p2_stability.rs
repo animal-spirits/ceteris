@@ -2,7 +2,7 @@
 //! (`tests/golden/p2-fixture/reference`, written by `python -m ceteris.reference solve`) and
 //! from the data state. Slow in debug builds; run with `--release` for speed.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ceteris_core::sim::Sim;
@@ -12,8 +12,16 @@ use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::TradeParams;
 
+/// Fixture export directory; `CETERIS_FIXTURE_DIR` overrides the committed one.
+fn fixture_dir() -> PathBuf {
+    std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture"),
+        PathBuf::from,
+    )
+}
+
 fn reference() -> Equilibrium {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
+    let dir = fixture_dir().join("reference");
     Equilibrium::read(&dir).expect("reference solution of the fixture")
 }
 

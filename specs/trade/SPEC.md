@@ -56,7 +56,7 @@ tau_leg,g = 1 + c * w_g + lambda_g * T       (iceberg, S05 = iceberg; geo SPEC m
 K_leg,g   = tau_leg,g ^ -theta
 ```
 
-lambda_g is the ad valorem cost of a day in transit (P41). Inside a province trade is costless
+lambda_g is the ad valorem cost of a day in transit (P43). Inside a province trade is costless
 (A2): K_oo = 1.
 
 **Active destinations.** Market (d, g) is active if anyone at d can buy g: its country's final
@@ -173,7 +173,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03c | Price step clip c_max | 0.1 log points per month | Free (numerical) |
 | P04 | Mode costs | geo SPEC | Literature + calibrated |
 | P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3 | Calibrated (P9) |
-| P41 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
+| P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
 
 Data, not parameters: weight per value w_g (BACI 2000), tariffs t (WDI applied rates, CEPII
 agreement flags), gateway set (pack).

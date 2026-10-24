@@ -20,7 +20,7 @@
 - Golden files are rewritten only with `CETERIS_BLESS=1`; a commit that changes one says why.
 - Do not edit `app/` or `crates/ceteris-app` (the native app is a separate effort, ADR 0011); P2's UI is a later plan once the native app reaches parity.
 - Commits: Conventional Commits, imperative, lowercase, no period, no attribution lines, no em dashes anywhere in code, docs or messages.
-- New parameters exist only with their register ID in a doc comment (`/// P37`), values from the spec's Parameters tables.
+- New parameters exist only with their register ID in a doc comment (`/// P39`), values from the spec's Parameters tables.
 
 ## Review Focus
 
@@ -38,7 +38,7 @@
 crates/ceteris-core/src/sim.rs           State::restore (static inputs survive snapshots)
 crates/ceteris-trade/
   src/lib.rs        goods.rs (N_GOODS, TRADED, names, tariff group)
-  src/params.rs     TradeParams (P01, P02, P03a-c, P05, P41)
+  src/params.rs     TradeParams (P01, P02, P03a-c, P05, P43)
   src/network.rs    Network, Leg: graph-independent leg costs
   src/kernel.rs     Kernel::build, access sums (v, u, Pi)
   src/route.rs      route(): flows, payments, tariffs, losses, netback
@@ -145,7 +145,7 @@ tests/golden/  p2-econ.txt  p2-pack.txt  p2-fixture/ (export + reference solutio
 
 **Interfaces:**
 - Produces:
-  - `EconParams { sigma_demand: 0.6 /* P06 */, sigma_fl: 0.8 /* P08 */, kappa_w: 0.1 /* P37 */, delta_w: 0.5 /* P38 */, eta: 0.3 /* P39 */, edu_eff: [1.0, 1.5, 2.3] /* P40 */, frictionless: false }`; `EconParams::frictionless()` sets `frictionless = true, eta = 1, delta_w = 0`
+  - `EconParams { sigma_demand: 0.6 /* P06 */, sigma_fl: 0.8 /* P08 */, kappa_w: 0.1 /* P39 */, delta_w: 0.5 /* P40 */, eta: 0.3 /* P41 */, edu_eff: [1.0, 1.5, 2.3] /* P42 */, frictionless: false }`; `EconParams::frictionless()` sets `frictionless = true, eta = 1, delta_w = 0`
   - `production::rho(sigma) -> f64`; `value_added(a, va0, l0, s_l, rho, l) -> f64`; `labour_target(p_va, w, a, va0, l0, s_l, rho, l_supply) -> f64` (spec closed form, corners, Cobb-Douglas when |rho| < 1e-9)
   - `labour::wage_step(w, excess, p: &EconParams, c_max) -> f64`; `labour::clearing_wage(w_guess, l_supply, demand: impl Fn(f64) -> f64) -> f64` (safeguarded Newton in ln w, bisection fallback, relative tolerance 1e-13); `labour::allocate(targets, prev, eta, l_supply, out: &mut [f64])`
   - `demand::ces(omega: &[f64; 10], price: &[f64; 10], money: f64, sigma: f64, out: &mut [f64; 10])`
@@ -367,7 +367,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 ### Task 21: Records
 
-**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P37 to P41, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
+**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P43, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
 
 - [ ] **Step 1: Write** the gate evidence (commands, measured V1 maxima, H2 estimate with standard error, benchmark medians).
 - [ ] **Step 2: Commit** `docs(specs): record p2 gate evidence`

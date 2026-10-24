@@ -106,7 +106,7 @@ impl EconInputs {
         1.0 - (0..N_GOODS).map(|k| self.a(c, k, g)).sum::<f64>()
     }
 
-    /// Effective labour supply per province, L^s_i = sum_k e_k LF_k (P40 `edu_eff`).
+    /// Effective labour supply per province, L^s_i = sum_k e_k LF_k (P42 `edu_eff`).
     pub fn labour_supply(&self, edu_eff: &[f64; N_EDU]) -> Vec<f64> {
         let mut out = vec![0.0; self.n_provinces()];
         for k in 0..self.n_pops() {

@@ -138,13 +138,13 @@ L* = L0 * ( (q^(rho/(1-rho)) - s_L) / (1 - s_L) )^(-1/rho)
 L* = 0 if p_VA <= 0. When the bracket is not positive the target is a corner: zero if rho < 0,
 the province's labour supply if rho > 0. Cobb-Douglas: L* = L0 q^(1/(s_L - 1)). A unit test
 checks the closed form against numerical maximization. Employment moves toward the target:
-L_t = L_{t-1} + eta (L* - L_{t-1}) (P39). If sum_g L_t exceeds L^s_i, all are scaled down pro
+L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t exceeds L^s_i, all are scaled down pro
 rata.
 
 **Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i:
 
 ```
-dlnw = clip( kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P37, P38)
+dlnw = clip( kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
 ```
 
 Frictionless mode (V1): w_i solves sum_g L*_ig(w) = L^s_i exactly (monotone in w; safeguarded
@@ -239,10 +239,10 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 |---|---|---|---|
 | P06 | Goods substitution sigma | 0.3 to 0.9, start 0.6 | Literature |
 | P08 | F-L substitution sigma_FL | 0.5 to 1.2, start 0.8 | Literature |
-| P37 | Wage adjustment speed kappa_w | 0.05 to 0.5 per month, start 0.1 | Free |
-| P38 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
-| P39 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
-| P40 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
+| P39 | Wage adjustment speed kappa_w | 0.05 to 0.5 per month, start 0.1 | Free |
+| P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
+| P41 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
+| P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
 populations, education and labour-force shares. Calibrated: A (inversion, not estimation).
@@ -262,7 +262,7 @@ on generated small worlds in CI and on the full pack locally.
   run) on ln distance (CEPII population-weighted) and contiguity, with exporter and importer
   effects, excluding domestic pairs: distance coefficient in -1.1 to -0.7. H2 blocks the gate
   (owner decision). Nothing is fitted to it: costs come from P04 and the literature time cost
-  P41. If it misses, work stops and the miss is reported to the owner before any parameter
+  P43. If it misses, work stops and the miss is reported to the owner before any parameter
   moves; any change then goes through the register.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
