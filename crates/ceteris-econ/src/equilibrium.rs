@@ -15,7 +15,6 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{ARRIVAL_SLOTS, HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
 
-use crate::demand::ces;
 use crate::export::ExportError;
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
@@ -134,6 +133,7 @@ impl EconWorld {
             &self.inputs,
             &EconParams {
                 sigma_demand: self.params.sigma_demand,
+                pigl: self.params.pigl.clone(),
                 sigma_fl: self.params.sigma_fl,
                 edu_eff: self.params.edu_eff,
                 ..EconParams::default()
@@ -243,8 +243,7 @@ impl EconWorld {
                 let row: [f64; N_GOODS] = index[i * N_GOODS..(i + 1) * N_GOODS]
                     .try_into()
                     .expect("one row of goods");
-                let omega = &inp.countries.omega[inp.country_of(i)];
-                ces(omega, &row, income[k], self.params.sigma_demand, &mut x);
+                lay.pop_demand(inp, &self.params, k, &row, income[k], &mut x);
                 for &g in &traded {
                     pop_spend[k * N_GOODS + g] = if x[g] > 0.0 { x[g] * row[g] } else { 0.0 };
                 }

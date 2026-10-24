@@ -28,7 +28,6 @@ use ceteris_trade::kernel::Csr;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{N_GOODS, dispatch as dispatch_good, source as source_good};
 
-use crate::demand::ces;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
@@ -322,8 +321,9 @@ pub fn produce(w: &mut EconWorld) {
 }
 
 /// E3: refreshes the buyer prices at the current prices, then posts demand. Households
-/// spend their whole money balance with CES over goods at the delivered unit price q_d of
-/// traded goods and the posted price of local goods. Enterprises order up to an inventory
+/// spend their whole money balance with PIGL across categories and CES within them
+/// (`Layout::pop_demand`, ADR 0021) at the delivered unit price q_d of traded goods and the
+/// posted price of local goods. Enterprises order up to an inventory
 /// position (stock plus goods on order) of `(1 + COVER + L) a_kg Y_cap` of each input k:
 /// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
 /// capacity output at this tick's employment and L the expected months in transit of the
@@ -338,7 +338,6 @@ pub fn demand(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
     let n_pops = inp.n_pops();
-    let sigma = w.params.sigma_demand;
     let r = rho(w.params.sigma_fl);
     let sc = &mut w.scratch;
     w.markets.demand.fill(0.0);
@@ -351,7 +350,7 @@ pub fn demand(w: &mut EconWorld) {
             .expect("one row of goods");
         for k in lay.pops(i) {
             let money = to_numeraire(w.ledger.money(acc.pop[k]));
-            ces(&inp.countries.omega[c], &prices, money, sigma, &mut x);
+            lay.pop_demand(inp, &w.params, k, &prices, money, &mut x);
             for g in 0..N_GOODS {
                 let at = k * N_GOODS + g;
                 sc.pop_demand[at] = x[g];

@@ -19,6 +19,8 @@ pub struct Countries {
     pub s_l: Vec<f64>,
     /// 2000 unemployment rate.
     pub unemployment: Vec<f64>,
+    /// 2000 Gini of income, the dispersion of each pop's lognormal income (ADR 0021).
+    pub gini: Vec<f64>,
 }
 
 /// Per-province data, indexed by province.
@@ -150,7 +152,10 @@ impl EconInputs {
         let (nc, np) = (self.n_countries(), self.n_provinces());
         let c = &self.countries;
         assert!(
-            c.omega.len() == nc && c.io.len() == nc && c.unemployment.len() == nc,
+            c.omega.len() == nc
+                && c.io.len() == nc
+                && c.unemployment.len() == nc
+                && c.gini.len() == nc,
             "country columns disagree in length"
         );
         assert_eq!(
@@ -168,6 +173,11 @@ impl EconInputs {
                 (0.0..1.0).contains(&c.unemployment[k]),
                 "country {k}: unemployment {}",
                 c.unemployment[k]
+            );
+            assert!(
+                (0.0..1.0).contains(&c.gini[k]),
+                "country {k}: Gini {}",
+                c.gini[k]
             );
             assert!(
                 c.omega[k].iter().all(|&w| w >= 0.0) && c.omega[k].iter().any(|&w| w > 0.0),
@@ -287,6 +297,7 @@ impl EconInputs {
             io,
             s_l,
             unemployment,
+            gini,
         } = countries;
         let ProvinceData {
             country,
@@ -322,6 +333,7 @@ impl EconInputs {
         e.f64s(io.as_flattened());
         e.f64s(s_l);
         e.f64s(unemployment);
+        e.f64s(gini);
         u16s(&mut e, country);
         e.f64s(population);
         e.f64s(w0);

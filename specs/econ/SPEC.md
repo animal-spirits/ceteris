@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018, 0019 and 0023
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018, 0019, 0021 and 0023
 
 ## Purpose
 
@@ -19,7 +19,7 @@ investment, finance, the state and politics are later phases.
 | Design | P2 | Why |
 |---|---|---|
 | Enterprises set output from demand forecasts and inventory coverage (7.3) | Price-taking enterprises move employment toward the profit-maximizing level at expected (current) prices; inventory coverage lives with the province market (trade SPEC) | Province markets absorb all output at the posted price, so firms face prices, not demand curves; this rule nests the GE optimum exactly. The forecast rule can return as a switch when firms get pricing power |
-| Non-homothetic CES demand over categories (8.6, A4) | Homothetic CES over the 10 goods | Non-homotheticity matters only with income growth, which P2 does not have; it would be a mechanism without a test (21.2, ablation rule) |
+| PIGL over five categories: food, energy, housing, manufactures, services (8.6) | PIGL over the three categories the form was estimated on, A (goods 0, 3), M (goods 1, 2, 4, 5, 6), S (goods 7, 8, 9), with a CES over goods within each (ADR 0021, controller ruling 2026-10-24) | Alder, Boppart and Mueller (2022) estimate agriculture, manufacturing and services only; crude oil, coal and utilities have no clean counterpart there and are placed by the nearest category |
 | Intermediates Leontief plus a CES energy nest (7.2) | All intermediates Leontief | The energy nest comes with energy and emissions (P8) |
 | VA over K, effective L by education, land or resources T (7.2) | Normalized CES over one fixed factor F (capital, land and resources together) and effective labour | No investment in P2, so K and T never move separately; one fixed factor keeps the reference model small |
 | Pops keyed by province, ethnic group, education, labour status (6.1) | Province x education (3 levels); labour status as employed and unemployed counts inside each pop | Ethnicity and status transitions are P4 |
@@ -58,7 +58,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, HS to ISIC concordance) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, final demand shares (10), labour share, unemployment rate, participation rate, education shares (3), GDP 2000 | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, final demand shares (10), labour share, unemployment rate, participation rate, education shares (3), GDP 2000, Gini 2000 (imputed flag) | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10) | WorldPop 2000 aggregated through the H3 cells; VA downscaled as below |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured | WDI weighted applied rates by importer; zero inside agreements and customs unions (CEPII gravity, WB DTA) |
@@ -179,14 +179,73 @@ full employment (owner choice; structural unemployment arrives with matching in 
 pool (enterprise profits plus market cash flow, both signed, trade SPEC), and a share of its
 country's tariff rebate by population. Shares are fixed at load.
 
-**Final demand.** Each pop spends its whole money balance m each month (when positive) with CES
-over goods at buyer prices (q_d for traded goods, the province price for local goods; a good
-with no reachable origin has q_d infinite and gets nothing), Omega from its country's 2000 final demand shares and
-sigma = P06:
+**Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
+the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
+province price for local goods; a good with no reachable origin has q_d infinite and gets
+nothing): PIGL across three categories, a CES over goods within each.
+
+*Source.* Alder, Simon, Timo Boppart and Andreas Mueller (2022), "A Theory of Structural Change
+That Can Fit the Data", American Economic Journal: Macroeconomics 14(2): 160-206. Equation and
+page numbers below are those of the accepted manuscript (Essex repository,
+`repository.essex.ac.uk/29270/1/AEJMacro2019-0303_Manuscript.pdf`), read in full.
+
+- Period indirect utility, eq. (12), p. 14: `v(e, P) = (1 - eps) / eps * (e / B(P) - A(P))^eps
+  - D(P)`, A and D homogeneous of degree 0, B linearly homogeneous. PIGL is Special Case I,
+  A(P) = 0 (p. 18).
+- Price functions, Section IV, p. 17: eq. (19) `B(P) = (sum_c omega_c p_c^(1 - sigma_B))^(1 /
+  (1 - sigma_B))`, sigma_B > 0, sum omega = 1; eq. (21) `D(P) = (1 - eps) nu / (kappa gamma) *
+  ((Dt(P) / B(P))^gamma - 1)`, `Dt(P) = (sum_c theta_c p_c^(1 - phi))^(1 / (1 - phi))`, nu >= 0,
+  phi > 0, sum theta = 1; eps < 1, and 0 < gamma <= eps < 1 in estimation (Prop. 3, p. 18).
+- Aggregate PIGL shares, eq. (22), p. 18: `eta_c = B_c p_c / B + kappa D_c p_c / (1 - eps) *
+  B^eps (E/N)^-eps`, kappa = 1/N int ((E/N) / e_i)^(eps - 1) di. EIS 1 / (1 - eps).
+- Individual shares (Roy's identity on (12) with A = 0, from (15), p. 15), with sB_c =
+  omega_c p_c^(1 - sigma_B) / B^(1 - sigma_B) and sD_c = theta_c p_c^(1 - phi) / Dt^(1 - phi):
 
 ```
-x_g = Omega_g p_g^-sigma m / sum_k Omega_k p_k^(1 - sigma)
+eta_c(e) = sB_c + lambda (Dt / B)^gamma (sD_c - sB_c) (e / B)^-eps,    lambda = nu / kappa
 ```
+
+- Roles: eps (P47) is the Engel parameter: the income-effect term falls with e at rate eps, so
+  categories with theta_c > omega_c (A) are necessities and those with theta_c < omega_c are
+  luxuries. sigma_B, phi and gamma (P46) are price parameters: the substitution of the
+  homothetic aggregator B, of the income-effect aggregator Dt, and the curvature of D in Dt /
+  B. nu scales the income-effect term (absorbed in lambda, backed out per country); omega and
+  theta are the two weight vectors.
+- phi = 0, the pooled estimate, is the limit phi -> 0 of (21): the exponents 1 - phi and 1 / (1
+  - phi) tend to 1, so `Dt(P) = sum_c theta_c p_c`, linear and smooth (the Leontief cost
+  function), and sD_c = theta_c p_c / Dt. The formula is continuous there, so phi = 0 is used
+  as is.
+
+*Categories and goods.* Categories c: A (goods 0 agriculture, 3 food), M (goods 1, 2, 4, 5,
+6), S (goods 7, 8, 9). The paper has no counterpart for crude oil, coal and utilities; they sit
+in M, M and S. Within category c the pop spends by CES at P06 = sigma:
+P_c = (sum_(g in c) alpha_g p_g^(1 - sigma))^(1 / (1 - sigma)), good g getting alpha_g
+p_g^(1 - sigma) / sum of the category. Goods without weight or at an infinite price are left
+out; a category with none of its goods reachable is left out, and B and Dt run over the rest
+with omega and theta renormalized.
+
+*Pop demand.* A pop's income per person is lognormal with mean m = money / population and log
+dispersion s = sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G), G its country's 2000 Gini. With
+E[e^(1 - eps)] = m^(1 - eps) exp(-eps (1 - eps) s^2 / 2), the pop's category shares are, in
+closed form,
+
+```
+s_c = sB_c + lambda (Dt / B)^gamma (sD_c - sB_c) (m / B)^-eps exp(-eps (1 - eps) s^2 / 2)
+```
+
+Shares below 0 (a pop far poorer than its country's base) are set to 0 and the rest rescaled to
+sum to 1 (Review Focus 4). Spending on good g is s_c(g) times its within-category share times
+the money balance: spending equals money.
+
+*Inversion (at load, per country).* Parameters theta, sigma_B, phi, gamma, eps and omega_A = 0
+from the pooled PIGL column of the paper (Tables 3 and A3, column 3, pp. 24 and 48). At prices 1
+(B = Dt = 1, sB = omega, sD = theta) and the country's base spending per person m_0 (base
+household income over population), Omega_c = (1 - z) omega_c + z theta_c with z = lambda m_0^-eps
+exp(-eps (1 - eps) s^2 / 2). Hence z = Omega_A / theta_A, omega_c = (Omega_c - z theta_c) / (1 -
+z) for M and S, lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g = Omega_g / Omega_c(g):
+the 2000 final demand shares are reproduced exactly at prices 1 and m_0. A country with z >= 1
+or a negative omega_c stops the load (never clipped). On the fixture z = 0.284, omega = (0,
+0.247, 0.753) in every country.
 
 Spending on traded goods is sourced over origins (trade SPEC) and paid at dispatch for what is
 filled; rationed purchases leave money unspent until the next tick.
@@ -219,12 +278,15 @@ equilibrium: runs start out of it and converge, so V1 tests convergence, not cal
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every
 active (province, good) cell (origin markets of traded goods, province markets of local goods)
 and ln w for every province. Conditions: every origin sells its output, output = sum_d X_od /
-(p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (CES at
-q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; pops
-spend income (wages, profits, rebates; market cash flow is zero at a fixed point); the world
-price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals 1.
-Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
-fallback; tolerance 1e-10 on scaled residuals. Balanced Sinkhorn on the dense kernel is the S02
+(p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (PIGL at
+q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; each pop
+spends its income by PIGL (`reference/demand.py`, the mirror of `demand.rs`): its effective
+labour share e_k LF_k / L^s of its province's wages and profits, and its population share of its
+country's rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
+spending, so income is iterated to a fixed point (relative 1e-15) inside each evaluation; the
+world price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals
+1. Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
+fallback (under PIGL the fixture needs the fallback); tolerance 1e-10 on scaled residuals. Balanced Sinkhorn on the dense kernel is the S02
 full solve and reproduces the equilibrium's sourcing flows. numpy and scipy only (JAX stays
 optional, 19.1).
 
@@ -269,7 +331,9 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P06 | Goods substitution sigma | 0.3 to 0.9, start 0.6 | Literature |
+| P06 | Goods substitution sigma within a PIGL category | 0.3 to 0.9, start 0.6 | Literature |
+| P46 | PIGL price parameters: sigma_B (aggregator B), phi (aggregator Dt), gamma (curvature of D), with the Dt weights theta_A, theta_M, theta_S | start sigma_B 0.26 (s.e. 0.05), phi 0.00 (at its bound), gamma 0.71 (s.e. 0.01), theta 0.634, 0.082, 0.284; country estimates sigma_B 0.09 to 0.55, gamma 0 to 0.90, phi 0 to 7.32 | Literature: Alder, Boppart and Mueller (2022), pooled PIGL, Tables 3 and A3 column 3 |
+| P47 | PIGL Engel parameter eps | start 0.71 (s.e. 0.01); country estimates 0.34 to 0.90 | Literature: same column |
 | P08 | F-L substitution sigma_FL | 0.5 to 1.2, start 0.8 | Literature |
 | P39 | Wage adjustment speed kappa_w | 0.05 to 0.5 per month, start 0.1 | Free |
 | P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
@@ -277,7 +341,10 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
-populations, education and labour-force shares. Calibrated: A (inversion, not estimation).
+populations, education and labour-force shares, Gini. Calibrated: A (inversion, not
+estimation); the PIGL weights omega_M, omega_S, lambda and alpha per country (exact inversion
+of the 2000 final demand shares, above). P07 stays the S03 (non-homothetic CES) row of the
+design register.
 
 ## Equilibrium nesting
 
@@ -320,15 +387,20 @@ texture fed from core columns.
 
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
   numerical maximization, wage step and clip, rigidity on nominal cuts
-  (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, CES demand shares,
-  income split, rounding of payments.
+  (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, income split, rounding of payments. PIGL (`demand.rs`): pop
+  demand against 64-node Gauss-Hermite quadrature of individual demand over the lognormal
+  (1e-10), adding-up (1e-14), inversion reproducing base shares (1e-12), Engel curves across
+  fixture pops (food share falls, services share rises), clamping far from base (money x 1e-3
+  and x 1e3), homogeneity, unreachable goods and categories, Gini to sigma.
 - Property (proptest): money and goods conservation through a full tick on random small
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
   identical; pi^e is a log difference and stays); pi^e follows the world price index
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
 - Python (pytest, hypothesis): ICIO aggregation preserves totals; downscaling preserves national
   VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
-  worlds; PPML recovers a known elasticity on synthetic gravity data.
+  worlds; PPML recovers a known elasticity on synthetic gravity data; the reference's PIGL
+  reproduces Rust's on the export's 100 `pigl_check` draws (1e-12) and its inversion the base
+  shares.
 - Acceptance: `tests/p2_acceptance.rs` (V0, V1, 100 years, determinism) and
   `python/tests/test_p2_gate.py` (V1 comparison, H2); full-pack parts skip without a pack, as
   in P1.
@@ -341,14 +413,19 @@ texture fed from core columns.
 - DOSE region matching rate to Natural Earth provinces without GADM geometry; if too low,
   manufacturing falls back to gridded GDP for those countries.
 - 2000 tariff detail beyond importer x two groups (WTO IDB is closed-source only, fetch).
-- Stability on the full pack: on the fixture under origin clearing small deviations decay by
-  0.9963 (frictionless) and 0.9969 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
+- Stability on the full pack: on the fixture under origin clearing and PIGL demand small
+  deviations decay by 0.9965 (frictionless) and 0.9968 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
   0, expectation gain 0.006; trade SPEC, Stability region and P03a, P03b, P45). The slowest
   mode is the world price level, which expected inflation turns into a damped oscillation
   (trade SPEC, Nominal mode). Re-measure on the pack in Task 20.
 - The run from the data state passes through a deep coal-led shortage before it converges (the
   equilibrium's coal output is about twice base output and intermediate demand is inelastic in
   units); V1 holds on the fixture at 1,200 ticks.
+- PIGL aggregation across pops: the inversion matches the 2000 shares for one lognormal at the
+  country's mean income per person; the country's pops differ in mean income (education,
+  province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
+  (food 0.118 for 0.120). Matching the aggregate exactly would need a per-country solve over
+  its pops.
 - Frictionless clearing wage: each labour target is capped at L^s, so where one enterprise's
   target reaches L^s, capped demand equals L^s on a whole interval of low wages; the search
   then finds no sign change and the wage is indeterminate below the true root. Searching on

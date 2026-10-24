@@ -298,8 +298,10 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Interfaces:** Produces `people.province_population(worldpop_2000, cells) -> np.ndarray[P]` (H3 cell aggregation as `raster.py` does for elevation); `people.country_labour(ilostat, wic, barro_lee, pwt) -> dict[str, Labour(participation, unemployment, edu_shares[3], labour_share)]`; `people.pops(provinces, labour) -> pa.Table` (province x 3 education rows).
 
-- [ ] **Step 1: Write failing tests** `test_population_sums_match_country_totals_within_2pct` (WorldPop vs WDI 2000), `test_edu_shares_sum_to_one`, `test_labour_share_in_unit_interval`.
-- [ ] **Step 2: Fetch** WorldPop 2000 global mosaic (1 km), ILOSTAT bulk (participation, unemployment 2000), WIC reconstruction, Barro-Lee v3, PWT 11.
+- `people.country_labour` also returns the 2000 Gini (`Labour.gini`, `Labour.gini_imputed`): WDI SI.POV.GINI, the year nearest 2000 within 1995 to 2005, else WIID; imputed flag set for WIID or donor values. `econ_countries.arrow` gains `gini` (and its flag), which `EconInputs::from_pack` reads into `Countries.gini` (PIGL income dispersion, ADR 0021; MIGRATION Task 7).
+
+- [ ] **Step 1: Write failing tests** `test_population_sums_match_country_totals_within_2pct` (WorldPop vs WDI 2000), `test_edu_shares_sum_to_one`, `test_labour_share_in_unit_interval`, `test_gini_in_unit_interval_with_source_flag`.
+- [ ] **Step 2: Fetch** WorldPop 2000 global mosaic (1 km), ILOSTAT bulk (participation, unemployment 2000), WIC reconstruction, Barro-Lee v3, PWT 11, WDI SI.POV.GINI, WIID.
 - [ ] **Step 3: Implement; run** `-k people`; expected: PASS.
 - [ ] **Step 4: Commit** `feat(packs): add 2000 population, education and labour by province`
 

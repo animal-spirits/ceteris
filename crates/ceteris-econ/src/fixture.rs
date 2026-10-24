@@ -38,6 +38,8 @@ const WEIGHT: [f64; N_GOODS] = [
 const VA_PER_MILLION: [f64; N_GOODS] = [6.0, 15.0, 5.0, 9.0, 12.0, 20.0, 25.0, 5.0, 9.0, 55.0];
 const S_L: [f64; 4] = [0.55, 0.60, 0.50, 0.45];
 const UNEMPLOYMENT: [f64; 4] = [0.06, 0.08, 0.05, 0.10];
+/// Gini of income: the mainland countries, then the island.
+const GINI: [f64; 4] = [0.30, 0.40, 0.50, 0.45];
 const EDU_SHARE: [[f64; N_EDU]; 4] = [
     [0.40, 0.40, 0.20],
     [0.50, 0.35, 0.15],
@@ -170,6 +172,7 @@ pub fn small_world() -> EconInputs {
         io: vec![io; n_countries],
         s_l: S_L.to_vec(),
         unemployment: UNEMPLOYMENT.to_vec(),
+        gini: GINI.to_vec(),
     };
 
     let mut pops = PopData::default();

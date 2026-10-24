@@ -8,9 +8,9 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods) |
+//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
 //! | `gateways` | gateway u32, country u32 |
-//! | `countries` | country u32, s_l f64, unemployment f64, omega_0 to omega_9 f64 |
+//! | `countries` | country u32, s_l f64, unemployment f64, gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
 //! | `provinces` | province u32, country u32, population f64, w0 f64 |
@@ -21,6 +21,7 @@
 //! | `kernel_domestic` | good u8, o u32, d u32, k f32, tau f64 |
 //! | `kernel_access` | good u8, province u32, gateway u32, k f32, tau f64 |
 //! | `kernel_crossing` | good u8, a u32, b u32, k f32, tau f64, border_tau f64, lag u8, tariff f32 |
+//! | `pigl_check` | draw u32, country u32, money f64 (mean spending per person), sigma f64, price_0 to price_9 f64 (some infinite), x_0 to x_9 f64: `demand::pigl` with the country's weights on [`PIGL_CHECK_DRAWS`] random draws, which the reference reproduces |
 //! | `params.json` | both parameter sets by field name, the register IDs, constants |
 //!
 //! Kernel rows list the traded goods in order, then origins in order, then the entries of the
@@ -41,17 +42,29 @@ use ceteris_trade::goods::{NAME, TRADED, tariff_group};
 use ceteris_trade::source::WEIGHT_FLOOR;
 use ceteris_trade::{Kernel, N_GOODS, Rationing, TradeParams};
 
+use ceteris_core::entity::{EntityId, Kind};
+use ceteris_core::rng::Seed;
+use ceteris_core::schedule::SystemId;
+
+use crate::demand::{CATEGORY, pigl};
 use crate::flows::WINDOW;
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
-use crate::world::{EconWorld, MINOR_PER_UNIT, active_cells, static_digest};
+use crate::world::{
+    EconWorld, MINOR_PER_UNIT, active_cells, base_spend, household_preferences, static_digest,
+};
 
 /// Bumped when a table or `params.json` changes shape or meaning; the reference checks it.
 /// 2: `active` marks origin markets of traded goods, `params.json` has `rationing`,
 /// `run_prices` has `price_index` (ADRs 0015 and 0016). 3: theta per good, in `goods` and as
 /// a list in `params.json`, and `goods.theta_class` (ADRs 0018 and 0023). 4: `params.json`
-/// has `expectation_gain`, `run_prices` and `run_wages` have `clip_ticks` (ADR 0019).
-pub const EXPORT_FORMAT: &str = "4";
+/// has `expectation_gain`, `run_prices` and `run_wages` have `clip_ticks` (ADR 0019). 5: PIGL
+/// demand (ADR 0021): `goods.category`, `countries.gini`, the `pigl_*` parameters in
+/// `params.json`, the `pigl_check` table.
+pub const EXPORT_FORMAT: &str = "5";
+
+/// Rows of the `pigl_check` table.
+pub const PIGL_CHECK_DRAWS: usize = 100;
 
 #[derive(Debug)]
 pub struct ExportError(pub String);
@@ -170,6 +183,7 @@ pub fn write_inputs(
             f64s("time_cost", trade.time_cost),
             f64s("theta", trade.theta),
             u8s("theta_class", trade.theta_class),
+            u8s("category", CATEGORY.map(|c| c as u8)),
         ],
     )?;
     write_table(
@@ -186,6 +200,7 @@ pub fn write_inputs(
         u32s("country", 0..nc as u32),
         f64s("s_l", c.s_l.iter().copied()),
         f64s("unemployment", c.unemployment.iter().copied()),
+        f64s("gini", c.gini.iter().copied()),
     ];
     for g in 0..N_GOODS {
         columns.push(f64s(&format!("omega_{g}"), c.omega.iter().map(|o| o[g])));
@@ -257,6 +272,7 @@ pub fn write_inputs(
         ],
     )?;
     write_table(dir, "active", active_columns(&active_cells(inputs)))?;
+    write_table(dir, "pigl_check", pigl_check(inputs, params))?;
 
     let legs: Vec<(u8, &ceteris_trade::Leg)> = [&net.domestic, &net.access, &net.crossings]
         .into_iter()
@@ -354,6 +370,42 @@ fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
     )
 }
 
+/// [`PIGL_CHECK_DRAWS`] draws of `demand::pigl`: a country, prices e^U(-2, 2) with every
+/// tenth draw's good `draw % 7` unreachable, money per person the country's base spending
+/// times e^U(-7, 7) (far enough to clamp), sigma U(0, 1.2).
+fn pigl_check(inputs: &EconInputs, params: &EconParams) -> Vec<Column> {
+    let (weights, _) = household_preferences(inputs, params);
+    let base = base_spend(inputs, params);
+    let nc = inputs.n_countries();
+    let mut rows = Vec::with_capacity(PIGL_CHECK_DRAWS);
+    for r in 0..PIGL_CHECK_DRAWS {
+        let mut s = Seed(21).stream(0, SystemId(0), Kind(0), EntityId(r as u32));
+        let c = (s.next_u32() as usize) % nc;
+        let mut price: [f64; N_GOODS] = std::array::from_fn(|_| libm::exp(4.0 * s.uniform() - 2.0));
+        if r % 10 == 0 {
+            price[r % 7] = f64::INFINITY;
+        }
+        let money = base[c] * libm::exp(14.0 * s.uniform() - 7.0);
+        let sigma = 1.2 * s.uniform();
+        let mut x = [0.0; N_GOODS];
+        pigl(&weights[c], &price, money, sigma, params, &mut x);
+        rows.push((c, money, sigma, price, x));
+    }
+    let mut columns = vec![
+        u32s("draw", 0..PIGL_CHECK_DRAWS as u32),
+        u32s("country", rows.iter().map(|r| r.0 as u32)),
+        f64s("money", rows.iter().map(|r| r.1)),
+        f64s("sigma", rows.iter().map(|r| r.2)),
+    ];
+    for g in 0..N_GOODS {
+        columns.push(f64s(&format!("price_{g}"), rows.iter().map(|r| r.3[g])));
+    }
+    for g in 0..N_GOODS {
+        columns.push(f64s(&format!("x_{g}"), rows.iter().map(|r| r.4[g])));
+    }
+    columns
+}
+
 fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
     let register = [
         ("theta", "P01"),
@@ -364,6 +416,11 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("c_max", "P03c"),
         ("border_nu", "P05"),
         ("sigma_demand", "P06"),
+        ("pigl_sigma_b", "P46"),
+        ("pigl_phi", "P46"),
+        ("pigl_gamma", "P46"),
+        ("pigl_theta", "P46"),
+        ("pigl_eps", "P47"),
         ("sigma_fl", "P08"),
         ("kappa_w", "P39"),
         ("delta_w", "P40"),
@@ -379,6 +436,11 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         .collect();
     let econ = [
         ("sigma_demand", num(p.sigma_demand)),
+        ("pigl_sigma_b", num(p.pigl.sigma_b)),
+        ("pigl_phi", num(p.pigl.phi)),
+        ("pigl_gamma", num(p.pigl.gamma)),
+        ("pigl_theta", nums(&p.pigl.theta)),
+        ("pigl_eps", num(p.pigl.eps)),
         ("sigma_fl", num(p.sigma_fl)),
         ("kappa_w", num(p.kappa_w)),
         ("delta_w", num(p.delta_w)),
@@ -604,6 +666,7 @@ mod tests {
         assert_eq!(f64s(&goods, "time_cost").unwrap(), trade.time_cost);
         assert_eq!(f64s(&goods, "theta").unwrap(), trade.theta);
         assert_eq!(u8s(&goods, "theta_class").unwrap(), trade.theta_class);
+        assert_eq!(u8s(&goods, "category").unwrap(), CATEGORY.map(|c| c as u8));
 
         let gateways = table("gateways");
         assert_eq!(u32s(&gateways, "country").unwrap().len(), 7);
@@ -615,6 +678,7 @@ mod tests {
             f64s(&countries, "unemployment").unwrap(),
             inputs.countries.unemployment
         );
+        assert_eq!(f64s(&countries, "gini").unwrap(), inputs.countries.gini);
         for g in 0..N_GOODS {
             let col = f64s(&countries, &format!("omega_{g}")).unwrap();
             assert_eq!(col[2], inputs.countries.omega[2][g]);
@@ -722,6 +786,42 @@ mod tests {
         let active = table("active");
         assert_eq!(active.num_rows(), 25 * N_GOODS);
 
+        // the PIGL check draws reproduce through the world's demand
+        let check = table("pigl_check");
+        assert_eq!(check.num_rows(), PIGL_CHECK_DRAWS);
+        let w = EconWorld::new(Arc::new(inputs.clone()), params.clone(), trade.clone());
+        let (country, money, sigma) = (
+            u32s(&check, "country").unwrap(),
+            f64s(&check, "money").unwrap(),
+            f64s(&check, "sigma").unwrap(),
+        );
+        let price: Vec<Vec<f64>> = (0..N_GOODS)
+            .map(|g| f64s(&check, &format!("price_{g}")).unwrap())
+            .collect();
+        let got: Vec<Vec<f64>> = (0..N_GOODS)
+            .map(|g| f64s(&check, &format!("x_{g}")).unwrap())
+            .collect();
+        assert!(price.iter().flatten().any(|p| p.is_infinite()));
+        let spread = money.iter().fold(0.0, |a: f64, &m| a.max(m))
+            / money.iter().fold(f64::INFINITY, |a: f64, &m| a.min(m));
+        assert!(spread > 1e4, "money spread {spread}");
+        let mut x = [0.0; N_GOODS];
+        for r in [0, 37, PIGL_CHECK_DRAWS - 1] {
+            let row: [f64; N_GOODS] = std::array::from_fn(|g| price[g][r]);
+            let c = country[r] as usize;
+            pigl(
+                &w.layout().pigl[c],
+                &row,
+                money[r],
+                sigma[r],
+                &params,
+                &mut x,
+            );
+            for g in 0..N_GOODS {
+                assert_eq!(got[g][r], x[g], "draw {r} good {g}");
+            }
+        }
+
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
             json.contains(
@@ -734,6 +834,11 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
+        assert!(
+            json.contains("\"pigl_theta\": [0.634, 0.082, 0.284]"),
+            "{json}"
+        );
+        assert!(json.contains("\"pigl_eps\": 0.71"), "{json}");
         assert!(json.contains("\"rationing\": \"priority\""), "{json}");
         assert!(json.contains("\"weight_floor\": 1e-100"), "{json}");
         assert!(
@@ -742,7 +847,7 @@ mod tests {
         );
         for id in [
             "P01", "P02", "P03a", "P03b", "P03c", "P05", "P43", "P06", "P08", "P39", "P40", "P41",
-            "P42", "P45",
+            "P42", "P45", "P46", "P47",
         ] {
             assert!(
                 json.contains(&format!("\"{id}\"")),
