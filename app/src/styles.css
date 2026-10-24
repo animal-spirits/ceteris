@@ -1,16 +1,37 @@
+/* Tokens from the Ceteris Paribus design system (dark theme). */
 :root {
-  --surface: #fcfcfb;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --border: #d9d8d3;
-  --accent: #2a78d6;
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --ground: #0f1720;
+  --panel: #161f2a;
+  --panel-raised: #1c2734;
+  --hover: #223041;
+  --field: #0c131a;
+  --line: #2a3644;
+  --line-strong: #3a4757;
+  --control-border: #717e8e;
+  --ink: #ece8e0;
+  --ink-muted: #a3a9b0;
+  --gold: #c9a253;
+  --gold-bright: #e2c27a;
+  --danger: #f0907f;
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-sans);
   font-size: 13px;
-  color: var(--text-primary);
+  line-height: 18px;
+  color: var(--ink);
+  background: var(--ground);
+  color-scheme: dark;
+  accent-color: var(--gold);
 }
 
 * {
   box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 1px;
 }
 
 html,
@@ -29,10 +50,10 @@ body,
 
 .panel {
   position: absolute;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+  background: rgba(22, 31, 42, 0.96);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float);
 }
 
 .modes {
@@ -40,75 +61,92 @@ body,
   left: 12px;
   display: flex;
   gap: 4px;
-  padding: 4px;
+  padding: 6px;
+  background: var(--ground);
 }
 
 .modes button,
 .modes select {
   font: inherit;
+  font-weight: 500;
   border: 1px solid transparent;
   background: none;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
-  color: var(--text-secondary);
+  color: var(--ink-muted);
+  transition: background-color 120ms;
+}
+
+.modes button:hover {
+  background: var(--panel-raised);
+  color: var(--ink);
 }
 
 .modes button.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--hover);
+  border-color: var(--gold);
+  color: var(--ink);
 }
 
 .modes select {
-  border-color: var(--border);
+  background: var(--field);
+  border-color: var(--control-border);
+  color: var(--ink);
 }
 
 .modes .toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 0 8px;
-  color: var(--text-secondary);
-  border-left: 1px solid var(--border);
+  color: var(--ink-muted);
+  border-left: 1px solid var(--line);
 }
 
 .legend {
   left: 12px;
   bottom: 24px;
-  padding: 10px 12px;
+  padding: 12px;
   max-width: 280px;
 }
 
 .legend h3 {
   margin: 0 0 6px;
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
 }
 
 .legend ul {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .legend li {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-secondary);
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  width: 24px;
+  height: 12px;
+  border-radius: 2px;
   flex: none;
 }
 
 .legend p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
+  margin: 8px 0 0;
+  color: var(--ink-muted);
   font-size: 12px;
+  line-height: 16px;
 }
 
 .inspector {
@@ -117,26 +155,39 @@ body,
   width: 300px;
   max-height: calc(100% - 24px);
   overflow: auto;
-  padding: 10px 12px;
+  padding: 12px 16px 16px;
 }
 
 .inspector header {
   display: flex;
   justify-content: space-between;
   align-items: start;
+  gap: 8px;
 }
 
 .inspector h2 {
-  margin: 0 0 8px;
-  font-size: 15px;
+  margin: 0 0 12px;
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .inspector header button {
-  border: none;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
   background: none;
   font-size: 18px;
   cursor: pointer;
-  color: var(--text-secondary);
+  color: var(--ink-muted);
+}
+
+.inspector header button:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 
 .inspector dl {
@@ -147,24 +198,27 @@ body,
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 3px 0;
-  border-top: 1px solid var(--border);
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
 }
 
 .inspector dt {
-  color: var(--text-secondary);
+  color: var(--ink-muted);
 }
 
 .inspector dd {
   margin: 0;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .error {
-  top: 60px;
+  top: 68px;
   left: 12px;
   padding: 8px 12px;
-  color: #d03b3b;
+  border-color: var(--danger);
+  border-radius: 4px;
+  color: var(--danger);
   max-width: 420px;
 }
 
@@ -173,8 +227,45 @@ body,
   top: 12px;
   left: 50%;
   padding: 2px 8px;
-  background: #0b0b0b;
-  color: #fff;
-  border-radius: 4px;
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* MapLibre's zoom control and attribution, on the dark chrome. */
+.maplibregl-ctrl-group:not(:empty) {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float);
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--line);
+}
+
+.maplibregl-ctrl-group button:not(:disabled):hover {
+  background: var(--hover);
+}
+
+.maplibregl-ctrl-group .maplibregl-ctrl-icon {
+  filter: invert(0.9);
+}
+
+.maplibregl-ctrl.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgba(22, 31, 42, 0.9);
+  color: var(--ink-muted);
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--ink-muted);
+}
+
+.maplibregl-ctrl-attrib-button {
+  filter: invert(0.9);
 }

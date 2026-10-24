@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Map as MlMap, NavigationControl, addProtocol, type FeatureIdentifier } from "maplibre-gl";
+import { Map as MlMap, NavigationControl, addProtocol, type ExpressionSpecification, type FeatureIdentifier } from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { packUrl } from "./data";
@@ -21,6 +21,7 @@ const SOURCE = "map";
 // Tile features are numbered from 1 (ADR 0009); provinces and counties are indexed from 0.
 const province = (i: number): FeatureIdentifier => ({ source: SOURCE, sourceLayer: "provinces", id: i + 1 });
 const COUNTY_MINZOOM = 4;
+const MARKED_OPACITY: ExpressionSpecification = ["case", ["any", ["boolean", ["feature-state", "selected"], false], ["boolean", ["feature-state", "origin"], false]], 1, 0];
 
 /** Vector-tiled borders and labels from MapLibre; province colours from the GPU fill layer (ADR 0010). */
 export function MapView({ fill, selected, origin, counties, globe, onSelect }: Props) {
@@ -66,7 +67,7 @@ export function MapView({ fill, selected, origin, counties, globe, onSelect }: P
             "source-layer": "counties",
             minzoom: COUNTY_MINZOOM,
             layout: { visibility: "none" },
-            paint: { "line-color": "#1c1c1a", "line-opacity": 0.3, "line-width": 0.4 },
+            paint: { "line-color": "#141b22", "line-opacity": 0.3, "line-width": 0.4 },
           },
           {
             id: "province-lines",
@@ -74,14 +75,26 @@ export function MapView({ fill, selected, origin, counties, globe, onSelect }: P
             source: SOURCE,
             "source-layer": "provinces",
             minzoom: 3,
-            paint: { "line-color": "#1c1c1a", "line-opacity": 0.35, "line-width": 0.6 },
+            paint: { "line-color": "#141b22", "line-opacity": 0.35, "line-width": 0.6 },
           },
           {
             id: "country-lines",
             type: "line",
             source: SOURCE,
             "source-layer": "countries",
-            paint: { "line-color": "#1c1c1a", "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.6, 6, 1.6] },
+            paint: { "line-color": "#0a0f14", "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.6, 6, 1.6] },
+          },
+          {
+            // Dark casing under the mark, so the pale outline also reads on light fills (terrain plains).
+            id: "marked-casing",
+            type: "line",
+            source: SOURCE,
+            "source-layer": "provinces",
+            paint: {
+              "line-color": "#0a0f14",
+              "line-width": 5,
+              "line-opacity": MARKED_OPACITY,
+            },
           },
           {
             id: "marked",
@@ -89,9 +102,9 @@ export function MapView({ fill, selected, origin, counties, globe, onSelect }: P
             source: SOURCE,
             "source-layer": "provinces",
             paint: {
-              "line-color": ["case", ["boolean", ["feature-state", "origin"], false], "#ffffff", "#0b0b0b"],
+              "line-color": ["case", ["boolean", ["feature-state", "origin"], false], "#8db6e3", "#ffe7a3"],
               "line-width": 2.5,
-              "line-opacity": ["case", ["any", ["boolean", ["feature-state", "selected"], false], ["boolean", ["feature-state", "origin"], false]], 1, 0],
+              "line-opacity": MARKED_OPACITY,
             },
           },
         ],

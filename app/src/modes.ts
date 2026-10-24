@@ -1,17 +1,17 @@
 // Map modes (Section 20.1): one fill colour per province, plus a legend.
-// Palettes validated with the dataviz validator against the ocean surface.
+// Palettes from the Ceteris Paribus design system (pol-*, terrain-*, seq-*), drawn on the dark sea.
 
 import { type Provinces, type ResourceGroup, TERRAIN, resources } from "./data";
 import type { CostTree } from "./engine";
 
 export type MapMode = "political" | "terrain" | "resources" | "cost";
 
-export const OCEAN = "#4a6680";
-export const NO_DATA = "#9a9a96";
+export const OCEAN = "#0f1c27";
+export const NO_DATA = "#2c343d";
 // Categorical slots in fixed order; country borders are the secondary encoding.
-const COUNTRY = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+const COUNTRY = ["#b48d4c", "#5f8b66", "#5e7fa8", "#a8665a", "#8a79a8", "#4f8f8c", "#b07a93", "#8c8f55"];
 const TERRAIN_RAMP = ["#e3d3b0", "#c6a571", "#9a7342", "#5e4424"];
-const SEQUENTIAL = ["#fde0c5", "#f9b98a", "#f28f53", "#e0662b", "#b84a1b", "#8a3512", "#5c230b"];
+const SEQUENTIAL = ["#213a52", "#264c62", "#2d5e70", "#4f8b84", "#6fa286", "#93b788", "#e4d98e"];
 
 export interface LegendItem {
   colour: string;
