@@ -1,6 +1,6 @@
 # 0020. Putty-clay intermediates and within-tick rationing
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: implemented on p2-econ (MIGRATION Task 8)
 Date: 2026-10-24
 Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 17.2 (S09, S11), 19.4
 

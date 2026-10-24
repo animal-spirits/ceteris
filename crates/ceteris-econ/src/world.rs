@@ -17,14 +17,14 @@ use ceteris_trade::{Kernel, Markets, N_GOODS, Pipeline, Sourced, TradeParams};
 use crate::demand::{PiglWeights, invert_pigl, lognormal_sigma, pigl};
 use crate::flows::FlowWindow;
 use crate::inputs::EconInputs;
-use crate::params::{EconParams, Pigl};
+use crate::params::{EconParams, Pigl, Technology};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 pub const MINOR_PER_UNIT: f64 = 1e4;
 
 /// Relative slack of the labour bounds (spec Invariants, Labour).
 const LABOUR_TOLERANCE: f64 = 1e-12;
-/// Relative tolerance of input use against a_kg Y (spec Invariants, Leontief).
+/// Relative tolerance of input use against coef_k Y (spec Invariants, Leontief).
 const LEONTIEF_TOLERANCE: f64 = 1e-12;
 /// Relative tolerance of dispatched units against origin sales (trade SPEC Invariants,
 /// Dispatch mass).
@@ -87,7 +87,10 @@ pub struct Layout {
     pub labour_supply: Vec<f64>,
     /// Pop's share of its province's profit pool: base wage income share, fixed at load.
     pub ownership: Vec<f64>,
-    /// Value-added coefficient a_VA = 1 - sum_k a_kg per enterprise.
+    /// Input coefficients each enterprise runs on (S09): its own putty-clay coefficients
+    /// `EntData::coef`, or its country's ICIO column under fixed Leontief.
+    pub coef: Vec<[f64; N_GOODS]>,
+    /// Value-added coefficient a_VA = 1 - sum_k coef_k per enterprise.
     pub a_va: Vec<f64>,
     /// Pops of each country in ID order, for the tariff rebate.
     pub country_pops: Vec<Vec<u32>>,
@@ -147,9 +150,19 @@ impl Layout {
 pub struct Scratch {
     /// Output Y of each enterprise at E2.
     pub produced: Vec<f64>,
-    /// Input stock before use and the quantity used at E2, `[enterprise * N_GOODS + k]`.
+    /// Inputs available before use (stock, plus for a local good the units drawn from this
+    /// tick's output) and the quantity used at E2, `[enterprise * N_GOODS + k]`.
     pub input_before: Vec<f64>,
     pub input_used: Vec<f64>,
+    /// Units of each local good an enterprise draws from this tick's output in the same-tick
+    /// chain (`crate::local`), `[enterprise * N_GOODS + k]`; the rest of its use comes from
+    /// its stock.
+    pub from_output: Vec<f64>,
+    /// Units of local output drawn by intermediate users at E2 per province market,
+    /// `[province * N_GOODS + g]` (0 for traded goods): part of the market's demand and sales.
+    pub drawn: Vec<f64>,
+    /// Iterations of the same-tick chain per province at E2.
+    pub chain_iterations: Vec<u32>,
     /// Units dispatched at T2b by each origin market, home purchases included,
     /// `[province * N_GOODS + g]`: the filled orders, equal to the market's sales.
     pub dispatched: Vec<f64>,
@@ -191,6 +204,9 @@ impl Scratch {
             produced: vec![0.0; n_ent],
             input_before: vec![0.0; n_ent * N_GOODS],
             input_used: vec![0.0; n_ent * N_GOODS],
+            from_output: vec![0.0; n_ent * N_GOODS],
+            drawn: vec![0.0; np * N_GOODS],
+            chain_iterations: vec![0; np],
             dispatched: vec![0.0; np * N_GOODS],
             pop_demand: vec![0.0; n_pops * N_GOODS],
             ent_order: vec![0.0; n_ent * N_GOODS],
@@ -268,6 +284,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         edu_eff,
         frictionless,
         rationing,
+        technology,
     } = params;
     let TradeParams {
         theta,
@@ -298,6 +315,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(edu_eff);
     e.u8(u8::from(*frictionless));
     e.u8(*rationing as u8);
+    // with one vintage both settings read the same coefficients and run identically
+    if !inputs.one_vintage() {
+        e.u8(*technology as u8);
+    }
     e.f64s(theta);
     e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain, *border_nu]);
     e.f64s(coverage);
@@ -309,8 +330,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
 /// market is the origin market of the province's output: active where an enterprise of the
 /// province produces the good with positive capacity (A VA0 > 0). A local good's market is
 /// the province market: active where anyone in the province buys it (final demand in the
-/// province's country, or an enterprise of the province using it as an input). Fixed by the
-/// inputs for the whole run.
+/// province's country, or an enterprise of the province using it as an input under either S09
+/// setting). Fixed by the inputs for the whole run.
 pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
     let mut active = vec![false; inp.n_provinces() * N_GOODS];
     for i in 0..inp.n_provinces() {
@@ -327,7 +348,7 @@ pub fn active_cells(inp: &EconInputs) -> Vec<bool> {
             active[i * N_GOODS + sector] = true;
         }
         for k in (0..N_GOODS).filter(|&k| !TRADED[k]) {
-            if inp.a(inp.country_of(i), k, sector) > 0.0 {
+            if inp.coef(e, k) > 0.0 || inp.a(inp.country_of(i), k, sector) > 0.0 {
                 active[i * N_GOODS + k] = true;
             }
         }
@@ -462,7 +483,6 @@ impl EconWorld {
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
-        let sector = |e: usize| usize::from(inp.enterprises.good[e]);
         let pop_offsets = offsets(&inp.pops.province, np);
         let ent_offsets = offsets(&inp.enterprises.province, np);
         let labour_supply = inp.labour_supply(&params.edu_eff);
@@ -477,6 +497,12 @@ impl EconWorld {
             })
             .collect();
         let (pigl, sigma_income) = household_preferences(inp, &params);
+        let coef: Vec<[f64; N_GOODS]> = (0..n_ent)
+            .map(|e| match params.technology {
+                Technology::PuttyClay => inp.enterprises.coef[e],
+                Technology::FixedLeontief => inp.country_column(e),
+            })
+            .collect();
         let mut layout = Layout {
             index_weights: price_index_weights(inp, &params),
             pigl,
@@ -487,12 +513,8 @@ impl EconWorld {
             labour_supply,
             ownership: vec![0.0; n_pops],
             country_pops,
-            a_va: (0..n_ent)
-                .map(|e| {
-                    let i = inp.enterprises.province[e] as usize;
-                    inp.a_va(inp.country_of(i), sector(e))
-                })
-                .collect(),
+            a_va: coef.iter().map(|a| 1.0 - a.iter().sum::<f64>()).collect(),
+            coef,
         };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
@@ -531,11 +553,9 @@ impl EconWorld {
         // input stocks at one month of base use (Y0 = A VA0 / a_VA)
         let mut base_use = vec![0.0; n_ent * N_GOODS];
         for e in 0..n_ent {
-            let i = inp.enterprises.province[e] as usize;
-            let (c, g) = (inp.country_of(i), sector(e));
             let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / layout.a_va[e];
             for k in 0..N_GOODS {
-                let q = inp.a(c, k, g) * y0;
+                let q = layout.coef[e][k] * y0;
                 if q > 0.0 {
                     ledger.create(accounts.enterprise[e], k, q);
                     base_use[e * N_GOODS + k] = q;
@@ -773,8 +793,9 @@ impl State for EconWorld {
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
     /// (S >= 0 and held by the market account), transit (pipeline and transit accounts
     /// agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
-    /// [`Scratch`]: Leontief (inputs used = a_kg Y, 1e-12 relative to the larger of a_kg Y
-    /// and the stock they came from), dispatch mass (units dispatched = origin sales, 1e-12)
+    /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
+    /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
+    /// dispatch mass (units dispatched = origin sales, 1e-12)
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
     /// its recorded income, exact in minor units).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
@@ -878,10 +899,8 @@ impl State for EconWorld {
 
         let sc = &self.scratch;
         for e in 0..inp.n_enterprises() {
-            let i = inp.enterprises.province[e] as usize;
-            let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
             for k in 0..N_GOODS {
-                let want = inp.a(c, k, g) * sc.produced[e];
+                let want = lay.coef[e][k] * sc.produced[e];
                 let (used, before) = (
                     sc.input_used[e * N_GOODS + k],
                     sc.input_before[e * N_GOODS + k],
@@ -1091,14 +1110,12 @@ mod tests {
             let u = inp.countries.unemployment[inp.country_of(inp.pops.province[k] as usize)];
             assert_eq!(w.employed[k], (1.0 - u) * inp.pops.labour_force[k]);
         }
-        // input stocks: one month of base use, a_kg A VA0 / a_VA
+        // input stocks: one month of base use, coef_k A VA0 / a_VA
         for e in 0..inp.n_enterprises() {
-            let i = inp.enterprises.province[e] as usize;
-            let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
-            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / inp.a_va(c, g);
+            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / w.layout.a_va[e];
             for k in 0..N_GOODS {
                 let held = w.ledger.goods(w.layout.accounts.enterprise[e], k);
-                assert!((held - inp.a(c, k, g) * y0).abs() <= 1e-12 * y0);
+                assert!((held - inp.coef(e, k) * y0).abs() <= 1e-12 * y0);
             }
         }
         // origin inventories at coverage times initial demand; local goods and cells

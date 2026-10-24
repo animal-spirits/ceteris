@@ -57,6 +57,10 @@ pub struct EntData {
     pub l0: Vec<f64>,
     /// Value added the calibration matches (pack VA for traded goods).
     pub va_target: Vec<f64>,
+    /// Putty-clay input coefficients (ADR 0020): units of each good per unit of output,
+    /// aggregated over the enterprise's capacity vintages. P2 has one vintage, the country's
+    /// ICIO column; see [`EconInputs::set_coefficients`].
+    pub coef: Vec<[f64; N_GOODS]>,
 }
 
 /// All static data of a P2 world.
@@ -101,6 +105,32 @@ impl EconInputs {
     /// Input coefficient a_kg of country `c`: units of `k` per unit of `g`.
     pub fn a(&self, c: usize, k: usize, g: usize) -> f64 {
         self.countries.io[c][k * N_GOODS + g]
+    }
+
+    /// Putty-clay input coefficient of enterprise `e`: units of `k` per unit of its output.
+    pub fn coef(&self, e: usize, k: usize) -> f64 {
+        self.enterprises.coef[e][k]
+    }
+
+    /// Fills every enterprise's coefficients with one vintage, its country's ICIO column for
+    /// its sector (the 2000 state, ADR 0020).
+    pub fn set_coefficients(&mut self) {
+        self.enterprises.coef = (0..self.n_enterprises())
+            .map(|e| self.country_column(e))
+            .collect();
+    }
+
+    /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k.
+    pub fn country_column(&self, e: usize) -> [f64; N_GOODS] {
+        let c = self.country_of(self.enterprises.province[e] as usize);
+        let g = usize::from(self.enterprises.good[e]);
+        std::array::from_fn(|k| self.a(c, k, g))
+    }
+
+    /// Whether every enterprise's coefficients are its country's column (one vintage), so
+    /// that both S09 settings read the same numbers.
+    pub fn one_vintage(&self) -> bool {
+        (0..self.n_enterprises()).all(|e| self.enterprises.coef[e] == self.country_column(e))
     }
 
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
@@ -245,7 +275,8 @@ impl EconInputs {
                 && e.a.len() == n
                 && e.va0.len() == n
                 && e.l0.len() == n
-                && e.va_target.len() == n,
+                && e.va_target.len() == n
+                && e.coef.len() == n,
             "enterprise columns disagree in length"
         );
         for k in 0..n {
@@ -268,6 +299,11 @@ impl EconInputs {
                     && e.l0[k].is_finite()
                     && e.va_target[k].is_finite(),
                 "enterprise {k}: non-finite data"
+            );
+            let coef = &e.coef[k];
+            assert!(
+                coef.iter().all(|a| a.is_finite() && *a >= 0.0) && coef.iter().sum::<f64>() < 1.0,
+                "enterprise {k}: input coefficients {coef:?}; fill them with set_coefficients"
             );
         }
     }
@@ -317,6 +353,7 @@ impl EconInputs {
             va0,
             l0,
             va_target,
+            coef,
         } = enterprises;
 
         let mut e = Encoder::default();
@@ -349,6 +386,7 @@ impl EconInputs {
         e.f64s(va0);
         e.f64s(l0);
         e.f64s(va_target);
+        e.f64s(coef.as_flattened());
         // appended only when present, so least-cost networks keep their digest
         if let Some(rt) = route_taus {
             b"route-taus".iter().for_each(|&b| e.u8(b));

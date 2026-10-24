@@ -29,6 +29,7 @@ use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{N_GOODS, dispatch as dispatch_good, source as source_good};
 
 use crate::labour::{allocate, clearing_wage, wage_step};
+use crate::local::{self, LOCAL};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
     DIVIDEND, EconWorld, PURCHASE, REBATE, SALE, TARIFF, TRADE, WAGE, to_minor, to_numeraire,
@@ -200,7 +201,7 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .map(|e| {
                     let g = usize::from(inp.enterprises.good[e]);
-                    value_added_price(p[g], |k| inp.a(c, k, g), p_in, lay.a_va[e])
+                    value_added_price(p[g], |k| lay.coef[e][k], p_in, lay.a_va[e])
                 })
                 .collect();
             let target = |e: usize, p_va: f64, w: f64| {
@@ -249,27 +250,31 @@ pub fn labour(w: &mut EconWorld) {
     }
 }
 
-/// E2: Leontief output from employment and input stocks; inputs used are destroyed, output
-/// is sold to the province's market (the origin market of a traded good) at its current
-/// price and becomes the market's supply Q, and wages are paid to the pops of the province
-/// by effective employed labour.
+/// E2: Leontief output from employment, traded input stocks and the same-tick chain of local
+/// goods ([`local::chain`], per province). Output is sold to the province's market (the origin
+/// market of a traded good) at its current price and becomes the market's supply Q; traded
+/// inputs used are destroyed from stock; each local input is drawn from this tick's output at
+/// the province market, paid at its price, and the rest of its use from the enterprise's
+/// stock. Wages are paid to the pops of the province by effective employed labour.
 pub fn produce(w: &mut EconWorld) {
-    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let (inp, lay) = (
+        std::sync::Arc::clone(&w.inputs),
+        std::sync::Arc::clone(&w.layout),
+    );
+    let (inp, lay) = (&*inp, &*lay);
     let acc = &lay.accounts;
     let edu_eff = w.params.edu_eff;
     let r = rho(w.params.sigma_fl);
     let (ledger, employment) = (&w.ledger, &w.employment);
-    let output: Vec<f64> = (0..inp.n_enterprises())
+    let capped: Vec<f64> = (0..inp.n_enterprises())
         .into_par_iter()
         .map(|e| {
             let ent = &inp.enterprises;
-            let i = ent.province[e] as usize;
-            let (c, g) = (inp.country_of(i), usize::from(ent.good[e]));
-            let s_l = inp.countries.s_l[c];
+            let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
             let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
             let mut y = va / lay.a_va[e];
-            for k in 0..N_GOODS {
-                let a = inp.a(c, k, g);
+            for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
+                let a = lay.coef[e][k];
                 if a > 0.0 {
                     y = y.min(ledger.goods(acc.enterprise[e], k) / a);
                 }
@@ -277,21 +282,23 @@ pub fn produce(w: &mut EconWorld) {
             y
         })
         .collect();
+    w.scratch.produced.copy_from_slice(&capped);
 
     w.markets.supply.fill(0.0);
+    w.scratch.drawn.fill(0.0);
     let mut parts = Vec::new();
     for i in 0..inp.n_provinces() {
-        let c = inp.country_of(i);
+        w.scratch.chain_iterations[i] = local::chain(w, i) as u32;
         let pops = lay.pops(i);
         let effective: Vec<f64> = pops
             .clone()
             .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
             .collect();
         for e in lay.enterprises(i) {
-            let (g, y) = (usize::from(inp.enterprises.good[e]), output[e]);
+            let (g, y) = (usize::from(inp.enterprises.good[e]), w.scratch.produced[e]);
             let (account, cell) = (acc.enterprise[e], i * N_GOODS + g);
-            for k in 0..N_GOODS {
-                let a = inp.a(c, k, g);
+            for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
+                let a = lay.coef[e][k];
                 let before = w.ledger.goods(account, k);
                 if a > 0.0 {
                     w.ledger.destroy(account, k, (a * y).min(before));
@@ -299,7 +306,6 @@ pub fn produce(w: &mut EconWorld) {
                 w.scratch.input_before[e * N_GOODS + k] = before;
                 w.scratch.input_used[e * N_GOODS + k] = before - w.ledger.goods(account, k);
             }
-            w.scratch.produced[e] = y;
             w.output[e] = y;
             if y > 0.0 {
                 w.ledger.create(account, g, y);
@@ -317,14 +323,37 @@ pub fn produce(w: &mut EconWorld) {
                 w.scratch.income_paid[k] += part;
             }
         }
+        // local inputs: this tick's output at the market first, the stock second
+        for e in lay.enterprises(i) {
+            let account = acc.enterprise[e];
+            for k in LOCAL {
+                let (at, cell) = (e * N_GOODS + k, i * N_GOODS + k);
+                let need = lay.coef[e][k] * w.scratch.produced[e];
+                let stock = w.ledger.goods(account, k);
+                let take = w.scratch.from_output[at].min(w.ledger.goods(acc.market[i], k));
+                if take > 0.0 {
+                    w.ledger.ship(acc.market[i], account, k, take);
+                    let value = to_minor(w.markets.price[cell] * take);
+                    pay(&mut w.ledger, PURCHASE, account, acc.market[i], value);
+                    w.scratch.drawn[cell] += take;
+                }
+                let used = take + (need - take).clamp(0.0, stock);
+                if used > 0.0 {
+                    w.ledger.destroy(account, k, used);
+                }
+                w.scratch.input_before[at] = stock + take;
+                w.scratch.input_used[at] = used;
+            }
+        }
     }
 }
 
-/// E3: refreshes the buyer prices at the current prices, then posts demand. Households
+/// E3: refreshes the buyer prices at the current prices, then posts demand on top of the
+/// local goods drawn at E2, which count as demand at their province markets. Households
 /// spend their whole money balance with PIGL across categories and CES within them
 /// (`Layout::pop_demand`, ADR 0021) at the delivered unit price q_d of traded goods and the
 /// posted price of local goods. Enterprises order up to an inventory
-/// position (stock plus goods on order) of `(1 + COVER + L) a_kg Y_cap` of each input k:
+/// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_cap` of each input k:
 /// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
 /// capacity output at this tick's employment and L the expected months in transit of the
 /// input to the province (0 for local goods), so where L = 0 this is the two-month rule of
@@ -340,7 +369,7 @@ pub fn demand(w: &mut EconWorld) {
     let n_pops = inp.n_pops();
     let r = rho(w.params.sigma_fl);
     let sc = &mut w.scratch;
-    w.markets.demand.fill(0.0);
+    w.markets.demand.copy_from_slice(&sc.drawn);
     let mut x = [0.0; N_GOODS];
     for i in 0..inp.n_provinces() {
         let c = inp.country_of(i);
@@ -367,11 +396,10 @@ pub fn demand(w: &mut EconWorld) {
         let s_l = inp.countries.s_l[c];
         for e in lay.enterprises(i) {
             let ent = &inp.enterprises;
-            let g = usize::from(ent.good[e]);
             let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, w.employment[e]);
             let capacity = va / lay.a_va[e];
             for k in 0..N_GOODS {
-                let a = inp.a(c, k, g);
+                let a = lay.coef[e][k];
                 let at = e * N_GOODS + k;
                 let order = if a > 0.0 {
                     let held = w.ledger.goods(acc.enterprise[e], k);
@@ -428,11 +456,10 @@ pub fn source(w: &mut EconWorld) {
 /// T3: clears every active market. Origin markets of traded goods clear their orders
 /// against output and merchant stock (S' = S + Q - sales), a shortfall shared between buyer
 /// classes by `EconParams::rationing`; the fills are dispatched at T2b. Province markets of
-/// local goods hand out their sales here: enterprise input orders first, pro rata among
-/// enterprises, then households, pro rata among pops, on what remains (DESIGN 8.2,
-/// intermediate users by contract before the rest); unsold output perishes. Buyers of
-/// local goods pay the posted price; households consume what they receive, enterprises
-/// stock it.
+/// local goods hand out what the same-tick chain left of their output (E2): enterprise input
+/// orders (refilling stocks) and households share it by `EconParams::rationing`, pro rata
+/// within each class; unsold output perishes. Buyers of local goods pay the posted price;
+/// households consume what they receive, enterprises stock it.
 pub fn clear(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
@@ -448,7 +475,8 @@ pub fn clear(w: &mut EconWorld) {
                 continue;
             }
             let keep = w.scratch.spoiled[cell];
-            let (sold, price) = (m.sales[cell], m.price[cell]);
+            let price = m.price[cell];
+            let rest = (m.supply[cell] - w.scratch.drawn[cell]).max(0.0);
             buyers.clear();
             for k in lay.pops(i) {
                 buyers.push((acc.pop[k], w.scratch.pop_demand[k * N_GOODS + g], true));
@@ -468,17 +496,7 @@ pub fn clear(w: &mut EconWorld) {
                     .sum()
             };
             let (orders, households) = (total(false), total(true));
-            let fill_orders = if orders > 0.0 {
-                (sold / orders).min(1.0)
-            } else {
-                1.0
-            };
-            let rest = (sold - orders).max(0.0);
-            let fill_households = if households > 0.0 {
-                (rest / households).min(1.0)
-            } else {
-                1.0
-            };
+            let [fill_orders, fill_households] = w.params.rationing.fill(rest, orders, households);
             for b in buyers.iter_mut() {
                 b.1 *= if b.2 { fill_households } else { fill_orders };
             }

@@ -118,9 +118,10 @@ impl EconWorld {
     /// steady state of `solution`, at the start of a tick: its prices (cells without a market
     /// keep price 1), wages, employment and output; the price index at those prices and the
     /// world price level, with no expected inflation; every buyer's pipeline holding the
-    /// shipments of the last ticks; input stocks such that this tick's orders (up to the
-    /// inventory position of E3) replace exactly one month of use, traded inputs bought at the
-    /// delivered unit price, a Y q_d; origin inventories at coverage of output; and each pop
+    /// shipments of the last ticks; traded input stocks such that this tick's orders (up to
+    /// the inventory position of E3) replace exactly one month of use, bought at the delivered
+    /// unit price, a Y q_d, and local input stocks at their target, which E2 leaves untouched
+    /// (the same-tick chain draws local use from output); origin inventories at coverage of output; and each pop
     /// holding last tick's dividends and rebates, so that with this tick's wages it spends
     /// exactly its steady-state income (found by iterating, since rebates and market cash
     /// depend on spending).
@@ -202,12 +203,12 @@ impl EconWorld {
         let mut pool = vec![0.0; np];
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
-            let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
+            let g = usize::from(inp.enterprises.good[e]);
             let y = self.output[e];
             output[i * N_GOODS + g] += y;
             let mut cost = 0.0;
-            for k in (0..N_GOODS).filter(|&k| inp.a(c, k, g) > 0.0) {
-                let (use_k, cell) = (inp.a(c, k, g) * y, i * N_GOODS + k);
+            for k in (0..N_GOODS).filter(|&k| lay.coef[e][k] > 0.0) {
+                let (use_k, cell) = (lay.coef[e][k] * y, i * N_GOODS + k);
                 if !TRADED[k] {
                     cost += price(cell) * use_k;
                 } else if index[cell].is_finite() {
@@ -331,26 +332,26 @@ impl EconWorld {
         }
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
-            let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
             for k in 0..N_GOODS {
                 let held = self.ledger.goods(acc.enterprise[e], k);
                 self.ledger.destroy(acc.enterprise[e], k, held);
-                let a = inp.a(c, k, g);
+                let a = lay.coef[e][k];
                 if a == 0.0 {
                     continue;
                 }
-                // E3 sees M + arrivals - use in stock and the rest on order; ordering u =
-                // T - stock - on order, T = (1 + COVER + L) a Y, replaces use when
-                // M = T + a Y - u - sum_s s a_s
+                // traded: E3 sees M + arrivals - use in stock and the rest on order; ordering
+                // u = T - stock - on order, T = (1 + COVER + L) a Y, replaces use when
+                // M = T + a Y - u - sum_s s a_s. Local: E2 draws the use from this tick's
+                // output, so the stock stays at T and E3 orders nothing
                 let use_k = a * self.output[e];
                 let cell = i * N_GOODS + k;
-                let ordered = if TRADED[k] {
-                    ent_spend[e * N_GOODS + k] / index[cell]
-                } else {
-                    use_k
-                };
                 let target = (1.0 + COVER + self.scratch.lead[cell]) * use_k;
-                let stock = (target + use_k - ordered - lagged[e * N_GOODS + k]).max(0.0);
+                let stock = if TRADED[k] {
+                    let ordered = ent_spend[e * N_GOODS + k] / index[cell];
+                    (target + use_k - ordered - lagged[e * N_GOODS + k]).max(0.0)
+                } else {
+                    target
+                };
                 if stock > 0.0 {
                     self.ledger.create(acc.enterprise[e], k, stock);
                 }

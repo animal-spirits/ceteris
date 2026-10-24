@@ -32,6 +32,15 @@ impl Default for Pigl {
     }
 }
 
+/// S09: which input coefficients enterprises run on (ADR 0020).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Technology {
+    /// Each enterprise's own coefficients, `EntData::coef`, fixed by its capacity vintages.
+    PuttyClay,
+    /// Every enterprise on its country's ICIO column.
+    FixedLeontief,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct EconParams {
     /// P06 goods substitution sigma within a final demand category, prior 0.3 to 0.9.
@@ -50,9 +59,12 @@ pub struct EconParams {
     pub edu_eff: [f64; 3],
     /// Walrasian wage, eta = 1 and delta_w = 0 (V1 equilibrium nesting).
     pub frictionless: bool,
-    /// S11 sharing of an origin shortfall between buyer classes: intermediate users first
-    /// (`Priority`, default, DESIGN 8.2) or one fill ratio (`Proportional`).
+    /// S11 sharing of a shortfall between buyer classes, at origin markets and at what the
+    /// same-tick chain leaves of local output: `Priority` (default, DESIGN 8.2),
+    /// `Proportional` or `Mixed` (`specs/trade/SPEC.md`, Deviations, rationing row).
     pub rationing: Rationing,
+    /// S09 input coefficients: `PuttyClay` (default) or `FixedLeontief`.
+    pub technology: Technology,
 }
 
 impl Default for EconParams {
@@ -67,6 +79,7 @@ impl Default for EconParams {
             edu_eff: [1.0, 1.5, 2.3],
             frictionless: false,
             rationing: Rationing::Priority,
+            technology: Technology::PuttyClay,
         }
     }
 }

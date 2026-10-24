@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0013, 0018, 0019 and 0023
+Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0013, 0018, 0019, 0020 and 0023
 
 ## Purpose
 
@@ -25,6 +25,7 @@ them only as quantities offered to and demanded from each market.
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
 | Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
 | Merchant stocks targeted by coverage (8.2) | Enterprises order up to an inventory position (stock plus goods on order) of (1 + cover + L) months of use, cover = 1, L the sourcing-weighted expected months in transit of the input (owner decision, 2026-10-24); see the econ SPEC | A fixed two-month position that counts goods on order cannot hold a month in transit: importers bound at the equilibrium and V1 failed on the island (MIGRATION Task 3) |
+| Rationing within the tick after Pichler et al. (2022): priority by default (households' essential consumption, then intermediate users by contract, then the rest), proportional and mixed as S11 (8.2, 17.2) | S11 is `EconParams.rationing`, shared between intermediate users (index 0) and households (index 1) of what a market has: S + Q at an origin market (T3), the output left after the same-tick chain at a local market (T3; econ SPEC, Production). With A available and orders D_int, D_hh, D = D_int + D_hh, every class is filled when D <= A; otherwise: **Proportional** fills both at A / D. **Mixed** fills intermediate users at min(1, A / D_int) and households at max(A - D_int, 0) / D_hh (1 without household orders). **Priority** (default) serves households' essential consumption first, then intermediate users pro rata, then the rest; P2 has no essential consumption levels (they arrive in P4), so their P2 value is 0 and Priority fills as Mixed (`mixed_rationing_matches_definition`). Inside the same-tick chain intermediate users of a local good are served before households under every setting: the chain runs at E2, before household demand is posted (ADR 0020, Mapping to P2 as built) | Sources. Pichler, Pangallo, del Rio-Chanona, Lafond and Farmer (2022, JEDC 144, 104527, Section 2.2.2, eqs. (15) to (17), p. 8) use proportional rationing only: industry j delivers O_ji x_j / d_j to industry i, households receive c^d_i x_i / d_i; for other rules they refer to Pichler and Farmer (2021). That paper (Economic Systems Research 34(3), 2022, 273-293; read as arXiv 2101.07818v2, Section 4.2) defines (a) strict proportional rationing (Algorithm 1, eqs. (7) to (11), p. 8: r_i = x_i^max / d_i for all customers) and (b) mixed proportional/priority rationing (Algorithm 2, eqs. (12) to (16), p. 9): intermediate customers are rationed pro rata on r_i = x_i^max / sum_j a_ij d_j (eq. 12), so final demand plays no part in the bottleneck, and final demand takes the residual f_i = max(x_i - sum_j a_ij x_j, 0) (eq. 15). Mixed above is (b) with x_i^max = A, Proportional is (a). Their (c), priority as largest customer first, is not built: DESIGN 8.2 names its own priority order |
 | Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.05) (owner decisions 2026-10-24: kappa1 0.02 for stability, then 0.05 with expected inflation, MIGRATION Task 6) | The derived region (Stability region, below; ADR 0019) puts kappa1 0.2 outside for the theta-12.55 goods and kappa2 0.05 outside in the default mode. At kappa1 0.02 the world price level returns too slowly for the expectation loop: every P45 gain in the prior broke V1 (0.006: 1.02e-2) or the ledger (0.25 and up); at 0.05 with gain 0.006 V1 is 2.4e-5 and a small deviation decays by 0.9963 / 0.9969 per tick (frictionless / default). Growth factor per tick of a small deviation from the fixture's GE equilibrium, ticks 300 to 600, at the per-good thetas (MIGRATION Task 6, pi^e = 0; frictionless / default): kappa1 0.02, kappa2 0: 0.9954 / 0.9954, the same with every crossing lag at 3; kappa1 0.05: 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756 (lag 3 the same); 0.2: 1.0000 / 1.0000 (oscillates, lag 3 the same). kappa2 0.05: kappa1 0.02: 0.9876 / ledger overflow (lag 3: 0.9881 / 0.9998); 0.05: 0.9738 / 1.0014; 0.1: 0.9999 / 0.9978; 0.2: 1.0000 / 1.0000. The stock integrates the gap and feeds the money and trade-balance loop (Task 7b) |
 
 ## State components
@@ -151,8 +152,8 @@ as transport).
 
 **Origin market, traded good (ADR 0016).** At tick t, supply Q = this tick's output of the
 province's producers; buyers everywhere place orders D at the origin (intermediate users and
-households, origin units). Sales = min(D, S + Q); a shortfall is rationed by S11 (default:
-intermediate users first, households share the rest; DESIGN 8.2). S' = S + Q - sales: excess
+households, origin units). Sales = min(D, S + Q); a shortfall is rationed by S11 (Deviations, rationing row; default
+Priority: intermediate users first, households share the rest, DESIGN 8.2). S' = S + Q - sales: excess
 supply goes to merchant inventory. Then (8.2):
 
 ```
@@ -175,8 +176,11 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 GE reference is unchanged. Every tick the clip binds at a cell is counted (`clip_ticks`, run
 export).
 
-**Province market, local good** (utilities, construction, services): Q = local output; unsold
-output perishes (destroyed, tallied as spoilage); s_g = 0, so only the first term applies.
+**Province market, local good** (utilities, construction, services): Q = local output. Its
+intermediate users draw from it within the tick, at E2, in the same-tick chain (ADR 0020; econ
+SPEC, Production); those draws are part of D and of sales. At T3 the rest of Q is shared between
+enterprise orders (stock refills) and households by S11; unsold output perishes (destroyed,
+tallied as spoilage); s_g = 0, so only the first term applies.
 
 Q or S* of zero (a province with no supply of g) uses the denominator max(Q, Q_floor) with
 Q_floor = 1e-9 of the world mean of Q for that good.
@@ -347,7 +351,9 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   network carries them (`kernel_uses_route_taus_when_present`), factors below 1 rejected; kernel low-rank products against dense K on small
   worlds; sourcing against the dense route table and closed-form Eaton-Kortum shares, dispatch
   conservation, unreachable destinations, extreme prices (proptest); pipeline slots and
-  wraparound; origin clearing, rationing classes, price clip, zero-supply floor; expected
+  wraparound; origin clearing, rationing classes (`mixed_rationing_matches_definition`: S11 Mixed
+  on a hand-computed two-class shortage, equal to Priority without essential consumption), price
+  clip, zero-supply floor; expected
   inflation in the rule (`reprice_adds_expected_inflation`) and clip counts
   (`clip_ticks_count_bindings`).
 - Stability: the Jury conditions against a toy market run through `Markets`

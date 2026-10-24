@@ -5,13 +5,18 @@ use std::sync::Arc;
 
 use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::small_world;
+use ceteris_econ::inputs::EconInputs;
+use ceteris_econ::local::N_LOCAL;
+use ceteris_econ::params::Technology;
 use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
-use ceteris_econ::world::{MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, to_minor};
+use ceteris_econ::world::{
+    MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, static_digest, to_minor,
+};
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{N_GOODS, Rationing, Sourced, TradeParams, dispatch, source};
 use proptest::prelude::*;
 
 fn world(params: EconParams) -> EconWorld {
@@ -451,7 +456,7 @@ fn capacity(w: &EconWorld, e: usize) -> f64 {
 }
 
 /// The order rule of E3 for every enterprise and input: up to an inventory position of
-/// (1 + COVER + L) a_kg Y_cap, L the expected months in transit to the province,
+/// (1 + COVER + L) coef_k Y_cap, L the expected months in transit to the province,
 /// (target - stock - on order) at least zero; returns the orders that bind at zero only
 /// because of goods on order.
 fn assert_order_rule(w: &EconWorld) -> usize {
@@ -459,9 +464,8 @@ fn assert_order_rule(w: &EconWorld) -> usize {
     let mut held_back = 0;
     for e in 0..inp.n_enterprises() {
         let i = inp.enterprises.province[e] as usize;
-        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
         for (k, &traded) in TRADED.iter().enumerate() {
-            let a = inp.a(c, k, g);
+            let a = lay.coef[e][k];
             let stock = w.ledger.goods(lay.accounts.enterprise[e], k);
             let on_order = w.pipeline.on_order(inp.n_pops() + e, k);
             let lead = w.scratch.lead[i * N_GOODS + k];
@@ -492,18 +496,17 @@ fn input_orders_count_goods_on_order() {
     systems::deliver(&mut w);
     systems::labour(&mut w);
     systems::produce(&mut w);
-    let inp = w.inputs().clone();
-    let acc = w.layout().accounts.clone();
+    let (inp, lay) = (w.inputs().clone(), w.layout().clone());
+    let acc = &lay.accounts;
     let (full, half) = (0, 1);
     let mut checked = 0;
     // the lead E3 will use: the prices do not move between here and E3
     w.refresh_price_index();
     for (e, months) in [(full, None), (half, Some(0.5))] {
         let i = inp.enterprises.province[e] as usize;
-        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
-        for k in (0..N_GOODS).filter(|&k| TRADED[k] && inp.a(c, k, g) > 0.0) {
+        for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
             let target = 1.0 + systems::COVER + w.scratch.lead[i * N_GOODS + k];
-            let units = months.unwrap_or(target) * inp.a(c, k, g) * capacity(&w, e);
+            let units = months.unwrap_or(target) * lay.coef[e][k] * capacity(&w, e);
             // in flight over three slots; the goods sit in the transit account
             for slot in 2..=4 {
                 w.pipeline.push(slot, inp.n_pops() + e, k, units / 3.0);
@@ -518,9 +521,7 @@ fn input_orders_count_goods_on_order() {
         assert_order_rule(&w) > 0,
         "no order held back by goods on order"
     );
-    let i = inp.enterprises.province[full] as usize;
-    let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[full]));
-    for k in (0..N_GOODS).filter(|&k| TRADED[k] && inp.a(c, k, g) > 0.0) {
+    for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[full][k] > 0.0) {
         assert_eq!(w.scratch.ent_order[full * N_GOODS + k], 0.0);
         assert_eq!(w.scratch.ent_spend[full * N_GOODS + k], 0.0);
     }
@@ -606,4 +607,282 @@ fn buyers_price_traded_goods_at_the_delivered_unit_price() {
         leads > 0,
         "no destination waits more than a month on average"
     );
+}
+
+const COAL: usize = 2;
+const CONSTRUCTION: usize = 8;
+const SERVICES: usize = 9;
+const LOCAL: [usize; 3] = [7, 8, 9];
+
+/// The fixture with input coefficients `(k, g, a_kg)` set in every country, one vintage.
+fn fixture_with(coefficients: &[(usize, usize, f64)]) -> EconInputs {
+    let mut inputs = small_world();
+    for io in &mut inputs.countries.io {
+        for &(k, g, a) in coefficients {
+            io[k * N_GOODS + g] = a;
+        }
+    }
+    inputs.set_coefficients();
+    inputs.validate();
+    inputs
+}
+
+/// The enterprise of province `i` producing `g`.
+fn producer(w: &EconWorld, i: usize, g: usize) -> usize {
+    let inp = w.inputs();
+    w.layout()
+        .enterprises(i)
+        .find(|&e| usize::from(inp.enterprises.good[e]) == g)
+        .expect("a producer")
+}
+
+/// One tick through the systems, with `hook` run right after E1 labour.
+fn step_with(w: &mut EconWorld, tick: u32, hook: impl Fn(&mut EconWorld)) {
+    w.begin_tick();
+    systems::deliver(w);
+    systems::labour(w);
+    hook(w);
+    systems::produce(w);
+    systems::demand(w);
+    systems::source(w);
+    systems::clear(w);
+    from_dispatch(w, tick);
+}
+
+/// Destroys the local input stocks (the chain's buffers) of every enterprise of province `i`.
+fn drain_local_buffers(w: &mut EconWorld, i: usize) {
+    let lay = w.layout().clone();
+    for e in lay.enterprises(i) {
+        for k in LOCAL {
+            let held = w.ledger.goods(lay.accounts.enterprise[e], k);
+            if held > 0.0 {
+                w.ledger.destroy(lay.accounts.enterprise[e], k, held);
+            }
+        }
+    }
+}
+
+/// Services feeding every sector at 0.3, so that intermediate users take most of services
+/// output, and the first tick from the data state in two runs, both with the local buffers
+/// of province 0 drained: control, and cut (half of its services labour). The cut is at tick
+/// 0, not 10: at tick 10 the data state's traded shortage caps services output by its
+/// traded input stocks, so its labour does not bind.
+fn services_shortage() -> (EconWorld, EconWorld) {
+    let coefficients: Vec<_> = (0..N_GOODS).map(|g| (SERVICES, g, 0.3)).collect();
+    let w = EconWorld::new(
+        Arc::new(fixture_with(&coefficients)),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let services = producer(&w, 0, SERVICES);
+    let mut control = w.clone();
+    step_with(&mut control, 0, |w| drain_local_buffers(w, 0));
+    let mut cut = w;
+    step_with(&mut cut, 0, |w| {
+        drain_local_buffers(w, 0);
+        w.employment[services] *= 0.5;
+    });
+    (control, cut)
+}
+
+/// ADR 0020: a shortage of a local good reaches its users' output within the tick.
+#[test]
+fn local_shortage_reaches_downstream_same_tick() {
+    let (control, cut) = services_shortage();
+    let (services, construction) = (
+        producer(&control, 0, SERVICES),
+        producer(&control, 0, CONSTRUCTION),
+    );
+    assert!(cut.output[services] < 0.7 * control.output[services]);
+    // without the cut, services covers its users from this tick's output
+    assert_eq!(control.scratch.chain_iterations[0], 1);
+    assert!(cut.scratch.chain_iterations[0] > 1);
+    let (was, now) = (control.output[construction], cut.output[construction]);
+    assert!(now < 0.95 * was, "construction {now} against {was}");
+}
+
+/// Intermediate users of a local good are served before households: in the shortage they
+/// draw all of services output and households get none; without it households buy the rest.
+/// At origin markets the default Priority fills intermediate orders before households.
+#[test]
+fn local_chain_respects_intermediate_priority() {
+    let (control, cut) = services_shortage();
+    let cell = SERVICES;
+    let households = |w: &EconWorld| -> f64 {
+        w.layout()
+            .pops(0)
+            .map(|k| w.scratch.pop_demand[k * N_GOODS + SERVICES])
+            .sum()
+    };
+    for w in [&control, &cut] {
+        assert!(households(w) > 0.0);
+        assert!(w.scratch.drawn[cell] <= w.markets.supply[cell] * (1.0 + 1e-12));
+    }
+    let to_households = |w: &EconWorld| w.markets.sales[cell] - w.scratch.drawn[cell];
+    assert!(to_households(&control) > 0.0);
+    let supply = cut.markets.supply[cell];
+    assert!((cut.scratch.drawn[cell] - supply).abs() <= 1e-12 * supply);
+    assert!(to_households(&cut) <= 1e-12 * supply);
+
+    let mut sim = sim_of(world(EconParams::default()));
+    let mut short = 0;
+    for _ in 0..36 {
+        sim.step().unwrap();
+        let w = sim.world();
+        for (c, f) in w.scratch.fill.iter().enumerate() {
+            if TRADED[c % N_GOODS] && w.markets.active[c] && f[0] < 1.0 {
+                let none = if w.markets.demand_hh[c] > 0.0 {
+                    0.0
+                } else {
+                    1.0
+                };
+                assert_eq!(f[1], none, "cell {c}: {f:?}");
+                short += 1;
+            }
+        }
+    }
+    assert!(short > 0, "no intermediate shortage at an origin");
+}
+
+/// A traded input reaches its users after transit: cutting coal output leaves downstream
+/// output unchanged in the tick of the cut, and lowers it once input stocks run out.
+#[test]
+fn traded_shortage_still_lags() {
+    let mut sim = sim_of(world(EconParams::default()));
+    sim.run_until(10).unwrap();
+    let (mut control, mut cut) = (sim.world().clone(), sim.world().clone());
+    let inp = control.inputs().clone();
+    let coal: Vec<usize> = (0..inp.n_enterprises())
+        .filter(|&e| usize::from(inp.enterprises.good[e]) == COAL)
+        .collect();
+    let users: Vec<usize> = (0..inp.n_enterprises())
+        .filter(|&e| !coal.contains(&e) && control.layout().coef[e][COAL] > 0.0)
+        .collect();
+    let mut lower = None;
+    for tick in 10..48 {
+        step_with(&mut control, tick, |_| {});
+        step_with(&mut cut, tick, |w| {
+            coal.iter().for_each(|&e| w.employment[e] = 0.0)
+        });
+        if tick == 10 {
+            assert!(coal.iter().all(|&e| cut.output[e] == 0.0));
+            for &e in &users {
+                assert_eq!(cut.output[e].to_bits(), control.output[e].to_bits());
+            }
+        } else if lower.is_none()
+            && users
+                .iter()
+                .any(|&e| cut.output[e] < 0.99 * control.output[e])
+        {
+            lower = Some(tick);
+        }
+    }
+    assert!(lower.is_some(), "downstream output never fell");
+}
+
+/// Review Focus 5: services feeding services, and construction and services feeding each
+/// other. From the data state the chain binds in every mainland province at tick 1 and
+/// converges there within its bound; over 120 ticks every local input used equals coef Y
+/// (the Leontief invariant, exactly, at every tick), including the province ticks where a
+/// cycle between two local goods is still converging at the bound and the chain clears the
+/// rest by cutting the users that produce no local good.
+#[test]
+fn local_chain_terminates_on_cycles() {
+    let coefficients = [
+        (SERVICES, SERVICES, 0.3),
+        (SERVICES, CONSTRUCTION, 0.2),
+        (CONSTRUCTION, SERVICES, 0.2),
+    ];
+    let inputs = Arc::new(fixture_with(&coefficients));
+    let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
+    let (mut bound, mut at_bound) = (0, 0);
+    for tick in 0..120 {
+        sim.step().unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world();
+        let iterations = &w.scratch.chain_iterations;
+        assert!(
+            iterations
+                .iter()
+                .all(|&n| (1..=N_LOCAL as u32).contains(&n))
+        );
+        if tick == 1 {
+            assert!(
+                iterations[..24]
+                    .iter()
+                    .all(|&n| n > 1 && n < N_LOCAL as u32)
+            );
+        }
+        bound += iterations.iter().filter(|&&n| n > 1).count();
+        at_bound += iterations.iter().filter(|&&n| n == N_LOCAL as u32).count();
+        for e in 0..w.inputs().n_enterprises() {
+            for k in LOCAL {
+                let want = w.layout().coef[e][k] * w.scratch.produced[e];
+                let used = w.scratch.input_used[e * N_GOODS + k];
+                assert!(
+                    (used - want).abs() <= 1e-12 * want,
+                    "tick {tick} enterprise {e} good {k}"
+                );
+            }
+        }
+    }
+    println!("chain bound in {bound} province ticks, {at_bound} of them at the bound");
+    assert!(bound > 0 && at_bound < bound);
+}
+
+/// S11 Proportional: one fill ratio for both classes at every short origin market.
+#[test]
+fn proportional_rationing_switch() {
+    let params = EconParams {
+        rationing: Rationing::Proportional,
+        ..EconParams::default()
+    };
+    let mut sim = sim_of(world(params));
+    let mut short = 0;
+    for _ in 0..36 {
+        sim.step().unwrap();
+        let w = sim.world();
+        for (c, f) in w.scratch.fill.iter().enumerate() {
+            if TRADED[c % N_GOODS] && w.markets.active[c] && f != &[1.0, 1.0] {
+                assert_eq!(f[0], f[1], "cell {c}");
+                short += 1;
+            }
+        }
+    }
+    assert!(short > 0, "no shortage at an origin");
+}
+
+/// ADR 0020: with one vintage (the 2000 ICIO column) putty-clay coefficients run exactly as
+/// fixed Leontief (S09), down to the state hash; a second vintage would tell them apart.
+#[test]
+fn putty_clay_one_vintage_equals_fixed_leontief() {
+    let with = |technology| EconParams {
+        technology,
+        ..EconParams::default()
+    };
+    let (putty, fixed) = (with(Technology::PuttyClay), with(Technology::FixedLeontief));
+    let mut a = sim_of(world(putty.clone()));
+    let mut b = sim_of(world(fixed.clone()));
+    assert_eq!(a.world().digest(), b.world().digest());
+    for tick in 0..120 {
+        a.step().unwrap();
+        b.step().unwrap();
+        assert_eq!(a.state_hash(), b.state_hash(), "tick {tick}");
+    }
+
+    let mut inputs = small_world();
+    inputs.enterprises.coef[0][SERVICES] *= 1.5;
+    let t = TradeParams::default();
+    assert_ne!(
+        static_digest(&inputs, &putty, &t),
+        static_digest(&inputs, &fixed, &t)
+    );
+    let (inputs, e) = (Arc::new(inputs), 0);
+    let fixed_world = EconWorld::new(Arc::clone(&inputs), fixed, t.clone());
+    let putty_world = EconWorld::new(Arc::clone(&inputs), putty, t);
+    let c = inputs.country_of(inputs.enterprises.province[e] as usize);
+    let g = usize::from(inputs.enterprises.good[e]);
+    for k in 0..N_GOODS {
+        assert_eq!(fixed_world.layout().coef[e][k], inputs.a(c, k, g));
+        assert_eq!(putty_world.layout().coef[e][k], inputs.coef(e, k));
+    }
 }

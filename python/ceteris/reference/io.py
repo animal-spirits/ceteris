@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 4)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 6)."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,7 +10,7 @@ from pyarrow import ipc
 
 from . import demand
 
-EXPORT_FORMAT = "5"
+EXPORT_FORMAT = "6"
 
 
 @dataclass(frozen=True)
