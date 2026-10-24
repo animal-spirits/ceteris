@@ -26,7 +26,7 @@ pub struct TradeParams {
     pub c_max: f64,
     /// P05 non-tariff border friction nu, ad valorem equivalent.
     pub border_nu: f64,
-    /// P41 ad valorem cost of a day in transit, lambda_g.
+    /// P43 ad valorem cost of a day in transit, lambda_g.
     pub time_cost: [f64; N_GOODS],
 }
 

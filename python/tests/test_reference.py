@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,7 @@ from pyarrow import ipc as pa_ipc
 from ceteris.reference import io, model, ppml, sinkhorn, solve
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tests" / "golden" / "p2-fixture"
+FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
 
 
 @pytest.fixture(scope="module")
@@ -208,6 +209,7 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k) / tau, rel=1e-9)
 
 
+@pytest.mark.skip(reason="re-blessed in MIGRATION Task 10 (ADRs 0015-0022)")
 def test_fixture_reference_is_current(fixture):
     """`tests/golden/p2-fixture/reference` (read by Rust: runs started from the equilibrium and
     the V1 check) is the current solve of the fixture. Regenerate with

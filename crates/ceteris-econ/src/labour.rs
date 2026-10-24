@@ -10,7 +10,7 @@ const MAX_ITER: usize = 200;
 /// Relative tolerance on the wage.
 const TOL: f64 = 1e-13;
 
-/// P37, P38: dlnw = clip(kappa_w x, -c_max, c_max), scaled by (1 - delta_w) when negative.
+/// P39, P40: dlnw = clip(kappa_w x, -c_max, c_max), scaled by (1 - delta_w) when negative.
 /// `excess` is x_i = (sum L* - L^s) / L^s. Returns the new wage.
 pub fn wage_step(w: f64, excess: f64, p: &EconParams, c_max: f64) -> f64 {
     let mut dlnw = (p.kappa_w * excess).clamp(-c_max, c_max);
