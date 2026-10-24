@@ -68,6 +68,11 @@ impl Ledger {
         self.open[a.0 as usize] = false;
     }
 
+    /// Accounts ever opened, closed ones included.
+    pub fn n_accounts(&self) -> usize {
+        self.money.len()
+    }
+
     pub fn is_open(&self, a: AccountId) -> bool {
         self.open[a.0 as usize]
     }

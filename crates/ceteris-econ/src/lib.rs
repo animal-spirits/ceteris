@@ -2,8 +2,13 @@
 //! the trade layer. See `specs/econ/SPEC.md`.
 
 pub mod demand;
+pub mod fixture;
+pub mod inputs;
 pub mod labour;
 pub mod params;
 pub mod production;
+pub mod world;
 
+pub use inputs::EconInputs;
 pub use params::EconParams;
+pub use world::EconWorld;
