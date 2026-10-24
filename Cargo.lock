@@ -274,6 +274,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceteris-trade"
+version = "0.0.1"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
