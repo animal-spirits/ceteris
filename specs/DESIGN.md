@@ -121,7 +121,7 @@ Each assumption has an ID referenced by module specs. Assumptions marked (T) are
 
 ### 3.4 The equilibrium-nesting principle
 
-Every behavioural rule is specified as a relaxation of an optimizing benchmark with an explicit friction parameter. Setting adjustment speeds high, information lags to zero and dispersion parameters to their structural values must reproduce the benchmark. Examples: merchant logit routing collapses to structural gravity; inventory-based pricing converges to Walrasian clearing; dynamic migration choice collapses to the Caliendo-Dvorkin-Parro migration block. This gives every module a closed-form correctness test and makes literature elasticities usable as priors.
+Every behavioural rule is specified as a relaxation of an optimizing benchmark with an explicit friction parameter. Setting adjustment speeds high, information lags to zero and dispersion parameters to their structural values must reproduce the benchmark. Examples: merchant logit routing collapses to structural gravity; inventory-based pricing converges to Walrasian clearing; dynamic migration choice collapses to the Caliendo-Dvorkin-Parro migration block. This gives every module a closed-form correctness test and makes literature elasticities usable as priors. Household saving, money and fiscal policy have no closed-form benchmark, so their reference is a sequence-space HANK model (ADR 0025), matched on impulse responses given the same intertemporal MPCs.
 
 ## 4. System Architecture and Simulation Loop
 
@@ -360,6 +360,8 @@ L is effective labour by education level; T is land (agriculture) or resource de
 
 **Putty-clay intermediates (ADR 0020).** The coefficients a belong to installed capacity, not to the sector. Each capacity vintage fixes its input coefficients when it is built, by cost minimization over a CES with a long-run elasticity (register P38) at expected prices; once installed it runs Leontief. Short-run complementarity matches the near-zero elasticities measured for intermediates (Atalay 2017; Boehm, Flaaen and Pandalai-Nayar 2019) and keeps rationing along supply chains. Long-run substitution lets the input-output structure drift from its 2000 values over decades instead of staying frozen to 2150, and gives large shocks the non-linear propagation studied by Baqaee and Farhi (2019). Vintages are aggregated per enterprise into a capacity-weighted coefficient vector, so per-tick cost is unchanged; the choice happens at the quarterly investment step (7.4). Initial capacity is one vintage with the 2000 ICIO coefficients.
 
+**Firms within a cell (ADR 0026).** Each (province, sector, ownership) enterprise is a mass of firms with Pareto-distributed productivity, shape k\_g, above a cell-specific lower bound, selling CES varieties with elasticity sigma\_g (k\_g > sigma\_g - 1), as in Melitz (2003) and Chaney (2008). The firm count, size distribution and exporter share of each cell are closed form, so the extensive margin of trade and a firm-size target come at no per-tick cost. The quarterly investment step (7.4) becomes free entry and exit in the mass of firms.
+
 ### 7.3 Enterprise behaviour (monthly)
 
 1. Forecast demand with the heuristic expectation rules of Section 12.
@@ -430,7 +432,7 @@ Within each good, buyers in province d spread spending across origin provinces b
 X_{od,g} = \frac{K_{od,g} \, p_{o,g}^{-\theta_g}}{\sum_{k} K_{kd,g} \, p_{k,g}^{-\theta_g}} \, E_{d,g}, \qquad K_{od,g} = \tau_{od,g}^{-\theta_g}
 ```
 
-E(d,g) is province d's expenditure on good g at posted prices (households, intermediate users, investment and government), and the denominator is the price-index term P(d,g)^(-theta). The kernel is dimensionless and prices enter only as ratios, so flows are homogeneous of degree zero in nominal prices and exchange rates: inflation or a currency move does not change trade dispersion. Quantities shipped are X / (p\_o tau); per-unit costs (5.4) are charged to the shipment.
+E(d,g) is province d's expenditure on good g at posted prices (households, intermediate users, investment and government), and the denominator is the price-index term P(d,g)^(-theta). The kernel is dimensionless and prices enter only as ratios, so flows are homogeneous of degree zero in nominal prices and exchange rates: inflation or a currency move does not change trade dispersion. Quantities shipped are X / (p\_o tau); per-unit costs (5.4) are charged to the shipment. With firms heterogeneous within cells (ADR 0026), theta\_g is the Pareto shape of productivity and fixed export costs multiply the kernel on gateway links by f^(1 - theta/(sigma - 1)), so its form and factorization are unchanged.
 
 **Clearing across ticks (ADR 0016).** Each tick applies the destination-side normalization above once, at posted prices. Origin sales are not forced to equal origin supply within the tick: the gap goes into the origin's merchant inventory and moves p\_o through the rule of 8.2 at the next tick. A destination normalization followed by an origin price adjustment is one Sinkhorn sweep, so the price dynamics are Sinkhorn spread over time. With adjustment speeds high and lags zero, the fixed point is the doubly constrained entropic transport solution, which is the structural-gravity equilibrium (Galichon 2016; Allen, Arkolakis and Takahashi 2020). The frictionless limit is therefore the GE reference model by construction, and the within-tick work is one kernel product per good class instead of 5 to 10 full Sinkhorn iterations.
 
@@ -827,7 +829,7 @@ Climate is an endogenous feedback loop (the economy emits, temperature responds,
 1. **Emissions**: CO2, methane and nitrous oxide from fossil energy use, industry, agriculture and land-use change, computed from simulated activity (Section 7.7).
 2. **Global response**: a reduced-form carbon cycle and temperature model in the style of FaIR (open source), initialized to observed 2000 concentrations; it runs annually and costs microseconds.
 3. **Regional climate**: province temperature and precipitation anomalies by pattern scaling of global mean temperature, using patterns from climate-model ensembles, plus interannual variability from the weather generator.
-4. **Damages**: non-linear temperature effects on crop yields (Schlenker and Roberts style), on labour productivity and output (Burke, Hsiang and Miguel 2015), on mortality (Carleton et al. 2022), sea-level rise removing coastal land and raising flood risk, and more frequent extremes. Whether temperature lowers output levels or growth rates is switch S10, not a fixed prior: growth effects (Burke, Hsiang and Miguel 2015) dominate every run past 2050, and the evidence is divided (Newell, Prest and Sexton 2021; Bilal and Kanzig 2024).
+4. **Damages**: non-linear temperature effects on crop yields (Schlenker and Roberts style), on labour productivity and output (Burke, Hsiang and Miguel 2015), on mortality (Carleton et al. 2022), sea-level rise removing coastal land and raising flood risk, and more frequent extremes. Whether temperature lowers output levels or growth rates is switch S10, not a fixed prior: growth effects (Burke, Hsiang and Miguel 2015) dominate every run past 2050, and the evidence is divided (Newell, Prest and Sexton 2021; Bilal and Kanzig 2024). The reference model for P8 is the spatial integrated assessment model of Cruz and Rossi-Hansberg (2024), which resolves warming, migration and trade at a comparable spatial scale; P8 compares damage incidence by province with it, as P2 compares trade with the GE reference.
 5. **Policy levers**: carbon prices, fuel taxes and subsidies, efficiency standards and clean-energy subsidies act through prices and sector productivity; adaptation spending reduces damage functions.
 
 Validation: 2000-2024 emissions by country and global temperature; beyond 2024, emission and temperature paths are compared to IPCC scenario ranges as a plausibility check, not a target.
@@ -923,8 +925,9 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | Method of simulated moments | Moments with clear targets (trade shares, unemployment, spreads, fertility) | Common random numbers across draws |
 | Neural posterior estimation / ABC-SMC | Joint posterior of behavioural parameters | Simulation-based inference for ABMs as in Dyer et al. (2024); sbi toolkit (PyTorch, runs on Apple MPS) |
 | History matching with GP emulators | Ruling out implausible regions first | A few hundred runs |
-| Gradient-based tuning on differentiable relaxations | Prices, demand and trade kernels | JAX on CPU (Apple GPU support for JAX is limited) |
+| Gradient-based variational inference | Behavioural parameters, through forward-mode derivatives of the Rust core (ADR 0023) | Same code as the golden runs; in Hamid et al. (2025) gradient-based variational inference reached in 300 evaluations a loss ABC had not reached in 30,000 |
 | Direct structural estimation | Parameters whose estimating equation the model nests: theta\_g, border frictions (P05) and mode cost ratios (P04) by PPML gravity on BACI; migration dispersion (P16) by PPML on bilateral migration flows; Koijen-Yogo demand elasticities by their instrument | Outside the simulation (ADR 0022); frees the run budget for behavioural parameters |
+| Multi-fidelity emulation and inference | Low-fidelity simulators (the European slice, gateway-coarsened worlds, short horizons) explore parameter space; full-globe runs correct them (Kennedy and O'Hagan 2000) | Cuts the number of full-globe runs the overnight budget must cover |
 
 **Compute budget on the MacBook (estimate to verify in P0).** A headless 25-year run on one core is targeted at 2 to 3 minutes; running 10 to 12 in parallel gives roughly 250 to 350 runs per hour, about 3,000 overnight. Calibration is planned around that number: emulators and modular steps first, joint inference last.
 
@@ -933,8 +936,8 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | Level | Test | Pass criterion |
 | --- | --- | --- |
 | V0 | Accounting invariants, determinism, null-branch identity | Zero violations in CI |
-| V1 | Equilibrium nesting: frictions off, ABM steady state vs analytical GE; long-run neutrality of a permanent nominal shock | Prices and flows within 1% where the uniqueness condition holds (ADR 0022); real allocations unchanged in the long run |
-| V2 | Stylized facts | Gravity distance elasticity near the consensus around -0.9 (Disdier and Head 2008); Zipf's law for city sizes; Engel curves; Okun's law; Phillips-curve and Beveridge-curve shapes |
+| V1 | Equilibrium nesting: frictions off, ABM steady state vs analytical GE; long-run neutrality of a permanent nominal shock | Prices and flows within 1% where the uniqueness condition holds (ADR 0022); real allocations unchanged in the long run; from P5, impulse responses to rate and transfer shocks within tolerance of the sequence-space HANK reference given matched intertemporal MPCs (ADR 0025) |
+| V2 | Stylized facts | Gravity distance elasticity near the consensus around -0.9 (Disdier and Head 2008); Zipf's law for city sizes; Engel curves; Pareto firm-size tails within cells (ADR 0026); Okun's law; Phillips-curve and Beveridge-curve shapes |
 | V3 | Out-of-sample 2011-2024 | See 15.4 |
 | V4 | Natural-experiment replication | See 15.5 |
 | V5 | Expert face validity | Structured review of baseline runs by economists and political scientists |
@@ -1098,6 +1101,9 @@ Added for the modern scenario:
 | P36 | Nuclear escalation cost term | War | Large | Absence of direct war between nuclear powers | Calibrated |
 | P37 | Consumption propensity m, wealth correction lambda, target wealth ratio w\* | Households | m 0.5 to 1 by wealth bracket; lambda 0.01 to 0.05 per month | Intertemporal MPCs (Fagereng, Holm and Natvik 2021; Auclert, Rognlie and Straub 2024); wealth-to-income by bracket (WID) | Calibrated |
 | P38 | Long-run input substitution elasticity (putty-clay) | Production | 0.3 to 1 | Drift of input-output coefficients across ICIO years 1995-2022 | Literature + calibrated |
+| P39 | Within-cell elasticity of substitution sigma\_g | Production | 3 to 8, below theta\_g + 1 | Markup estimates; Broda and Weinstein (2006) | Literature |
+| P40 | Fixed export costs by border crossing | Trade | Log-uniform | Exporter shares by sector and country | Calibrated |
+| P41 | Entry costs by sector | Production | Log-uniform | Firm counts by size class; entry and exit rates | Calibrated |
 
 ### 17.2 Structural switches (model uncertainty)
 
@@ -1215,6 +1221,8 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Sparse relations (trade partners, transport edges, financial claims by holder and issuer) in compressed-row form; 45x45 input-output blocks stay dense.
 - Goods are the innermost dimension of every goods-indexed array, padded to a multiple of 4 (f32) or 2 (f64), aligned to 128 bytes (the M-series cache line).
 - Ledger balances in fixed-point `i64`; prices and quantities in `f64`; kernel values in `f32` where the spec allows.
+- Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0023). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
+- Ensemble members are lanes, the innermost array dimension (ADR 0024); interactive play runs one lane.
 
 **Tick execution**
 
@@ -1252,9 +1260,9 @@ These are binding rules for the coding agent: the speed comes from layout and al
 
 **Ensembles and calibration**
 
-- One single-threaded run per process; process count about equal to performance cores.
+- Ensemble members run as 8 to 32 lanes of one process, advancing in lockstep (ADR 0024); process count about equal to performance cores.
 - Data packs are immutable Arrow files memory-mapped by every process, so ensembles share one physical copy through the page cache.
-- Seeds that share a kernel can be batched as extra columns in the gateway-level Sinkhorn products.
+- Lanes share packs, kernels and route-choice factors; trade products widen from (provinces x goods) to (provinces x goods x lanes).
 - Copy-on-write snapshots in about 64k-row content-hashed chunks with low-level zstd.
 - Emulate principal components of output series; reuse Saltelli sample matrices; random Fourier features keep emulators linear in run count; Python crosses the boundary only with zero-copy Arrow, never per-entity calls.
 
@@ -1328,7 +1336,7 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
 5. **P4 Population.** Demography with Brass mortality and fertility, education, occupational mobility, culture and religion dynamics, migration with dynamic discrete choice.
    - Accept: fertility, mortality and urbanization within tolerance of UN data for 2000-2010; population conservation holds.
 6. **P5 Money, finance and state.** Currencies and regimes, central banks with policy rules, banks, housing and equity prices, sovereign bonds and default, IMF, portfolio capital flows, taxes with fiscal capacity, budgets, SFC matrices.
-   - Accept: SFC matrices close every tick; a policy-rate shock moves credit, output, inflation and the exchange rate with plausible signs and lags; spreads respond to debt and stress.
+   - Accept: SFC matrices close every tick; a policy-rate shock moves credit, output, inflation and the exchange rate with plausible signs and lags, within tolerance of the sequence-space HANK reference given matched intertemporal MPCs (ADR 0025); spreads respond to debt and stress.
 7. **P6 Politics and institutions.** Institution vector, interest groups, parties and elections, contest function, policy mechanisms, laws with momentum, legitimacy, ideology dynamics, unrest, reform, repression, revolution, coups, secession.
    - Accept: regime transitions, coups and protest waves at plausible frequencies; simulated 2000-2010 elections track vote shares; crisis-voting event study (H7) runs end to end.
 8. **P7 Diplomacy and war.** Relations, treaties, crisis bargaining, alliances, nuclear deterrence, forces, daily combat, logistics, occupation, war economy, peace terms, sanctions, civil conflict.
@@ -1758,13 +1766,15 @@ Several nineteenth-century references above are no longer cited after the switch
 - Lux (2018). Estimation of agent-based models using sequential Monte Carlo methods. JEDC.
 - Yao, Vehtari, Simpson and Gelman (2018). Using stacking to average Bayesian predictive distributions. Bayesian Analysis.
 
-## 25. P2 model migration (ADRs 0015-0022)
+## 25. Model migration (ADRs 0015-0026)
 
 An economics review on 24 Oct 2026 changed P2's core: the trade objective, how markets clear, trade costs, the price and wage rules, production, demand and the P2 gate. Sections 5.4, 7.2, 8.2, 8.3, 8.6, 8.7, 15, 17, 19 and 21.1 already carry the new design; the ADRs below record the decisions and say how to move the P2 work in progress onto them. Later-phase findings (6.5, 8.8, 9.2, 9.4, 9.9, 13.2, 15.7) are folded into those sections and need no ADR until their phases start.
 
 **How to apply.** Transcribe each ADR to adr/NNNN-slug.md in the repository format. P2 work had already used 0012 to 0014 (full globe, posted-price logit routing, data seeding), so these ADRs are numbered 0015 to 0022 in the repository and here; 0015 and 0016 supersede the repository's 0013. The ADRs were written against the P2 specification in this document, because the P2 code is not on the remote (it ends at P1, commit c848142); where the code differs, map each migration step to what exists and record the mapping in the ADR.
 
 **Landing order.** 0015 and 0016 together (one rewrite of the trade system), then 0017 (ceteris-geo), 0018, 0019, 0021, 0020, and 0022 last because it defines the gate. Every one of them changes simulation output, so regenerate the golden hashes once after all eight land, with one BEHAVIOUR changelog entry listing them.
+
+**Second round (0023-0026).** A follow-up review against the computational and economic state of the art added four ADRs. 0023 (forward-mode derivatives) and 0024 (ensemble lanes) fix P2's numeric types and array layout, so they land before P2's code settles, ideally with 0015 and 0016. 0026 (firms within cells) lands with the trade rewrite. 0025 (HANK reference) lands in P5 and asks only for a test harness in P2. 0023, 0024 and 0025 leave release-mode output unchanged; 0026 changes it and joins the single golden-hash regeneration.
 
 | ADR | Decision | Crates and specs | Changes P2 output |
 | --- | --- | --- | --- |
@@ -1776,6 +1786,10 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 | 0020 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
 | 0021 | PIGL demand; consumption rule | econ | Yes |
 | 0022 | Uniqueness check, static nesting gate, direct estimation | python reference and calibrate | Gate only |
+| 0023 | Forward-mode derivatives through a Real trait | core, econ, trade, geo | No (f64 path identical) |
+| 0024 | Ensemble lanes as the innermost array dimension | core, all systems | No (lane k equals seed k) |
+| 0025 | Sequence-space HANK reference for the macro block | python reference; P2 test harness | No |
+| 0026 | Pareto firm heterogeneity within cells | econ, trade, register | Yes |
 
 ### 0015. Trade flows in value with a dimensionless gravity kernel
 
@@ -1968,3 +1982,108 @@ Status: proposed. Date: 2026-10-24. Design sections: 3.4, 15.2, 15.3 (V1), 17.1,
 **Tests.** The gate itself; the PPML code reproduces published estimates on a published sample before it runs on the pack.
 
 **Consequences.** The P2 gate is well posed, and fewer parameters enter joint inference in P9.
+
+### 0023. Forward-mode derivatives in the Rust core
+
+Status: proposed. Date: 2026-10-24. Design sections: 15.2, 15.7, 17, 19.4.
+
+**Context.** Section 15.2 planned gradient-based tuning on JAX relaxations of the price, demand and trade kernels: a second implementation of the core, in Python, that would drift from the first. Gradient-based calibration of agent-based models is now practical: Hamid et al. (2025) calibrate a differentiable supply-chain ABM by variational inference and reach in 300 model evaluations a loss that approximate Bayesian computation had not reached in 30,000. After ADRs 0015 to 0021 the per-tick economic kernels are smooth and closed form: the gravity normalization, route-choice solves, PIGL demand, and the price and wage rules.
+
+**Options.** (1) Reimplement the kernels in JAX. (2) Reverse-mode automatic differentiation in Rust with Enzyme. (3) Forward-mode dual numbers through a float trait. (4) Finite differences under common random numbers.
+
+**Decision.** Option 3, with option 4 as its test. Calibration needs derivatives with respect to about 10 parameters (the top Sobol indices), where forward mode is cheap and needs no tape. Reverse mode over a 300-tick run with 100,000 pops would store the whole trajectory, and Enzyme needs a nightly LLVM plugin against the pinned stable toolchain. Option 1 duplicates the core.
+
+**Migration.**
+
+- Add a Real trait in ceteris-core (arithmetic, mul\_add, exp, ln, powf, smooth max and min), implemented by f64 and by Dual\<N>: a value plus N tangents, N up to 16, stored contiguously for SIMD.
+- Write the P2 economic kernels and the route-choice solve generic over Real. Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
+- Give non-smooth operations smooth versions in calibration builds only: the price-step clip becomes a soft clip, and priority rationing a softmax ordering with a temperature. Discrete events (default, entry, exit) are held at their primal outcome, and gradients are reported as conditional on that event path.
+- Ledger balances stay fixed-point i64 without tangents; tangents live on prices, quantities and parameters.
+- Gradients of summary statistics reach Python through the same Arrow boundary as other outputs.
+
+**Tests.**
+
+- The f64 instantiation reproduces the non-generic golden hashes bit for bit.
+- Dual gradients match central finite differences under common random numbers to 1e-6 relative on the P2 golden scenario.
+- A criterion benchmark of Dual<10> against f64 sets the calibration-build budget in the P2 spec.
+
+**Consequences.** Variational inference and gradient-based MCMC become available in P9 for the smooth blocks without emulators; JAX stays only in the GE reference model. Calibration builds differ from release builds in the soft clips and rationing, so each posterior is checked by re-running its mean in release mode.
+
+### 0024. Ensemble lanes
+
+Status: proposed. Date: 2026-10-24. Design sections: 4.5, 14.1, 14.4, 15.2, 19.4.
+
+**Context.** Section 19.4 ran one single-threaded run per process. Ensembles (32 seeds by default), common-random-number pairs and calibration batches are most of the compute, and every process reads the same kernels and route-choice factors from memory again. Current agent-based frameworks vectorize across runs instead; ABMax, for example, runs many similar models in parallel with JAX's vmap.
+
+**Options.** (1) One process per run. (2) Lanes: an inner array dimension indexing ensemble members, advanced in lockstep in one process. (3) GPU-resident ensembles.
+
+**Decision.** Option 2, with the lane count L a const generic: L = 1 for interactive play, 8 to 32 for ensembles. Option 3 stays the Metal fallback for the trade products only, under the GPU rules of 19.4.
+
+**Migration.**
+
+- State arrays gain lane as the innermost dimension, after goods. P2's entities are static, so every table is rectangular in lanes.
+- RNG streams already key on the seed, so lane k uses seed k and no stream changes.
+- Read-only data (pack, kernels, route-choice factors) is stored once; a lane whose edges differ after an intervention gets a copy-on-write factor.
+- Trade products widen from (provinces x goods) to (provinces x goods x lanes), so gateway products become larger matrix-matrix products.
+- From P4, lanes can diverge in their entity sets (enterprise entry, wars): entity tables carry per-lane existence masks, and work for absent entities is masked, not skipped.
+- Lanes compose with 0023: tangents and lanes are both inner dimensions, and a calibration build uses lanes for parameter draws or tangents, not both at once.
+
+**Tests.**
+
+- Lane k of a vectorized run has the same state hashes as a scalar run with seed k at every snapshot.
+- A common-random-number pair in two lanes reproduces the paired effects of two scalar runs.
+- A benchmark of run-ticks per second against the process-per-run baseline.
+
+**Consequences.** Snapshots store lanes as separate branches. The throughput gain is measured in P2; it is expected from memory traffic rather than arithmetic.
+
+### 0025. Sequence-space HANK reference for the macro block
+
+Status: proposed. Date: 2026-10-24. Design sections: 3.4, 8.6, 9, 15.3 (V1), 21.1 (P5).
+
+**Context.** Trade and migration nest into Caliendo-Dvorkin-Parro and Kleinman-Liu-Redding, but household saving, money and fiscal policy had no reference model, so P5's acceptance rested on plausible signs and lags. The standard tool for heterogeneous-agent macroeconomics is the sequence-space Jacobian method (Auclert, Bardoczy, Rognlie and Straub 2021), which solves linearized HANK models in seconds and has an open-source Python implementation. Auclert, Rognlie and Straub (2024) show that intertemporal MPCs summarize the household block for aggregate demand.
+
+**Options.** (1) No reference; plausibility only. (2) A representative-agent New Keynesian reference. (3) A small-open-economy HANK per state, solved in sequence space.
+
+**Decision.** Option 3. A representative agent cannot match MPCs and would fail the transfer experiments that matter most for fiscal counterfactuals.
+
+**Migration.**
+
+- P2: add a harness that computes the intertemporal MPC matrix of the consumption rule (8.6) from simulated one-off transfers to each pop group. It runs even with m = 1 and lambda = 0.
+- P5: build the reference in python/ceteris/reference with each state's income process, Taylor rule (P35), fiscal rule and trade openness from its initial data, and calibrate its household block to the same intertemporal MPC targets as P37.
+- V1 macro test: with perfect foresight in place of heuristics (S04) and frictions off, impulse responses of output, consumption and inflation to policy-rate and transfer shocks lie within tolerance of the reference for small shocks; with heuristics on, signs and peak timing only.
+
+**Tests.** The harness reproduces the closed-form case: with m = 1 and lambda = 0 the intertemporal MPC matrix is the identity.
+
+**Consequences.** P5 gets a quantitative gate. The reference is linear, so it checks small shocks only; crises stay judged by the frequency targets of 9.13.
+
+### 0026. Firm heterogeneity within cells
+
+Status: proposed. Date: 2026-10-24. Design sections: 7.2, 7.4, 8.3, 15.3 (V2), 17.1.
+
+**Context.** One enterprise per (province, sector, ownership) has no extensive margin of trade, no firm-size distribution and no exporter selection. The V2 firm-size target had to be dropped, and trade liberalization worked only through the intensive margin.
+
+**Options.** (1) One representative enterprise per cell. (2) Explicit firms. (3) A Pareto distribution of productivity within each cell, aggregated in closed form (Melitz 2003; Chaney 2008).
+
+**Decision.** Option 3. Explicit firms multiply agents and parameters for little out-of-sample gain, which 15.7 already excludes. With Pareto productivity of shape k\_g and CES varieties of elasticity sigma\_g (k\_g > sigma\_g - 1), aggregate flows keep the gravity form of 8.3 with trade elasticity k\_g, times a fixed-export-cost term:
+
+```latex
+X_{od,g} \propto \tau_{od,g}^{-k_g} \, f_{od,g}^{\,1 - k_g / (\sigma_g - 1)}
+```
+
+Fixed export costs vary by border crossing, so they multiply the kernel on gateway links and the factorization of 8.3 is unchanged. Each cell's firm count, size distribution and exporter share are closed form.
+
+**Migration.**
+
+- Reinterpret theta\_g (P01) as the Pareto shape k\_g; the PPML estimates of 0022 are unchanged.
+- Add sigma\_g (P39), fixed export costs by border (P40, identified by exporter shares) and entry costs (P41, identified by firm counts by size class) to the register.
+- Gateway links carry the fixed-cost factor beside tariffs.
+- Each enterprise cell stores its mass of firms and productivity lower bound; the quarterly investment step (7.4) becomes free entry and exit in that mass.
+- Restore the V2 firm-size target as the Pareto tail within cells.
+
+**Tests.**
+
+- A toy cell's exporter share and size distribution match the closed form.
+- With fixed export costs at zero, flows equal the 8.3 kernel.
+- PPML on simulated flows recovers k\_g.
+
+**Consequences.** Liberalization now moves the extensive margin. Granular shocks from individual large firms (Gabaix 2011) are still absent; they could later come from drawing each country-sector's largest firms explicitly from the tail.
