@@ -92,3 +92,73 @@ name = "ISIC31_ISIC4.txt"
 sha256 = "5edbf40aa5e75dd778782896dc2054a76bcd252c2fbad9f704d00a883a3f66a5"
 bytes = 41764
 url = "https://unstats.un.org/unsd/classifications/Econ/tables/ISIC/ISIC31_ISIC4/ISIC31_ISIC4.txt"
+
+[[file]]
+source = "wic-reconstruction"
+name = "BPJresult_AGE_V01.csv"
+sha256 = "c1fec8888ae8de1ead8f2fdf8b7f31c86ae9eb251887259128fe4cc95504841a"
+bytes = 35665550
+url = "https://zenodo.org/api/records/16927371/files/BPJresult_AGE_V01.csv/content"
+
+[[file]]
+source = "barro-lee"
+name = "BL_v3_MF1564.csv"
+sha256 = "349374c63cb869455dd208a2dd6bc4f7119003a9fc19b06188f4c443abd80861"
+bytes = 274760
+url = "https://raw.githubusercontent.com/barrolee/BarroLeeDataSet/ee575b42f659bad7445dfc26d19816ede8000e47/BLData/BL_v3_MF1564.csv"
+
+[[file]]
+source = "ilostat"
+name = "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv"
+sha256 = "350493edbacc7dcab02bada7ec1ec51801ee6d8740844cc9c35389555c815a9a"
+bytes = 621033
+url = "https://rplumber.ilo.org/data/indicator/?id=EAP_2WAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=2000&timeto=2000"
+
+[[file]]
+source = "ilostat"
+name = "ilostat_UNE_2EAP_SEX_AGE_RT_A_2000.csv"
+sha256 = "614ec8ec463b07354e41d38bee2606aca6553b39b5a1f85a97ab7a7bf084ae90"
+bytes = 204817
+url = "https://rplumber.ilo.org/data/indicator/?id=UNE_2EAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=2000&timeto=2000"
+
+[[file]]
+source = "pwt"
+name = "pwt110.xlsx"
+sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
+bytes = 5839841
+url = "https://dataverse.nl/api/access/datafile/554105"
+
+[[file]]
+source = "wdi"
+name = "wdi_SI.POV.GINI.zip"
+sha256 = "ee7af858347bc313934732f51830864df83bcd77def0be4a2556cff5447639de"
+bytes = 20080
+url = "https://api.worldbank.org/v2/en/indicator/SI.POV.GINI?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_SP.POP.TOTL.zip"
+sha256 = "9c8a27460bb951b2b6e18fe9c01fac3938c78fd6b8862a84240d01f218b649b0"
+bytes = 90332
+url = "https://api.worldbank.org/v2/en/indicator/SP.POP.TOTL?downloadformat=csv"
+
+[[file]]
+source = "swiid"
+name = "swiid9_92.zip"
+sha256 = "d36c541307a4e3d16f79f878ae9c23f88effb6650ebc634be829870f383dbbf0"
+bytes = 24593134
+url = "https://dataverse.harvard.edu/api/access/datafile/13657070"
+
+[[file]]
+source = "wdi"
+name = "wdi_SP.POP.1564.TO.ZS.zip"
+sha256 = "0488393fecd4589401b8017b8d34efa8e42fbaf4f9a24f1c41756d6cee1d1a39"
+bytes = 160605
+url = "https://api.worldbank.org/v2/en/indicator/SP.POP.1564.TO.ZS?downloadformat=csv"
+
+[[file]]
+source = "worldpop"
+name = "ppp_2000_1km_Aggregated.tif"
+sha256 = "3404d3fff958acf6bba98f88edbfdc0e9ff8062d85a5bc609da0e9c3b2bef148"
+bytes = 1165526326
+url = "https://data.worldpop.org/GIS/Population/Global_2000_2020/2000/0_Mosaicked/ppp_2000_1km_Aggregated.tif"

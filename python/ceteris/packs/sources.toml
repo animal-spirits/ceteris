@@ -176,6 +176,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0; rasters too large to bundle whole"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 reads ppp_2000_1km_Aggregated.tif (unconstrained, not UN-adjusted), summed to provinces through the H3 cells."
 
 [[source]]
 id = "ghsl"
@@ -853,7 +854,7 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS."
 
 [[source]]
 id = "wb-gem"
@@ -1036,6 +1037,25 @@ confidence = "medium"
 replaced_by = "oecd-stats"
 
 [[source]]
+id = "wiid"
+name = "UNU-WIDER World Income Inequality Database (WIID) and WIID Companion"
+provider = "UNU-WIDER"
+version = "8 September 2026"
+role = "Gini fallback named in the P2 spec for countries without a WDI value (replaced by SWIID)"
+licence = "CC-BY-NC-SA-3.0-IGO"
+licence_url = "https://www.wider.unu.edu/about/copyright"
+attribution = "UNU-WIDER, World Income Inequality Database (WIID), version 8 September 2026, doi:10.35188/UNU-WIDER/WIID-080926"
+commercial_use = false
+share_alike = true
+use = "rejected"
+policy = "exclude"
+reason = "Non-commercial share-alike (site-wide UNU-WIDER terms); the download links return 403 to scripted requests; SWIID (CC0) covers the role"
+checked = 2026-10-24
+confidence = "medium"
+replaced_by = "swiid"
+notes = "Files: https://www.wider.unu.edu/sites/default/files/WIID/WIID_08SEP2026.zip and WIID-08SEP2026.xlsx. The licence is read from the site-wide copyright page, not from a WIID-specific statement."
+
+[[source]]
 id = "pip"
 name = "Poverty and Inequality Platform (incl. percentiles)"
 provider = "World Bank"
@@ -1069,6 +1089,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 uses the disposable-income Gini (gini_disp) for 2000 where WDI SI.POV.GINI has no value within 1995 to 2005; such rows are flagged imputed. Replaces WIID in that role."
 
 [[source]]
 id = "wid"
@@ -1354,7 +1375,7 @@ policy = "bundle"
 reason = "ILO datasets published on or after 2023-05-03 are CC BY 4.0"
 checked = 2026-10-23
 confidence = "medium"
-notes = "ILOSTAT's own terms page was unreachable; pin a post-May-2023 download."
+notes = "ILOSTAT's own terms page was unreachable; pin a post-May-2023 download. P2 reads the modelled estimates EAP_2WAP_SEX_AGE_RT_A and UNE_2EAP_SEX_AGE_RT_A for 2000 through the rplumber.ilo.org data API (the bulk-download page is behind a bot check), accessed 2026-10-24."
 
 [[source]]
 id = "kummu-subnational"
