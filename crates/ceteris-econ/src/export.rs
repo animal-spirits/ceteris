@@ -26,6 +26,12 @@
 //!
 //! Kernel rows list the traded goods in order, then origins in order, then the entries of the
 //! row in kernel order. [`write_run`] writes the results of a run; see its documentation.
+//!
+//! `ceteris run --history [--history-every N]` also writes the per-tick series of
+//! [`crate::history`] next to the run files: `run_history_world` (one row per sampled tick),
+//! `run_history_provinces` (per tick and province) and `run_history_markets` (per tick,
+//! province and good), with the conventions of `run_prices` and `run_wages`. They are not part
+//! of [`write_run`], so the default output is unchanged.
 
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
@@ -90,17 +96,17 @@ impl From<arrow_schema::ArrowError> for ExportError {
     }
 }
 
-type Column = (String, ArrayRef);
+pub(crate) type Column = (String, ArrayRef);
 
 fn col(name: impl Into<String>, array: impl arrow_array::Array + 'static) -> Column {
     (name.into(), Arc::new(array))
 }
 
-fn u8s(name: &str, v: impl IntoIterator<Item = u8>) -> Column {
+pub(crate) fn u8s(name: &str, v: impl IntoIterator<Item = u8>) -> Column {
     col(name, UInt8Array::from_iter_values(v))
 }
 
-fn u32s(name: &str, v: impl IntoIterator<Item = u32>) -> Column {
+pub(crate) fn u32s(name: &str, v: impl IntoIterator<Item = u32>) -> Column {
     col(name, UInt32Array::from_iter_values(v))
 }
 
@@ -108,15 +114,15 @@ fn f32s(name: &str, v: impl IntoIterator<Item = f32>) -> Column {
     col(name, Float32Array::from_iter_values(v))
 }
 
-fn f64s(name: &str, v: impl IntoIterator<Item = f64>) -> Column {
+pub(crate) fn f64s(name: &str, v: impl IntoIterator<Item = f64>) -> Column {
     col(name, Float64Array::from_iter_values(v))
 }
 
-fn bools(name: &str, v: impl IntoIterator<Item = bool>) -> Column {
+pub(crate) fn bools(name: &str, v: impl IntoIterator<Item = bool>) -> Column {
     col(name, BooleanArray::from_iter(v.into_iter().map(Some)))
 }
 
-fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Result<(), ExportError> {
+pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Result<(), ExportError> {
     let fields: Vec<Field> = columns
         .iter()
         .map(|(n, a)| Field::new(n, a.data_type().clone(), false))

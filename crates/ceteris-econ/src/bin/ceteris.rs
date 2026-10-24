@@ -2,11 +2,13 @@
 //!
 //! ```text
 //! ceteris export --fixture --out DIR
-//! ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR] --out DIR
+//! ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR]
+//!     [--history [--history-every N]] --out DIR
 //! ```
 //!
 //! `--from-equilibrium` starts the run from a GE reference solution
-//! (`python -m ceteris.reference solve --out DIR`) instead of the data state.
+//! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--history` also
+//! writes the per-tick series of `ceteris_econ::history`, every N ticks (default 1).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -16,13 +18,15 @@ use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
+use ceteris_econ::history::run_recorded;
 use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
   ceteris export --fixture --out DIR
-  ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR] --out DIR";
+  ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR]
+    [--history [--history-every N]] --out DIR";
 
 /// Where the inputs of a world come from.
 enum Source {
@@ -43,12 +47,15 @@ struct Args {
     ticks: Option<u32>,
     frictionless: bool,
     equilibrium: Option<PathBuf>,
+    history: bool,
+    history_every: Option<u32>,
 }
 
 fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut args = args;
     let (mut source, mut out, mut ticks, mut frictionless) = (None, None, None, false);
     let mut equilibrium = None;
+    let (mut history, mut history_every) = (false, None);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fixture" => source = Some(Source::Fixture),
@@ -57,6 +64,14 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--from-equilibrium" => {
                 let dir = args.next().ok_or("--from-equilibrium needs a directory")?;
                 equilibrium = Some(PathBuf::from(dir));
+            }
+            "--history" => history = true,
+            "--history-every" => {
+                let n = args.next().ok_or("--history-every needs a count")?;
+                match n.parse::<u32>() {
+                    Ok(v) if v > 0 => history_every = Some(v),
+                    _ => return Err(format!("bad sampling interval '{n}'")),
+                }
             }
             "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
             "--ticks" => {
@@ -72,12 +87,22 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         ticks,
         frictionless,
         equilibrium,
+        history,
+        history_every,
     })
 }
 
 fn export(args: &Args) -> Result<(), String> {
-    if args.ticks.is_some() || args.frictionless || args.equilibrium.is_some() {
-        return Err("--ticks, --frictionless and --from-equilibrium belong to run".into());
+    if args.ticks.is_some()
+        || args.frictionless
+        || args.equilibrium.is_some()
+        || args.history
+        || args.history_every.is_some()
+    {
+        return Err(
+            "--ticks, --frictionless, --from-equilibrium, --history and --history-every belong to run"
+                .into(),
+        );
     }
     let inputs = args.source.load();
     let (params, trade) = (EconParams::default(), TradeParams::default());
@@ -87,6 +112,9 @@ fn export(args: &Args) -> Result<(), String> {
 
 fn run(args: &Args) -> Result<(), String> {
     let ticks = args.ticks.ok_or("--ticks is required")?;
+    if args.history_every.is_some() && !args.history {
+        return Err("--history-every needs --history".into());
+    }
     let params = if args.frictionless {
         EconParams::frictionless()
     } else {
@@ -101,6 +129,12 @@ fn run(args: &Args) -> Result<(), String> {
         None => EconWorld::new(inputs, params, trade),
     };
     let mut sim = Sim::new(world, schedule(), SEED);
+    if args.history {
+        let history = run_recorded(&mut sim, ticks, args.history_every.unwrap_or(1))
+            .map_err(|v| v.to_string())?;
+        write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
+        return history.write(&args.out).map_err(|e| e.to_string());
+    }
     sim.run_until(ticks).map_err(|v| v.to_string())?;
     write_run(&args.out, sim.world()).map_err(|e| e.to_string())
 }
