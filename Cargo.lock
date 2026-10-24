@@ -261,6 +261,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceteris-econ"
+version = "0.0.1"
+dependencies = [
+ "ceteris-core",
+ "ceteris-trade",
+ "libm",
+ "rayon",
+]
+
+[[package]]
 name = "ceteris-geo"
 version = "0.0.1"
 dependencies = [
