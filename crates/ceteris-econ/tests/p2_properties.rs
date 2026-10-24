@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::small_world;
+use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{MINOR_PER_UNIT, MINT, TARIFF, TRADE};
 use ceteris_econ::{EconParams, EconWorld};
@@ -166,14 +167,10 @@ fn homogeneity_of_degree_zero() {
     for params in [EconParams::default(), EconParams::frictionless()] {
         let mut base = sim_of(world(params.clone()));
         let mut big = sim_of(scaled(world(params), 10_000));
-        // 18 ticks, not the brief's 60: the fixture's dynamics are unstable (island prices fall at
-        // the clip from tick 10, some enterprises die), which amplifies the 1e-13 rounding gap
-        // about tenfold per ten ticks. Under delivered pricing the gap passes 1e-9 from tick 19:
-        // input-stock corners (output and stocks become small residuals of S + bought - used),
-        // e.g. enterprise 23 of province 3 at tick 20 of the frictionless run, amplify it about
-        // thirtyfold; long-run stability is a later task
-        base.run_until(18).unwrap();
-        big.run_until(18).unwrap();
+        // 60 ticks: since Task 7b (capacity input orders, slower prices) the fixture's dynamics
+        // are stable and the rounding gap between the two runs stays within 1e-9
+        base.run_until(60).unwrap();
+        big.run_until(60).unwrap();
         // 1e-9, not bit for bit: payments round half to even to minor units and 1e4 is not
         // a power of two, so nominal roundings differ between the two runs
         for ((what, a, size), (_, b, _)) in real_state(base.world())
@@ -324,4 +321,58 @@ fn trade_is_paid_at_delivered_prices_in_minor_units() {
             w.end_tick(tick).unwrap();
         }
     }
+}
+
+/// Input orders plan on capacity output VA(L) / a_VA at this tick's employment, not on output
+/// cut by a short input (owner decision, Task 7b): a_kg Y_cap + (a_kg Y_cap - stock after use).
+#[test]
+fn input_orders_plan_on_capacity_output() {
+    let mut w = world(EconParams::default());
+    // starve enterprise 0 of every input, so its output is cut far below capacity
+    let account = w.layout().accounts.enterprise[0];
+    for k in 0..N_GOODS {
+        let held = w.ledger.goods(account, k);
+        if held > 0.0 {
+            w.ledger.destroy(account, k, 0.5 * held);
+        }
+    }
+    w.begin_tick();
+    systems::deliver(&mut w);
+    systems::labour(&mut w);
+    systems::produce(&mut w);
+    systems::route(&mut w);
+    systems::demand(&mut w);
+
+    let (inp, lay) = (w.inputs(), w.layout());
+    let mut binding = 0;
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        let (c, g) = (inp.country_of(i), usize::from(inp.enterprises.good[e]));
+        let ent = &inp.enterprises;
+        let va = value_added(
+            ent.a[e],
+            ent.va0[e],
+            ent.l0[e],
+            inp.countries.s_l[c],
+            rho(w.params().sigma_fl),
+            w.employment[e],
+        );
+        let capacity = va / lay.a_va[e];
+        binding += usize::from(w.output[e] < 0.9 * capacity);
+        for k in 0..N_GOODS {
+            let a = inp.a(c, k, g);
+            let stock = w.ledger.goods(lay.accounts.enterprise[e], k);
+            let want = if a > 0.0 {
+                (2.0 * a * capacity - stock).max(0.0)
+            } else {
+                0.0
+            };
+            let got = w.scratch.ent_order[e * N_GOODS + k];
+            assert!(
+                (got - want).abs() <= 1e-12 * want.max(1.0),
+                "enterprise {e} good {k}: order {got}, want {want}"
+            );
+        }
+    }
+    assert!(binding > 0, "no enterprise was input-bound");
 }

@@ -23,6 +23,7 @@ them only as quantities offered to and demanded from each market.
 | Shortage rationing by priority (8.2) | Pro rata across buyers | Priority needs subsistence levels, which arrive with P4 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
 | FOB payment (draft): the destination pays the origin price per shipped unit | FOB payment (draft) replaced by delivered pricing: the router bears its routing costs (controller ruling during implementation) | Under FOB remote importers lose money on routes they did not choose; the fixture had no frictionless equilibrium (island income turned negative) |
+| Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.02), for stability (owner decision 2026-10-24) | Measured growth factor per tick of a small deviation from the fixture's GE equilibrium (frictionless / default): defaults 0.2, 0.1: 1.513 / 1.514; kappa2 = 0.05 unstable at every kappa1 in the prior (best 1.175 / 1.197 at kappa1 0.05; also 1.112 / 1.121 with inventory position control); kappa1 0.02, kappa2 0: 0.989 / 0.991, and 0.987 / 0.997 with every crossing lag at 3. The inventory term integrates routed supply that arrives 2 to 5 months after the price moves and feeds the money and trade-balance loop (Task 7b report) |
 
 ## State components
 
@@ -167,7 +168,8 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 |---|---|---|---|
 | P01 | Trade elasticity theta | 4 to 8, start 5 | Literature |
 | P02 | Inventory target coverage s_g | 1 to 6 months by good, start: agriculture 3, oil and gas 1, coal and mining 2, food 2, manufactures 2; local goods 0 | Free |
-| P03a, P03b | kappa1, kappa2 | 0.05 to 0.5 per month, start 0.2 and 0.1 | Free |
+| P03a | kappa1 | 0.01 to 0.5 per month, start 0.02 (prior widened from 0.05 by owner decision, for stability) | Free |
+| P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
 | P03c | Price step clip c_max | 0.1 log points per month | Free (numerical) |
 | P04 | Mode costs | geo SPEC | Literature + calibrated |
 | P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3 | Calibrated (P9) |
@@ -178,7 +180,8 @@ agreement flags), gateway set (pack).
 
 ## Equilibrium nesting
 
-Steady state of T1-T4 with any stable kappa: prices stop moving when D = Q and S = S*, which
+Steady state of T1-T4 with any stable kappa: prices stop moving when D = Q (and S = S* when
+kappa2 > 0; with the default kappa2 = 0 the stock stays where the transient left it), which
 is the spatial equilibrium of the logit routing with all markets clearing. That equilibrium is
 computed directly by the GE reference model (`python/ceteris/reference`, econ SPEC) on the same
 kernel. V1: frictionless runs reach it within 1%. H2: PPML on simulated country-pair flows
@@ -206,3 +209,6 @@ small worlds the two coincide at the equilibrium prices.
 - Expectations are naive in P2; heuristic switching (12.2, P19) arrives with the expectations
   module.
 - Freight capacity and endogenous freight rates (8.4) are P8.
+- Inventories are untargeted in P2 (kappa2 = 0): stocks keep what a transient leaves (4.7 to 47 times
+  target cover on the fixture after 1,200 ticks from the data state). Revisit with
+  expectations (12.2), which can make an inventory target stable, or with P9 calibration.

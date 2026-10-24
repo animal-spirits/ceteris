@@ -163,8 +163,18 @@ mod tests {
     const G: usize = 3; // food, traded
     const L: usize = 9; // services, local
 
+    /// Both terms of the rule on, at the speeds these tests were written for (the defaults
+    /// switch the inventory term off since Task 7b).
+    fn rule() -> TradeParams {
+        TradeParams {
+            kappa1: 0.2,
+            kappa2: 0.1,
+            ..TradeParams::default()
+        }
+    }
+
     fn one() -> (Markets, TradeParams) {
-        (Markets::new(1), TradeParams::default())
+        (Markets::new(1), rule())
     }
 
     fn set(m: &mut Markets, g: usize, s: f64, q: f64, d: f64) {
@@ -284,7 +294,7 @@ mod tests {
         assert_eq!(fill[G], 0.5);
         assert_eq!((fill[N_GOODS + G], fill[L]), (-1.0, -1.0));
         assert_eq!((m.sales[N_GOODS + G], m.sales[L]), (0.0, 0.0));
-        m.reprice(&TradeParams::default());
+        m.reprice(&rule());
         assert_eq!(m.price[N_GOODS + G], 3.0);
     }
 
@@ -292,7 +302,7 @@ mod tests {
     fn all_import_province_with_zero_q_stays_finite() {
         // province 0 produces and supplies; province 1 only imports, so Q = 0, D > 0
         let mut m = Markets::new(2);
-        let p = TradeParams::default();
+        let p = rule();
         for g in 0..7 {
             set(&mut m, g, 0.0, 10.0, 1.0);
             set(&mut m, N_GOODS + g, 0.0, 0.0, 4.0);
@@ -327,7 +337,7 @@ mod tests {
     #[test]
     fn floor_uses_the_mean_over_active_cells_only() {
         let mut m = Markets::new(3);
-        let p = TradeParams::default();
+        let p = rule();
         // provinces 0 and 1 active with Q 4 and 0; province 2 inactive with huge Q
         set(&mut m, G, 0.0, 4.0, 4.0);
         set(&mut m, N_GOODS + G, 0.0, 0.0, 1.0);
@@ -343,7 +353,7 @@ mod tests {
     #[test]
     fn steady_state_is_fixed_point() {
         let mut m = Markets::new(2);
-        let p = TradeParams::default();
+        let p = rule();
         // awkward values: (S + Q) - D is not S in floating point for these
         let d = 0.1 + 0.2;
         for pi in 0..2 {
