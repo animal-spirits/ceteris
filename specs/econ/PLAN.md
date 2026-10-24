@@ -353,7 +353,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Files:** Create `crates/ceteris-trade/benches/trade.rs`, `crates/ceteris-econ/benches/econ.rs`
 
-**Interfaces:** criterion benches on the full pack (skip with a notice without one, fixture fallback so `cargo bench --no-run` and CI work): `route` (10 goods per tick, budget 30 ms), `clear_reprice` (2 ms), `labour` + `produce` (12 ms), `consume` (10 ms), `kernel_build` (report only).
+**Interfaces:** criterion benches on the full pack (skip with a notice without one, fixture fallback so `cargo bench --no-run` and CI work): `source_dispatch` (10 goods per tick, budget 5 ms per tick on the full pack), `clear_reprice` (2 ms), `labour` + `produce` (12 ms), `consume` (10 ms), `kernel_build` (report only).
 
 - [ ] **Step 1: Implement; run** `cargo bench -p ceteris-trade -p ceteris-econ`; expected: medians reported; record them in the commit message and in `specs/econ/SPEC.md` (new "Measured" note under the gate).
 - [ ] **Step 2: If a budget is missed,** profile (samply) and fix layout or algorithm per 19.4 before continuing; never relax determinism.
@@ -372,7 +372,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 ### Task 21: Records
 
-**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P43, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
+**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P47, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
 
 - [ ] **Step 1: Write** the gate evidence (commands, measured V1 maxima, H2 estimate with standard error, benchmark medians).
 - [ ] **Step 2: Commit** `docs(specs): record p2 gate evidence`

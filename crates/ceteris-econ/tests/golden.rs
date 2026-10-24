@@ -18,7 +18,6 @@ const HEADER: &str =
     "# P2 fixture: 4 countries, 25 provinces, seed 42, 1200 ticks. Lines: tick state-hash";
 
 #[test]
-#[ignore = "re-blessed in MIGRATION Task 10 (ADRs 0015-0022)"]
 fn p2_fixture_matches_golden_hashes() {
     let mut sim = EconWorld::sim(
         Arc::new(small_world()),

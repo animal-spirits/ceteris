@@ -1,10 +1,10 @@
 {
   "format": "1",
-  "static_digest": "82a9b596d8f614c0b28f4b1ccfbdde3f3ded230c5015aff7aece41e5c9b4a5c2",
-  "price_index": 1.0000000000000007,
-  "method": "newton_krylov",
-  "iterations": 12,
-  "residual": 1.0014211682119413e-13,
+  "static_digest": "da51121c1c9cc59697dbe41c790fd2b49fcc786abd9256cd2395cb769ced8f98",
+  "price_index": 0.9999999999734923,
+  "method": "tatonnement, newton_krylov",
+  "iterations": 3,
+  "residual": 7.650124978235218e-11,
   "dropped_province": 10,
-  "dropped_residual": -1.0650599125196426e-13
+  "dropped_residual": -2.6566275906826373e-11
 }

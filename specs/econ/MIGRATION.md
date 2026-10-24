@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move the pack-free P2 core on `p2-econ` (PLAN.md Tasks 1 to 12, 7b) onto the review's model: destination-side gravity with origin markets cleared across ticks, route-choice costs, sector thetas, expected inflation, PIGL demand, putty-clay coefficients with a same-tick local chain, and the uniqueness-checked gate; then resume PLAN.md Part D.
+**Goal:** Move the pack-free P2 core on `p2-econ` (PLAN.md Tasks 1 to 12, 7b) onto the review's model: destination-side gravity with origin markets cleared across ticks, route-choice costs (superseded: see ADR 0017 Deferral), sector thetas, expected inflation, PIGL demand, putty-clay coefficients with a same-tick local chain, and the uniqueness-checked gate; then resume PLAN.md Part D.
 
 **Architecture:** The trade crate keeps the two-level kernel but runs it backwards: destinations spread expenditure over origins (Eaton-Kortum shares on K p_o^-theta), origins clear orders against output and merchant inventory, buyers pay at dispatch and receive after transit through a per-buyer pipeline. Every behaviour change is mirrored in the Python GE reference in the same task, so V1 on the fixture holds after each task. Route choice is a new `ceteris-geo` module whose per-good leg factors the trade network can carry; the fixture keeps direct legs (S05 least-cost).
 
@@ -132,11 +132,11 @@ ADR 0017, with the separate dispersion theta_r (P44).
 - Produces:
   - `route_choice::EdgeFactors::new(g: &TransportGraph, weight: f64, time_cost_per_day: f64, theta_r: f64) -> EdgeFactors` with `t_kl = 1 + c_kl weight + time_cost_per_day hours_kl / 24` from `graph::price`, `a_kl = t_kl^-theta_r`, closed edges a = 0
   - `EdgeFactors::spectral_radius(&self) -> f64` (power iteration on the symmetric A, at most 10,000 iterations, relative change 1e-10)
-  - `route_choice::solve_from(f: &EdgeFactors, source: u32, nodes: Option<&[u32]> /* subgraph */, warm: Option<&[f64]>) -> RouteTau { z: Vec<f64> /* [(I - A)^-1]_source,. */, hours: Vec<f64> /* expected route hours */ }`: conjugate gradient on I - A (symmetric positive definite when rho < 1), relative residual 1e-12; hours from the second solve with A o H: `T_sd = [(I - A)^-1 (A o H) z]_d / z_d`
+  - (superseded: see ADR 0017 Deferral) `route_choice::solve_from(f: &EdgeFactors, source: u32, nodes: Option<&[u32]> /* subgraph */, warm: Option<&[f64]>) -> RouteTau { z: Vec<f64> /* [(I - A)^-1]_source,. */, hours: Vec<f64> /* expected route hours */ }`: conjugate gradient on I - A (symmetric positive definite when rho < 1), relative residual 1e-12; hours from the second solve with A o H: `T_sd = [(I - A)^-1 (A o H) z]_d / z_d`
   - `tau_sd = z_d^(-1/theta_r)`; panics with the radius when `spectral_radius() >= 1` (never clipped)
   - `ceteris_trade::network::LegTaus { domestic: Vec<[f64; N_GOODS]>, access: Vec<[f64; N_GOODS]>, crossings: Vec<[f64; N_GOODS]>, hours: same three }` and `Network.route_taus: Option<LegTaus>`; `Kernel::build` uses them when present (K = tau^-theta_g, lag from the good's hours), else the least-cost `Leg` costs (S05; the fixture)
   - `TradeParams.theta_r: f64 /* P44 */`
-- The pack loader that fills `route_taus` is PLAN.md Task 17 (`EconInputs::from_pack`); this task builds and tests the module and measures theta_r.
+- (superseded: see ADR 0017 Deferral) The pack loader that fills `route_taus` is PLAN.md Task 17 (`EconInputs::from_pack`); this task builds and tests the module and measures theta_r.
 
 - [ ] **Step 1: Write failing tests** `converges_to_least_cost_as_theta_r_grows` (6-node toy graph with two routes: tau from route choice -> Dijkstra cost factor as theta_r goes 10, 100, 1000, monotone, gap < 1e-3 at 1000), `derivative_matches_finite_difference` (d tau / d c on one edge, central difference h = 1e-6, 1e-6 relative), `closing_an_edge_is_continuous` (scale one edge's cost by 1 .. 1e6 in 20 steps: tau changes monotonically with no jump above 5% between steps), `two_parallel_routes_add_access` (closed form for two disjoint routes), `radius_above_one_panics` (`#[should_panic]`), `kernel_uses_route_taus_when_present` (trade); pack test (skips without a pack) `route_choice_radius_below_one_at_theta_r` for every traded good.
 - [ ] **Step 2: Run** `cargo test -p ceteris-geo route_choice && cargo test -p ceteris-trade`; expected: FAIL.

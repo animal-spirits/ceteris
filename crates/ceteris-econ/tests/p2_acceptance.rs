@@ -109,7 +109,6 @@ fn files_of(dir: &Path) -> BTreeMap<String, Vec<u8>> {
 }
 
 #[test]
-#[ignore = "re-blessed in MIGRATION Task 10 (ADRs 0015-0022)"]
 fn fixture_export_is_current() {
     let out = std::env::temp_dir().join(format!("ceteris-p2-export-{}", std::process::id()));
     let _ = fs::remove_dir_all(&out);
