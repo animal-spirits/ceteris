@@ -42,7 +42,8 @@ drive the freight-cost map mode.
 
 ## Tests
 
-- On a toy graph, route-choice costs converge to least-cost path costs as theta grows.
+- On a toy graph, route-choice costs converge to least-cost path costs as theta grows, in the
+  product-of-edge-factors sense.
 - Finite-difference check of the derivative of tau with respect to an edge cost.
 - Scaling one edge's cost up to closure changes tau continuously.
 - Spectral-radius assertion in the pack property tests.
@@ -123,5 +124,8 @@ so that route-choice tau reproduces S05 tau on least-cost routes.
 
 ## Consequences
 
-ceteris-geo golden hashes change. The trade kernel (0016) uses route-choice factors directly,
-and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare formula.
+Deferred past P2 (Deferral above): no golden hashes change in P2, and the trade kernel (0016)
+keeps least-cost legs (S05) with `Network.route_taus` left `None`. When route choice is
+revisited, ceteris-geo golden hashes change, the trade kernel uses route-choice factors
+directly, and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare
+formula.
