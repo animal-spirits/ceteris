@@ -254,7 +254,7 @@ c_{od,g} = \min_{\text{paths}} \sum_{e} \left( f_{e,m} \, w_g \, \ell_e + h_{e} 
 
 where f is the per-ton-km mode cost, w the good's weight per unit of value, l edge length, h transshipment and port cost, r the interest rate times transit time T (inventory carrying cost), rho the loss and disruption risk, t tariffs and other policy wedges (applied tariffs initialized from WTO and World Bank tariff data), and nu non-policy frictions (language, legal system, currency, sanctions compliance). For comparison with the GE reference model the cost maps to an iceberg factor tau = 1 + c / p. Per-unit components matter: Hummels and Skiba (2004) show per-unit shipping costs change the composition of trade, which pure iceberg models miss.
 
-**Route choice (ADR 0014).** The hard minimum over paths above is replaced by a soft minimum. Following Allen and Arkolakis (2022), each shipment draws Frechet route-specific shocks with the trade elasticity as shape parameter, so the cost averaged over all routes has a closed form:
+**Route choice (ADR 0017).** The hard minimum over paths above is replaced by a soft minimum. Following Allen and Arkolakis (2022), each shipment draws Frechet route-specific shocks with the trade elasticity as shape parameter, so the cost averaged over all routes has a closed form:
 
 ```latex
 \tau_{od}^{-\theta} = \left[ (I - A)^{-1} \right]_{od}, \qquad A_{kl} = t_{kl}^{-\theta}
@@ -358,7 +358,7 @@ Y = \min\left( \frac{VA}{a_{VA}}, \; \frac{M}{a_{M}}, \; \frac{E}{a_{E}} \right)
 
 L is effective labour by education level; T is land (agriculture) or resource deposits (mining). A combines sector productivity, province agglomeration (rising with local employment density) and climate damages.
 
-**Putty-clay intermediates (ADR 0017).** The coefficients a belong to installed capacity, not to the sector. Each capacity vintage fixes its input coefficients when it is built, by cost minimization over a CES with a long-run elasticity (register P38) at expected prices; once installed it runs Leontief. Short-run complementarity matches the near-zero elasticities measured for intermediates (Atalay 2017; Boehm, Flaaen and Pandalai-Nayar 2019) and keeps rationing along supply chains. Long-run substitution lets the input-output structure drift from its 2000 values over decades instead of staying frozen to 2150, and gives large shocks the non-linear propagation studied by Baqaee and Farhi (2019). Vintages are aggregated per enterprise into a capacity-weighted coefficient vector, so per-tick cost is unchanged; the choice happens at the quarterly investment step (7.4). Initial capacity is one vintage with the 2000 ICIO coefficients.
+**Putty-clay intermediates (ADR 0020).** The coefficients a belong to installed capacity, not to the sector. Each capacity vintage fixes its input coefficients when it is built, by cost minimization over a CES with a long-run elasticity (register P38) at expected prices; once installed it runs Leontief. Short-run complementarity matches the near-zero elasticities measured for intermediates (Atalay 2017; Boehm, Flaaen and Pandalai-Nayar 2019) and keeps rationing along supply chains. Long-run substitution lets the input-output structure drift from its 2000 values over decades instead of staying frozen to 2150, and gives large shocks the non-linear propagation studied by Baqaee and Farhi (2019). Vintages are aggregated per enterprise into a capacity-weighted coefficient vector, so per-tick cost is unchanged; the choice happens at the quarterly investment step (7.4). Initial capacity is one vintage with the 2000 ICIO coefficients.
 
 ### 7.3 Enterprise behaviour (monthly)
 
@@ -418,13 +418,13 @@ Each month, supply (local output plus arrivals) meets demand at the posted price
 \Delta \ln p_{i,g,t+1} = \pi^{e}_{i,t} + \kappa_1 \frac{D_{i,g,t} - Q_{i,g,t}}{Q_{i,g,t}} - \kappa_2 \frac{S_{i,g,t} - S^{*}_{i,g,t}}{S^{*}_{i,g,t}}, \qquad S^{*} = \bar{s}_g \, D_{i,g}
 ```
 
-pi^e is the merchants' expected inflation for the currency area (Section 12.2). It makes the rule homogeneous: after a permanent change in money growth, prices drift at the new rate with zero real excess demand, so the long-run Phillips curve is vertical and money is neutral in the long run (ADR 0016). The other two terms form a proportional-integral controller on the inventory gap: excess demand is the flow, the inventory deviation its integral. The P2 spec derives the stability region in (kappa1, kappa2) for the linearized market given local demand and supply elasticities; the step clip is a registered parameter, and every tick it binds is counted.
+pi^e is the merchants' expected inflation for the currency area (Section 12.2). It makes the rule homogeneous: after a permanent change in money growth, prices drift at the new rate with zero real excess demand, so the long-run Phillips curve is vertical and money is neutral in the long run (ADR 0019). The other two terms form a proportional-integral controller on the inventory gap: excess demand is the flow, the inventory deviation its integral. The P2 spec derives the stability region in (kappa1, kappa2) for the linearized market given local demand and supply elasticities; the step clip is a registered parameter, and every tick it binds is counted.
 
 When inventory runs out, demand is rationed within the tick, which is how shortages propagate. The scheme follows the dynamic input-output model of Pichler et al. (2022), whose rationing rules were tested against 2020 data: priority by default (households' essential consumption, then intermediate users by contract, then the rest), with proportional and mixed rationing as switch S11. A Walrasian mode solves clearing prices by Newton iteration each tick, for equilibrium-nesting tests and as a robustness switch.
 
 ### 8.3 Inter-province trade: structural gravity cleared across ticks
 
-Within each good, buyers in province d spread spending across origin provinces by a logit over delivered prices (A8). This is the structural gravity system of Eaton-Kortum and Anderson-van Wincoop with sector trade elasticity theta\_g (ADRs 0012, 0015). Flows are in value, and the kernel is built from iceberg factors, not from costs in currency:
+Within each good, buyers in province d spread spending across origin provinces by a logit over delivered prices (A8). This is the structural gravity system of Eaton-Kortum and Anderson-van Wincoop with sector trade elasticity theta\_g (ADRs 0015, 0018). Flows are in value, and the kernel is built from iceberg factors, not from costs in currency:
 
 ```latex
 X_{od,g} = \frac{K_{od,g} \, p_{o,g}^{-\theta_g}}{\sum_{k} K_{kd,g} \, p_{k,g}^{-\theta_g}} \, E_{d,g}, \qquad K_{od,g} = \tau_{od,g}^{-\theta_g}
@@ -432,7 +432,7 @@ X_{od,g} = \frac{K_{od,g} \, p_{o,g}^{-\theta_g}}{\sum_{k} K_{kd,g} \, p_{k,g}^{
 
 E(d,g) is province d's expenditure on good g at posted prices (households, intermediate users, investment and government), and the denominator is the price-index term P(d,g)^(-theta). The kernel is dimensionless and prices enter only as ratios, so flows are homogeneous of degree zero in nominal prices and exchange rates: inflation or a currency move does not change trade dispersion. Quantities shipped are X / (p\_o tau); per-unit costs (5.4) are charged to the shipment.
 
-**Clearing across ticks (ADR 0013).** Each tick applies the destination-side normalization above once, at posted prices. Origin sales are not forced to equal origin supply within the tick: the gap goes into the origin's merchant inventory and moves p\_o through the rule of 8.2 at the next tick. A destination normalization followed by an origin price adjustment is one Sinkhorn sweep, so the price dynamics are Sinkhorn spread over time. With adjustment speeds high and lags zero, the fixed point is the doubly constrained entropic transport solution, which is the structural-gravity equilibrium (Galichon 2016; Allen, Arkolakis and Takahashi 2020). The frictionless limit is therefore the GE reference model by construction, and the within-tick work is one kernel product per good class instead of 5 to 10 full Sinkhorn iterations.
+**Clearing across ticks (ADR 0016).** Each tick applies the destination-side normalization above once, at posted prices. Origin sales are not forced to equal origin supply within the tick: the gap goes into the origin's merchant inventory and moves p\_o through the rule of 8.2 at the next tick. A destination normalization followed by an origin price adjustment is one Sinkhorn sweep, so the price dynamics are Sinkhorn spread over time. With adjustment speeds high and lags zero, the fixed point is the doubly constrained entropic transport solution, which is the structural-gravity equilibrium (Galichon 2016; Allen, Arkolakis and Takahashi 2020). The frictionless limit is therefore the GE reference model by construction, and the within-tick work is one kernel product per good class instead of 5 to 10 full Sinkhorn iterations.
 
 Per-unit costs make tau depend on the origin price (tau = 1 + c / p\_o); the kernel uses last tick's prices, which adds no iteration. Supply that cannot be sold at the posted price stays in inventory, which replaces the unbalanced-transport relaxation. The full within-tick Sinkhorn solve (balanced, or unbalanced as in Chizat et al. 2018) stays available as structural switch S02 for nesting tests.
 
@@ -454,7 +454,7 @@ Policy wedges enter c(o,d,g): MFN and preferential tariffs (free trade agreement
 
 ### 8.6 Demand system
 
-Households allocate spending across consumption categories (food, energy, housing, manufactures, services) with PIGL preferences in the multi-sector form of Alder, Boppart and Muller (2022) (ADR 0018). PIGL generates Engel's law and the rising services share and, unlike non-homothetic CES, aggregates exactly: a pop's category shares depend on its income distribution only through the moment E\[y^(1-epsilon)\], which for the lognormal income of A3 has a closed form:
+Households allocate spending across consumption categories (food, energy, housing, manufactures, services) with PIGL preferences in the multi-sector form of Alder, Boppart and Muller (2022) (ADR 0021). PIGL generates Engel's law and the rising services share and, unlike non-homothetic CES, aggregates exactly: a pop's category shares depend on its income distribution only through the moment E\[y^(1-epsilon)\], which for the lognormal income of A3 has a closed form:
 
 ```latex
 \mathbb{E}\left[ y^{1-\varepsilon} \right] = \exp\left( (1-\varepsilon)\,\mu + \tfrac{1}{2}(1-\varepsilon)^2 \sigma^2 \right)
@@ -464,7 +464,7 @@ Category demand per pop is therefore closed form, with no root-finding or quadra
 
 Within each category a CES aggregates goods and origins. A subsistence floor for food and energy enters through rationing priority, not preferences. Governments, armies and investment add their own demand.
 
-**Consumption and saving (ADR 0018).** Total spending follows a buffer-stock rule: pops consume out of expected permanent income and correct toward a target ratio of wealth to income,
+**Consumption and saving (ADR 0021).** Total spending follows a buffer-stock rule: pops consume out of expected permanent income and correct toward a target ratio of wealth to income,
 
 ```latex
 C_{p,t} = m_p \, \bar{y}^{e}_{p,t} + \lambda_p \left( W_{p,t} - w^{*}_{p} \, \bar{y}^{e}_{p,t} \right)
@@ -474,7 +474,7 @@ with propensities differing by wealth bracket and labour status (register P37). 
 
 ### 8.7 Factor markets
 
-- **Labour**: per province and education level, wage posting with a matching function; wages move with expected inflation plus a term in the vacancy-unemployment ratio (ADR 0016), with downward nominal rigidity and minimum wages where legislated.
+- **Labour**: per province and education level, wage posting with a matching function; wages move with expected inflation plus a term in the vacancy-unemployment ratio (ADR 0019), with downward nominal rigidity and minimum wages where legislated.
 - **Land and housing**: rents clear demand by use; housing is a durable stock with construction lags, so house-price booms and busts are possible.
 - **Capital**: allocated by investment and credit (Sections 7.4 and 9).
 
@@ -924,7 +924,7 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | Neural posterior estimation / ABC-SMC | Joint posterior of behavioural parameters | Simulation-based inference for ABMs as in Dyer et al. (2024); sbi toolkit (PyTorch, runs on Apple MPS) |
 | History matching with GP emulators | Ruling out implausible regions first | A few hundred runs |
 | Gradient-based tuning on differentiable relaxations | Prices, demand and trade kernels | JAX on CPU (Apple GPU support for JAX is limited) |
-| Direct structural estimation | Parameters whose estimating equation the model nests: theta\_g, border frictions (P05) and mode cost ratios (P04) by PPML gravity on BACI; migration dispersion (P16) by PPML on bilateral migration flows; Koijen-Yogo demand elasticities by their instrument | Outside the simulation (ADR 0019); frees the run budget for behavioural parameters |
+| Direct structural estimation | Parameters whose estimating equation the model nests: theta\_g, border frictions (P05) and mode cost ratios (P04) by PPML gravity on BACI; migration dispersion (P16) by PPML on bilateral migration flows; Koijen-Yogo demand elasticities by their instrument | Outside the simulation (ADR 0022); frees the run budget for behavioural parameters |
 
 **Compute budget on the MacBook (estimate to verify in P0).** A headless 25-year run on one core is targeted at 2 to 3 minutes; running 10 to 12 in parallel gives roughly 250 to 350 runs per hour, about 3,000 overnight. Calibration is planned around that number: emulators and modular steps first, joint inference last.
 
@@ -933,7 +933,7 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | Level | Test | Pass criterion |
 | --- | --- | --- |
 | V0 | Accounting invariants, determinism, null-branch identity | Zero violations in CI |
-| V1 | Equilibrium nesting: frictions off, ABM steady state vs analytical GE; long-run neutrality of a permanent nominal shock | Prices and flows within 1% where the uniqueness condition holds (ADR 0019); real allocations unchanged in the long run |
+| V1 | Equilibrium nesting: frictions off, ABM steady state vs analytical GE; long-run neutrality of a permanent nominal shock | Prices and flows within 1% where the uniqueness condition holds (ADR 0022); real allocations unchanged in the long run |
 | V2 | Stylized facts | Gravity distance elasticity near the consensus around -0.9 (Disdier and Head 2008); Zipf's law for city sizes; Engel curves; Okun's law; Phillips-curve and Beveridge-curve shapes |
 | V3 | Out-of-sample 2011-2024 | See 15.4 |
 | V4 | Natural-experiment replication | See 15.5 |
@@ -1055,7 +1055,7 @@ The register lists every parameter that is not pinned by data, with its prior an
 
 | ID | Parameter | Module | Starting prior | Identification / source | Class |
 | --- | --- | --- | --- | --- | --- |
-| P01 | Trade elasticity theta\_g by sector | Trade | By sector, grouped into 3 to 5 classes; centre 5 | Caliendo and Parro (2015); estimated directly by PPML structural gravity on 2000 BACI flows (ADR 0019); sets the gravity kernel | Literature |
+| P01 | Trade elasticity theta\_g by sector | Trade | By sector, grouped into 3 to 5 classes; centre 5 | Caliendo and Parro (2015); estimated directly by PPML structural gravity on 2000 BACI flows (ADR 0022); sets the gravity kernel | Literature |
 | P02 | Merchant inventory target coverage | Markets | 1 to 6 months by good | Storage and perishability; price volatility | Free |
 | P03 | Price adjustment speeds kappa1, kappa2 | Markets | 0.05 to 0.5 per month | Price volatility and autocorrelation | Free |
 | P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
@@ -1322,7 +1322,7 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
 2. **P1 World and map.** Geography pipeline (H3 raster, provinces, sea zones), transport graph with mode costs, least-cost-path cache, 2000 borders, web map with political, terrain and resource modes.
    - Accept: about 4,000 provinces render at 60 fps; clicking a province shows attributes; cost-from-node map mode looks plausible to a reviewer.
 3. **P2 Economic core (minimal).** 10 goods, static pops, one enterprise per (province, sector), labour market, province markets with the stock-flow rule, structural-gravity trade over route-choice costs, cleared across ticks, with transit, a single numeraire money, accounting assertions, and the GE reference model in Python.
-   - Accept: V0 and V1 pass (frictionless convergence to the GE reference within 1% where the uniqueness condition holds; long-run neutrality); simulated gravity elasticities in range by theta class (H2); no invariant violations over 100 years; ADRs 0012 to 0019 implemented (Section 25).
+   - Accept: V0 and V1 pass (frictionless convergence to the GE reference within 1% where the uniqueness condition holds; long-run neutrality); simulated gravity elasticities in range by theta class (H2); no invariant violations over 100 years; ADRs 0015 to 0022 implemented (Section 25).
 4. **P3 Counterfactual workbench.** Branches, interventions (all types in 14.2), common random numbers, ensembles, difference maps, fan charts, Python experiment API.
    - Accept: null intervention reproduces parent; a tariff intervention yields paired effects with tighter intervals under CRN than with independent seeds.
 5. **P4 Population.** Demography with Brass mortality and fertility, education, occupational mobility, culture and religion dynamics, migration with dynamic discrete choice.
@@ -1363,7 +1363,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Identification: many parameter sets fit 2000-2010 equally well | High | Three-layer parameterization, literature priors, modular calibration, posterior reporting, natural-experiment tests |
 | Province-level data gaps, especially for the \~115 economies outside OECD ICIO | High | Documented imputation, reconciliation to national totals, imputation flags down-weighted in calibration |
 | Sensitive real-world content: real states, ethnic groups and ongoing conflicts in an open-source simulator | High | Neutral mechanistic modeling, generic party names, documented sources, outputs framed as distributions not predictions, no editorializing UI text |
-| Trade solver misses the laptop budget at province level | Medium | One gravity normalization per tick (ADR 0013), gateway-factorized kernel, tunable gateway counts, Metal fallback |
+| Trade solver misses the laptop budget at province level | Medium | One gravity normalization per tick (ADR 0016), gateway-factorized kernel, tunable gateway counts, Metal fallback |
 | Open-ended runs drift or explode (debt spirals, price drift, demographic collapse) | Medium | Stabilizing policy rules, stability tests to 2150, balanced-growth checks in CI |
 | Numerical instability (price oscillation, bank-run cascades) | Medium | Clipped adjustments, stability tests on adjustment speeds, Walrasian fallback switch |
 | Railroading toward known post-2000 history | Medium | No date-triggered events; historical shocks enter only as exogenous tape items; LLM tier deferred |
@@ -1758,26 +1758,26 @@ Several nineteenth-century references above are no longer cited after the switch
 - Lux (2018). Estimation of agent-based models using sequential Monte Carlo methods. JEDC.
 - Yao, Vehtari, Simpson and Gelman (2018). Using stacking to average Bayesian predictive distributions. Bayesian Analysis.
 
-## 25. P2 model migration (ADRs 0012-0019)
+## 25. P2 model migration (ADRs 0015-0022)
 
 An economics review on 24 Oct 2026 changed P2's core: the trade objective, how markets clear, trade costs, the price and wage rules, production, demand and the P2 gate. Sections 5.4, 7.2, 8.2, 8.3, 8.6, 8.7, 15, 17, 19 and 21.1 already carry the new design; the ADRs below record the decisions and say how to move the P2 work in progress onto them. Later-phase findings (6.5, 8.8, 9.2, 9.4, 9.9, 13.2, 15.7) are folded into those sections and need no ADR until their phases start.
 
-**How to apply.** Transcribe each ADR to adr/NNNN-slug.md in the repository format. If P2 work has already used these numbers, renumber and update the references in this document. The ADRs were written against the P2 specification in this document, because the P2 code is not on the remote (it ends at P1, commit c848142); where the code differs, map each migration step to what exists and record the mapping in the ADR.
+**How to apply.** Transcribe each ADR to adr/NNNN-slug.md in the repository format. P2 work had already used 0012 to 0014 (full globe, posted-price logit routing, data seeding), so these ADRs are numbered 0015 to 0022 in the repository and here; 0015 and 0016 supersede the repository's 0013. The ADRs were written against the P2 specification in this document, because the P2 code is not on the remote (it ends at P1, commit c848142); where the code differs, map each migration step to what exists and record the mapping in the ADR.
 
-**Landing order.** 0012 and 0013 together (one rewrite of the trade system), then 0014 (ceteris-geo), 0015, 0016, 0018, 0017, and 0019 last because it defines the gate. Every one of them changes simulation output, so regenerate the golden hashes once after all eight land, with one BEHAVIOUR changelog entry listing them.
+**Landing order.** 0015 and 0016 together (one rewrite of the trade system), then 0017 (ceteris-geo), 0018, 0019, 0021, 0020, and 0022 last because it defines the gate. Every one of them changes simulation output, so regenerate the golden hashes once after all eight land, with one BEHAVIOUR changelog entry listing them.
 
 | ADR | Decision | Crates and specs | Changes P2 output |
 | --- | --- | --- | --- |
-| 0012 | Trade flows in value, kernel tau^(-theta) | trade | Yes |
-| 0013 | Origin markets clear across ticks; full Sinkhorn becomes switch S02 | trade, markets | Yes |
-| 0014 | Route-choice trade costs (Allen-Arkolakis) | geo, trade | Yes |
-| 0015 | Sector trade elasticities in 3 to 5 classes | trade, register | Yes |
-| 0016 | Expected inflation in price and wage rules | markets, labour | Yes (small in P2) |
-| 0017 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
-| 0018 | PIGL demand; consumption rule | econ | Yes |
-| 0019 | Uniqueness check, static nesting gate, direct estimation | python reference and calibrate | Gate only |
+| 0015 | Trade flows in value, kernel tau^(-theta) | trade | Yes |
+| 0016 | Origin markets clear across ticks; full Sinkhorn becomes switch S02 | trade, markets | Yes |
+| 0017 | Route-choice trade costs (Allen-Arkolakis) | geo, trade | Yes |
+| 0018 | Sector trade elasticities in 3 to 5 classes | trade, register | Yes |
+| 0019 | Expected inflation in price and wage rules | markets, labour | Yes (small in P2) |
+| 0020 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
+| 0021 | PIGL demand; consumption rule | econ | Yes |
+| 0022 | Uniqueness check, static nesting gate, direct estimation | python reference and calibrate | Gate only |
 
-### 0012. Trade flows in value with a dimensionless gravity kernel
+### 0015. Trade flows in value with a dimensionless gravity kernel
 
 Status: proposed. Date: 2026-10-24. Design sections: 1, 8, 8.3, 17.1 (P01).
 
@@ -1802,7 +1802,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 1, 8, 8.3, 17.1 (P01).
 
 **Consequences.** Trade no longer depends on the price level. Epsilon leaves the register; theta\_g is the only trade dispersion parameter.
 
-### 0013. Clear origin markets across ticks
+### 0016. Clear origin markets across ticks
 
 Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.3, 17.2 (S02), 19.2, 19.4.
 
@@ -1817,7 +1817,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.3, 17.2 (S02), 19.2,
 - Replace the per-tick solver loop with one normalization per (theta class, weight class).
 - Remove the Sinkhorn scaling vectors from tick state and snapshots; keep them only inside the S02 test path.
 - Route origin excess supply (output plus arrivals minus sales) into merchant inventory. Take the unbalanced-transport path out of the default system order.
-- The 8.2 rule is now the only origin clearing mechanism; ADR 0016 covers its stability.
+- The 8.2 rule is now the only origin clearing mechanism; ADR 0019 covers its stability.
 
 **Tests.**
 
@@ -1827,7 +1827,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.3, 17.2 (S02), 19.2,
 
 **Consequences.** Trade responds to shocks over months rather than within the month, the intended disequilibrium. Tariff impulse responses are checked against the timing in Amiti, Redding and Weinstein (2019).
 
-### 0014. Route-choice trade costs
+### 0017. Route-choice trade costs
 
 Status: proposed. Date: 2026-10-24. Design sections: 5.3, 5.4, 5.5, 8.3, 8.4, 17.2 (S05), 19.4.
 
@@ -1853,9 +1853,9 @@ Status: proposed. Date: 2026-10-24. Design sections: 5.3, 5.4, 5.5, 8.3, 8.4, 17
 - Scaling one edge's cost up to closure changes tau continuously.
 - Spectral-radius assertion in the pack property tests.
 
-**Consequences.** ceteris-geo golden hashes change. The trade kernel (0013) uses route-choice factors directly, and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare formula.
+**Consequences.** ceteris-geo golden hashes change. The trade kernel (0016) uses route-choice factors directly, and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare formula.
 
-### 0015. Sector-specific trade elasticities
+### 0018. Sector-specific trade elasticities
 
 Status: proposed. Date: 2026-10-24. Design sections: 8.3, 17.1 (P01), 19.4, 18 (H2).
 
@@ -1863,7 +1863,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.3, 17.1 (P01), 19.4, 18 (
 
 **Options.** (1) A single theta. (2) Theta per sector, each with its own kernel. (3) Theta per sector, grouped into 3 to 5 classes that share kernels.
 
-**Decision.** Option 3. Kernels and route-choice matrices are built per (theta class, weight class), so cost scales with classes, not sectors. Values are estimated outside the simulation (0019).
+**Decision.** Option 3. Kernels and route-choice matrices are built per (theta class, weight class), so cost scales with classes, not sectors. Values are estimated outside the simulation (0022).
 
 **Migration.**
 
@@ -1875,7 +1875,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.3, 17.1 (P01), 19.4, 18 (
 
 **Consequences.** More kernels in memory (classes x weight classes); the 19.2 trade line is budgeted for 5 theta classes.
 
-### 0016. Expected inflation in price and wage rules
+### 0019. Expected inflation in price and wage rules
 
 Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.7, 12.2, 15.3 (V1).
 
@@ -1900,7 +1900,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.7, 12.2, 15.3 (V1).
 
 **Consequences.** Inflation persistence now comes partly from expectations, which the 12.2 heuristics and survey targets discipline.
 
-### 0017. Putty-clay intermediates and within-tick rationing
+### 0020. Putty-clay intermediates and within-tick rationing
 
 Status: proposed. Date: 2026-10-24. Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 17.2 (S09, S11), 19.4.
 
@@ -1923,7 +1923,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 
 
 **Consequences.** The rationing change alters P2 output; the vintage change does not until investment exists. P38 enters the register.
 
-### 0018. PIGL demand and a household consumption rule
+### 0021. PIGL demand and a household consumption rule
 
 Status: proposed. Date: 2026-10-24. Design sections: 8.6, 17.1 (P06, P07, P37), 17.2 (S03), 19.4.
 
@@ -1947,7 +1947,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.6, 17.1 (P06, P07, P37), 
 
 **Consequences.** Demand stays closed form and cheap. Structural change runs through PIGL's Engel parameter rather than per-category income elasticities.
 
-### 0019. Uniqueness check, static nesting gate and direct estimation
+### 0022. Uniqueness check, static nesting gate and direct estimation
 
 Status: proposed. Date: 2026-10-24. Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate.
 
@@ -1957,7 +1957,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 3.4, 15.2, 15.3 (V1), 17.1,
 
 1. Before V1, evaluate the uniqueness condition of Allen, Arkolakis and Li (2024), a spectral-radius bound on the matrix of elasticities built from theta, agglomeration and (from P4) migration dispersion, at the tested parameters. Where it fails, V1 starts both models from the same point and reports which equilibrium each reaches instead of a 1% gap.
 2. V1 compares steady states with the custom static GE. Comparisons with CDP and KLR are sign and rank only, as the roadmap already states.
-3. theta\_g (0015), border frictions (P05) and mode cost ratios (P04) are estimated by PPML structural gravity on 2000 BACI with the route-choice cost structure, in python/ceteris/calibrate, outside simulation-based inference.
+3. theta\_g (0018), border frictions (P05) and mode cost ratios (P04) are estimated by PPML structural gravity on 2000 BACI with the route-choice cost structure, in python/ceteris/calibrate, outside simulation-based inference.
 
 **Migration.**
 
