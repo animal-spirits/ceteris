@@ -4,7 +4,7 @@
 
 ## 1. Executive Summary
 
-Ceteris Paribus (code name `ceteris`) is an open-source, deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post).
+Ceteris Paribus (code name `ceteris`) is a deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post). It stays closed source until the restricted data sources it uses are replaced or cleared.
 
 Six design bets carry the project:
 
@@ -22,7 +22,7 @@ Headline specification:
 | Start / horizon | 1 Jan 2000, open-ended | 25 years of out-of-sample history; long runs need climate, demography and stable growth |
 | Economic tick | 1 month | Captures harvests, prices, credit and policy cycles |
 | Military sub-tick | 1 day | Movement, battles, sieges |
-| Provinces | About 3,600 first-level administrative regions, large ones split to about 4,000 | Modern admin units carry the subnational data |
+| Provinces | 4,796 first-level regions from Natural Earth at 2000 borders; those over 250,000 km² split along county borders | Modern admin units carry the subnational data |
 | Markets | Every province prices every good | Finest price geography; costs about 10x more trade-solver work than hubs |
 | Goods | 45 sectors aligned with OECD ICIO, with energy and food staples split out | Direct mapping to input-output data |
 | States | About 195 | Current sovereign states plus a handful of de facto entities |
@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a Tauri desktop app with a MapLibre + deck.gl map UI; Python (uv) for data pipelines, the reference model and calibration via PyO3. The project is open source (Apache-2.0 / MIT dual licence), so every bundled dataset must permit redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a Tauri desktop app. The map is drawn with MapLibre and a GPU fill layer today and moves to a native Rust renderer on wgpu. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -209,11 +209,11 @@ Geography enters the economy through land and resource endowments and through tr
 
 ### 5.1 Base raster
 
-A global hexagonal grid (H3 resolution 4, cells of roughly 1,800 sq km; resolution 5 near cities) stores: elevation, slope and ruggedness, land cover, climate normals, crop suitability (FAO GAEZ v4, current input levels), gridded population and built-up area, night lights (for downscaling economic activity), energy and mineral resources, and coastlines and ports. The raster feeds province aggregates and transport costs; it is not simulated directly, except by the climate damage module.
+A global hexagonal grid (H3 resolution 4, cells of roughly 1,800 sq km; finer cells for provinces too small to hold one; resolution 6 for county statistics) stores: elevation, slope and ruggedness (ETOPO 2022), land cover, climate normals, crop suitability (FAO GAEZ v4, current input levels), gridded population and built-up area, night lights (for downscaling economic activity), energy and mineral resources, and coastlines and ports. The raster feeds province aggregates and transport costs; it is not simulated directly, except by the climate damage module.
 
 ### 5.2 Provinces
 
-Provinces are first-level administrative regions from geoBoundaries (openly licensed, about 3,600 units). Very large or very populous regions are split along second-level boundaries so no province dominates its country, giving about 4,000. Boundaries are frozen at 2000 with the post-2000 sovereignty changes (Timor-Leste, Montenegro, Kosovo, South Sudan) available as validation events, not scripted ones.
+Provinces are first-level administrative regions from Natural Earth (public domain; 4,594 units at mixed levels), remapped to 1 January 2000: South Sudan in Sudan, Serbia and Montenegro in Yugoslavia, Crimea in Ukraine. Regions over 250,000 km² are split along county boundaries from geoBoundaries (82 regions), or by Voronoi cells where counties are too few (11), giving 4,796. A county layer of 53,084 units is drawn on the map and carries raster statistics; it is not simulated. The post-2000 sovereignty changes (Timor-Leste, Montenegro, Kosovo, South Sudan) remain validation events, not scripted ones.
 
 | Attribute | Source | Dynamic? |
 |---|---|---|
@@ -231,14 +231,16 @@ Provinces are first-level administrative regions from geoBoundaries (openly lice
 
 Nodes are province centroids, ports, airports and sea-lane waypoints. Edges carry one or more modes, each with a per-ton-km cost, speed, capacity and risk that depend on investment and fuel prices.
 
+The 2000 graph has 4,796 province anchors, 2,757 rail nodes, 2,284 ports (1,001 listed, 1,283 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack.
+
 | Mode | Edge existence | Cost driver | Notes |
 |---|---|---|---|
 | Road | Network between adjacent provinces | Distance, road class, congestion, fuel | Dominant within continents |
 | Rail freight | Built lines | Distance, gauge breaks, electrification | Bulk goods |
-| Inland waterway | Navigable rivers, canals | Distance, seasonal depth | Bulk goods |
+| Inland waterway | Navigable rivers, canals | Distance, seasonal depth | Bulk goods; not yet built |
 | Maritime (container, bulk, tanker) | Sea lanes via chokepoints (Suez, Panama, Hormuz, Malacca, Bosporus) | Distance, bunker fuel, port capacity, freight rates | Chokepoint closures are shocks |
 | Air freight | Airport pairs | Distance, jet fuel | High value-to-weight goods |
-| Pipeline | Built oil and gas pipelines | Throughput, transit fees | Geopolitically exposed |
+| Pipeline | Built oil and gas pipelines | Throughput, transit fees | Geopolitically exposed; not yet built (P8, with energy assets) |
 
 Relative mode costs are calibrated priors: the ordering (sea cheapest per ton-km, then rail and waterway, then road, air far above) is imposed; magnitudes are estimated against international transport-cost data and price gaps (Section 15).
 
@@ -258,7 +260,7 @@ States and enterprises propose projects (highways, rail lines, ports, pipelines)
 
 ### 5.6 Licensing note
 
-OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. Because the project is open source this is acceptable, but the infrastructure tables must be published under ODbL and attributed. Every source's licence is recorded in the pack manifest (Section 16).
+OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. While the project is closed source nothing is distributed; once it opens, the OSM-derived tables ship as a separate artifact under ODbL, attributed. Every source's licence is recorded in the pack manifest (Section 16).
 
 ## 6. Population: Pops, Demography, Identity and Migration
 
@@ -848,12 +850,14 @@ Named firms or individuals, sub-province geography, daily financial markets, pow
 
 ## 16. Data Sources and Pipeline
 
-The 2000 pack can be built from open datasets; because the project is open source, the repository ships build scripts for everything and bundles only data whose licence clearly permits redistribution. Licence entries below are working assumptions to confirm in the P0 audit.
+The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). While the project is closed source it may use restricted sources, which must be replaced or cleared before it opens. ADR 0005 lists the substitutions made in the P0 audit.
 
-| Dataset | Content | Role | Licence (to verify) | Bundle or fetch |
+| Dataset | Content | Role | Licence | Bundle or fetch |
 |---|---|---|---|---|
-| geoBoundaries | Admin boundaries | Provinces | Mostly CC BY 4.0, per-boundary | Bundle |
+| geoBoundaries | Admin boundaries | County layer, county-border splits | Per file; 28% of units share-alike | Fetch |
 | Natural Earth | Coastlines, rivers | Map | Public domain | Bundle |
+| Natural Earth admin-1 | First-level regions | Provinces | Public domain | Bundle |
+| ETOPO 2022 | Elevation | Terrain, ruggedness | CC0 1.0 | Bundle aggregates |
 | OpenStreetMap | Roads, rail, ports, pipelines | Transport graph | ODbL (share-alike) | Bundle under ODbL |
 | WorldPop / GHSL | Gridded population, built-up area | Pops, urban share | CC BY 4.0 | Bundle aggregates |
 | FAO GAEZ v4 | Crop suitability, yields | Land productivity | Possibly non-commercial | Fetch |
@@ -969,7 +973,7 @@ The simulator is built to adjudicate between explanations, so each hypothesis na
 
 ## 19. Technology Stack, Performance and Repository
 
-A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; a web client renders the map; the three meet on Apache Arrow.
+A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust on wgpu later; the three meet on Apache Arrow.
 
 ### 19.1 Stack
 
@@ -978,13 +982,13 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | Simulation core | Rust, plain structure-of-arrays, rayon for parallelism | Determinism control, speed, memory safety for a long-lived codebase |
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
-| App shell | Tauri 2: Rust core in-process, Arrow buffers to the UI over IPC | One native macOS app, no server |
-| Map UI | TypeScript, Vite, MapLibre GL + deck.gl, PMTiles for province geometry, React panels, ECharts | WebGL choropleths and animated trade arcs at 4,000 provinces |
+| App shell | Tauri 2: Rust core in-process, raw buffers to the UI over IPC (Arrow with tick state), pack files served from disk through pack:// | One native macOS app, no server |
+| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
 | Bindings | PyO3 + maturin | Python drives headless runs and reads Arrow tables with zero copy |
 | Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
-| Licence | Apache-2.0 / MIT dual for code; data under its source licences (ODbL for OSM-derived tables) | Open source |
+| Licence | Closed source for now; Apache-2.0 / MIT dual for code on opening; data under its source licences (ODbL and other share-alike tables shipped separately) | Restricted sources usable until the project opens |
 
 An alternative worth noting: the Julia ecosystem now hosts a data-driven macro ABM framework (BeforeIT.jl, associated with the Bank of Italy), useful as a reference implementation for the economic core even though Ceteris Paribus uses Rust.
 
@@ -1209,10 +1213,10 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Start-year flexibility | Pipeline builds packs for any year 1995-2022 | Rolling-origin validation (2000, 2005, 2010, 2015) |
 | Horizon | Open-ended | Climate, demography and long-run stability are first-class requirements |
 | Map scope | Global, developed on a European slice in P1-P3 | Full globe from P4 |
-| Provinces | geoBoundaries first-level regions, split to about 4,000 | Open licence; subnational data aligns |
+| Provinces | Natural Earth first-level regions at 2000 borders, oversized ones split along county borders, 4,796 | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Two-level trade solver (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
-| App | Tauri desktop app | Rust core in-process, no server |
+| App | Tauri desktop app; map moving to native Rust on wgpu (ADR 0011) | Rust core in-process, no server |
 | Core language | Rust from the start | Python only for pipeline, reference model, calibration |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |
@@ -1221,7 +1225,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Parties | Explicit parties over interest groups | Elections, coalitions, party entry |
 | Naming | Real states and provinces, generic party labels by family | Recognizable map, less curation and sensitivity |
 | IO and trade data | OECD ICIO 2025 edition (1995-2022, 80+ economies) + BACI | About 115 economies imputed |
-| Licence | Open source (Apache-2.0 / MIT) | Only redistributable data bundled; rest fetched at build |
+| Licence | Closed source for now (supersedes open source; ADR 0005) | Restricted data allowed until it is replaced or cleared; Apache-2.0 / MIT on opening |
 | LLM leaders | Out of v1 | Tier 2 deferred |
 | First release | End of P9 (calibrated, validated world) | No public partial builds |
 | Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-*, Python package ceteris, CLI ceteris; check crates.io, PyPI and GitHub before P0 |
