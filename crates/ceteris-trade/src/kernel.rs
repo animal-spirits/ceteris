@@ -2,7 +2,7 @@
 //!
 //! Domestic pairs use the direct leg, `K_od = tau_od^-theta_g`, dense within a country. A
 //! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
-//! materialized: [`Kernel::access`] evaluates the sums through gateway aggregates.
+//! materialized: [`Kernel::origin_access_into`] evaluates the sums through gateway aggregates.
 
 use crate::goods::{N_GOODS, TRADED, tariff_group};
 use crate::network::{Leg, Network, Wedges};
