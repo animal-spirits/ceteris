@@ -328,6 +328,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 - Leg costs stay least-cost (S05) in P2: `Network.route_taus` stays `None` (route choice deferred past P2, ADR 0017)
 - `EconInputs::from_pack`: leg costs from `ceteris_geo::paths::shortest` run in parallel from each province and gateway, keeping only same-country province entries, gateway entries and gateway-pair entries (never caching full trees: 4,796 trees would need about 3 GB); reads `econ_calib.arrow` when present, else A = 1
 - `EconInputs::network_from_graph(pack: &Pack, gateways) -> Network` (the leg-cost step alone) and `EconWorld::set_network(&mut self, net: Network)` (replaces the inputs `Arc` with the new network, rebuilds the kernel: system T0 of the trade SPEC, triggered by the caller in P2 since shocks arrive in P3)
+- Carried from the migration (MIGRATION Task 8): `EconInputs::from_pack` must call `set_coefficients()` (`validate` rejects empty `EntData::coef`), and the export writes only the country `a` table, not `EntData::coef` (exact with one vintage; revisit with vintages)
 
 - [ ] **Step 1: Write failing tests** Python `test_pack_econ_tables_reproducible` (two builds, same sha256), `test_every_country_has_a_gateway`, `test_gateway_count_near_600` (500 to 700); Rust `pack_inputs_load` (skips without pack: every province has a country with omega summing to 1; every enterprise has workers), `kernel_rebuilds_after_chokepoint_closure` (run 12 ticks, close Suez with `set_chokepoint_closed`, `set_network(network_from_graph(...))`, run 24 more ticks: no violation, Suez-dependent flows fall; Review Focus 3).
 - [ ] **Step 2: Fetch** CEPII gravity, WB DTA, WDI tariff series (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS).
@@ -354,6 +355,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 **Files:** Create `crates/ceteris-trade/benches/trade.rs`, `crates/ceteris-econ/benches/econ.rs`
 
 **Interfaces:** criterion benches on the full pack (skip with a notice without one, fixture fallback so `cargo bench --no-run` and CI work): `source_dispatch` (10 goods per tick, budget 5 ms per tick on the full pack), `clear_reprice` (2 ms), `labour` + `produce` (12 ms), `consume` (10 ms), `kernel_build` (report only).
+- Carried from the migration (MIGRATION Tasks 6 and 8): E3 runs one extra unit `source` + `dispatch` per traded good each tick for q_d and the lead time L, and the E2 same-tick chain of local goods runs serially per province; budget both
 
 - [ ] **Step 1: Implement; run** `cargo bench -p ceteris-trade -p ceteris-econ`; expected: medians reported; record them in the commit message and in `specs/econ/SPEC.md` (new "Measured" note under the gate).
 - [ ] **Step 2: If a budget is missed,** profile (samply) and fix layout or algorithm per 19.4 before continuing; never relax determinism.
@@ -364,6 +366,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 **Files:** Modify `crates/ceteris-econ/tests/p2_acceptance.rs`; create `python/tests/test_p2_gate.py`
 
 **Interfaces:** Consumes everything above.
+- Carried from the migration (MIGRATION Tasks 5 and 6): define ADR 0018's per-class prior band for H2 before testing `test_h2_theta_by_class` (none is defined; for example the Caliendo and Parro standard errors aggregated per class), and re-measure the stability region and the growth factors on the pack with the committed harnesses `crates/ceteris-econ/tests/p2_price_rule_sweep.rs` and `p2_expectation_sweep.rs`
 
 - [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (first `uniqueness.spectral_bound` at the pack's theta and `uniqueness.value_added_share`, then runs `ceteris run --pack ... --ticks 1200 --frictionless` and solves the reference from the data state; `uniqueness.v1_mode` picks the check: in tolerance mode the V1 tolerances of the econ SPEC, in report mode a report of which equilibrium each model reaches, per the econ SPEC P2 gate), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
 - [ ] **Step 2: Run** `cargo test -p ceteris-econ --release --test p2_acceptance` and `uv run --project python pytest python/tests/test_p2_gate.py`.
@@ -373,6 +376,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 ### Task 21: Records
 
 **Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P47, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
+- Carried from the migration (MIGRATION Tasks 4 and 7): the DESIGN.md refresh must carry the ADR 0017 deferral (lines 257, 1324 and 1856 still describe route choice as the P2 cost model) and ADR 0021's three PIGL categories (DESIGN 8.6 names five)
 
 - [ ] **Step 1: Write** the gate evidence (commands, measured V1 maxima, H2 estimate with standard error, benchmark medians).
 - [ ] **Step 2: Commit** `docs(specs): record p2 gate evidence`
