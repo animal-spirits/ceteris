@@ -7,8 +7,9 @@ pops spending their whole income.
 Destination d spends E_d on traded good g, households by CES at the delivered unit price
 q_d = 1 / alpha_d, alpha_d the units arriving per unit of spending (owner decision, 2026-10-24),
 and enterprises a Y q_d, so arrivals replace use; X_od = E_d K_od w_o / Phi_d with
-w_o = (p_o / p_min)^-theta (floored), K carrying the tariff on crossings. Origin o ships X_od / (p_o (1 + t)) units and
-receives p_o per unit, the importer's rebate account t p_o.
+w_o = (p_o / p_min)^-theta_g (floored; theta per good, ADR 0018), K carrying the tariff on
+crossings. Origin o ships X_od / (p_o (1 + t)) units and receives p_o per unit, the importer's
+rebate account t p_o.
 
 Unknowns x: ln p of every active (province, good) cell in row-major order (origin markets of
 traded goods, province markets of local goods), then ln w per province. Equations: excess demand
@@ -113,7 +114,7 @@ def _to_destinations(inp: Inputs, r: np.ndarray, dom_k, acc_k, cro_k) -> np.ndar
 
 
 def _sourcing(inp: Inputs, price: np.ndarray) -> dict:
-    """Floored origin weights w = (p / p_min)^-theta of active traded origins, Phi, alpha (units
+    """Floored origin weights w = (p / p_min)^-theta_g of active traded origins, Phi, alpha (units
     arriving per unit of spending) and the delivered unit price q = 1 / alpha (infinite where no
     active origin is reachable), as `EconWorld::refresh_price_index`. Weights good-major flat
     (G * P); index and alpha (P, G)."""
@@ -123,7 +124,7 @@ def _sourcing(inp: Inputs, price: np.ndarray) -> dict:
     act = inp.active.T & inp.traded[:, None]
     p_min = np.where(act, p, np.inf).min(axis=1, keepdims=True)  # weights relative to it
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        w = np.where(act, (p / p_min) ** -inp.theta, 0.0)
+        w = np.where(act, (p / p_min) ** -inp.theta[:, None], 0.0)
     w[w < inp.weight_floor] = 0.0
     wf = w.ravel()
     phi = _from_origins(inp, wf, dom.k, acc.k, cro.k)

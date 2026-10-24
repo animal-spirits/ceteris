@@ -1,6 +1,6 @@
 //! Two-level trade kernel (`specs/trade/SPEC.md`, Equations).
 //!
-//! Domestic pairs use the direct leg, `K_od = tau_od^-theta`, dense within a country. A
+//! Domestic pairs use the direct leg, `K_od = tau_od^-theta_g`, dense within a country. A
 //! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
 //! materialized: [`Kernel::access`] evaluates the sums through gateway aggregates.
 
@@ -48,7 +48,7 @@ impl<E> Csr<E> {
 }
 
 /// A domestic or access leg: `tau = 1 + c w + lambda T` on the least-cost leg (S05), or the
-/// route-choice factor when the network carries one, and `k = tau^-theta`.
+/// route-choice factor when the network carries one, and `k = tau^-theta_g`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Entry {
     pub col: u32,
@@ -58,7 +58,7 @@ pub struct Entry {
 
 /// A gateway crossing. `tau` is the leg factor without border friction or tariff;
 /// `border_tau = 1 + nu` is the iceberg border loss, destroyed at the crossing. The tariff
-/// is a routing wedge only. `k = (tau * border_tau * (1 + tariff))^-theta`. `lag` is the
+/// is a routing wedge only. `k = (tau * border_tau * (1 + tariff))^-theta_g`. `lag` is the
 /// extra transit time in months, `round(hours / 730)` capped at 3, from the least-cost leg's
 /// hours or the good's expected route hours.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,8 +87,10 @@ pub struct GoodKernel {
 pub struct Kernel {
     pub n_provinces: usize,
     pub n_gateways: usize,
-    /// P01 as used to build `k`; routing needs it for `p^theta`.
-    pub theta: f64,
+    /// P01 per good as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
+    /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
+    /// (ADR 0018).
+    pub theta: [f64; N_GOODS],
     goods: [Option<GoodKernel>; N_GOODS],
 }
 
@@ -153,7 +155,7 @@ impl Kernel {
     }
 
     /// Origin-side low-rank evaluation into reused buffers. `weight` must be floored
-    /// sourcing weights as [`crate::source::origin_weights`] writes them: `(p_o / p_min)^-theta`
+    /// sourcing weights as [`crate::source::origin_weights`] writes them: `(p_o / p_min)^-theta_g`
     /// for an active origin at or above `WEIGHT_FLOOR`, 0 otherwise. Unfloored weights can
     /// make products with the f32 kernel factors subnormal and the shares inaccurate.
     /// Writes `v'_a = sum_{o in A} K_oa w_o`, `u'_b = sum_a v'_a K_ab` and
@@ -291,7 +293,7 @@ fn good_kernel(
 ) -> GoodKernel {
     let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
     let rt = net.route_taus.as_ref();
-    let k_of = |total: f64| libm::pow(total, -p.theta) as f32;
+    let k_of = |total: f64| libm::pow(total, -p.theta[g]) as f32;
     let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
         let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
         Entry {
@@ -358,7 +360,7 @@ mod tests {
     /// K of a leg by the spec formula, independent of the implementation, stored as f32.
     fn leg_k(p: &TradeParams, g: usize, leg: &Leg, extra: f64) -> f64 {
         let tau = 1.0 + leg.cost_per_t * W[g] + p.time_cost[g] * leg.hours / 24.0;
-        f64::powf(tau * extra, -p.theta) as f32 as f64
+        f64::powf(tau * extra, -p.theta[g]) as f32 as f64
     }
 
     /// Provinces 0..5 in country 0, 5..10 in country 1; gateways 0 and 1 in country 0,
@@ -428,9 +430,35 @@ mod tests {
         let e = k.good(4).domestic.row(0)[0];
         // 1 + 150 * 0.002 + 0.010 * 2 days
         assert!((e.tau - 1.32).abs() < 1e-12);
-        let want = f64::powf(1.32, -5.0) as f32;
+        let want = f64::powf(1.32, -p.theta[4]) as f32;
         assert!((e.k - want).abs() <= want * 1e-6);
         assert_eq!(e.col, 1);
+    }
+
+    #[test]
+    fn kernel_uses_theta_per_good() {
+        let mut p = TradeParams::default();
+        p.theta[0] = 2.0;
+        p.theta[4] = 8.0;
+        let net = world(&mut Rng(5));
+        let mut wedges = Wedges::none(2);
+        wedges.tariff.iter_mut().for_each(|t| *t = 0.2);
+        let k = Kernel::build(&net, &W, &wedges, &p);
+        assert_eq!((k.theta[0], k.theta[4]), (2.0, 8.0));
+        let nu = 1.0 + p.border_nu;
+        for g in [0, 4] {
+            let gk = k.good(g);
+            for e in gk.domestic.entries.iter().chain(&gk.access.entries) {
+                assert_eq!(e.k, libm::pow(e.tau, -p.theta[g]) as f32);
+            }
+            for e in &gk.crossings.entries {
+                let total = e.tau * nu * (1.0 + f64::from(e.tariff));
+                assert_eq!(e.k, libm::pow(total, -p.theta[g]) as f32);
+            }
+        }
+        // same legs, the other theta: the factors differ
+        let e = k.good(0).domestic.entries[0];
+        assert_ne!(e.k, libm::pow(e.tau, -8.0) as f32);
     }
 
     #[test]
@@ -497,14 +525,14 @@ mod tests {
         assert!((e.border_tau - 1.3).abs() < 1e-12);
         assert_eq!(e.tariff, 0.25);
         assert_eq!(e.lag, 2);
-        let want = f64::powf(tau * 1.3 * 1.25, -5.0) as f32;
+        let want = f64::powf(tau * 1.3 * 1.25, -p.theta[4]) as f32;
         assert!((e.k - want).abs() <= want * 1e-6);
 
         // same leg, good 0 (primary, group 0)
         let e = k.good(0).crossings.row(0)[0];
         assert_eq!(e.tariff, 0.10);
         let tau = 1.0 + 100.0 * W[0] + p.time_cost[0] * 1500.0 / 24.0;
-        let want = f64::powf(tau * 1.3 * 1.10, -5.0) as f32;
+        let want = f64::powf(tau * 1.3 * 1.10, -p.theta[0]) as f32;
         assert!((e.k - want).abs() <= want * 1e-6);
 
         // 1 -> 0, good 0: lag round(5000 / 730) = 7 capped at 3; importer is country 0
@@ -569,7 +597,7 @@ mod tests {
             for (i, l) in net.domestic.iter().enumerate() {
                 let e = entry(&gk.domestic, l);
                 assert_eq!(e.tau, rt.domestic[i][g]);
-                assert_eq!(e.k, libm::pow(rt.domestic[i][g], -p.theta) as f32);
+                assert_eq!(e.k, libm::pow(rt.domestic[i][g], -p.theta[g]) as f32);
             }
             for (i, l) in net.access.iter().enumerate() {
                 let e = entry(&gk.access, l);
@@ -584,7 +612,7 @@ mod tests {
                     .unwrap();
                 let tau = rt.crossings[i][g];
                 assert_eq!(e.tau, tau);
-                assert_eq!(e.k, libm::pow(tau * nu, -p.theta) as f32);
+                assert_eq!(e.k, libm::pow(tau * nu, -p.theta[g]) as f32);
                 let lag = (rt.crossing_hours[i][g] / 730.0).round().min(3.0) as u8;
                 assert_eq!(e.lag, lag);
             }

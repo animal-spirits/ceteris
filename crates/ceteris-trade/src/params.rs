@@ -4,8 +4,19 @@ use crate::goods::N_GOODS;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
-    /// P01 trade elasticity theta, prior 4 to 8.
-    pub theta: f64,
+    /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.62 to 12.55, the
+    /// range of the class values (ADR 0018). Each traded good carries its class's theta
+    /// (ADR 0023): Caliendo and Parro (2015, Table 1, 99% sample) sector estimates averaged
+    /// over the HS lines of the good with BACI 2000 trade weights (`ceteris.packs.econ.theta`):
+    /// agriculture 9.11, crude oil and gas 13.53, coal and other mining 13.53, food 2.62, light
+    /// manufacturing 6.73, chemicals, refined fuels and metals 12.64, machinery, electronics and
+    /// vehicles 5.33; grouped into 3 classes within a factor 1.5, each at the trade-weighted
+    /// mean of its goods, to two decimals.
+    pub theta: [f64; N_GOODS],
+    /// P01 theta class of each good (ADR 0023), 0 for the lowest theta; local goods 0
+    /// (unused). Kernels stay per good, since weight classes are goods in P2 (ADR 0018); the
+    /// map lets goods of one class share kernels once weight classes merge.
+    pub theta_class: [u8; N_GOODS],
     /// P02 inventory target coverage s_g in months; local goods 0.
     pub coverage: [f64; N_GOODS],
     /// P03a price response to the demand-supply gap, per month. Prior 0.01 to 0.5 (widened
@@ -15,7 +26,8 @@ pub struct TradeParams {
     /// kappa2 = 0, frictionless / default): kappa1 0.02: 0.9956 / 0.9958; 0.05: 0.9864 /
     /// 0.9873; 0.1: 0.9723 / 0.9759; 0.2: 1.0000 / 0.9942 (frictionless oscillates). The
     /// same with every crossing lag at 3 months (the full pack's cap) up to kappa1 0.1;
-    /// 0.2: 1.0001 / 1.0014.
+    /// 0.2: 1.0001 / 1.0014. These are at theta 5 for every good; at the per-good thetas
+    /// (MIGRATION Task 5) kappa1 0.02 gives 0.9954 / 0.9954.
     pub kappa1: f64,
     /// P03b price response to the inventory gap, per month. Prior 0 to 0.5 (widened from 0.05
     /// by owner decision, 2026-10-24), default 0: the inventory term is off and inventories
@@ -41,7 +53,8 @@ pub struct TradeParams {
 impl Default for TradeParams {
     fn default() -> Self {
         Self {
-            theta: 5.0,
+            theta: [12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88, 0.0, 0.0, 0.0],
+            theta_class: [2, 2, 2, 0, 1, 2, 1, 0, 0, 0],
             coverage: [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.02,
             kappa2: 0.0,

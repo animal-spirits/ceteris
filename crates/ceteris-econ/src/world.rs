@@ -232,6 +232,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         time_cost,
         // reaches the kernel only through Network.route_taus, in the inputs digest
         theta_r: _,
+        // groups goods for kernel sharing; the dynamics read theta alone
+        theta_class: _,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
@@ -239,7 +241,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(edu_eff);
     e.u8(u8::from(*frictionless));
     e.u8(*rationing as u8);
-    e.f64s(&[*theta, *kappa1, *kappa2, *c_max, *border_nu]);
+    e.f64s(theta);
+    e.f64s(&[*kappa1, *kappa2, *c_max, *border_nu]);
     e.f64s(coverage);
     e.f64s(time_cost);
     state_hash(&e.into_bytes())
@@ -1074,7 +1077,7 @@ mod tests {
             Arc::new(small_world()),
             EconParams::default(),
             TradeParams {
-                theta: 6.0,
+                theta: [6.0; N_GOODS],
                 ..TradeParams::default()
             },
         );

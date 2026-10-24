@@ -2,8 +2,8 @@
 //! spread over origins, and the forward dispatch of what the origin markets fill.
 //!
 //! Destination d spends E_d (numeraire, tariff included) on good g over routes by
-//! `X_od = E_d K_od p_o^-theta / Phi_d`, `Phi_d = sum_o K_od p_o^-theta`, so its delivered
-//! price index is `P_d = Phi_d^(-1/theta)`. The kernel on a crossing carries the tariff, so X
+//! `X_od = E_d K_od p_o^-theta / Phi_d`, `Phi_d = sum_o K_od p_o^-theta`, theta the good's
+//! P01 value, so its delivered price index is `P_d = Phi_d^(-1/theta)`. The kernel on a crossing carries the tariff, so X
 //! is what d pays: the origin ships `X / (p_o (1 + t))` units and receives `p_o` per unit, the
 //! importer's rebate account `t p_o` per unit, and d receives the shipped units over the
 //! physical loss factor of the route. Domestic and home routes have t = 0.
@@ -12,7 +12,8 @@ use crate::kernel::{Access, Kernel};
 
 /// Origins whose weight `(p_o / p_min)^-theta` is below this are not sourcing targets, and a
 /// destination whose access `Phi_d` (in the same relative units) is below it buys nothing:
-/// its price index is infinite. At theta = 5, markets 1e20x above the best price are left out.
+/// its price index is infinite. Markets 1e20x above the best price are left out at theta = 5,
+/// 1e8x at 12.55 (the largest P01 class value).
 /// It keeps every product of a weight with up to three f32 kernel factors a normal f64, so
 /// the Markov shares stay accurate when prices span orders of magnitude.
 pub const WEIGHT_FLOOR: f64 = 1e-100;
@@ -124,10 +125,16 @@ fn zeroed2(v: &mut Vec<[f64; 2]>, n: usize) {
     v.resize(n, [0.0; 2]);
 }
 
-/// Sourcing weights `(p_o / p_min)^-theta` of the active origins into `out` (0 for inactive
-/// origins and below [`WEIGHT_FLOOR`]), and returns `p_min`, the lowest active price
-/// (`f64::INFINITY` when no origin is active). Prices of inactive origins are not read.
-pub fn origin_weights(k: &Kernel, price: &[f64], active: &[bool], out: &mut Vec<f64>) -> f64 {
+/// Sourcing weights `(p_o / p_min)^-theta_g` of good `g` at the active origins into `out` (0
+/// for inactive origins and below [`WEIGHT_FLOOR`]), and returns `p_min`, the lowest active
+/// price (`f64::INFINITY` when no origin is active). Prices of inactive origins are not read.
+pub fn origin_weights(
+    k: &Kernel,
+    g: usize,
+    price: &[f64],
+    active: &[bool],
+    out: &mut Vec<f64>,
+) -> f64 {
     assert!(price.len() == k.n_provinces && active.len() == k.n_provinces);
     let mut p_min = f64::INFINITY;
     for (o, &p) in price.iter().enumerate() {
@@ -141,7 +148,7 @@ pub fn origin_weights(k: &Kernel, price: &[f64], active: &[bool], out: &mut Vec<
         if !active[o] {
             return 0.0;
         }
-        let w = libm::pow(price[o] / p_min, -k.theta);
+        let w = libm::pow(price[o] / p_min, -k.theta[g]);
         if w >= WEIGHT_FLOOR { w } else { 0.0 }
     }));
     p_min
@@ -176,13 +183,13 @@ pub fn source(
     let gk = k.good(g);
     let s = &mut out.scratch;
     s.good = Some(g);
-    let p_min = origin_weights(k, price, active, &mut s.weight);
+    let p_min = origin_weights(k, g, price, active, &mut s.weight);
     k.origin_access_into(g, &s.weight, &mut s.access);
     let (w, v, u, phi) = (&s.weight, &s.access.v, &s.access.u, &s.access.pi);
 
     out.price_index.clear();
     out.price_index
-        .extend(phi.iter().map(|&f| price_index(p_min, f, k.theta)));
+        .extend(phi.iter().map(|&f| price_index(p_min, f, k.theta[g])));
     s.reach.clear();
     s.reach.extend((0..np).map(|d| {
         if phi[d] >= WEIGHT_FLOOR {
@@ -521,8 +528,13 @@ mod tests {
         complete_world(&mut rng(seed), provinces, vec![0, 0, 1])
     }
 
+    /// Kernel at theta = [`THETA`] for every good, the value the oracles below use.
     fn kernel(net: &Network, wedges: &Wedges) -> Kernel {
-        Kernel::build(net, &W, wedges, &TradeParams::default())
+        let p = TradeParams {
+            theta: [THETA; N_GOODS],
+            ..TradeParams::default()
+        };
+        Kernel::build(net, &W, wedges, &p)
     }
 
     fn tau_leg(g: usize, l: &Leg) -> f64 {
@@ -918,10 +930,13 @@ mod tests {
 
     #[test]
     fn shares_homogeneous_in_prices() {
-        for seed in [3u64, 17, 99] {
+        // per good, each at its own default theta
+        let p = TradeParams::default();
+        for (seed, g) in (0..7).map(|g| (3 + 14 * g as u64, g)) {
             let (net, wedges) = random_world(seed);
             let n = net.n_provinces();
-            let k = kernel(&net, &wedges);
+            let k = Kernel::build(&net, &W, &wedges, &p);
+            assert_eq!(k.theta[g], p.theta[g]);
             let mut rng = rng(seed);
             let price = draw(&mut rng, n, 0.5, 1.5);
             let spend = draw2(&mut rng, n, 1.0, 100.0);
@@ -936,11 +951,11 @@ mod tests {
                     .collect()
             };
             let mut base = Sourced::new();
-            source(&k, 4, &price, &active, &spend, &mut base);
+            source(&k, g, &price, &active, &spend, &mut base);
             for lambda in [1e-6, 1e3] {
                 let scaled: Vec<f64> = price.iter().map(|p| p * lambda).collect();
                 let mut out = Sourced::new();
-                source(&k, 4, &scaled, &active, &spend, &mut out);
+                source(&k, g, &scaled, &active, &spend, &mut out);
                 assert_close(
                     &format!("shares at lambda {lambda}"),
                     &shares(&out, &scaled),
@@ -954,7 +969,7 @@ mod tests {
                     .iter()
                     .map(|s| [s[0] * lambda, s[1] * lambda])
                     .collect();
-                source(&k, 4, &scaled, &active, &spend_l, &mut out);
+                source(&k, g, &scaled, &active, &spend_l, &mut out);
                 for c in 0..2 {
                     assert_close(
                         "units",

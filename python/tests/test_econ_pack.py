@@ -1,10 +1,18 @@
+import math
+import os
+import re
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pytest
+from pyarrow import ipc
 
 from ceteris.packs import fetch
-from ceteris.packs.econ import goods
+from ceteris.packs.econ import goods, theta
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
 
 # ICIO 2025 edition, 50 industries (ReadMe_ICIO_small.xlsx, "Areas and Economic Activities").
 ICIO_2025 = [
@@ -193,6 +201,94 @@ def test_weights_from_baci_pins_tonnes_per_usd(tmp_path):
     assert (w[7:] == 0).all()
 
 
+def _isic_divisions(span: str) -> tuple[str, ...]:
+    """ISIC Rev 3 codes of Table A.1 ("1-5", "36 -37", "351 - 359") as two-digit divisions present in Rev 3."""
+    lo, _, hi = (x.strip() for x in span.partition("-"))
+    lo, hi = lo[:2].zfill(2), (hi or lo)[:2].zfill(2)
+    rev3 = {"01", "02", "05", *map(str, range(10, 38))}
+    return tuple(f"{d:02d}" for d in range(int(lo), int(hi) + 1) if f"{d:02d}" in rev3)
+
+
+def test_caliendo_parro_values_transcribed():
+    """The table in `theta.py` is the one ADR 0023 transcribes from Caliendo and Parro (2015), with the page."""
+    adr = (ROOT / "adr" / "0023-trade-elasticity-classes.md").read_text()
+    assert "Table 1" in adr and "p. 18" in adr and "99% sample" in adr
+    rows = re.findall(r"^\| (\d+) \| ([A-Za-z. ]+?) \| ([\d -]+?) \| ([\d.]+) \| \(([\d.]+)\) \|$", adr, re.MULTILINE)
+    assert len(rows) == 20
+    transcribed = {name: (_isic_divisions(span), float(t)) for _, name, span, t, _ in rows}
+    assert transcribed == theta.CALIENDO_PARRO
+    assert min(t for _, t in transcribed.values()) == 0.39 and max(t for _, t in transcribed.values()) == 64.85
+
+
+def test_theta_by_good_weighted_by_trade(tmp_path):
+    # Two light-manufacturing lines (Textile 8.10, Wood 11.50) and one food line (2.62); one line out of the concordance.
+    lines = {"520100": ("1711", "1310"), "440310": ("2010", "1610"), "020110": ("1511", "1010")}
+    rows = [
+        "2000,1,2,520100,1,",  # no q: still weighs by value
+        "2000,1,3,520100,2,5",
+        "2000,1,2,440310,1,2",
+        "2000,1,2,20110,4,1",
+        "2000,1,2,999999,100,1",
+    ]
+    baci = tmp_path / "baci.zip"
+    with zipfile.ZipFile(baci, "w") as z:
+        z.writestr("BACI_HS92_Y2000_V202601.csv", "t,i,j,k,v,q\n" + "\n".join(rows) + "\n")
+        z.writestr("BACI_HS92_Y2001_V202601.csv", "t,i,j,k,v,q\n2001,1,2,440310,1000,1\n")
+    wits = tmp_path / "wits.zip"
+    with zipfile.ZipFile(wits, "w") as z:
+        text = "HS1988-92 Product Code,Product Description,ISIC Revision 3 Product Code\n"
+        text += "".join(f"{hs},x,{i3}\n" for hs, (i3, _) in lines.items())
+        z.writestr("JobID-0_Concordance_H0_to_I3.CSV", text)
+    bridge = tmp_path / "bridge.txt"
+    bridge.write_text(
+        '"ISIC31code","partialISIC31","ISIC4code","partialISIC4","Detail"\n'
+        + "".join(f'"{i3}",0,"{i4}",0,""\n' for i3, i4 in lines.values())
+    )
+
+    t = theta.caliendo_parro_by_good(baci, wits, bridge)
+
+    assert t.shape == (goods.N_GOODS,)
+    assert t[4] == pytest.approx((3 * 8.10 + 1 * 11.50) / 4, rel=1e-12)
+    assert t[3] == pytest.approx(2.62, rel=1e-12)
+    assert (t[[0, 1, 2, 5, 6]] == 0).all() and (t[7:] == 0).all()
+
+
+def test_classes_follow_rule():
+    # Sorted 2, 2.9 | 4, 5.9 | 8, 9, 11: the only split into 3 within a factor 1.5.
+    t = np.array([2.0, 4.0, 5.9, 2.9, 8.0, 9.0, 11.0])
+    v = np.array([1.0, 1.0, 3.0, 1.0, 1.0, 1.0, 2.0])
+    of, ct = theta.classes(t, v)
+    assert of.tolist() == [0, 1, 1, 0, 2, 2, 2]
+    np.testing.assert_allclose(ct, [2.45, (4.0 + 3 * 5.9) / 4, (8.0 + 9.0 + 22.0) / 4], rtol=1e-12)
+    for c in range(len(ct)):
+        members = t[of == c]
+        assert members.max() / members.min() <= theta.CLASS_SPREAD
+    # Fewer distinct values still give 3 classes, the split with the smallest largest spread.
+    of, _ = theta.classes(np.array([2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0]), np.ones(7))
+    assert of.tolist() == [0, 1, 1, 1, 2, 2, 2]  # the first such split in order
+    # A spread of exactly 1.5 is inside the bound.
+    of, _ = theta.classes(np.array([1.0, 1.5, 3.0, 4.5, 9.0, 13.5, 13.5]), np.ones(7))
+    assert of.tolist() == [0, 0, 1, 1, 2, 2, 2]
+    with pytest.raises(ValueError, match="5 classes"):
+        theta.classes(np.array([1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0]), np.ones(7))
+
+
+def test_fixture_theta_follows_the_classes():
+    """`TradeParams::default()` as exported: every traded good at its class's theta, local goods 0."""
+    if not (FIXTURE / "goods.arrow").exists():
+        pytest.skip(f"skipping: no export in {FIXTURE}")
+    g = ipc.open_file(str(FIXTURE / "goods.arrow")).read_all()
+    if "theta_class" not in g.column_names:
+        pytest.skip(f"skipping: {FIXTURE} predates export format 3")
+    t, of, traded = (g[c].to_numpy() for c in ("theta", "theta_class", "traded"))
+    assert (t[~traded] == 0).all() and (of[~traded] == 0).all()
+    classes = sorted(set(of[traded].tolist()))
+    assert classes == list(range(len(classes))) and 3 <= len(classes) <= 5
+    by_class = [t[traded][of[traded] == c] for c in classes]
+    assert all(len(set(x.tolist())) == 1 for x in by_class)
+    assert [x[0] for x in by_class] == sorted(x[0] for x in by_class)
+
+
 # Tests below need the downloaded BACI and concordances; CI is data-free.
 def _cached(name: str):
     path = fetch.path_of(name)
@@ -222,3 +318,22 @@ def test_local_goods_weigh_nothing(weights):
 
 def test_bulk_heavier_than_machinery(weights):
     assert weights[2] > 10 * weights[6]
+
+
+@pytest.fixture(scope="module")
+def caliendo_parro():
+    baci = _cached("BACI_HS92_V202601.zip")
+    hs_isic = _cached("Concordance_H0_to_I3.zip")
+    bridge = _cached("ISIC31_ISIC4.txt")
+    return theta.caliendo_parro_with_value(baci, hs_isic, bridge)
+
+
+def test_caliendo_parro_by_good_from_baci(caliendo_parro):
+    """ADR 0023 values: theta per good to two decimals, and the classes of `TradeParams::default()`."""
+    t, v = caliendo_parro
+    np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 6.73, 12.64, 5.33, 0, 0, 0], atol=0.005)
+    assert (v[:7] > 1e11).all() and (v[7:] == 0).all()
+    of, ct = theta.classes(t[:7], v[:7])
+    assert of.tolist() == [2, 2, 2, 0, 1, 2, 1]
+    np.testing.assert_allclose(ct, [2.62, 5.88, 12.55], atol=0.005)
+    assert math.log(ct[-1] / ct[0]) > math.log(theta.CLASS_SPREAD)

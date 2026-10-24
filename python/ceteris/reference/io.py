@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 2)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 3)."""
 
 import json
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from pyarrow import ipc
 
-EXPORT_FORMAT = "2"
+EXPORT_FORMAT = "3"
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class Entries:
 
 @dataclass(frozen=True)
 class Inputs:
-    theta: float
+    theta: np.ndarray  # (G,) P01 per good, 0 for local goods (ADR 0018)
     sigma_demand: float
     sigma_fl: float
     weight_floor: float
@@ -165,7 +165,7 @@ def load(directory: Path | str) -> Inputs:
     edu_eff = np.asarray(params["econ"]["edu_eff"])
     pop_province = pops["province"].astype(np.int64)
     inp = Inputs(
-        theta=float(params["trade"]["theta"]),
+        theta=goods["theta"].astype(np.float64),
         sigma_demand=float(params["econ"]["sigma_demand"]),
         sigma_fl=float(params["econ"]["sigma_fl"]),
         weight_floor=float(params["weight_floor"]),

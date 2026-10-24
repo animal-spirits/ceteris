@@ -50,10 +50,10 @@ def test_scale_invariance(inputs):
     assert scaled[row] - base[row] == pytest.approx(np.log(3.7), abs=1e-12)
 
 
-def _weights(inp: io.Inputs, p: np.ndarray, act: np.ndarray) -> np.ndarray:
-    """Floored origin weights (p / p_min)^-theta of the active origins, as `source::origin_weights`."""
+def _weights(inp: io.Inputs, g: int, p: np.ndarray, act: np.ndarray) -> np.ndarray:
+    """Floored origin weights (p / p_min)^-theta_g of the active origins, as `source::origin_weights`."""
     with np.errstate(divide="ignore"):
-        w = np.where(act, (p / p[act].min()) ** -inp.theta, 0.0)
+        w = np.where(act, (p / p[act].min()) ** -inp.theta[g], 0.0)
     w[w < inp.weight_floor] = 0.0
     return w
 
@@ -68,7 +68,7 @@ def test_sinkhorn_and_dense_kernel_reproduce_equilibrium_gravity(fixture):
     for g in np.flatnonzero(inp.traded):
         k, k_net = sinkhorn.dense_kernel(inp, g), sinkhorn.dense_kernel(inp, g, net_of_tariff=True)
         p = eq.price[:, g]
-        w = _weights(inp, p, inp.active[:, g])
+        w = _weights(inp, g, p, inp.active[:, g])
         phi = w @ k
         flows = w[:, None] * k_net * (eq.expenditure[:, g] / phi)[None, :]
         supply = p * eq.supply[:, g]
@@ -102,7 +102,7 @@ def dense_route_oracle(inp: io.Inputs, price: np.ndarray, spend: np.ndarray) -> 
     dom, acc, cro = inp.domestic, inp.access, inp.crossing
     for g in np.flatnonzero(inp.traded):
         p = price[:, g]
-        w = _weights(inp, p, inp.active[:, g])
+        w = _weights(inp, g, p, inp.active[:, g])
         routes = [(o, o, 1.0, 1.0, 0.0) for o in range(n_p)]  # (o, d, k, tau, tariff)
         for j in np.flatnonzero(dom.good == g):
             routes.append((dom.row[j], dom.col[j], dom.k[j], dom.tau[j], 0.0))
@@ -140,6 +140,20 @@ def dense_route_oracle(inp: io.Inputs, price: np.ndarray, spend: np.ndarray) -> 
     return out
 
 
+def test_inputs_carry_theta_per_good(inputs):
+    """ADR 0018: theta is read per good from `goods.arrow`, and the sourcing weights use each good's."""
+    inp = inputs
+    goods = pa_ipc.open_file(str(FIXTURE / "goods.arrow")).read_all()
+    np.testing.assert_array_equal(inp.theta, goods["theta"].to_numpy())
+    traded = inp.theta[inp.traded]
+    assert len(np.unique(traded)) > 1 and np.all(traded > 0) and np.all(inp.theta[~inp.traded] == 0)
+    rng = np.random.default_rng(3)
+    price = np.exp(rng.uniform(-0.5, 0.5, (inp.n_provinces, inp.n_goods)))
+    w = model._sourcing(inp, price)["w"].reshape(inp.n_goods, inp.n_provinces)
+    for g in np.flatnonzero(inp.traded):
+        np.testing.assert_allclose(w[g], _weights(inp, g, price[:, g], inp.active[:, g]), rtol=1e-14)
+
+
 def test_trade_money_matches_dense_route_oracle(inputs):
     inp = inputs
     assert np.any(inp.crossing.tariff > 0)
@@ -165,7 +179,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
     l0 = (1.0 - u) * labour / 2.0
     empty = io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, np.zeros(0), np.zeros(0))
     return io.Inputs(
-        theta=theta,
+        theta=np.array([theta]),
         sigma_demand=sigma_demand,
         sigma_fl=sigma_fl,
         weight_floor=1e-100,
@@ -328,6 +342,24 @@ def test_ppml_reports_separated_rows_and_rejects_empty():
     o, d = np.nonzero(~np.eye(n, dtype=bool))
     with pytest.raises(ValueError, match="survives"):
         ppml.fit(np.zeros(len(o)), o, d, {"ln_dist": np.log(dist[o, d])})
+
+
+def test_ppml_recovers_trade_elasticity():
+    """ADR 0018, H2 per class: PPML on gravity with tariffs recovers theta from the coefficient on ln(1 + t)."""
+    rng = np.random.default_rng(5)
+    n, theta, beta = 40, 6.0, -1.0
+    xy = rng.uniform(0.0, 10.0, (n, 2))
+    dist = 500.0 * (1.0 + np.hypot(*(xy[:, None] - xy[None]).transpose(2, 0, 1)))
+    tariff = rng.uniform(0.0, 0.3, (n, n))
+    a, b = rng.normal(0, 0.7, n), rng.normal(0, 0.7, n)
+    mu = np.exp(a[:, None] + b[None] - theta * np.log1p(tariff) + beta * np.log(dist))
+    mu *= 200.0 / mu[~np.eye(n, dtype=bool)].mean()
+    flows = rng.poisson(mu).astype(float)
+    o, d = np.nonzero(~np.eye(n, dtype=bool))
+    res = ppml.trade_elasticity(flows[o, d], o, d, tariff[o, d], dist[o, d])
+    assert res.theta == pytest.approx(theta, abs=0.05)
+    assert res.distance == pytest.approx(beta, abs=0.02)
+    assert 0.0 < res.se_theta < 0.5 and res.n_pairs == n * (n - 1)
 
 
 def _tables(flows, dist, c, split=2):

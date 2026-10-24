@@ -1,6 +1,7 @@
-"""PPML gravity estimation for the P2 gate's H2 test (`specs/econ/SPEC.md`, P2 gate): Poisson
+"""PPML gravity estimation for the P2 gate's H2 tests (`specs/econ/SPEC.md`, P2 gate): Poisson
 pseudo-maximum likelihood on country-pair trade with exporter and importer fixed effects, ln
-population-weighted distance and contiguity as regressors, domestic pairs excluded. numpy only."""
+population-weighted distance and contiguity as regressors, domestic pairs excluded; and per theta
+class, ln(1 + tariff) and ln distance (ADR 0018). numpy only."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -80,6 +81,16 @@ def _irls(y: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if converged:
             return beta, mu
     raise RuntimeError(f"PPML did not converge in {MAX_ITER} iterations")
+
+
+@dataclass(frozen=True)
+class TradeElasticity:
+    theta: float  # minus the coefficient on ln(1 + tariff)
+    distance: float  # coefficient on ln distance
+    se_theta: float  # Eicker-Huber-White
+    se_distance: float
+    n_pairs: int  # observations actually estimated
+    n_separated_rows: int  # observations removed because their exporter or importer has no positive flow
 
 
 @dataclass(frozen=True)
@@ -188,4 +199,26 @@ def distance_elasticity(run_flows, gravity_table, iso3: Sequence[str]) -> Elasti
         n_separated_rows=sep.n_rows,
         n_separated_exporters=sep.n_exporters,
         n_separated_importers=sep.n_importers,
+    )
+
+
+def trade_elasticity(
+    flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, tariff: np.ndarray, distance: np.ndarray
+) -> TradeElasticity:
+    """H2 per theta class (ADR 0018): PPML of `flows` on ln(1 + `tariff`) and ln `distance` with
+    exporter and importer fixed effects; the coefficient on ln(1 + t) is -theta. One observation per
+    pair (zero flows kept), all arrays aligned; domestic pairs are the caller's to leave out."""
+    coef, se, sep = _fit(
+        flows,
+        exporter,
+        importer,
+        {"ln_tariff": np.log1p(np.asarray(tariff, dtype=np.float64)), "ln_dist": np.log(np.asarray(distance, dtype=np.float64))},
+    )
+    return TradeElasticity(
+        theta=-coef["ln_tariff"],
+        distance=coef["ln_dist"],
+        se_theta=se["ln_tariff"],
+        se_distance=se["ln_dist"],
+        n_pairs=len(np.asarray(flows)) - sep.n_rows,
+        n_separated_rows=sep.n_rows,
     )

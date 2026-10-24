@@ -361,7 +361,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Interfaces:** Consumes everything above.
 
-- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (runs `ceteris run --pack ... --ticks 1200 --frictionless`, solves the reference, applies the V1 tolerances of the econ SPEC), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]).
+- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (runs `ceteris run --pack ... --ticks 1200 --frictionless`, solves the reference, applies the V1 tolerances of the econ SPEC), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
 - [ ] **Step 2: Run** `cargo test -p ceteris-econ --release --test p2_acceptance` and `uv run --project python pytest python/tests/test_p2_gate.py`.
 - [ ] **Step 3: If V1 fails,** use superpowers:systematic-debugging; no parameter changes to pass. **If H2 misses, stop and report the estimate to the owner before changing anything** (owner decision, ADR 0013).
 - [ ] **Step 4: Commit** `test(econ): add the p2 gate on the full pack`
