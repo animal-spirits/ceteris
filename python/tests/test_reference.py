@@ -46,7 +46,10 @@ def test_scale_invariance(inputs):
     assert scaled[row] - base[row] == pytest.approx(np.log(3.7), abs=1e-12)
 
 
-def test_balanced_sinkhorn_matches_logit_at_equilibrium(fixture):
+def test_sinkhorn_and_dense_kernel_reproduce_equilibrium_gravity(fixture):
+    """Checks `sinkhorn.balanced` (any a K b matrix is recovered from its own marginals, so this
+    does not test the model's routing) and the dense two-level kernel against the model's low-rank
+    country-pair units at dispatch. Trade money is checked by the dense route oracle below."""
     inp, eq = fixture
     countries = inp.province_country
     for g in np.flatnonzero(inp.traded):
@@ -68,6 +71,66 @@ def test_balanced_sinkhorn_matches_logit_at_equilibrium(fixture):
         pairs = np.zeros((inp.n_countries, inp.n_countries))
         np.add.at(pairs, (countries[:, None], countries[None, :]), shipped)
         np.testing.assert_allclose(eq.units_by_country_pair_good[:, :, g], pairs, rtol=1e-9, atol=1e-9 * pairs.sum())
+
+
+def dense_route_oracle(inp: io.Inputs, price: np.ndarray, supply: np.ndarray) -> dict:
+    """Every route enumerated from the exported legs: home, o -> d inside a country, and
+    o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination pays
+    p_d per arriving unit, t / (1 + t) of it is tariff, the rest goes to the origin."""
+    n_p, n_g = price.shape
+    out = {key: np.zeros((n_p, n_g)) for key in ("home", "arrive", "paid", "received", "tariff", "netback")}
+    n_c, country = inp.n_countries, inp.province_country
+    out["pair_value"], out["pair_units"] = np.zeros((n_c, n_c, n_g)), np.zeros((n_c, n_c, n_g))
+    dom, acc, cro = inp.domestic, inp.access, inp.crossing
+    for g in np.flatnonzero(inp.traded):
+        p, act = price[:, g], inp.active[:, g]
+        pt = np.where(act, (p / p[act].max()) ** inp.theta, 0.0)
+        pt[pt < inp.weight_floor] = 0.0
+        legs_out = [[] for _ in range(n_p)]  # o -> d: (d, k, tau, tariff)
+        for j in np.flatnonzero(dom.good == g):
+            legs_out[dom.row[j]].append((dom.col[j], dom.k[j], dom.tau[j], 0.0))
+        gate_in = [[] for _ in range(inp.n_gateways)]  # b -> d: (d, k, tau)
+        for j in np.flatnonzero(acc.good == g):
+            gate_in[acc.col[j]].append((acc.row[j], acc.k[j], acc.tau[j]))
+        for ja in np.flatnonzero(acc.good == g):
+            o, a = acc.row[ja], acc.col[ja]
+            for jc in np.flatnonzero((cro.good == g) & (cro.row == a)):
+                b, t = cro.col[jc], cro.tariff[jc]
+                for d, k_bd, tau_bd in gate_in[b]:
+                    k = acc.k[ja] * cro.k[jc] * k_bd
+                    tau = acc.tau[ja] * cro.tau[jc] * cro.border_tau[jc] * tau_bd
+                    legs_out[o].append((d, k, tau, t))
+        for o in range(n_p):
+            routes = [(o, 1.0, 1.0, 0.0), *legs_out[o]]
+            weights = np.array([k * pt[d] for d, k, _, _ in routes])
+            share = weights / weights.sum()
+            out["netback"][o, g] = sum(s * p[d] / (tau * (1 + t)) for s, (d, _, tau, t) in zip(share, routes))
+            out["home"][o, g] = supply[o, g] * share[0]
+            for s, (d, _, tau, t) in zip(share[1:], routes[1:]):
+                got = supply[o, g] * s / tau
+                delivered = p[d] * got
+                out["arrive"][d, g] += got
+                out["paid"][d, g] += delivered
+                out["tariff"][d, g] += delivered * t / (1 + t)
+                out["received"][o, g] += delivered / (1 + t)
+                out["pair_value"][country[o], country[d], g] += delivered / (1 + t)
+                out["pair_units"][country[o], country[d], g] += supply[o, g] * s
+    return out
+
+
+def test_trade_money_matches_dense_route_oracle(inputs):
+    inp = inputs
+    assert np.any(inp.crossing.tariff > 0)
+    rng = np.random.default_rng(11)
+    price = np.exp(rng.uniform(-2.3, 2.3, (inp.n_provinces, inp.n_goods)))
+    supply = np.where(inp.traded[None, :], rng.uniform(0.0, 1e6, price.shape), 0.0)
+    want = dense_route_oracle(inp, price, supply)
+    pt, v, u, pi, dest, onward, netback = model._routing(inp, price)
+    got = model._flows(inp, price, supply, pt, v, u, pi, dest, onward)
+    got["netback"] = netback
+    traded = inp.traded
+    for key, w in want.items():
+        np.testing.assert_allclose(got[key][..., traded], w[..., traded], rtol=1e-10, atol=1e-13 * np.abs(w).max(), err_msg=key)
 
 
 def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.Inputs:
