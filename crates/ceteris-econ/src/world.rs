@@ -31,7 +31,7 @@ const ROUTING_TOLERANCE: f64 = 1e-12;
 pub const WAGE: Flow = Flow(1);
 pub const SALE: Flow = Flow(2);
 pub const PURCHASE: Flow = Flow(3);
-pub const FOB: Flow = Flow(4);
+pub const TRADE: Flow = Flow(4);
 pub const TARIFF: Flow = Flow(5);
 pub const DIVIDEND: Flow = Flow(6);
 pub const REBATE: Flow = Flow(7);
@@ -984,7 +984,7 @@ mod tests {
         assert_eq!(w.end_tick(0).unwrap_err().invariant, "transit");
         let mut w = fresh;
         let (g, m) = (w.layout.accounts.gateway[0], w.layout.accounts.mint);
-        w.ledger.transfer(FOB, m, g, 1);
+        w.ledger.transfer(TRADE, m, g, 1);
         assert_eq!(w.end_tick(0).unwrap_err().invariant, "gateway clearing");
     }
 }

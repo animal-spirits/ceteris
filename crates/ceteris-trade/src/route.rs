@@ -8,9 +8,12 @@ use crate::kernel::{Access, Kernel};
 /// caller moves `arrive` into the transit wheel (`TransitWheel::push(lag, g, &arrive[lag])`)
 /// before the next call.
 ///
-/// Units: `home`, `shipped` and the flows behind them are origin units, `arrive` destination
-/// units after the iceberg and border losses. Values are numeraire: FOB = origin price times
-/// origin units shipped.
+/// Units: `home`, `shipped` and the `*_units` columns are origin units, `arrive` destination
+/// units after the iceberg and border losses. Values are numeraire at delivered prices: each
+/// route is paid the destination price times the units that arrive, at dispatch. On a
+/// cross-border route the tariff takes t / (1 + t) of that payment; the rest is the money
+/// that moves d to b to a to o, so the leg value columns are what moves across each leg in
+/// money terms and every gateway pays out exactly what it takes in.
 #[derive(Clone, Debug, Default)]
 pub struct Routed {
     /// Supply that stays at the origin, delivered immediately. Per province.
@@ -18,31 +21,44 @@ pub struct Routed {
     /// Goods due at the destination by transit lag in months, delivered at t + 1 + lag.
     /// Domestic arrivals are in lag 0. Per province.
     pub arrive: [Vec<f64>; 4],
-    /// FOB value each destination market pays, tariff excluded. Per province.
-    pub fob_paid: Vec<f64>,
-    /// FOB value each origin receives for shipments. Per province.
-    pub fob_received: Vec<f64>,
-    /// FOB value sent origin to destination province in the same country, aligned with
-    /// `Kernel::good(g).domestic.entries`.
+    /// What each destination market pays: its price times the units arriving from other
+    /// provinces, tariff included. Per province.
+    pub paid: Vec<f64>,
+    /// What each origin market receives for its shipments: the delivered value of everything
+    /// it shipped, net of tariffs. Per province.
+    pub received: Vec<f64>,
+    /// Money destination d pays origin o directly, both in one country: the destination
+    /// price times the units arriving. Aligned with `Kernel::good(g).domestic.entries`.
     pub domestic_value: Vec<f64>,
-    /// FOB value sent origin to gateway, aligned with `Kernel::good(g).access.entries`
-    /// read as origin province to gateway.
+    /// Origin units sent origin to destination in one country, aligned like
+    /// `domestic_value`.
+    pub domestic_units: Vec<f64>,
+    /// Money gateway a pays origin o: the delivered value, net of tariff, of everything o
+    /// sent through a. Aligned with `Kernel::good(g).access.entries` read as origin province
+    /// to gateway.
     pub access_out_value: Vec<f64>,
-    /// FOB value sent gateway to gateway, aligned with `Kernel::good(g).crossings.entries`.
+    /// Money gateway b pays gateway a: the delivered value, net of tariff, of the units that
+    /// crossed a to b. Aligned with `Kernel::good(g).crossings.entries`.
     pub crossing_value: Vec<f64>,
-    /// FOB value sent gateway to destination province, aligned with
-    /// `Kernel::good(g).access.entries` read as destination province to gateway.
+    /// Origin units, at dispatch from their origins, whose route crosses a to b. Aligned like
+    /// `crossing_value`.
+    pub crossing_units: Vec<f64>,
+    /// Money destination d pays gateway b: its price times the units arriving through b, net
+    /// of tariff. Aligned with `Kernel::good(g).access.entries` read as destination province
+    /// to gateway.
     pub access_in_value: Vec<f64>,
-    /// Tariff revenue, attributed to the destination province that the dutiable value ends
-    /// up at. Per province.
+    /// Tariff each destination market pays its country's rebate account: t / (1 + t) of the
+    /// delivered value of its imports, t of the crossing column. Per province.
     pub tariff: Vec<f64>,
     /// Origin units sent to other provinces. Per province.
     pub shipped: Vec<f64>,
     /// Quantity destroyed by iceberg and border losses on every leg, all provinces.
     pub lost: f64,
-    /// Average netback price per origin unit over all destinations including home, at the
-    /// destination price and net of losses. Defined per unit, so also for zero supply. An
-    /// origin with no route at all reports its own price.
+    /// Average netback price per origin unit over all destinations including home: the
+    /// destination price net of losses and tariff, sum_d share p_d / tau / (1 + t). Equal to
+    /// the origin's own price on the home route plus `received`, per unit of supply. Defined
+    /// per unit, so also for zero supply. An origin with no route at all reports its own
+    /// price.
     pub netback: Vec<f64>,
     scratch: Scratch,
 }
@@ -51,15 +67,18 @@ pub struct Routed {
 struct Scratch {
     price_theta: Vec<f64>,
     access: Access,
-    /// Destination value per unit arriving at a destination gateway, by gateway.
+    /// Delivered value per unit arriving at a destination gateway, by gateway.
     dest_value: Vec<f64>,
-    /// Destination value per unit arriving at an origin gateway, by gateway.
+    /// Delivered value net of tariff per unit arriving at an origin gateway, by gateway.
     onward_value: Vec<f64>,
+    /// Units arriving at an origin gateway, and the same at dispatch from the origins.
     from_origins_units: Vec<f64>,
-    from_origins_value: Vec<f64>,
+    from_origins_dispatched: Vec<f64>,
     at_dest_units: [Vec<f64>; 4],
-    at_dest_value: Vec<f64>,
-    at_dest_tariff: Vec<f64>,
+    /// Units arriving at a destination gateway over all lags, and the same weighted by
+    /// 1 / (1 + t) of the crossing they took.
+    at_dest_total: Vec<f64>,
+    at_dest_net: Vec<f64>,
 }
 
 impl Routed {
@@ -101,11 +120,13 @@ pub fn route(
     let Routed {
         home,
         arrive,
-        fob_paid,
-        fob_received,
+        paid,
+        received,
         domestic_value,
+        domestic_units,
         access_out_value,
         crossing_value,
+        crossing_units,
         access_in_value,
         tariff,
         shipped,
@@ -116,11 +137,13 @@ pub fn route(
 
     zeroed(home, np);
     arrive.iter_mut().for_each(|a| zeroed(a, np));
-    zeroed(fob_paid, np);
-    zeroed(fob_received, np);
+    zeroed(paid, np);
+    zeroed(received, np);
     zeroed(domestic_value, gk.domestic.entries.len());
+    zeroed(domestic_units, gk.domestic.entries.len());
     zeroed(access_out_value, gk.access.entries.len());
     zeroed(crossing_value, gk.crossings.entries.len());
+    zeroed(crossing_units, gk.crossings.entries.len());
     zeroed(access_in_value, gk.access.entries.len());
     zeroed(tariff, np);
     zeroed(shipped, np);
@@ -156,7 +179,7 @@ pub fn route(
     k.access_into(g, pt, &mut s.access);
     let (v, u, pi) = (&s.access.v, &s.access.u, &s.access.pi);
 
-    // Destination value per unit entering a destination gateway b: the posted price at the
+    // Delivered value per unit entering a destination gateway b: the posted price at the
     // destination d it ends at, net of the last leg.
     zeroed(&mut s.dest_value, ng);
     for d in 0..np {
@@ -169,7 +192,8 @@ pub fn route(
             *dv /= vb;
         }
     }
-    // The same per unit leaving an origin gateway a, net of the crossing and border loss.
+    // The same per unit leaving an origin gateway a, net of the crossing, the border loss
+    // and the tariff.
     zeroed(&mut s.onward_value, ng);
     for (a, &ua) in u.iter().enumerate() {
         if ua > 0.0 {
@@ -179,7 +203,7 @@ pub fn route(
                 .iter()
                 .map(|e| {
                     f64::from(e.k) * v[e.col as usize] * s.dest_value[e.col as usize]
-                        / (e.tau * e.border_tau)
+                        / (e.tau * e.border_tau * (1.0 + f64::from(e.tariff)))
                 })
                 .sum();
             s.onward_value[a] = sum / ua;
@@ -188,7 +212,7 @@ pub fn route(
 
     // Origins: home, domestic and into the first gateway.
     zeroed(&mut s.from_origins_units, ng);
-    zeroed(&mut s.from_origins_value, ng);
+    zeroed(&mut s.from_origins_dispatched, ng);
     for o in 0..np {
         if pi[o] <= 0.0 {
             home[o] = supply[o];
@@ -210,11 +234,12 @@ pub fn route(
             back += w * price[d] / e.tau;
             let x = scale * w;
             let got = x / e.tau;
-            let value = price[o] * x;
+            let value = price[d] * got;
             arrive[0][d] += got;
             domestic_value[lo + i] = value;
-            fob_paid[d] += value;
-            fob_received[o] += value;
+            domestic_units[lo + i] = x;
+            paid[d] += value;
+            received[o] += value;
             *lost += x - got;
             sent += x;
         }
@@ -228,11 +253,11 @@ pub fn route(
             back += w * s.onward_value[a] / e.tau;
             let x = scale * w;
             let got = x / e.tau;
-            let value = price[o] * x;
+            let value = got * s.onward_value[a];
             access_out_value[lo + i] = value;
             s.from_origins_units[a] += got;
-            s.from_origins_value[a] += value;
-            fob_received[o] += value;
+            s.from_origins_dispatched[a] += x;
+            received[o] += value;
             *lost += x - got;
             sent += x;
         }
@@ -240,11 +265,11 @@ pub fn route(
         netback[o] = back * per_unit;
     }
 
-    // Origin gateways onto crossings. Units are kept by transit lag from here on; value and
-    // tariff are only needed in total at the destination gateway.
+    // Origin gateways onto crossings. Units are kept by transit lag from here on; the tariff
+    // only as the 1 / (1 + t) weighted total at the destination gateway.
     s.at_dest_units.iter_mut().for_each(|a| zeroed(a, ng));
-    zeroed(&mut s.at_dest_value, ng);
-    zeroed(&mut s.at_dest_tariff, ng);
+    zeroed(&mut s.at_dest_total, ng);
+    zeroed(&mut s.at_dest_net, ng);
     for (a, &ua) in u.iter().enumerate() {
         if s.from_origins_units[a] == 0.0 {
             continue;
@@ -258,12 +283,13 @@ pub fn route(
             }
             let share = w / ua;
             let units = s.from_origins_units[a] * share;
-            let value = s.from_origins_value[a] * share;
             let got = units / (e.tau * e.border_tau);
-            crossing_value[lo + i] = value;
+            let net = got / (1.0 + f64::from(e.tariff));
+            crossing_value[lo + i] = net * s.dest_value[b];
+            crossing_units[lo + i] = s.from_origins_dispatched[a] * share;
             s.at_dest_units[usize::from(e.lag)][b] += got;
-            s.at_dest_value[b] += value;
-            s.at_dest_tariff[b] += f64::from(e.tariff) * value;
+            s.at_dest_total[b] += got;
+            s.at_dest_net[b] += net;
             *lost += units - got;
         }
     }
@@ -274,20 +300,23 @@ pub fn route(
         for (i, e) in gk.access.row(d).iter().enumerate() {
             let b = e.col as usize;
             let w = f64::from(e.k) * pt[d];
-            if w == 0.0 || s.at_dest_value[b] == 0.0 {
+            if w == 0.0 || s.at_dest_total[b] == 0.0 {
                 continue;
             }
             let share = w / v[b];
-            let value = s.at_dest_value[b] * share;
-            access_in_value[lo + i] = value;
-            fob_paid[d] += value;
-            tariff[d] += s.at_dest_tariff[b] * share;
+            let mut got_all = 0.0;
             for (at_dest, arrived) in s.at_dest_units.iter().zip(arrive.iter_mut()) {
                 let units = at_dest[b] * share;
                 let got = units / e.tau;
                 arrived[d] += got;
+                got_all += got;
                 *lost += units - got;
             }
+            let delivered = price[d] * got_all;
+            let net = delivered * (s.at_dest_net[b] / s.at_dest_total[b]);
+            access_in_value[lo + i] = net;
+            paid[d] += delivered;
+            tariff[d] += delivered - net;
         }
     }
 }
@@ -442,15 +471,17 @@ mod tests {
     struct Dense {
         home: Vec<f64>,
         arrive: [Vec<f64>; 4],
-        fob_paid: Vec<f64>,
-        fob_received: Vec<f64>,
+        paid: Vec<f64>,
+        received: Vec<f64>,
         tariff: Vec<f64>,
         shipped: Vec<f64>,
         lost: f64,
         netback: Vec<f64>,
     }
 
-    /// The spec equations on a dense route table, independent of the Markov split.
+    /// The spec equations on a dense route table, independent of the Markov split. Every
+    /// route pays the destination price per arriving unit; the tariff takes t / (1 + t) of
+    /// that and the origin receives the rest.
     fn dense(
         net: &Network,
         wedges: &Wedges,
@@ -474,8 +505,8 @@ mod tests {
         let mut r = Dense {
             home: vec![0.0; n],
             arrive: std::array::from_fn(|_| vec![0.0; n]),
-            fob_paid: vec![0.0; n],
-            fob_received: vec![0.0; n],
+            paid: vec![0.0; n],
+            received: vec![0.0; n],
             tariff: vec![0.0; n],
             shipped: vec![0.0; n],
             netback: vec![0.0; n],
@@ -495,7 +526,7 @@ mod tests {
                 for h in &all[d] {
                     let share = h.k * pt[d] / pi;
                     let x = supply[o] * share;
-                    r.netback[o] += share * price[d] / h.tau;
+                    r.netback[o] += share * price[d] / (h.tau * (1.0 + h.tariff));
                     if o == d {
                         r.home[o] += x;
                         continue;
@@ -504,9 +535,10 @@ mod tests {
                     r.shipped[o] += x;
                     r.arrive[h.lag][d] += got;
                     r.lost += x - got;
-                    r.fob_paid[d] += price[o] * x;
-                    r.fob_received[o] += price[o] * x;
-                    r.tariff[d] += h.tariff * price[o] * x;
+                    let delivered = price[d] * got;
+                    r.paid[d] += delivered;
+                    r.received[o] += delivered / (1.0 + h.tariff);
+                    r.tariff[d] += delivered * h.tariff / (1.0 + h.tariff);
                 }
             }
         }
@@ -515,6 +547,10 @@ mod tests {
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() <= 1e-10 * a.abs().max(b.abs()) + 1e-14
+    }
+
+    fn close12(a: f64, b: f64) -> bool {
+        (a - b).abs() <= 1e-12 * a.abs().max(b.abs())
     }
 
     fn assert_close(what: &str, got: &[f64], want: &[f64]) {
@@ -592,45 +628,46 @@ mod tests {
             }
             assert_close("home", &out.home, &want.home);
             assert_close("shipped", &out.shipped, &want.shipped);
-            assert_close("fob_paid", &out.fob_paid, &want.fob_paid);
-            assert_close("fob_received", &out.fob_received, &want.fob_received);
+            assert_close("paid", &out.paid, &want.paid);
+            assert_close("received", &out.received, &want.received);
             assert_close("tariff", &out.tariff, &want.tariff);
             assert_close("netback", &out.netback, &want.netback);
             assert_close("lost", &[out.lost], &[want.lost]);
         }
 
         #[test]
-        fn fob_balances(c in case(-2.0..2.0)) {
+        fn paid_equals_received_plus_tariff(c in case(-2.0..2.0)) {
             let s = setup(c);
             let out = run(&s);
-            let paid: f64 = out.fob_paid.iter().sum();
-            let received: f64 = out.fob_received.iter().sum();
-            prop_assert!(close(paid, received), "{paid} vs {received}");
+            let paid: f64 = out.paid.iter().sum();
+            let received: f64 = out.received.iter().sum();
+            let tariff: f64 = out.tariff.iter().sum();
+            prop_assert!(close12(paid, received + tariff), "{paid} vs {received} + {tariff}");
 
-            // each gateway nets to zero: value in from origins and crossings equals value out
+            // money moves d to b, b to a, a to o: each gateway pays out what it takes in
             let gk = s.kernel.good(s.g);
-            let mut inflow = vec![0.0; s.kernel.n_gateways];
-            let mut outflow = vec![0.0; s.kernel.n_gateways];
+            let mut money_in = vec![0.0; s.kernel.n_gateways];
+            let mut money_out = vec![0.0; s.kernel.n_gateways];
             for p in 0..s.kernel.n_provinces {
                 let lo = gk.access.offsets[p] as usize;
                 for (i, e) in gk.access.row(p).iter().enumerate() {
-                    inflow[e.col as usize] += out.access_out_value[lo + i];
-                    outflow[e.col as usize] += out.access_in_value[lo + i];
+                    money_in[e.col as usize] += out.access_in_value[lo + i];
+                    money_out[e.col as usize] += out.access_out_value[lo + i];
                 }
             }
-            for (a, out_a) in outflow.iter_mut().enumerate() {
+            for (a, m_in) in money_in.iter_mut().enumerate() {
                 let lo = gk.crossings.offsets[a] as usize;
                 for (i, e) in gk.crossings.row(a).iter().enumerate() {
-                    *out_a += out.crossing_value[lo + i];
-                    inflow[e.col as usize] += out.crossing_value[lo + i];
+                    *m_in += out.crossing_value[lo + i];
+                    money_out[e.col as usize] += out.crossing_value[lo + i];
                 }
             }
-            for a in 0..s.kernel.n_gateways {
-                prop_assert!(close(inflow[a], outflow[a]), "gateway {a}: {} vs {}", inflow[a], outflow[a]);
+            for (a, (m_in, m_out)) in money_in.iter().zip(&money_out).enumerate() {
+                prop_assert!(close12(*m_in, *m_out), "gateway {a}: {m_in} vs {m_out}");
             }
 
-            // per province, the leg values add up to the FOB totals
-            let mut paid = vec![0.0; s.kernel.n_provinces];
+            // per province, the leg values and the tariff add up to the totals
+            let mut paid = out.tariff.clone();
             let mut received = vec![0.0; s.kernel.n_provinces];
             for p in 0..s.kernel.n_provinces {
                 let lo = gk.domestic.offsets[p] as usize;
@@ -644,8 +681,27 @@ mod tests {
                     paid[p] += out.access_in_value[lo + i];
                 }
             }
-            prop_assert!(paid.iter().zip(&out.fob_paid).all(|(a, b)| close(*a, *b)));
-            prop_assert!(received.iter().zip(&out.fob_received).all(|(a, b)| close(*a, *b)));
+            for p in 0..s.kernel.n_provinces {
+                prop_assert!(close12(paid[p], out.paid[p]), "paid {p}: {} vs {}", paid[p], out.paid[p]);
+                prop_assert!(close12(received[p], out.received[p]),
+                    "received {p}: {} vs {}", received[p], out.received[p]);
+            }
+        }
+
+        #[test]
+        fn origin_revenue_per_unit_is_netback(c in case(-1.0..1.0)) {
+            let s = setup(c);
+            let out = run(&s);
+            let want = dense(&s.net, &s.wedges, s.g, &s.supply, &s.price, &s.active);
+            for o in (0..s.net.n_provinces()).filter(|&o| out.shipped[o] > 0.0) {
+                // the home route sells at the origin's own price
+                let revenue = s.price[o] * out.home[o] + out.received[o];
+                let per_unit = revenue / s.supply[o];
+                prop_assert!(close12(per_unit, want.netback[o]),
+                    "origin {o}: {per_unit} vs dense {}", want.netback[o]);
+                prop_assert!(close12(per_unit, out.netback[o]),
+                    "origin {o}: {per_unit} vs routed {}", out.netback[o]);
+            }
         }
 
         #[test]
@@ -679,7 +735,7 @@ mod tests {
             let out = run(&s);
             let all_finite = |v: &[f64]| v.iter().all(|x| x.is_finite() && *x >= 0.0);
             prop_assert!(all_finite(&out.home) && all_finite(&out.shipped));
-            prop_assert!(all_finite(&out.fob_paid) && all_finite(&out.fob_received));
+            prop_assert!(all_finite(&out.paid) && all_finite(&out.received));
             prop_assert!(all_finite(&out.tariff) && all_finite(&out.netback));
             prop_assert!(all_finite(&out.access_out_value));
             prop_assert!(all_finite(&out.crossing_value) && all_finite(&out.access_in_value));
@@ -693,9 +749,10 @@ mod tests {
             let shipped: f64 = out.shipped.iter().sum();
             let arrived: f64 = out.arrive.iter().flatten().sum();
             prop_assert!(close(shipped, arrived + out.lost));
-            let paid: f64 = out.fob_paid.iter().sum();
-            let received: f64 = out.fob_received.iter().sum();
-            prop_assert!(close(paid, received), "{paid} vs {received}");
+            let paid: f64 = out.paid.iter().sum();
+            let received: f64 = out.received.iter().sum();
+            let tariff: f64 = out.tariff.iter().sum();
+            prop_assert!(close(paid, received + tariff), "{paid} vs {received} + {tariff}");
         }
     }
 
@@ -716,8 +773,8 @@ mod tests {
             assert_close("arrive", &a.arrive[lag], &b.arrive[lag]);
         }
         assert_close("home", &a.home, &b.home);
-        let scaled: Vec<f64> = a.fob_paid.iter().map(|v| v * 1e40).collect();
-        assert_close("fob_paid", &scaled, &b.fob_paid);
+        let scaled: Vec<f64> = a.paid.iter().map(|v| v * 1e40).collect();
+        assert_close("paid", &scaled, &b.paid);
     }
 
     /// Provinces 0 (country 0) and 1 (country 1), one gateway each.
@@ -742,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn tariff_is_rate_times_fob_crossing() {
+    fn tariff_is_share_of_delivered_value() {
         let (net, wedges) = pair_world(0.25);
         let k = kernel(&net, &wedges);
         let g = 4;
@@ -759,17 +816,35 @@ mod tests {
         let x = 100.0 * kroute * pt1 / (pt0 + kroute * pt1);
         assert!(close(out.shipped[0], x));
         assert!(close(out.home[0], 100.0 - x));
-        let fob = 2.0 * x;
-        assert!(close(out.fob_paid[1], fob));
-        assert!(close(out.fob_received[0], fob));
-        assert_eq!(out.crossing_value[0], out.access_out_value[0]);
-        assert!(close(out.crossing_value[0], fob));
-        assert!(close(out.tariff[1], 0.25 * fob));
+        let tau = tau_leg(g, oa) * tau_leg(g, ab) * nu * tau_leg(g, bd);
+        let got = x / tau;
+        let delivered = 3.0 * got;
+        assert!(close12(out.paid[1], delivered));
+        assert!(close12(out.tariff[1], 0.2 * delivered));
+        assert!(close12(out.received[0], 0.8 * delivered));
         assert_eq!(out.tariff[0], 0.0);
+        assert_eq!(out.paid[0], 0.0);
+        // each leg carries the payment net of the tariff
+        for leg in [
+            out.access_in_value[1],
+            out.crossing_value[0],
+            out.access_out_value[0],
+        ] {
+            assert!(
+                close12(leg, 0.8 * delivered),
+                "{leg} vs {}",
+                0.8 * delivered
+            );
+        }
+        let netback = (pt0 * 2.0 + kroute * pt1 * 3.0 / (tau * 1.25)) / (pt0 + kroute * pt1);
+        assert!(close12(out.netback[0], netback));
+        assert!(close12(
+            (2.0 * out.home[0] + out.received[0]) / 100.0,
+            netback
+        ));
         // province 1 has no supply; the reverse crossing carries nothing
         assert_eq!(out.crossing_value[1], 0.0);
         // lag round(1500 / 730) = 2
-        let got = x / (tau_leg(g, oa) * tau_leg(g, ab) * nu * tau_leg(g, bd));
         assert!(close(out.arrive[2][1], got));
         assert!(
             out.arrive[0]
@@ -814,8 +889,9 @@ mod tests {
                 .chain(&out.arrive[3])
                 .all(|&v| v == 0.0)
         );
-        assert!(close(out.fob_paid[1], out.fob_received[0]));
-        assert!(close(out.fob_received[0], 1.0 * out.shipped[0]));
+        assert!(close12(out.paid[1], out.received[0]));
+        assert!(close12(out.received[0], 2.0 * out.arrive[0][1]));
+        assert!(out.received[0] < 2.0 * out.shipped[0]);
         assert_eq!(out.tariff, vec![0.0, 0.0]);
         assert!(out.crossing_value.is_empty());
     }
@@ -834,7 +910,7 @@ mod tests {
             "an inactive origin does not keep home supply"
         );
         assert_eq!(out.arrive.iter().map(|a| a[0]).sum::<f64>(), 0.0);
-        assert_eq!(out.fob_paid[0], 0.0);
+        assert_eq!(out.paid[0], 0.0);
         assert_eq!(out.tariff[0], 0.0);
         // its supply goes out whole
         assert!(close(out.shipped[0], 10.0));
@@ -959,7 +1035,7 @@ mod tests {
                 .iter()
                 .flatten()
                 .chain(&r.home)
-                .chain(&r.fob_paid)
+                .chain(&r.paid)
                 .chain(&r.tariff)
                 .chain(&r.netback)
                 .chain(&[r.lost])

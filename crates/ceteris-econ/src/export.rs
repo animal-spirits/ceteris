@@ -411,16 +411,17 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 /// | `run_prices` | province u32, good u8, price f64, active bool (inactive cells carry the netback) |
 /// | `run_wages` | province u32, wage f64 |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
-/// | `run_flows` | exporter_country u32, importer_country u32, good u8, fob_value f64, units f64 |
-/// | `run_home` | province u32, good u8, fob_value f64, units f64 |
+/// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |
+/// | `run_home` | province u32, good u8, value f64, units f64 |
 /// | `run.json` | `static_digest` of the inputs and parameters, `ticks_averaged`, `frictionless` |
 ///
 /// Flows are the means over the last 12 ticks (fewer when the run is shorter, see
 /// `ticks_averaged`) of traded goods only, one row per (exporter, importer, good) with a
-/// positive flow, sorted. FOB value is at the origin price and units are origin units at
+/// positive flow, sorted. Value is what the exporter receives: the destination price times
+/// the units arriving, net of tariff (trade SPEC, Payments). Units are origin units at
 /// dispatch, before losses. Domestic pairs (exporter = importer) are the shipments between
 /// provinces of one country; `run_home` has the supply routed to stay in its province (for
-/// every traded cell, FOB at the cell's price).
+/// every traded cell, valued at the cell's price).
 pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
     fs::create_dir_all(dir)?;
     let inputs = world.inputs();
@@ -478,7 +479,7 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
             u32s("exporter_country", keys.iter().map(|k| k.0)),
             u32s("importer_country", keys.iter().map(|k| k.1)),
             u8s("good", keys.iter().map(|k| k.2)),
-            f64s("fob_value", keys.iter().map(|k| mean.pair_value[k.3])),
+            f64s("value", keys.iter().map(|k| mean.pair_value[k.3])),
             f64s("units", keys.iter().map(|k| mean.pair_units[k.3])),
         ],
     )?;
@@ -489,7 +490,7 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
         vec![
             u32s("province", cells.iter().map(|&c| (c / N_GOODS) as u32)),
             u8s("good", cells.iter().map(|&c| (c % N_GOODS) as u8)),
-            f64s("fob_value", cells.iter().map(|&c| mean.home_value[c])),
+            f64s("value", cells.iter().map(|&c| mean.home_value[c])),
             f64s("units", cells.iter().map(|&c| mean.home_units[c])),
         ],
     )?;
@@ -784,7 +785,7 @@ mod tests {
             u8s(&flows, "good").unwrap(),
         );
         let (value, units) = (
-            f64s(&flows, "fob_value").unwrap(),
+            f64s(&flows, "value").unwrap(),
             f64s(&flows, "units").unwrap(),
         );
         assert!(flows.num_rows() > 0);

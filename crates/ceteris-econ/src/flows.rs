@@ -1,10 +1,12 @@
 //! Trade flows by country pair over the last 12 ticks, recorded at T2 for the run export.
 //! Not state: a restored world starts with an empty window, like the rest of `Scratch`.
 //!
-//! Units are origin units at dispatch, before any iceberg or border loss; value is FOB at
-//! the origin price. A shipment between two provinces of one country is a domestic pair
-//! (exporter = importer); international value and units follow the Markov split through the
-//! gateways, attributed to the countries of the two gateways of the crossing.
+//! Units are origin units at dispatch, before any iceberg or border loss; value is what the
+//! origin receives: the delivered value (destination price times arriving units) net of
+//! tariff. A shipment between two provinces of one country is a domestic pair (exporter =
+//! importer); international value and units are the crossing columns of `Routed`,
+//! attributed to the countries of the two gateways of the crossing. Supply routed home is
+//! valued at the origin's own price.
 
 use ceteris_trade::{Kernel, N_GOODS, Routed};
 
@@ -100,38 +102,24 @@ impl FlowWindow {
         let gk = kernel.good(g);
         let slot = &mut self.slots[self.head];
         let pair = |ex: u16, im: u16| (usize::from(ex) * nc + usize::from(im)) * N_GOODS + g;
-        // per origin gateway: FOB value and origin units received from the origins
-        let mut gate_value = vec![0.0; kernel.n_gateways];
-        let mut gate_units = vec![0.0; kernel.n_gateways];
 
         for o in 0..kernel.n_provinces {
             let cell = o * N_GOODS + g;
             slot.home_value[cell] += price[o] * r.home[o];
             slot.home_units[cell] += r.home[o];
             let at = pair(province_country[o], province_country[o]);
-            let lo = gk.domestic.offsets[o] as usize;
-            for j in 0..gk.domestic.row(o).len() {
-                let value = r.domestic_value[lo + j];
-                slot.pair_value[at] += value;
-                slot.pair_units[at] += value / price[o];
-            }
-            let lo = gk.access.offsets[o] as usize;
-            for (j, e) in gk.access.row(o).iter().enumerate() {
-                let value = r.access_out_value[lo + j];
-                gate_value[e.col as usize] += value;
-                gate_units[e.col as usize] += value / price[o];
+            let legs = gk.domestic.offsets[o] as usize..gk.domestic.offsets[o + 1] as usize;
+            for j in legs {
+                slot.pair_value[at] += r.domestic_value[j];
+                slot.pair_units[at] += r.domestic_units[j];
             }
         }
         for a in 0..kernel.n_gateways {
-            if gate_value[a] <= 0.0 {
-                continue;
-            }
             let lo = gk.crossings.offsets[a] as usize;
             for (j, e) in gk.crossings.row(a).iter().enumerate() {
-                let value = r.crossing_value[lo + j];
                 let at = pair(gateway_country[a], gateway_country[e.col as usize]);
-                slot.pair_value[at] += value;
-                slot.pair_units[at] += gate_units[a] * value / gate_value[a];
+                slot.pair_value[at] += r.crossing_value[lo + j];
+                slot.pair_units[at] += r.crossing_units[lo + j];
             }
         }
     }
@@ -211,7 +199,7 @@ mod tests {
         let pairs = (0..nc).flat_map(|ex| (0..nc).map(move |im| (ex, im)));
         let value: f64 = pairs.clone().map(|(ex, im)| m.pair_value[at(ex, im)]).sum();
         let units: f64 = pairs.clone().map(|(ex, im)| m.pair_units[at(ex, im)]).sum();
-        let received: f64 = routed.fob_received.iter().sum();
+        let received: f64 = routed.received.iter().sum();
         let shipped: f64 = routed.shipped.iter().sum();
         assert!(relative(value, received) < 1e-12, "{value} {received}");
         assert!(relative(units, shipped) < 1e-12, "{units} {shipped}");

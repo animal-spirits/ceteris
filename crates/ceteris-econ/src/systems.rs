@@ -25,7 +25,7 @@ use crate::demand::ces;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
-    DIVIDEND, EconWorld, FOB, PURCHASE, REBATE, SALE, TARIFF, WAGE, to_minor, to_numeraire,
+    DIVIDEND, EconWorld, PURCHASE, REBATE, SALE, TARIFF, TRADE, WAGE, to_minor, to_numeraire,
 };
 
 /// No RNG draws in P2; streams stay reserved per system ID.
@@ -287,9 +287,11 @@ pub fn produce(w: &mut EconWorld) {
 }
 
 /// T2: routes this tick's traded output (merchant logit), keeps the home flow in Q, moves
-/// shipments into transit (losses destroyed) and the wheel, pays FOB destination to origin
-/// (domestic directly, international through the gateways of both countries) and tariffs to
-/// the importer's rebate account, and sets inactive cells' price to this tick's netback.
+/// shipments into transit (losses destroyed) and the wheel, and pays for them at delivered
+/// prices: each destination pays its price per arriving unit, the tariff share t / (1 + t)
+/// to its country's rebate account and the rest to the origin (domestic directly,
+/// international through the gateways of both countries). Sets inactive cells' price to this
+/// tick's netback.
 pub fn route(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*w.inputs, &*w.layout, &*w.kernel);
     let acc = &lay.accounts;
@@ -345,21 +347,21 @@ pub fn route(w: &mut EconWorld) {
                 let value = to_minor(r.domestic_value[lo + j]);
                 pay(
                     &mut w.ledger,
-                    FOB,
+                    TRADE,
                     acc.market[e.col as usize],
                     acc.market[o],
                     value,
                 );
             }
         }
-        // destination to its gateway b, rounded per leg
+        // destination to its gateway b, net of tariff, rounded per leg
         let mut at_gateway = vec![0i64; ng];
         for d in 0..np {
             let lo = gk.access.offsets[d] as usize;
             for (j, e) in gk.access.row(d).iter().enumerate() {
                 let b = e.col as usize;
                 let value = to_minor(r.access_in_value[lo + j]);
-                pay(&mut w.ledger, FOB, acc.market[d], acc.gateway[b], value);
+                pay(&mut w.ledger, TRADE, acc.market[d], acc.gateway[b], value);
                 at_gateway[b] += value;
             }
         }
@@ -371,7 +373,7 @@ pub fn route(w: &mut EconWorld) {
             let weights = legs.iter().map(|&(_, j)| r.crossing_value[j]);
             split(at_gateway[b], weights, &mut parts);
             for (&(a, _), &part) in legs.iter().zip(&parts) {
-                pay(&mut w.ledger, FOB, acc.gateway[b], acc.gateway[a], part);
+                pay(&mut w.ledger, TRADE, acc.gateway[b], acc.gateway[a], part);
                 from_gateway[a] += part;
             }
         }
@@ -381,7 +383,7 @@ pub fn route(w: &mut EconWorld) {
             let weights = legs.iter().map(|&(_, j)| r.access_out_value[j]);
             split(from_gateway[a], weights, &mut parts);
             for (&(o, _), &part) in legs.iter().zip(&parts) {
-                pay(&mut w.ledger, FOB, acc.gateway[a], acc.market[o], part);
+                pay(&mut w.ledger, TRADE, acc.gateway[a], acc.market[o], part);
             }
         }
         for d in 0..np {
