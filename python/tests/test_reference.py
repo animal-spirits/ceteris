@@ -207,14 +207,29 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k) / tau, rel=1e-9)
 
 
-def test_committed_reference_is_the_solution(fixture):
-    """`tests/golden/p2-fixture/reference` (read by Rust runs started from the equilibrium) is the
-    current solve of the fixture."""
+def test_fixture_reference_is_current(fixture):
+    """`tests/golden/p2-fixture/reference` (read by Rust: runs started from the equilibrium and
+    the V1 check) is the current solve of the fixture. Regenerate with
+    `python -m ceteris.reference solve --inputs tests/golden/p2-fixture --out tests/golden/p2-fixture/reference`."""
     inp, eq = fixture
     ref = FIXTURE / "reference"
-    tables = {name: pa_ipc.open_file(ref / f"{name}.arrow").read_all() for name in ("prices", "wages", "enterprises")}
-    np.testing.assert_allclose(tables["prices"]["price"].to_numpy(), eq.price.ravel(), rtol=1e-9)
-    np.testing.assert_allclose(tables["wages"]["wage"].to_numpy(), eq.wage, rtol=1e-9)
-    np.testing.assert_allclose(tables["enterprises"]["employment"].to_numpy(), eq.employment, rtol=1e-9)
-    np.testing.assert_allclose(tables["enterprises"]["output"].to_numpy(), eq.output, rtol=1e-9)
-    assert json.loads((ref / "solution.json").read_text())["static_digest"] == inp.static_digest
+    tables = {
+        name: pa_ipc.open_file(ref / f"{name}.arrow").read_all() for name in ("prices", "wages", "enterprises", "flows", "home")
+    }
+    np.testing.assert_allclose(tables["prices"]["price"].to_numpy(), eq.price.ravel(), rtol=1e-8)
+    np.testing.assert_allclose(tables["wages"]["wage"].to_numpy(), eq.wage, rtol=1e-8)
+    np.testing.assert_allclose(tables["enterprises"]["employment"].to_numpy(), eq.employment, rtol=1e-8)
+    np.testing.assert_allclose(tables["enterprises"]["output"].to_numpy(), eq.output, rtol=1e-8)
+    flows = tables["flows"]
+    ex, im, g = (flows[c].to_numpy() for c in ("exporter_country", "importer_country", "good"))
+    for got, want in zip((ex, im, g), np.nonzero(eq.flows_by_country_pair_good > 0)):
+        np.testing.assert_array_equal(got, want)
+    scale = eq.flows_by_country_pair_good.max()
+    np.testing.assert_allclose(flows["value"].to_numpy(), eq.flows_by_country_pair_good[ex, im, g], rtol=1e-8, atol=1e-8 * scale)
+    np.testing.assert_allclose(flows["units"].to_numpy(), eq.units_by_country_pair_good[ex, im, g], rtol=1e-8, atol=1e-8 * scale)
+    traded = inp.traded[np.tile(np.arange(inp.n_goods), inp.n_provinces)]
+    np.testing.assert_allclose(tables["home"]["value"].to_numpy(), eq.home_value.ravel()[traded], rtol=1e-8, atol=1e-8 * scale)
+    np.testing.assert_allclose(tables["home"]["units"].to_numpy(), eq.home_units.ravel()[traded], rtol=1e-8, atol=1e-8 * scale)
+    meta = json.loads((ref / "solution.json").read_text())
+    assert meta["static_digest"] == inp.static_digest
+    assert meta["price_index"] == pytest.approx(eq.price_index, abs=1e-8)
