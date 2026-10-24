@@ -2,7 +2,7 @@
 
 Status: draft (P1 needs no human approval)
 Phase: P1
-Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADRs 0006 to 0009
+Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADRs 0006 to 0011
 
 ## Purpose
 
@@ -31,6 +31,7 @@ Outputs go to `data/packs/2000/` (not in git).
 | `sea_zones.arrow` | 725 | H3 resolution-1 parent per zone |
 | `chokepoints.arrow` | 10 | name, canal flag; edge chokepoint id k is row k - 1 |
 | `web/map.pmtiles` | | vector tiles, layers provinces, countries, counties (from zoom 4); feature ID = index + 1 |
+| `web/*.fill` | | GPU fill buffers per layer: Web Mercator triangles with a feature index per vertex, long edges split for the globe (ADR 0010) |
 | `web/*.json` | | columnar province and county attributes for the map |
 | `manifest.json` | | config, source checksums, table sha256, build statistics |
 

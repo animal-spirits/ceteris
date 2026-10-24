@@ -5,6 +5,7 @@ description = "Data pipeline, reference model and analysis for Ceteris Paribus"
 requires-python = ">=3.12"
 dependencies = [
     "h3>=4.2",
+    "mapbox-earcut>=2.1.0",
     "numpy>=2.1",
     "pyarrow>=18",
     "pyogrio>=0.10",

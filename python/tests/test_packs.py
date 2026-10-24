@@ -1,3 +1,4 @@
+import collections
 import json
 import os
 from pathlib import Path
@@ -8,7 +9,7 @@ import shapely
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ceteris.packs import build, counties, geo, provinces, transport
+from ceteris.packs import build, counties, fills, geo, provinces, transport
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "data" / "packs" / "2000"
@@ -84,6 +85,48 @@ def test_county_split_follows_county_borders_and_covers_the_province():
 def test_county_split_declines_with_too_few_counties():
     p = provinces.Province("X-1", "X", "XXX", "XXX", "XXX", shapely.box(0, 0, 4, 4))
     assert provinces.split_by_counties(p, 4, [shapely.box(0, 0, 4, 2), shapely.box(0, 2, 4, 4)], 1e9, 4) is None
+
+
+def _tri_area(xy, index):
+    t = xy[index.reshape(-1, 3)]
+    return 0.5 * np.abs(
+        (t[:, 1, 0] - t[:, 0, 0]) * (t[:, 2, 1] - t[:, 0, 1]) - (t[:, 2, 0] - t[:, 0, 0]) * (t[:, 1, 1] - t[:, 0, 1])
+    )
+
+
+def test_fill_buffers_round_trip_and_cover_their_polygons(tmp_path):
+    donut = shapely.box(0, 0, 20, 10).difference(shapely.box(5, 2, 8, 6))
+    geoms = [donut, shapely.MultiPolygon([shapely.box(30, 30, 31, 31), shapely.box(40, 30, 42, 31)])]
+    fills.write(tmp_path / "x.fill", geoms)
+    xy, feature, index, n = fills.read(tmp_path / "x.fill")
+    assert n == 2 and len(feature) == len(xy) and set(feature) == {0, 1}
+    for f, g in enumerate(geoms):
+        tris = index.reshape(-1, 3)
+        mine = tris[(feature[tris] == f).all(axis=1)]
+        expected = sum(
+            shapely.Polygon(fills.mercator(np.asarray(p.exterior.coords))).area
+            - sum(shapely.Polygon(fills.mercator(np.asarray(r.coords))).area for r in p.interiors)
+            for p in shapely.get_parts(g)
+        )
+        assert _tri_area(xy.astype(float), mine.ravel()).sum() == pytest.approx(expected, rel=1e-4)
+
+
+def test_subdivision_bounds_edges_and_leaves_no_cracks():
+    # Two triangles sharing a long diagonal must split it at the same points.
+    xy = np.array([[0.0, 0.0], [0.03, 0.0], [0.03, 0.02], [0.0, 0.02]])
+    tri = np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)
+    v, t = fills.subdivide(xy, tri)
+    corners = v[t.reshape(-1, 3)]
+    assert np.linalg.norm(corners - np.roll(corners, 1, axis=1), axis=2).max() <= fills.MAX_EDGE
+    assert _tri_area(v, t).sum() == pytest.approx(0.03 * 0.02)
+    edges = collections.Counter()
+    for a, b, c in t.reshape(-1, 3):
+        for e in ((a, b), (b, c), (c, a)):
+            edges[tuple(sorted(e))] += 1
+    boundary = [e for e, k in edges.items() if k == 1]
+    # Each boundary edge lies on the square's outline: no T-junction gaps inside.
+    on_outline = lambda p: np.isclose(p[0], 0) or np.isclose(p[0], 0.03) or np.isclose(p[1], 0) or np.isclose(p[1], 0.02)
+    assert all(on_outline(v[a]) and on_outline(v[b]) for a, b in boundary)
 
 
 @given(st.sets(st.tuples(st.integers(0, 30), st.integers(0, 30)).filter(lambda e: e[0] != e[1]), max_size=120))
