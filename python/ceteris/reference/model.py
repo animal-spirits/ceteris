@@ -20,7 +20,8 @@ origin or the demand at a local market, and of every labour market, (sum L* - L^
 cash flow is zero at a fixed point and left out, and households are paid w L^s (full employment),
 so Walras' law reads sum p (D - Q) + sum w (L* - L^s) = 0 identically; the labour equation of the
 province with the largest base wage bill is replaced by ln(world price index) = 0, the index
-weighting consumer prices (q_d for traded goods, the local price for local goods).
+weighting consumer prices (q_d for traded goods, the local price for local goods) and leaving out
+cells with no reachable origin (q_d infinite), as `EconWorld::world_price_index`.
 """
 
 from dataclasses import dataclass, field
@@ -296,6 +297,9 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
     with np.errstate(divide="ignore", invalid="ignore"):
         local = np.where(traded, 0.0, np.divide(spend_hh, price, out=np.zeros_like(price), where=price > 0) + local_use)
     demand = np.where(traded, f["orders"], local)
+    # as `EconWorld::world_price_index`: cells with no reachable origin are left out
+    reached = np.isfinite(consumer)
+    index_weights = np.where(reached, inp.index_weights, 0.0)
 
     return {
         "price": price,
@@ -311,7 +315,7 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
         "q": out,
         "labour_demand": _sum(ep, l_star, n_p),
         "income": income,
-        "index": (inp.index_weights * consumer).sum() / inp.index_weights.sum(),
+        "index": (index_weights * np.where(reached, consumer, 0.0)).sum() / index_weights.sum(),
     }
 
 

@@ -518,6 +518,17 @@ texture fed from core columns.
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
   identical; pi^e is a log difference and stays); pi^e follows the world price index
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
+- Unreachable destination at world level (Review Focus 1, `fixture::unreachable_island`:
+  machinery has no route to or from the island, and of the island's sectors only light
+  manufacturing uses it): over 240 ticks in both modes the island's q_d of machinery is the only
+  infinite buyer price and the world index leaves it out, island pops buy none of it and spend
+  the rest of their money, its one user orders none, never restocks and ends producing nothing,
+  no price, wage or flow turns NaN and the invariants hold
+  (`unreachable_destination_buys_nothing_in_the_world`); the reference solves the same variant
+  with a finite residual (`test_unreachable_destination_solves`). V1 holds on the variant (final
+  fix wave: price 3.0e-5, wage 2.5e-5, flow units 5.8e-5, value 7.5e-5 at 1,200 ticks) except at
+  the island's light manufacturing, whose price is not determined: with no output and no orders
+  any price that leaves its weight below the market floor solves its market.
 - Python (pytest, hypothesis): ICIO aggregation preserves totals; downscaling preserves national
   VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
   worlds; PPML recovers a known elasticity on synthetic gravity data; the uniqueness check

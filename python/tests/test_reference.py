@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import os
 from pathlib import Path
@@ -35,6 +36,48 @@ def test_residual_zero_at_solution(fixture):
     assert eq.price_index == pytest.approx(1.0, abs=1e-10)
     assert np.all(eq.price[inp.active] > 0) and np.all(eq.wage > 0)
     assert np.all(eq.income > 0)
+
+
+UNREACHABLE, ISLAND_USER = 6, 4  # as `fixture::UNREACHABLE` and `fixture::ISLAND_USER`
+
+
+def unreachable_island(inp: io.Inputs) -> io.Inputs:
+    """The fixture as `fixture::unreachable_island` exports it: machinery without a route to or
+    from the island port (kernel factor 0, tau infinite), and of the island's sectors only light
+    manufacturing using machinery."""
+    island = inp.n_countries - 1
+    port = np.flatnonzero(inp.gateway_country == island)
+    cro = inp.crossing
+    cut = (cro.good == UNREACHABLE) & (np.isin(cro.row, port) | np.isin(cro.col, port))
+    crossing = dataclasses.replace(cro, k=np.where(cut, 0.0, cro.k), tau=np.where(cut, np.inf, cro.tau))
+    a = inp.io.copy()
+    a[island, UNREACHABLE, np.arange(inp.n_goods) != ISLAND_USER] = 0.0
+    return dataclasses.replace(inp, io=a, crossing=crossing)
+
+
+def test_unreachable_destination_solves(inputs):
+    """Review Focus 1 at world level: with machinery unreachable at the island its delivered price
+    there is infinite, the world price index leaves that cell out (as `world_price_index`), the
+    island spends nothing on machinery, the island's light manufacturing (its one user) employs
+    and produces nothing, and the reference solves with a finite residual."""
+    inp = unreachable_island(inputs)
+    island = inp.n_provinces - 1
+    assert np.isinf(model.evaluate(model.data_state(inp), inp)["consumer_price"][island, UNREACHABLE])
+    assert np.isfinite(model.residual(model.data_state(inp), inp)).all()
+    eq = solve.equilibrium(inp)
+    r = model.residual(eq.x, inp)
+    assert np.isfinite(r).all() and np.abs(r).max() <= 1e-10
+    assert eq.price_index == pytest.approx(1.0, abs=1e-10)
+    assert eq.consumer_price[island, UNREACHABLE] == np.inf
+    assert eq.expenditure[island, UNREACHABLE] == 0.0
+    assert np.isfinite(np.delete(eq.consumer_price.ravel(), island * inp.n_goods + UNREACHABLE)).all()
+    on_island = inp.ent_province == island
+    user = on_island & (inp.ent_good == ISLAND_USER)
+    assert eq.employment[user] == 0.0 and eq.output[user] == 0.0
+    assert np.all(eq.output[on_island & ~user] > 0)
+    for v in (eq.price, eq.wage, eq.income, eq.flows_by_country_pair_good, eq.units_by_country_pair_good):
+        assert np.isfinite(v).all()
+    assert np.all(eq.wage > 0) and np.all(eq.income > 0)
 
 
 def test_scale_invariance(inputs):
