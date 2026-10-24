@@ -2,12 +2,13 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import io, model, sinkhorn, solve
+from ceteris.reference import io, model, ppml, sinkhorn, solve
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tests" / "golden" / "p2-fixture"
@@ -233,3 +234,97 @@ def test_fixture_reference_is_current(fixture):
     meta = json.loads((ref / "solution.json").read_text())
     assert meta["static_digest"] == inp.static_digest
     assert meta["price_index"] == pytest.approx(eq.price_index, abs=1e-8)
+
+
+def _gravity_world(n=40, beta=-0.9, contig=0.5, scale=60.0, seed=11):
+    """Synthetic Poisson gravity: pair flows exp(a_i + b_j + beta ln d + contig c) with unit-mean noise."""
+    rng = np.random.default_rng(seed)
+    xy = rng.uniform(0.0, 10.0, (n, 2))
+    dist = 500.0 * (1.0 + np.hypot(*(xy[:, None] - xy[None]).transpose(2, 0, 1)))
+    near = dist < np.quantile(dist[~np.eye(n, dtype=bool)], 0.1)
+    c = (near & ~np.eye(n, dtype=bool)).astype(float)
+    a, b = rng.normal(0, 0.7, n), rng.normal(0, 0.7, n)
+    mu = np.exp(a[:, None] + b[None] + beta * np.log(dist) + contig * c)
+    mu *= scale / mu[~np.eye(n, dtype=bool)].mean()
+    return rng.poisson(mu).astype(float), dist, c
+
+
+def test_ppml_recovers_known_elasticity():
+    flows, dist, c = _gravity_world()
+    n = len(flows)
+    o, d = np.nonzero(~np.eye(n, dtype=bool))
+    coef = ppml.fit(flows[o, d], o, d, {"ln_dist": np.log(dist[o, d]), "contig": c[o, d]})
+    assert coef["ln_dist"] == pytest.approx(-0.9, abs=0.02)
+    assert coef["contig"] == pytest.approx(0.5, abs=0.1)
+
+
+def test_ppml_scale_invariant_and_keeps_zeros():
+    flows, dist, _c = _gravity_world(n=25, scale=0.8)  # many zero flows
+    n = len(flows)
+    o, d = np.nonzero(~np.eye(n, dtype=bool))
+    assert (flows[o, d] == 0).mean() > 0.3
+    reg = {"ln_dist": np.log(dist[o, d])}
+    base = ppml.fit(flows[o, d], o, d, reg)
+    scaled = ppml.fit(1e6 * flows[o, d], o, d, reg)
+    assert scaled["ln_dist"] == pytest.approx(base["ln_dist"], abs=1e-8)
+    coef, se = ppml.fit_robust(flows[o, d], o, d, reg)
+    assert coef["ln_dist"] == pytest.approx(base["ln_dist"], abs=1e-12)
+    assert 0.0 < se["ln_dist"] < 0.2
+
+
+def test_ppml_drops_countries_without_any_flow():
+    flows, dist, _c = _gravity_world(n=20)
+    flows[3, :] = 0.0  # country 3 never exports: its exporter effect diverges unless dropped
+    n = len(flows)
+    o, d = np.nonzero(~np.eye(n, dtype=bool))
+    coef = ppml.fit(flows[o, d], o, d, {"ln_dist": np.log(dist[o, d])})
+    assert np.isfinite(coef["ln_dist"]) and -1.5 < coef["ln_dist"] < -0.4
+
+
+def _tables(flows, dist, c, split=2):
+    n = len(flows)
+    codes = [f"C{i:02d}" for i in range(n)]
+    oo, dd = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    oo, dd = oo.ravel(), dd.ravel()
+    gravity = pa.table(
+        {
+            "iso3_o": [codes[i] for i in oo],
+            "iso3_d": [codes[j] for j in dd],
+            "distw": dist.ravel(),
+            "contig": c.ravel().astype(np.int8),
+        }
+    )
+    keep = flows[oo, dd] > 0  # sparse like run_flows: absent = 0
+    eo, ed, v = oo[keep], dd[keep], flows[oo, dd][keep]
+    parts = [  # the value is split over goods; domestic rows are present and must be ignored
+        (eo, ed, g, v * w) for g, w in enumerate(np.linspace(1.0, 2.0, split) / np.linspace(1.0, 2.0, split).sum())
+    ]
+    run = pa.table(
+        {
+            "exporter_country": pa.array(np.concatenate([p[0] for p in parts]), pa.uint32()),
+            "importer_country": pa.array(np.concatenate([p[1] for p in parts]), pa.uint32()),
+            "good": pa.array(np.concatenate([np.full(len(p[0]), p[2]) for p in parts]), pa.uint8()),
+            "value": pa.array(np.concatenate([p[3] for p in parts]), pa.float64()),
+            "units": pa.array(np.concatenate([p[3] for p in parts]), pa.float64()),
+        }
+    )
+    return run, gravity, codes
+
+
+def test_distance_elasticity_from_run_flows():
+    flows, dist, c = _gravity_world()
+    run, gravity, codes = _tables(flows, dist, c)
+    res = ppml.distance_elasticity(run, gravity, codes)
+    assert res.elasticity == pytest.approx(-0.9, abs=0.02)
+    assert res.contiguity == pytest.approx(0.5, abs=0.1)
+    assert res.n_dropped == 0 and res.n_pairs == 40 * 39
+    # Same estimate when the table carries only some of the pairs: missing and nonpositive distance are dropped.
+    keep = np.ones(gravity.num_rows, dtype=bool)
+    keep[5] = False
+    distw = gravity["distw"].to_numpy().copy()
+    distw[100] = np.nan
+    distw[200] = 0.0
+    thin = gravity.filter(pa.array(keep)).set_column(2, "distw", pa.array(distw[keep]))
+    res2 = ppml.distance_elasticity(run, thin, codes)
+    assert res2.n_dropped == 3 and res2.n_pairs == 40 * 39 - 3
+    assert res2.elasticity == pytest.approx(res.elasticity, abs=0.02)
