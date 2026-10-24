@@ -1,6 +1,6 @@
-# 0018. PIGL demand and a household consumption rule
+# 0021. PIGL demand and a household consumption rule
 
-Status: proposed
+Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
 Date: 2026-10-24
 Design sections: 8.6, 17.1 (P06, P07, P37), 17.2 (S03), 19.4
 
@@ -39,6 +39,19 @@ Option 2 by default, option 1 as S03. Total spending follows the buffer-stock ru
 - Adding-up: category spending sums to total spending exactly.
 - Engel curves across the 2000 cross-section: the food share falls and the services share rises
   with income.
+
+## Mapping to P2 as built
+
+P2 uses homothetic CES over the 10 goods (`ceteris-econ` demand.rs), an approved spec deviation
+that this ADR reverses.
+
+- Categories are the 10 P2 goods (agent default): PIGL shares per good, weights backed out from
+  each country's 2000 final demand shares by exact inversion.
+- Each pop's income is lognormal: mu from its mean income, sigma^2 from its country's 2000 Gini
+  (sigma = sqrt(2) Phi^(-1)((G + 1) / 2)), a new pack column with its own source row.
+- P06 and P07 become the PIGL price and Engel parameters; spend-all (m = 1, lambda = 0) is P2's
+  current rule, so the consumption rule adds no behaviour yet.
+- The GE reference mirrors PIGL demand.
 
 ## Consequences
 

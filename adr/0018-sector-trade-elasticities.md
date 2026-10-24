@@ -1,6 +1,6 @@
-# 0015. Sector-specific trade elasticities
+# 0018. Sector-specific trade elasticities
 
-Status: proposed
+Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
 Date: 2026-10-24
 Design sections: 8.3, 17.1 (P01), 19.4, 18 (H2)
 
@@ -18,7 +18,7 @@ grouped into 3 to 5 classes that share kernels.
 ## Decision
 
 Option 3. Kernels and route-choice matrices are built per (theta class, weight class), so cost
-scales with classes, not sectors. Values are estimated outside the simulation (0019).
+scales with classes, not sectors. Values are estimated outside the simulation (0022).
 
 ## Migration
 
@@ -30,6 +30,19 @@ scales with classes, not sectors. Values are estimated outside the simulation (0
 ## Tests
 
 H2 per class: PPML on simulated flows recovers each class's theta within its prior band.
+
+## Mapping to P2 as built
+
+- P01 becomes a vector over the 7 traded goods (`TradeParams.theta`, one f64 today). Starting
+  values are Caliendo and Parro (2015) estimates mapped to the P2 goods with 2000 BACI trade
+  weights; class boundaries are an agent default recorded in their own ADR.
+- P2 already builds one kernel per traded good, and each good has its own weight w_g, so weight
+  classes are goods and theta classes add no kernels while goods number 7. The cache key becomes
+  (theta class, weight class) all the same, so classes can merge later.
+- Several Caliendo-Parro values lie outside the current P01 prior (4 to 8); the prior widens with
+  the register update.
+- H2 per class extends `python/tests/test_p2_gate.py`; the owner's distance-elasticity gate
+  (-1.1 to -0.7) stays.
 
 ## Consequences
 

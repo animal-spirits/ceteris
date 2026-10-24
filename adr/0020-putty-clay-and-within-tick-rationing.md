@@ -1,6 +1,6 @@
-# 0017. Putty-clay intermediates and within-tick rationing
+# 0020. Putty-clay intermediates and within-tick rationing
 
-Status: proposed
+Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
 Date: 2026-10-24
 Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 17.2 (S09, S11), 19.4
 
@@ -35,6 +35,22 @@ priority by default, proportional and mixed as S11.
 - With one vintage, golden hashes equal S09 (fixed Leontief) bit for bit.
 - In a toy supply chain, an upstream shortage reaches downstream output within the tick, and
   the priority order is respected.
+
+## Mapping to P2 as built
+
+The decision holds; the owner chose (2026-10-24) a same-tick chain for local goods as the reading
+of within-tick rationing.
+
+- Putty-clay: each enterprise holds its own coefficient vector, initialized from its country's
+  ICIO row (one vintage). P2 output is unchanged by this step, and the golden equals S09.
+- Priority: P2 already fills enterprise input orders before household demand (controller ruling
+  during Task 7). With no subsistence levels before P4, that is the review's order (essential
+  consumption, then intermediate users, then the rest). Proportional and mixed become S11.
+- Same-tick chain: local goods (utilities, construction, services) have no transit, so their
+  production, input use and rationing run as one pass within the tick, in input-output order with
+  a fixed iteration bound, so an upstream local shortage reaches downstream output in the same
+  tick. Traded goods still reach buyers after their transit time; input stocks are the buffer.
+- The toy supply-chain test uses local goods; the priority test covers both kinds.
 
 ## Consequences
 
