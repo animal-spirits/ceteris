@@ -34,8 +34,8 @@ share are closed form.
 
 - Reinterpret theta_g (P01) as the Pareto shape k_g; the PPML estimates of 0022 are
   unchanged.
-- Add sigma_g (P39), fixed export costs by border (P40, identified by exporter shares) and
-  entry costs (P41, identified by firm counts by size class) to the register.
+- Add sigma_g (P50), fixed export costs by border (P51, identified by exporter shares) and
+  entry costs (P52, identified by firm counts by size class) to the register.
 - Gateway links carry the fixed-cost factor beside tariffs.
 - Each enterprise cell stores its mass of firms and productivity lower bound; the quarterly
   investment step (7.4) becomes free entry and exit in that mass.
