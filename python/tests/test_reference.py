@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from pyarrow import ipc as pa_ipc
 
 from ceteris.reference import io, model, sinkhorn, solve
 
@@ -203,3 +205,16 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     assert eq.units_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k), rel=1e-9)
     # delivered pricing: the destination pays p = 1 per arriving unit
     assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * y * k / (1.0 + k) / tau, rel=1e-9)
+
+
+def test_committed_reference_is_the_solution(fixture):
+    """`tests/golden/p2-fixture/reference` (read by Rust runs started from the equilibrium) is the
+    current solve of the fixture."""
+    inp, eq = fixture
+    ref = FIXTURE / "reference"
+    tables = {name: pa_ipc.open_file(ref / f"{name}.arrow").read_all() for name in ("prices", "wages", "enterprises")}
+    np.testing.assert_allclose(tables["prices"]["price"].to_numpy(), eq.price.ravel(), rtol=1e-9)
+    np.testing.assert_allclose(tables["wages"]["wage"].to_numpy(), eq.wage, rtol=1e-9)
+    np.testing.assert_allclose(tables["enterprises"]["employment"].to_numpy(), eq.employment, rtol=1e-9)
+    np.testing.assert_allclose(tables["enterprises"]["output"].to_numpy(), eq.output, rtol=1e-9)
+    assert json.loads((ref / "solution.json").read_text())["static_digest"] == inp.static_digest
