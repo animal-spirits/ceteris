@@ -277,7 +277,9 @@ dependencies = [
 name = "ceteris-trade"
 version = "0.0.1"
 dependencies = [
+ "ceteris-core",
  "libm",
+ "proptest",
 ]
 
 [[package]]

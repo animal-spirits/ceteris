@@ -85,11 +85,13 @@ pub struct GoodKernel {
 pub struct Kernel {
     pub n_provinces: usize,
     pub n_gateways: usize,
+    /// P01 as used to build `k`; routing needs it for `p^theta`.
+    pub theta: f64,
     goods: [Option<GoodKernel>; N_GOODS],
 }
 
 /// Results of the low-rank evaluation for one good.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Access {
     /// Destination access at each gateway, `v_b = sum_{d in B} K_bd p_d^theta`.
     pub v: Vec<f64>,
@@ -131,6 +133,7 @@ impl Kernel {
         Kernel {
             n_provinces: np,
             n_gateways: ng,
+            theta: p.theta,
             goods,
         }
     }
@@ -149,42 +152,47 @@ impl Kernel {
     /// Low-rank evaluation. `price_theta[d] = p_d^theta` per province, 0 for inactive
     /// destinations.
     pub fn access(&self, g: usize, price_theta: &[f64]) -> Access {
+        let mut out = Access::default();
+        self.access_into(g, price_theta, &mut out);
+        out
+    }
+
+    /// [`Kernel::access`] into reused buffers: allocation-free once `out` has been sized.
+    pub fn access_into(&self, g: usize, price_theta: &[f64], out: &mut Access) {
         assert_eq!(price_theta.len(), self.n_provinces);
         let gk = self.good(g);
 
-        let mut v = vec![0.0; self.n_gateways];
+        out.v.clear();
+        out.v.resize(self.n_gateways, 0.0);
         for (d, &pt) in price_theta.iter().enumerate() {
             for e in gk.access.row(d) {
-                v[e.col as usize] += f64::from(e.k) * pt;
+                out.v[e.col as usize] += f64::from(e.k) * pt;
             }
         }
-        let u: Vec<f64> = (0..self.n_gateways)
-            .map(|a| {
-                gk.crossings
-                    .row(a)
-                    .iter()
-                    .map(|e| f64::from(e.k) * v[e.col as usize])
-                    .sum()
-            })
-            .collect();
-        let pi = (0..self.n_provinces)
-            .map(|o| {
-                let local: f64 = gk
-                    .domestic
-                    .row(o)
-                    .iter()
-                    .map(|e| f64::from(e.k) * price_theta[e.col as usize])
-                    .sum();
-                let abroad: f64 = gk
-                    .access
-                    .row(o)
-                    .iter()
-                    .map(|e| f64::from(e.k) * u[e.col as usize])
-                    .sum();
-                price_theta[o] + local + abroad
-            })
-            .collect();
-        Access { v, u, pi }
+        out.u.clear();
+        out.u.extend((0..self.n_gateways).map(|a| {
+            gk.crossings
+                .row(a)
+                .iter()
+                .map(|e| f64::from(e.k) * out.v[e.col as usize])
+                .sum::<f64>()
+        }));
+        out.pi.clear();
+        out.pi.extend((0..self.n_provinces).map(|o| {
+            let local: f64 = gk
+                .domestic
+                .row(o)
+                .iter()
+                .map(|e| f64::from(e.k) * price_theta[e.col as usize])
+                .sum();
+            let abroad: f64 = gk
+                .access
+                .row(o)
+                .iter()
+                .map(|e| f64::from(e.k) * out.u[e.col as usize])
+                .sum();
+            price_theta[o] + local + abroad
+        }));
     }
 }
 
