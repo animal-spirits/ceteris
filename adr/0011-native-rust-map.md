@@ -1,6 +1,6 @@
 # 0011. Rewrite the map in Rust
 
-Status: accepted (owner, 2026-10-23); scheduling open
+Status: accepted (owner, 2026-10-23); path amended by 0088 (fully native, Slint panels); scheduling open
 Date: 2026-10-23
 Design sections: 19.1 (Map UI, App shell), 19.4, 20, 22.1 (App)
 
