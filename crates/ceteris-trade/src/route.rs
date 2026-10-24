@@ -87,10 +87,8 @@ impl Routed {
     }
 }
 
-/// Destinations whose weight `(p / p_max)^theta` is below this are not routing targets. It
-/// keeps every product of the weight with up to three f32 kernel factors a normal f64, so
-/// the Markov shares stay accurate when prices span orders of magnitude.
-pub const WEIGHT_FLOOR: f64 = 1e-100;
+/// Destinations whose weight `(p / p_max)^theta` is below this are not routing targets.
+pub use crate::source::WEIGHT_FLOOR;
 
 fn zeroed(v: &mut Vec<f64>, n: usize) {
     v.clear();

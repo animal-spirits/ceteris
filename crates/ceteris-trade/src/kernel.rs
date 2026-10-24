@@ -90,15 +90,20 @@ pub struct Kernel {
     goods: [Option<GoodKernel>; N_GOODS],
 }
 
-/// Results of the low-rank evaluation for one good.
+/// Results of the low-rank evaluation for one good. [`Kernel::access_into`] fills it from the
+/// destination side, [`Kernel::origin_access_into`] from the origin side; the field docs give
+/// both readings.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Access {
-    /// Destination access at each gateway, `v_b = sum_{d in B} K_bd p_d^theta`.
+    /// Destination access at each gateway, `v_b = sum_{d in B} K_bd p_d^theta`. Origin side:
+    /// origin access at each gateway, `v'_a = sum_{o in A} K_oa w_o`.
     pub v: Vec<f64>,
-    /// International access at each gateway, `u_a = sum_b K_ab v_b`.
+    /// International access at each gateway, `u_a = sum_b K_ab v_b`. Origin side: access of
+    /// each destination gateway to every foreign origin, `u'_b = sum_a v'_a K_ab`.
     pub u: Vec<f64>,
     /// Route normalizer per origin province, `Pi_o = sum_d K_od p_d^theta`, home term
-    /// `K_oo p_o^theta = p_o^theta` included.
+    /// `K_oo p_o^theta = p_o^theta` included. Origin side: sourcing normalizer per
+    /// destination province, `Phi_d = sum_o K_od w_o`, home term `w_d` included.
     pub pi: Vec<f64>,
 }
 
@@ -193,6 +198,46 @@ impl Kernel {
                 .sum();
             price_theta[o] + local + abroad
         }));
+    }
+
+    /// Origin-side low-rank evaluation into reused buffers. `weight[o]` is the sourcing
+    /// weight of origin o, `(p_o / p_min)^-theta` for an active origin and 0 otherwise.
+    /// Writes `v'_a = sum_{o in A} K_oa w_o`, `u'_b = sum_a v'_a K_ab` and
+    /// `Phi_d = sum_{o in B} K_od w_o + sum_b K_bd u'_b`, home term `K_dd w_d = w_d` included.
+    pub fn origin_access_into(&self, g: usize, weight: &[f64], out: &mut Access) {
+        assert_eq!(weight.len(), self.n_provinces);
+        let gk = self.good(g);
+
+        out.v.clear();
+        out.v.resize(self.n_gateways, 0.0);
+        for (o, &w) in weight.iter().enumerate() {
+            for e in gk.access.row(o) {
+                out.v[e.col as usize] += f64::from(e.k) * w;
+            }
+        }
+        out.u.clear();
+        out.u.resize(self.n_gateways, 0.0);
+        for (a, &va) in out.v.iter().enumerate() {
+            for e in gk.crossings.row(a) {
+                out.u[e.col as usize] += va * f64::from(e.k);
+            }
+        }
+        out.pi.clear();
+        out.pi.extend_from_slice(weight);
+        for (o, &w) in weight.iter().enumerate() {
+            for e in gk.domestic.row(o) {
+                out.pi[e.col as usize] += f64::from(e.k) * w;
+            }
+        }
+        for (d, phi) in out.pi.iter_mut().enumerate() {
+            let abroad: f64 = gk
+                .access
+                .row(d)
+                .iter()
+                .map(|e| f64::from(e.k) * out.u[e.col as usize])
+                .sum();
+            *phi += abroad;
+        }
     }
 }
 

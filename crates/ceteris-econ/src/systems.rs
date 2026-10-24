@@ -464,7 +464,7 @@ pub fn demand(w: &mut EconWorld) {
 pub fn clear(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
-    w.markets.clear(&mut w.scratch.fill);
+    w.markets.clear_pro_rata(&mut w.scratch.fill);
     w.markets.clear_local(&mut w.scratch.spoiled);
     let mut buyers: Vec<(AccountId, f64, bool)> = Vec::new();
     for i in 0..inp.n_provinces() {
