@@ -27,7 +27,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - name: Determinism gate in optimized builds
-        run: cargo test -p ceteris-core --release --test golden --test p0_acceptance
+        run: |
+          cargo test -p ceteris-core --release --test golden --test p0_acceptance
+          cargo test -p ceteris-econ --release --test golden --test p2_acceptance
       # The 20% regression gate needs a dedicated runner (ADR 0004).
       - run: cargo bench --workspace --no-run
 
