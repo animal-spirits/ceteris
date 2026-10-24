@@ -659,7 +659,7 @@ policy = "bundle-aggregates"
 reason = "OECD data terms allow distribution for any purpose, including commercial"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices. The 2025 ReadMe (webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/ReadMe_ICIO_small.xlsx, reachable live) lists 50 industries with B05 and B06 split."
+notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices. The 2025 ReadMe (webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/ReadMe_ICIO_small.xlsx, reachable live) lists 50 industries with B05 and B06 split. The OECD host rejects scripted downloads (403 on every zip, ReadMe files are fine): the packages in fetch.toml (`manual = true`) are saved by hand in a browser from the dataset page into data/cache, and fetch only verifies their pins. Task 14 reads the small edition (SML) 1995-2000 package, one CSV per year; the other periods and the extended edition are pinned for later phases."
 
 [[source]]
 id = "baci"

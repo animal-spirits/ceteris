@@ -40,6 +40,8 @@ def path_of(name: str) -> Path:
 
 def fetch(entry: dict) -> Path:
     path = path_of(entry["name"])
+    if not path.exists() and entry.get("manual"):
+        raise SystemExit(f"{entry['name']}: the host rejects scripted downloads; save {entry['url']} into {CACHE} in a browser")
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         part = path.with_suffix(path.suffix + ".part")

@@ -9,7 +9,7 @@ import shapely
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ceteris.packs import build, counties, fills, geo, provinces, transport
+from ceteris.packs import build, counties, fetch, fills, geo, provinces, transport
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "data" / "packs" / "2000"
@@ -194,3 +194,17 @@ def test_pack_invariants():
     stats = json.loads((PACK / "manifest.json").read_text())["stats"]
     assert stats["county_area_outside_province"] < 0.05
     assert stats["split_by_counties"] > stats["split_by_voronoi"]
+
+
+def test_fetch_does_not_download_manual_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    entry = {"name": "x.zip", "url": "https://example.invalid/x.zip", "manual": True}
+    with pytest.raises(SystemExit, match="save https://example.invalid/x.zip"):
+        fetch.fetch(entry)
+    (tmp_path / "x.zip").write_bytes(b"data")
+    assert fetch.fetch(entry) == tmp_path / "x.zip"
+
+
+def test_icio_packages_are_manual_downloads():
+    icio = [e for e in fetch.entries() if e["source"] == "oecd-icio"]
+    assert len(icio) == 10 and all(e.get("manual") and e["sha256"] for e in icio)
