@@ -23,7 +23,7 @@ cargo run -p ceteris-econ --release --bin ceteris -- export --fixture --out targ
 uv run --project python python -m ceteris.reference solve --inputs target/p2-wip --out target/p2-wip/reference
 CETERIS_FIXTURE_DIR=$PWD/target/p2-wip cargo test -p ceteris-econ --release --test p2_acceptance --test p2_stability -- --include-ignored --skip p2_fixture_matches_golden_hashes --skip fixture_export_is_current
 CETERIS_FIXTURE_DIR=$PWD/target/p2-wip uv run --project python --locked pytest python/tests
-cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check
+CETERIS_FIXTURE_DIR=$PWD/target/p2-wip cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check
 ```
 
   Expected: all pass. V1 is never xfailed; if it fails, debug (superpowers:systematic-debugging), no parameter changes to pass, and report to the controller if the cause is the model rather than the code.
