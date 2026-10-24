@@ -1,6 +1,8 @@
 //! The graph-independent trade network: leg costs between provinces and gateways, as
 //! produced from `ceteris-geo` path costs, and the tariff wedges on gateway crossings.
 
+use crate::goods::N_GOODS;
+
 /// A least-cost path summary between two nodes. `cost_per_t` is USD per tonne at the
 /// reference price level, `hours` the travel time along the same path.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,6 +22,9 @@ pub struct Leg {
 ///
 /// `from` and `to` index provinces for `domestic`, province then gateway for `access`,
 /// and gateways for `crossings`.
+///
+/// `route_taus`, when present, replaces the least-cost leg factors (S05) with route-choice
+/// factors (ADR 0017).
 #[derive(Clone, Debug, Default)]
 pub struct Network {
     pub province_country: Vec<u16>,
@@ -27,6 +32,21 @@ pub struct Network {
     pub domestic: Vec<Leg>,
     pub access: Vec<Leg>,
     pub crossings: Vec<Leg>,
+    pub route_taus: Option<LegTaus>,
+}
+
+/// Route-choice leg factors per good (ADR 0017, `ceteris_geo::route_choice`) and the
+/// route-probability-weighted hours, aligned with the leg lists of [`Network`]: entry i of
+/// `domestic` belongs to `Network::domestic[i]`, and so on. Factors are at least 1, infinite
+/// for a leg with no route; local goods' entries are unused.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LegTaus {
+    pub domestic: Vec<[f64; N_GOODS]>,
+    pub access: Vec<[f64; N_GOODS]>,
+    pub crossings: Vec<[f64; N_GOODS]>,
+    pub domestic_hours: Vec<[f64; N_GOODS]>,
+    pub access_hours: Vec<[f64; N_GOODS]>,
+    pub crossing_hours: Vec<[f64; N_GOODS]>,
 }
 
 impl Network {

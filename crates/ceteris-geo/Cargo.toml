@@ -13,6 +13,7 @@ workspace = true
 arrow-array = "60.0.0"
 arrow-ipc = "60.0.0"
 arrow-schema = "60.0.0"
+libm = "0.2.16"
 rayon = "1.12.0"
 
 [dev-dependencies]

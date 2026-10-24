@@ -1,6 +1,6 @@
 //! Two-level trade kernel (`specs/trade/SPEC.md`, Equations).
 //!
-//! Domestic pairs use the direct path, `K_od = tau_od^-theta`, dense within a country. A
+//! Domestic pairs use the direct leg, `K_od = tau_od^-theta`, dense within a country. A
 //! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
 //! materialized: [`Kernel::access`] evaluates the sums through gateway aggregates.
 
@@ -29,8 +29,8 @@ impl<E> Csr<E> {
         &self.entries[self.offsets[i] as usize..self.offsets[i + 1] as usize]
     }
 
-    /// Entries of a row keep the order of the input legs.
-    fn from_legs(n_rows: usize, legs: &[Leg], entry: impl Fn(&Leg) -> E) -> Self {
+    /// Entries of a row keep the order of the input legs; `entry` gets the leg's index.
+    fn from_legs(n_rows: usize, legs: &[Leg], entry: impl Fn(usize, &Leg) -> E) -> Self {
         let mut order: Vec<usize> = (0..legs.len()).collect();
         order.sort_by_key(|&i| legs[i].from);
         let mut offsets = vec![0u32; n_rows + 1];
@@ -42,12 +42,13 @@ impl<E> Csr<E> {
         }
         Self {
             offsets,
-            entries: order.into_iter().map(|i| entry(&legs[i])).collect(),
+            entries: order.into_iter().map(|i| entry(i, &legs[i])).collect(),
         }
     }
 }
 
-/// A domestic or access leg: `tau = 1 + c w + lambda T` and `k = tau^-theta`.
+/// A domestic or access leg: `tau = 1 + c w + lambda T` on the least-cost leg (S05), or the
+/// route-choice factor when the network carries one, and `k = tau^-theta`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Entry {
     pub col: u32,
@@ -58,7 +59,8 @@ pub struct Entry {
 /// A gateway crossing. `tau` is the leg factor without border friction or tariff;
 /// `border_tau = 1 + nu` is the iceberg border loss, destroyed at the crossing. The tariff
 /// is a routing wedge only. `k = (tau * border_tau * (1 + tariff))^-theta`. `lag` is the
-/// extra transit time in months, `round(hours / 730)` capped at 3.
+/// extra transit time in months, `round(hours / 730)` capped at 3, from the least-cost leg's
+/// hours or the good's expected route hours.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Crossing {
     pub col: u32,
@@ -236,6 +238,46 @@ fn validate(net: &Network, np: usize, ng: usize) {
             "negative leg cost: {l:?}"
         );
     }
+    if let Some(rt) = &net.route_taus {
+        let lists = [
+            (
+                "domestic",
+                &rt.domestic,
+                &rt.domestic_hours,
+                net.domestic.len(),
+            ),
+            ("access", &rt.access, &rt.access_hours, net.access.len()),
+            (
+                "crossing",
+                &rt.crossings,
+                &rt.crossing_hours,
+                net.crossings.len(),
+            ),
+        ];
+        for (name, taus, hours, n) in lists {
+            assert!(
+                taus.len() == n && hours.len() == n,
+                "{name} route taus: {} factors and {} hours for {n} legs",
+                taus.len(),
+                hours.len()
+            );
+            for (i, (t, h)) in taus.iter().zip(hours).enumerate() {
+                for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+                    // t >= 1 also rejects NaN; below 1 a leg would create goods
+                    assert!(
+                        t[g] >= 1.0,
+                        "{name} route tau {} below 1 at leg {i}, good {g}",
+                        t[g]
+                    );
+                    assert!(
+                        h[g] >= 0.0,
+                        "{name} route hours {} at leg {i}, good {g}",
+                        h[g]
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn good_kernel(
@@ -247,10 +289,11 @@ fn good_kernel(
     wedges: &Wedges,
     p: &TradeParams,
 ) -> GoodKernel {
-    let tau = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
+    let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
+    let rt = net.route_taus.as_ref();
     let k_of = |total: f64| libm::pow(total, -p.theta) as f32;
-    let plain = |l: &Leg| {
-        let tau = tau(l);
+    let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
+        let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
         Entry {
             col: l.to,
             k: k_of(tau),
@@ -259,8 +302,11 @@ fn good_kernel(
     };
     let group = tariff_group(g);
     let border_tau = 1.0 + p.border_nu;
-    let crossing = |l: &Leg| {
-        let tau = tau(l);
+    let crossing = |i: usize, l: &Leg| {
+        let (tau, hours) = rt.map_or_else(
+            || (least(l), l.hours),
+            |rt| (rt.crossings[i][g], rt.crossing_hours[i][g]),
+        );
         let importer = usize::from(net.gateway_country[l.to as usize]);
         let exporter = usize::from(net.gateway_country[l.from as usize]);
         let tariff = wedges.rate(importer, exporter, group);
@@ -270,12 +316,14 @@ fn good_kernel(
             tau,
             border_tau,
             tariff,
-            lag: (l.hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8,
+            lag: (hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8,
         }
     };
     GoodKernel {
-        domestic: Csr::from_legs(np, &net.domestic, plain),
-        access: Csr::from_legs(np, &net.access, plain),
+        domestic: Csr::from_legs(np, &net.domestic, |i, l| {
+            plain(rt.map(|r| &r.domestic), i, l)
+        }),
+        access: Csr::from_legs(np, &net.access, |i, l| plain(rt.map(|r| &r.access), i, l)),
         crossings: Csr::from_legs(ng, &net.crossings, crossing),
     }
 }
@@ -284,7 +332,7 @@ fn good_kernel(
 mod tests {
     use super::*;
     use crate::goods::{N_GOODS, tariff_group};
-    use crate::network::{Leg, Network, Wedges};
+    use crate::network::{Leg, LegTaus, Network, Wedges};
     use crate::params::TradeParams;
 
     const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
@@ -479,6 +527,87 @@ mod tests {
                 assert_eq!((y.lag, Crossing { lag: x.lag, ..*y }), (0, *x));
             }
         }
+    }
+
+    #[test]
+    fn kernel_uses_route_taus_when_present() {
+        let p = TradeParams::default();
+        let mut net = world(&mut Rng(11));
+        let least = Kernel::build(&net, &W, &Wedges::none(2), &p);
+        // per-good factors unrelated to the least-cost legs; hours give lags 0 to 3
+        let taus = |n: usize, base: f64| -> Vec<[f64; N_GOODS]> {
+            (0..n)
+                .map(|i| std::array::from_fn(|g| base + 0.01 * i as f64 + 0.1 * g as f64))
+                .collect()
+        };
+        let hours = |n: usize| -> Vec<[f64; N_GOODS]> {
+            (0..n)
+                .map(|i| std::array::from_fn(|g| 730.0 * ((i + g) % 4) as f64))
+                .collect()
+        };
+        let (nd, na, nc) = (net.domestic.len(), net.access.len(), net.crossings.len());
+        let rt = LegTaus {
+            domestic: taus(nd, 1.1),
+            access: taus(na, 1.2),
+            crossings: taus(nc, 1.3),
+            domestic_hours: hours(nd),
+            access_hours: hours(na),
+            crossing_hours: hours(nc),
+        };
+        net.route_taus = Some(rt.clone());
+        let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
+        let nu = 1.0 + p.border_nu;
+        // entries keep leg order within a row; find each leg's entry by (row, col)
+        let entry = |csr: &Csr<Entry>, l: &Leg| -> Entry {
+            *csr.row(l.from as usize)
+                .iter()
+                .find(|e| e.col == l.to)
+                .unwrap()
+        };
+        for g in 0..7 {
+            let gk = k.good(g);
+            for (i, l) in net.domestic.iter().enumerate() {
+                let e = entry(&gk.domestic, l);
+                assert_eq!(e.tau, rt.domestic[i][g]);
+                assert_eq!(e.k, libm::pow(rt.domestic[i][g], -p.theta) as f32);
+            }
+            for (i, l) in net.access.iter().enumerate() {
+                let e = entry(&gk.access, l);
+                assert_eq!(e.tau, rt.access[i][g]);
+            }
+            for (i, l) in net.crossings.iter().enumerate() {
+                let e = gk
+                    .crossings
+                    .row(l.from as usize)
+                    .iter()
+                    .find(|e| e.col == l.to)
+                    .unwrap();
+                let tau = rt.crossings[i][g];
+                assert_eq!(e.tau, tau);
+                assert_eq!(e.k, libm::pow(tau * nu, -p.theta) as f32);
+                let lag = (rt.crossing_hours[i][g] / 730.0).round().min(3.0) as u8;
+                assert_eq!(e.lag, lag);
+            }
+            // the least-cost kernel differs: the route taus were used
+            assert_ne!(
+                least.good(g).domestic.entries[0].tau,
+                gk.domestic.entries[0].tau
+            );
+        }
+        let lags: Vec<u8> = k.good(0).crossings.entries.iter().map(|e| e.lag).collect();
+        assert!(lags.contains(&0) && lags.contains(&3), "{lags:?}");
+    }
+
+    #[test]
+    #[should_panic(expected = "route tau")]
+    fn route_taus_below_one_are_rejected() {
+        let mut net = two_provinces(10.0, 10.0);
+        net.route_taus = Some(LegTaus {
+            domestic: vec![[0.9; N_GOODS]; 2],
+            domestic_hours: vec![[1.0; N_GOODS]; 2],
+            ..LegTaus::default()
+        });
+        Kernel::build(&net, &W, &Wedges::none(1), &TradeParams::default());
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 Status: draft (P1 needs no human approval)
 Phase: P1
-Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADRs 0006 to 0011
+Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADRs 0006 to 0011; route choice (P2): ADR 0017
 
 ## Purpose
 
@@ -11,7 +11,8 @@ public-domain sources into provinces at 1 January 2000 borders, an H3 base raste
 multimodal transport graph, and nests a county display layer in the provinces (ADR 0009).
 `ceteris-geo` loads the pack, prices graph edges per tonne from
 mode parameters, and answers least-cost path queries through a cache that is dropped when
-any edge cost changes. It owns the physical part of the generalized trade cost (5.4); the
+any edge cost changes. For P2 it also computes route-choice trade costs per good (ADR 0017,
+Route choice below). It owns the physical part of the generalized trade cost (5.4); the
 inventory, risk, tariff and friction terms, and the iceberg mapping, arrive with trade in P2.
 
 ## Pack (built by `uv run python -m ceteris.packs`, about 2.5 minutes; needs tippecanoe)
@@ -66,6 +67,38 @@ Path cost: c_od = min over paths of the sum of edge prices (Dijkstra; heap keys 
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
 
+### Route choice (P2, ADR 0017; `route_choice.rs`)
+
+Per traded good g, with weight per value w_g, time cost lambda_g (trade P43) and route
+dispersion theta_r (trade P44), each edge gets an iceberg factor and a route weight
+
+```
+t_kl = 1 + c_kl * w_g + lambda_g * hours_kl / 24        (c, hours from the edge price above)
+a_kl = t_kl ^ -theta_r                                   (0 on a closed edge)
+z_s. = row s of (I - A)^-1 = sum over walks from s of the product of a     (Allen and Arkolakis 2022)
+tau_sd = z_sd ^ (-1/theta_r)
+T_sd  = [(I - A)^-1 (A o H) z_s.]_d / z_sd                 expected route hours
+```
+
+The series converges only when the spectral radius of A is below 1; `EdgeFactors::spectral_radius`
+(power iteration, norm ratio from the all-ones vector, at most 10,000 iterations, relative change
+1e-10) is checked before every solve and a radius of 1 or more panics with its value, never
+clipped. As theta_r grows, tau tends to the product of edge factors along the least-cost path.
+The international factor is one solve per gateway on the whole graph; the domestic factor one
+solve per province on its country's subgraph (`solve_from(.., Some(nodes), ..)`, results
+indexed like `nodes`).
+
+z spans hundreds of decades over the globe, so a residual-norm method (conjugate gradient, as
+the migration plan first specified) leaves far entries at 0 or wrong: on the 6-node test graph CG
+at a relative residual of 1e-12 gives tau = infinity at theta_r 1000. Each solve instead scales
+z by the least-cost walk, z_k = exp(-D_k) u_k with D the Dijkstra distance under the weights
+theta_r ln t, and runs symmetric Gauss-Seidel on u in Dijkstra order from u = 1 (the least-cost
+walk alone, a lower bound), until no entry changes by more than 1e-12 relative. The scaled
+weights exp(-(theta_r ln t_kl + D_l - D_k)) lie in [0, 1], and tau = exp((D - ln u) / theta_r)
+is computed from logs, so it stays finite where z underflows. A warm start is a previous z.
+Deterministic: each solve is sequential; solves and the radius's rows run in parallel into fixed
+slots.
+
 ## System order
 
 No tick systems in P1: the graph is static except for shocks. `PathCache` compares the graph
@@ -84,6 +117,7 @@ change). `warm` computes missing trees in parallel; results are independent of t
 | Pack reproducibility | Rebuild gives the stored table hashes | exact | `python/tests/test_packs.py` |
 | County nesting | Every county lies in one province; of counties at most half the area limit, under 5% of area falls outside it | 5% | `python/tests/test_packs.py` |
 | Mode ordering | Default per tonne-km: sea < rail < road < air | exact | `graph.rs` unit test |
+| Route-choice radius | Spectral radius of A below 1 for every traded good at P44 | exact (asserted) | `solve_from`; `tests/pack_properties.rs` |
 
 ## Parameters
 
@@ -113,7 +147,16 @@ reference model's iceberg factors.
 
 - Unit: Dijkstra against Floyd-Warshall on random graphs (proptest); cache invalidation on
   repricing; mode ordering; terrain factor bounds; access and canal fees.
+- Route choice (unit, toy graphs): convergence to the least-cost path factor as theta_r goes
+  10, 100, 1000 (monotone, gap below 1e-3); derivative of tau in one edge cost against a central
+  difference (1e-6); scaling one edge up to closure moves tau monotonically, no step above 5%;
+  two disjoint routes against the closed form z = q / (1 - 2q); expected hours against the walk
+  sum on a path; far entries below the f64 range keep tau exact; subgraph and warm-started solves;
+  a radius above 1 panics.
 - Pack properties: the invariants table above, on the built pack; skipped without one.
+- Measurement: `cargo run -p ceteris-geo --release --example route_choice_radius` prints, per
+  traded good, the smallest theta_r with radius below 0.99, the radius at the ends of the P44
+  prior and the time of all gateway and domestic solves (MIGRATION Task 4 report).
 - Pipeline (pytest, hypothesis): spherical area, antimeridian unwrap and wrap, split counts,
   bisection balance (by count and by weight) and determinism, county level choice, county
   splits, neighbour colouring, terrain classes, 2000 remapping, pack table invariants.
