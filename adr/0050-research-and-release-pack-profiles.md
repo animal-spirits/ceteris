@@ -65,6 +65,31 @@ WEO vintages, ITU indicators, van Donkelaar PM2.5, published AI exposure indices
 Monitor's statement of CC BY 4.0 conflicts with a non-commercial checkbox on its download form;
 get written confirmation before relying on it for release.
 
+Second scan (2026-10-24, beyond the economic core). More sources with restrictive or unclear
+terms, several underpinning existing or proposed layers:
+
+- Ethnic Power Relations and GeoEPR: no licence stated, so all rights reserved by default. They
+  key every pop (6.1); request written permission now, not before release.
+- WCDE v3 (Wittgenstein Centre): a custom licence; request written permission (ADR 0032).
+- WHO data portal: CC BY-NC-SA 3.0 IGO, non-commercial (ADRs 0033, 0061).
+- World Values Survey and European Values Study: non-profit use only, no redistribution (ADR
+  0055).
+- Gallup World Poll and World Happiness Report data: no reuse without written permission.
+- Afrobarometer geocoded data: a non-commercial pledge.
+- Seshat: CC BY-NC-SA on the official downloads page.
+- UNODC homicide publications: no commercial use; check the data portal's terms (ADR 0060).
+- World Christian Database: subscription only; excluded.
+- TeleGeography's submarine cable map: restrictive terms; derive topology from open sources
+  (ADR 0075).
+- Commercial-safe additions: World Bank Harmonized Learning Outcomes and Human Capital Index
+  (CC BY 4.0), AidData GCDF 3.0 (ODC-By, with OSM-derived features under ODbL), GHSL (free and
+  open; confirm), UCDP (CC BY 4.0), V-Dem (CC BY-SA 4.0), Global Forest Watch (CC BY 4.0).
+- To audit: Archigos, REIGN, ITU indicators, Hanson-Sigman capacity, Regional Authority Index,
+  PRIndex, IPI peacekeeping, Voeten UN voting, GSMA mobile money, Freedom on the Net, NCD-RisC,
+  CDC WONDER (public domain), UNICEF-WHO-World Bank malnutrition estimates, SAGE or MIRCA crop
+  calendars, FAO fisheries statistics, Sentinel-5P (Copernicus), Transboundary Freshwater
+  Dispute Database.
+
 ## Migration
 
 - Pipeline: the profile flag in `check_sources.py` and the pack build; a CI job builds the

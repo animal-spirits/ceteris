@@ -48,6 +48,15 @@ Option 2.
   (Frankel and Rose 1998), recent unconditional convergence (Patel, Sandefur and Subramanian
   2021), slowing regional convergence (Kleinman, Liu and Redding 2023), demographic transition
   timing, democratization and autocratization waves (V-Dem ERT) and conflict persistence.
+- Out-of-sample targets beyond the economic core (2011-2024): Arab Spring diffusion and leader
+  exits; the global homicide decline with Latin America's plateau; fertility below replacement;
+  internet adoption S-curves; democratic backsliding and Russia's autocratization; the 2015
+  migration surge; the rise of Chinese development finance; the 2016 populist wave; Pentecostal
+  growth; African urbanization; the US overdose epidemic and its 2024 decline; the Sahel coup
+  cluster; monthly conflict fatalities scored against ViEWS. Each names the ADR whose module it
+  tests (0055 to 0087).
+- Subnational track: synthetic satellite observables scored against VIIRS, Sentinel-5P, GHSL
+  and shipping density (ADR 0087).
 
 ## Migration
 
