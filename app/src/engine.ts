@@ -2,13 +2,12 @@
 // engine over HTTP in a plain browser. Both return little-endian f32 cost then hours per province.
 
 import { invoke } from "@tauri-apps/api/core";
+import { inTauri } from "./data";
 
 export interface CostTree {
   cost: Float32Array;
   hours: Float32Array;
 }
-
-const inTauri = "__TAURI_INTERNALS__" in window;
 
 async function bytes(source: number): Promise<ArrayBuffer> {
   if (inTauri) return invoke<ArrayBuffer>("cost_from", { source });

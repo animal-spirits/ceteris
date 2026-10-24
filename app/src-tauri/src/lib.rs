@@ -1,6 +1,9 @@
 //! Desktop shell: loads the pack once and answers the map's least-cost queries over IPC
 //! with raw little-endian f32 buffers (Section 19.1; Arrow arrives with tabular state in P2).
 
+mod pack_protocol;
+
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use ceteris_geo::graph::TransportParams;
@@ -85,7 +88,12 @@ fn setup<R: tauri::Runtime>(
     pack: Pack,
     county_province: Vec<u32>,
 ) -> tauri::Builder<R> {
+    let root: PathBuf = pack.dir.clone();
     builder
+        .register_asynchronous_uri_scheme_protocol("pack", move |_ctx, request, responder| {
+            let root = root.clone();
+            std::thread::spawn(move || responder.respond(pack_protocol::serve(&root, &request)));
+        })
         .manage(Mutex::new(Engine {
             pack,
             cache: PathCache::default(),

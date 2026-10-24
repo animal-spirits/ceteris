@@ -4,11 +4,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Map as MlMap } from "maplibre-gl";
+import { packUrl } from "./data";
+import { FillLayer } from "./fills";
 
 const log = (line: string) => invoke("bench_log", { line: `${performance.now().toFixed(0)} ${line}` });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const frame = () => new Promise<number>((r) => requestAnimationFrame(r));
 const RAMP = ["#fde0c5", "#f9b98a", "#f28f53", "#e0662b", "#b84a1b", "#8a3512", "#5c230b"];
+const RAMP_RGBA = RAMP.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), 255]);
 const BREAKS = [50, 75, 100, 130, 160, 200];
 const UPDATES = 20;
 
@@ -44,14 +47,26 @@ async function flight(m: MlMap) {
   return { frames: ms.length, mean_fps: +(1000 / mean).toFixed(1), ...summary(ms), over_33ms: ms.filter((x) => x > 33.4).length };
 }
 
-type Method = "strings" | "gpu";
+// "feature-state": MapLibre fill layer recoloured through feature state (the P1 path).
+// "texture": the GPU fill layer, recoloured by uploading one texel per county (ADR 0010).
+type Method = "feature-state" | "texture";
+
+const classify = (x: number) => {
+  let c = 0;
+  while (c < BREAKS.length && x >= BREAKS[c]) c++;
+  return c;
+};
 
 async function recolour(m: MlMap, method: Method, provinces: number) {
-  const paint =
-    method === "strings"
-      ? { "fill-color": ["coalesce", ["feature-state", "c"], "#9a9a96"] }
-      : { "fill-color": ["interpolate", ["linear"], ["coalesce", ["feature-state", "v"], 0], ...BREAKS.flatMap((b, k) => [b, RAMP[k + 1]])] };
-  m.addLayer({ id: "bench-fill", type: "fill", source: "map", "source-layer": "counties", minzoom: 4, paint } as never, "county-lines");
+  let layer: FillLayer | null = null;
+  if (method === "texture") {
+    layer = new FillLayer("bench-fill", packUrl("counties.fill"), 4);
+    m.addLayer(layer, "county-lines");
+    await layer.ready;
+  } else {
+    const paint = { "fill-color": ["coalesce", ["feature-state", "c"], "#9a9a96"] };
+    m.addLayer({ id: "bench-fill", type: "fill", source: "map", "source-layer": "counties", minzoom: 4, paint } as never, "county-lines");
+  }
   m.jumpTo({ center: [10, 50], zoom: 4.5 });
   await settle(m);
   const ipc: number[] = [], apply: number[] = [], screen: number[] = [], worstFrame: number[] = [];
@@ -62,14 +77,12 @@ async function recolour(m: MlMap, method: Method, provinces: number) {
     const v = new Float32Array(await invoke<ArrayBuffer>("county_costs", { source }));
     const t1 = performance.now();
     counties = v.length;
-    for (let i = 0; i < v.length; i++) {
-      const id = { source: "map", sourceLayer: "counties", id: i + 1 };
-      if (method === "gpu") m.setFeatureState(id, { v: v[i] });
-      else {
-        let c = 0;
-        while (c < BREAKS.length && v[i] >= BREAKS[c]) c++;
-        m.setFeatureState(id, { c: RAMP[c] });
-      }
+    if (layer) {
+      const bytes = new Uint8Array(v.length * 4);
+      for (let i = 0; i < v.length; i++) bytes.set(RAMP_RGBA[classify(v[i])], i * 4);
+      layer.setColours(bytes);
+    } else {
+      for (let i = 0; i < v.length; i++) m.setFeatureState({ source: "map", sourceLayer: "counties", id: i + 1 }, { c: RAMP[classify(v[i])] });
     }
     const t2 = performance.now();
     const f1 = await frame();
@@ -81,7 +94,7 @@ async function recolour(m: MlMap, method: Method, provinces: number) {
     worstFrame.push(Math.max(f1 - t2, f2 - f1, f3 - f2));
     await sleep(100);
   }
-  const rendered = m.queryRenderedFeatures(undefined, { layers: ["bench-fill"] }).length;
+  const rendered = layer ? null : m.queryRenderedFeatures(undefined, { layers: ["bench-fill"] }).length;
   m.removeLayer("bench-fill");
   return { method, counties, rendered, query_and_ipc_ms: summary(ipc), js_apply_ms: summary(apply), to_screen_ms: summary(screen), worst_frame_ms: summary(worstFrame) };
 }
@@ -103,8 +116,8 @@ export async function runBench(provinces: number) {
     viewport: [innerWidth, innerHeight, devicePixelRatio],
     flight_cold: await flight(m).finally(() => log("flight 1 done")),
     flight_warm: await flight(m),
-    recolour_strings: await recolour(m, "strings", provinces).finally(() => log("strings done")),
-    recolour_gpu: await recolour(m, "gpu", provinces),
+    recolour_feature_state: await recolour(m, "feature-state", provinces).finally(() => log("feature-state done")),
+    recolour_texture: await recolour(m, "texture", provinces),
   };
   await invoke("bench_report", { report: JSON.stringify(report) });
 }

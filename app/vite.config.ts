@@ -6,6 +6,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   publicDir: "../data/packs/2000/web",
+  // The desktop app reads the pack through pack:// (ADR 0010); never bundle it.
+  build: { copyPublicDir: false },
   clearScreen: false,
   // Pre-bundling moves MapLibre away from its worker module, which it locates relative to itself.
   optimizeDeps: { exclude: ["maplibre-gl"] },
