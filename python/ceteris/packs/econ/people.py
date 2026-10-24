@@ -263,7 +263,7 @@ def _weighted(values: Sequence, weights: Sequence[float]):
     return mean if isinstance(mean, np.ndarray) else float(mean)
 
 
-def _donor(
+def donor(
     region: str | None, log_income: float | None, observed: Mapping[str, object], obs: Observed, exclude: Sequence[str]
 ) -> str:
     """Observed economy in the same region with the closest log GDP per person (the region's median if unknown)."""
@@ -307,7 +307,7 @@ def country_labour(countries: Mapping[str, str], obs: Observed, iso: Mapping[str
                 return v, i
         merged = {k: v for s in reversed(series) for k, v in s.items()}
         region, income = features(code)
-        return merged[_donor(region, income, merged, obs, parts(code))], len(series)
+        return merged[donor(region, income, merged, obs, parts(code))], len(series)
 
     out = {}
     for code in countries:

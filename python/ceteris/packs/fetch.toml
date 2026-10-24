@@ -1,6 +1,7 @@
 # Files the pack pipeline downloads (Section 16.1). Each names its manifest source.
 # fetch.py verifies sha256 and size; `python -m ceteris.packs.fetch --record` fills them
-# for a new entry, which must then be reviewed and committed.
+# for a new entry, which must then be reviewed and committed. An entry with manual = true is
+# saved into the cache by hand (its host rejects scripted downloads); fetch only verifies it.
 
 [[file]]
 source = "natural-earth-admin1"
@@ -162,3 +163,118 @@ name = "ppp_2000_1km_Aggregated.tif"
 sha256 = "3404d3fff958acf6bba98f88edbfdc0e9ff8062d85a5bc609da0e9c3b2bef148"
 bytes = 1165526326
 url = "https://data.worldpop.org/GIS/Population/Global_2000_2020/2000/0_Mosaicked/ppp_2000_1km_Aggregated.tif"
+
+[[file]]
+source = "oecd-icio"
+name = "1995-2000_SML.zip"
+sha256 = "3bfd5cb014bf3436e3435ad50c0e6b66039ad2f6c484e6e26fad0bc92ef4725b"
+bytes = 110135258
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "1995-2000_EXT.zip"
+sha256 = "318875a509d208852e6adcc902bcfb8e6266cd318ea8201878a4766ce4eb0de7"
+bytes = 112406672
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2001-2005_SML.zip"
+sha256 = "75015a66e7944e7377a5a08a02155a472517efe4e4a36b1116c7542f759f78f6"
+bytes = 99391392
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2001-2005_EXT.zip"
+sha256 = "182d6d6dc723a73585b57beebe3b6565b061cd109e50b2df128a37a3817d4312"
+bytes = 101621382
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2006-2010_SML.zip"
+sha256 = "e57685c00ad30b4353e1e7de24910ba70b181c5198c9dbb6d46eb349de76f35a"
+bytes = 111587430
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2006-2010_EXT.zip"
+sha256 = "343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533"
+bytes = 114156164
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2011-2015_SML.zip"
+sha256 = "d9025195bdb9a03278ba6403066cef2969cc30185a1b28117c9452994a203619"
+bytes = 116134326
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2011-2015_EXT.zip"
+sha256 = "171c74914cdb1d6952492441f2a771a1a1a65cd3eba015dbf8522754b1e11b0a"
+bytes = 118820898
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2016-2022_SML.zip"
+sha256 = "46db55c45747e26dde5c1716d072b2aa74ace362a4424491ac646d2ab175befb"
+bytes = 166241019
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2016-2022_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2016-2022_EXT.zip"
+sha256 = "80ea6fb868ccaafbdd0f430532e638f0971b3b6712a2fc7eb08d88fff6405c4e"
+bytes = 170150625
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2016-2022_EXT.zip"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.AGR.TOTL.ZS.zip"
+sha256 = "b74440759337932e724a3e623a94914c384c2a7c2408f41491e0b710f5185895"
+bytes = 114978
+url = "https://api.worldbank.org/v2/en/indicator/NV.AGR.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.IND.TOTL.ZS.zip"
+sha256 = "dc9ee04da6fcdc3d22b125de391204e30ad369143eedf795b42a82966373d265"
+bytes = 113516
+url = "https://api.worldbank.org/v2/en/indicator/NV.IND.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.IND.MANF.ZS.zip"
+sha256 = "8cf1fcc0f5b7a0f5ebeaccc86ffbca6cc051197c4f4da3a3cdd574377354f3e2"
+bytes = 101959
+url = "https://api.worldbank.org/v2/en/indicator/NV.IND.MANF.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.SRV.TOTL.ZS.zip"
+sha256 = "796663c59cdd989af2772da9c81669885e6683400af2ab45b599f5dacef52234"
+bytes = 108912
+url = "https://api.worldbank.org/v2/en/indicator/NV.SRV.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.MKTP.CD.zip"
+sha256 = "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81"
+bytes = 142891
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
