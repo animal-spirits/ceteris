@@ -8,7 +8,7 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64 |
+//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods) |
 //! | `gateways` | gateway u32, country u32 |
 //! | `countries` | country u32, s_l f64, unemployment f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
@@ -48,8 +48,9 @@ use crate::world::{EconWorld, MINOR_PER_UNIT, active_cells, static_digest};
 
 /// Bumped when a table or `params.json` changes shape or meaning; the reference checks it.
 /// 2: `active` marks origin markets of traded goods, `params.json` has `rationing`,
-/// `run_prices` has `price_index` (ADRs 0015 and 0016).
-pub const EXPORT_FORMAT: &str = "2";
+/// `run_prices` has `price_index` (ADRs 0015 and 0016). 3: theta per good, in `goods` and as
+/// a list in `params.json`, and `goods.theta_class` (ADRs 0018 and 0023).
+pub const EXPORT_FORMAT: &str = "3";
 
 #[derive(Debug)]
 pub struct ExportError(pub String);
@@ -166,6 +167,8 @@ pub fn write_inputs(
             f64s("weight", inputs.weight),
             f64s("coverage", trade.coverage),
             f64s("time_cost", trade.time_cost),
+            f64s("theta", trade.theta),
+            u8s("theta_class", trade.theta_class),
         ],
     )?;
     write_table(
@@ -353,6 +356,7 @@ fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
 fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
     let register = [
         ("theta", "P01"),
+        ("theta_class", "P01"),
         ("coverage", "P02"),
         ("kappa1", "P03a"),
         ("kappa2", "P03b"),
@@ -389,7 +393,8 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ),
     ];
     let trade = [
-        ("theta", num(t.theta)),
+        ("theta", nums(&t.theta)),
+        ("theta_class", format!("{:?}", t.theta_class)),
         ("coverage", nums(&t.coverage)),
         ("kappa1", num(t.kappa1)),
         ("kappa2", num(t.kappa2)),
@@ -592,6 +597,8 @@ mod tests {
         assert_eq!(f64s(&goods, "weight").unwrap(), inputs.weight);
         assert_eq!(f64s(&goods, "coverage").unwrap(), trade.coverage);
         assert_eq!(f64s(&goods, "time_cost").unwrap(), trade.time_cost);
+        assert_eq!(f64s(&goods, "theta").unwrap(), trade.theta);
+        assert_eq!(u8s(&goods, "theta_class").unwrap(), trade.theta_class);
 
         let gateways = table("gateways");
         assert_eq!(u32s(&gateways, "country").unwrap().len(), 7);
@@ -711,7 +718,16 @@ mod tests {
         assert_eq!(active.num_rows(), 25 * N_GOODS);
 
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
-        assert!(json.contains("\"theta\": 5.0"), "{json}");
+        assert!(
+            json.contains(
+                "\"theta\": [12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88, 0.0, 0.0, 0.0]"
+            ),
+            "{json}"
+        );
+        assert!(
+            json.contains("\"theta_class\": [2, 2, 2, 0, 1, 2, 1, 0, 0, 0]"),
+            "{json}"
+        );
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
         assert!(json.contains("\"rationing\": \"priority\""), "{json}");
         assert!(json.contains("\"weight_floor\": 1e-100"), "{json}");

@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 and 0023
 
 ## Purpose
 
@@ -287,6 +287,9 @@ on generated small worlds in CI and on the full pack locally.
   (owner decision). Nothing is fitted to it: costs come from P04 and the literature time cost
   P43. If it misses, work stops and the miss is reported to the owner before any parameter
   moves; any change then goes through the register.
+- H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade on ln(1 +
+  tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity`) recovers
+  the class's theta (ADR 0023) within its prior band.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
