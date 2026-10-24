@@ -273,12 +273,36 @@ def test_ppml_scale_invariant_and_keeps_zeros():
 
 
 def test_ppml_drops_countries_without_any_flow():
-    flows, dist, _c = _gravity_world(n=20)
+    n = 20
+    flows, dist, c = _gravity_world(n=n)
     flows[3, :] = 0.0  # country 3 never exports: its exporter effect diverges unless dropped
-    n = len(flows)
     o, d = np.nonzero(~np.eye(n, dtype=bool))
-    coef = ppml.fit(flows[o, d], o, d, {"ln_dist": np.log(dist[o, d])})
-    assert np.isfinite(coef["ln_dist"]) and -1.5 < coef["ln_dist"] < -0.4
+    reg = {"ln_dist": np.log(dist[o, d]), "contig": c[o, d]}
+    got = ppml.fit(flows[o, d], o, d, reg)
+    # Exactly the fit on the explicitly filtered rows: country 3 stays as an importer.
+    keep = o != 3
+    assert (d[keep] == 3).sum() == n - 1
+    want = ppml.fit(flows[o, d][keep], o[keep], d[keep], {k: v[keep] for k, v in reg.items()})
+    for k in reg:
+        assert got[k] == pytest.approx(want[k], abs=1e-10)
+    # Dropping the country altogether is a different fit, so its importer rows are used.
+    both = (o != 3) & (d != 3)
+    other = ppml.fit(flows[o, d][both], o[both], d[both], {k: v[both] for k, v in reg.items()})
+    assert abs(other["ln_dist"] - want["ln_dist"]) > 1e-6
+
+
+def test_ppml_reports_separated_rows_and_rejects_empty():
+    n = 20
+    flows, dist, c = _gravity_world(n=n)
+    flows[3, :] = 0.0
+    run, gravity, codes = _tables(flows, dist, c)
+    res = ppml.distance_elasticity(run, gravity, codes)
+    assert res.n_separated_rows == n - 1
+    assert (res.n_separated_exporters, res.n_separated_importers) == (1, 0)
+    assert res.n_pairs == n * (n - 1) - (n - 1) and res.n_dropped == 0
+    o, d = np.nonzero(~np.eye(n, dtype=bool))
+    with pytest.raises(ValueError, match="survives"):
+        ppml.fit(np.zeros(len(o)), o, d, {"ln_dist": np.log(dist[o, d])})
 
 
 def _tables(flows, dist, c, split=2):
