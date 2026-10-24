@@ -52,22 +52,30 @@ fn distance(w: &EconWorld, solution: &Equilibrium, cells: &[usize]) -> f64 {
         .fold(0.0, f64::max)
 }
 
+/// ADR 0016's S02 comparison: with every crossing lag forced to 0, the run started at the GE
+/// reference stays within 1e-6 of it, every active price and every wage, for 24 ticks.
 #[test]
 fn equilibrium_is_a_fixed_point() {
     let solution = reference();
-    let mut sim = sim_of(at_equilibrium(EconParams::frictionless(), &solution));
+    let mut w = EconWorld::new(
+        Arc::new(small_world()),
+        EconParams::frictionless(),
+        TradeParams::default(),
+    );
+    w.set_crossing_lags(0);
+    w.settle(&solution);
+    let mut sim = sim_of(w);
     let cells = active_cells(sim.world());
     for tick in 0..24 {
-        let (price, wage) = (sim.world().markets.price.clone(), sim.world().wage.clone());
         sim.step().unwrap();
         let w = sim.world();
         for &c in &cells {
-            let rel = (w.markets.price[c] / price[c] - 1.0).abs();
-            assert!(rel < 1e-8, "tick {tick} cell {c}: price moved {rel:e}");
+            let rel = (w.markets.price[c] / solution.price[c] - 1.0).abs();
+            assert!(rel < 1e-6, "tick {tick} cell {c}: price off by {rel:e}");
         }
-        for (i, (&now, &before)) in w.wage.iter().zip(&wage).enumerate() {
-            let rel = (now / before - 1.0).abs();
-            assert!(rel < 1e-8, "tick {tick} province {i}: wage moved {rel:e}");
+        for (i, (&now, &want)) in w.wage.iter().zip(&solution.wage).enumerate() {
+            let rel = (now / want - 1.0).abs();
+            assert!(rel < 1e-6, "tick {tick} province {i}: wage off by {rel:e}");
         }
         let acc = &w.layout().accounts;
         assert!(
@@ -98,6 +106,10 @@ fn small_perturbation_decays() {
         let mid = distance(sim.world(), &solution, &cells);
         sim.run_until(600).unwrap();
         let end = distance(sim.world(), &solution, &cells);
+        let growth = libm::pow(end / mid, 1.0 / 300.0);
+        println!(
+            "frictionless {frictionless}: {mid:e} at 300, {end:e} at 600, growth {growth} per tick"
+        );
         if frictionless {
             assert!(end < 1e-4, "frictionless: {end:e} at tick 600");
         } else {

@@ -90,20 +90,16 @@ pub struct Kernel {
     goods: [Option<GoodKernel>; N_GOODS],
 }
 
-/// Results of the low-rank evaluation for one good. [`Kernel::access_into`] fills it from the
-/// destination side, [`Kernel::origin_access_into`] from the origin side; the field docs give
-/// both readings.
+/// Results of the origin-side low-rank evaluation for one good, written by
+/// [`Kernel::origin_access_into`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Access {
-    /// Destination access at each gateway, `v_b = sum_{d in B} K_bd p_d^theta`. Origin side:
-    /// origin access at each gateway, `v'_a = sum_{o in A} K_oa w_o`.
+    /// Origin access at each gateway, `v'_a = sum_{o in A} K_oa w_o`.
     pub v: Vec<f64>,
-    /// International access at each gateway, `u_a = sum_b K_ab v_b`. Origin side: access of
-    /// each destination gateway to every foreign origin, `u'_b = sum_a v'_a K_ab`.
+    /// Access of each destination gateway to every foreign origin, `u'_b = sum_a v'_a K_ab`.
     pub u: Vec<f64>,
-    /// Route normalizer per origin province, `Pi_o = sum_d K_od p_d^theta`, home term
-    /// `K_oo p_o^theta = p_o^theta` included. Origin side: sourcing normalizer per
-    /// destination province, `Phi_d = sum_o K_od w_o`, home term `w_d` included.
+    /// Sourcing normalizer per destination province, `Phi_d = sum_o K_od w_o`, home term
+    /// `w_d` included.
     pub pi: Vec<f64>,
 }
 
@@ -154,54 +150,10 @@ impl Kernel {
         self.goods[g].as_ref()
     }
 
-    /// Low-rank evaluation. `price_theta[d] = p_d^theta` per province, 0 for inactive
-    /// destinations.
-    pub fn access(&self, g: usize, price_theta: &[f64]) -> Access {
-        let mut out = Access::default();
-        self.access_into(g, price_theta, &mut out);
-        out
-    }
-
-    /// [`Kernel::access`] into reused buffers: allocation-free once `out` has been sized.
-    pub fn access_into(&self, g: usize, price_theta: &[f64], out: &mut Access) {
-        assert_eq!(price_theta.len(), self.n_provinces);
-        let gk = self.good(g);
-
-        out.v.clear();
-        out.v.resize(self.n_gateways, 0.0);
-        for (d, &pt) in price_theta.iter().enumerate() {
-            for e in gk.access.row(d) {
-                out.v[e.col as usize] += f64::from(e.k) * pt;
-            }
-        }
-        out.u.clear();
-        out.u.extend((0..self.n_gateways).map(|a| {
-            gk.crossings
-                .row(a)
-                .iter()
-                .map(|e| f64::from(e.k) * out.v[e.col as usize])
-                .sum::<f64>()
-        }));
-        out.pi.clear();
-        out.pi.extend((0..self.n_provinces).map(|o| {
-            let local: f64 = gk
-                .domestic
-                .row(o)
-                .iter()
-                .map(|e| f64::from(e.k) * price_theta[e.col as usize])
-                .sum();
-            let abroad: f64 = gk
-                .access
-                .row(o)
-                .iter()
-                .map(|e| f64::from(e.k) * out.u[e.col as usize])
-                .sum();
-            price_theta[o] + local + abroad
-        }));
-    }
-
-    /// Origin-side low-rank evaluation into reused buffers. `weight[o]` is the sourcing
-    /// weight of origin o, `(p_o / p_min)^-theta` for an active origin and 0 otherwise.
+    /// Origin-side low-rank evaluation into reused buffers. `weight` must be floored
+    /// sourcing weights as [`crate::source::origin_weights`] writes them: `(p_o / p_min)^-theta`
+    /// for an active origin at or above `WEIGHT_FLOOR`, 0 otherwise. Unfloored weights can
+    /// make products with the f32 kernel factors subnormal and the shares inaccurate.
     /// Writes `v'_a = sum_{o in A} K_oa w_o`, `u'_b = sum_a v'_a K_ab` and
     /// `Phi_d = sum_{o in B} K_od w_o + sum_b K_bd u'_b`, home term `K_dd w_d = w_d` included.
     pub fn origin_access_into(&self, g: usize, weight: &[f64], out: &mut Access) {
@@ -237,6 +189,18 @@ impl Kernel {
                 .map(|e| f64::from(e.k) * out.u[e.col as usize])
                 .sum();
             *phi += abroad;
+        }
+    }
+}
+
+impl Kernel {
+    /// Sets the transit lag of every crossing of every good to `lag` months, at most
+    /// `MAX_LAG`. Lags only time deliveries, so steady states do not change; for nesting
+    /// tests (lags 0) and stability studies (the longest lag).
+    pub fn set_crossing_lags(&mut self, lag: u8) {
+        assert!(f64::from(lag) <= MAX_LAG, "lag {lag} above {MAX_LAG}");
+        for gk in self.goods.iter_mut().flatten() {
+            gk.crossings.entries.iter_mut().for_each(|e| e.lag = lag);
         }
     }
 }
@@ -381,6 +345,12 @@ mod tests {
         net
     }
 
+    fn origin_access(k: &Kernel, g: usize, weight: &[f64]) -> Access {
+        let mut out = Access::default();
+        k.origin_access_into(g, weight, &mut out);
+        out
+    }
+
     fn two_provinces(cost: f64, hours: f64) -> Network {
         Network {
             province_country: vec![0, 0],
@@ -496,6 +466,19 @@ mod tests {
         // good 4 in the same direction carries no tariff
         assert_eq!(k.good(4).crossings.row(1)[0].tariff, 0.0);
         assert_eq!(tariff_group(4), 1);
+
+        // forced lags change nothing but the lags
+        let mut forced = k.clone();
+        forced.set_crossing_lags(0);
+        for g in 0..7 {
+            let (a, b) = (
+                &k.good(g).crossings.entries,
+                &forced.good(g).crossings.entries,
+            );
+            for (x, y) in a.iter().zip(b) {
+                assert_eq!((y.lag, Crossing { lag: x.lag, ..*y }), (0, *x));
+            }
+        }
     }
 
     #[test]
@@ -509,17 +492,17 @@ mod tests {
             for o in 0..10 {
                 assert!(dom.row(o).iter().all(|e| e.col as usize != o));
             }
-            // only the origin carries price: Pi_o = p_o^theta exactly
-            for o in 0..10 {
-                let mut pt = vec![0.0; 10];
-                pt[o] = 2.5;
-                assert_eq!(k.access(g, &pt).pi[o], 2.5);
+            // only the destination's own weight reaches it at home: Phi_d = w_d exactly
+            for d in 0..10 {
+                let mut w = vec![0.0; 10];
+                w[d] = 2.5;
+                assert_eq!(origin_access(&k, g, &w).pi[d], 2.5);
             }
         }
     }
 
     #[test]
-    fn pi_matches_dense_kernel() {
+    fn phi_matches_dense_kernel() {
         let p = TradeParams::default();
         let mut rng = Rng(0x9e3779b97f4a7c15);
         let net = world(&mut rng);
@@ -587,14 +570,14 @@ mod tests {
                 })
                 .collect();
 
-            let acc = kernel.access(g, &pt);
+            let acc = origin_access(&kernel, g, &pt);
             assert_eq!(acc.pi.len(), 10);
             assert_eq!(acc.v.len(), 3);
             assert_eq!(acc.u.len(), 3);
-            for (o, row) in dense.iter().enumerate() {
-                let want: f64 = row.iter().zip(&pt).map(|(k, p)| k * p).sum();
-                let rel = (acc.pi[o] - want).abs() / want;
-                assert!(rel < 1e-12, "g {g} o {o}: {} vs {want}", acc.pi[o]);
+            for (d, &phi) in acc.pi.iter().enumerate() {
+                let want: f64 = dense.iter().zip(&pt).map(|(row, p)| row[d] * p).sum();
+                let rel = (phi - want).abs() / want;
+                assert!(rel < 1e-12, "g {g} d {d}: {phi} vs {want}");
             }
         }
     }

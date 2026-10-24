@@ -69,6 +69,9 @@ pub struct Sourced {
     /// Money gateway b pays gateway a, net of tariff. Aligned with
     /// `Kernel::good(g).crossings.entries`.
     pub crossing_value: Vec<f64>,
+    /// Origin units shipped over each crossing, before any loss: `crossing_value` read in
+    /// units at the prices of the origins it came from. Aligned with `crossing_value`.
+    pub crossing_units: Vec<f64>,
     /// Money gateway a pays origin o for everything o sent through a. Aligned with
     /// `Kernel::good(g).access.entries` read as origin province to gateway.
     pub access_out_value: Vec<f64>,
@@ -94,10 +97,11 @@ struct Scratch {
     y: Vec<f64>,
     z: Vec<f64>,
     net_ratio: Vec<f64>,
-    /// Value entering origin gateway a, and the same over `p_o tau_oa` (units at a before
-    /// the tariff division).
+    /// Value entering origin gateway a, the same over `p_o tau_oa` (units at a before the
+    /// tariff division) and over `p_o` (origin units before the tariff division).
     gross_a: Vec<f64>,
     units_a: Vec<f64>,
+    origin_units_a: Vec<f64>,
     /// Value entering destination gateway b, the same net of tariff, and units by lag.
     gross_b: Vec<f64>,
     net_b: Vec<f64>,
@@ -270,6 +274,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         domestic_value,
         access_in_value,
         crossing_value,
+        crossing_units,
         access_out_value,
         lost,
         scratch: s,
@@ -284,6 +289,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     zeroed(domestic_value, gk.domestic.entries.len());
     zeroed(access_in_value, gk.access.entries.len());
     zeroed(crossing_value, gk.crossings.entries.len());
+    zeroed(crossing_units, gk.crossings.entries.len());
     zeroed(access_out_value, gk.access.entries.len());
     *lost = 0.0;
 
@@ -314,6 +320,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         // Origins: home, domestic and into the first gateway.
         zeroed(&mut s.gross_a, ng);
         zeroed(&mut s.units_a, ng);
+        zeroed(&mut s.origin_units_a, ng);
         for o in 0..np {
             let f = fill[o][c];
             if w[o] == 0.0 || f == 0.0 {
@@ -361,6 +368,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
                 *lost += units - units / e.tau;
                 s.gross_a[a] += x;
                 s.units_a[a] += x / (p * e.tau);
+                s.origin_units_a[a] += x / p;
             }
         }
 
@@ -383,6 +391,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
                 let units = s.units_a[a] * share / duty;
                 let got = units / (e.tau * e.border_tau);
                 crossing_value[lo + i] += net;
+                crossing_units[lo + i] += s.origin_units_a[a] * share / duty;
                 *lost += units - got;
                 s.units_b[usize::from(e.lag)][b] += got;
                 s.gross_b[b] += gross;
@@ -1066,6 +1075,60 @@ mod tests {
                 total(&out.received) + tariff,
                 1e-12
             ));
+        }
+    }
+
+    /// With one gateway per country each crossing carries one country pair, so its origin
+    /// units are the filled dense units of every route between the two countries.
+    #[test]
+    fn crossing_units_are_origin_units_by_country_pair() {
+        for seed in 1..=10u64 {
+            let mut rng = rng(seed * 31);
+            let n_countries = 2 + rng.below(2);
+            let provinces: Vec<u16> = (0..n_countries as u16)
+                .flat_map(|c| std::iter::repeat_n(c, 1 + rng.below(4)))
+                .collect();
+            let gateways = (0..n_countries as u16).collect();
+            let (net, wedges) = complete_world(&mut rng, provinces, gateways);
+            let n = net.n_provinces();
+            let k = kernel(&net, &wedges);
+            let g = [0, 3, 5][seed as usize % 3];
+            let price = draw(&mut rng, n, 0.3, 3.0);
+            let spend = draw2(&mut rng, n, 0.0, 100.0);
+            let fill = draw2(&mut rng, n, 0.0, 1.0);
+            let out = run(&k, g, &price, &vec![true; n], &spend, &fill);
+
+            let p_min = price.iter().copied().fold(f64::INFINITY, f64::min);
+            let w: Vec<f64> = price.iter().map(|p| f64::powf(p / p_min, -THETA)).collect();
+            let gk = k.good(g);
+            for a in 0..net.n_gateways() {
+                let lo = gk.crossings.offsets[a] as usize;
+                for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                    let (ca, cb) = (net.gateway_country[a], net.gateway_country[e.col as usize]);
+                    let mut want = 0.0;
+                    for d in (0..n).filter(|&d| net.province_country[d] == cb) {
+                        let all: Vec<Vec<Hop>> =
+                            (0..n).map(|o| hops(&net, &wedges, g, o, d)).collect();
+                        let phi: f64 = (0..n)
+                            .map(|o| all[o].iter().map(|h| h.k).sum::<f64>() * w[o])
+                            .sum();
+                        for o in (0..n).filter(|&o| net.province_country[o] == ca) {
+                            for h in &all[o] {
+                                for c in 0..2 {
+                                    let x = spend[d][c] * h.k * w[o] / phi;
+                                    want += fill[o][c] * x / (1.0 + h.tariff) / price[o];
+                                }
+                            }
+                        }
+                    }
+                    let got = out.crossing_units[lo + i];
+                    assert!(
+                        close(got, want, 1e-10),
+                        "seed {seed} {a}->{}: {got} vs {want}",
+                        e.col
+                    );
+                }
+            }
         }
     }
 

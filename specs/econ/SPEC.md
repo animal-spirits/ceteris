@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0014
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016
 
 ## Purpose
 
@@ -28,6 +28,8 @@ investment, finance, the state and politics are later phases.
 | Final demand split into households, government, investment | One final demander per pop, with country shares from all ICIO final demand | No state or investment in P2 |
 | Observed 2000 trade imbalances | Balanced trade: pops spend their income each month | Deficits need finance (P5) |
 | Agglomeration in productivity (A5, P09) | Off by default | Ablation rule: on only once it improves a test |
+| Buyers face posted prices (8.6, 7.3) | Traded goods are bought at the delivered unit price q_d = 1 / alpha_d of the buyer's province (trade SPEC, Sourcing), in household demand, input orders and the value-added price (owner decision, 2026-10-24) | Destination sourcing gives no single posted price at a destination; at the CES index P_d an order of a unit delivers fewer than one |
+| Inventory coverage at the market (7.3) | Enterprises order inputs up to an inventory position (stock plus goods on order) of (1 + cover + L) months of capacity use, cover = 1, L the expected months in transit (owner decision, 2026-10-24) | Goods paid at dispatch and delivered after transit must be counted, and the target must hold them: a two-month position cannot hold a month in transit |
 
 ## Goods (energy-forward, owner choice)
 
@@ -120,15 +122,26 @@ rho = (sigma_FL - 1) / sigma_FL                                    (P08)
 sigma_FL = 1 uses the Cobb-Douglas limit VA = A VA0 (L/L0)^s_L. Inputs M_k come from the
 enterprise's input stock, bought at the previous tick's market clearing; a shortfall caps Y,
 so rationing propagates through the IO network (7.3) with a one-month lag, and local goods
-(services feed services) need no same-tick solve. Each tick the enterprise orders
-a_kg Y_cap + (a_kg Y_cap - stock_k after use), at least zero, i.e. replacement plus the gap to
-one month of cover, where Y_cap = VA(L) / a_VA is capacity output at this tick's employment
-(owner decision, 2026-10-24): planning on output cut by a short input would cut the next order
-and the next output with it, a ratchet that emptied the fixture economy from the data state.
-At a steady state inputs do not bind and Y_cap = Y.
+(services feed services) need no same-tick solve. Each tick the enterprise orders up to an inventory position
+(stock plus goods on order, the paid shipments in its pipeline):
 
-**Labour target.** With value-added price p_VA = (p_ig - sum_k a_kg p_ik) / a_VA at current
-(expected) prices, the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
+```
+order_k = max(0, (1 + cover + L_k) a_kg Y_cap - stock_k - on_order_k),    cover = 1
+```
+
+where Y_cap = VA(L) / a_VA is capacity output at this tick's employment and L_k the expected
+months in transit of input k to the enterprise's province: the arrival slots of its sourcing
+(0 home, 1 domestic, 1 + lag a crossing) weighted by the units arriving at current shares; 0 for
+local goods (bought at the province market and delivered the same tick). Where L = 0 everywhere
+this is the two-month rule (owner decisions, 2026-10-24): planning on output cut by a short input
+would cut the next order and the next output with it, a ratchet that emptied the fixture economy
+from the data state; and a fixed target that counts goods on order cannot hold a month in
+transit. Traded inputs are bought at the delivered unit price q_k, spend = order_k q_k, so the
+units ordered are the units that arrive. At a steady state inputs do not bind and Y_cap = Y.
+
+**Labour target.** With value-added price p_VA = (p_ig - sum_k a_kg q_ik) / a_VA, the own
+(origin or province market) price at current prices and the buyer prices q_ik of last tick's
+E3 (the delivered unit price of traded inputs, the posted price of local ones), the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
 
 ```
 q  = w L0 / (p_VA A VA0 s_L)
@@ -158,14 +171,16 @@ pool (enterprise profits plus market cash flow, both signed, trade SPEC), and a 
 country's tariff rebate by population. Shares are fixed at load.
 
 **Final demand.** Each pop spends its whole money balance m each month (when positive) with CES
-over goods at local prices, Omega from its country's 2000 final demand shares and
+over goods at buyer prices (q_d for traded goods, the province price for local goods; a good
+with no reachable origin has q_d infinite and gets nothing), Omega from its country's 2000 final demand shares and
 sigma = P06:
 
 ```
 x_g = Omega_g p_g^-sigma m / sum_k Omega_k p_k^(1 - sigma)
 ```
 
-Rationed purchases leave money unspent until the next tick.
+Spending on traded goods is sourced over origins (trade SPEC) and paid at dispatch for what is
+filled; rationed purchases leave money unspent until the next tick.
 
 **Money.** The mint issues one month of base income to each pop at tick 0. Enterprises and
 markets pay out their signed cash flow every tick, so their balances return to zero; any
@@ -193,26 +208,33 @@ equilibrium: runs start out of it and converge, so V1 tests convergence, not cal
 ## GE reference model (`python/ceteris/reference`)
 
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every
-(province, good) and ln w for every province. Conditions: traded goods clear at every
-destination under the logit routing on the exported kernel; local goods clear locally;
-labour clears; pops spend income (wages, profits, market cash flow, rebates); the world price
-index (2000 final demand weights) equals 1. Solved with Newton-Krylov (scipy) from the data
-state, Anderson-accelerated tatonnement as a fallback; tolerance 1e-10 on scaled residuals.
-Small worlds also solve by balanced Sinkhorn at the equilibrium prices as a cross-check.
-numpy and scipy only (JAX stays optional, 19.1).
+active (province, good) cell (origin markets of traded goods, province markets of local goods)
+and ln w for every province. Conditions: every origin sells its output, output = sum_d X_od /
+(p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (CES at
+q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; pops
+spend income (wages, profits, rebates; market cash flow is zero at a fixed point); the world
+price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals 1.
+Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
+fallback; tolerance 1e-10 on scaled residuals. Balanced Sinkhorn on the dense kernel is the S02
+full solve and reproduces the equilibrium's sourcing flows. numpy and scipy only (JAX stays
+optional, 19.1).
 
 ## System order (monthly unless noted)
 
 | System ID | Name | Reads | Writes | Position (4.4) |
 |---|---|---|---|---|
-| T1 | deliver (trade) | transit wheel | inventories | first |
-| E1 | labour | prices, wages, A | L*, L, wages, unemployment | labour market |
-| E2 | produce | L, input stocks | input use, output sold to the local market, wages paid | production |
-| T2 | route (trade) | traded supply, prices, kernel | shipments, payments, tariffs | inter-province trade |
-| E3 | demand | pop money, prices, output | household demand, enterprise input orders | consumption demand |
-| T3, T4 | clear, reprice (trade) | demand, supply, inventory | sales, rationing, input stocks, inventory, prices | province markets |
+| T1 | deliver (trade) | pipeline | pops' consumption, enterprise input stocks | first |
+| E1 | labour | prices, last tick's buyer prices, wages, A | L*, L, wages, unemployment | labour market |
+| E2 | produce | L, input stocks | input use, output to the province's market (Q), wages paid | production |
+| E3 | demand | pop money, prices, output, pipeline | buyer prices q and leads L, household demand, enterprise input orders | consumption demand |
+| T2 | source (trade) | traded spending, prices, kernel | orders at origin markets | inter-province trade |
+| T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales and payments | markets |
+| T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
+| T4 | reprice (trade) | D, Q, S | prices | markets |
 | E4 | distribute | enterprise and market cash flow, rebates | pop money for next tick | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
+
+System IDs 201 to 210 in this order.
 
 Pops spend at E3 the money they hold: this tick's wages plus last tick's dividends and rebates.
 
@@ -227,6 +249,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
 | Leontief | Inputs used = a_kg Y | 1e-12 relative | every tick |
+| Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
 | Determinism | Same inputs, same hashes; 1 vs 8 threads; replay from snapshots | exact | P2 acceptance |
 | Long run | 1,200 ticks on the full pack: no violation, all prices and wages finite and positive | exact | P2 acceptance |
@@ -304,9 +327,12 @@ texture fed from core columns.
 - DOSE region matching rate to Natural Earth provinces without GADM geometry; if too low,
   manufacturing falls back to gridded GDP for those countries.
 - 2000 tariff detail beyond importer x two groups (WTO IDB is closed-source only, fetch).
-- Stability margin at the full pack's transit lags is thin: with every crossing lag at 3 months
-  the fixture's small deviations decay by 0.987 (frictionless) and 0.997 (default) per tick at
-  the P2 defaults (trade SPEC, P03a, P03b). Re-measure on the pack in Task 20.
+- Stability on the full pack: on the fixture under origin clearing small deviations decay by
+  0.9956 (frictionless) and 0.9958 (default) per tick at the P2 defaults, the same with every
+  crossing lag at 3 (trade SPEC, P03a, P03b). Re-measure on the pack in Task 20.
+- The run from the data state passes through a deep coal-led shortage before it converges (the
+  equilibrium's coal output is about twice base output and intermediate demand is inelastic in
+  units); V1 holds on the fixture at 1,200 ticks.
 - Frictionless clearing wage: each labour target is capped at L^s, so where one enterprise's
   target reaches L^s, capped demand equals L^s on a whole interval of low wages; the search
   then finds no sign change and the wage is indeterminate below the true root. Searching on

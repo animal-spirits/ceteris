@@ -1,6 +1,6 @@
 # 0016. Clear origin markets across ticks
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 3)
 Date: 2026-10-24
 Design sections: 8.2, 8.3, 17.2 (S02), 19.2, 19.4
 

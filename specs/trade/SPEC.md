@@ -8,8 +8,8 @@ Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, 
 
 `ceteris-trade` owns province markets and the movement of goods between them: one price and
 one inventory per (province, good), the stock-flow price rule, the two-level trade kernel built
-from `ceteris-geo` path costs, merchant routing, the transit pipeline, and the payments that go
-with shipments. It does not own production, labour or demand (`specs/econ/SPEC.md`); it sees
+from `ceteris-geo` path costs, destination sourcing (ADR 0015), origin clearing across ticks (ADR
+0016), the per-buyer pipeline of goods on order, and the payments that go with shipments. It does not own production, labour or demand (`specs/econ/SPEC.md`); it sees
 them only as quantities offered to and demanded from each market.
 
 ## Deviations from DESIGN.md (approved with the spec)
@@ -17,13 +17,13 @@ them only as quantities offered to and demanded from each market.
 | Design | P2 | Why |
 |---|---|---|
 | Develop P1-P3 on a European slice (21) | Full globe, 4,796 provinces | Owner decision; ADR 0012 |
-| Per-tick unbalanced Sinkhorn over both marginals (8.3) | Posted-price merchant logit: each origin routes its supply over destinations by a logit in log netback prices. Closed form on the two-level kernel, no per-tick iteration. Sinkhorn and Anderson acceleration stay in the GE reference and calibration | The same entropic transport family with the demand-side penalty at zero: flows keep the gravity form, steady state is the same equilibrium, and supply that is not profitable to ship stays home through the home route. Cost per tick falls from iterations to a few sparse products. ADR 0013 |
+| Per-tick unbalanced Sinkhorn over both marginals (8.3) | Destination sourcing in value (ADR 0015): each destination spreads its spending over origins with Eaton-Kortum shares K_od p_o^-theta / Phi_d on the two-level kernel; origin markets clear the orders against output and merchant stock across ticks, one normalization per tick (ADR 0016). Balanced Sinkhorn is the S02 full solve, in the GE reference only | Flows keep the gravity form and are homogeneous of degree zero in prices; one destination normalization followed by the origin price update is one Sinkhorn sweep spread over ticks, with the same frictionless fixed point. ADRs 0013, 0015, 0016 |
 | Per-unit plus iceberg costs (5.4, A7) | Iceberg only (S05 = iceberg): tau = 1 + c w_g + lambda_g T at reference prices, the second term the time cost of transit (Hummels and Schaur 2013) standing in for 5.4's carrying cost; risk and per-unit composition effects deferred to P8 (freight) | Per-unit costs need a transport sector that owns fleets; iceberg nests exactly in the GE reference. Freight alone gives distance elasticities far below H2's range (owner decision: add the literature time cost, nothing fitted to H2) |
 | Utilities, construction and services traded through demand frictions (7.1) | Not traded between provinces in P2 | Province-local markets; cross-province service frictions arrive with P8 |
-| Shortage rationing by priority (8.2) | Pro rata across buyers | Priority needs subsistence levels, which arrive with P4 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
-| FOB payment (draft): the destination pays the origin price per shipped unit | FOB payment (draft) replaced by delivered pricing: the router bears its routing costs (controller ruling during implementation) | Under FOB remote importers lose money on routes they did not choose; the fixture had no frictionless equilibrium (island income turned negative) |
-| Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.02), for stability (owner decision 2026-10-24) | Measured growth factor per tick of a small deviation from the fixture's GE equilibrium (frictionless / default): defaults 0.2, 0.1: 1.513 / 1.514; kappa2 = 0.05 unstable at every kappa1 in the prior (best 1.175 / 1.197 at kappa1 0.05; also 1.112 / 1.121 with inventory position control); kappa1 0.02, kappa2 0: 0.989 / 0.991, and 0.987 / 0.997 with every crossing lag at 3. The inventory term integrates routed supply that arrives 2 to 5 months after the price moves and feeds the money and trade-balance loop (Task 7b report) |
+| Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
+| Merchant stocks targeted by coverage (8.2) | Enterprises order up to an inventory position (stock plus goods on order) of (1 + cover + L) months of use, cover = 1, L the sourcing-weighted expected months in transit of the input (owner decision, 2026-10-24); see the econ SPEC | A fixed two-month position that counts goods on order cannot hold a month in transit: importers bound at the equilibrium and V1 failed on the island (MIGRATION Task 3) |
+| Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.02), for stability (owner decision 2026-10-24) | Growth factor per tick of a small deviation from the fixture's GE equilibrium, ticks 300 to 600, under origin clearing (MIGRATION Task 3; frictionless / default): kappa1 0.02, kappa2 0: 0.9956 / 0.9958, the same with every crossing lag at 3; kappa1 0.05: 0.9864 / 0.9873; 0.1: 0.9723 / 0.9759; 0.2: 1.0000 / 0.9942. kappa2 = 0.05 does not decay in the default mode at kappa1 0.02 and 0.05 (1.0023, 1.0054), nor at any kappa1 with every lag at 3 (1.0082 to 1.0000). The stock integrates the gap and feeds the money and trade-balance loop (Task 7b) |
 
 ## State components
 
@@ -31,10 +31,11 @@ them only as quantities offered to and demanded from each market.
 |---|---|---|---|---|
 | Price p | (province, good) | `f64` | numeraire per unit | 1.0 (2000 world reference price), then the calibrated state |
 | Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x initial demand |
-| Last demand D, last supply Q, last sales | (province, good) | `f64` | units per month | zero |
+| Last demand D (orders by class at origins), last supply Q, last sales | (province, good) | `f64` | units per month | zero |
+| Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | the data state's prices |
 | Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f32` K = tau^-theta, CSR | | path costs at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
-| Transit wheel | (arrival tick slot, province, traded good) | `f64` | units | empty |
+| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 
@@ -59,14 +60,16 @@ K_leg,g   = tau_leg,g ^ -theta
 lambda_g is the ad valorem cost of a day in transit (P43). Inside a province trade is costless
 (A2): K_oo = 1.
 
-**Active destinations.** Market (d, g) is active if anyone at d can buy g: its country's final
-demand share Omega_g > 0 or a local enterprise uses g as an input. Only active markets are
-routing destinations and carry a price state. An inactive (province, traded good) cell with
-output is origin-only: its producer price is last tick's realized average netback,
-sum_d X_od p_d / (tau_od (1 + t_od)) / sum_d X_od over every route including home, with t = 0
-on domestic and home routes (data state: 1), and it is left out of V1's price comparison. Under
-delivered pricing (Payments) this is the origin's realized revenue per unit of supply. The GE
-reference uses the same rule.
+**Active markets.** A traded cell (o, g) has an origin market if an enterprise of province o
+produces g with positive capacity (A VA0 > 0); a local cell (d, g) has a province market if
+anyone at d buys g (its country's final demand share Omega_g > 0 or a local enterprise uses g
+as an input). Only active cells carry a price state; destinations are every province with
+spending. Origin weights are relative to the good's lowest active price, w_o = (p_o /
+p_min)^-theta, and floored at WEIGHT_FLOOR = 1e-100: an origin below the floor is not a source,
+and a destination whose Phi_d (in the same relative units) is below it reaches no origin, buys
+nothing and has an infinite buyer price. At theta = 5 a price spread above about 1e20 can make a
+destination unreachable. Since every weight is relative to one global p_min, a single cheap
+origin anywhere sets the scale for all destinations.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
 K_od = tau_od^-theta, dense within each country. A cross-border pair is reached only through
@@ -84,49 +87,60 @@ the entropic route choice of Allen and Arkolakis (2022): parallel routes add acc
 belong to one country; a land crossing is two gateways, one on each side, joined by the crossing
 edge.
 
-**Routing (merchant logit).** Each tick the market at o routes this tick's supply Y_o,g (output
-bought from local producers) over destinations by the expected log netback, with expected
-prices equal to current posted prices (naive expectations, S04 adaptive-only in P2):
+**Sourcing (ADR 0015).** Each tick destination d spends E_d,g (numeraire, tariff included) on
+good g: households by CES at the buyer price, enterprises their input orders times the buyer
+price (econ SPEC). Spending goes over origins and routes with Eaton-Kortum shares at posted
+prices (naive expectations, S04 adaptive-only in P2):
 
 ```
-X_od = Y_o * K_od * p_d^theta / Pi_o,      Pi_o = sum_d K_od * p_d^theta
+X_od = E_d * K_od * w_o / Phi_d,      Phi_d = sum_o K_od * w_o,      w_o = (p_o / p_min)^-theta
+P_d  = p_min * Phi_d^(-1/theta)       (CES index, exported for information)
 ```
 
-X is in origin units; the destination receives X_od / tau_route. The home route (d = o) is part
-of the sum, so unprofitable supply stays home. With costs in log-iceberg units this is
-structural gravity: X_od = a_o b_d tau_od^-theta with a_o = Y_o / Pi_o and b_d = p_d^theta.
+K carries the tariff on crossings, so X is what d pays: origin o is ordered X / (p_o (1 + t))
+units, d receives them over the route's physical tau. The home route (o = d, K = 1) is part of
+the sum. alpha_d = sum over routes of X / (E_d p_o (1 + t) tau) is the units arriving per unit of
+spending, and q_d = 1 / alpha_d the delivered unit price buyers use (owner decision,
+2026-10-24). The arrival slots of those units (0 home, 1 domestic or a lag-0 crossing, 2 to 4 a
+crossing with lag 1 to 3) weighted by units give the expected lead L_d,g in months.
 
-**Low-rank evaluation.** International terms never materialize K_od:
+**Low-rank evaluation.** International terms never materialize K_od. Backwards, on the origin
+weights:
 
 ```
-v_b = sum_{d in B} K_bd p_d^theta          (destination access at gateway b)
-u_a = sum_b K_ab v_b                        (international access at gateway a)
-Pi_o = sum_{d in A} K_od p_d^theta + sum_a K_oa u_a
+v'_a = sum_{o in A} K_oa w_o          (origin access at gateway a)
+u'_b = sum_a v'_a K_ab                 (access of destination gateway b to foreign origins)
+Phi_d = w_d + sum_{o in B} K_od w_o + sum_b K_bd u'_b
 ```
 
-Flows split as a Markov chain: o sends Y_o K_oa u_a / Pi_o to a; a sends share K_ab v_b / u_a
-of its arrivals to b; b sends share K_bd p_d^theta / v_b to d. The shares at a and b do not
-depend on the origin, so aggregating at gateways is exact. Iceberg losses apply per leg.
-Cost per good: O(sum_A n_A^2 + P k + G^2), with k gateways per country and G about 600.
+Orders split as a Markov chain: d sends E_d K_bd u'_b / Phi_d to gateway b, b splits by
+K_ab v'_a / u'_b over origin gateways (the tariff stays at the crossing), a by K_oa w_o / v'_a over
+origins. Dispatch runs the same split forwards with destination weights E_d / Phi_d, scaled by
+each origin's fill; iceberg losses apply per leg, the border loss on the crossing. Cost per good:
+O(sum_A n_A^2 + P k + G^2), with k gateways per country and G about 600.
 
-**Payments.** Delivered pricing: per arriving unit (destination units, after every leg's
-iceberg and border loss), the destination market pays its own current price p_d, at dispatch.
-Domestic flows pay o directly, p_d times the units arriving. On a cross-border route the share
-t_AB,g / (1 + t_AB,g) of that payment goes to the importer's rebate account
-(`specs/econ/SPEC.md`, income) and the rest moves d to b to a to o along the same split, so each
-gateway account nets to zero every tick (payments round to minor units per leg; gateway splits
-round cumulatively). The home flow is not paid. The origin market's revenue per unit of supply is
-then the netback (Active destinations): the merchant who chooses the routes bears their costs,
-and flows (quantities, shares, losses, lags) do not depend on the payment rule.
+**Payments.** Buyers pay at dispatch for what is filled: p_o (1 + t) per shipped unit, so a
+fully filled destination pays E_d. Each buyer pays its share of its class's filled spending to
+its destination market, rounded half to even per buyer and good; unfilled spending stays with
+the buyer. The market passes it on: domestic legs to the origin market directly; on a crossing
+the tariff t p_o per unit goes to the importer's rebate account (`specs/econ/SPEC.md`, income)
+and the rest moves d to b to a to o along the same split, so each gateway account nets to zero
+every tick (payments round to minor units per leg; gateway splits round cumulatively). A home
+purchase moves no money across legs: the market is both the buyer's market and the origin. The
+origin market receives p_o per unit sold.
 
-**Transit.** Domestic shipments arrive at tick t + 1. International shipments arrive at
-t + 1 + lag_ab, lag_ab = round(hours_ab / 730), capped at 3. Goods in transit sit in a transit
-account per good; the iceberg loss is destroyed at dispatch (tallied as transport).
+**Transit.** A shipment dispatched at tick t is delivered at t + s, s its arrival slot: home
+purchases at once (s = 0), domestic shipments and lag-0 crossings at t + 1, crossings at
+t + 1 + lag_ab, lag_ab = round(hours_ab / 730), capped at 3. Goods in flight sit in a transit
+account per good and in the buyer's pipeline; on arrival pops consume them and enterprises add
+them to their input stocks. The iceberg and border losses are destroyed at dispatch (tallied
+as transport).
 
-**Province market, traded good.** At tick t, supply Q = home-routed supply plus arrivals.
-Buyers post notional demand D at the posted price: households for consumption and enterprises
-for next tick's inputs (econ SPEC). Sales =
-min(D, S + Q); a shortfall is rationed pro rata. S' = S + Q - sales. Then (8.2):
+**Origin market, traded good (ADR 0016).** At tick t, supply Q = this tick's output of the
+province's producers; buyers everywhere place orders D at the origin (intermediate users and
+households, origin units). Sales = min(D, S + Q); a shortfall is rationed by S11 (default:
+intermediate users first, households share the rest; DESIGN 8.2). S' = S + Q - sales: excess
+supply goes to merchant inventory. Then (8.2):
 
 ```
 dlnp = clip( kappa1 (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max, c_max ),   S* = s_g D
@@ -142,10 +156,11 @@ Q_floor = 1e-9 of the world mean of Q for that good.
 
 | System ID | Name | Cadence | Reads | Writes | Position in tick pipeline (4.4) |
 |---|---|---|---|---|---|
-| T1 | deliver | Monthly | transit wheel | market inventories, wheel | before production |
-| T2 | route | Monthly | supply Y, prices, kernel | shipments, wheel, payments, tariffs | inter-province trade |
-| T3 | clear | Monthly | demand, supply, inventory | sales, rationing, inventory | province markets |
-| T4 | reprice | Monthly | D, Q, S | prices | after clearing |
+| T1 | deliver | Monthly | pipeline | buyers' goods (consumed or stocked), pipeline | before production |
+| T2 | source | Monthly | destination spending, prices, kernel | orders at origins | after demand (E3) |
+| T3 | clear | Monthly | orders, output, inventory | sales, fills, inventory; local markets | markets |
+| T2b | dispatch | Monthly | fills, sourcing of T2 | shipments, pipeline, payments, tariffs | after clearing |
+| T4 | reprice | Monthly | D, Q, S | prices | after dispatch |
 | T0 | kernel | On graph version change | path cache, wedges | kernel legs | load and shocks |
 
 The full order with econ systems is in `specs/econ/SPEC.md`.
@@ -156,10 +171,12 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 |---|---|---|---|
 | Goods | Ledger goods identity (core) with transport and spoilage tallies | 1e-9 relative | `Ledger::check`, every tick |
 | Gateway clearing | Each gateway's money and goods net to zero every tick | exact money, 1e-9 goods | every tick |
-| Routing mass | sum_d X_od = Y_o for each origin and good | 1e-12 relative | debug every tick, property test |
+| Sourcing | sum_o X_od = E_d for each reachable destination and good | 1e-12 relative | `source` unit and property tests |
+| Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 relative | every tick |
 | Inventory sign | S >= 0 | exact | every tick |
 | Price bounds | Prices finite and positive | exact | every tick |
 | Two-level vs single-level | On small worlds, flows from the gateway kernel versus direct-path kernel: median absolute log difference reported, and both nest in their GE solutions | report only; V1 tolerances apply to each | `tests/trade_nesting.rs` |
+| Pipeline | goods in the transit accounts = goods in the pipeline, per good | 1e-9 relative | every tick |
 | Thread independence | 1 and 8 threads, identical hashes | exact | P2 acceptance |
 
 ## Parameters
@@ -180,27 +197,29 @@ agreement flags), gateway set (pack).
 
 ## Equilibrium nesting
 
-Steady state of T1-T4 with any stable kappa: prices stop moving when D = Q (and S = S* when
-kappa2 > 0; with the default kappa2 = 0 the stock stays where the transient left it), which
-is the spatial equilibrium of the logit routing with all markets clearing. That equilibrium is
-computed directly by the GE reference model (`python/ceteris/reference`, econ SPEC) on the same
-kernel. V1: frictionless runs reach it within 1%. H2: PPML on simulated country-pair flows
-gives a distance elasticity in -0.7 to -1.1. Setting the routing's origin marginal hard and
-adding a hard destination marginal turns T2 into balanced Sinkhorn; a test checks that on
-small worlds the two coincide at the equilibrium prices.
+Steady state of T1-T4 with any stable kappa: prices stop moving when every origin sells its
+output (D = Q) and every local market clears (and S = S* when kappa2 > 0; with the default
+kappa2 = 0 the stock stays where the transient left it). That is the structural-gravity
+equilibrium of destination sourcing, computed directly by the GE reference model
+(`python/ceteris/reference`, econ SPEC) on the same kernel. V1: frictionless runs reach it within
+1%. H2: PPML on simulated country-pair flows gives a distance elasticity in -0.7 to -1.1. S02:
+balanced Sinkhorn on the dense kernel with the equilibrium's origin supplies and destination
+expenditures reproduces the sourcing flows (1e-8, reference test), and a Rust run started at the
+reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_a_fixed_point`).
 
 ## Test plan
 
 - Unit: leg factors and tariff wedges; kernel low-rank products against dense K on small
-  worlds; routing mass and Markov aggregation (property tests over random kernels, proptest);
-  transit lags and wheel wraparound; market clearing, rationing, price clip, zero-supply floor.
+  worlds; sourcing against the dense route table and closed-form Eaton-Kortum shares, dispatch
+  conservation, unreachable destinations, extreme prices (proptest); pipeline slots and
+  wraparound; origin clearing, rationing classes, price clip, zero-supply floor.
 - Property: goods and money conservation through T1-T4 under random supply and demand;
   gateway accounts net to zero; prices stay finite.
-- Nesting: two-level versus direct kernel on small worlds; routing versus balanced Sinkhorn at
-  equilibrium prices.
+- Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at
+  the equilibrium (S02).
 - Golden: covered by `tests/golden/p2-econ.txt` (econ SPEC).
-- Benchmarks (criterion): `route` on the full pack (10 goods, budget 30 ms per tick on the
-  M4 Pro, 19.2), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
+- Benchmarks (criterion): `source` and `dispatch` on the full pack (10 goods, budget 5 ms per tick
+  on the M4 Pro, 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
 
 ## Open questions
 
