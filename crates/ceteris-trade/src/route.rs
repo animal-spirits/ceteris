@@ -22,6 +22,9 @@ pub struct Routed {
     pub fob_paid: Vec<f64>,
     /// FOB value each origin receives for shipments. Per province.
     pub fob_received: Vec<f64>,
+    /// FOB value sent origin to destination province in the same country, aligned with
+    /// `Kernel::good(g).domestic.entries`.
+    pub domestic_value: Vec<f64>,
     /// FOB value sent origin to gateway, aligned with `Kernel::good(g).access.entries`
     /// read as origin province to gateway.
     pub access_out_value: Vec<f64>,
@@ -100,6 +103,7 @@ pub fn route(
         arrive,
         fob_paid,
         fob_received,
+        domestic_value,
         access_out_value,
         crossing_value,
         access_in_value,
@@ -114,6 +118,7 @@ pub fn route(
     arrive.iter_mut().for_each(|a| zeroed(a, np));
     zeroed(fob_paid, np);
     zeroed(fob_received, np);
+    zeroed(domestic_value, gk.domestic.entries.len());
     zeroed(access_out_value, gk.access.entries.len());
     zeroed(crossing_value, gk.crossings.entries.len());
     zeroed(access_in_value, gk.access.entries.len());
@@ -195,7 +200,8 @@ pub fn route(
         home[o] = scale * pt[o];
         let mut back = pt[o] * price[o];
         let mut sent = 0.0;
-        for e in gk.domestic.row(o) {
+        let lo = gk.domestic.offsets[o] as usize;
+        for (i, e) in gk.domestic.row(o).iter().enumerate() {
             let d = e.col as usize;
             let w = f64::from(e.k) * pt[d];
             if w == 0.0 {
@@ -206,6 +212,7 @@ pub fn route(
             let got = x / e.tau;
             let value = price[o] * x;
             arrive[0][d] += got;
+            domestic_value[lo + i] = value;
             fob_paid[d] += value;
             fob_received[o] += value;
             *lost += x - got;
@@ -621,6 +628,24 @@ mod tests {
             for a in 0..s.kernel.n_gateways {
                 prop_assert!(close(inflow[a], outflow[a]), "gateway {a}: {} vs {}", inflow[a], outflow[a]);
             }
+
+            // per province, the leg values add up to the FOB totals
+            let mut paid = vec![0.0; s.kernel.n_provinces];
+            let mut received = vec![0.0; s.kernel.n_provinces];
+            for p in 0..s.kernel.n_provinces {
+                let lo = gk.domestic.offsets[p] as usize;
+                for (i, e) in gk.domestic.row(p).iter().enumerate() {
+                    received[p] += out.domestic_value[lo + i];
+                    paid[e.col as usize] += out.domestic_value[lo + i];
+                }
+                let lo = gk.access.offsets[p] as usize;
+                for i in 0..gk.access.row(p).len() {
+                    received[p] += out.access_out_value[lo + i];
+                    paid[p] += out.access_in_value[lo + i];
+                }
+            }
+            prop_assert!(paid.iter().zip(&out.fob_paid).all(|(a, b)| close(*a, *b)));
+            prop_assert!(received.iter().zip(&out.fob_received).all(|(a, b)| close(*a, *b)));
         }
 
         #[test]
