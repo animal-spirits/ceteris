@@ -409,11 +409,16 @@ pub fn route(w: &mut EconWorld) {
 }
 
 /// E3: households post CES demand for their whole money balance at local prices;
-/// enterprises order a_kg Y + (a_kg Y - stock after use), at least zero.
+/// enterprises order a_kg Y_cap + (a_kg Y_cap - stock after use), at least zero, where
+/// Y_cap = VA(L) / a_VA is capacity output at this tick's employment. Owner decision
+/// (2026-10-24, Task 7b): planning on realized output Y, which a short input caps, let one shortage cut
+/// the next order and the next output (Y_(t+1) <= 2 fill Y_t), emptying the fixture economy
+/// from the data state; at every steady state inputs do not bind and Y_cap = Y.
 pub fn demand(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
     let sigma = w.params.sigma_demand;
+    let r = rho(w.params.sigma_fl);
     w.markets.demand.fill(0.0);
     let mut x = [0.0; N_GOODS];
     for i in 0..inp.n_provinces() {
@@ -430,12 +435,16 @@ pub fn demand(w: &mut EconWorld) {
                 *d += q;
             }
         }
+        let s_l = inp.countries.s_l[c];
         for e in lay.enterprises(i) {
-            let (g, y) = (usize::from(inp.enterprises.good[e]), w.output[e]);
+            let ent = &inp.enterprises;
+            let g = usize::from(ent.good[e]);
+            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, w.employment[e]);
+            let capacity = va / lay.a_va[e];
             for k in 0..N_GOODS {
                 let a = inp.a(c, k, g);
                 let order = if a > 0.0 {
-                    (2.0 * a * y - w.ledger.goods(acc.enterprise[e], k)).max(0.0)
+                    (2.0 * a * capacity - w.ledger.goods(acc.enterprise[e], k)).max(0.0)
                 } else {
                     0.0
                 };

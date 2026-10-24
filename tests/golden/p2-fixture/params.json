@@ -1,6 +1,6 @@
 {
   "format": "1",
-  "static_digest": "0cc324144a363721dc2c0b634115ccb80569344dd490d8804b66454593e869de",
+  "static_digest": "82a9b596d8f614c0b28f4b1ccfbdde3f3ded230c5015aff7aece41e5c9b4a5c2",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "weight_floor": 1e-100,
@@ -31,8 +31,8 @@
   "trade": {
     "theta": 5.0,
     "coverage": [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
-    "kappa1": 0.2,
-    "kappa2": 0.1,
+    "kappa1": 0.02,
+    "kappa2": 0.0,
     "c_max": 0.1,
     "border_nu": 0.3,
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0]

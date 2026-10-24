@@ -121,7 +121,11 @@ sigma_FL = 1 uses the Cobb-Douglas limit VA = A VA0 (L/L0)^s_L. Inputs M_k come 
 enterprise's input stock, bought at the previous tick's market clearing; a shortfall caps Y,
 so rationing propagates through the IO network (7.3) with a one-month lag, and local goods
 (services feed services) need no same-tick solve. Each tick the enterprise orders
-a_kg Y + (a_kg Y - stock_k after use), i.e. replacement plus the gap to one month of cover.
+a_kg Y_cap + (a_kg Y_cap - stock_k after use), at least zero, i.e. replacement plus the gap to
+one month of cover, where Y_cap = VA(L) / a_VA is capacity output at this tick's employment
+(owner decision, 2026-10-24): planning on output cut by a short input would cut the next order
+and the next output with it, a ratchet that emptied the fixture economy from the data state.
+At a steady state inputs do not bind and Y_cap = Y.
 
 **Labour target.** With value-added price p_VA = (p_ig - sum_k a_kg p_ik) / a_VA at current
 (expected) prices, the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
@@ -300,3 +304,11 @@ texture fed from core columns.
 - DOSE region matching rate to Natural Earth provinces without GADM geometry; if too low,
   manufacturing falls back to gridded GDP for those countries.
 - 2000 tariff detail beyond importer x two groups (WTO IDB is closed-source only, fetch).
+- Stability margin at the full pack's transit lags is thin: with every crossing lag at 3 months
+  the fixture's small deviations decay by 0.987 (frictionless) and 0.997 (default) per tick at
+  the P2 defaults (trade SPEC, P03a, P03b). Re-measure on the pack in Task 20.
+- Frictionless clearing wage: each labour target is capped at L^s, so where one enterprise's
+  target reaches L^s, capped demand equals L^s on a whole interval of low wages; the search
+  then finds no sign change and the wage is indeterminate below the true root. Searching on
+  uncapped targets (capping only the allocation) would follow the closed form. No fixture
+  province is affected.
