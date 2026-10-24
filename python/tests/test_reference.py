@@ -21,7 +21,6 @@ def fixture(inputs):
     return inputs, solve.equilibrium(inputs)
 
 
-@pytest.mark.xfail(strict=True, reason="fixture non-viable; netback producer price and sea costs pending")
 def test_residual_zero_at_solution(fixture):
     inp, eq = fixture
     r = model.residual(eq.x, inp)
@@ -47,7 +46,6 @@ def test_scale_invariance(inputs):
     assert scaled[row] - base[row] == pytest.approx(np.log(3.7), abs=1e-12)
 
 
-@pytest.mark.xfail(strict=True, reason="fixture non-viable; netback producer price and sea costs pending")
 def test_balanced_sinkhorn_matches_logit_at_equilibrium(fixture):
     inp, eq = fixture
     countries = inp.province_country
