@@ -22,6 +22,7 @@ them only as quantities offered to and demanded from each market.
 | Utilities, construction and services traded through demand frictions (7.1) | Not traded between provinces in P2 | Province-local markets; cross-province service frictions arrive with P8 |
 | Shortage rationing by priority (8.2) | Pro rata across buyers | Priority needs subsistence levels, which arrive with P4 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
+| FOB payment (draft): the destination pays the origin price per shipped unit | FOB payment (draft) replaced by delivered pricing: the router bears its routing costs (controller ruling during implementation) | Under FOB remote importers lose money on routes they did not choose; the fixture had no frictionless equilibrium (island income turned negative) |
 
 ## State components
 
@@ -61,8 +62,10 @@ lambda_g is the ad valorem cost of a day in transit (P41). Inside a province tra
 demand share Omega_g > 0 or a local enterprise uses g as an input. Only active markets are
 routing destinations and carry a price state. An inactive (province, traded good) cell with
 output is origin-only: its producer price is last tick's realized average netback,
-sum_d X_od p_d / tau_od / sum_d X_od (data state: 1), and it is left out of V1's price
-comparison. The GE reference uses the same rule.
+sum_d X_od p_d / (tau_od (1 + t_od)) / sum_d X_od over every route including home, with t = 0
+on domestic and home routes (data state: 1), and it is left out of V1's price comparison. Under
+delivered pricing (Payments) this is the origin's realized revenue per unit of supply. The GE
+reference uses the same rule.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
 K_od = tau_od^-theta, dense within each country. A cross-border pair is reached only through
@@ -105,11 +108,15 @@ of its arrivals to b; b sends share K_bd p_d^theta / v_b to d. The shares at a a
 depend on the origin, so aggregating at gateways is exact. Iceberg losses apply per leg.
 Cost per good: O(sum_A n_A^2 + P k + G^2), with k gateways per country and G about 600.
 
-**Payments.** The destination market pays the origin price per shipped (origin) unit, FOB, at
-dispatch: domestic flows pay o directly; international value moves d to b to a to o along the
-same split, so each gateway account nets to zero every tick. Tariff revenue t_AB,g times the
-FOB value crossing a to b is paid by the destination market to the importer's rebate account
-(`specs/econ/SPEC.md`, income).
+**Payments.** Delivered pricing: per arriving unit (destination units, after every leg's
+iceberg and border loss), the destination market pays its own current price p_d, at dispatch.
+Domestic flows pay o directly, p_d times the units arriving. On a cross-border route the share
+t_AB,g / (1 + t_AB,g) of that payment goes to the importer's rebate account
+(`specs/econ/SPEC.md`, income) and the rest moves d to b to a to o along the same split, so each
+gateway account nets to zero every tick (payments round to minor units per leg; gateway splits
+round cumulatively). The home flow is not paid. The origin market's revenue per unit of supply is
+then the netback (Active destinations): the merchant who chooses the routes bears their costs,
+and flows (quantities, shares, losses, lags) do not depend on the payment rule.
 
 **Transit.** Domestic shipments arrive at tick t + 1. International shipments arrive at
 t + 1 + lag_ab, lag_ab = round(hours_ab / 730), capped at 3. Goods in transit sit in a transit
