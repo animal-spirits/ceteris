@@ -72,6 +72,12 @@ impl<W: State> Sim<W> {
         &self.world
     }
 
+    /// The world between ticks, for changes the schedule does not make (a shock). Snapshots
+    /// taken before the change keep the world as it was.
+    pub fn world_mut(&mut self) -> &mut W {
+        &mut self.world
+    }
+
     /// Number of completed ticks.
     pub fn tick(&self) -> u32 {
         self.tick

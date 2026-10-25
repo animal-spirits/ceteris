@@ -12,7 +12,7 @@ use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
-use ceteris_trade::{Kernel, Markets, N_GOODS, Pipeline, Sourced, TradeParams};
+use ceteris_trade::{Kernel, Markets, N_GOODS, Network, Pipeline, Sourced, TradeParams};
 
 use crate::demand::{PiglWeights, invert_pigl, lognormal_sigma, pigl};
 use crate::flows::FlowWindow;
@@ -713,6 +713,32 @@ impl EconWorld {
         Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
     }
 
+    /// Replaces the trade network (system T0 of the trade SPEC: the kernel follows the graph
+    /// version), for example after a chokepoint closes: the inputs `Arc` gets a copy of the
+    /// inputs with `network`, the kernel is rebuilt from it and the static digest follows.
+    /// Called between ticks; the buyer prices of the last E3 stand until the next E3 sources
+    /// over the new kernel, and goods already in flight arrive as scheduled, so the same
+    /// network leaves the run unchanged. The network must keep the provinces and gateways,
+    /// whose accounts are open. In P2 the caller triggers it; shocks arrive in P3.
+    pub fn set_network(&mut self, network: Network) {
+        let old = &self.inputs.network;
+        assert!(
+            network.province_country == old.province_country
+                && network.gateway_country == old.gateway_country,
+            "a new network must keep the provinces and gateways"
+        );
+        let mut inputs = (*self.inputs).clone();
+        inputs.network = network;
+        self.kernel = Arc::new(Kernel::build(
+            &inputs.network,
+            &inputs.weight,
+            &inputs.wedges,
+            &self.trade,
+        ));
+        self.digest = static_digest(&inputs, &self.params, &self.trade);
+        self.inputs = Arc::new(inputs);
+    }
+
     /// A run of this world from the data state on the P2 schedule.
     pub fn sim(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> Sim<EconWorld> {
         Sim::new(
@@ -1306,6 +1332,44 @@ mod tests {
         let mut t2 = TradeParams::default();
         t2.coverage[2] = 2.5;
         assert_ne!(static_digest(&base, &p, &t2), s);
+    }
+
+    #[test]
+    fn set_network_rebuilds_the_kernel_and_the_digest() {
+        let mut w = world();
+        let (digest, island) = (w.digest(), 24 * N_GOODS + 6);
+        let before = w.price_index[island];
+        let mut net = w.inputs().network.clone();
+        w.set_network(net.clone());
+        assert_eq!(w.digest(), digest);
+        for l in &mut net.crossings {
+            l.cost_per_t *= 4.0;
+        }
+        w.set_network(net.clone());
+        assert_ne!(w.digest(), digest);
+        assert_eq!(w.inputs().network.crossings, net.crossings);
+        let tau = w.kernel().good(6).crossings.row(6)[0].tau;
+        let base = Kernel::build(&net, &w.inputs().weight, &w.inputs().wedges, w.trade());
+        assert_eq!(tau, base.good(6).crossings.row(6)[0].tau);
+        // the buyer prices of the last E3 stand; at the next refresh the island's machinery,
+        // all imported, costs more
+        assert_eq!(w.price_index[island], before);
+        w.refresh_price_index();
+        assert!(w.price_index[island] > before);
+        let snapshot = canonical(0, &w);
+        let back = decode_canonical_with(&snapshot, |d| w.restore(d))
+            .unwrap()
+            .1;
+        assert_eq!(back.digest(), w.digest());
+    }
+
+    #[test]
+    #[should_panic(expected = "keep the provinces and gateways")]
+    fn set_network_keeps_provinces_and_gateways() {
+        let mut w = world();
+        let mut net = w.inputs().network.clone();
+        net.gateway_country.push(0);
+        w.set_network(net);
     }
 
     #[test]

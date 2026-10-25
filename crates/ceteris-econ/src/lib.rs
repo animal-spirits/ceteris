@@ -10,6 +10,7 @@ pub mod history;
 pub mod inputs;
 pub mod labour;
 pub mod local;
+pub mod pack;
 pub mod params;
 pub mod production;
 pub mod systems;
