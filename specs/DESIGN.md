@@ -1779,7 +1779,7 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 
 **Landing order.** 0015 and 0016 together (one rewrite of the trade system), then 0017 (ceteris-geo), 0018, 0019, 0021, 0020, and 0022 last because it defines the gate. Every one of them changes simulation output, so regenerate the golden hashes once after all eight land, with one BEHAVIOUR changelog entry listing them.
 
-**Second round (0024-0026, 0096).** A follow-up review against the computational and economic state of the art added four ADRs. 0096 (forward-mode derivatives) and 0024 (ensemble lanes) fix P2's numeric types and array layout, so they land before P2's code settles, ideally with 0015 and 0016. 0026 (firms within cells) lands with the trade rewrite. 0025 (HANK reference) lands in P5 and asks only for a test harness in P2. 0096, 0024 and 0025 leave release-mode output unchanged; 0026 changes it and joins the single golden-hash regeneration.
+**Second round (0024-0026, 0096).** A follow-up review against the computational and economic state of the art added four ADRs. 0096 (forward-mode derivatives) and 0024 (ensemble lanes) fix P2's numeric types and array layout, so they were meant to land before P2's code settled, ideally with 0015 and 0016; P2 shipped in f64 on p2-econ without them, so adopting them now means a retrofit. 0026 (firms within cells) lands with the trade rewrite. 0025 (HANK reference) lands in P5 and asks only for a test harness in P2. 0096, 0024 and 0025 leave release-mode output unchanged; 0026 changes it and joins the single golden-hash regeneration.
 
 | ADR | Decision | Crates and specs | Changes P2 output |
 | --- | --- | --- | --- |

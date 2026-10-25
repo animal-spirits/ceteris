@@ -34,8 +34,8 @@ Option 2.
   famine (ADR 0029), and a scenario hazard for deaths of despair (P65 sets its default to zero;
   it is a scenario lane until a mechanism passes ablation).
 - Health spending is a fiscal category (9.6) and a household expenditure; it lowers
-  communicable and part of non-communicable mortality with diminishing returns. No hospital
-  system is modeled.
+  communicable and part of non-communicable mortality with diminishing returns. Health-system
+  capacity and its saturation are ADR 0061.
 
 ## Migration
 

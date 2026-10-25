@@ -37,7 +37,8 @@ Option 2.
   (7.4, 13.4).
 - Crude trades on the gravity kernel like other goods, so the world price emerges with regional
   basis differentials from transport costs and sanctions (Urals discount after 2022 as a test).
-- Inventories follow the competitive storage rule of ADR 0029, shared with food and metals.
+- Inventories follow the competitive storage rule of ADR 0091 (which took over 0029's storage
+  part), shared with food and metals.
 - Natural gas (P8) clears in regional markets linked by pipelines and LNG shipping with
   capacity constraints; liquefaction and regasification capacity are capital stocks. Built
   pipelines arrive with the pipeline mode (5.3).
