@@ -203,7 +203,8 @@ def _xlsx_sheet(path: Path, sheet: str, header_cell: str | None = None) -> Itera
             cells: dict[str, object] = {}
             for c in row:
                 v = c.find(f"{main}v")
-                if v is None or v.text is None:
+                # Error cells (t="e", such as #REF!) count as empty.
+                if v is None or v.text is None or c.get("t") == "e":
                     continue
                 col = "".join(ch for ch in c.get("r") if ch.isalpha())
                 cells[col] = strings[int(v.text)] if c.get("t") == "s" else v.text if c.get("t") == "str" else float(v.text)
@@ -358,42 +359,63 @@ def country_columns(codes: Sequence[str], labour: Mapping[str, Labour]) -> dict[
     return out
 
 
-def province_population(worldpop: Path, cells: pa.Table, block_rows: int = 512) -> np.ndarray:
-    """WorldPop 2000 people per province: each populated pixel goes to the province owning its H3 cell.
+class CellOwner:
+    """Province owning a point through the pack's cells table (`cell` uint64, `province`).
 
-    `cells` is the pack's cells table (`cell` uint64, `province`); cells of several resolutions may
-    coexist, and the finest cell containing a pixel decides. A pixel in a cell no province owns (a coastal
-    cell whose centre is at sea) goes to the nearest owned cell within `MAX_RING` rings; pixels further
-    out are dropped.
+    Cells of several resolutions may coexist, and the finest owned cell containing the point decides. A point
+    in a cell no province owns (a coastal cell whose centre is at sea) goes to the nearest owned cell within
+    `MAX_RING` rings; further out it has no owner (-1).
     """
-    owner_of = dict(zip(cells.column("cell").to_pylist(), cells.column("province").to_pylist()))
-    n = max(owner_of.values()) + 1
-    resolutions = sorted({h3.get_resolution(c) for c in owner_of})
-    base, finer = resolutions[0], resolutions[1:]
-    split = {h3.cell_to_parent(c, base) for c in owner_of if h3.get_resolution(c) > base}
-    nearest: dict[int, int] = {}
 
-    def of_base(cell: int) -> int:
-        if cell in owner_of:
-            return owner_of[cell]
-        if cell not in nearest:
+    def __init__(self, cells: pa.Table):
+        self.owner_of = dict(zip(cells.column("cell").to_pylist(), cells.column("province").to_pylist()))
+        self.n = max(self.owner_of.values()) + 1
+        resolutions = sorted({h3.get_resolution(c) for c in self.owner_of})
+        self.base, self.finer = resolutions[0], resolutions[1:]
+        self.split = {h3.cell_to_parent(c, self.base) for c in self.owner_of if h3.get_resolution(c) > self.base}
+        self._nearest: dict[int, int] = {}
+
+    def of_base(self, cell: int) -> int:
+        if cell in self.owner_of:
+            return self.owner_of[cell]
+        if cell not in self._nearest:
             lat, lng = h3.cell_to_latlng(cell)
-            nearest[cell] = -1
+            self._nearest[cell] = -1
             for k in range(1, MAX_RING + 1):
-                owned = [c for c in h3.grid_disk(cell, k) if c in owner_of]
+                owned = [c for c in h3.grid_disk(cell, k) if c in self.owner_of]
                 if owned:
                     best = min(
                         owned, key=lambda c: ((h3.cell_to_latlng(c)[0] - lat) ** 2 + (h3.cell_to_latlng(c)[1] - lng) ** 2, c)
                     )
-                    nearest[cell] = owner_of[best]
+                    self._nearest[cell] = self.owner_of[best]
                     break
-        return nearest[cell]
+        return self._nearest[cell]
 
-    total = np.zeros(n)
+    def finest(self, lat: float, lng: float) -> int | None:
+        """Owner of the finest cell containing a point inside a split base cell, if any."""
+        for r in reversed(self.finer):
+            child = self.owner_of.get(h3.latlng_to_cell(lat, lng, r))
+            if child is not None:
+                return child
+        return None
+
+    def of_point(self, lat: float, lng: float) -> int:
+        cell = h3.latlng_to_cell(lat, lng, self.base)
+        found = self.finest(lat, lng) if cell in self.split else None
+        return self.of_base(cell) if found is None else found
+
+
+def province_population(worldpop: Path | str, cells: pa.Table, block_rows: int = 512, band: int = 1) -> np.ndarray:
+    """WorldPop 2000 people per province: each populated pixel goes to the province owning its H3 cell (`CellOwner`).
+
+    Any raster of counts works the same way (`band` picks the layer); pixels with no positive value are skipped.
+    """
+    owner_of = CellOwner(cells)
+    total = np.zeros(owner_of.n)
     with rasterio.open(worldpop) as ds:
         a, _, x0, _, e, y0 = ds.transform[:6]
         for r0 in range(0, ds.height, block_rows):
-            block = ds.read(1, window=Window(0, r0, ds.width, min(block_rows, ds.height - r0)))
+            block = ds.read(band, window=Window(0, r0, ds.width, min(block_rows, ds.height - r0)))
             valid = block > 0
             if ds.nodata is not None:
                 valid &= block != np.float32(ds.nodata)
@@ -402,18 +424,16 @@ def province_population(worldpop: Path, cells: pa.Table, block_rows: int = 512) 
                 continue
             lat = (y0 + (rows + r0 + 0.5) * e).tolist()
             lng = (x0 + (cols + 0.5) * a).tolist()
-            cell = np.fromiter((h3.latlng_to_cell(la, lo, base) for la, lo in zip(lat, lng)), np.int64, len(lat))
+            cell = np.fromiter((h3.latlng_to_cell(la, lo, owner_of.base) for la, lo in zip(lat, lng)), np.int64, len(lat))
             unique, inverse = np.unique(cell, return_inverse=True)
-            owner = np.array([of_base(c) for c in unique.tolist()])[inverse]
-            fine = np.flatnonzero(np.isin(cell, list(split))) if split else ()
+            owner = np.array([owner_of.of_base(c) for c in unique.tolist()])[inverse]
+            fine = np.flatnonzero(np.isin(cell, list(owner_of.split))) if owner_of.split else ()
             for i in fine:
-                for r in reversed(finer):
-                    child = owner_of.get(h3.latlng_to_cell(lat[i], lng[i], r))
-                    if child is not None:
-                        owner[i] = child
-                        break
+                child = owner_of.finest(lat[i], lng[i])
+                if child is not None:
+                    owner[i] = child
             kept = owner >= 0
-            total += np.bincount(owner[kept], block[rows, cols][kept].astype(np.float64), n)
+            total += np.bincount(owner[kept], block[rows, cols][kept].astype(np.float64), owner_of.n)
     return total
 
 

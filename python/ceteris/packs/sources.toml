@@ -290,7 +290,7 @@ id = "mapspam-2000"
 name = "MapSPAM SPAM2000 (and 2005, 2010, 2020)"
 provider = "IFPRI / HarvestChoice"
 version = "SPAM2000 v3.0.7"
-role = "Harvested area, production and yield around 2000 (5.2, 7.2)"
+role = "Harvested area, production and yield around 2000 (5.2, 7.2); physical area of all crops places agricultural VA in provinces"
 licence = "CC-BY-4.0"
 licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/A50I2T"
 attribution = "IFPRI SPAM citation; adaptations carry the IFPRI disclaimer sentence"
@@ -299,8 +299,9 @@ share_alike = false
 use = "primary"
 policy = "bundle-aggregates"
 reason = "CC BY 4.0 under IFPRI default terms"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "medium"
+notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 ships SPAM_License_v3.2.pdf (non-commercial, no redistribution without IFPRI permission), so it is not used. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
 
 [[source]]
 id = "gdhy"
@@ -340,10 +341,10 @@ confidence = "high"
 id = "gem-trackers"
 name = "Global Energy Monitor trackers (coal, oil and gas plants, pipelines, mines)"
 provider = "Global Energy Monitor"
-version = "Latest release per tracker, pinned by date"
-role = "Energy assets (5.2, 7.7)"
+version = "Latest release per tracker, pinned by date (Coal Mine Tracker August 2026; Oil and Gas Extraction Tracker March 2026)"
+role = "Energy assets (5.2, 7.7); coal mines and oil and gas fields place mining VA in provinces"
 licence = "CC-BY-4.0"
-licence_url = "https://globalenergymonitor.org/creative-commons-public-license/"
+licence_url = "https://globalenergymonitor.org/creative-commons-license"
 attribution = "<Tracker name>, Global Energy Monitor, <release>"
 commercial_use = true
 share_alike = false
@@ -352,7 +353,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0 unless otherwise noted"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Drop rows flagged with third-party NC licences (e.g. TransitionZero solar records). Check the licence sheet in each download."
+notes = "Saved by hand through GEM's download form (manual in fetch.toml). The form's licence page (checked 2026-10-24) is the unmodified text of the Creative Commons Attribution 4.0 International Public License. The README sheets state: Copyright (c) Global Energy Monitor; Distributed under a Creative Commons Attribution 4.0 International License; recommended citation \"Global Energy Monitor, Global Coal Mine Tracker, August 2026 release.\" and \"Global Oil and Gas Extraction Tracker, 2026 release\". Neither tracker flags third-party NC rows. Drop rows flagged with third-party NC licences in other trackers (e.g. TransitionZero solar records). Check the licence sheet in each download."
 
 [[source]]
 id = "usgs-mrds"
@@ -771,9 +772,9 @@ id = "dose"
 name = "DOSE sub-national economic output"
 provider = "PIK / MCC (Wenz et al. 2023)"
 version = "V2.14 (Zenodo 20035157)"
-role = "Province output by sector (5.2)"
+role = "Province output by sector (5.2); manufacturing GVA places manufacturing VA in provinces"
 licence = "CC-BY-4.0"
-licence_url = "https://zenodo.org/records/7573249"
+licence_url = "https://zenodo.org/records/20035157"
 attribution = "Wenz et al. (2023), Scientific Data, doi:10.1038/s41597-023-02323-8"
 commercial_use = true
 share_alike = false
@@ -782,7 +783,7 @@ policy = "bundle"
 reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
-notes = "Region keys reference GADM: join on codes, never bundle GADM geometries."
+notes = "Region keys reference GADM (GID_1) and carry no ISO 3166-2 codes: regions are joined to provinces by exact name (ignoring case), never through GADM geometries."
 
 [[source]]
 id = "kummu-gdp"
@@ -800,6 +801,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
+notes = "Dryad serves files only with an API bearer token (401) or a browser session (403, 2026-10-24); GDP_PPP_1990_2015_5arcmin_v2.nc is a manual, optional download."
 
 [[source]]
 id = "chen-gdp"

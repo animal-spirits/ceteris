@@ -295,3 +295,46 @@ name = "unsd_GDPPC_USD_countries.xlsx"
 sha256 = "9082e75331f67b8210a102a69494a89cd77cd2ca2648f3fab893dca9383293de"
 bytes = 200369
 url = "https://unstats.un.org/unsd/amaapi/api/file/9"
+
+# Downscaling VA to provinces (Task 16). SPAM2000 has no value of production; its physical area (cropland of
+# all crops) is the agriculture proxy. SPAM2005 has value of production but ships a non-commercial licence.
+[[file]]
+source = "mapspam-2000"
+name = "spam2000v3.0.7_global_physical-area.geotiff.zip"
+sha256 = "4ddfc353bc4c87ac7e7cb2eb35101c48d4d5da2efbc3d6942e543e910986fb86"
+bytes = 88551524
+url = "https://dataverse.harvard.edu/api/access/datafile/3666793"
+
+[[file]]
+source = "dose"
+name = "DOSE_V2.14.csv"
+sha256 = "28c4501aa87314cce4dbb2054f64eb82276caf01f4674ee22e02864a177c900c"
+bytes = 17472502
+url = "https://zenodo.org/api/records/20035157/files/DOSE_V2.14.csv/content"
+
+# Dryad serves files only with an API bearer token (401) or a browser session (403).
+[[file]]
+source = "kummu-gdp"
+name = "GDP_PPP_1990_2015_5arcmin_v2.nc"
+optional = true
+url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
+manual = true
+
+# GEM releases sit behind a web form; the downscaling falls back to other proxies without them.
+[[file]]
+source = "gem-trackers"
+name = "Global Coal Mine Tracker, August 2026.xlsx"
+optional = true
+sha256 = "9aa804479c4b76456678fa02f1b5b9af826e12fa57d98cbcade35f4ee0417d43"
+bytes = 3085251
+url = "https://globalenergymonitor.org/projects/global-coal-mine-tracker/"
+manual = true
+
+[[file]]
+source = "gem-trackers"
+name = "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx"
+optional = true
+sha256 = "10ed7bc007e47895c2f387449365c20d0a87679cb8c69be678d0cc60df4d1aa5"
+bytes = 5393993
+url = "https://globalenergymonitor.org/projects/global-oil-gas-extraction-tracker/"
+manual = true

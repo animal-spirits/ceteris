@@ -18,10 +18,12 @@ def _f(x) -> str:
     return repr(float(x))
 
 
-def _table(economies=("AAA", "BBB"), invnt=None, deplete=None, seed=1) -> tuple[str, dict[str, np.ndarray]]:
+def _table(
+    economies=("AAA", "BBB"), invnt=None, deplete=None, seed=1, industries=INDUSTRIES
+) -> tuple[str, dict[str, np.ndarray]]:
     """An ICIO-shaped CSV (industry block, final demand block, OUT; rows then TLS, VA, OUT) and its parts."""
     rng = np.random.default_rng(seed)
-    cols = [f"{e}_{i}" for e in economies for i in INDUSTRIES]
+    cols = [f"{e}_{i}" for e in economies for i in industries]
     fd_cols = [f"{e}_{f}" for e in economies for f in FINAL]
     n = len(cols)
     z = rng.uniform(1, 10, (n, n))
