@@ -131,7 +131,7 @@ ordering is imposed (5.3).
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P04a-d | Cost per tonne-km: road, rail, sea, air | 0.10, 0.04, 0.008, 0.80 USD | Literature + calibrated |
+| P04a-d | Cost per tonne-km: road, rail, sea, air | 0.10, 0.04, 0.008, 0.80 USD. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI along S05 paths, road as numeraire; values kept, owner 2026-10-24): rail/road 52.6 (s.e. 24.1), sea/road 115.3 (46.3), air/road -2.39 (34.4), not identified (the fit drifts to a log-distance form; air on about 70 of 378,392 least-cost rows); a linear km form gives 0.12, 0.09, 3.8 | Literature + calibrated |
 | P04e-h | Circuity: road, rail, sea, air | 1.3, 1.3, 1.0, 1.05 | Literature |
 | P04i-l | Effective speed: road, rail, sea, air | 40, 25, 25, 500 km/h | Literature |
 | P04m | Handling fee: rail terminal, listed port, minor port, airport | 5, 8, 20, 60 USD/t | Literature + calibrated |
