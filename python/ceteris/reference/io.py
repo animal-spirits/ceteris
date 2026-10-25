@@ -17,7 +17,8 @@ EXPORT_FORMAT = "7"
 class Entries:
     """Kernel legs of all traded goods. Domestic: row origin, col destination province. Access:
     row province, col gateway (origin access read forward, destination access backward).
-    Crossing: row and col gateways; `border_tau` and `tariff` are set for crossings only."""
+    Crossing: row and col gateways; `border_tau`, `tariff` and `lag` (transit months) are set for
+    crossings only."""
 
     good: np.ndarray
     row: np.ndarray
@@ -26,6 +27,7 @@ class Entries:
     tau: np.ndarray
     border_tau: np.ndarray | None = None
     tariff: np.ndarray | None = None
+    lag: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -61,7 +63,14 @@ class Inputs:
     access: Entries
     crossing: Entries
     ent_va_target: np.ndarray | None = None  # (E,) value added the calibration matches
+    coverage: np.ndarray | None = None  # (G,) P02 merchant stock target in months of orders
+    pop_edu: np.ndarray | None = None  # (K,) education level
     static_digest: str = field(default="")
+    # A calibrated steady state (`calibrate.reference_inputs`) replaces the base column, its a_VA and
+    # the PIGL weights inverted at prices 1.
+    calibrated_coef: np.ndarray | None = None  # (E, G)
+    calibrated_a_va: np.ndarray | None = None  # (E,)
+    calibrated_weights: demand.Weights | None = None
 
     @property
     def n_provinces(self) -> int:
@@ -88,6 +97,8 @@ class Inputs:
         """(E, G): physical input coefficients, as `EconInputs::base_column`: the sector's ICIO
         cost share a_kg over the base delivered price of k at the enterprise's province, 0 where
         the sector does not use k."""
+        if self.calibrated_coef is not None:
+            return self.calibrated_coef
         a = self.io[self.ent_country, :, self.ent_good]
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.where(a > 0, a / self.base_price[self.ent_province], 0.0)
@@ -95,6 +106,8 @@ class Inputs:
     @cached_property
     def ent_a_va(self) -> np.ndarray:
         """1 - sum_k coef_k q_k at base prices, as `EconInputs::base_a_va` (1 - sum_k a_kg)."""
+        if self.calibrated_a_va is not None:
+            return self.calibrated_a_va
         coef = self.ent_inputs
         cost = np.zeros(len(coef))
         for k in range(coef.shape[1]):  # summed in Rust's order
@@ -140,6 +153,8 @@ class Inputs:
     @cached_property
     def pigl_weights(self) -> demand.Weights:
         """PIGL weights per country, as `world::household_preferences`."""
+        if self.calibrated_weights is not None:
+            return self.calibrated_weights
         return demand.invert(self.omega, self.base_spend, self.sigma_income, self.category, self.pigl)
 
     @cached_property
@@ -170,7 +185,11 @@ def _table(path: Path) -> dict[str, np.ndarray]:
 
 
 def _entries(t: dict[str, np.ndarray], row: str, col: str, crossing: bool = False) -> Entries:
-    extra = {"border_tau": t["border_tau"].astype(np.float64), "tariff": t["tariff"].astype(np.float64)} if crossing else {}
+    extra = (
+        {"border_tau": t["border_tau"].astype(np.float64), "tariff": t["tariff"].astype(np.float64), "lag": t["lag"].astype(np.int64)}
+        if crossing
+        else {}
+    )
     return Entries(
         good=t["good"].astype(np.int64),
         row=t[row].astype(np.int64),
@@ -240,6 +259,8 @@ def load(directory: Path | str) -> Inputs:
         access=_entries(_table(d / "kernel_access.arrow"), "province", "gateway"),
         crossing=_entries(_table(d / "kernel_crossing.arrow"), "a", "b", crossing=True),
         ent_va_target=ent["va_target"].astype(np.float64),
+        coverage=goods["coverage"].astype(np.float64),
+        pop_edu=pops["edu"].astype(np.int64),
         static_digest=params["static_digest"],
     )
     validate(inp)
