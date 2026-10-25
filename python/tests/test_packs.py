@@ -239,6 +239,14 @@ def test_validation_files_are_fetched_but_not_pack_sources():
     assert all(e["sha256"] for e in validation.values())
 
 
+def test_no_pack_code_names_a_validation_file():
+    names = {e["name"] for e in fetch.validation_entries()}
+    code = Path(fetch.__file__).parent
+    for path in code.rglob("*.py"):
+        text = path.read_text()
+        assert not [n for n in names if n in text], path
+
+
 def test_only_the_2000_icio_package_is_required():
     icio = {e["name"]: e for e in fetch.entries() if e["source"] == "oecd-icio"}
     assert len(icio) == 10
