@@ -208,3 +208,28 @@ def test_fetch_does_not_download_manual_files(tmp_path, monkeypatch):
 def test_icio_packages_are_manual_downloads():
     icio = [e for e in fetch.entries() if e["source"] == "oecd-icio"]
     assert len(icio) == 10 and all(e.get("manual") and e["sha256"] for e in icio)
+
+
+def test_fetch_skips_optional_files_that_are_not_cached(tmp_path, monkeypatch, capsys):
+    entries = [
+        {"source": "x", "name": "need.zip", "url": "u", "manual": True, "sha256": "0" * 64, "bytes": 1},
+        {"source": "x", "name": "later.zip", "url": "u", "manual": True, "optional": True, "sha256": "0" * 64, "bytes": 1},
+    ]
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    monkeypatch.setattr(fetch, "entries", lambda: entries)
+    monkeypatch.setattr("sys.argv", ["fetch"])
+    with pytest.raises(SystemExit, match="need.zip"):
+        fetch.main()
+    (tmp_path / "need.zip").write_bytes(b"x")
+    # The cached required file must match its pin (wrong here), the missing optional one is not asked for.
+    assert fetch.main() == 1
+    err = capsys.readouterr().err
+    assert "need.zip: checksum mismatch" in err and "later.zip" not in err
+    (tmp_path / "later.zip").write_bytes(b"x")
+    assert fetch.main() == 1 and "later.zip: checksum mismatch" in capsys.readouterr().err
+
+
+def test_only_the_2000_icio_package_is_required():
+    icio = {e["name"]: e for e in fetch.entries() if e["source"] == "oecd-icio"}
+    assert len(icio) == 10
+    assert [n for n, e in icio.items() if not e.get("optional")] == ["1995-2000_SML.zip"]

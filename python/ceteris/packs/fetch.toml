@@ -1,7 +1,8 @@
 # Files the pack pipeline downloads (Section 16.1). Each names its manifest source.
 # fetch.py verifies sha256 and size; `python -m ceteris.packs.fetch --record` fills them
 # for a new entry, which must then be reviewed and committed. An entry with manual = true is
-# saved into the cache by hand (its host rejects scripted downloads); fetch only verifies it.
+# saved into the cache by hand (its host rejects scripted downloads); fetch only verifies it. An
+# entry with optional = true is kept for later phases: fetch skips it unless it is in the cache.
 
 [[file]]
 source = "natural-earth-admin1"
@@ -175,6 +176,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_SML.zip"
 [[file]]
 source = "oecd-icio"
 name = "1995-2000_EXT.zip"
+optional = true
 sha256 = "318875a509d208852e6adcc902bcfb8e6266cd318ea8201878a4766ce4eb0de7"
 bytes = 112406672
 manual = true
@@ -183,6 +185,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_EXT.zip"
 [[file]]
 source = "oecd-icio"
 name = "2001-2005_SML.zip"
+optional = true
 sha256 = "75015a66e7944e7377a5a08a02155a472517efe4e4a36b1116c7542f759f78f6"
 bytes = 99391392
 manual = true
@@ -191,6 +194,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_SML.zip"
 [[file]]
 source = "oecd-icio"
 name = "2001-2005_EXT.zip"
+optional = true
 sha256 = "182d6d6dc723a73585b57beebe3b6565b061cd109e50b2df128a37a3817d4312"
 bytes = 101621382
 manual = true
@@ -199,6 +203,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_EXT.zip"
 [[file]]
 source = "oecd-icio"
 name = "2006-2010_SML.zip"
+optional = true
 sha256 = "e57685c00ad30b4353e1e7de24910ba70b181c5198c9dbb6d46eb349de76f35a"
 bytes = 111587430
 manual = true
@@ -207,6 +212,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_SML.zip"
 [[file]]
 source = "oecd-icio"
 name = "2006-2010_EXT.zip"
+optional = true
 sha256 = "343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533"
 bytes = 114156164
 manual = true
@@ -215,6 +221,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_EXT.zip"
 [[file]]
 source = "oecd-icio"
 name = "2011-2015_SML.zip"
+optional = true
 sha256 = "d9025195bdb9a03278ba6403066cef2969cc30185a1b28117c9452994a203619"
 bytes = 116134326
 manual = true
@@ -223,6 +230,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_SML.zip"
 [[file]]
 source = "oecd-icio"
 name = "2011-2015_EXT.zip"
+optional = true
 sha256 = "171c74914cdb1d6952492441f2a771a1a1a65cd3eba015dbf8522754b1e11b0a"
 bytes = 118820898
 manual = true
@@ -231,6 +239,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_EXT.zip"
 [[file]]
 source = "oecd-icio"
 name = "2016-2022_SML.zip"
+optional = true
 sha256 = "46db55c45747e26dde5c1716d072b2aa74ace362a4424491ac646d2ab175befb"
 bytes = 166241019
 manual = true
@@ -239,6 +248,7 @@ url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2016-2022_SML.zip"
 [[file]]
 source = "oecd-icio"
 name = "2016-2022_EXT.zip"
+optional = true
 sha256 = "80ea6fb868ccaafbdd0f430532e638f0971b3b6712a2fc7eb08d88fff6405c4e"
 bytes = 170150625
 manual = true
@@ -278,3 +288,10 @@ name = "wdi_NY.GDP.MKTP.CD.zip"
 sha256 = "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81"
 bytes = 142891
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
+
+[[file]]
+source = "unsd-snaama"
+name = "unsd_GDPPC_USD_countries.xlsx"
+sha256 = "9082e75331f67b8210a102a69494a89cd77cd2ca2648f3fab893dca9383293de"
+bytes = 200369
+url = "https://unstats.un.org/unsd/amaapi/api/file/9"

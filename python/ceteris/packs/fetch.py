@@ -60,6 +60,8 @@ def main() -> int:
     args = parser.parse_args()
     bad = 0
     for entry in entries():
+        if entry.get("optional") and not path_of(entry["name"]).exists():
+            continue
         path = fetch(entry)
         digest, size = sha256(path), path.stat().st_size
         if "sha256" not in entry:
