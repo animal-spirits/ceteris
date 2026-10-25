@@ -60,11 +60,12 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, HS to ISIC concordance) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, final demand shares (10), labour share, unemployment rate, participation rate, education shares (3), GDP 2000, Gini 2000 (imputed flag) | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
-| `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10) | WorldPop 2000 aggregated through the H3 cells; VA downscaled as below |
-| `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured | WDI weighted applied rates by importer; zero inside agreements and customs unions (CEPII gravity, WB DTA) |
-| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph |
+| `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
+| `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
+| `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
+| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph, BACI 2000 trade by country |
 
 **Value added convention.** National VA by good is output less intermediate inputs, summed over
 all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
@@ -72,14 +73,18 @@ all sellers: ICIO value added at basic prices plus its taxes less subsidies on p
 alike, and VA + inputs = output holds exactly (the identity the GE reference model relies on).
 
 **Downscaling VA to provinces (traded goods only).** National VA by good from ICIO, then
-province shares from the best proxy available: agriculture by MapSPAM 2000 value of production;
-oil and gas by GEM extraction assets; coal and other mining by GEM coal mines and P1 mineral
+province shares from the best proxy available: agriculture by MapSPAM 2000 physical area of all
+crops (cropland; SPAM2000 has no value of production and SPAM2005's licence is non-commercial);
+oil and gas in the United States by EIA 2000 state production (SEDS, crude oil and marketed gas
+by heat content, federal offshore to the nearest coastal provinces by GEM fields), elsewhere by
+GEM extraction assets, flagged imputed in a country where assets with no start or discovery year
+carry more than half of its GEM weight; coal and other mining by GEM coal mines and P1 mineral
 sites; manufacturing goods by DOSE manufacturing GVA where a DOSE region matches a province by
 ISO 3166-2 code or exact name within its country (never through GADM geometry), else by Kummu
-gridded GDP. Each fallback falls back to population. Local goods get a base point only:
-national VA split by population (their equilibrium output follows local demand). Provinces with
-fewer than 1,000 working-age people get no VA; theirs is reallocated within the country by
-the same proxy, so every enterprise has workers to hire. Every row carries an imputation flag.
+gridded GDP, which serves the manufacturing chain only. Each fallback falls back to population.
+Local goods get a base point only: national VA split by population (their equilibrium output
+follows local demand). Provinces with fewer than 1,000 working-age people get no VA; theirs is
+reallocated within the country by the same proxy, so every enterprise has workers to hire. Every row carries an imputation flag.
 
 **Economies outside ICIO.** IO coefficients and final demand shares from the ICIO economy
 nearest in (region, log GDP per capita); national VA by good from WDI sector shares
@@ -93,10 +98,31 @@ parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population sh
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
 basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.
 
-**Gateways.** Per country: listed ports and major airports clustered by k-medoids on path cost,
-plus every land crossing (graph edge whose endpoints lie in different 2000 countries, merged
-within 50 km). Count per country proportional to the square root of 2000 trade, at least one,
-about 600 in total. Agent default under 22.2, set by benchmark.
+**Gateways.** Per country: k gateways, the k-medoids on great-circle distance of its
+candidates: its listed ports and airports and its land crossing points, the endpoints of graph
+edges (road, rail) whose two ends lie in different 2000 countries, merged within 50 km of
+midpoint per country pair. k is proportional to the square root of 2000 trade (BACI exports
+plus imports), at least one and at most the candidate count, scaled to about 600 in total; each
+gateway's kind is its candidate's. Agent default under 22.2, set by benchmark (open questions).
+
+**Tariffs.** The importer's WDI weighted mean applied rate of each group (primary goods 0 to 3,
+manufactures 4 to 6), the year nearest 2000 within five years (a year at 100% or more is a data
+error and counts as missing), applies to every exporter outside its agreements. Zero inside a goods free trade agreement or customs union in force on 1 January
+2000: CEPII gravity pairs flagged (fta_wto, rta_type CU or FTA, with or without an EIA) in both
+1999 and 2000, or World Bank DTA pairs listed for 2000 and earlier, or for 2000 under an
+agreement that entered into force on 1 January 2000. Partial scope and services-only agreements
+keep the rate. A dependency trades free of tariffs with its sovereign. An importer without a WDI
+rate takes its sovereign's, else its donor's (same region, nearest log income), flagged imputed.
+
+**Loading (`EconInputs::from_pack`).** The economy's provinces are the pack provinces with value
+added and a labour force; the others (below the working-age floor, or uninhabited) stay in the
+transport graph only, and `ProvinceData::pack` maps each economy province to its pack province.
+Enterprises are the (province, good) cells with VA > 0, VA0 the pack VA per month (USD). Leg costs
+are least-cost paths on the graph, run in parallel from every province and gateway, each keeping
+only its own country's provinces and gateways (from a province) or other countries' gateways
+(from a gateway): domestic, access and crossing legs, all gateway pairs of different countries.
+`network_from_graph` is that step alone, and `EconWorld::set_network` installs a rebuilt
+network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 
 **Calibration table** `econ_calib.arrow` (not built by the pack pipeline; written by
 `ceteris calibrate p2`, below): productivity A per enterprise, base factor quantities, base
@@ -562,6 +588,16 @@ texture fed from core columns.
 ## Open questions
 
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
+- Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on
+  great-circle distance, not path cost, since path costs need the Rust paths in the Python
+  pipeline. Land crossings enter as candidates, not each as a gateway pair: the P1 graph has
+  2,481 cross-border road and rail edges, 1,359 after merging within 50 km, which as gateways
+  would make about 2,700 gateways and the all-pairs crossing matrix twenty times its budget. The
+  built pack has 600 gateways (287 ports, 168 airports, 145 land crossings). Revisit with path
+  cost medoids, or sparse land crossings joined only to their neighbour, when the benchmark sets it.
+- Tariffs: WDI applied rates are effectively applied rates, preferences included, so the
+  rate charged outside agreements understates each importer's MFN rate; rescaling it so the
+  trade-weighted mean over all partners matches the WDI rate, or the MFN series, would correct it.
 - Sector-specific labour shares (P2 uses the PWT country share for every sector).
 - DOSE region matching rate to Natural Earth provinces without GADM geometry; if too low,
   manufacturing falls back to gridded GDP for those countries.

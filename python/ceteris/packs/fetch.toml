@@ -348,3 +348,33 @@ sha256 = "10ed7bc007e47895c2f387449365c20d0a87679cb8c69be678d0cc60df4d1aa5"
 bytes = 5393993
 url = "https://globalenergymonitor.org/projects/global-oil-gas-extraction-tracker/"
 manual = true
+
+# Tariffs (Task 17): WDI weighted mean applied rates by importer (primary, manufactured), and the trade agreements in
+# force on 1 January 2000 (CEPII gravity RTA flags by pair and year; World Bank DTA agreement list).
+[[file]]
+source = "wdi"
+name = "wdi_TM.TAX.TCOM.WM.AR.ZS.zip"
+sha256 = "a79f2589136cec8136f9b2e9af57d875264d551a04285ddaa46aa07448c2ef73"
+bytes = 23394
+url = "https://api.worldbank.org/v2/en/indicator/TM.TAX.TCOM.WM.AR.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_TM.TAX.MANF.WM.AR.ZS.zip"
+sha256 = "0e1cdd868fd2cd152bee4aa941118b42d2bcf9c3a1613ff5185fab959744a8ca"
+bytes = 23110
+url = "https://api.worldbank.org/v2/en/indicator/TM.TAX.MANF.WM.AR.ZS?downloadformat=csv"
+
+[[file]]
+source = "cepii-gravity"
+name = "Gravity_csv_V202211.zip"
+sha256 = "7ffea0510a536587f2f9295bbafef4a312a36b366acc256eb6d9770fe35e44b1"
+bytes = 206707748
+url = "https://www.cepii.fr/DATA_DOWNLOAD/gravity/data/Gravity_csv_V202211.zip"
+
+[[file]]
+source = "wb-dta"
+name = "DTA 1.0 - Horizontal Content (v2).xlsx"
+sha256 = "7c7a5b1e47233749290ffb54ce8546ef7d23094cf05b2f59291566b8bd4b7ede"
+bytes = 11141676
+url = "https://datacatalogfiles.worldbank.org/ddh-published/0065624/2/DR0093615/DTA%201.0%20-%20Horizontal%20Content%20(v2).xlsx"

@@ -158,8 +158,10 @@ def test_every_link_endpoint_is_named_and_ordered():
 
 
 def _pack_lines() -> str:
+    from ceteris.packs.econ import build as econ_build
+
     manifest = json.loads((PACK / "manifest.json").read_text())
-    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items()]
+    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items() if name not in econ_build.TABLES]
     return "# P1 pack 2000: table sha256 from manifest.json\n" + "\n".join(lines) + "\n"
 
 
