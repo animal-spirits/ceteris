@@ -70,6 +70,18 @@ def test_aggregation_preserves_output_totals(table):
             assert got[code].output[g] == pytest.approx(parts["out"][block][member].sum() if member else 0.0, rel=1e-9)
 
 
+def test_exports_sum_sales_to_foreign_columns(table):
+    """Intermediate and final sales of an economy's industries to the other economy's columns, by good."""
+    path, parts = table
+    got = icio.exports(path)
+    n_fd = len(FINAL)
+    for k, code in enumerate(("AAA", "BBB")):
+        rows, other = slice(k * 6, k * 6 + 6), slice((1 - k) * 6, (1 - k) * 6 + 6)
+        abroad = parts["z"][rows, other].sum(axis=1) + parts["fd"][rows, (1 - k) * n_fd : (2 - k) * n_fd].sum(axis=1)
+        want = np.bincount(GOOD, abroad, goods.N_GOODS)
+        assert got[code] == pytest.approx(want, rel=1e-12)
+
+
 def test_value_added_closes_the_identity(table):
     path, _ = table
     for c in icio.aggregate(path).values():
