@@ -128,15 +128,20 @@ profile stays enforced in every distribution and `check_sources.py` keeps its ch
   including commercial, with credit), `oecd-btige-key`. It maps each HS 1988/92 line to one CPA 2.1 activity
   (ISIC Rev 4 at division level, split as ICIO 2025 splits industries), so the equal split over linked divisions
   and the principal-link rule are gone. Every 2000 BACI line is covered (the old route left 0.6% of trade out).
-  Weights per value move by -26% (coal and other mining, gold now counted with metal ores) to +60% (light
-  manufacturing, which no longer receives a share of repair divisions); coal over machinery stays far above 10
-  (169, was 188).
+  The pipeline adapts the key in two places, which the OECD terms permit (`goods.read_hs_cpa`): non-monetary
+  gold (HS 7108; the key puts unwrought gold in metal ores, B072) is read as basic metals (C24B), so good 2
+  stays physical bulk; printed books and recorded media (J58, J59_60) are read as printing and reproduction
+  (C18), light manufacturing. Electricity (D35), recycling (E38) and the service and art codes (H53, M71, M74,
+  R90, R91) stay with the local goods: 23.1 billion USD, 0.35% of 2000 BACI trade, outside the traded goods.
+  Weights per value, new over old: agriculture 1.05, crude oil and gas 1.00, coal and other mining 0.96, food
+  0.96, light manufacturing 1.55 (it no longer receives a share of the repair divisions), chemicals, refined
+  fuels and metals 0.87, machinery, electronics and vehicles 0.82; coal over machinery is 221 (was 188).
 - Trade elasticities: each CPA activity takes the ISIC Rev 3 division of Caliendo and Parro's Table A.1
-  (`theta.REV3_OF_CPA`). Theta per good becomes 9.11, 13.53, 13.53, 2.62, 8.81, 10.70, 5.19 (was 6.73, 12.64 and
-  5.33 for goods 4 to 6), and the ADR 0023 rule draws four classes, 2.62 (food), 5.19 (machinery), 9.94
-  (agriculture, light manufacturing, chemicals and metals) and 13.53 (oil and gas, coal and mining), instead of
-  2.62, 5.88 and 12.55. `TradeParams::default()` keeps the ADR 0023 values until the owner decides whether to
-  adopt the new classes.
+  (`theta.REV3_OF_CPA`). Theta per good becomes 9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 (was 6.73, 12.64 and
+  5.33 for goods 4 to 6). The ADR 0023 rule draws three classes: 2.62 (food), 5.19 (machinery, electronics and
+  vehicles) and 10.57 (the other five goods), instead of 2.62, 5.88 and 12.55. Before the gold and books
+  adaptations it drew four (2.62, 5.19, 9.94, 13.53); the owner adopted the key's classes on 2026-10-25, and
+  `TradeParams::default()` moves to them in a separate P2 task.
 - Income where WDI and PWT have none: UNSD National Accounts (UN copyright) is replaced for the Cook Islands by
   ADB Key Indicators (`adb-kidb`, free for commercial use with attribution; 5,091 against 6,307 USD per person in
   2000) and for North Korea by the Maddison Project 2023 (`maddison-2023`, CC BY 4.0). Maddison values are 2011

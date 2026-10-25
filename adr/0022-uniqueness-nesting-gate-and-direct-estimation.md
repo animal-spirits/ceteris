@@ -117,6 +117,15 @@ P01, P05 and P04 is revisited in P9 with richer tariff data (line-level applied 
 flows under S05 iceberg costs may therefore give a distance elasticity outside H2's -0.7 to -1.1, or a
 tariff-based theta off its class value, for reasons of functional form rather than code.
 
+**Amendment (2026-10-25, ADR 0050).** The sample's split of BACI lines over goods changed after these
+estimates: the WITS and UNSD concordance gave way to the OECD BTiGE HS to CPA key, adapted locally
+(gold to basic metals, books and recorded media to printing). Every line now lies in one good and all
+2000 BACI lines are mapped. Traded value by good moves most for light manufacturing (1,563 to 952
+billion USD), chemicals, refined fuels and metals (1,276 to 1,586) and machinery, electronics and
+vehicles (2,421 to 2,891); the rest move by less than 10%. The ADR 0023 rule regroups the goods (light
+manufacturing joins agriculture, mining and chemicals in the top class). The estimates above are
+pending a re-run on the new sample and classes; the owner decision stands.
+
 ## Consequences
 
 The P2 gate is well posed, and fewer parameters enter joint inference in P9.
