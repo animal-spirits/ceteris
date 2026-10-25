@@ -26,7 +26,7 @@ them only as quantities offered to and demanded from each market.
 | Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
 | Merchant stocks targeted by coverage (8.2) | Enterprises order up to an inventory position (stock plus goods on order) of (1 + cover + L) months of use, cover = 1, L the sourcing-weighted expected months in transit of the input (owner decision, 2026-10-24); see the econ SPEC | A fixed two-month position that counts goods on order cannot hold a month in transit: importers bound at the equilibrium and V1 failed on the island (MIGRATION Task 3) |
 | Rationing within the tick after Pichler et al. (2022): priority by default (households' essential consumption, then intermediate users by contract, then the rest), proportional and mixed as S11 (8.2, 17.2) | S11 is `EconParams.rationing`, shared between intermediate users (index 0) and households (index 1) of what a market has: S + Q at an origin market (T3), the output left after the same-tick chain at a local market (T3; econ SPEC, Production). With A available and orders D_int, D_hh, D = D_int + D_hh, every class is filled when D <= A; otherwise: **Proportional** fills both at A / D. **Mixed** fills intermediate users at min(1, A / D_int) and households at max(A - D_int, 0) / D_hh (1 without household orders). **Priority** (default) serves households' essential consumption first, then intermediate users pro rata, then the rest; P2 has no essential consumption levels (they arrive in P4), so their P2 value is 0 and Priority fills as Mixed (`mixed_rationing_matches_definition`). Inside the same-tick chain intermediate users of a local good are served before households under every setting: the chain runs at E2, before household demand is posted (ADR 0020, Mapping to P2 as built) | Sources. Pichler, Pangallo, del Rio-Chanona, Lafond and Farmer (2022, JEDC 144, 104527, Section 2.2.2, eqs. (15) to (17), p. 8) use proportional rationing only: industry j delivers O_ji x_j / d_j to industry i, households receive c^d_i x_i / d_i; for other rules they refer to Pichler and Farmer (2021). That paper (Economic Systems Research 34(3), 2022, 273-293; read as arXiv 2101.07818v2, Section 4.2) defines (a) strict proportional rationing (Algorithm 1, eqs. (7) to (11), p. 8: r_i = x_i^max / d_i for all customers) and (b) mixed proportional/priority rationing (Algorithm 2, eqs. (12) to (16), p. 9): intermediate customers are rationed pro rata on r_i = x_i^max / sum_j a_ij d_j (eq. 12), so final demand plays no part in the bottleneck, and final demand takes the residual f_i = max(x_i - sum_j a_ij x_j, 0) (eq. 15). Mixed above is (b) with x_i^max = A, Proportional is (a). Their (c), priority as largest customer first, is not built: DESIGN 8.2 names its own priority order |
-| Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.05) (owner decisions 2026-10-24: kappa1 0.02 for stability, then 0.05 with expected inflation, MIGRATION Task 6) | The derived region (Stability region, below; ADR 0019) puts kappa1 0.2 outside for the theta-12.55 goods and kappa2 0.05 outside in the default mode. At kappa1 0.02 the world price level returns too slowly for the expectation loop: every P45 gain in the prior broke V1 (0.006: 1.02e-2) or the ledger (0.25 and up); at 0.05 with gain 0.006 V1 is 3.14e-5 and a small deviation decays by 0.99644 / 0.99676 per tick (frictionless / default; the blessed fixture after MIGRATION Task 8, reproduced by `p2_expectation_sweep.rs`; 2.4e-5 and 0.9963 / 0.9969 when measured at Task 6). Growth factor per tick of a small deviation from the fixture's GE equilibrium, ticks 300 to 600, at the per-good thetas (MIGRATION Task 6, pi^e = 0; frictionless / default): kappa1 0.02, kappa2 0: 0.9954 / 0.9954, the same with every crossing lag at 3; kappa1 0.05: 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756 (lag 3 the same); 0.2: 1.0000 / 1.0000 (oscillates, lag 3 the same). kappa2 0.05: kappa1 0.02: 0.9876 / ledger overflow (lag 3: 0.9881 / 0.9998); 0.05: 0.9738 / 1.0014; 0.1: 0.9999 / 0.9978; 0.2: 1.0000 / 1.0000. The stock integrates the gap and feeds the money and trade-balance loop (Task 7b) |
+| Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.05) (owner decisions 2026-10-24: kappa1 0.02 for stability, then 0.05 with expected inflation, MIGRATION Task 6) | The derived region (Stability region, below; ADR 0019) puts kappa1 0.2 outside for the theta-10.57 goods and kappa2 0.05 outside in the default mode. At kappa1 0.02 the world price level returns too slowly for the expectation loop: every P45 gain in the prior broke V1 (0.006: 1.02e-2) or the ledger (0.25 and up); at 0.05 with gain 0.006 V1 is 3.14e-5 and a small deviation decays by 0.99644 / 0.99676 per tick (frictionless / default; the blessed fixture after MIGRATION Task 8, reproduced by `p2_expectation_sweep.rs`; 2.4e-5 and 0.9963 / 0.9969 when measured at Task 6). Growth factor per tick of a small deviation from the fixture's GE equilibrium, ticks 300 to 600, at the per-good thetas (MIGRATION Task 6, pi^e = 0; frictionless / default): kappa1 0.02, kappa2 0: 0.9954 / 0.9954, the same with every crossing lag at 3; kappa1 0.05: 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756 (lag 3 the same); 0.2: 1.0000 / 1.0000 (oscillates, lag 3 the same). kappa2 0.05: kappa1 0.02: 0.9876 / ledger overflow (lag 3: 0.9881 / 0.9998); 0.05: 0.9738 / 1.0014; 0.1: 0.9999 / 0.9978; 0.2: 1.0000 / 1.0000. The stock integrates the gap and feeds the money and trade-balance loop (Task 7b) |
 
 ## State components
 
@@ -81,8 +81,8 @@ as an input). Only active cells carry a price state; destinations are every prov
 spending. Origin weights are relative to the good's lowest active price, w_o = (p_o /
 p_min)^-theta, and floored at WEIGHT_FLOOR = 1e-100: an origin below the floor is not a source,
 and a destination whose Phi_d (in the same relative units) is below it reaches no origin, buys
-nothing and has an infinite buyer price. A price spread above about 1e20 at theta 5, or 1e8 at
-the largest class value 12.55, can make a destination unreachable. Since every weight is relative to one global p_min, a single cheap
+nothing and has an infinite buyer price. A price spread above about 1e20 at theta 5, or 3e9 at
+the largest class value 10.57, can make a destination unreachable. Since every weight is relative to one global p_min, a single cheap
 origin anywhere sets the scale for all destinations.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
@@ -247,22 +247,22 @@ fixture's eps:
 
 | Good | theta_g | s_g | kappa1 limit | kappa2 limit at kappa1 0.05 (default) | at kappa1 0.02 |
 |---|---|---|---|---|---|
-| 0 Agriculture | 12.55 | 3 | 0.144 / 0.130 | 0.083 / 0.077 | 0.109 / 0.105 |
-| 1 Crude oil and gas | 12.55 | 1 | 0.145 / 0.132 | 0.049 / 0.059 | 0.016 / 0.080 |
-| 2 Coal and other mining | 12.55 | 2 | 0.144 / 0.130 | 0.077 / 0.071 | 0.040 / 0.097 |
-| 3 Food | 2.62 | 2 | 0.507 / 0.368 | 0.392 / 0.347 | 0.040 / 0.380 |
-| 4 Light manufacturing | 5.88 | 2 | 0.278 / 0.230 | 0.189 / 0.173 | 0.040 / 0.202 |
-| 5 Chemicals, refined fuels, metals | 12.55 | 2 | 0.143 / 0.124 | 0.077 / 0.068 | 0.031 / 0.095 |
-| 6 Machinery, electronics, vehicles | 5.88 | 2 | 0.278 / 0.230 | 0.189 / 0.173 | 0.040 / 0.202 |
+| 0 Agriculture | 10.57 | 3 | 0.168 / 0.149 | 0.104 / 0.096 | 0.130 / 0.126 |
+| 1 Crude oil and gas | 10.57 | 1 | 0.169 / 0.151 | 0.048 / 0.074 | 0.016 / 0.095 |
+| 2 Coal and other mining | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
+| 3 Food | 2.62 | 2 | 0.508 / 0.368 | 0.392 / 0.347 | 0.040 / 0.380 |
+| 4 Light manufacturing | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
+| 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
+| 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
 
 Limits are the first failing value on a 0.0005 grid.
 
 The default (kappa1 0.05, kappa2 0) lies on the edge kappa2 = 0 of the region and counts as
 inside (owner ruling, MIGRATION Task 6): J1 holds with equality, so the stock has a unit root (it
 keeps what a transient leaves, as decided: inventories are untargeted in P2) while J2 to J4 hold,
-kappa1 at 0.10 to 0.40 of its limit, and prices and output return to the steady state (spectral
-radius of the (x, q) block 0.19 to 0.93; 0.68 to 0.97 at kappa1 0.02). The
-derivation agrees with the fixture: kappa1 0.2 lies beyond the theta-12.55 limits and oscillates;
+kappa1 at 0.10 to 0.30 of its limit, and prices and output return to the steady state (spectral
+radius of the (x, q) block 0.29 to 0.93; 0.72 to 0.97 at kappa1 0.02). The
+derivation agrees with the fixture: kappa1 0.2 lies beyond the theta-10.57 limits and oscillates;
 kappa2 0.05 at kappa1 0.02 lies outside in the default mode for goods 1 to 6 and inside
 frictionless, and the fixture overflows in the first and decays in the second (Deviations).
 `price_rule_stability.rs` checks the conditions against a toy market run through
@@ -270,7 +270,7 @@ frictionless, and the fixture overflows in the first and decays in the second (D
 coordinate). This region, for the rule as built and with E from theta_g + 1 down to sigma,
 replaces the simplified 3 x 3 of the migration plan (owner ruling, MIGRATION Task 6): reading the
 stock before clearing against a fixed target misclassifies that toy market both ways (at E =
-13.55 it calls (0.02, 0.06) unstable and (0.1, 0.06) stable).
+13.55, theta 12.55 as before the OECD key, it calls (0.02, 0.06) unstable and (0.1, 0.06) stable).
 
 Nominal mode. pi^e adds a world mode outside the one-market region: with money fixed, a common
 deviation X of the price level lowers household real demand, e = -h X, and the rule pulls X back
@@ -316,7 +316,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P01 | Trade elasticity theta_g per traded good, in classes (ADRs 0018 and 0023) | 2.62 to 12.55, the range of the class values (widened from 4 to 8, ADR 0018). Values: class 0 (food) 2.62, class 1 (light manufacturing; machinery, electronics and vehicles) 5.88, class 2 (agriculture; crude oil and gas; coal and other mining; chemicals, refined fuels and metals) 12.55. Caliendo and Parro (2015, Table 1 p. 18, 99% sample) sector estimates averaged over each good's HS lines with 2000 BACI trade weights (9.11, 13.53, 13.53, 2.62, 6.73, 12.64, 5.33 for goods 0 to 6), grouped into the fewest classes within a factor 1.5, each at its goods' trade-weighted mean; local goods 0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI, S05 costs; values kept, owner 2026-10-24): 13.36 (s.e. 1.24), 13.20 (1.42), 11.82 (1.02) for classes 0 to 2; 8.4 to 9.4 with contiguity, language and colony controls | Literature |
+| P01 | Trade elasticity theta_g per traded good, in classes (ADRs 0018 and 0023) | 2.62 to 10.57, the range of the class values (widened from 4 to 8, ADR 0018). Values: class 0 (food) 2.62, class 1 (machinery, electronics and vehicles) 5.19, class 2 (agriculture; crude oil and gas; coal and other mining; light manufacturing; chemicals, refined fuels and metals) 10.57, derived by the ADR 0023 rule from the OECD concordance. Caliendo and Parro (2015, Table 1 p. 18, 99% sample) sector estimates averaged over each good's HS lines with 2000 BACI trade weights (9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 for goods 0 to 6), grouped into the fewest classes within a factor 1.5, each at its goods' trade-weighted mean; local goods 0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI, S05 costs, on the classes of the time: food; goods 4 and 6; goods 0, 1, 2, 5; values kept, owner 2026-10-24): 13.36 (s.e. 1.24), 13.20 (1.42), 11.82 (1.02); 8.4 to 9.4 with contiguity, language and colony controls | Literature |
 | P02 | Inventory target coverage s_g | 1 to 6 months by good, start: agriculture 3, oil and gas 1, coal and mining 2, food 2, manufactures 2; local goods 0 | Free |
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |

@@ -141,7 +141,7 @@ profile stays enforced in every distribution and `check_sources.py` keeps its ch
   5.33 for goods 4 to 6). The ADR 0023 rule draws three classes: 2.62 (food), 5.19 (machinery, electronics and
   vehicles) and 10.57 (the other five goods), instead of 2.62, 5.88 and 12.55. Before the gold and books
   adaptations it drew four (2.62, 5.19, 9.94, 13.53); the owner adopted the key's classes on 2026-10-25, and
-  `TradeParams::default()` moves to them in a separate P2 task.
+  `TradeParams::default()` moves to them in a separate P2 task (done, ADR 0023).
 - Income where WDI and PWT have none: UNSD National Accounts (UN copyright) is replaced for the Cook Islands by
   ADB Key Indicators (`adb-kidb`, free for commercial use with attribution; 5,091 against 6,307 USD per person in
   2000) and for North Korea by the Maddison Project 2023 (`maddison-2023`, CC BY 4.0). Maddison values are 2011
