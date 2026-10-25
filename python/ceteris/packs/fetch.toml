@@ -282,12 +282,20 @@ sha256 = "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81"
 bytes = 142891
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
 
+# GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
 [[file]]
-source = "unsd-nama"
-name = "unsd_GDPPC_USD_countries.xlsx"
-sha256 = "9082e75331f67b8210a102a69494a89cd77cd2ca2648f3fab893dca9383293de"
-bytes = 200369
-url = "https://unstats.un.org/unsd/amaapi/api/file/9"
+source = "adb-kidb"
+name = "adb_kidb_NY_GDP_PCAP_CD_COO.csv"
+sha256 = "fff1e442fba05e11ffb46dcfc75a9ee4a4d678623cf61ea81cd18cefdf9b9325"
+bytes = 1421
+url = "https://kidb.adb.org/api/v5/sdmx/data/ADB,DF_NA/A.NY_GDP_PCAP_CD.COO?format=sdmx-csv&startPeriod=2000&endPeriod=2010"
+
+[[file]]
+source = "maddison-2023"
+name = "mpd2023_web.xlsx"
+sha256 = "ecc5916ca12789b983fc4be437f8a354bbf4291323605324ac3e0aea4c57cbb6"
+bytes = 4903804
+url = "https://dataverse.nl/api/access/datafile/421302"
 
 # Downscaling VA to provinces (Task 16). SPAM2000 has no value of production; its physical area (cropland of
 # all crops) is the agriculture proxy. SPAM2005 has value of production but ships a non-commercial licence.

@@ -181,11 +181,8 @@ def read_swiid(path: Path, names: Mapping[str, str]) -> dict[str, dict[int, floa
     return dict(out)
 
 
-def _xlsx_sheet(path: Path, sheet: str, header_cell: str | None = None) -> Iterator[dict[str, object]]:
-    """Rows of one worksheet as dicts by header; numbers as float, text as str.
-
-    The first row is the header, or the first row holding a cell with the text `header_cell` (UNSD files put a title above it).
-    """
+def _xlsx_sheet(path: Path, sheet: str) -> Iterator[dict[str, object]]:
+    """Rows of one worksheet as dicts by its first row; numbers as float, text as str."""
     main = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
     rel = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
     with zipfile.ZipFile(path) as z:
@@ -209,8 +206,6 @@ def _xlsx_sheet(path: Path, sheet: str, header_cell: str | None = None) -> Itera
                 col = "".join(ch for ch in c.get("r") if ch.isalpha())
                 cells[col] = strings[int(v.text)] if c.get("t") == "s" else v.text if c.get("t") == "str" else float(v.text)
             row.clear()
-            if not header and header_cell is not None and header_cell not in cells.values():
-                continue
             if not header:
                 header = {col: str(v) for col, v in cells.items()}
             elif cells:

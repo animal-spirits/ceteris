@@ -91,8 +91,8 @@ reallocated within the country by the same proxy, so every enterprise has worker
 nearest in (region, log GDP per capita); national VA by good from WDI sector shares
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
-(UNSD) GDP per person against the donors' in the same source, never the region median when an
-income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
+(ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
+always against the donors' in the same source, never the region median when an income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
 over goods 1 to 8 when only manufacturing is missing); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
