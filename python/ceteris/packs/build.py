@@ -3,7 +3,8 @@
 
     uv run python -m ceteris.packs [--out data/packs/2000]
 
-Same inputs give byte-identical outputs; `manifest.json` records every table's sha256.
+Same inputs give byte-identical outputs; `manifest.json` records every table's sha256. Pack format 3 adds the 2000
+economic tables (`econ.build`), written after the P1 tables from them.
 """
 
 import argparse
@@ -27,7 +28,7 @@ from . import counties, fetch, fills, geo, provinces, raster, resources, transpo
 
 CONFIG = tomllib.loads(Path(__file__).with_name("pack.toml").read_text())
 ROOT = Path(__file__).resolve().parents[3]
-PACK_FORMAT = 2
+PACK_FORMAT = 3
 PALETTE_SIZE = 8
 # Map geometry simplification tolerance in degrees (about 1 km).
 SIMPLIFY_DEG = 0.01
@@ -326,6 +327,11 @@ def build(out: Path) -> dict:
     (web / "counties.json").write_text(json.dumps(county_attrs, separators=(",", ":"), ensure_ascii=False))
     hashes["web/counties.json"] = sha256(web / "counties.json")
 
+    from .econ import build as econ_build
+
+    econ = econ_build.build(out, out, cache)
+    hashes |= econ["tables"]
+
     stats = extra["stats"] | {
         "provinces": n,
         "countries": len(codes),
@@ -340,6 +346,7 @@ def build(out: Path) -> dict:
         "counties_unassigned": int((home < 0).sum()),
         "county_area_outside_province": round(1 - fits_inside / fits, 4),
         "fills": fill_stats,
+        "econ": econ["stats"],
     }
     manifest = {
         "pack_format": PACK_FORMAT,

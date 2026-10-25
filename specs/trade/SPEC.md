@@ -370,7 +370,9 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 ## Open questions
 
 - Gateway count and selection rule are an agent default (22.2), set by benchmark; starting
-  rule in the econ SPEC pack section.
+  rule in the econ SPEC pack section. As built (Task 17): 600 gateways, land crossing points
+  among the k-medoid candidates rather than one gateway pair per crossing, and every gateway
+  pair of different countries a crossing leg (econ SPEC, Open questions).
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.

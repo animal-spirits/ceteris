@@ -320,7 +320,7 @@ reason = "The dataset ships SPAM_License_v3.2.pdf: own non-commercial use only, 
 checked = 2026-10-24
 confidence = "high"
 replaced_by = "mapspam-2000"
-notes = "Unused: not in fetch.toml. A copy of spam2005v3r2_global_val_prod_agg.geotiff.zip (93,448,154 bytes) sits in data/cache from Task 16; the pipeline must not read it."
+notes = "Unused: not in fetch.toml, and no copy is kept (the file downloaded in Task 16 was deleted). The pipeline must not read it."
 
 [[source]]
 id = "gdhy"
@@ -702,8 +702,8 @@ confidence = "high"
 id = "cepii-gravity"
 name = "CEPII Gravity database"
 provider = "CEPII"
-version = "1948-2020"
-role = "Distances, RTA and WTO membership by country pair (5.4, 8.5)"
+version = "V202211, 1948-2021"
+role = "Distances, RTA and WTO membership by country pair (5.4, 8.5); P2 tariffs: goods FTAs and customs unions in force in 1999 and 2000 (fta_wto, rta_type)"
 licence = "etalab-2.0"
 licence_url = "https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=8"
 attribution = "Conte, Cotterlaz and Mayer (2022), CEPII"
@@ -712,15 +712,15 @@ share_alike = false
 use = "primary"
 policy = "bundle"
 reason = "Etalab 2.0"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "high"
 
 [[source]]
 id = "wb-dta"
 name = "Deep Trade Agreements database"
 provider = "World Bank"
-version = "v2, 1958-2022"
-role = "Preferential agreement content (8.5)"
+version = "v2, 1958-2022; DTA 1.0 Horizontal Content (v2) workbook"
+role = "Preferential agreement content (8.5); P2 tariffs: goods FTAs and customs unions in force on 1 January 2000 (Agreements and Bilateral Information sheets)"
 licence = "CC-BY-4.0"
 licence_url = "https://datacatalog.worldbank.org/search/dataset/0065624"
 attribution = "World Bank, Deep Trade Agreements"
@@ -729,8 +729,9 @@ share_alike = false
 use = "primary"
 policy = "bundle"
 reason = "CC BY 4.0"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "high"
+notes = "The data catalog page (dataset 0065624) states Creative Commons Attribution 4.0 for the collection on 2026-10-24."
 
 [[source]]
 id = "wto-tariffs"
@@ -875,7 +876,7 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS."
 
 [[source]]
 id = "wb-gem"
