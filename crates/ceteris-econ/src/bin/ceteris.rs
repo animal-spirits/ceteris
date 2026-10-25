@@ -1,12 +1,13 @@
 //! `ceteris export|run`: Arrow export of a P2 world and of a run from its data state.
 //!
 //! ```text
-//! ceteris export --fixture --out DIR
-//! ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR]
+//! ceteris export --fixture|--pack DIR --out DIR
+//! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--history [--history-every N]] --out DIR
 //! ```
 //!
-//! `--from-equilibrium` starts the run from a GE reference solution
+//! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
+//! generated fixture. `--from-equilibrium` starts the run from a GE reference solution
 //! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--history` also
 //! writes the per-tick series of `ceteris_econ::history`, every N ticks (default 1).
 
@@ -21,22 +22,30 @@ use ceteris_econ::fixture::small_world;
 use ceteris_econ::history::run_recorded;
 use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
+use ceteris_geo::graph::TransportParams;
+use ceteris_geo::pack::Pack;
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
-  ceteris export --fixture --out DIR
-  ceteris run --fixture --ticks N [--frictionless] [--from-equilibrium DIR]
+  ceteris export --fixture|--pack DIR --out DIR
+  ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--history [--history-every N]] --out DIR";
 
 /// Where the inputs of a world come from.
 enum Source {
     Fixture,
+    Pack(PathBuf),
 }
 
 impl Source {
-    fn load(&self) -> EconInputs {
+    fn load(&self) -> Result<EconInputs, String> {
         match self {
-            Source::Fixture => small_world(),
+            Source::Fixture => Ok(small_world()),
+            Source::Pack(dir) => {
+                let pack =
+                    Pack::load(dir, &TransportParams::default()).map_err(|e| e.to_string())?;
+                EconInputs::from_pack(&pack, dir).map_err(|e| e.to_string())
+            }
         }
     }
 }
@@ -59,7 +68,10 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fixture" => source = Some(Source::Fixture),
-            "--pack" => return Err("--pack needs the pack loader, which is not built yet".into()),
+            "--pack" => {
+                let dir = args.next().ok_or("--pack needs a directory")?;
+                source = Some(Source::Pack(PathBuf::from(dir)));
+            }
             "--frictionless" => frictionless = true,
             "--from-equilibrium" => {
                 let dir = args.next().ok_or("--from-equilibrium needs a directory")?;
@@ -82,7 +94,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         }
     }
     Ok(Args {
-        source: source.ok_or("choose an input with --fixture")?,
+        source: source.ok_or("choose an input with --fixture or --pack")?,
         out: out.ok_or("--out is required")?,
         ticks,
         frictionless,
@@ -104,7 +116,7 @@ fn export(args: &Args) -> Result<(), String> {
                 .into(),
         );
     }
-    let inputs = args.source.load();
+    let inputs = args.source.load()?;
     let (params, trade) = (EconParams::default(), TradeParams::default());
     let kernel = Kernel::build(&inputs.network, &inputs.weight, &inputs.wedges, &trade);
     write_inputs(&args.out, &inputs, &kernel, &params, &trade).map_err(|e| e.to_string())
@@ -120,7 +132,7 @@ fn run(args: &Args) -> Result<(), String> {
     } else {
         EconParams::default()
     };
-    let (inputs, trade) = (Arc::new(args.source.load()), TradeParams::default());
+    let (inputs, trade) = (Arc::new(args.source.load()?), TradeParams::default());
     let world = match &args.equilibrium {
         Some(dir) => {
             let solution = Equilibrium::read(dir).map_err(|e| e.to_string())?;

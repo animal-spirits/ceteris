@@ -210,6 +210,7 @@ pub fn small_world() -> EconInputs {
             country: province_country,
             population,
             w0: Vec::new(),
+            pack: Vec::new(),
         },
         pops,
         enterprises: ent,

@@ -12,6 +12,7 @@ use ceteris_core::sim::{SNAPSHOT_EVERY, Sim};
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::{EconParams, EconWorld};
+use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
 use ceteris_trade::{Kernel, N_GOODS, TradeParams};
 
@@ -268,4 +269,225 @@ fn v1_fixture_frictionless_matches_reference() {
     ] {
         assert!(d < TOL, "{what} deviates by {d:e}; {summary}");
     }
+}
+
+/// `set_network` with the network the world already has, between ticks, leaves the run
+/// bit for bit as it was (the fixture; the pack test relies on it for its control run).
+#[test]
+fn set_network_to_the_same_network_changes_nothing() {
+    let sim = || {
+        EconWorld::sim(
+            Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams::default(),
+        )
+    };
+    let (mut a, mut b) = (sim(), sim());
+    a.run_until(12).unwrap();
+    b.run_until(12).unwrap();
+    let net = b.world().inputs().network.clone();
+    b.world_mut().set_network(net);
+    a.run_until(48).unwrap();
+    b.run_until(48).unwrap();
+    assert_eq!(a.snapshot_hashes(), b.snapshot_hashes());
+}
+
+/// The built pack and its directory, or None (with the notice of `ceteris-geo`'s pack tests)
+/// where it has not been built, as in CI.
+fn built_pack() -> Option<(ceteris_geo::pack::Pack, PathBuf)> {
+    let dir = ceteris_geo::pack::default_dir();
+    if !dir.join("provinces.arrow").exists() {
+        eprintln!(
+            "skipping: no pack at {}; build it with `uv run python -m ceteris.packs`",
+            dir.display()
+        );
+        return None;
+    }
+    let pack =
+        ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).expect("pack loads");
+    Some((pack, dir))
+}
+
+/// The full-pack world loads: every province has a country whose final demand shares sum to
+/// one and at least one enterprise, every enterprise has workers, every pop belongs to a
+/// province with value added, and the inputs pass `validate`.
+#[test]
+fn pack_inputs_load() {
+    let Some((pack, dir)) = built_pack() else {
+        return;
+    };
+    let started = std::time::Instant::now();
+    let inputs = ceteris_econ::EconInputs::from_pack(&pack, &dir).unwrap();
+    let load = started.elapsed();
+    inputs.validate();
+    for i in 0..inputs.n_provinces() {
+        let omega = &inputs.countries.omega[inputs.country_of(i)];
+        assert!(
+            (omega.iter().sum::<f64>() - 1.0).abs() < 1e-12,
+            "province {i}: final demand shares {omega:?}"
+        );
+    }
+    let mut firms = vec![0usize; inputs.n_provinces()];
+    for e in 0..inputs.n_enterprises() {
+        let ent = &inputs.enterprises;
+        firms[ent.province[e] as usize] += 1;
+        assert!(
+            ent.l0[e] > 0.0 && ent.va0[e] > 0.0 && ent.a[e] == 1.0,
+            "enterprise {e}: L0 {}, VA0 {}, A {}",
+            ent.l0[e],
+            ent.va0[e],
+            ent.a[e]
+        );
+    }
+    assert!(firms.iter().all(|&n| n > 0), "a province has no enterprise");
+    let supply = inputs.labour_supply(&EconParams::default().edu_eff);
+    assert!(supply.iter().all(|&s| s > 0.0));
+    let n = pack.provinces.len();
+    let left_out = n - inputs.n_provinces();
+    let net = &inputs.network;
+    println!(
+        "pack world: {} of {n} provinces ({left_out} without value added or labour), {} pops, \
+         {} enterprises, {} countries, {} gateways; legs: {} domestic, {} access, {} crossings; \
+         population {:.4e}; from_pack {load:?}",
+        inputs.n_provinces(),
+        inputs.n_pops(),
+        inputs.n_enterprises(),
+        inputs.n_countries(),
+        net.n_gateways(),
+        net.domestic.len(),
+        net.access.len(),
+        net.crossings.len(),
+        inputs.pops.population.iter().sum::<f64>(),
+    );
+    assert!(left_out < n / 10);
+}
+
+/// Share of the country pairs of `pairs` in the international flows of the last 12 ticks, by
+/// value and by units, all goods. Shares compare runs whose price levels differ.
+fn pair_shares(w: &EconWorld, pairs: &[(usize, usize)]) -> (f64, f64) {
+    let nc = w.inputs().n_countries();
+    let mean = w.scratch.flows.mean();
+    let cells = |ex: usize, im: usize| (0..N_GOODS).map(move |g| (ex * nc + im) * N_GOODS + g);
+    let sum = |x: &[f64], keys: &mut dyn Iterator<Item = usize>| keys.map(|k| x[k]).sum::<f64>();
+    let foreign = || {
+        (0..nc)
+            .flat_map(move |ex| (0..nc).filter(move |&im| im != ex).map(move |im| (ex, im)))
+            .flat_map(move |(ex, im)| cells(ex, im))
+    };
+    let chosen = || pairs.iter().flat_map(move |&(ex, im)| cells(ex, im));
+    (
+        sum(&mean.pair_value, &mut chosen()) / sum(&mean.pair_value, &mut foreign()),
+        sum(&mean.pair_units, &mut chosen()) / sum(&mean.pair_units, &mut foreign()),
+    )
+}
+
+/// The cheapest crossing cost per (exporter, importer) country pair.
+fn cheapest_crossings(net: &ceteris_trade::Network) -> BTreeMap<(usize, usize), f64> {
+    let mut out = BTreeMap::new();
+    for l in &net.crossings {
+        let key = (
+            usize::from(net.gateway_country[l.from as usize]),
+            usize::from(net.gateway_country[l.to as usize]),
+        );
+        let c = out.entry(key).or_insert(f64::INFINITY);
+        *c = l.cost_per_t.min(*c);
+    }
+    out
+}
+
+fn assert_finite(w: &EconWorld, when: &str) {
+    let m = &w.markets;
+    let bad_price =
+        (0..m.price.len()).find(|&c| m.active[c] && !(m.price[c].is_finite() && m.price[c] > 0.0));
+    assert!(bad_price.is_none(), "{when}: price at cell {bad_price:?}");
+    assert!(
+        w.wage.iter().all(|&x| x.is_finite() && x > 0.0),
+        "{when}: a wage is not finite and positive"
+    );
+    assert!(
+        w.world_price_index().is_finite(),
+        "{when}: world price index"
+    );
+}
+
+/// Review Focus 3 on the full pack: 12 ticks from the data state, then the Suez Canal closes,
+/// the network is rebuilt from the graph (`network_from_graph`, `set_network`) and the run
+/// goes on for 24 ticks with every invariant checked. Against a control run without the
+/// closure, the country pairs whose cheapest crossing went through Suez (more than 1% dearer
+/// without it) carry a smaller share of international trade, by value and by units.
+#[test]
+fn kernel_rebuilds_after_chokepoint_closure() {
+    const BEFORE: u32 = 12;
+    const AFTER: u32 = 24;
+    let Some((mut pack, dir)) = built_pack() else {
+        return;
+    };
+    let gateways = ceteris_econ::pack::Gateways::read(&dir).unwrap();
+    let inputs = Arc::new(ceteris_econ::EconInputs::from_pack(&pack, &dir).unwrap());
+    let sim = |inputs: &Arc<ceteris_econ::EconInputs>| {
+        EconWorld::sim(
+            Arc::clone(inputs),
+            EconParams::default(),
+            TradeParams::default(),
+        )
+    };
+    let (mut shocked, mut control) = (sim(&inputs), sim(&inputs));
+    let started = std::time::Instant::now();
+    for s in [&mut shocked, &mut control] {
+        s.run_until(BEFORE).unwrap_or_else(|v| panic!("{v}"));
+    }
+    let per_tick = started.elapsed() / (2 * BEFORE);
+    assert_finite(shocked.world(), "tick 12");
+    println!(
+        "full pack, 12 ticks from the data state: no violation, prices and wages finite, \
+         world price index {}; {per_tick:?} per tick",
+        shocked.world().world_price_index()
+    );
+
+    let suez = pack.chokepoint("Suez Canal").expect("Suez in the pack");
+    pack.graph
+        .set_chokepoint_closed(suez, true, &TransportParams::default());
+    let closed = inputs.network_from_graph(&pack, &gateways);
+    let open = &inputs.network;
+    let legs = |n: &ceteris_trade::Network| (n.domestic.len(), n.access.len(), n.crossings.len());
+    assert_eq!(
+        legs(&closed),
+        legs(open),
+        "every leg stays reachable without Suez"
+    );
+    let (open_cost, closed_cost) = (cheapest_crossings(open), cheapest_crossings(&closed));
+    let dependent: Vec<(usize, usize)> = open_cost
+        .iter()
+        .filter(|&(k, &c)| closed_cost[k] > 1.01 * c)
+        .map(|(&k, _)| k)
+        .collect();
+    assert!(!dependent.is_empty());
+    let before = pair_shares(control.world(), &dependent);
+    shocked.world_mut().set_network(closed);
+    assert_ne!(shocked.world().digest(), control.world().digest());
+
+    for s in [&mut shocked, &mut control] {
+        s.run_until(BEFORE + AFTER)
+            .unwrap_or_else(|v| panic!("{v}"));
+    }
+    assert_finite(shocked.world(), "after the closure");
+    let (with, without) = (
+        pair_shares(shocked.world(), &dependent),
+        pair_shares(control.world(), &dependent),
+    );
+    println!(
+        "Suez closed at tick {BEFORE}: {} of {} country pairs depend on it; their share of \
+         international trade (value, units): ticks 1..12 {before:.4?}, ticks {}..{} with the \
+         closure {with:.4?}, without {without:.4?}; world price index {} with, {} without",
+        dependent.len(),
+        open_cost.len(),
+        BEFORE + AFTER - 11,
+        BEFORE + AFTER,
+        shocked.world().world_price_index(),
+        control.world().world_price_index(),
+    );
+    assert!(
+        with.0 < without.0 && with.1 < without.1,
+        "Suez-dependent shares {with:?} did not fall below {without:?}"
+    );
 }

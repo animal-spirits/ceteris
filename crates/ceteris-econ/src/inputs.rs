@@ -28,6 +28,10 @@ pub struct Countries {
 pub struct ProvinceData {
     /// Same as `Network::province_country`.
     pub country: Vec<u16>,
+    /// Pack province (graph node) of each province, for a world loaded from the pack
+    /// ([`EconInputs::from_pack`]); empty for a generated world, whose provinces are no
+    /// pack's.
+    pub pack: Vec<u32>,
     pub population: Vec<f64>,
     /// Base wage w0, numeraire per effective labour unit. See [`EconInputs::set_base_point`].
     pub w0: Vec<f64>,
@@ -243,6 +247,10 @@ impl EconInputs {
             p.w0.iter().all(|&w| w.is_finite() && w > 0.0),
             "base wages must be finite and positive; fill them with set_base_point"
         );
+        assert!(
+            p.pack.is_empty() || (p.pack.len() == np && p.pack.is_sorted_by(|a, b| a < b)),
+            "pack provinces must be one per province, increasing"
+        );
 
         let pp = &self.pops;
         let n = pp.province.len();
@@ -339,6 +347,7 @@ impl EconInputs {
             country,
             population,
             w0,
+            pack,
         } = provinces;
         let PopData {
             province: pop_province,
@@ -387,6 +396,11 @@ impl EconInputs {
         e.f64s(l0);
         e.f64s(va_target);
         e.f64s(coef.as_flattened());
+        // appended only when present, so generated worlds keep their digest
+        if !pack.is_empty() {
+            b"pack-provinces".iter().for_each(|&b| e.u8(b));
+            e.u32s(pack);
+        }
         // appended only when present, so least-cost networks keep their digest
         if let Some(rt) = route_taus {
             b"route-taus".iter().for_each(|&b| e.u8(b));
