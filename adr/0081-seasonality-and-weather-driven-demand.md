@@ -3,7 +3,7 @@
 Status: proposed
 Date: 2026-10-24
 Design sections: 4.3, 7.1, 7.7, 8.2, 13.1, ADR 0034, ADR 0073
-Phase: P2 (calendars), P8 (weather-driven demand)
+Phase: P2 (calendars as data), P4 (harvest step), P8 (weather-driven demand)
 
 ## Context
 
@@ -36,7 +36,9 @@ Option 2.
 
 ## Migration
 
-- P2: crop calendars and seasonal factors (data only, plus the harvest step).
+- P2: crop calendars and seasonal factors as pack data only. P2 output is smooth across months,
+  so the data state stays the steady state of ADR 0089 (owner, 2026-10-25).
+- P4: the harvest step, with demography.
 - P8: degree-day demand and hydro from the climate module.
 - Data: ERA5 (in the manifest), crop calendars from SAGE or MIRCA (licences to audit).
 
