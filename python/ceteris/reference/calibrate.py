@@ -3,7 +3,8 @@ values are held fixed and prices are solved first, so the data state is the stea
 
 Stage 1, values. Output value V = VA / (1 - sum_k a_kg) per traded enterprise, VA the pack's.
 Destinations spend on traded goods E_dg = households' PIGL spending at q_d of their income
-(their province's VA by effective labour share, their country's tariff rebate by population)
+(their province's wages s_L VA by effective labour share; their country's profits (1 - s_L) VA
+and tariff rebate by population, national ownership, owner 2026-10-25)
 plus sum a_kg V of the province's enterprises. One scalar r_g per traded good rescales its V (and
 VA) so that world spending net of tariffs equals world output value. Rebates depend on sourcing,
 local output on income and income on local output, so passes of stages 1, 2 and 4 repeat until
@@ -54,7 +55,7 @@ ANDERSON_STALL = 20  # sweeps without a new smallest residual before the mixing 
 # Sinkhorn tolerance leaves a floor near 1e-12 on the full pack.
 PASS_TOL = 1e-11
 MAX_PASSES = 100
-LOCAL_TOL = 1e-15  # relative change of local output that ends the income fixed point
+LOCAL_TOL = 1e-14  # largest relative change of any local output that ends the income fixed point
 MAX_LOCAL = 1_000
 FORMAT = "3"
 
@@ -260,8 +261,11 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
     kp, kc = inp.pop_province, c[inp.pop_province]
     people = inp.pop_population
     country_people = np.bincount(kc, people, n_c)
-    va_share = inp.pop_effective / inp.labour_supply[kp]  # a pop's share of its province's wages and dividends
-    rebate_share = np.divide(people, country_people[kc], out=np.zeros_like(people), where=country_people[kc] > 0)
+    wage_share = inp.pop_effective / inp.labour_supply[kp]  # a pop's share of its province's wages
+    people_share = np.divide(people, country_people[kc], out=np.zeros_like(people), where=country_people[kc] > 0)
+    province_people = np.bincount(c, inp.population, n_c)
+    province_share = np.divide(inp.population, province_people[c], out=np.zeros(n_p), where=province_people[c] > 0)
+    s_l = inp.ent_s_l
     sigma_k = inp.sigma_income[kc]
     om = inp.omega / inp.omega.sum(axis=1, keepdims=True)
     v_data = np.where(traded_e, inp.ent_va_target / a_va, 0.0)
@@ -271,15 +275,19 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
     theta = np.where(traded, inp.theta, 1.0)
 
     def households(v, rebate, q, weights):
-        va_p = np.bincount(ep, a_va * v, n_p)
-        income = va_share * va_p[kp] + rebate_share * rebate[kc]
+        va = a_va * v
+        bill = np.bincount(ep, s_l * va, n_p)
+        pool = np.bincount(inp.ent_country, (1.0 - s_l) * va, n_c)
+        income = wage_share * bill[kp] + people_share * (pool + rebate)[kc]
         per_person = np.divide(income, people, out=np.zeros_like(income), where=people > 0)
         with np.errstate(divide="ignore", invalid="ignore"):
             share = demand.shares(weights, kc, q[kp], per_person, sigma_k, inp.category, inp.sigma_demand, inp.pigl)
         pop_spend = np.where(income[:, None] > 0, share * income[:, None], 0.0)
         spend_hh = np.zeros((n_p, n_g))
         np.add.at(spend_hh, kp, pop_spend)
-        return va_p, income, pop_spend, spend_hh
+        # household income per province rebates aside, the weights of the world price index (`io.base_income`)
+        base = bill + province_share * pool[c]
+        return base, income, pop_spend, spend_hh
 
     def settle(r, rebate, q, weights, y_local):
         """Income and local output at given r, rebates, buyer prices and weights: output values V."""
@@ -289,7 +297,7 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
             use = np.zeros((n_p, n_g))
             np.add.at(use, ep[traded_e], a_e[traded_e] * v[traded_e, None])
             y_new = local_output(inp, a_e, (spend_hh + use)[:, ~traded])
-            settled = _relative(y_new, y_local) <= LOCAL_TOL
+            settled = np.all(np.abs(y_new - y_local) <= LOCAL_TOL * np.abs(y_new))
             y_local = y_new
             if settled:
                 return np.where(traded_e, r[eg] * v_data, y_local)
@@ -322,7 +330,7 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
     for passes in range(1, MAX_PASSES + 1):
         v = settle(r, rebate, q, weights, y_local)
         y_local = np.where(traded_e, 0.0, v)
-        va_p, income, _, spend_hh = households(v, rebate, q, weights)
+        base, income, _, spend_hh = households(v, rebate, q, weights)
         spend_int = np.zeros((n_p, n_g))
         np.add.at(spend_int, ep, a_e * v[:, None])
         spend = np.where(traded[None, :], spend_hh + spend_int, 0.0)
@@ -332,7 +340,7 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
         top = np.where(origin, lw, -np.inf).max(axis=0)
         raw = np.where(origin, np.exp(-(lw - np.where(traded, top, 0.0)) / theta), 0.0)
         raw[:, ~traded] = 1.0
-        index_weights = om[c] * va_p[:, None]
+        index_weights = om[c] * base[:, None]
         mass = index_weights.sum(axis=0)
         index_raw = np.where(traded[None, :], model._sourcing(inp, raw)["index"], 1.0)
         level = (index_weights * index_raw).sum(axis=0)
@@ -381,19 +389,15 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
 
     v = settle(r, rebate, q, weights, y_local)
     va0 = a_va * v
-    va_p, income, pop_spend, spend_hh = households(v, rebate, q, weights)
+    _, income, pop_spend, spend_hh = households(v, rebate, q, weights)
     spend_int = np.zeros((n_p, n_g))
     np.add.at(spend_int, ep, a_e * v[:, None])
     spend_int[:, ~traded] = 0.0
 
     own = np.where(traded_e, price[ep, eg], 1.0)
     output = v / own
-    s_l = inp.ent_s_l
     bill = np.bincount(ep, s_l * va0, n_p)
     w0 = bill / ((1.0 - u_star[c]) * inp.labour_supply)
-    # A province without traded output has no income but rebates, and at that income PIGL buys no
-    # local goods, so its steady state has no output, no employment and no wage (w0 = 0).
-    idle = bill == 0
     arrive = arrivals(inp, price, src) * traded[None, None, :]
     alpha = arrive.sum(axis=0)
     lead = np.divide((np.arange(SLOTS + 1)[:, None, None] * arrive).sum(axis=0), alpha, out=np.zeros_like(alpha), where=alpha > 0)
@@ -411,7 +415,6 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
         "sinkhorn_sweeps": [h["sweeps"] for h in history],
         "sinkhorn_residual": history[-1]["sinkhorn_residual"],
         "min_log10_relative_weight": [float(x) if traded[g] else None for g, x in enumerate(log10_weight)],
-        "provinces_without_value_added": np.flatnonzero(idle).tolist(),
         "seconds": time.perf_counter() - t0,
     }
     return Steady(
@@ -429,11 +432,11 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
         a_va=a_va,
         a=1.0 / own,
         va0=va0,
-        l0=np.divide(s_l * va0, w0[ep], out=np.zeros_like(va0), where=~idle[ep]),
+        l0=s_l * va0 / w0[ep],
         w0=w0,
         ent_spend=ent_spend,
         pop_income=income,
-        pop_wage=va_share * bill[kp],
+        pop_wage=wage_share * bill[kp],
         pop_spend=pop_spend,
         spend_hh=spend_hh,
         spend_int=spend_int,

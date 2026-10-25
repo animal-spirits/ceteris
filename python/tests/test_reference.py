@@ -286,7 +286,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         pop_population=np.array([4e5, 6e5, 4e5, 6e5]),
         domestic=io.Entries(np.zeros(2, dtype=np.int64), np.array([0, 1]), np.array([1, 0]), k * one, tau * one),
         access=empty,
-        crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4),
+        crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4, lag=np.zeros(0, dtype=np.int64)),
     )
 
 
@@ -331,6 +331,10 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * p * y * k / (1.0 + k), rel=1e-9)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="national profit ownership (owner, 2026-10-25) is in the reference; Rust and this golden follow in Task 18e-2",
+)
 def test_fixture_reference_is_current(fixture):
     """`tests/golden/p2-fixture/reference` (read by Rust: runs started from the equilibrium and
     the V1 check) is the current solve of the fixture. Regenerate with
