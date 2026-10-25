@@ -4,9 +4,10 @@ Each country's VA of a good is split over its provinces by the first proxy of th
 positive total in the country's eligible provinces (at least `MIN_WORKING_AGE` working-age people):
 
 - agriculture: MapSPAM 2000 physical area of all crops (cropland), then population;
-- crude oil and gas: GEM oil and gas fields, then gridded GDP, then population;
+- crude oil and gas: in the United States, EIA 2000 state production (`eia_oil_gas`); elsewhere GEM oil and
+  gas fields; then population. GEM is flagged imputed where undated fields carry most of a country's weight;
 - coal and other mining: GEM coal mines and P1 mineral sites (weighted by the country's coal share of the
-  good), then gridded GDP, then population; without the GEM file, mineral sites alone;
+  good), then population; without the GEM file, mineral sites alone;
 - manufacturing (3 to 6): DOSE manufacturing GVA of the regions matched to provinces by exact name, then
   gridded GDP, then population;
 - local goods (7 to 9): population, a base point only.
@@ -29,6 +30,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import pyarrow as pa
@@ -48,7 +50,11 @@ M3_PER_BOE = 5800 * 0.0283168466
 
 SPAM = "spam2000v3.0.7_global_physical-area.geotiff.zip"
 KUMMU = "GDP_PPP_1990_2015_5arcmin_v2.nc"
-KUMMU_BAND = YEAR - 1990 + 1  # one band per year from 1990
+SEDS = "Complete_SEDS.csv"
+# SEDS series: crude oil production and marketed natural gas production, billion Btu.
+SEDS_SERIES = ("PAPRB", "NGMPB")
+# SEDS federal offshore areas and the states whose coasts they lie off.
+OFFSHORE = {"X3": ("TX", "LA", "MS", "AL", "FL"), "X5": ("CA",)}
 DOSE = "DOSE_V2.14.csv"
 ADMIN0 = "ne_10m_admin_0_countries.zip"
 ADMIN1 = "ne_10m_admin_1_states_provinces.zip"
@@ -60,7 +66,9 @@ RESOURCES = ("precious", "base", "ferrous", "energy", "industrial")
 COAL_OPEN = {"Operating", "Mothballed"}
 FIELD_PRODUCED = {"operating", "mothballed", "abandoned", "decommissioning"}
 
-LEVELS = ("crops", "gem", "mining", "sites", "dose", "dose_rest", "gdp", "population", "largest")
+LEVELS = ("crops", "gem", "mining", "sites", "dose", "dose_rest", "gdp", "population", "largest", "eia")
+# GEM oil and gas is flagged imputed in a country where fields with no start or discovery year carry more of its weight.
+MAX_UNDATED = 0.5
 MANUFACTURING = (3, 4, 5, 6)
 LOCAL = (7, 8, 9)
 
@@ -78,6 +86,8 @@ class Proxies:
 
     crops: np.ndarray | None = None  # MapSPAM 2000 physical area of all crops (ha)
     oil_gas: np.ndarray | None = None  # GEM oil and gas fields (million boe per year)
+    oil_gas_undated: np.ndarray | None = None  # the part of `oil_gas` from fields with no start or discovery year
+    eia: np.ndarray | None = None  # EIA 2000 crude oil and marketed gas (billion Btu), United States provinces only
     coal: np.ndarray | None = None  # GEM coal mines (Mt per year)
     sites: np.ndarray | None = None  # P1 producing and past-producing mineral sites (USGS MRDS)
     dose: np.ndarray | None = None  # DOSE manufacturing GVA of matched regions, NaN for provinces no region matches
@@ -114,6 +124,16 @@ def _plain(name: str, x: np.ndarray | None, imputed: bool) -> Level:
         if x is None or not x[idx].sum() > 0:
             return None
         return x[idx], np.full(len(idx), imputed), np.full(len(idx), LEVELS.index(name))
+
+    return weights
+
+
+def _gem(p: Proxies) -> Level:
+    def weights(idx, code, c):
+        if p.oil_gas is None or not p.oil_gas[idx].sum() > 0:
+            return None
+        undated = p.oil_gas_undated is not None and p.oil_gas_undated[idx].sum() > MAX_UNDATED * p.oil_gas[idx].sum()
+        return p.oil_gas[idx], np.full(len(idx), undated), np.full(len(idx), LEVELS.index("gem"))
 
     return weights
 
@@ -164,8 +184,9 @@ def _dose(p: Proxies, population: np.ndarray) -> Level:
 
 def _chains(p: Proxies, population: np.ndarray) -> list[list[Level]]:
     gdp, people_ = _plain("gdp", p.gdp, True), _plain("population", population, True)
-    chains: list[list[Level]] = [[_plain("crops", p.crops, False), people_], [_plain("gem", p.oil_gas, False), gdp, people_]]
-    chains.append([_mining(p), gdp, people_])
+    chains: list[list[Level]] = [[_plain("crops", p.crops, False), people_]]
+    chains.append([_plain("eia", p.eia, False), _gem(p), people_])
+    chains.append([_mining(p), people_])
     chains += [[_dose(p, population), gdp, people_] for _ in MANUFACTURING]
     chains += [[_plain("population", population, False)] for _ in LOCAL]
     return chains
@@ -352,16 +373,26 @@ def _number(v) -> float | None:
         return None
 
 
-def _located(rows: list[tuple[str, float | None, float | None, float | None]]) -> list[tuple[float, float, float]]:
-    """(lat, lon, weight) for rows with valid coordinates; a missing weight is its country's median (else the median)."""
-    known: dict[str, list[float]] = defaultdict(list)
-    for country, _, _, w in rows:
-        if w is not None:
-            known[country].append(w)
-    overall = [w for ws in known.values() for w in ws]
-    fallback = statistics.median(overall) if overall else 1.0
+class Asset(NamedTuple):
+    lat: float
+    lon: float
+    weight: float
+    dated: bool = True  # a start (or discovery, or opening) year is known
+    offshore: bool = False
+    country: str = ""  # as GEM writes it
+
+
+def _located(rows: list[tuple[str, float | None, float | None, float | None, bool, bool]]) -> list[Asset]:
+    """Assets with valid coordinates from (country, lat, lon, weight, dated, offshore) rows.
+
+    A missing weight is 0 in a country where any asset has a figure; where none has, every asset takes the median
+    positive figure (equal weights within the country).
+    """
+    weighted = {country for country, _, _, w, *_ in rows if w is not None}
+    known = [w for _, _, _, w, *_ in rows if w is not None and w > 0]
+    fill = statistics.median(known) if known else 1.0
     out = []
-    for country, lat, lon, w in rows:
+    for country, lat, lon, w, dated, offshore in rows:
         if lat is None or lon is None:
             continue
         if abs(lat) > 90 >= abs(lon):
@@ -369,19 +400,15 @@ def _located(rows: list[tuple[str, float | None, float | None, float | None]]) -
         if abs(lat) > 90 or abs(lon) > 180:
             continue
         if w is None:
-            w = statistics.median(known[country]) if known[country] else fallback
-        out.append((lat, lon, w))
+            w = 0.0 if country in weighted else fill
+        out.append(Asset(lat, lon, w, dated, offshore, country))
     return out
 
 
-def _positive(*values) -> float | None:
-    return next((x for x in map(_number, values) if x is not None and x > 0), None)
-
-
-def read_gem_coal(path: Path) -> list[tuple[float, float, float]]:
-    """GEM coal mines open in 2000 as (lat, lon, Mt per year): non-closed mines operating or mothballed and opened
-    by 2000 (or of unknown opening), and closed mines that closed in 2000 or later. Weight is production, else
-    capacity, else the country's median."""
+def read_gem_coal(path: Path) -> list[Asset]:
+    """GEM coal mines open in 2000 (Mt per year): non-closed mines operating or mothballed and opened by 2000 (or of
+    unknown opening), and closed mines that closed in 2000 or later. Weight is reported production as given (0 stays
+    0), capacity only where production is missing (`_located` fills the rest)."""
     rows = []
     for sheet in ("Non-closed mines", "Closed mines"):
         for r in people._xlsx_sheet(path, sheet):
@@ -392,17 +419,20 @@ def read_gem_coal(path: Path) -> list[tuple[float, float, float]]:
                 continue
             if sheet != "Closed mines" and r.get("Status") not in COAL_OPEN:
                 continue
-            weight = _positive(r.get("Production (Mtpa)"), r.get("Capacity (Mtpa)"))
-            rows.append((str(r.get("Country / Area")), _number(r.get("Latitude")), _number(r.get("Longitude")), weight))
+            production = _number(r.get("Production (Mtpa)"))
+            weight = production if production is not None else _number(r.get("Capacity (Mtpa)"))
+            lat, lon = _number(r.get("Latitude")), _number(r.get("Longitude"))
+            rows.append((str(r.get("Country / Area")), lat, lon, weight, opening is not None, False))
     return _located(rows)
 
 
-def read_gem_oil_gas(path: Path) -> list[tuple[float, float, float]]:
-    """GEM oil and gas fields that may have produced in 2000 as (lat, lon, million boe per year).
+def read_gem_oil_gas(path: Path) -> list[Asset]:
+    """GEM oil and gas fields that may have produced in 2000 (million boe per year).
 
     A field counts when its status shows it has produced and its production start (else discovery) year is 2000
-    or earlier, or unknown. Weight is its latest reported production: the largest liquids and the largest gas
-    figure of that year, gas at `M3_PER_BOE`, or a boe figure; else the country's median.
+    or earlier, or unknown (`dated` False). Weight is its latest reported production, 0 included: the largest
+    liquids and the largest gas figure of that year, gas at `M3_PER_BOE`, or a boe figure (`_located` fills fields
+    with none).
     """
     latest: dict[str, float] = {}
     by_unit: dict[str, dict[str, float]] = defaultdict(dict)
@@ -423,24 +453,104 @@ def read_gem_oil_gas(path: Path) -> list[tuple[float, float, float]]:
         start = start if start is not None else _number(r.get("Discovery year"))
         if start is not None and start > YEAR:
             continue
-        q = by_unit.get(r.get("Unit ID"), {})
-        if "million boe/y" in q:
+        q = by_unit.get(r.get("Unit ID"))
+        if q is None:
+            weight = None
+        elif "million boe/y" in q:
             weight = q["million boe/y"]
         else:
             weight = q.get("million bbl/y", 0.0) + q.get("million m³/y", 0.0) / M3_PER_BOE
-        rows.append((str(r.get("Country/Area")), _number(r.get("Latitude")), _number(r.get("Longitude")), weight or None))
+        lat, lon = _number(r.get("Latitude")), _number(r.get("Longitude"))
+        offshore = r.get("Onshore/Offshore") == "offshore"
+        rows.append((str(r.get("Country/Area")), lat, lon, weight, start is not None, offshore))
     return _located(rows)
 
 
-def point_sums(points: Sequence[tuple[float, float, float]], cells: pa.Table, n: int) -> np.ndarray:
-    """Weights of (lat, lon, weight) points summed by the province owning their cell; points with no owner are dropped."""
+def point_sums(points: Sequence[Sequence[float]], cells: pa.Table, n: int) -> np.ndarray:
+    """Weights of points (lat, lon, weight, ...) summed by the province owning their cell; points with no owner are dropped."""
     owner = people.CellOwner(cells)
     out = np.zeros(n)
-    for lat, lon, w in points:
+    for lat, lon, w, *_ in points:
         k = owner.of_point(lat, lon)
         if k >= 0:
             out[k] += w
     return out
+
+
+# EIA
+
+
+def read_seds(path: Path, year: int = YEAR) -> dict[str, float]:
+    """EIA SEDS crude oil plus marketed natural gas production in `year` (billion Btu) by state code, with the
+    federal offshore areas X3 (Gulf of Mexico) and X5 (Pacific); the US total is left out."""
+    out: dict[str, float] = defaultdict(float)
+    with path.open(encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            if r["MSN"] in SEDS_SERIES and r["Year"] == str(year) and r["StateCode"] != "US" and r["Data"]:
+                out[r["StateCode"]] += float(r["Data"])
+    return dict(out)
+
+
+def us_states(admin1: Path) -> dict[str, str]:
+    """Natural Earth adm1_code of each United States region to its postal state code (from ISO 3166-2)."""
+    _, t = pyogrio.read_arrow(admin1, columns=["adm1_code", "adm0_a3", "iso_3166_2"], read_geometry=False)
+    return {
+        r["adm1_code"]: r["iso_3166_2"].removeprefix("US-")
+        for r in t.to_pylist()
+        if r["adm0_a3"] == "USA" and (r["iso_3166_2"] or "").startswith("US-")
+    }
+
+
+def eia_oil_gas(
+    seds: Mapping[str, float],
+    provinces: pa.Table,
+    states: Mapping[str, str],
+    cells: pa.Table,
+    population: np.ndarray,
+    assets: Sequence[Asset] | None,
+) -> np.ndarray:
+    """US province weights for crude oil and gas from EIA 2000 state production, combined by heat content (Btu).
+
+    A state's own production is spread over its provinces by the GEM weight of the onshore fields in them, else by
+    population. Federal offshore production (`OFFSHORE`) goes to the coastal provinces of the adjacent states: each
+    US offshore GEM field in the area adds its weight to the nearest of them; without such fields, by population.
+    """
+    n = provinces.num_rows
+    country = provinces.column("country").to_pylist()
+    state = np.array(
+        [states.get(_base(i), "") if c == "USA" else "" for i, c in zip(provinces.column("id").to_pylist(), country)]
+    )
+    coastal = provinces.column("coastal").to_numpy(zero_copy_only=False)
+    lon, lat = provinces.column("lon").to_numpy(), provinces.column("lat").to_numpy()
+    us = [a for a in assets or () if a.country == "United States"]
+    onshore = point_sums([a for a in us if not a.offshore], cells, n)
+    out = np.zeros(n)
+    for code, value in seds.items():
+        idx = np.flatnonzero(state == code)
+        if code in OFFSHORE or value <= 0 or not len(idx):
+            continue
+        w = onshore[idx] if onshore[idx].sum() > 0 else population[idx]
+        out[idx] += value * w / w.sum()
+    for area, coast in OFFSHORE.items():
+        idx = np.flatnonzero(np.isin(state, coast) & coastal)
+        if seds.get(area, 0.0) <= 0 or not len(idx):
+            continue
+        w = np.zeros(len(idx))
+        for a in us:
+            # Gulf of Mexico east of 100 W; the Pacific area off California south of 50 N (Alaska is a state's own).
+            if a.offshore and (a.lon > -100 if area == "X3" else a.lon <= -100 and a.lat < 50):
+                d = (lat[idx] - a.lat) ** 2 + ((lon[idx] - a.lon) * np.cos(np.radians(a.lat))) ** 2
+                w[np.argmin(d)] += a.weight
+        w = w if w.sum() > 0 else population[idx]
+        out[idx] += seds[area] * w / w.sum()
+    return out
+
+
+def gridded_gdp(path: Path, cells: pa.Table) -> np.ndarray:
+    """Kummu et al. gridded GDP (PPP, constant 2011 international dollars) of `YEAR` per province."""
+    with rasterio.open(path) as ds:
+        band = next(b for b in range(1, ds.count + 1) if ds.tags(b).get("NETCDF_DIM_time") == str(YEAR))
+    return people.province_population(path, cells, band=band)
 
 
 def mineral_sites(provinces: pa.Table) -> np.ndarray:
@@ -481,14 +591,17 @@ def load_proxies(
     """
     n = provinces.num_rows
     crops = cropland(cache / SPAM, cells)
-    gdp = people.province_population(cache / KUMMU, cells, band=KUMMU_BAND) if (cache / KUMMU).exists() else None
+    gdp = gridded_gdp(cache / KUMMU, cells) if (cache / KUMMU).exists() else None
+    oil = read_gem_oil_gas(gem[1]) if gem else None
     iso, _ = people.read_codes(cache / ADMIN0)
     ids, country = provinces.column("id").to_pylist(), provinces.column("country").to_pylist()
     split = gdp if gdp is not None else population
     dose, rest, match = match_dose(read_dose(cache / DOSE, national), ids, country, province_names(cache / ADMIN1), split, iso)
     proxies = Proxies(
         crops=crops,
-        oil_gas=point_sums(read_gem_oil_gas(gem[1]), cells, n) if gem else None,
+        oil_gas=point_sums(oil, cells, n) if oil is not None else None,
+        oil_gas_undated=point_sums([a for a in oil if not a.dated], cells, n) if oil is not None else None,
+        eia=eia_oil_gas(read_seds(cache / SEDS), provinces, us_states(cache / ADMIN1), cells, population, oil),
         coal=point_sums(read_gem_coal(gem[0]), cells, n) if gem else None,
         sites=mineral_sites(provinces),
         dose=dose,

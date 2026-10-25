@@ -287,7 +287,7 @@ replaces = "gaez-v4"
 
 [[source]]
 id = "mapspam-2000"
-name = "MapSPAM SPAM2000 (and 2005, 2010, 2020)"
+name = "MapSPAM SPAM2000 (and 2010, 2020)"
 provider = "IFPRI / HarvestChoice"
 version = "SPAM2000 v3.0.7"
 role = "Harvested area, production and yield around 2000 (5.2, 7.2); physical area of all crops places agricultural VA in provinces"
@@ -301,7 +301,26 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0 under IFPRI default terms"
 checked = 2026-10-24
 confidence = "medium"
-notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 ships SPAM_License_v3.2.pdf (non-commercial, no redistribution without IFPRI permission), so it is not used. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
+notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 (value of production) ships SPAM_License_v3.2.pdf: non-commercial, no redistribution without IFPRI permission; it is unused (not in fetch.toml), and a copy in data/cache must not be read by the pipeline. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
+
+[[source]]
+id = "mapspam-2005"
+name = "MapSPAM SPAM2005 value of production"
+provider = "IFPRI / IIASA"
+version = "SPAM2005 v3.2 (Dataverse doi:10.7910/DVN/DHXBJX)"
+role = "Value of crop production around 2005; considered as the agriculture proxy for province VA and not used"
+licence = "LicenseRef-MapSPAM-EULA-3.2"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DHXBJX"
+attribution = "You, L., U. Wood-Sichra, S. Fritz, Z. Guo, L. See, and J. Koo. 2014. Spatial Production Allocation Model (SPAM) 2005 v3.2. Available from http://mapspam.info"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "The dataset ships SPAM_License_v3.2.pdf: own non-commercial use only, no distribution to third parties without IFPRI permission (a non-CC licence, which the IFPRI Dataverse terms let override CC BY)"
+checked = 2026-10-24
+confidence = "high"
+replaced_by = "mapspam-2000"
+notes = "Unused: not in fetch.toml. A copy of spam2005v3r2_global_val_prod_agg.geotiff.zip (93,448,154 bytes) sits in data/cache from Task 16; the pipeline must not read it."
 
 [[source]]
 id = "gdhy"
@@ -1207,7 +1226,7 @@ id = "eia"
 name = "US EIA energy data (EIA-collected series)"
 provider = "US Energy Information Administration"
 version = "Current"
-role = "Energy prices and quantities (7.7, 15.4)"
+role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces"
 licence = "LicenseRef-USGov-PublicDomain"
 licence_url = "https://www.eia.gov/about/copyrights_reuse.php"
 attribution = "Source: U.S. Energy Information Administration"
@@ -1218,7 +1237,7 @@ policy = "bundle"
 reason = "US public domain for EIA's own series"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily)."
+notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily). SEDS (Complete_SEDS.csv, current release) is EIA's own series, downloaded by a plain scripted request on 2026-10-24; its pin breaks when EIA updates the file, by design."
 
 [[source]]
 id = "fao-ffpi"
