@@ -5,7 +5,9 @@
 `python -m ceteris.reference calibrate --pack DIR [--out OUT]`: exports the pack's world with
 `cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates the
 data state as the steady state (`calibrate.calibrate`, ADR 0089) at the pack's u* and writes the
-calibration tables (`calibrate.write`) into OUT (default DIR), printing the summary. With
+calibration tables (`calibrate.write`) into OUT, printing the summary. OUT defaults to
+`target/calibration/<pack name>`, never the pack: the Rust loader reads `econ_calib.arrow` from the
+pack until it checks the calibration format (Task 18e-2). With
 `--inputs EXPORT` instead of `--pack` it calibrates an export directory (a generated world: its
 2000 unemployment rates serve as u*, its provinces as their own pack provinces)."""
 
@@ -118,11 +120,11 @@ def main() -> None:
     source = c.add_mutually_exclusive_group(required=True)
     source.add_argument("--pack", type=Path)
     source.add_argument("--inputs", type=Path, help="an export directory of a generated world")
-    c.add_argument("--out", type=Path, help="directory of the calibration tables (default: PACK)")
+    c.add_argument("--out", type=Path, help="directory of the calibration tables (default: target/calibration/PACK_NAME)")
     args = parser.parse_args()
     if args.command == "calibrate":
         if args.pack:
-            calibrate_pack(args.pack, args.out or args.pack)
+            calibrate_pack(args.pack, args.out or ROOT / "target" / "calibration" / args.pack.resolve().name)
         elif args.out is None:
             parser.error("--inputs needs --out")
         else:
