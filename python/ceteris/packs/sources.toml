@@ -929,19 +929,21 @@ notes = "Commodity price series: confirm no vendor exception before bundling."
 [[source]]
 id = "unsd-nama"
 name = "UN National Accounts Main Aggregates"
-provider = "UN Statistics Division (UNdata)"
-version = "1970-2023"
-role = "GDP gaps outside WDI"
-licence = "LicenseRef-UNdata"
-licence_url = "https://data.un.org/Host.aspx?Content=UNdataUse"
-attribution = "UNSD, National Accounts Main Aggregates Database"
+provider = "UN Statistics Division"
+version = "Downloads page file 9 (GDP per capita, current USD), data upload January 2026"
+role = "GDP per person where WDI and PWT have none: North Korea and the Cook Islands for the donor ranking and level scaling of imputed economies (7.2, 16.1)"
+licence = "LicenseRef-UN-terms-of-use"
+licence_url = "https://www.un.org/en/about-us/copyright"
+attribution = "United Nations Statistics Division, National Accounts Main Aggregates Database, GDP per capita (current US dollars)"
 commercial_use = false
 share_alike = false
 use = "complement"
 policy = "fetch"
-reason = "Free redistribution with citation, but commercial use is not addressed; treated as not granted"
-checked = 2026-10-23
+reason = "UN copyright: free for non-commercial use with attribution, all other rights reserved (the UNdata terms add free redistribution with citation but do not address commercial use); the downloads page (unstats.un.org/unsd/snaama/downloads) needs no login or form. One derived income number per country without a WDI or PWT value enters the pack."
+checked = 2026-10-24
 confidence = "medium"
+closed_source_only = true
+notes = "Same status as unsd-isic-correspondence: clear the terms or replace before distribution becomes open."
 
 [[source]]
 id = "oecd-stats"
@@ -1830,22 +1832,3 @@ checked = 2026-10-24
 confidence = "low"
 closed_source_only = true
 notes = "Before opening: request permission from UNSD, or replace with an open correspondence."
-
-[[source]]
-id = "unsd-snaama"
-name = "UNSD National Accounts Main Aggregates, GDP per capita in US dollars"
-provider = "United Nations Statistics Division"
-version = "Download file 9, data upload January 2026"
-role = "Income of North Korea 2000 where WDI and PWT have none (7.2, 16.1)"
-licence = "LicenseRef-UN-terms-of-use"
-licence_url = "https://www.un.org/en/about-us/copyright"
-attribution = "United Nations Statistics Division, National Accounts Main Aggregates Database, GDP per capita (current US dollars)"
-commercial_use = false
-share_alike = false
-use = "primary"
-policy = "fetch"
-reason = "UN copyright: free for non-commercial use with attribution, all other rights reserved; the downloads page (unstats.un.org/unsd/snaama/downloads) needs no login or form. One derived income number per country without a WDI or PWT value enters the pack."
-checked = 2026-10-25
-confidence = "medium"
-closed_source_only = true
-notes = "Same status as unsd-isic-correspondence: clear the terms or replace before distribution becomes open."

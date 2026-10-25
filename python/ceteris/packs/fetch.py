@@ -40,6 +40,8 @@ def path_of(name: str) -> Path:
 
 def fetch(entry: dict) -> Path:
     path = path_of(entry["name"])
+    if entry.get("optional") and not path.exists():
+        return path
     if not path.exists() and entry.get("manual"):
         raise SystemExit(f"{entry['name']}: the host rejects scripted downloads; save {entry['url']} into {CACHE} in a browser")
     if not path.exists():
