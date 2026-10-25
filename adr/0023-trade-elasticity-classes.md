@@ -111,3 +111,6 @@ give the same classes except that Agriculture moves to class 1 (class values 2.5
   against 1e20 at theta 5.
 - Direct estimation on BACI (ADR 0022) replaces these values and may redraw the classes by the
   same rule.
+- Amended by ADR 0050 (2026-10-25): the WITS and UNSD concordance gave way to the OECD BTiGE HS to CPA
+  key, through which the same rule draws four classes (2.62, 5.19, 9.94, 13.53). The values above stay
+  in `TradeParams::default()` until the owner decides.

@@ -29,8 +29,7 @@ TABLES = (
 )
 ICIO = "1995-2000_SML.zip"
 BACI = "BACI_HS92_V202601.zip"
-HS_ISIC = "Concordance_H0_to_I3.zip"
-ISIC_BRIDGE = "ISIC31_ISIC4.txt"
+HS_KEY = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
 WORLDPOP = "ppp_2000_1km_Aggregated.tif"
 GEM = ("Global Coal Mine Tracker, August 2026.xlsx", "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx")
 # P02 inventory target coverage s_g in months, the prior's start (trade SPEC, Parameters; TradeParams::coverage).
@@ -74,7 +73,7 @@ def build(pack: Path, out: Path, cache: Path = fetch.CACHE) -> dict:
     )
     placed = downscale.allocate(world, downscale.Provinces(country, population, working_age), proxies)
 
-    weight = goods.weights_from_baci(cache / BACI, cache / HS_ISIC, cache / ISIC_BRIDGE)
+    weight = goods.weights_from_baci(cache / BACI, cache / HS_KEY)
     trade = gateways.trade_by_country(cache / BACI, iso, codes)
     agreements = tariffs.pack_pairs(
         tariffs.read_cepii(cache / tariffs.GRAVITY) | tariffs.read_dta(cache / tariffs.DTA), codes, iso

@@ -474,15 +474,15 @@ def _pack_index(codes, iso) -> dict[str, int]:
     return index
 
 
-def baci_flows(baci_2000, hs_isic, isic_bridge, codes, iso) -> np.ndarray:
-    """2000 BACI trade by (exporter, importer, traded good) of the pack countries, USD; HS lines split over
-    goods by the Task 13 concordance (`goods.hs_goods_shares`)."""
+def baci_flows(baci_2000, hs_key, codes, iso) -> np.ndarray:
+    """2000 BACI trade by (exporter, importer, traded good) of the pack countries, USD; HS lines assigned to
+    goods by the OECD HS to CPA key (`goods.hs_goods_shares`)."""
     import pyarrow as pa
     import pyarrow.csv as pacsv
 
     from ..packs.econ import goods
 
-    shares = goods.hs_goods_shares(goods.read_hs_isic3(hs_isic), goods.read_bridge(isic_bridge))
+    shares = goods.hs_goods_shares(goods.read_hs_cpa(hs_key))
     hs = np.array(sorted(int(k) for k in shares))
     share = np.zeros((len(hs) + 1, N_TRADED))  # last row: lines outside the concordance
     for i, k in enumerate(hs):
@@ -728,7 +728,7 @@ def samples(pack, cache) -> tuple[Sample, Sample, dict]:
     codes = read("countries.arrow").column("code").to_pylist()
     iso, _ = people.read_codes(cache / downscale.ADMIN0)
     nc = len(codes)
-    flows = baci_flows(cache / econ_build.BACI, cache / econ_build.HS_ISIC, cache / econ_build.ISIC_BRIDGE, codes, iso)
+    flows = baci_flows(cache / econ_build.BACI, cache / econ_build.HS_KEY, codes, iso)
     domestic = icio_domestic(cache / econ_build.ICIO, codes, iso, read("econ_countries.arrow").column("va_basis").to_pylist())
     t = read("econ_tariffs.arrow")
     rate = np.zeros((nc, nc, 2))

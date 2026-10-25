@@ -40,6 +40,22 @@ CALIENDO_PARRO: dict[str, tuple[tuple[str, ...], float]] = {
 
 _THETA_OF_DIVISION = {d: theta for divisions, theta in CALIENDO_PARRO.values() for d in divisions}
 
+# ISIC Rev 3 division of each CPA 2.1 activity of the OECD key (`goods.read_hs_cpa`), from the Rev 3 to Rev 4
+# breaks: weapons (C254) and military vehicles (C304) were Rev 3 2927, computers (C262) Rev 3 30, magnetic and
+# optical media (C268) Rev 3 2429, medical instruments (C325) Rev 3 3311, recycling (E38) Rev 3 37, publishing and
+# recorded media (J58, J59_60) Rev 3 22. Domestic appliances (Rev 3 2930) sit inside C27 and count as Electrical.
+# Electricity and the service codes (D35, H53, M71, M74, R90, R91) and unallocated lines have no estimate.
+REV3_OF_CPA = {
+    "A01": "01", "A02": "02", "A03": "05",
+    "B05": "10", "B06": "11", "B071": "13", "B072": "13", "B08": "14",
+    "C10": "15", "C11": "15", "C12": "16", "C13": "17", "C14": "18", "C15": "19", "C16": "20", "C17": "21",
+    "C18": "22", "J58": "22", "J59_60": "22", "C19": "23", "C20": "24", "C21": "24", "C268": "24", "C22": "25",
+    "C23": "26", "C24A": "27", "C24B": "27", "C25X254": "28", "C254": "29", "C28": "29", "C304": "29",
+    "C262": "30", "C27": "31", "C261": "32", "C263": "32", "C264": "32",
+    "C265": "33", "C266": "33", "C267": "33", "C325": "33", "C29": "34", "C301": "35", "C302_309": "35",
+    "C303": "35", "C31": "36", "C32X325": "36", "E38": "37",
+}  # fmt: skip
+
 # Largest ratio of two thetas in one class (ADR 0023), and the allowed class counts.
 CLASS_SPREAD = 1.5
 CLASS_COUNTS = (3, 4, 5)
@@ -60,14 +76,15 @@ def baci_values(baci_2000: Path) -> dict[str, float]:
 
 
 def by_good(
-    hs_isic3: dict[str, str], shares: dict[str, dict[int, float]], value: dict[str, float]
+    hs_cpa: dict[str, str], shares: dict[str, dict[int, float]], value: dict[str, float]
 ) -> tuple[np.ndarray, np.ndarray]:
     """Theta per good, the trade-value-weighted arithmetic mean of the sector estimates over the HS
-    lines of the good (the sector of a line is its ISIC Rev 3 division), and the trade value of the
-    lines with an estimate. Lines without one, and goods without such lines, weigh nothing (theta 0)."""
+    lines of the good (the sector of a line is the ISIC Rev 3 division of its CPA activity), and the trade
+    value of the lines with an estimate. Lines without one, and goods without such lines, weigh nothing
+    (theta 0)."""
     num, den = np.zeros(goods.N_GOODS), np.zeros(goods.N_GOODS)
     for hs, line_shares in shares.items():
-        theta = _THETA_OF_DIVISION.get(hs_isic3[hs][:2])
+        theta = _THETA_OF_DIVISION.get(REV3_OF_CPA.get(hs_cpa[hs], ""))
         v = value.get(hs, 0.0)
         if theta is None or v == 0.0:
             continue
@@ -77,16 +94,16 @@ def by_good(
     return np.divide(num, den, out=np.zeros(goods.N_GOODS), where=den > 0), den
 
 
-def caliendo_parro_by_good(baci_2000: Path, hs_isic: Path, isic_bridge: Path) -> np.ndarray:
-    """Theta per good (0 for the local goods 7 to 9) through the Task 13 concordance, BACI 2000 weights."""
-    return caliendo_parro_with_value(baci_2000, hs_isic, isic_bridge)[0]
+def caliendo_parro_by_good(baci_2000: Path, hs_key: Path) -> np.ndarray:
+    """Theta per good (0 for the local goods 7 to 9) through the OECD HS to CPA key, BACI 2000 weights."""
+    return caliendo_parro_with_value(baci_2000, hs_key)[0]
 
 
-def caliendo_parro_with_value(baci_2000: Path, hs_isic: Path, isic_bridge: Path) -> tuple[np.ndarray, np.ndarray]:
+def caliendo_parro_with_value(baci_2000: Path, hs_key: Path) -> tuple[np.ndarray, np.ndarray]:
     """`caliendo_parro_by_good` and the trade value behind each good's theta."""
-    hs_isic3 = goods.read_hs_isic3(hs_isic)
-    shares = goods.hs_goods_shares(hs_isic3, goods.read_bridge(isic_bridge))
-    theta, value = by_good(hs_isic3, shares, baci_values(baci_2000))
+    hs_cpa = goods.read_hs_cpa(hs_key)
+    shares = goods.hs_goods_shares(hs_cpa)
+    theta, value = by_good(hs_cpa, shares, baci_values(baci_2000))
     local = [g for g in range(goods.N_GOODS) if g not in goods.TRADED]
     theta[local], value[local] = 0.0, 0.0
     return theta, value
