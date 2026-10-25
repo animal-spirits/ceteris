@@ -38,7 +38,9 @@ Option 2.
 - Famine: when food consumption of a pop's bottom income quantile (from its lognormal) falls
   below subsistence for consecutive months, a mortality hazard rises on the Brass level (P58)
   and displacement flows start (6.5). Thresholds follow IPC phase definitions.
-- Harvest timing: annual crops realize once a year (4.3); storage carries the year.
+- Harvest timing: annual crops realize once a year (4.3) from P4 (ADR 0081); storage carries
+  the year. P2 spreads crop output evenly across months, so its data state stays the steady
+  state of ADR 0089 (owner, 2026-10-25).
 
 ## Migration
 
