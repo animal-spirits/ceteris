@@ -146,6 +146,25 @@ def aggregate(path: Path, year: int = YEAR) -> dict[str, CountryIO]:
     return result
 
 
+def exports(path: Path, year: int = YEAR) -> dict[str, np.ndarray]:
+    """Economy code -> sales of its industries to every other economy by good (million USD): intermediate use and
+    final demand of the foreign columns. Output less exports is what an economy absorbs of its own output."""
+    table = _open_table(path, year)
+    labels = table.column(0).to_pylist()
+    rows = np.array([i for i, label in enumerate(labels) if label not in _SPECIAL_ROWS])
+    seller = np.array([labels[i].split("_", 1)[0] for i in rows])
+    good = np.array([ICIO_MAP[labels[i].split("_", 1)[1]] for i in rows])
+    abroad = np.zeros(len(rows))
+    for name in table.column_names[1:-1]:
+        x = table.column(name).to_numpy().astype(np.float64)[rows]
+        abroad += np.where(seller != name.split("_", 1)[0], x, 0.0)
+    out = {}
+    for code in sorted(set(seller.tolist())):
+        mine = seller == code
+        out[code] = np.bincount(good[mine], abroad[mine], N_GOODS)
+    return out
+
+
 def _nearest_income(series: Mapping[int, float]) -> float | None:
     """Value of the year nearest 2000 within 1995 to 2010 (the earlier year on a tie)."""
     near = [y for y in series if INCOME_YEARS.start <= y < INCOME_YEARS.stop]

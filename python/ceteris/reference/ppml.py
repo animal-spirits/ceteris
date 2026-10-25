@@ -1,7 +1,8 @@
 """PPML gravity estimation for the P2 gate's H2 tests (`specs/econ/SPEC.md`, P2 gate): Poisson
 pseudo-maximum likelihood on country-pair trade with exporter and importer fixed effects, ln
 population-weighted distance and contiguity as regressors, domestic pairs excluded; and per theta
-class, ln(1 + tariff) and ln distance (ADR 0018). numpy only."""
+class, ln(1 + tariff) and ln distance (ADR 0018). `hdfe` absorbs any number of fixed effects and clusters
+standard errors, for direct estimation on BACI (ADR 0022, `ceteris.calibrate.gravity`). numpy only."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -222,3 +223,136 @@ def trade_elasticity(
         n_pairs=len(np.asarray(flows)) - sep.n_rows,
         n_separated_rows=sep.n_rows,
     )
+
+
+DEMEAN_TOL = 1e-13  # weighted norm of a sweep's change of a demeaned column, relative to the column's
+DEMEAN_MAX_SWEEPS = 10_000
+
+
+@dataclass(frozen=True)
+class Fit:
+    """A PPML fit with absorbed fixed effects (`hdfe`)."""
+
+    names: tuple[str, ...]
+    coef: np.ndarray
+    cov: np.ndarray  # cluster-robust when clusters were given, else Eicker-Huber-White (HC0)
+    n: int  # observations estimated
+    n_separated: int  # observations removed because some fixed-effect group has no positive flow
+    pseudo_r2: float  # squared correlation of flows and fitted means
+    keep: np.ndarray  # mask of the estimated observations over the input
+
+    def __getitem__(self, name: str) -> float:
+        return float(self.coef[self.names.index(name)])
+
+    def se(self, name: str) -> float:
+        i = self.names.index(name)
+        return float(np.sqrt(self.cov[i, i]))
+
+
+def _separated(y: np.ndarray, groups: Sequence[np.ndarray]) -> np.ndarray:
+    """Observations kept: those in no fixed-effect group whose flows are all zero (such a group's effect
+    is minus infinity and its rows carry no information); dropping rows can empty another group."""
+    keep = np.ones(len(y), dtype=bool)
+    while True:
+        now = keep.copy()
+        for g in groups:
+            total = np.bincount(g[now], y[now], minlength=g.max() + 1)
+            now &= total[g] > 0
+        if now.sum() == keep.sum():
+            return keep
+        keep = now
+
+
+def _two_way(v: np.ndarray, w: np.ndarray, a: np.ndarray, b: np.ndarray, na: int, nb: int) -> np.ndarray:
+    """Weighted residuals of `v` on two fixed effects solved directly: the first is eliminated from the
+    normal equations, the second solves the dense Schur complement (singular along each connected
+    component's constant, hence least squares)."""
+    m = np.zeros((na, nb))
+    np.add.at(m, (a, b), w)
+    da, db = m.sum(axis=1), m.sum(axis=0)
+    ra = np.stack([np.bincount(a, w * v[:, j], minlength=na) for j in range(v.shape[1])], axis=1)
+    rb = np.stack([np.bincount(b, w * v[:, j], minlength=nb) for j in range(v.shape[1])], axis=1)
+    scaled = m / da[:, None]
+    schur = np.diag(db) - m.T @ scaled
+    gamma = np.linalg.lstsq(schur, rb - scaled.T @ ra, rcond=None)[0]
+    alpha = (ra - m @ gamma) / da[:, None]
+    return v - alpha[a] - gamma[b]
+
+
+def _demean(v: np.ndarray, w: np.ndarray, groups: Sequence[np.ndarray], sizes: Sequence[int]) -> np.ndarray:
+    """Weighted residuals of the columns of `v` on the fixed effects `groups`, by alternating
+    projections (the within transformation of each fixed effect in turn until nothing moves). Two
+    small fixed effects start from their direct solution, which the projections then only polish."""
+    if len(groups) == 2 and sizes[0] * sizes[1] <= 4_000_000:
+        v = _two_way(v, w, groups[0], groups[1], sizes[0], sizes[1])
+    else:
+        v = v.copy()
+    weight = [np.bincount(g, w, minlength=s) for g, s in zip(groups, sizes, strict=True)]
+    for _ in range(DEMEAN_MAX_SWEEPS):
+        before = v.copy()
+        for g, s, wg in zip(groups, sizes, weight, strict=True):
+            means = np.stack([np.bincount(g, w * v[:, j], minlength=s) for j in range(v.shape[1])], axis=1) / wg[:, None]
+            v -= means[g]
+        # rows of negligible weight converge slowly but do not move the weighted least squares step
+        moved = np.sqrt(w @ (v - before) ** 2)
+        if np.all(moved <= DEMEAN_TOL * np.maximum(np.sqrt(w @ v**2), 1e-300)):
+            return v
+    raise RuntimeError(f"fixed effects did not converge in {DEMEAN_MAX_SWEEPS} sweeps")
+
+
+def hdfe(
+    flows: np.ndarray,
+    fixed_effects: Sequence[np.ndarray],
+    regressors: Mapping[str, np.ndarray],
+    cluster: np.ndarray | None = None,
+) -> Fit:
+    """PPML of `flows` on `regressors` with any number of absorbed fixed effects (integer group codes
+    per observation), as in Correia, Guimaraes and Zylkin (2020): IRLS whose weighted least squares step
+    runs on the regressors and working variable demeaned by the fixed effects. Standard errors are
+    clustered on `cluster` (integer codes) with the G / (G - 1) correction, else HC0. Zero flows are kept;
+    rows of fixed-effect groups without any positive flow are dropped first."""
+    y = np.asarray(flows, dtype=np.float64)
+    names = tuple(regressors)
+    x = np.column_stack([np.asarray(regressors[k], dtype=np.float64) for k in names])
+    if np.any(y < 0) or not np.all(np.isfinite(y)) or not np.all(np.isfinite(x)):
+        raise ValueError("flows must be finite and nonnegative, regressors finite")
+    codes = [np.unique(np.asarray(g), return_inverse=True)[1] for g in fixed_effects]
+    keep = _separated(y, codes)
+    if not keep.any():
+        raise ValueError("no observation survives: every fixed-effect group has zero total flow")
+    y, x = y[keep], x[keep]
+    groups = [np.unique(g[keep], return_inverse=True)[1] for g in codes]
+    sizes = [int(g.max()) + 1 for g in groups]
+    y = y / y.mean()
+
+    mu = (y + y.mean()) / 2.0
+    eta = np.log(mu)
+    dev = _deviance(y, mu)
+    for _ in range(MAX_ITER):
+        z = eta + (y - mu) / mu
+        both = _demean(np.column_stack([x, z]), mu, groups, sizes)
+        xt, zt = both[:, :-1], both[:, -1]
+        sw = np.sqrt(mu)
+        beta, *_ = np.linalg.lstsq(xt * sw[:, None], zt * sw, rcond=None)
+        eta = np.clip(z - (zt - xt @ beta), -700.0, 700.0)
+        mu = np.exp(eta)
+        dev_new = _deviance(y, mu)
+        converged = abs(dev - dev_new) <= TOL * (abs(dev_new) + 0.1)
+        dev = dev_new
+        if converged:
+            break
+    else:
+        raise RuntimeError(f"PPML did not converge in {MAX_ITER} iterations")
+
+    xt = _demean(x, mu, groups, sizes)
+    bread = np.linalg.pinv(xt.T @ (xt * mu[:, None]))
+    score = xt * (y - mu)[:, None]
+    if cluster is None:
+        meat = score.T @ score
+    else:
+        c = np.unique(np.asarray(cluster)[keep], return_inverse=True)[1]
+        g = int(c.max()) + 1
+        sums = np.stack([np.bincount(c, score[:, j], minlength=g) for j in range(score.shape[1])], axis=1)
+        meat = sums.T @ sums * (g / (g - 1))
+    r2 = float(np.corrcoef(y, mu)[0, 1] ** 2)
+    return Fit(names, beta, bread @ meat @ bread, int(keep.sum()), int((~keep).sum()), r2, keep)

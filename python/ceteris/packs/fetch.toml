@@ -378,3 +378,11 @@ name = "DTA 1.0 - Horizontal Content (v2).xlsx"
 sha256 = "7c7a5b1e47233749290ffb54ce8546ef7d23094cf05b2f59291566b8bd4b7ede"
 bytes = 11141676
 url = "https://datacatalogfiles.worldbank.org/ddh-published/0065624/2/DR0093615/DTA%201.0%20-%20Horizontal%20Content%20(v2).xlsx"
+
+# Gravity estimator check (ADR 0022): the published sample of Yotov et al. (2016), read only by python/tests/test_calibrate.py.
+[[file]]
+source = "yotov-2016"
+name = "AdvancedGuideFiles.zip"
+sha256 = "928deb36d48453ce03a61881c656aade30baee241c5315b0ea4b3b0b28963b65"
+bytes = 29863975
+url = "https://www.wto.org/english/res_e/reser_e/AdvancedGuideFiles.zip"

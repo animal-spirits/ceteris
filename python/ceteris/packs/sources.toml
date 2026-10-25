@@ -716,6 +716,25 @@ checked = 2026-10-24
 confidence = "high"
 
 [[source]]
+id = "yotov-2016"
+name = "An Advanced Guide to Trade Policy Analysis: application and exercise files"
+provider = "WTO and UNCTAD"
+version = "2016 (AdvancedGuideFiles.zip, files dated October and November 2016)"
+role = "Reproduction test of the PPML gravity estimator before it runs on BACI (ADR 0022): Chapter 1 datasets, 69 countries, 1986 to 2006"
+licence = "LicenseRef-WTO-all-rights-reserved"
+licence_url = "https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm"
+attribution = "Yotov, Piermartini, Monteiro and Larch (2016), An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model, WTO and UNCTAD"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "The publication page offers the files for free download; the book's copyright page reserves all rights and requires the WTO Publications Manager's written permission for reproduction. Read only by a test, never in a pack or artifact."
+checked = 2026-10-24
+confidence = "medium"
+closed_source_only = true
+notes = "The data are Zylkin's manufacturing panel (UN COMTRADE, CEPII TradeProd, UNIDO INDSTAT; CEPII GeoDist; Larch RTA database) as the guide distributes them. An open release drops this row with the test, which skips without the file."
+
+[[source]]
 id = "wb-dta"
 name = "Deep Trade Agreements database"
 provider = "World Bank"
