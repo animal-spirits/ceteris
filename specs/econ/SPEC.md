@@ -141,7 +141,7 @@ weights). Every table carries `calibration_format` in its schema metadata.
 |---|---|---|---|---|
 | Population, working-age, labour force | pop (province, education) | `f64` | persons | econ pack; static in P2 |
 | Employed | pop | `f64` | persons | (1 - unemployment rate) x labour force |
-| Ownership share | pop | `f64` | share of province profit pool | base wage income share |
+| Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership; Rust in Task 18e-2) |
 | Income last tick | pop | `f64` | numeraire | |
 | Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
@@ -265,9 +265,23 @@ solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_
 u*_i) L^s_i). P4 matching replaces u* with matching frictions. The Rust wage rule and loader take
 the wedge in Task 18e Part 2; until then they run the rule above without u*.
 
-**Income.** Pop k in province i receives wages w_i e_k employed_k, a share of the province profit
-pool (enterprise profits plus market cash flow, both signed, trade SPEC), and a share of its
-country's tariff rebate by population. Shares are fixed at load.
+**Income (national profit ownership, owner 2026-10-25).** Labour income stays local; profits
+and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
+
+```
+income_k = w_i L_i e_k employed_k / sum_(k' in i) e_k' employed_k'          (wages, local)
+         + N_k / N_c * sum_(e in c) profit_e                                 (profits, national)
+         + N_k / N_c * rebate_c                                              (tariffs, national)
+```
+
+N_k the pop's population, N_c its country's, profit_e = sales - wages - purchases of enterprise e
+(signed) plus, in the profit pool, each province market's signed cash flow (trade SPEC), so the
+pool is sum over the country's enterprises and markets. Shares are fixed at load. At a steady
+state profit_e = (1 - s_L) VA0_e and market cash flow is 0. A province without traded output so
+earns dividends and buys local goods (it had only its rebate share under provincial ownership,
+Task 18e). The base income of a province, rebates aside (`world::base_income`,
+`io.Inputs.base_income`), is w0 (1 - u) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e. The Rust
+world takes this rule in Task 18e-2.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
@@ -359,16 +373,19 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
 2. `reference/calibrate.py` (numpy, the source of truth) solves stages 1 to 5 below at the pack's
    u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
+   Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"
+   section.
 
 **Stage 1, values.** Output value V_o = VA_o / (1 - sum_k a_kg) per traded enterprise, VA the
 pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
-plus sum_g' a_gg' V_dg' of the province's enterprises. Household income is the province's VA by
-effective labour share plus the country's tariff rebate by population. One scalar r_g per traded
+plus sum_g' a_gg' V_dg' of the province's enterprises. Household income follows Income above:
+the province's wages s_L VA by effective labour share, and the country's profits (1 - s_L) VA and
+tariff rebate by population. One scalar r_g per traded
 good rescales its V and VA so that world spending net of tariffs equals world output value (the
 2000 imbalances, reported). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-11 relative (Anderson-mixed);
-within a pass the income and local-output fixed point is iterated to 1e-15.
+within a pass the income and local-output fixed point is iterated until no local output changes by more than 1e-14 relative.
 
 **Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
 w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
@@ -385,10 +402,9 @@ Local goods take p = 1, and local output solves the 3 x 3 Leontief system of eac
 against its local demand (households and every enterprise's a_kg V); local VA = a_VA Y is an
 output of calibration, and its national gap to ICIO is reported. w0_i = sum_g s_L VA0_ig / ((1 -
 u*_i) L^s_i) and L0 = s_L VA0 / w0, so with L = L0 nominal VA is VA0 and the labour first-order
-condition holds. S09 FixedLeontief reads the same calibrated column. A province without traded
-output earns only its rebate share, at which PIGL buys no local goods, so its steady state has
-no output, employment or wage (w0 = 0, listed in the summary as `provinces_without_value_added`;
-35 provinces in 6 countries on the 2000 pack, 0.37% of pack VA): open question below.
+condition holds. S09 FixedLeontief reads the same calibrated column. Every province produces:
+under national ownership even a province without traded output earns dividends and buys local
+goods.
 
 **Stage 4, demand weights.** Per country, PIGL weights inverted (ADR 0021 form, omega_A = 0) at
 the country's buyer prices, the unit value of its households' purchases of each good, and its
@@ -420,8 +436,8 @@ and ln w for every province. Conditions: every origin sells its output, output =
 (p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (PIGL at
 q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; each pop
 spends its income by PIGL (`reference/demand.py`, the mirror of `demand.rs`): its effective
-labour share e_k LF_k / L^s of its province's wages and profits, and its population share of its
-country's rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
+labour share e_k LF_k / L^s of its province's wages, and its population share of its country's
+profits (national ownership, Income) and rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
 spending, so income is iterated to a fixed point (relative 1e-15) inside each evaluation; the
 world price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals
 1. Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
@@ -653,11 +669,6 @@ texture fed from core columns.
 - Benchmarks: `labour`, `produce`, `consume` (criterion, full pack).
 
 ## Open questions
-
-- Provinces without traded output (ADR 0089 calibration): their calibrated steady state is empty
-  (Calibration, stage 3). Options: leave them out of the economy like the provinces below the
-  working-age floor, own profits nationally rather than by province, or give the downscaling
-  traded VA there. Owner ruling pending (Task 18e).
 
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
 - Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on

@@ -100,3 +100,42 @@ a boom, up to L^s. Frictionless mode solves sum_g L*_ig(w) = (1 - u*_i) L^s_i.
   prices.
 - `reference/calibrate.py`, the econ SPEC Calibration section and the pack's `econ_countries`
   table (u* column) change.
+
+## As built (Task 18e)
+
+`python/ceteris/reference/calibrate.py` implements the decision. It departs from the text above
+where the text's form cannot give an exact steady state of the model as built:
+
+- **Household spending.** Stage 1 uses the households' PIGL spending at their own province's q_d
+  and income, not Omega_g I_d. Stage 4 inverts the PIGL weights per country, at the unit value of
+  the country's household purchases of each good and its mean income per person. Exactness: PIGL
+  weights are per country, while buyer prices and incomes vary across a country's provinces and
+  pops, so Omega_g I_d is not what the model's households spend at any weights. The national
+  shares then miss Omega by at most 0.0060, with a median over countries of 0.0003 (2000 pack).
+- **Passes and run time.** One outer loop settles rebates, r_g, buyer prices and the PIGL weights
+  together, Anderson-mixed, to 1e-11 relative. It is not a rebate-only iteration of 3 to 5
+  passes. On the 2000 pack it takes 46 passes and 11,010 Sinkhorn sweeps (about 40 ms each, cold
+  start about 1,000), 473 s and 0.85 GB. Exactness: r_g and the PIGL weights depend on sourcing as
+  the rebates do. The Sinkhorn tolerance (1e-13 in ln) leaves a floor near 1e-12 on the passes.
+- **Per-good index scaling.** Stage 2 fixes one scale per traded good, not one in total: each
+  good's part of the world price index (Omega_g times province household income as weights) is
+  1, and local goods take p = 1, so the index is 1. Exactness: the scaling is unique up to a
+  scale per good, since fixed values leave each good's units free, and the PIGL weights inverted
+  at q absorb the choice.
+- **a_VA.** Stage 3 uses a_VA = 1 - sum_k a_kg, the cost shares at the calibrated prices, so
+  p_VA = p_o and A = 1 / p_o. Exactness: a_VA only sets the units of real VA. At base prices
+  (`EconInputs::base_a_va`), coef = a_kg p_o / q_ik makes it nonpositive for 7,519 pack
+  enterprises.
+- **Local output with household closure.** Household income includes the calibrated local VA,
+  so local output and income are one fixed point per province. Exactness: a steady state pays
+  households the VA the model produces.
+- **National profit ownership** (owner, 2026-10-25). Enterprise profits, VA less labour income
+  (with the markets' cash flow), are pooled per country and paid per person to every pop of the
+  country. Wages stay local, and the tariff rebate keeps its national per-person rule. Exactness:
+  under provincial ownership, the 35 pack provinces without traded output earned only their
+  rebate share. At that income PIGL buys no local goods, so their only steady state was empty
+  (output 0, w0 = 0). With national ownership every province produces: the smallest local output
+  is 67.8 and the smallest w0 is 2.05.
+
+On the 2000 pack the reference model's residual at the calibrated point is 1.0e-11. The econ
+SPEC (Income, Calibration) states the rules.
