@@ -82,18 +82,11 @@ bytes = 2417732497
 url = "https://www.cepii.fr/DATA_DOWNLOAD/baci/data/BACI_HS92_V202601.zip"
 
 [[file]]
-source = "wits-concordance"
-name = "Concordance_H0_to_I3.zip"
-sha256 = "c4a2c417465777fef3bcacd492438743702b427ca03353dca43076d9a27a632e"
-bytes = 91146
-url = "https://wits.worldbank.org/data/public/concordance/Concordance_H0_to_I3.zip"
-
-[[file]]
-source = "unsd-isic-correspondence"
-name = "ISIC31_ISIC4.txt"
-sha256 = "5edbf40aa5e75dd778782896dc2054a76bcd252c2fbad9f704d00a883a3f66a5"
-bytes = 41764
-url = "https://unstats.un.org/unsd/classifications/Econ/tables/ISIC/ISIC31_ISIC4/ISIC31_ISIC4.txt"
+source = "oecd-btige-key"
+name = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
+sha256 = "16b1e00e98d44948ea6e807db5787149e6c84c1e3f5cf5db11ff33e2092cee4f"
+bytes = 807017
+url = "https://webfs-sti.oecd.org/files/STI-PIE/BTIGE/OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
 
 [[file]]
 source = "wic-reconstruction"
