@@ -337,21 +337,23 @@ initial money and comparisons use a world price index.
    costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
 2. Base point per enterprise: L0_ig = s_L VA0_ig / w0_i (base wage from the State table), so
    base wages clear base employment. The GE reference model (below) then solves in one joint
-   system for prices, wages, the productivity A of every traded enterprise (equilibrium VA
-   equals the pack's downscaled VA) and one A per (country, local good) (equilibrium national
-   VA of that good equals ICIO).
+   system for prices, wages and the productivity A of every enterprise: traded enterprises match
+   the pack's downscaled VA, and each local enterprise (province, local good) matches its
+   population-based base VA, so national local totals equal ICIO (owner decision, 2026-10-25,
+   replacing one A per country and local good).
 3. The result is `econ_calib.arrow`, hashed in `tests/golden/p2-pack.txt`. Residuals (where no
    positive A can match) are reported, not hidden.
 
 As built (`reference/calibrate.py`): value added is nominal, sales less inputs at buyer prices (the
-pack's convention), at equilibrium prices with the world price index at 1. The traded A are
-eliminated in closed form: at given prices and wages, an enterprise with p_VA > 0 matches VA T at
-L / L0 = x with s_L T = w L0 ((1 - s_L) x^(1 - rho) + s_L x) and A = T / (p_VA VA0 g(x)), g the
-normalized CES; the reduced system (ln p, ln w, ln A per pair) has the joint system's roots. The
-equilibrium at A = 1 (unique, ADR 0022) anchors the solve: targets move from its VA V1 to the data
-along V1^(1 - lambda) T^lambda, Newton-Krylov (GMRES) correcting each step. The joint system has
-several roots in general; the path picks the one connected to A = 1, and stops at a fold (the
-fixture's own data stall at lambda 0.199, PLAN Task 18b report).
+pack's convention), at equilibrium prices with the world price index at 1. Every A is eliminated
+in closed form: at given prices and wages, an enterprise with p_VA > 0 matches VA T at L / L0 = x
+with s_L T = w L0 ((1 - s_L) x^(1 - rho) + s_L x) and A = T / (p_VA VA0 g(x)), g the normalized
+CES; the reduced system in ln p and ln w alone has the joint system's roots. With cost-share
+coefficients the data state has p_VA = 1, A = 1 and L = L0 everywhere. The solve is a Newton
+homotopy F(x) - (1 - lambda) F(x0) from the data state x0, followed by pseudo-arclength
+continuation through folds to lambda = 1, Newton with GMRES correcting each arc. The joint system
+has several roots in general; the calibration keeps the one reached continuously from the data
+state (controller ruling, 2026-10-25), and reports the distribution of ln A.
 
 The 2000 state used for runs is the data state (prices 1, base wages and employment, 2000
 unemployment, inventories and input stocks at target) with the calibrated A. It is not the

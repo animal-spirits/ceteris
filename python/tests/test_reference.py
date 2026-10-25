@@ -565,28 +565,39 @@ def test_v1_mode():
     assert uniqueness.v1_mode(float("inf")) == "report"
 
 
-# Log sd of the perturbation. The calibration has several roots: at 0.1 one seed in four reaches
-# another, at 0.2 the continuation stalls at folds or reaches another (task 18b report).
-SPREAD = 0.05
+SPREAD = 0.05  # log sd of the perturbation (controller ruling, 2026-10-25)
 
 
-def test_calibration_recovers_fixture_productivity(inputs):
-    """Calibration step 2: perturb the fixture's A (per traded enterprise, per country and local
-    good), solve its equilibrium, and calibrate against that equilibrium's value added (per traded
-    enterprise, national per local good) with the inputs' A at 1: the solve recovers the
-    perturbed A, and its root solves the joint system."""
-    inp = inputs
+@pytest.fixture(scope="module")
+def calibrated(inputs):
+    """The fixture calibrated against its own data from the data state: (x, A)."""
+    a, residuals = calibrate.productivity(inputs)
+    return inputs, residuals, a
+
+
+def test_calibration_solves_the_fixture_data(calibrated):
+    """Calibration step 2 on the fixture's own targets (its VA0, local ones the population split):
+    the path from the data state reaches a root of the joint system, every A positive."""
+    inp, residuals, a = calibrated
+    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
+    assert np.all(np.isfinite(a) & (a > 0))
+
+
+def test_calibration_recovers_fixture_productivity(calibrated):
+    """Perturb the calibrated fixture's A (one per enterprise, local ones included), solve its
+    equilibrium, and calibrate against that equilibrium's value added with the inputs' A at 1,
+    starting at the calibrated root: the solve recovers the perturbed A and solves the joint
+    system. From the data state itself the path can reach another root (task 18b report)."""
+    inp, _, a_star = calibrated
+    x_star = solve.equilibrium(dataclasses.replace(inp, ent_a=a_star), tol=1e-13).x
     rng = np.random.default_rng(18)
-    local = ~inp.traded[inp.ent_good]
-    pair = np.unique(inp.ent_country * inp.n_goods + inp.ent_good, return_inverse=True)[1]
-    a = np.exp(rng.normal(0.0, SPREAD, len(inp.ent_good)))
-    a[local] = np.exp(rng.normal(0.0, SPREAD, pair.max() + 1))[pair[local]]
+    a = a_star * np.exp(rng.normal(0.0, SPREAD, len(inp.ent_good)))
     truth = dataclasses.replace(inp, ent_a=a)
-    eq = solve.equilibrium(truth, tol=1e-13)
+    eq = solve.equilibrium(truth, x0=x_star, tol=1e-13)
     va = model.evaluate(eq.x, truth)["value_added"]
     assert np.all(va > 0)
-    data = dataclasses.replace(inp, ent_a=np.ones_like(a), ent_va_target=va)
-    got, residuals = calibrate.productivity(data)
+    data = dataclasses.replace(inp, ent_va_target=va)
+    got, residuals = calibrate.productivity(data, start=x_star)
     assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
     np.testing.assert_allclose(got, a, rtol=1e-8)
 
@@ -597,7 +608,7 @@ def test_calibration_table_has_the_layout_from_pack_reads(inputs, tmp_path):
     inp = inputs
     pack = 2 * np.arange(inp.n_provinces) + 1
     a = np.linspace(0.5, 2.0, len(inp.ent_good))
-    none = calibrate.Residuals(*(np.zeros(0),) * 4)
+    none = calibrate.Residuals(np.zeros(0, dtype=np.int64), np.zeros(0))
     calibrate.write(tmp_path / "econ_calib.arrow", inp, pack, a, none)
     t = pa_ipc.open_file(str(tmp_path / "econ_calib.arrow")).read_all()
     assert [(f.name, f.type) for f in t.schema] == [("province", pa.uint32()), ("good", pa.uint8()), ("a", pa.float64())]
