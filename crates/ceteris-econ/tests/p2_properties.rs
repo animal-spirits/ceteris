@@ -11,7 +11,7 @@ use ceteris_econ::params::Technology;
 use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
-    MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, static_digest, to_minor,
+    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, static_digest, to_minor,
     to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
@@ -82,8 +82,10 @@ fn employment_within_bounds() {
                 let l: f64 = lay.enterprises(i).map(|e| w.employment[e]).sum();
                 assert!(lay.enterprises(i).all(|e| w.employment[e] >= 0.0));
                 assert!(l <= lay.labour_supply[i] * (1.0 + 1e-12), "province {i}");
-                let l0: f64 = lay.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
-                moved |= (l / l0 - 1.0).abs() > 1e-6;
+                // frictionless provinces stay at (1 - u*) L^s = sum L0, their enterprises move
+                moved |= lay
+                    .enterprises(i)
+                    .any(|e| (w.employment[e] / inp.enterprises.l0[e] - 1.0).abs() > 1e-6);
             }
             assert!(w.wage.iter().all(|x| x.is_finite() && *x > 0.0));
         }
@@ -436,6 +438,88 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
             systems::reprice(&mut w);
             systems::distribute(&mut w);
             w.end_tick(tick).unwrap();
+        }
+    }
+}
+
+/// National profit ownership (owner, 2026-10-25; SPEC Income): at E4 every enterprise's and
+/// every province market's signed cash flow joins one pool per country, paid to the country's
+/// pops by population share N_k / N_c, the cumulative shares rounded half to even. Money is
+/// conserved exactly: each country's pops receive, in minor units, exactly the cash its
+/// enterprises and markets held; each pop's part is within one minor unit of N_k / N_c of the
+/// pool; every enterprise, market and rebate account ends at zero.
+#[test]
+fn national_profit_pool_conserves_money_exactly() {
+    for params in [EconParams::default(), EconParams::frictionless()] {
+        let mut w = world(params);
+        for tick in 0..6 {
+            up_to_dispatch(&mut w);
+            systems::dispatch(&mut w);
+            systems::reprice(&mut w);
+            let inp = w.inputs().clone();
+            let lay = w.layout().clone();
+            let acc = &lay.accounts;
+            let nc = inp.n_countries();
+            let mut pool = vec![0i64; nc];
+            for i in 0..inp.n_provinces() {
+                let c = inp.country_of(i);
+                pool[c] += w.ledger.money(acc.market[i]);
+                pool[c] += lay
+                    .enterprises(i)
+                    .map(|e| w.ledger.money(acc.enterprise[e]))
+                    .sum::<i64>();
+            }
+            let start = w.ledger.journal().len();
+            systems::distribute(&mut w);
+            let pop_of = |a| acc.pop.iter().position(|&p| p == a);
+            let mut dividend = vec![0i64; inp.n_pops()];
+            for e in &w.ledger.journal()[start..] {
+                if e.flow == DIVIDEND
+                    && let Some(k) = pop_of(e.to)
+                {
+                    dividend[k] += e.amount;
+                }
+            }
+            let mut people = vec![0.0; nc];
+            for k in 0..inp.n_pops() {
+                people[inp.country_of(inp.pops.province[k] as usize)] += inp.pops.population[k];
+            }
+            let mut paid = vec![0i64; nc];
+            for (k, &part) in dividend.iter().enumerate() {
+                let c = inp.country_of(inp.pops.province[k] as usize);
+                paid[c] += part;
+                let share = pool[c] as f64 * inp.pops.population[k] / people[c];
+                assert!(
+                    (part as f64 - share).abs() <= 1.0,
+                    "tick {tick} pop {k}: dividend {part} of share {share}"
+                );
+            }
+            assert_eq!(paid, pool, "tick {tick}: pools paid out exactly");
+            for a in acc.enterprise.iter().chain(&acc.market).chain(&acc.rebate) {
+                assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
+            }
+            w.end_tick(tick).unwrap();
+        }
+    }
+}
+
+/// ADR 0089: the frictionless wage clears labour at the natural rate, sum_g L*_ig(w) =
+/// (1 - u*_i) L^s_i, so unemployment is u* in every province at every tick.
+#[test]
+fn frictionless_unemployment_is_the_natural_rate() {
+    let mut sim = sim_of(world(EconParams::frictionless()));
+    for tick in 0..24 {
+        sim.step().unwrap();
+        let w = sim.world();
+        let (inp, lay) = (w.inputs(), w.layout());
+        for i in 0..inp.n_provinces() {
+            let l: f64 = lay.enterprises(i).map(|e| w.employment[e]).sum();
+            let u = 1.0 - l / lay.labour_supply[i];
+            let u_star = inp.countries.u_star[inp.country_of(i)];
+            assert!(
+                (u - u_star).abs() <= 1e-10,
+                "tick {tick} province {i}: unemployment {u}, u* {u_star}"
+            );
         }
     }
 }

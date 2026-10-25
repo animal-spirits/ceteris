@@ -6,10 +6,11 @@
 `cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates the
 data state as the steady state (`calibrate.calibrate`, ADR 0089) at the pack's u* and writes the
 calibration tables (`calibrate.write`) into OUT, printing the summary. OUT defaults to
-`target/calibration/<pack name>`, never the pack: the Rust loader reads `econ_calib.arrow` from the
-pack until it checks the calibration format (Task 18e-2). With
-`--inputs EXPORT` instead of `--pack` it calibrates an export directory (a generated world: its
-2000 unemployment rates serve as u*, its provinces as their own pack provinces)."""
+`target/calibration/<pack name>`, never the pack; copying the six tables into the pack installs
+them, and `EconInputs::from_pack` loads them only at their `calibration_format` and the static
+digest of the export they were solved from. With
+`--inputs EXPORT` instead of `--pack` it calibrates an export directory at the export's u* (a
+generated world: its provinces serve as their own pack provinces)."""
 
 import argparse
 import json
@@ -90,7 +91,7 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
 def run_calibration(inputs: Path, u_star, pack_province, out: Path) -> None:
     inp = io.load(inputs)
     if u_star is None:
-        u_star = inp.unemployment
+        u_star = inp.u_star
     if pack_province is None:
         pack_province = np.arange(inp.n_provinces)
     try:

@@ -450,19 +450,15 @@ def calibrate(inp: Inputs, u_star: np.ndarray, progress=None) -> Steady:
 
 
 def reference_inputs(inp: Inputs, s: Steady) -> Inputs:
-    """The reference model's inputs at the calibrated point: A, VA0, L0, w0, the coefficients, a_VA
-    and the PIGL weights of `s`; labour supply (1 - u*) L^s (the natural-rate economy is the
-    full-employment one on that supply, pops keeping their shares)."""
-    employed = 1.0 - s.u_star[inp.province_country]
+    """The reference model's inputs at the calibrated point: A, VA0, L0, w0, the coefficients, a_VA,
+    the PIGL weights and the natural rates of `s` (labour clears at (1 - u*) L^s)."""
     return replace(
         inp,
         ent_a=s.a,
         ent_va0=s.va0,
         ent_l0=s.l0,
         w0=s.w0,
-        labour_supply=employed * inp.labour_supply,
-        pop_effective=employed[inp.pop_province] * inp.pop_effective,
-        unemployment=np.zeros(inp.n_countries),
+        u_star=s.u_star,
         calibrated_coef=s.coef,
         calibrated_a_va=s.a_va,
         calibrated_weights=s.weights,

@@ -180,8 +180,9 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
 }
 
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
-/// current wage, then the wage (wage rule on expected inflation and excess demand, or the
-/// clearing wage when frictionless), employment toward L* and employed pops.
+/// current wage, then the wage (wage rule on expected inflation and excess demand against the
+/// natural rate u*, or when frictionless the wage at which labour demand is (1 - u*) L^s, ADR
+/// 0089), employment toward L* and employed pops.
 pub fn labour(w: &mut EconWorld) {
     let (inp, lay, params) = (&*w.inputs, &*w.layout, &w.params);
     let c_max = w.trade.c_max;
@@ -192,7 +193,7 @@ pub fn labour(w: &mut EconWorld) {
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
-            let s_l = inp.countries.s_l[c];
+            let (s_l, u_star) = (inp.countries.s_l[c], inp.countries.u_star[c]);
             let supply = lay.labour_supply[i];
             let row = i * N_GOODS..(i + 1) * N_GOODS;
             let (p, p_in) = (&price[row.clone()], &index[row]);
@@ -222,17 +223,18 @@ pub fn labour(w: &mut EconWorld) {
                         .map(|(e, &pv)| target(e, pv, w))
                         .sum()
                 };
-                let mut w1 = clearing_wage(w0, supply, demand);
+                let natural = (1.0 - u_star) * supply;
+                let mut w1 = clearing_wage(w0, natural, demand);
                 // no root: the search ran to an extreme; take at most a doubling or halving
-                if (demand(w1) - supply).abs() > NO_ROOT * supply {
+                if (demand(w1) - natural).abs() > NO_ROOT * natural {
                     w1 = w1.clamp(0.5 * w0, 2.0 * w0);
                 }
                 (w1, targets(w1), false)
             } else {
                 let t = targets(w0);
                 let excess = (fixed_sum(&t) - supply) / supply;
-                let clipped = (pi + params.kappa_w * excess).abs() > c_max;
-                (wage_step(w0, excess, pi, params, c_max), t, clipped)
+                let clipped = (pi + params.kappa_w * (excess + u_star)).abs() > c_max;
+                (wage_step(w0, excess, u_star, pi, params, c_max), t, clipped)
             };
             let mut l = vec![0.0; t.len()];
             allocate(&t, &prev[ents], params.eta, supply, &mut l);
@@ -703,36 +705,34 @@ pub fn reprice(w: &mut EconWorld) {
     w.update_expectation();
 }
 
-/// E4: every enterprise and market pays its signed cash flow of the tick to its province's
-/// pops by ownership share, every rebate account pays its tariffs to its country's pops by
-/// population, so all three end the tick at zero. Records each pop's income of the tick.
+/// E4 (national ownership, owner 2026-10-25): every enterprise and province market pays its
+/// signed cash flow of the tick into its country's profit pool, and each country pays its pool
+/// and its rebate account (tariffs) to its pops by population share N_k / N_c, so all of them
+/// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
+/// cumulative population shares of the country's pops in ID order rounded half to even, so the
+/// parts add up to the pool exactly. Records each pop's income of the tick.
 pub fn distribute(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
-    let mut parts = Vec::new();
     for i in 0..inp.n_provinces() {
-        let pops = lay.pops(i);
-        let shares = &lay.ownership[pops.clone()];
-        let payers = lay.enterprises(i).map(|e| (Some(e), acc.enterprise[e]));
-        for (e, payer) in payers.chain([(None, acc.market[i])]) {
-            let cash = w.ledger.money(payer);
-            if let Some(e) = e {
-                w.profit[e] = to_numeraire(cash);
-            }
-            split(cash, shares.iter().copied(), &mut parts);
-            for (k, &part) in pops.clone().zip(&parts) {
-                pay(&mut w.ledger, DIVIDEND, payer, acc.pop[k], part);
-                w.scratch.income_paid[k] += part;
-            }
+        let pool = acc.dividend[inp.country_of(i)];
+        for e in lay.enterprises(i) {
+            let cash = w.ledger.money(acc.enterprise[e]);
+            w.profit[e] = to_numeraire(cash);
+            pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, cash);
         }
+        let cash = w.ledger.money(acc.market[i]);
+        pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
     }
+    let mut parts = Vec::new();
     for (c, pops) in lay.country_pops.iter().enumerate() {
-        let rebate = acc.rebate[c];
-        let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
-        split(w.ledger.money(rebate), weights, &mut parts);
-        for (&k, &part) in pops.iter().zip(&parts) {
-            pay(&mut w.ledger, REBATE, rebate, acc.pop[k as usize], part);
-            w.scratch.income_paid[k as usize] += part;
+        for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
+            let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
+            split(w.ledger.money(payer), weights, &mut parts);
+            for (&k, &part) in pops.iter().zip(&parts) {
+                pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
+                w.scratch.income_paid[k as usize] += part;
+            }
         }
     }
     for (income, &paid) in w.income.iter_mut().zip(&w.scratch.income_paid) {

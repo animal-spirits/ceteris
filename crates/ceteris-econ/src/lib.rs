@@ -1,6 +1,7 @@
 //! The P2 economic core: enterprises, labour markets, wages and final demand on top of
 //! the trade layer. See `specs/econ/SPEC.md`.
 
+pub mod calibration;
 pub mod demand;
 pub mod equilibrium;
 pub mod export;
