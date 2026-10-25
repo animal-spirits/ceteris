@@ -2,15 +2,26 @@
 
 Standard library only, so CI can run it before the Python package exists:
 
-    python3 -I python/ceteris/packs/check_sources.py
+    python3 -I python/ceteris/packs/check_sources.py [--profile research|release]
+
+With --profile, it also checks the sources the pack build reads (fetch.toml, plus geoBoundaries
+when the county lock exists) against that profile (ADR 0050): a research pack may read
+non-commercial and closed-source-only sources for calibration and validation; a release pack may
+read only sources whose licence allows commercial use on a confident reading. No profile reads
+an excluded source. Files that only tests read (validation.toml) are not pack sources; each must
+name a source with use = "validation".
 """
 
+import argparse
 import datetime
 import sys
 import tomllib
 from pathlib import Path
 
 MANIFEST = Path(__file__).with_name("sources.toml")
+FETCH = Path(__file__).with_name("fetch.toml")
+VALIDATION = Path(__file__).with_name("validation.toml")
+COUNTY_LOCK = Path(__file__).with_name("counties.lock.toml")
 
 REQUIRED = {
     "id": str,
@@ -36,6 +47,7 @@ DISTRIBUTIONS = {"closed", "open"}
 USES = {"primary", "complement", "fallback", "validation", "rejected"}
 CONFIDENCE = {"high", "medium", "low"}
 SHIPPED = {"bundle", "bundle-aggregates"}
+PROFILES = {"research", "release"}
 
 
 def problems(source: dict, ids: set[str]) -> list[str]:
@@ -73,7 +85,46 @@ def problems(source: dict, ids: set[str]) -> list[str]:
     return found
 
 
-def main() -> int:
+def pack_sources() -> set[str]:
+    """Ids of the sources the pack build reads."""
+    used = {f["source"] for f in tomllib.loads(FETCH.read_text()).get("file", [])}
+    if COUNTY_LOCK.exists():
+        used.add("geoboundaries")
+    return used
+
+
+def validation_problems(by_id: dict[str, dict]) -> list[str]:
+    """Files outside the pack must belong to validation-only sources, so the file list cannot hide a pack input."""
+    found = []
+    for f in tomllib.loads(VALIDATION.read_text()).get("file", []):
+        source = by_id.get(f["source"])
+        if source is None:
+            found.append(f"{f['source']}: named in validation.toml but missing from sources.toml")
+        elif source.get("use") != "validation":
+            found.append(f"{f['source']}: in validation.toml but its use is '{source.get('use')}', not validation")
+    return found
+
+
+def profile_problems(source: dict, profile: str) -> list[str]:
+    sid = source["id"]
+    if source["policy"] == "exclude":
+        return [f"{sid}: excluded source read by the {profile} pack"]
+    if profile == "research":
+        return []
+    found = []
+    if not source["commercial_use"]:
+        found.append(f"{sid}: release pack reads a source without commercial use")
+    if source.get("closed_source_only"):
+        found.append(f"{sid}: release pack reads closed-source-only data")
+    if source["confidence"] == "low":
+        found.append(f"{sid}: release pack reads a source on a low-confidence licence reading")
+    return found
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", choices=sorted(PROFILES), help="check the pack's sources too")
+    args = parser.parse_args(argv)
     manifest = tomllib.loads(MANIFEST.read_text())
     distribution = manifest.get("project", {}).get("distribution")
     sources = manifest.get("source", [])
@@ -86,11 +137,22 @@ def main() -> int:
         # Opening the project requires every closed-source fallback to be resolved (ADR 0005).
         if distribution == "open" and source.get("closed_source_only"):
             errors.append(f"{source.get('id')}: closed-source-only data in an open distribution")
+    by_id = {s.get("id"): s for s in sources}
+    errors += validation_problems(by_id)
+    if args.profile:
+        for sid in sorted(pack_sources()):
+            if sid not in by_id:
+                errors.append(f"{sid}: read by the pack but missing from sources.toml")
+            elif not problems(by_id[sid], set(ids)):
+                errors += profile_problems(by_id[sid], args.profile)
     for e in errors:
         print(e, file=sys.stderr)
     shipped = sum(s.get("policy") in SHIPPED for s in sources)
     closed = sum(bool(s.get("closed_source_only")) for s in sources)
-    print(f"{distribution}: {len(sources)} sources, {shipped} shippable, {closed} closed-source-only, {len(errors)} problems")
+    profile = f", {args.profile} pack" if args.profile else ""
+    print(
+        f"{distribution}{profile}: {len(sources)} sources, {shipped} shippable, {closed} closed-source-only, {len(errors)} problems"
+    )
     return 1 if errors else 0
 
 

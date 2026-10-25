@@ -60,7 +60,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 
 | Table | Rows | Content | Sources |
 |---|---|---|---|
-| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, HS to ISIC concordance) |
+| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
 | `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
@@ -91,8 +91,8 @@ reallocated within the country by the same proxy, so every enterprise has worker
 nearest in (region, log GDP per capita); national VA by good from WDI sector shares
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
-(UNSD) GDP per person against the donors' in the same source, never the region median when an
-income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
+(ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
+always against the donors' in the same source, never the region median when an income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
 over goods 1 to 8 when only manufacturing is missing); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
@@ -549,10 +549,10 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
 
-## App (after the native app reaches parity, ADR 0011 option 3)
+## App (after the native app reaches parity, ADRs 0011 and 0088)
 
-The owner chose a fully native app (no React, webview or Tauri), panels in iced or Slint, picked
-by the stage 1 spike. P2's UI is built there, not in `app/`. Map modes: price by good
+The app is fully native (no React, webview or Tauri), with Slint panels over a wgpu map
+(ADR 0088). P2's UI is built there, not in `app/`. Map modes: price by good
 (index-normalized), output by sector, net exports by good, wage, unemployment. Province panel:
 market rows per good (price, inventory, supply, demand), its enterprises (sector, employment,
 output, profit), its pops (education, labour force, employed, income). Time controls: play,

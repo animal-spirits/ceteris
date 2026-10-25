@@ -10,7 +10,7 @@ no production split is needed; an earlier edition's combined B05_06 (`goods.SPLI
 production values at Pink Sheet prices and is not implemented.
 """
 
-import re
+import csv
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
@@ -36,6 +36,10 @@ BASES = ("icio", "wdi", "wdi_gdp", "donor", "parent", "none")
 INSIDE = {"SOL": "SOM", "ALD": "FIN", "CYN": "CYP"}
 # World Bank regions for pack countries the World Bank does not classify (and whose sovereign it does not either).
 REGIONS = {"SAH": "Middle East & North Africa", "CYN": "Europe & Central Asia", "SOL": "Sub-Saharan Africa"}
+# Income files where WDI has none: ADB Key Indicators (Cook Islands) and the Maddison Project (North Korea).
+ADB_INCOME = "adb_kidb_NY_GDP_PCAP_CD_COO.csv"
+MADDISON = "mpd2023_web.xlsx"
+ADB_ISO = {"COO": "COK"}  # ADB economy codes that differ from ISO 3166-1 alpha-3
 # GDP per person is taken from the year nearest 2000 within these years.
 INCOME_YEARS = range(1995, 2011)
 
@@ -55,7 +59,8 @@ class CountryIO:
     va_basis: str = "icio"
     region: str | None = None  # World Bank region the donor was looked up in
     # Income the donor ranking and the donor-basis level scaling used: pwt, wdi (GDP per person, nearest year in 1995 to
-    # 2010), unsd (UN National Accounts GDP per person) or none (region median donor, donor's level unscaled).
+    # 2010), adb (ADB Key Indicators GDP per person), maddison (Maddison Project GDP per person, 2011 international
+    # dollars) or none (region median donor, donor's level unscaled).
     income_source: str = "none"
     shed: float = 0.0  # share of this economy's own VA given to territories counted inside it
     coal_share: float = 0.0  # coal (ICIO B05) in the VA of good 2, coal and other mining; an imputed country has its donor's
@@ -67,7 +72,8 @@ class Wdi:
 
     gdp: dict[str, float] = field(default_factory=dict)
     income: dict[str, float] = field(default_factory=dict)  # GDP per person in current USD, nearest year in 1995 to 2010
-    income_source: dict[str, str] = field(default_factory=dict)  # wdi, or unsd where WDI has no value
+    income_source: dict[str, str] = field(default_factory=dict)  # wdi, or adb where WDI has no value
+    maddison: dict[str, float] = field(default_factory=dict)  # Maddison Project GDP per person, same years
     agriculture: dict[str, float] = field(default_factory=dict)
     industry: dict[str, float] = field(default_factory=dict)
     manufacturing: dict[str, float] = field(default_factory=dict)
@@ -171,14 +177,23 @@ def _nearest_income(series: Mapping[int, float]) -> float | None:
     return series[min(near, key=lambda y: (abs(y - people.YEAR), y))] if near else None
 
 
-def read_unsd_income(path: Path, m49_to_iso: Mapping[int, str]) -> dict[str, dict[int, float]]:
-    """UNSD National Accounts Main Aggregates, GDP per capita in current USD: value by year for each ISO code."""
-    out: dict[str, dict[int, float]] = {}
-    for r in people._xlsx_sheet(path, "Download-GDPPC-USD-countries", header_cell="CountryID"):
-        code = m49_to_iso.get(int(r["CountryID"]))
-        if code:
-            out[code] = {int(float(y)): v for y, v in r.items() if re.fullmatch(r"\d{4}(\.0)?", y) and isinstance(v, float)}
-    return out
+def read_adb_income(path: Path) -> dict[str, dict[int, float]]:
+    """ADB Key Indicators (SDMX CSV) GDP per capita in current USD: value by year for each ISO code."""
+    out: dict[str, dict[int, float]] = defaultdict(dict)
+    with path.open(newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            if r["INDICATOR"] == "NY_GDP_PCAP_CD" and r["OBS_VALUE"].strip():
+                out[ADB_ISO.get(r["ECONOMY_CODE"], r["ECONOMY_CODE"])][int(r["TIME_PERIOD"])] = float(r["OBS_VALUE"])
+    return dict(out)
+
+
+def read_maddison(path: Path) -> dict[str, dict[int, float]]:
+    """Maddison Project Database GDP per capita (2011 international dollars): value by year for each ISO code."""
+    out: dict[str, dict[int, float]] = defaultdict(dict)
+    for r in people._xlsx_sheet(path, "Full data"):
+        if isinstance(r.get("gdppc"), float):
+            out[str(r["countrycode"])][int(r["year"])] = r["gdppc"]
+    return dict(out)
 
 
 def income_by_year(gdp: Mapping[str, Mapping[int, float]], population: Mapping[str, Mapping[int, float]]) -> dict[str, float]:
@@ -191,8 +206,8 @@ def income_by_year(gdp: Mapping[str, Mapping[int, float]], population: Mapping[s
     return out
 
 
-def load_wdi(cache: Path, admin0: Path) -> Wdi:
-    """The WDI series imputation needs, from the fetch cache; `admin0` is the Natural Earth countries zip (UNSD codes)."""
+def load_wdi(cache: Path) -> Wdi:
+    """The WDI series imputation needs, from the fetch cache, with ADB and Maddison Project income where WDI has none."""
 
     def series(indicator: str, scale: float = 1.0) -> dict[str, float]:
         raw = people.read_wdi(cache / f"wdi_{indicator}.zip")
@@ -201,15 +216,15 @@ def load_wdi(cache: Path, admin0: Path) -> Wdi:
 
     income = income_by_year(people.read_wdi(cache / "wdi_NY.GDP.MKTP.CD.zip"), people.read_wdi(cache / "wdi_SP.POP.TOTL.zip"))
     source = dict.fromkeys(income, "wdi")
-    _, m49 = people.read_codes(admin0)
-    unsd = read_unsd_income(cache / "unsd_GDPPC_USD_countries.xlsx", {n: i for i, n in m49.items()})
-    for code, v in unsd.items():
+    for code, v in read_adb_income(cache / ADB_INCOME).items():
         if code not in income and (found := _nearest_income(v)) is not None:
-            income[code], source[code] = found, "unsd"
+            income[code], source[code] = found, "adb"
+    maddison = {k: found for k, v in read_maddison(cache / MADDISON).items() if (found := _nearest_income(v)) is not None}
     return Wdi(
         gdp=series("NY.GDP.MKTP.CD"),
         income=income,
         income_source=source,
+        maddison=maddison,
         agriculture=series("NV.AGR.TOTL.ZS", 100),
         industry=series("NV.IND.TOTL.ZS", 100),
         manufacturing=series("NV.IND.MANF.ZS", 100),
@@ -295,8 +310,8 @@ def impute(
 
     Another country copies the input coefficients and final demand shares of the ICIO economy in its World
     Bank region (`regions` overrides it) with the closest log income, in PWT GDP per person when it has one,
-    else WDI GDP per person (UNSD where WDI has none), compared with the donors' in the same source; with
-    no income at all, the region's median. Only ICIO economies with WDI GDP and population can donate.
+    else WDI GDP per person (ADB where WDI has none), else Maddison Project GDP per person, compared with the
+    donors' in the same source; with no income at all, the region's median. Only ICIO economies with WDI GDP and population can donate.
 
     VA by good: WDI GDP times the sector shares (agriculture, industry, manufacturing, services), each group
     split over its goods by the donor's VA (`va_basis` wdi); with manufacturing missing, industry is split over
@@ -309,6 +324,7 @@ def impute(
     worldpop = worldpop or {}
     eligible = {c: v for c, v in icio_by_code.items() if c in wdi.gdp and c in obs.population}
     by_wdi = people.Observed(region=obs.region, gdp_per_capita=wdi.income)
+    by_maddison = people.Observed(region=obs.region, gdp_per_capita=wdi.maddison)
     ratio = median_va_over_gdp(icio_by_code, wdi)
     out = {}
     for code, sovereign in countries.items():
@@ -321,11 +337,14 @@ def impute(
             region = regions.get(code) or next((obs.region[p] for p in ps + parents if p in obs.region), None)
             pwt = [obs.gdp_per_capita[p] for p in ps if p in obs.gdp_per_capita]
             income = [wdi.income[p] for p in ps if p in wdi.income]
+            ppp = [wdi.maddison[p] for p in ps if p in wdi.maddison]
             if pwt:
                 ranking, level, source = obs, float(np.mean(pwt)), "pwt"
             elif income:
-                unsd = all(wdi.income_source[p] == "unsd" for p in ps if p in wdi.income)
-                ranking, level, source = by_wdi, float(np.mean(income)), "unsd" if unsd else "wdi"
+                adb = all(wdi.income_source[p] == "adb" for p in ps if p in wdi.income)
+                ranking, level, source = by_wdi, float(np.mean(income)), "adb" if adb else "wdi"
+            elif ppp:
+                ranking, level, source = by_maddison, float(np.mean(ppp)), "maddison"
             else:
                 ranking, level, source = obs, None, "none"
             name = people.donor(region, None if level is None else float(np.log(level)), eligible, ranking, ps)
