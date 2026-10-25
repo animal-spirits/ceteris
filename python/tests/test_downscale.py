@@ -90,8 +90,9 @@ def test_proxy_levels_follow_the_spec_order():
     assert set(name[AAA[[0, 2, 3]], 1]) == {"gem"}  # province 1 holds oil but is too small
     assert set(name[AAA[[0, 2, 3]], 3]) == {"dose"}
     assert set(name[AAA[[0, 2, 3]], 7]) == set(name[AAA[[0, 2, 3]], 9]) == {"population"}
-    # BBB has no oil fields and no DOSE regions: gridded GDP.
-    assert set(name[BBB, 1]) == set(name[BBB, 4]) == {"gdp"}
+    # BBB has no oil fields and no DOSE regions.
+    # Only manufacturing falls back to gridded GDP; oil and gas go straight to population.
+    assert set(name[BBB, 4]) == {"gdp"} and set(name[BBB, 1]) == {"population"}
     assert set(name[BBB, 2]) == {"mining"}
 
 
@@ -103,7 +104,7 @@ def test_fallbacks_are_flagged_imputed_and_data_levels_are_not():
     world = _world()
     world["BBB"] = _io(world["BBB"].va)
     out = downscale.allocate(world, _provinces(), _proxies())
-    assert out.imputed[BBB][:, [1, 3, 4, 5, 6]].all()  # gridded GDP stands in for GEM and DOSE
+    assert out.imputed[BBB][:, [1, 3, 4, 5, 6]].all()  # population stands in for GEM, gridded GDP for DOSE
     assert not out.imputed[BBB][:, [0, 2, 7, 8, 9]].any()
 
 
@@ -114,13 +115,31 @@ def test_without_crops_agriculture_follows_population():
     assert out.imputed[eligible, 0].all()
 
 
-def test_oil_and_gas_fall_back_to_gridded_gdp_then_population():
+def test_oil_gas_and_mining_fall_back_to_population_not_gridded_gdp():
     eligible = AAA[[0, 2, 3]]
-    out = downscale.allocate(_world(), _provinces(), _proxies(oil_gas=None))
-    np.testing.assert_allclose(_shares(out.va[:, 1], eligible), _shares(_proxies().gdp, eligible), rtol=1e-12)
-    out = downscale.allocate(_world(), _provinces(), _proxies(oil_gas=None, gdp=None))
-    np.testing.assert_allclose(_shares(out.va[:, 1], eligible), _shares(POPULATION, eligible), rtol=1e-12)
-    assert out.imputed[eligible, 1].all()
+    out = downscale.allocate(_world(), _provinces(), _proxies(oil_gas=None, coal=None, sites=None))
+    for g in (1, 2):
+        np.testing.assert_allclose(_shares(out.va[:, g], eligible), _shares(POPULATION, eligible), rtol=1e-12)
+        assert out.imputed[eligible, g].all()
+
+
+def test_eia_state_production_comes_before_gem():
+    eia = np.array([0, 0, 1.0, 3.0, 0, 0, 0, 0])
+    out = downscale.allocate(_world(), _provinces(), _proxies(eia=eia))
+    eligible = AAA[[0, 2, 3]]
+    np.testing.assert_allclose(out.va[eligible, 1] / out.va[AAA, 1].sum(), [0, 0.25, 0.75], rtol=1e-12)
+    assert {downscale.LEVELS[k] for k in out.level[eligible, 1]} == {"eia"} and not out.imputed[eligible, 1].any()
+    # BBB has no EIA data: its own chain (no fields there, so population).
+    assert {downscale.LEVELS[k] for k in out.level[BBB, 1]} == {"population"}
+
+
+def test_gem_oil_and_gas_is_imputed_where_undated_fields_carry_most_weight():
+    oil = _proxies().oil_gas  # AAA eligible weight: 1 (province 3)
+    out = downscale.allocate(_world(), _provinces(), _proxies(oil_gas_undated=np.array([0, 3, 0, 0.5, 0, 0, 0, 0])))
+    assert not out.imputed[AAA[[0, 2, 3]], 1].any()
+    out = downscale.allocate(_world(), _provinces(), _proxies(oil_gas_undated=oil * 0.6))
+    assert out.imputed[AAA[[0, 2, 3]], 1].all()
+    assert {downscale.LEVELS[k] for k in out.level[AAA[[0, 2, 3]], 1]} == {"gem"}
 
 
 def test_mining_weights_coal_mines_and_mineral_sites_by_the_coal_share():
@@ -270,7 +289,10 @@ def test_gem_coal_keeps_mines_open_in_2000_weighted_by_output(tmp_path):
         mine("old", "Operating", 1980, production=4.0, capacity=9.0),
         mine("cap", "Mothballed", 1995, capacity=2.0),
         mine("undated", "Operating", production=1.0),
-        mine("guess", "Operating", 1990),  # no output: the median of its country's known ones
+        mine("guess", "Operating", 1990),  # no figure while others in its country have one: 0
+        mine("idle", "Operating", 1990, production=0.0, capacity=5.0),  # reported 0 stays 0
+        mine("b1", "Operating", 1990, country="Bland"),  # Bland has no figures: the median positive figure
+        mine("b2", "Operating", 1990, country="Bland"),
         mine("new", "Operating", 2005, production=50.0),
         mine("plan", "Proposed", 1990, production=50.0),
     ]
@@ -283,8 +305,10 @@ def test_gem_coal_keeps_mines_open_in_2000_weighted_by_output(tmp_path):
     ]  # fmt: skip
     path = _xlsx(tmp_path / "coal.xlsx", {"README": [{"x": "y"}], "Non-closed mines": open_, "Closed mines": closed})
     got = downscale.read_gem_coal(path)
-    assert [(lat, lon) for lat, lon, _ in got][-1] == (-38.0, 144.0)
-    assert sorted(w for _, _, w in got) == [1.0, 2.0, 2.5, 3.0, 4.0]
+    assert (got[-1].lat, got[-1].lon) == (-38.0, 144.0)
+    assert sorted(a.weight for a in got if a.country == "Aland") == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+    assert [a.weight for a in got if a.country == "Bland"] == [2.5, 2.5]
+    assert [a.dated for a in got if a.country == "Aland"] == [True, True, False, True, True, True]
 
 
 def test_gem_oil_and_gas_keeps_producing_fields_weighted_by_boe(tmp_path):
@@ -300,6 +324,9 @@ def test_gem_oil_and_gas_keeps_producing_fields_weighted_by_boe(tmp_path):
         field("E", "discovered", 1990.0),
         field("F", "operating", 1990.0, lat=""),
         field("G", "mothballed"),
+        field("H", "operating", 1990.0),
+        field("S", "operating", 1990.0, country="Bland") | {"Onshore/Offshore": "offshore"},
+        field("T", "operating", country="Bland"),
     ]
 
     def prod(uid, quantity, units, year=2023.0):
@@ -312,13 +339,19 @@ def test_gem_oil_and_gas_keeps_producing_fields_weighted_by_boe(tmp_path):
         prod("A", 99.0, "million bbl/y", 2015.0),  # an older year is ignored
         prod("B", 3.0, "million boe/y"),
         prod("C", 5.0, "million bbl/y"),
+        prod("H", 0.0, "million bbl/y"),  # latest production 0 stays 0
     ]
     path = _xlsx(tmp_path / "goget.xlsx", {"Field-level main data": fields, "Field-level production data": production})
     got = downscale.read_gem_oil_gas(path)
-    weights = sorted(round(w, 6) for _, _, w in got)
     gas = 1642.0 / downscale.M3_PER_BOE
-    # A: 10 bbl + gas; B: 3; C: 5; G: no data, the country median of A, B, C.
-    assert weights == sorted(round(x, 6) for x in (10 + gas, 3.0, 5.0, 5.0))
+    # A: 10 bbl + gas; B: 3; C: 5; G: no data while Aland has figures, 0; H: 0.
+    weights = sorted(round(a.weight, 6) for a in got if a.country == "Aland")
+    assert weights == sorted(round(x, 6) for x in (10 + gas, 3.0, 5.0, 0.0, 0.0))
+    # Bland has no figures at all: each field takes the median positive figure (A, B, C: 3, 5, 10 + gas), 5.
+    bland = [a for a in got if a.country == "Bland"]
+    assert [a.weight for a in bland] == [5.0, 5.0] and [a.offshore for a in bland] == [True, False]
+    assert [a.dated for a in bland] == [True, False]
+    assert {a.dated for a in got if a.country == "Aland"} == {True, False}  # G has no year
 
 
 def _cells(points: list[tuple[float, float]]) -> pa.Table:
@@ -330,6 +363,68 @@ def test_points_go_to_the_province_owning_their_cell():
     cells = _cells([(10.0, 20.0), (-30.0, 140.0)])
     got = downscale.point_sums([(10.0, 20.0, 2.0), (-30.0, 140.0, 1.0), (10.0, 20.0, 0.5), (60.0, -40.0, 9.0)], cells, 2)
     np.testing.assert_allclose(got, [2.5, 1.0])
+
+
+SEDS_HEADER = "Data_Status,MSN,StateCode,Year,Data\n"
+
+
+def test_read_seds_sums_crude_and_marketed_gas_by_state(tmp_path):
+    path = tmp_path / "seds.csv"
+    rows = [
+        '"2024F","PAPRB","TX","2000",10',
+        '"2024F","NGMPB","TX","2000",30',
+        '"2024F","PAPRB","TX","2001",99',
+        '"2024F","PAPRP","TX","2000",99',  # thousand barrels: not the Btu series
+        '"2024F","PAPRB","X3","2000",50',
+        '"2024F","PAPRB","US","2000",90',
+        '"2024F","NGMPB","VT","2000",',
+    ]
+    path.write_text(SEDS_HEADER + "\n".join(rows) + "\n", encoding="utf-8-sig")
+    assert downscale.read_seds(path) == {"TX": 40.0, "X3": 50.0}
+
+
+def test_eia_spreads_states_by_onshore_fields_and_offshore_over_the_nearest_coastal_province():
+    # Texas in two parts (the second coastal), Louisiana coastal, Kansas inland, and one Canadian province.
+    points = [(31.0, -101.0), (28.5, -96.5), (30.5, -92.0), (38.5, -98.0), (53.0, -113.0)]
+    cells = _cells(points)
+    table = pa.table(
+        {
+            "id": ["USA-1.1", "USA-1.2", "USA-2", "USA-3", "CAN-1"],
+            "country": ["USA", "USA", "USA", "USA", "CAN"],
+            "coastal": [False, True, True, False, False],
+            "lat": [p[0] for p in points],
+            "lon": [p[1] for p in points],
+        }
+    )
+    states = {"USA-1": "TX", "USA-2": "LA", "USA-3": "KS"}
+    seds = {"TX": 40.0, "LA": 10.0, "KS": 6.0, "X3": 100.0}
+    assets = [
+        downscale.Asset(31.0, -101.0, 3.0, country="United States"),
+        downscale.Asset(28.5, -96.5, 1.0, country="United States"),
+        downscale.Asset(28.0, -91.0, 9.0, offshore=True, country="United States"),  # off Louisiana
+        downscale.Asset(27.5, -96.0, 1.0, offshore=True, country="United States"),  # off Texas
+        downscale.Asset(53.0, -113.0, 50.0, country="Canada"),
+    ]
+    population = np.array([1.0, 1.0, 1.0, 4.0, 1.0])
+    got = downscale.eia_oil_gas(seds, table, states, cells, population, assets)
+    # TX 40 by onshore fields 3:1, plus 10 of offshore; LA 10 plus 90 of offshore; KS has no fields: by population.
+    np.testing.assert_allclose(got, [30.0, 10.0 + 10.0, 10.0 + 90.0, 6.0, 0.0])
+    without = downscale.eia_oil_gas(seds, table, states, cells, population, None)
+    np.testing.assert_allclose(without, [20.0, 20.0 + 50.0, 10.0 + 50.0, 6.0, 0.0])
+
+
+def test_gridded_gdp_reads_the_band_of_2000(tmp_path):
+    import rasterio
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "gdp.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=2, height=1, count=3, dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(19.0, 11.0, 2.0, 2.0)) as ds:  # fmt: skip
+        for b, year in enumerate((1999, 2000, 2001), 1):
+            ds.write(np.array([[b * 10.0, -9.0]], np.float32), b)
+            ds.update_tags(b, NETCDF_DIM_time=str(year))
+    got = downscale.gridded_gdp(path, _cells([(10.0, 20.0)]))
+    np.testing.assert_allclose(got, [20.0])
 
 
 def test_mineral_sites_sum_the_resource_groups():
@@ -387,7 +482,7 @@ def real_gem():
 def test_real_gem_trackers_have_the_main_producers(real_gem):
     coal, oil = real_gem
     assert len(coal) > 2000 and len(oil) > 4000
-    assert all(-90 <= lat <= 90 and -180 <= lon <= 180 and w > 0 for lat, lon, w in coal + oil)
+    assert all(-90 <= a.lat <= 90 and -180 <= a.lon <= 180 and a.weight >= 0 for a in coal + oil)
 
 
 @pytest.fixture(scope="module")
@@ -469,10 +564,30 @@ def test_real_gem_places_oil_and_coal_where_they_are(real_world):
     assert (out.level[sau, 1] == gem).all()
     names = _pack("provinces.arrow")["name"].to_pylist()
     assert {names[i].split(" (")[0] for i in sau[out.va[sau, 1] > 0.05 * out.va[sau, 1].sum()]} == {"Ash Sharqiyah"}
-    # Coal: Shanxi leads China, the Appalachian states the United States.
-    for code, top in (("CHN", "Shanxi"), ("USA", "Pennsylvania")):
+    # Coal: Shanxi leads China and Wyoming the United States (production as reported, no median fill).
+    for code, top in (("CHN", "Shanxi"), ("USA", "Wyoming")):
         here = np.flatnonzero(country == code)
-        assert names[here[np.argmax(out.va[here, 2])]] == top
+        assert names[here[np.argmax(out.va[here, 2])]].split(" (")[0] == top
+    # US oil and gas follows EIA 2000 state production: Texas and Louisiana (with the Gulf offshore) hold most.
+    usa = np.flatnonzero(country == "USA")
+    assert (out.level[usa, 1] == downscale.LEVELS.index("eia")).all()
+    share = {}
+    for i in usa:
+        share[names[i].split(" (")[0]] = share.get(names[i].split(" (")[0], 0.0) + out.va[i, 1] / out.va[usa, 1].sum()
+    assert share["Texas"] + share["Louisiana"] > 0.5 and share.get("Pennsylvania", 0.0) < 0.02
     assert proxies.coal is not None and proxies.oil_gas is not None
     cover = downscale.coverage(out)
-    assert cover[1].get("gem", 0) > 0.8 and cover[2].get("mining", 0) > 0.8
+    assert cover[1].get("gem", 0) + cover[1].get("eia", 0) > 0.8 and cover[2].get("mining", 0) > 0.8
+
+
+def test_real_gridded_gdp_places_manufacturing_dose_leaves(real_world):
+    _cached(downscale.KUMMU)
+    *_, proxies, _, out = real_world
+    assert proxies.gdp is not None
+    # Kummu 2000, constant 2011 international dollars: about 62 trillion over the pack's provinces.
+    assert 5e13 < proxies.gdp.sum() < 7.5e13
+    cover = downscale.coverage(out)
+    for g in downscale.MANUFACTURING:
+        assert cover[g].get("gdp", 0) > 0.1 and cover[g].get("population", 0) < 0.01
+    for g in (1, 2):
+        assert "gdp" not in cover[g]

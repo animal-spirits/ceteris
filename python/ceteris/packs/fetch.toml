@@ -312,11 +312,21 @@ sha256 = "28c4501aa87314cce4dbb2054f64eb82276caf01f4674ee22e02864a177c900c"
 bytes = 17472502
 url = "https://zenodo.org/api/records/20035157/files/DOSE_V2.14.csv/content"
 
+# EIA State Energy Data System, current release: crude oil and marketed gas production by state (US oil and gas).
+[[file]]
+source = "eia"
+name = "Complete_SEDS.csv"
+sha256 = "f541facb1d1ab1cdb1ca564700c1a27fa09e0a153f5be16341582198d143e654"
+bytes = 86526567
+url = "https://www.eia.gov/state/seds/CDF/Complete_SEDS.csv"
+
 # Dryad serves files only with an API bearer token (401) or a browser session (403).
 [[file]]
 source = "kummu-gdp"
 name = "GDP_PPP_1990_2015_5arcmin_v2.nc"
 optional = true
+sha256 = "975ddfad5d2ee71aa227c269b530a4917f8305299b77d09ee0f9cfabc83e5e5b"
+bytes = 134025184
 url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
 manual = true
 
