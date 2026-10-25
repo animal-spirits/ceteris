@@ -1,4 +1,4 @@
-"""The calibration's reduced residual (`calibrate.residual`) in JAX, for exact derivatives
+"""The reduced residual of the joint productivity inversion (`reduced.residual`) in JAX, for exact derivatives
 (optional: the `jax` extra, DESIGN 19.1). The same composition as numpy: `productivity_of`, then
 `model.evaluate` at those A, then `model.market_residual`, rule for rule (`model` documents the
 equations). Float64 throughout.
@@ -10,7 +10,7 @@ its tangents to the same relative tolerance as its values.
 
 `cut=True` holds the gateway sums (the international legs of the kernel) fixed in the
 derivative: the residual's Jacobian then couples only unknowns of one country, the index row
-aside (`precondition.py` uses it). The value is unchanged.
+aside. The value is unchanged.
 """
 
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import calibrate, model
+from . import model, reduced
 from .demand import N_CATEGORIES
 from .io import Inputs
 
@@ -157,7 +157,7 @@ def _sourcing(s: Static, d: dict, price, cut: bool) -> dict:
 
 
 def _labour_ratio(s: Static, w, l0, t, s_l):
-    """`calibrate.labour_ratio`: the Newton iteration on held inputs, then one differentiable step."""
+    """`reduced.labour_ratio`: the Newton iteration on held inputs, then one differentiable step."""
     r = s.rho
     if abs(r) < model.RHO_CD:
         return s_l * t / (w * l0)
@@ -176,7 +176,7 @@ def _labour_ratio(s: Static, w, l0, t, s_l):
 
     def cond(c):
         _, err, k = c
-        return (err > calibrate.LABOUR_TOL) & (k < calibrate.MAX_LABOUR_ITERATIONS)
+        return (err > reduced.LABOUR_TOL) & (k < reduced.MAX_LABOUR_ITERATIONS)
 
     y, _, _ = jax.lax.while_loop(cond, body, (jnp.zeros_like(bh), jnp.inf, 0))
     fy, inv = f(y, b)
@@ -263,11 +263,11 @@ def _consumer(s: Static, d: dict, price, cut: bool):
 
 
 def productivity_of(s: Static, d: dict, x, cut: bool = False):
-    """`calibrate.productivity_of`."""
+    """`reduced.productivity_of`."""
     price, wage = _split(s, d, x)
     _, consumer = _consumer(s, d, price, cut)
     ep = d["ep"]
-    p_va = jnp.maximum(_value_added_price(s, d, price, consumer), calibrate.PVA_FLOOR * price[ep, d["eg"]])
+    p_va = jnp.maximum(_value_added_price(s, d, price, consumer), reduced.PVA_FLOOR * price[ep, d["eg"]])
     t = d["target"]
     ratio = _labour_ratio(s, wage[ep], d["l0"], t, d["s_l"])
     return t / (p_va * d["va0"] * _value_added(s, 1.0, 1.0, 1.0, d["s_l"], ratio))
@@ -363,7 +363,7 @@ def log_index(s: Static, d: dict, x):
 
 
 def residual(s: Static, d: dict, x, cut: bool = False):
-    """`calibrate.residual`."""
+    """`reduced.residual`."""
     return market_residual(s, d, evaluate(s, d, x, productivity_of(s, d, x, cut), cut))
 
 

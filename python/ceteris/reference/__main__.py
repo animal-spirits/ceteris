@@ -2,10 +2,12 @@
 `ceteris export` and writes it with the column layout of the run export (`prices`, `wages`,
 `enterprises`, `flows`, `home`) plus `solution.json`.
 
-`python -m ceteris.reference calibrate --pack DIR [--out FILE] [--budget SECONDS]`: exports the pack's world with
-`cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates
-productivity (`calibrate.productivity`) and writes `DIR/econ_calib.arrow` (or FILE), printing the
-residual summary; progress lines follow the solve, which gives up after the budget (2 hours)."""
+`python -m ceteris.reference calibrate --pack DIR [--out OUT]`: exports the pack's world with
+`cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates the
+data state as the steady state (`calibrate.calibrate`, ADR 0089) at the pack's u* and writes the
+calibration tables (`calibrate.write`) into OUT (default DIR), printing the summary. With
+`--inputs EXPORT` instead of `--pack` it calibrates an export directory (a generated world: its
+2000 unemployment rates serve as u*, its provinces as their own pack provinces)."""
 
 import argparse
 import json
@@ -83,31 +85,27 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
     (out / "solution.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 
-def run_calibration(pack: Path, out: Path, budget: float) -> None:
+def run_calibration(inputs: Path, u_star, pack_province, out: Path) -> None:
+    inp = io.load(inputs)
+    if u_star is None:
+        u_star = inp.unemployment
+    if pack_province is None:
+        pack_province = np.arange(inp.n_provinces)
+    try:
+        s = calibrate.calibrate(inp, u_star, progress=lambda line: print(line, flush=True))
+    except ValueError as e:
+        sys.exit(f"no calibration: {e}")
+    calibrate.write(out, inp, s, pack_province)
+    print(json.dumps(calibrate.summary(inp, s), indent=2))
+    print(f"wrote {out}")
+
+
+def calibrate_pack(pack: Path, out: Path) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         cmd = ["cargo", "run", "--release", "--bin", "ceteris", "--", "export", "--pack", str(pack.resolve()), "--out", tmp]
         subprocess.run(cmd, check=True, cwd=ROOT)
-        inp = io.load(tmp)
         pack_province = io._table(Path(tmp) / "pack_provinces.arrow")["pack"].astype(np.int64)
-    try:
-        a, residuals = calibrate.productivity(inp, progress=lambda line: print(line, flush=True), budget=budget)
-    except (NoConvergence, ValueError) as e:
-        sys.exit(f"no calibration: {e}")
-    calibrate.write(out, inp, pack_province, a, residuals)
-    ln_a = np.log(a)
-    summary = {
-        "residual_count": len(residuals),
-        "largest_relative_miss": residuals.largest_miss,
-        "ln_a_quantiles": dict(
-            zip(
-                ["0", "1", "5", "25", "50", "75", "95", "99", "100"],
-                np.percentile(ln_a, [0, 1, 5, 25, 50, 75, 95, 99, 100]).tolist(),
-            )
-        ),
-        **residuals.info,
-    }
-    print(json.dumps(summary, indent=2))
-    print(f"wrote {out}")
+        run_calibration(Path(tmp), calibrate.read_u_star(pack), pack_province, out)
 
 
 def main() -> None:
@@ -116,13 +114,19 @@ def main() -> None:
     s = sub.add_parser("solve", help="solve the GE reference of an export")
     s.add_argument("--inputs", type=Path, required=True)
     s.add_argument("--out", type=Path, required=True)
-    c = sub.add_parser("calibrate", help="calibrate productivity against the pack's 2000 value added")
-    c.add_argument("--pack", type=Path, required=True)
-    c.add_argument("--out", type=Path, help="default: PACK/econ_calib.arrow")
-    c.add_argument("--budget", type=float, default=7200.0, help="wall-clock seconds before giving up (default 2 hours)")
+    c = sub.add_parser("calibrate", help="calibrate the 2000 data state as the steady state (ADR 0089)")
+    source = c.add_mutually_exclusive_group(required=True)
+    source.add_argument("--pack", type=Path)
+    source.add_argument("--inputs", type=Path, help="an export directory of a generated world")
+    c.add_argument("--out", type=Path, help="directory of the calibration tables (default: PACK)")
     args = parser.parse_args()
     if args.command == "calibrate":
-        run_calibration(args.pack, args.out or args.pack / "econ_calib.arrow", args.budget)
+        if args.pack:
+            calibrate_pack(args.pack, args.out or args.pack)
+        elif args.out is None:
+            parser.error("--inputs needs --out")
+        else:
+            run_calibration(args.inputs, None, None, args.out)
         return
     inp = io.load(args.inputs)
     try:

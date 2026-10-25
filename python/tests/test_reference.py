@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import calibrate, demand, io, model, ppml, sinkhorn, solve, uniqueness
+from ceteris.reference import demand, io, model, ppml, sinkhorn, solve, uniqueness
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
@@ -563,72 +563,6 @@ def test_v1_mode():
     assert uniqueness.v1_mode(np.nextafter(1.0, 2.0)) == "report"
     assert uniqueness.v1_mode(1.5) == "report"
     assert uniqueness.v1_mode(float("inf")) == "report"
-
-
-SPREAD = 0.05  # log sd of the perturbation (controller ruling, 2026-10-25)
-
-
-@pytest.fixture(scope="module")
-def calibrated(inputs):
-    """The fixture calibrated against its own data from the data state: (x, A)."""
-    a, residuals = calibrate.productivity(inputs)
-    return inputs, residuals, a
-
-
-def test_calibration_solves_the_fixture_data(calibrated):
-    """Calibration step 2 on the fixture's own targets (its VA0, local ones the population split):
-    the path from the data state reaches a root of the joint system, every A positive."""
-    _, residuals, a = calibrated
-    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
-    assert np.all(np.isfinite(a) & (a > 0))
-
-
-def test_jax_calibration_reaches_the_same_root(calibrated):
-    """The JAX solver (exact products, two-level preconditioner) follows the same path from the
-    data state to the same root; skipped without the `jax` extra."""
-    pytest.importorskip("jax", reason="skipping: no jax (the `jax` extra)")
-    from ceteris.reference import jax_calibrate
-
-    inp, _, a_star = calibrated
-    a, residuals = jax_calibrate.productivity(inp)
-    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
-    np.testing.assert_allclose(a, a_star, rtol=1e-8)
-
-
-def test_calibration_recovers_fixture_productivity(calibrated):
-    """Perturb the calibrated fixture's A (one per enterprise, local ones included), solve its
-    equilibrium, and calibrate against that equilibrium's value added with the inputs' A at 1,
-    starting at the calibrated root: the solve recovers the perturbed A and solves the joint
-    system. From the data state itself the path can reach another root (task 18b report)."""
-    inp, _, a_star = calibrated
-    x_star = solve.equilibrium(dataclasses.replace(inp, ent_a=a_star), tol=1e-13).x
-    rng = np.random.default_rng(18)
-    a = a_star * np.exp(rng.normal(0.0, SPREAD, len(inp.ent_good)))
-    truth = dataclasses.replace(inp, ent_a=a)
-    eq = solve.equilibrium(truth, x0=x_star, tol=1e-13)
-    va = model.evaluate(eq.x, truth)["value_added"]
-    assert np.all(va > 0)
-    data = dataclasses.replace(inp, ent_va_target=va)
-    got, residuals = calibrate.productivity(data, start=x_star)
-    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
-    np.testing.assert_allclose(got, a, rtol=1e-8)
-
-
-def test_calibration_table_has_the_layout_from_pack_reads(inputs, tmp_path):
-    """`econ_calib.arrow`: province (pack province) u32, good u8, a f64, one row per enterprise in
-    (province, good) order, the residual summary in the metadata."""
-    inp = inputs
-    pack = 2 * np.arange(inp.n_provinces) + 1
-    a = np.linspace(0.5, 2.0, len(inp.ent_good))
-    none = calibrate.Residuals(np.zeros(0, dtype=np.int64), np.zeros(0))
-    calibrate.write(tmp_path / "econ_calib.arrow", inp, pack, a, none)
-    t = pa_ipc.open_file(str(tmp_path / "econ_calib.arrow")).read_all()
-    assert [(f.name, f.type) for f in t.schema] == [("province", pa.uint32()), ("good", pa.uint8()), ("a", pa.float64())]
-    key = list(zip(t["province"].to_pylist(), t["good"].to_pylist()))
-    assert key == sorted(key) and len(set(key)) == len(key) == len(inp.ent_good)
-    assert t["province"].to_pylist() == pack[inp.ent_province].tolist()
-    np.testing.assert_array_equal(t["a"].to_numpy(), a)
-    assert json.loads(t.schema.metadata[b"residuals"]) == {"residual_count": 0, "largest_relative_miss": 0.0}
 
 
 def test_country_without_people_spends_nothing(inputs):
