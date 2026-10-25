@@ -28,6 +28,11 @@ NAMES = (
 
 # Sheet of the OECD BTiGE HS to CPA 2.1 conversion key.
 KEY_SHEET = "BTiGE FromHS-ToCPA-ToENDUSE"
+# Local adaptations of the key (ADR 0050 amendment). Non-monetary gold (HS 7108) is basic metals, not metal ore
+# (the key puts unwrought gold, 710812, in B072), so coal and other mining stays physical bulk. Printed books and
+# recorded media (J58, J59_60) are goods made by printing and reproduction (C18), not publishing services.
+GOLD = "7108"
+ADAPTED_CPA = {"J58": "C18", "J59_60": "C18"}
 
 # Marks an industry shared between goods 1 and 2 (the combined B05_06 of earlier editions); the ICIO
 # aggregation splits it by EIA 2000 production values at Pink Sheet prices.
@@ -133,10 +138,11 @@ def hs_goods_shares(hs_cpa: dict[str, str]) -> dict[str, dict[int, float]]:
 
 
 def read_hs_cpa(path: Path) -> dict[str, str]:
-    """OECD BTiGE conversion key (2025): HS 1988/92 (key version 0) 6-digit line -> CPA 2.1 activity. CPA 2.1
-    equals ISIC Rev 4 (NACE Rev 2) at division level, and the key splits divisions as ICIO 2025 does (B05 and
-    B06, C24A and C24B, C301 and C302_309)."""
-    return {r["HS-code"]: r["CPA"] for r in people._xlsx_sheet(path, KEY_SHEET) if r["HS-version"] == 0.0}
+    """OECD BTiGE conversion key (2025): HS 1988/92 (key version 0) 6-digit line -> CPA 2.1 activity, with the
+    local adaptations above (gold to C24B, books and media to C18). CPA 2.1 equals ISIC Rev 4 (NACE Rev 2) at
+    division level, and the key splits divisions as ICIO 2025 does (B05 and B06, C24A and C24B, C301 and C302_309)."""
+    key = {r["HS-code"]: r["CPA"] for r in people._xlsx_sheet(path, KEY_SHEET) if r["HS-version"] == 0.0}
+    return {hs: "C24B" if hs.startswith(GOLD) else ADAPTED_CPA.get(code, code) for hs, code in key.items()}
 
 
 def baci_by_product(baci_2000: Path) -> tuple[dict[str, float], dict[str, float]]:

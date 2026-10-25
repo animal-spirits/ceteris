@@ -183,6 +183,15 @@ def test_read_hs_cpa_keeps_hs_1988_92_lines(tmp_path):
     assert goods.read_hs_cpa(key) == {"010111": "A01", "270900": "B06"}
 
 
+def test_read_hs_cpa_moves_gold_to_basic_metals_and_books_to_printing(tmp_path):
+    lines = {"710812": "B072", "710813": "C24B", "490199": "J58", "852410": "J59_60", "271600": "D35", "970110": "R90"}
+    got = goods.read_hs_cpa(_key(tmp_path / "key.xlsx", lines))
+    assert got == {"710812": "C24B", "710813": "C24B", "490199": "C18", "852410": "C18", "271600": "D35", "970110": "R90"}
+    shares = goods.hs_goods_shares(got)
+    assert shares["710812"] == {5: 1.0} and shares["490199"] == {4: 1.0} and shares["852410"] == {4: 1.0}
+    assert shares["271600"] == {7: 1.0} and shares["970110"] == {9: 1.0}
+
+
 def test_weights_from_baci_pins_tonnes_per_usd(tmp_path):
     # One HS line per traded good: hs6 -> CPA 2.1 activity in divisions 01, 06, 05, 10, 13, 20, 26.
     lines = {
@@ -333,15 +342,15 @@ def caliendo_parro():
 
 
 def test_caliendo_parro_by_good_from_baci(caliendo_parro):
-    """Theta per good to two decimals through the OECD key, and its classes (ADR 0050 amendment). ADR 0023's
-    values, which `TradeParams::default()` keeps (goods 4 to 6 at 6.73, 12.64, 5.33; classes 2.62, 5.88, 12.55),
-    came from the WITS and UNSD route that the key replaced."""
+    """Theta per good to two decimals through the adapted OECD key, and its classes (ADR 0050 amendment). ADR
+    0023's values, which `TradeParams::default()` keeps until the theta task (goods 4 to 6 at 6.73, 12.64, 5.33;
+    classes 2.62, 5.88, 12.55), came from the WITS and UNSD route that the key replaced."""
     t, v = caliendo_parro
-    np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 8.81, 10.70, 5.19, 0, 0, 0], atol=0.005)
+    np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19, 0, 0, 0], atol=0.005)
     assert (v[:7] > 1e11).all() and (v[7:] == 0).all()
     of, ct = theta.classes(t[:7], v[:7])
-    assert of.tolist() == [2, 3, 3, 0, 2, 2, 1]
-    np.testing.assert_allclose(ct, [2.62, 5.19, 9.94, 13.53], atol=0.005)
+    assert of.tolist() == [2, 2, 2, 0, 2, 2, 1]
+    np.testing.assert_allclose(ct, [2.62, 5.19, 10.57], atol=0.005)
     assert math.log(ct[-1] / ct[0]) > math.log(theta.CLASS_SPREAD)
 
 

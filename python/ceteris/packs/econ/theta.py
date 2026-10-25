@@ -42,14 +42,15 @@ _THETA_OF_DIVISION = {d: theta for divisions, theta in CALIENDO_PARRO.values() f
 
 # ISIC Rev 3 division of each CPA 2.1 activity of the OECD key (`goods.read_hs_cpa`), from the Rev 3 to Rev 4
 # breaks: weapons (C254) and military vehicles (C304) were Rev 3 2927, computers (C262) Rev 3 30, magnetic and
-# optical media (C268) Rev 3 2429, medical instruments (C325) Rev 3 3311, recycling (E38) Rev 3 37, publishing and
-# recorded media (J58, J59_60) Rev 3 22. Domestic appliances (Rev 3 2930) sit inside C27 and count as Electrical.
+# optical media (C268) Rev 3 2429, medical instruments (C325) Rev 3 3311, recycling (E38) Rev 3 37; books and
+# recorded media arrive as C18 (`goods.ADAPTED_CPA`), Rev 3 22. Domestic appliances (Rev 3 2930) sit inside C27 and
+# count as Electrical.
 # Electricity and the service codes (D35, H53, M71, M74, R90, R91) and unallocated lines have no estimate.
 REV3_OF_CPA = {
     "A01": "01", "A02": "02", "A03": "05",
     "B05": "10", "B06": "11", "B071": "13", "B072": "13", "B08": "14",
     "C10": "15", "C11": "15", "C12": "16", "C13": "17", "C14": "18", "C15": "19", "C16": "20", "C17": "21",
-    "C18": "22", "J58": "22", "J59_60": "22", "C19": "23", "C20": "24", "C21": "24", "C268": "24", "C22": "25",
+    "C18": "22", "C19": "23", "C20": "24", "C21": "24", "C268": "24", "C22": "25",
     "C23": "26", "C24A": "27", "C24B": "27", "C25X254": "28", "C254": "29", "C28": "29", "C304": "29",
     "C262": "30", "C27": "31", "C261": "32", "C263": "32", "C264": "32",
     "C265": "33", "C266": "33", "C267": "33", "C325": "33", "C29": "34", "C301": "35", "C302_309": "35",
