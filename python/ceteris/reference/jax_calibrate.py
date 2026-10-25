@@ -185,7 +185,8 @@ MIN_COSINE = 0.95
 # 1 / n (root mean square), so a path that moves a few unknowns fast is almost parallel to lambda
 # = const in that norm and the bordered corrector inherits the Jacobian's near-singularity; unit
 # weights (Euclidean, the textbook choice) keep the arclength constraint across that direction.
-# The weights change the parameterization of the path, not the path.
+# The weights change the parameterization of the path, not the path. "tangent" weighs x by
+# 1 / |dx/dlambda|^2 at the start, so lambda carries half the start tangent's length.
 X_WEIGHT = 1.0
 GMRES_SIZE = 300
 GMRES_RTOL = 1e-2  # relative, or the residual's max norm where smaller (inexact Newton)
@@ -203,7 +204,7 @@ class Path:
     def __init__(
         self, system: System, x0: np.ndarray, kind: str = "two-level", log=None, deadline=None, checkpoint=None,
         predictor_cap: float = PREDICTOR_CAP, first_step: float = FIRST_STEP, contraction: float = CONTRACTION,
-        min_cosine: float = MIN_COSINE, x_weight: float | None = X_WEIGHT,
+        min_cosine: float = MIN_COSINE, x_weight: float | str | None = X_WEIGHT,
     ):  # fmt: skip
         self.system, self.kind, self.log, self.deadline, self.checkpoint = system, kind, log, deadline, checkpoint
         self.predictor_cap, self.first_step, self.contraction, self.min_cosine = (
@@ -215,7 +216,9 @@ class Path:
         self.layout = Layout.of(system.inp)
         self.x0 = x0
         self.n = len(x0)
-        self.weight = np.concatenate([np.full(self.n, 1.0 / self.n if x_weight is None else x_weight), [1.0]])
+        self.x_weight = x_weight
+        w = 1.0 / self.n if x_weight is None else 1.0 if x_weight == "tangent" else x_weight
+        self.weight = np.concatenate([np.full(self.n, w), [1.0]])
         self.arc_max = calibrate.ARC_MAX if x_weight is None else np.inf
         self.f0 = system.residual(x0)
         self.pre = None
@@ -280,6 +283,8 @@ class Path:
         self._say(
             f"tangent: gmres {info['iterations']} iterations, ratio {info['ratio']:.2e}, max |dx/dlambda| {np.abs(dx).max():.3e}"
         )
+        if self.x_weight == "tangent":  # x and lambda carry equal weight along the start tangent
+            self.weight[:n] = 1.0 / (dx @ dx)
         z, t = np.concatenate([self.x0, [0.0]]), np.concatenate([dx, [1.0]])
         t /= self._norm_w(t)
         ds = calibrate.ARC_FIRST if self.arc_max < np.inf else np.inf  # else the predictor cap sets it
@@ -319,7 +324,7 @@ class Path:
             if not ok:
                 self.stats["rejected_arcs"] += 1
                 ds /= 2.0
-                if ds < calibrate.MIN_STEP:
+                if ds < calibrate.MIN_STEP * np.sqrt(self.weight[0]):  # MIN_STEP in unit-weight terms
                     raise NoConvergence(f"continuation stalled at lambda {z[n]:.6e}, residual {norm:.3e}")
                 continue
             z, t, ds = w, tangent, min(self.arc_max, 1.5 * ds)
