@@ -1,10 +1,17 @@
 """`python -m ceteris.reference solve --inputs DIR --out DIR`: solves the GE reference of a
 `ceteris export` and writes it with the column layout of the run export (`prices`, `wages`,
-`enterprises`, `flows`, `home`) plus `solution.json`."""
+`enterprises`, `flows`, `home`) plus `solution.json`.
+
+`python -m ceteris.reference calibrate --pack DIR [--out FILE]`: exports the pack's world with
+`cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates
+productivity (`calibrate.productivity`) and writes `DIR/econ_calib.arrow` (or FILE), printing the
+residual summary."""
 
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -12,10 +19,11 @@ import pyarrow as pa
 from pyarrow import ipc
 from scipy.optimize import NoConvergence
 
-from . import io, solve
+from . import calibrate, io, solve
 from .model import Equilibrium
 
 FORMAT = "1"
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _write(path: Path, columns: dict[str, pa.Array]) -> None:
@@ -75,13 +83,46 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
     (out / "solution.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 
+def run_calibration(pack: Path, out: Path) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        cmd = ["cargo", "run", "--release", "--bin", "ceteris", "--", "export", "--pack", str(pack.resolve()), "--out", tmp]
+        subprocess.run(cmd, check=True, cwd=ROOT)
+        inp = io.load(tmp)
+        pack_province = io._table(Path(tmp) / "pack_provinces.arrow")["pack"].astype(np.int64)
+    try:
+        a, residuals = calibrate.productivity(inp, progress=lambda line: print(line, flush=True))
+    except (NoConvergence, ValueError) as e:
+        sys.exit(f"no calibration: {e}")
+    calibrate.write(out, inp, pack_province, a, residuals)
+    ln_a = np.log(a)
+    summary = {
+        "residual_count": len(residuals),
+        "largest_relative_miss": residuals.largest_miss,
+        "ln_a_quantiles": dict(
+            zip(
+                ["0", "1", "5", "25", "50", "75", "95", "99", "100"],
+                np.percentile(ln_a, [0, 1, 5, 25, 50, 75, 95, 99, 100]).tolist(),
+            )
+        ),
+        **residuals.info,
+    }
+    print(json.dumps(summary, indent=2))
+    print(f"wrote {out}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m ceteris.reference")
     sub = parser.add_subparsers(dest="command", required=True)
     s = sub.add_parser("solve", help="solve the GE reference of an export")
     s.add_argument("--inputs", type=Path, required=True)
     s.add_argument("--out", type=Path, required=True)
+    c = sub.add_parser("calibrate", help="calibrate productivity against the pack's 2000 value added")
+    c.add_argument("--pack", type=Path, required=True)
+    c.add_argument("--out", type=Path, help="default: PACK/econ_calib.arrow")
     args = parser.parse_args()
+    if args.command == "calibrate":
+        run_calibration(args.pack, args.out or args.pack / "econ_calib.arrow")
+        return
     inp = io.load(args.inputs)
     try:
         eq = solve.equilibrium(inp)

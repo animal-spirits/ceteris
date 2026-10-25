@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import demand, io, model, ppml, sinkhorn, solve, uniqueness
+from ceteris.reference import calibrate, demand, io, model, ppml, sinkhorn, solve, uniqueness
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
@@ -562,3 +562,46 @@ def test_v1_mode():
     assert uniqueness.v1_mode(np.nextafter(1.0, 2.0)) == "report"
     assert uniqueness.v1_mode(1.5) == "report"
     assert uniqueness.v1_mode(float("inf")) == "report"
+
+
+# Log sd of the perturbation. The calibration has several roots: at 0.1 one seed in four reaches
+# another, at 0.2 the continuation stalls at folds or reaches another (task 18b report).
+SPREAD = 0.05
+
+
+def test_calibration_recovers_fixture_productivity(inputs):
+    """Calibration step 2: perturb the fixture's A (per traded enterprise, per country and local
+    good), solve its equilibrium, and calibrate against that equilibrium's value added (per traded
+    enterprise, national per local good) with the inputs' A at 1: the solve recovers the
+    perturbed A, and its root solves the joint system."""
+    inp = inputs
+    rng = np.random.default_rng(18)
+    local = ~inp.traded[inp.ent_good]
+    pair = np.unique(inp.ent_country * inp.n_goods + inp.ent_good, return_inverse=True)[1]
+    a = np.exp(rng.normal(0.0, SPREAD, len(inp.ent_good)))
+    a[local] = np.exp(rng.normal(0.0, SPREAD, pair.max() + 1))[pair[local]]
+    truth = dataclasses.replace(inp, ent_a=a)
+    eq = solve.equilibrium(truth, tol=1e-13)
+    va = model.evaluate(eq.x, truth)["value_added"]
+    assert np.all(va > 0)
+    data = dataclasses.replace(inp, ent_a=np.ones_like(a), ent_va_target=va)
+    got, residuals = calibrate.productivity(data)
+    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
+    np.testing.assert_allclose(got, a, rtol=1e-8)
+
+
+def test_calibration_table_has_the_layout_from_pack_reads(inputs, tmp_path):
+    """`econ_calib.arrow`: province (pack province) u32, good u8, a f64, one row per enterprise in
+    (province, good) order, the residual summary in the metadata."""
+    inp = inputs
+    pack = 2 * np.arange(inp.n_provinces) + 1
+    a = np.linspace(0.5, 2.0, len(inp.ent_good))
+    none = calibrate.Residuals(*(np.zeros(0),) * 4)
+    calibrate.write(tmp_path / "econ_calib.arrow", inp, pack, a, none)
+    t = pa_ipc.open_file(str(tmp_path / "econ_calib.arrow")).read_all()
+    assert [(f.name, f.type) for f in t.schema] == [("province", pa.uint32()), ("good", pa.uint8()), ("a", pa.float64())]
+    key = list(zip(t["province"].to_pylist(), t["good"].to_pylist()))
+    assert key == sorted(key) and len(set(key)) == len(key) == len(inp.ent_good)
+    assert t["province"].to_pylist() == pack[inp.ent_province].tolist()
+    np.testing.assert_array_equal(t["a"].to_numpy(), a)
+    assert json.loads(t.schema.metadata[b"residuals"]) == {"residual_count": 0, "largest_relative_miss": 0.0}

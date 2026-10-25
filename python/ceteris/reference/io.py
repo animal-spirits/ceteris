@@ -59,6 +59,7 @@ class Inputs:
     domestic: Entries
     access: Entries
     crossing: Entries
+    ent_va_target: np.ndarray | None = None  # (E,) value added the calibration matches
     static_digest: str = field(default="")
 
     @property
@@ -226,6 +227,7 @@ def load(directory: Path | str) -> Inputs:
         domestic=_entries(_table(d / "kernel_domestic.arrow"), "o", "d"),
         access=_entries(_table(d / "kernel_access.arrow"), "province", "gateway"),
         crossing=_entries(_table(d / "kernel_crossing.arrow"), "a", "b", crossing=True),
+        ent_va_target=ent["va_target"].astype(np.float64),
         static_digest=params["static_digest"],
     )
     validate(inp)

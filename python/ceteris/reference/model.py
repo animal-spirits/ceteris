@@ -223,9 +223,11 @@ def value_added(a, va0, l0, s_l, r, labour):
         return a * va0 * ((1.0 - s_l) + s_l * x**r) ** (1.0 / r)
 
 
-def evaluate(x: np.ndarray, inp: Inputs) -> dict:
-    """Every quantity of the steady state at prices and wages `x`."""
+def evaluate(x: np.ndarray, inp: Inputs, a: np.ndarray | None = None) -> dict:
+    """Every quantity of the steady state at prices and wages `x`, with productivity `a` per
+    enterprise (default the inputs' A)."""
     n_p, n_g = inp.n_provinces, inp.n_goods
+    a = inp.ent_a if a is None else a
     traded = inp.traded[None, :]
     price, wage = _split(x, inp)
     src = _sourcing(inp, price)
@@ -241,10 +243,8 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
     # Rust caps each target at L^s. At a clearing wage no target exceeds L^s unless one enterprise
     # alone employs the province (then Rust finds no clearing wage either), so the cap never binds
     # at a steady state; leaving it out keeps labour demand responsive to the wage everywhere.
-    l_star = labour_target(
-        (sale - input_index) / inp.ent_a_va, wage[ep], inp.ent_a, inp.ent_va0, inp.ent_l0, inp.ent_s_l, r, np.inf
-    )
-    y = value_added(inp.ent_a, inp.ent_va0, inp.ent_l0, inp.ent_s_l, r, l_star) / inp.ent_a_va
+    l_star = labour_target((sale - input_index) / inp.ent_a_va, wage[ep], a, inp.ent_va0, inp.ent_l0, inp.ent_s_l, r, np.inf)
+    y = value_added(a, inp.ent_va0, inp.ent_l0, inp.ent_s_l, r, l_star) / inp.ent_a_va
     out = np.zeros((n_p, n_g))
     np.add.at(out, (ep, eg), y)
 
@@ -306,6 +306,7 @@ def evaluate(x: np.ndarray, inp: Inputs) -> dict:
         "wage": wage,
         "employment": l_star,
         "output": y,
+        "value_added": sale * y - cost,  # nominal: sales less inputs at buyer prices
         "supply": np.where(traded, out, 0.0),
         "consumer_price": consumer,
         "price_index": consumer,  # as `EconWorld::price_index`
@@ -327,17 +328,21 @@ def _excess(s: dict, inp: Inputs) -> np.ndarray:
     return np.concatenate([goods, labour])
 
 
-def excess(x: np.ndarray, inp: Inputs) -> np.ndarray:
+def excess(x: np.ndarray, inp: Inputs, a: np.ndarray | None = None) -> np.ndarray:
     """Scaled excess demand of every market, all labour markets included."""
-    return _excess(evaluate(x, inp), inp)
+    return _excess(evaluate(x, inp, a), inp)
 
 
-def residual(x: np.ndarray, inp: Inputs) -> np.ndarray:
-    """`excess` with the dropped labour equation replaced by ln(world price index)."""
-    s = evaluate(x, inp)
+def market_residual(s: dict, inp: Inputs) -> np.ndarray:
+    """`_excess` of an evaluation with the dropped labour equation replaced by ln(world price index)."""
     r = _excess(s, inp)
     r[index_row(inp)] = np.log(s["index"])
     return r
+
+
+def residual(x: np.ndarray, inp: Inputs, a: np.ndarray | None = None) -> np.ndarray:
+    """`excess` with the dropped labour equation replaced by ln(world price index)."""
+    return market_residual(evaluate(x, inp, a), inp)
 
 
 def unpack(x: np.ndarray, inp: Inputs, info: dict | None = None) -> Equilibrium:
