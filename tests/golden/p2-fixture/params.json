@@ -1,6 +1,6 @@
 {
-  "format": "7",
-  "static_digest": "0fa5ad7e4d57ab325e7fe257b04a687fbe731706ae8e5aa4e44363c21c152e9e",
+  "format": "8",
+  "static_digest": "c2022dbbd05bb7ed18d6cc3655350a00a60262c60ccdf8df65fbfba97a31c46c",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "weight_floor": 1e-100,

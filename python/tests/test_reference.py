@@ -272,6 +272,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         base_price=np.ones((2, 1)),
         s_l=np.array([s_l]),
         unemployment=np.array([u]),
+        u_star=np.zeros(1),
         gini=np.array([0.35]),
         omega=np.array([[1.0]]),
         io=np.zeros((1, 1, 1)),
@@ -331,10 +332,6 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     assert eq.flows_by_country_pair_good[0, 0, 0] == pytest.approx(2.0 * p * y * k / (1.0 + k), rel=1e-9)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="national profit ownership (owner, 2026-10-25) is in the reference; Rust and this golden follow in Task 18e-2",
-)
 def test_fixture_reference_is_current(fixture):
     """`tests/golden/p2-fixture/reference` (read by Rust: runs started from the equilibrium and
     the V1 check) is the current solve of the fixture. Regenerate with
@@ -575,7 +572,7 @@ def test_country_without_people_spends_nothing(inputs):
     inp = inputs
     one = lambda v: np.concatenate([v, v[-1:]])
     empty = dataclasses.replace(
-        inp, s_l=one(inp.s_l), unemployment=one(inp.unemployment), gini=one(inp.gini), omega=one(inp.omega), io=one(inp.io)
+        inp, s_l=one(inp.s_l), unemployment=one(inp.unemployment), u_star=one(inp.u_star), gini=one(inp.gini), omega=one(inp.omega), io=one(inp.io)
     )
     assert empty.base_spend[-1] == 0.0
     np.testing.assert_array_equal(empty.base_spend[:-1], inp.base_spend)

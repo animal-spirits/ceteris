@@ -310,8 +310,8 @@ fn built_pack() -> Option<(ceteris_geo::pack::Pack, PathBuf)> {
 
 /// The full-pack world loads: every province has a country whose final demand shares sum to
 /// one and at least one enterprise, every enterprise has workers and a positive finite A (1
-/// without `econ_calib.arrow`), every pop belongs to a province with value added, and the
-/// inputs pass `validate`.
+/// without the calibration tables, which also bring the steady state to start from), every pop
+/// belongs to a province with value added, and the inputs pass `validate`.
 #[test]
 fn pack_inputs_load() {
     let Some((pack, dir)) = built_pack() else {
@@ -328,7 +328,8 @@ fn pack_inputs_load() {
             "province {i}: final demand shares {omega:?}"
         );
     }
-    let calibrated = dir.join("econ_calib.arrow").exists();
+    let calibrated = ceteris_econ::EconInputs::has_calibration(&dir);
+    assert_eq!(inputs.steady.is_some(), calibrated);
     let mut firms = vec![0usize; inputs.n_provinces()];
     for e in 0..inputs.n_enterprises() {
         let ent = &inputs.enterprises;

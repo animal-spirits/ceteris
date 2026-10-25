@@ -172,7 +172,10 @@ pub fn small_world() -> EconInputs {
         io: vec![io; n_countries],
         s_l: S_L.to_vec(),
         unemployment: UNEMPLOYMENT.to_vec(),
+        // a generated world has no 1995 to 2005 window: its 2000 rate is its natural rate
+        u_star: UNEMPLOYMENT.to_vec(),
         gini: GINI.to_vec(),
+        pigl: None,
     };
 
     let mut pops = PopData::default();
@@ -215,6 +218,7 @@ pub fn small_world() -> EconInputs {
         },
         pops,
         enterprises: ent,
+        steady: None,
     };
     inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();
@@ -391,7 +395,7 @@ mod tests {
                 .filter(|&e| w.enterprises.province[e] as usize == i)
                 .map(|e| w.enterprises.l0[e])
                 .sum();
-            let u = w.countries.unemployment[w.country_of(i)];
+            let u = w.countries.u_star[w.country_of(i)];
             assert!((l / ((1.0 - u) * s) - 1.0).abs() < 1e-12);
         }
     }

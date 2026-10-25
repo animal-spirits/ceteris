@@ -96,7 +96,7 @@ def _arrays(inp: Inputs) -> dict:
         "pigl_theta": np.asarray(inp.pigl.theta, dtype=np.float64),
         "category": inp.category,
         "onehot": (inp.category[:, None] == np.arange(N_CATEGORIES)[None, :]).astype(np.float64),
-        "labour_supply": inp.labour_supply,
+        "employed_supply": inp.employed_supply,
         "index_weights": inp.index_weights,
         "eps_cells": model.MARKET_FLOOR * (inp.base_demand + inp.base_output).ravel()[cells],
     }
@@ -297,7 +297,7 @@ def evaluate(s: Static, d: dict, x, a) -> dict:
 
     pc, kp, kc = d["pc"], d["kp"], d["kc"]
     people = d["people"]
-    earned = d["eff_share"] * (wage * d["labour_supply"])[kp] + d["people_share"] * _seg(profit, d["ec"], s.n_c)[kc]
+    earned = d["eff_share"] * (wage * d["employed_supply"])[kp] + d["people_share"] * _seg(profit, d["ec"], s.n_c)[kc]
     from_inputs = _seg((duty_share * spend_int).sum(axis=1), pc, s.n_c)
     prices_k = consumer[kp]
 
@@ -340,7 +340,7 @@ def market_residual(s: Static, d: dict, e: dict):
     cells = d["cells"]
     eps = d["eps_cells"]
     goods = jnp.log((e["demand"].ravel()[cells] + eps) / (e["q"].ravel()[cells] + eps))
-    labour = (e["labour_demand"] - d["labour_supply"]) / d["labour_supply"]
+    labour = (e["labour_demand"] - d["employed_supply"]) / d["employed_supply"]
     return jnp.concatenate([goods, labour]).at[s.index_row].set(jnp.log(e["index"]))
 
 

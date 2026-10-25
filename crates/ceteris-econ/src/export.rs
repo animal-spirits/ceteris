@@ -10,7 +10,7 @@
 //! |---|---|
 //! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
 //! | `gateways` | gateway u32, country u32 |
-//! | `countries` | country u32, s_l f64, unemployment f64, gini f64, omega_0 to omega_9 f64 |
+//! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
 //! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable) |
@@ -69,8 +69,9 @@ use crate::world::{
 /// demand (ADR 0021): `goods.category`, `countries.gini`, the `pigl_*` parameters in
 /// `params.json`, the `pigl_check` table. 6: `params.json` has `technology` (S09) and
 /// `rationing` may be `mixed` (ADR 0020). 7: `provinces` has the base delivered prices from which
-/// enterprise coefficients follow as cost shares (owner decision, 2026-10-25).
-pub const EXPORT_FORMAT: &str = "7";
+/// enterprise coefficients follow as cost shares (owner decision, 2026-10-25). 8: `countries`
+/// has the natural rate `u_star` (ADR 0089).
+pub const EXPORT_FORMAT: &str = "8";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -209,6 +210,7 @@ pub fn write_inputs(
         u32s("country", 0..nc as u32),
         f64s("s_l", c.s_l.iter().copied()),
         f64s("unemployment", c.unemployment.iter().copied()),
+        f64s("u_star", c.u_star.iter().copied()),
         f64s("gini", c.gini.iter().copied()),
     ];
     for g in 0..N_GOODS {

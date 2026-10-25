@@ -22,7 +22,7 @@ PACK = Path(os.environ.get("CETERIS_PACK", ROOT / "data" / "packs" / "2000"))
 def _world(name: str):
     if name == "fixture":
         inp = io.load(FIXTURE)
-        return inp, inp.unemployment
+        return inp, inp.u_star
     if not PACK_EXPORT:
         pytest.skip("skipping: CETERIS_PACK_EXPORT unset (a full-pack export directory)")
     return io.load(PACK_EXPORT), calibrate.read_u_star(PACK)

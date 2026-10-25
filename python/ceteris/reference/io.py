@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 6)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 8)."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,7 +10,7 @@ from pyarrow import ipc
 
 from . import demand
 
-EXPORT_FORMAT = "7"
+EXPORT_FORMAT = "8"
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,8 @@ class Inputs:
     w0: np.ndarray  # (P,)
     base_price: np.ndarray  # (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable)
     s_l: np.ndarray  # (C,)
-    unemployment: np.ndarray  # (C,)
+    unemployment: np.ndarray  # (C,) 2000 rate (data)
+    u_star: np.ndarray  # (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s
     gini: np.ndarray  # (C,)
     omega: np.ndarray  # (C, G)
     io: np.ndarray  # (C, G, G), io[c, k, g] = a_kg
@@ -129,12 +130,18 @@ class Inputs:
         return np.flatnonzero(self.active.ravel())
 
     @cached_property
+    def employed_supply(self) -> np.ndarray:
+        """(P,) effective labour employed at the natural rate, (1 - u*) L^s: the frictionless
+        wage clears labour there (ADR 0089, as Rust's E1)."""
+        return (1.0 - self.u_star[self.province_country]) * self.labour_supply
+
+    @cached_property
     def base_income(self) -> np.ndarray:
-        """Household income per province in the data state, rebates aside: w0 (1 - u) L^s wages plus
-        the province's population share of its country's profit pool sum (1 - s_L) VA0 (national
-        ownership, owner 2026-10-25)."""
+        """Household income per province at the base point, rebates aside: w0 (1 - u*) L^s wages
+        plus the province's population share of its country's profit pool sum (1 - s_L) VA0
+        (national ownership, owner 2026-10-25), as `world::base_income`."""
         c = self.province_country
-        u = self.unemployment[c]
+        u = self.u_star[c]
         pool = np.bincount(c[self.ent_province], (1.0 - self.ent_s_l) * self.ent_va0, self.n_countries)
         people = np.bincount(c, self.population, self.n_countries)
         share = np.divide(self.population, people[c], out=np.zeros(self.n_provinces), where=people[c] > 0)
@@ -247,6 +254,7 @@ def load(directory: Path | str) -> Inputs:
         base_price=np.stack([provinces[f"base_price_{g}"] for g in range(n_goods)], axis=1).astype(np.float64),
         s_l=countries["s_l"],
         unemployment=countries["unemployment"],
+        u_star=countries["u_star"],
         gini=countries["gini"],
         omega=np.stack([countries[f"omega_{g}"] for g in range(n_goods)], axis=1),
         io=a,
