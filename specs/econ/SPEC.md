@@ -538,10 +538,10 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
 
-## App (after the native app reaches parity, ADR 0011 option 3)
+## App (after the native app reaches parity, ADRs 0011 and 0088)
 
-The owner chose a fully native app (no React, webview or Tauri), panels in iced or Slint, picked
-by the stage 1 spike. P2's UI is built there, not in `app/`. Map modes: price by good
+The app is fully native (no React, webview or Tauri), with Slint panels over a wgpu map
+(ADR 0088). P2's UI is built there, not in `app/`. Map modes: price by good
 (index-normalized), output by sector, net exports by good, wage, unemployment. Province panel:
 market rows per good (price, inventory, supply, demand), its enterprises (sector, employment,
 output, profit), its pops (education, labour force, employed, income). Time controls: play,
