@@ -219,6 +219,7 @@ def test_fetch_skips_optional_files_that_are_not_cached(tmp_path, monkeypatch, c
     ]
     monkeypatch.setattr(fetch, "CACHE", tmp_path)
     monkeypatch.setattr(fetch, "entries", lambda: entries)
+    monkeypatch.setattr(fetch, "validation_entries", list)
     monkeypatch.setattr("sys.argv", ["fetch"])
     with pytest.raises(SystemExit, match="need.zip"):
         fetch.main()
@@ -229,6 +230,13 @@ def test_fetch_skips_optional_files_that_are_not_cached(tmp_path, monkeypatch, c
     assert "need.zip: checksum mismatch" in err and "later.zip" not in err
     (tmp_path / "later.zip").write_bytes(b"x")
     assert fetch.main() == 1 and "later.zip: checksum mismatch" in capsys.readouterr().err
+
+
+def test_validation_files_are_fetched_but_not_pack_sources():
+    pack = {e["name"] for e in fetch.entries()}
+    validation = {e["name"]: e for e in fetch.validation_entries()}
+    assert "AdvancedGuideFiles.zip" in validation and not pack & set(validation)
+    assert all(e["sha256"] for e in validation.values())
 
 
 def test_only_the_2000_icio_package_is_required():
