@@ -13,7 +13,7 @@
 //! | `countries` | country u32, s_l f64, unemployment f64, gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
-//! | `provinces` | province u32, country u32, population f64, w0 f64 |
+//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable) |
 //! | `pack_provinces` | province u32, pack u32 (`ProvinceData::pack`); written only for a world loaded from a pack, which the calibration keys by pack province |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
@@ -68,8 +68,9 @@ use crate::world::{
 /// has `expectation_gain`, `run_prices` and `run_wages` have `clip_ticks` (ADR 0019). 5: PIGL
 /// demand (ADR 0021): `goods.category`, `countries.gini`, the `pigl_*` parameters in
 /// `params.json`, the `pigl_check` table. 6: `params.json` has `technology` (S09) and
-/// `rationing` may be `mixed` (ADR 0020).
-pub const EXPORT_FORMAT: &str = "6";
+/// `rationing` may be `mixed` (ADR 0020). 7: `provinces` has the base delivered prices from which
+/// enterprise coefficients follow as cost shares (owner decision, 2026-10-25).
+pub const EXPORT_FORMAT: &str = "7";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -243,16 +244,19 @@ pub fn write_inputs(
     )?;
 
     let p = &inputs.provinces;
-    write_table(
-        dir,
-        "provinces",
-        vec![
-            u32s("province", 0..np as u32),
-            u32s("country", p.country.iter().map(|&c| u32::from(c))),
-            f64s("population", p.population.iter().copied()),
-            f64s("w0", p.w0.iter().copied()),
-        ],
-    )?;
+    let mut columns = vec![
+        u32s("province", 0..np as u32),
+        u32s("country", p.country.iter().map(|&c| u32::from(c))),
+        f64s("population", p.population.iter().copied()),
+        f64s("w0", p.w0.iter().copied()),
+    ];
+    for g in 0..N_GOODS {
+        columns.push(f64s(
+            &format!("base_price_{g}"),
+            p.base_price.iter().map(|q| q[g]),
+        ));
+    }
+    write_table(dir, "provinces", columns)?;
     if !p.pack.is_empty() {
         write_table(
             dir,

@@ -10,7 +10,7 @@ use std::path::Path;
 
 use ceteris_geo::pack::{Pack, PackError, f64s, read_table, strings, u8s, u32s};
 use ceteris_geo::paths::{Tree, shortest};
-use ceteris_trade::{Leg, N_GOODS, Network, Wedges};
+use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
 use rayon::prelude::*;
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
@@ -81,7 +81,8 @@ impl EconInputs {
     /// Leg costs are least-cost paths ([`EconInputs::network_from_graph`]); productivity A
     /// comes from `econ_calib.arrow` (columns province, the pack province, good and a) when
     /// present, else 1. The base point is filled with the default education efficiencies
-    /// (`EconParams::default().edu_eff`), coefficients with one vintage.
+    /// (`EconParams::default().edu_eff`), base prices under the default trade parameters,
+    /// coefficients with one vintage.
     pub fn from_pack(pack: &Pack, dir: &Path) -> Result<EconInputs, PackError> {
         let table = |name: &str| read_table(&dir.join(name));
         let c = table("econ_countries.arrow")?;
@@ -205,9 +206,10 @@ impl EconInputs {
             pops: pop_data,
             enterprises: ent,
         };
+        inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
+        inputs.set_base_prices(&TradeParams::default());
         inputs.set_coefficients();
         inputs.set_base_point(&EconParams::default().edu_eff);
-        inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
         Ok(inputs)
     }
 

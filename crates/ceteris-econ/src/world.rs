@@ -449,6 +449,81 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
     off
 }
 
+/// Buyer prices of every cell, `[province * N_GOODS + g]`, with origins posting `price` on
+/// `active` markets: a traded good's delivered unit price q_d = 1 / alpha_d (alpha_d the units
+/// arriving per unit of intermediate spending, `source` and `dispatch` of one unit at every
+/// destination; infinite where no active origin is reachable) and the expected months in
+/// transit (`lead`, arrival slots weighted by units); a local good's posted price, lead 0.
+fn delivered_prices(
+    kernel: &Kernel,
+    price: &[f64],
+    active: &[bool],
+    unit: &mut Sourced,
+    index: &mut [f64],
+    lead: &mut [f64],
+) {
+    let np = price.len() / N_GOODS;
+    let (mut p, mut on) = (vec![0.0; np], vec![false; np]);
+    let (spend, fill) = (vec![[1.0, 0.0]; np], vec![[1.0; 2]; np]);
+    for (g, &traded) in TRADED.iter().enumerate() {
+        if !traded {
+            for d in 0..np {
+                let cell = d * N_GOODS + g;
+                index[cell] = price[cell];
+                lead[cell] = 0.0;
+            }
+            continue;
+        }
+        for o in 0..np {
+            p[o] = price[o * N_GOODS + g];
+            on[o] = active[o * N_GOODS + g];
+        }
+        source(kernel, g, &p, &on, &spend, unit);
+        dispatch(kernel, g, &p, &fill, unit);
+        for d in 0..np {
+            let cell = d * N_GOODS + g;
+            let slots = unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
+            let alpha: f64 = slots.clone().sum();
+            let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
+            (index[cell], lead[cell]) = if alpha > 0.0 {
+                (1.0 / alpha, weighted / alpha)
+            } else {
+                (f64::INFINITY, 0.0)
+            };
+        }
+    }
+}
+
+/// Base delivered prices per province: [`delivered_prices`] in the data state, every price 1,
+/// the traded markets of [`active_cells`] (which do not depend on input coefficients), over
+/// the kernel of `inp`'s network under `trade`. The buyer prices of tick 0.
+pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64; N_GOODS]> {
+    let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, trade);
+    let np = inp.n_provinces();
+    let ent = &inp.enterprises;
+    let mut active = vec![false; np * N_GOODS];
+    for e in 0..inp.n_enterprises() {
+        let g = usize::from(ent.good[e]);
+        if TRADED[g] && ent.a[e] * ent.va0[e] > 0.0 {
+            active[ent.province[e] as usize * N_GOODS + g] = true;
+        }
+    }
+    let (mut index, mut lead) = (vec![0.0; np * N_GOODS], vec![0.0; np * N_GOODS]);
+    let price = vec![1.0; np * N_GOODS];
+    delivered_prices(
+        &kernel,
+        &price,
+        &active,
+        &mut Sourced::new(),
+        &mut index,
+        &mut lead,
+    );
+    index
+        .chunks_exact(N_GOODS)
+        .map(|row| row.try_into().expect("one row of goods"))
+        .collect()
+}
+
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the 2000 data state: prices 1, base
     /// wages w0 and employment L0 from the inputs, 2000 unemployment, input stocks at one
@@ -505,7 +580,7 @@ impl EconWorld {
         let coef: Vec<[f64; N_GOODS]> = (0..n_ent)
             .map(|e| match params.technology {
                 Technology::PuttyClay => inp.enterprises.coef[e],
-                Technology::FixedLeontief => inp.country_column(e),
+                Technology::FixedLeontief => inp.base_column(e),
             })
             .collect();
         let mut layout = Layout {
@@ -518,7 +593,9 @@ impl EconWorld {
             labour_supply,
             ownership: vec![0.0; n_pops],
             country_pops,
-            a_va: coef.iter().map(|a| 1.0 - a.iter().sum::<f64>()).collect(),
+            a_va: (0..n_ent)
+                .map(|e| inp.base_a_va(inp.enterprises.province[e] as usize, &coef[e]))
+                .collect(),
             coef,
         };
         for i in 0..np {
@@ -672,37 +749,15 @@ impl EconWorld {
     /// weights (`ceteris_trade::source`) and dispatched in full: alpha_d is the units
     /// arriving at d, q_d = 1 / alpha_d, and the lead is the mean arrival slot of those units.
     pub fn refresh_price_index(&mut self) {
-        let np = self.inputs.n_provinces();
-        let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
-        let (spend, fill) = (vec![[1.0, 0.0]; np], vec![[1.0; 2]; np]);
         let sc = &mut self.scratch;
-        for (g, &traded) in TRADED.iter().enumerate() {
-            if !traded {
-                for d in 0..np {
-                    let cell = d * N_GOODS + g;
-                    self.price_index[cell] = self.markets.price[cell];
-                    sc.lead[cell] = 0.0;
-                }
-                continue;
-            }
-            for o in 0..np {
-                price[o] = self.markets.price[o * N_GOODS + g];
-                active[o] = self.markets.active[o * N_GOODS + g];
-            }
-            source(&self.kernel, g, &price, &active, &spend, &mut sc.unit);
-            dispatch(&self.kernel, g, &price, &fill, &mut sc.unit);
-            for d in 0..np {
-                let cell = d * N_GOODS + g;
-                let slots = sc.unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
-                let alpha: f64 = slots.clone().sum();
-                let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
-                (self.price_index[cell], sc.lead[cell]) = if alpha > 0.0 {
-                    (1.0 / alpha, weighted / alpha)
-                } else {
-                    (f64::INFINITY, 0.0)
-                };
-            }
-        }
+        delivered_prices(
+            &self.kernel,
+            &self.markets.price,
+            &self.markets.active,
+            &mut sc.unit,
+            &mut self.price_index,
+            &mut sc.lead,
+        );
     }
 
     /// Sets every crossing's transit lag to `lag` months (`Kernel::set_crossing_lags`), on
@@ -1069,6 +1124,40 @@ impl State for EconWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Owner decision, 2026-10-25: ICIO coefficients are cost shares at base delivered prices.
+    /// The base prices are the world's buyer prices at tick 0, and at them every input's cost
+    /// share is the ICIO share, so a_VA = 1 - sum_k a_kg.
+    #[test]
+    fn coefficients_are_cost_shares_at_base_prices() {
+        let inp = small_world();
+        let w = EconWorld::new(
+            Arc::new(inp.clone()),
+            EconParams::default(),
+            TradeParams::default(),
+        );
+        assert_eq!(w.price_index, inp.provinces.base_price.as_flattened());
+        assert!(
+            inp.provinces
+                .base_price
+                .iter()
+                .any(|q| q.iter().any(|&x| x > 1.0))
+        );
+        for e in 0..inp.n_enterprises() {
+            let i = inp.enterprises.province[e] as usize;
+            let (a, coef) = (inp.country_column(e), inp.enterprises.coef[e]);
+            for k in 0..N_GOODS {
+                let share = coef[k] * inp.provinces.base_price[i][k];
+                assert!(
+                    (share - a[k]).abs() <= 1e-15 * a[k],
+                    "enterprise {e} input {k}"
+                );
+            }
+            let c = inp.country_of(i);
+            let g = usize::from(inp.enterprises.good[e]);
+            assert!((w.layout().a_va[e] - inp.a_va(c, g)).abs() <= 1e-15);
+        }
+    }
 
     #[test]
     fn country_without_people_spends_nothing() {

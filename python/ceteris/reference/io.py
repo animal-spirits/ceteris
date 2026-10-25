@@ -10,7 +10,7 @@ from pyarrow import ipc
 
 from . import demand
 
-EXPORT_FORMAT = "6"
+EXPORT_FORMAT = "7"
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,7 @@ class Inputs:
     labour_supply: np.ndarray  # (P,) effective units, sum_k e_k LF_k
     population: np.ndarray  # (P,) sum of the province's pops, rebate weights
     w0: np.ndarray  # (P,)
+    base_price: np.ndarray  # (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable)
     s_l: np.ndarray  # (C,)
     unemployment: np.ndarray  # (C,)
     gini: np.ndarray  # (C,)
@@ -84,12 +85,21 @@ class Inputs:
 
     @cached_property
     def ent_inputs(self) -> np.ndarray:
-        """(E, G): a_kg of each enterprise's sector, by input k."""
-        return self.io[self.ent_country, :, self.ent_good]
+        """(E, G): physical input coefficients, as `EconInputs::base_column`: the sector's ICIO
+        cost share a_kg over the base delivered price of k at the enterprise's province, 0 where
+        the sector does not use k."""
+        a = self.io[self.ent_country, :, self.ent_good]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(a > 0, a / self.base_price[self.ent_province], 0.0)
 
     @cached_property
     def ent_a_va(self) -> np.ndarray:
-        return 1.0 - self.ent_inputs.sum(axis=1)
+        """1 - sum_k coef_k q_k at base prices, as `EconInputs::base_a_va` (1 - sum_k a_kg)."""
+        coef = self.ent_inputs
+        cost = np.zeros(len(coef))
+        for k in range(coef.shape[1]):  # summed in Rust's order
+            cost += np.where(coef[:, k] > 0, coef[:, k] * self.base_price[self.ent_province, k], 0.0)
+        return 1.0 - cost
 
     @cached_property
     def ent_s_l(self) -> np.ndarray:
@@ -211,6 +221,7 @@ def load(directory: Path | str) -> Inputs:
         labour_supply=np.bincount(pop_province, edu_eff[pops["edu"]] * pops["labour_force"], n_p),
         population=np.bincount(pop_province, pops["population"], n_p),
         w0=provinces["w0"].astype(np.float64),
+        base_price=np.stack([provinces[f"base_price_{g}"] for g in range(n_goods)], axis=1).astype(np.float64),
         s_l=countries["s_l"],
         unemployment=countries["unemployment"],
         gini=countries["gini"],
