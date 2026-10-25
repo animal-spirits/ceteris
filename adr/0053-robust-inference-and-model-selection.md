@@ -11,7 +11,7 @@ With up to 60 free behavioural parameters across many modules, a 2000-2010 calib
 and a 2011-2024 holdout, the main risk is misspecification and weak identification rather than
 sampling noise. Neural posterior estimation can be confidently wrong under misspecification,
 and posteriors are uninformative without coverage checks. The ablation rule (15.7) decides
-which mechanisms stay, but on point skill alone. Gradient-based calibration (0023) helps for
+which mechanisms stay, but on point skill alone. Gradient-based calibration (0096) helps for
 smooth blocks but is fragile for discrete ones (Quera-Bofarull et al. 2023).
 
 ## Options
@@ -44,7 +44,7 @@ Option 2.
 - Regime scans: classify runs into regimes (stable, cycles, crisis-prone) across parameter
   space, as in the Mark-0 phase diagrams (Gualdi et al. 2015), so posteriors near regime
   boundaries are flagged.
-- Forward-mode derivatives (0023) are used for smooth blocks only; discrete blocks use
+- Forward-mode derivatives (0096) are used for smooth blocks only; discrete blocks use
   simulation-based methods.
 
 ## Migration

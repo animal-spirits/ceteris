@@ -23,7 +23,7 @@ Excluded from the lab profile, with the reason:
 - LLM agents in the economic or political loop: not validatable, prompt-sensitive, and they
   break bit-for-bit determinism. LLM text is allowed only as cached presentation (0049).
 - Whole-model differentiability as an architectural requirement: forward-mode derivatives serve
-  smooth blocks only (0023, 0053).
+  smooth blocks only (0096, 0053).
 - A single headline climate damage function: replaced by lanes (0036).
 - Crypto-assets as a full asset class: only as a dollarization or capital-flight channel in
   high-inflation states, if ever.

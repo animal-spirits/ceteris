@@ -1,8 +1,10 @@
-# 0023. Forward-mode derivatives in the Rust core
+# 0096. Forward-mode derivatives in the Rust core
 
 Status: proposed
 Date: 2026-10-24
 Design sections: 15.2, 15.7, 17, 19.4
+
+Numbering: proposed as 0023; renumbered because p2-econ took 0023 for trade elasticity classes.
 
 ## Context
 

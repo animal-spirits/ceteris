@@ -925,7 +925,7 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | Method of simulated moments | Moments with clear targets (trade shares, unemployment, spreads, fertility) | Common random numbers across draws |
 | Neural posterior estimation / ABC-SMC | Joint posterior of behavioural parameters | Simulation-based inference for ABMs as in Dyer et al. (2024); sbi toolkit (PyTorch, runs on Apple MPS) |
 | History matching with GP emulators | Ruling out implausible regions first | A few hundred runs |
-| Gradient-based variational inference | Behavioural parameters, through forward-mode derivatives of the Rust core (ADR 0023) | Same code as the golden runs; in Hamid et al. (2025) gradient-based variational inference reached in 300 evaluations a loss ABC had not reached in 30,000 |
+| Gradient-based variational inference | Behavioural parameters, through forward-mode derivatives of the Rust core (ADR 0096) | Same code as the golden runs; in Hamid et al. (2025) gradient-based variational inference reached in 300 evaluations a loss ABC had not reached in 30,000 |
 | Direct structural estimation | Parameters whose estimating equation the model nests: theta\_g, border frictions (P05) and mode cost ratios (P04) by PPML gravity on BACI; migration dispersion (P16) by PPML on bilateral migration flows; Koijen-Yogo demand elasticities by their instrument | Outside the simulation (ADR 0022); frees the run budget for behavioural parameters |
 | Multi-fidelity emulation and inference | Low-fidelity simulators (the European slice, gateway-coarsened worlds, short horizons) explore parameter space; full-globe runs correct them (Kennedy and O'Hagan 2000) | Cuts the number of full-globe runs the overnight budget must cover |
 
@@ -1226,7 +1226,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Sparse relations (trade partners, transport edges, financial claims by holder and issuer) in compressed-row form; 45x45 input-output blocks stay dense.
 - Goods are the innermost dimension of every goods-indexed array, padded to a multiple of 4 (f32) or 2 (f64), aligned to 128 bytes (the M-series cache line).
 - Ledger balances in fixed-point `i64`; prices and quantities in `f64`; kernel values in `f32` where the spec allows.
-- Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0023). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
+- Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0096). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
 - Ensemble members are lanes, the innermost array dimension (ADR 0024); interactive play runs one lane.
 
 **Tick execution**
@@ -1779,7 +1779,7 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 
 **Landing order.** 0015 and 0016 together (one rewrite of the trade system), then 0017 (ceteris-geo), 0018, 0019, 0021, 0020, and 0022 last because it defines the gate. Every one of them changes simulation output, so regenerate the golden hashes once after all eight land, with one BEHAVIOUR changelog entry listing them.
 
-**Second round (0023-0026).** A follow-up review against the computational and economic state of the art added four ADRs. 0023 (forward-mode derivatives) and 0024 (ensemble lanes) fix P2's numeric types and array layout, so they land before P2's code settles, ideally with 0015 and 0016. 0026 (firms within cells) lands with the trade rewrite. 0025 (HANK reference) lands in P5 and asks only for a test harness in P2. 0023, 0024 and 0025 leave release-mode output unchanged; 0026 changes it and joins the single golden-hash regeneration.
+**Second round (0024-0026, 0096).** A follow-up review against the computational and economic state of the art added four ADRs. 0096 (forward-mode derivatives) and 0024 (ensemble lanes) fix P2's numeric types and array layout, so they land before P2's code settles, ideally with 0015 and 0016. 0026 (firms within cells) lands with the trade rewrite. 0025 (HANK reference) lands in P5 and asks only for a test harness in P2. 0096, 0024 and 0025 leave release-mode output unchanged; 0026 changes it and joins the single golden-hash regeneration.
 
 | ADR | Decision | Crates and specs | Changes P2 output |
 | --- | --- | --- | --- |
@@ -1791,7 +1791,7 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 | 0020 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
 | 0021 | PIGL demand; consumption rule | econ | Yes |
 | 0022 | Uniqueness check, static nesting gate, direct estimation | python reference and calibrate | Gate only |
-| 0023 | Forward-mode derivatives through a Real trait | core, econ, trade, geo | No (f64 path identical) |
+| 0096 | Forward-mode derivatives through a Real trait | core, econ, trade, geo | No (f64 path identical) |
 | 0024 | Ensemble lanes as the innermost array dimension | core, all systems | No (lane k equals seed k) |
 | 0025 | Sequence-space HANK reference for the macro block | python reference; P2 test harness | No |
 | 0026 | Pareto firm heterogeneity within cells | econ, trade, register | Yes |
@@ -1988,7 +1988,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 3.4, 15.2, 15.3 (V1), 17.1,
 
 **Consequences.** The P2 gate is well posed, and fewer parameters enter joint inference in P9.
 
-### 0023. Forward-mode derivatives in the Rust core
+### 0096. Forward-mode derivatives in the Rust core
 
 Status: proposed. Date: 2026-10-24. Design sections: 15.2, 15.7, 17, 19.4.
 
@@ -2031,7 +2031,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 4.5, 14.1, 14.4, 15.2, 19.4
 - Read-only data (pack, kernels, route-choice factors) is stored once; a lane whose edges differ after an intervention gets a copy-on-write factor.
 - Trade products widen from (provinces x goods) to (provinces x goods x lanes), so gateway products become larger matrix-matrix products.
 - From P4, lanes can diverge in their entity sets (enterprise entry, wars): entity tables carry per-lane existence masks, and work for absent entities is masked, not skipped.
-- Lanes compose with 0023: tangents and lanes are both inner dimensions, and a calibration build uses lanes for parameter draws or tangents, not both at once.
+- Lanes compose with 0096: tangents and lanes are both inner dimensions, and a calibration build uses lanes for parameter draws or tangents, not both at once.
 
 **Tests.**
 

@@ -34,7 +34,7 @@ of 19.4.
   products become larger matrix-matrix products.
 - From P4, lanes can diverge in their entity sets (enterprise entry, wars): entity tables carry
   per-lane existence masks, and work for absent entities is masked, not skipped.
-- Lanes compose with 0023: tangents and lanes are both inner dimensions, and a calibration
+- Lanes compose with 0096: tangents and lanes are both inner dimensions, and a calibration
   build uses lanes for parameter draws or tangents, not both at once.
 
 ## Tests
