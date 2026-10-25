@@ -518,9 +518,7 @@ def real_world():
     population = people.scale_to_national(raw, country, people.national_population(list(codes), obs, iso))
     labour = people.country_labour(codes, obs, iso)
     working_age = population * np.array([labour[c].working_age_share for c in country])
-    world = icio.impute(
-        codes, icio.aggregate(fetch.path_of("1995-2000_SML.zip")), icio.load_wdi(fetch.CACHE, admin0), obs, iso, worldpop
-    )
+    world = icio.impute(codes, icio.aggregate(fetch.path_of("1995-2000_SML.zip")), icio.load_wdi(fetch.CACHE), obs, iso, worldpop)
     gem = tuple(fetch.path_of(n) for n in GEM)
     national = {k: v for k, v in obs.population.items()}
     proxies, match = downscale.load_proxies(

@@ -65,7 +65,7 @@ def build(pack: Path, out: Path, cache: Path = fetch.CACHE) -> dict:
     population = people.scale_to_national(raw, country, people.national_population(codes, obs, iso))
     working_age = population * np.array([labour[c].working_age_share for c in country])
 
-    wdi = icio.load_wdi(cache, admin0)
+    wdi = icio.load_wdi(cache)
     world = icio.impute(sovereign, icio.aggregate(cache / ICIO), wdi, obs, iso, worldpop)
     gem = tuple(cache / n for n in GEM)
     proxies, match = downscale.load_proxies(
