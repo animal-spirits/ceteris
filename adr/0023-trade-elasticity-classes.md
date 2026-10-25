@@ -51,11 +51,16 @@ the table is used as printed. With the replication vector the goods change as no
 
 ### Mapping to the P2 goods
 
-Each HS 1992 6-digit line takes the estimate of its ISIC Rev 3 division (WITS HS 1988/92 to ISIC
-Rev 3 concordance) and its good shares from the Task 13 concordance (`goods.hs_goods_shares`).
-Theta of good g is the arithmetic mean of the line estimates weighted by share times the line's
-2000 BACI trade value (all flows, v in thousands of USD), `theta.caliendo_parro_by_good`. Every
-traded good's value is covered; 0.6% of world trade sits on lines outside the concordance.
+Each HS 1992 6-digit line takes one CPA 2.1 activity from the OECD BTiGE key, adapted locally (gold
+to basic metals, books and recorded media to printing; ADR 0050 amendment), which fixes its good
+(`goods.hs_goods_shares`) and, through the ISIC Rev 3 division of that activity (`theta.REV3_OF_CPA`),
+its Caliendo-Parro estimate. Theta of good g is the arithmetic mean of the line estimates weighted by
+the line's 2000 BACI trade value (all flows, v in thousands of USD), `theta.caliendo_parro_by_good`.
+
+The values below were drawn on 2026-10-24 through the route the key replaced: the ISIC Rev 3 division
+of the WITS HS 1988/92 to ISIC Rev 3 concordance, and good shares split equally over the ISIC Rev 4
+divisions the UNSD Rev 3.1 to Rev 4 table links (0.6% of world trade sat on lines outside it). The
+adapted key gives 9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 (amendment below).
 
 | Good | theta | 2000 trade, USD bn |
 |---|---|---|
@@ -111,3 +116,11 @@ give the same classes except that Agriculture moves to class 1 (class values 2.5
   against 1e20 at theta 5.
 - Direct estimation on BACI (ADR 0022) replaces these values and may redraw the classes by the
   same rule.
+- Amended by ADR 0050 (2026-10-25): the WITS and UNSD concordance gave way to the OECD BTiGE HS to CPA
+  key. Through the unadapted key the rule drew four classes (2.62, 5.19, 9.94, 13.53), and the owner
+  adopted the key's classes on 2026-10-25. With the local adaptations (gold to basic metals, books
+  and recorded media to printing) light manufacturing rises to 9.15 and chemicals and metals falls to
+  10.57, so the rule draws three classes again: 2.62 (food), 5.19 (machinery, electronics and
+  vehicles) and 10.57 (agriculture, crude oil and gas, coal and other mining, light manufacturing,
+  chemicals, refined fuels and metals; 9.11 to 13.53, a factor 1.485). `TradeParams::default()`
+  changes to the adopted classes in a separate P2 task; until then it holds the values above.

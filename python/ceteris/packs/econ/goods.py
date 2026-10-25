@@ -1,7 +1,5 @@
 """The 10 P2 goods: ICIO industry mapping and weight per value from BACI (specs/econ/SPEC.md, Goods)."""
 
-import csv
-import io
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -10,6 +8,8 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as pacsv
+
+from . import people
 
 N_GOODS = 10
 TRADED = tuple(range(7))
@@ -25,6 +25,14 @@ NAMES = (
     "Construction",
     "Services",
 )
+
+# Sheet of the OECD BTiGE HS to CPA 2.1 conversion key.
+KEY_SHEET = "BTiGE FromHS-ToCPA-ToENDUSE"
+# Local adaptations of the key (ADR 0050 amendment). Non-monetary gold (HS 7108) is basic metals, not metal ore
+# (the key puts unwrought gold, 710812, in B072), so coal and other mining stays physical bulk. Printed books and
+# recorded media (J58, J59_60) are goods made by printing and reproduction (C18), not publishing services.
+GOLD = "7108"
+ADAPTED_CPA = {"J58": "C18", "J59_60": "C18"}
 
 # Marks an industry shared between goods 1 and 2 (the combined B05_06 of earlier editions); the ICIO
 # aggregation splits it by EIA 2000 production values at Pink Sheet prices.
@@ -116,54 +124,25 @@ def good_of_division(division: str) -> int | None:
     return 9 if division.isdigit() and 45 <= int(division) <= 99 else None
 
 
-def hs_goods_shares(hs_isic3: dict[str, str], bridge: dict[str, list[str]]) -> dict[str, dict[int, float]]:
-    """Share of each HS 6-digit line in each good.
-
-    An HS line maps to one ISIC Rev 3 class, which the bridge links to one or more Rev 4 classes. The
-    line is split equally across the distinct Rev 4 divisions, then summed by good. A class absent from
-    the bridge (Rev 3 splits 0500 into 0501 and 0502 in Rev 3.1) uses the classes sharing its first three
-    digits; lines still unlinked are left out.
-    """
-    shares: dict[str, dict[int, float]] = {}
-    for hs, isic3 in hs_isic3.items():
-        links = bridge.get(isic3) or [c for k, v in bridge.items() if k[:3] == isic3[:3] for c in v]
-        divisions = sorted({c[:2] for c in links})
-        by_good: dict[int, float] = defaultdict(float)
-        for d in divisions:
-            good = good_of_division(d)
-            if good is not None:
-                by_good[good] += 1 / len(divisions)
-        if by_good:
-            shares[hs] = dict(by_good)
-    return shares
+def good_of_cpa(code: str) -> int | None:
+    """Good of a CPA 2.1 code of the OECD key (section letter, division, then any finer split such as C24A or
+    C302_309); None for the unallocated `_X`."""
+    division = code[1:3]
+    return good_of_division(division) if division.isdigit() else None
 
 
-def read_hs_isic3(path: Path) -> dict[str, str]:
-    """WITS concordance HS 1988/92 to ISIC Rev 3 (zip holding one CSV): hs6 -> ISIC class."""
-    with zipfile.ZipFile(path) as z:
-        name = next(n for n in z.namelist() if n.lower().endswith(".csv"))
-        rows = csv.reader(io.TextIOWrapper(z.open(name), encoding="utf-8-sig"))
-        next(rows)
-        return {r[0].zfill(6): r[2].zfill(4) for r in rows if r}
+def hs_goods_shares(hs_cpa: dict[str, str]) -> dict[str, dict[int, float]]:
+    """Share of each HS 6-digit line in each good. The key gives every line one activity, so a line lies wholly in
+    one good; unallocated lines are left out."""
+    return {hs: {good: 1.0} for hs, code in hs_cpa.items() if (good := good_of_cpa(code)) is not None}
 
 
-def read_bridge(path: Path) -> dict[str, list[str]]:
-    """UNSD correspondence ISIC Rev 3.1 to Rev 4: Rev 3.1 class -> its principal Rev 4 classes.
-
-    Principal links are the ones where the whole Rev 4 class lies inside the Rev 3.1 class
-    (partialISIC4 = 0); the rest are exceptions (a few products of the class went elsewhere). When no
-    link is complete, all are kept. Division 09 (mining support services) has no physical product, so it
-    is dropped wherever another division remains.
-    """
-    links: dict[str, list[tuple[str, bool]]] = defaultdict(list)
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            links[row["ISIC31code"]].append((row["ISIC4code"], row["partialISIC4"] == "0"))
-    bridge = {}
-    for c3, rows in links.items():
-        keep = [c for c, complete in rows if complete] or [c for c, _ in rows]
-        bridge[c3] = [c for c in keep if c[:2] != "09"] or keep
-    return bridge
+def read_hs_cpa(path: Path) -> dict[str, str]:
+    """OECD BTiGE conversion key (2025): HS 1988/92 (key version 0) 6-digit line -> CPA 2.1 activity, with the
+    local adaptations above (gold to C24B, books and media to C18). CPA 2.1 equals ISIC Rev 4 (NACE Rev 2) at
+    division level, and the key splits divisions as ICIO 2025 does (B05 and B06, C24A and C24B, C301 and C302_309)."""
+    key = {r["HS-code"]: r["CPA"] for r in people._xlsx_sheet(path, KEY_SHEET) if r["HS-version"] == 0.0}
+    return {hs: "C24B" if hs.startswith(GOLD) else ADAPTED_CPA.get(code, code) for hs, code in key.items()}
 
 
 def baci_by_product(baci_2000: Path) -> tuple[dict[str, float], dict[str, float]]:
@@ -193,9 +172,9 @@ def baci_by_product(baci_2000: Path) -> tuple[dict[str, float], dict[str, float]
     return tonnes, value
 
 
-def weights_from_baci(baci_2000: Path, hs_isic: Path, isic_bridge: Path) -> np.ndarray:
+def weights_from_baci(baci_2000: Path, hs_key: Path) -> np.ndarray:
     """Tonnes per USD for each good (0 for the local goods 7 to 9), from the BACI 2000 flows."""
-    shares = hs_goods_shares(read_hs_isic3(hs_isic), read_bridge(isic_bridge))
+    shares = hs_goods_shares(read_hs_cpa(hs_key))
     tonnes, value = baci_by_product(baci_2000)
     t, v = np.zeros(N_GOODS), np.zeros(N_GOODS)
     for hs, by_good in shares.items():

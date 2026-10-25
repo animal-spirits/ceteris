@@ -301,9 +301,25 @@ def test_without_pwt_income_donors_are_ranked_and_scaled_by_wdi_gdp_per_person()
     assert got.va.sum() == pytest.approx(100.0 * 12000 / 10000)
 
 
-def test_unsd_income_is_flagged():
-    got = icio.impute({"XXX": "XXX"}, _donors(), _wdi_income("unsd"), _no_pwt_for_xxx(), {})["XXX"]
-    assert got.income_source == "unsd" and got.donor == "AAA"
+def test_adb_income_is_flagged():
+    got = icio.impute({"XXX": "XXX"}, _donors(), _wdi_income("adb"), _no_pwt_for_xxx(), {})["XXX"]
+    assert got.income_source == "adb" and got.donor == "AAA"
+
+
+def test_without_pwt_or_wdi_income_donors_are_ranked_and_scaled_by_maddison_gdp_per_person():
+    maddison = {"AAA": 1500.0, "BBB": 4000.0, "CCC": 2000.0, "XXX": 3000.0}
+    got = icio.impute({"XXX": "XXX"}, _donors(), _wdi(gdp=DONOR_GDP, maddison=maddison), _no_pwt_for_xxx(), {})["XXX"]
+    # In region R1, Maddison values pick BBB (4000 is closer in logs to 3000 than 1500), where WDI incomes would pick AAA.
+    assert got.donor == "BBB" and got.income_source == "maddison" and got.va_basis == "donor"
+    # BBB: 100 million USD for 5 million people; XXX has 1 million people at 3000/4000 of BBB's Maddison income.
+    assert got.va.sum() == pytest.approx(20.0 * 3000 / 4000)
+
+
+def test_wdi_income_takes_precedence_over_maddison():
+    wdi = _wdi_income("wdi")
+    wdi.maddison = {"AAA": 1500.0, "BBB": 4000.0, "XXX": 3000.0}
+    got = icio.impute({"XXX": "XXX"}, _donors(), wdi, _no_pwt_for_xxx(), {})["XXX"]
+    assert got.donor == "AAA" and got.income_source == "wdi"
 
 
 def test_without_any_income_the_donor_is_the_region_median_and_the_level_is_unscaled():
@@ -446,7 +462,8 @@ NAMES = [
     "wdi_NV.IND.MANF.ZS.zip",
     "wdi_NV.SRV.TOTL.ZS.zip",
     "wdi_NY.GDP.MKTP.CD.zip",
-    "unsd_GDPPC_USD_countries.xlsx",
+    "adb_kidb_NY_GDP_PCAP_CD_COO.csv",
+    "mpd2023_web.xlsx",
     "ppp_2000_1km_Aggregated.tif",
 ]
 
@@ -479,7 +496,7 @@ def pack():
 def wdi():
     for name in NAMES:
         _cached(name)
-    return icio.load_wdi(fetch.CACHE, fetch.path_of("ne_10m_admin_0_countries.zip"))
+    return icio.load_wdi(fetch.CACHE)
 
 
 @pytest.fixture(scope="module")
@@ -547,11 +564,13 @@ def test_real_wdi_basis_value_added_is_gdp_times_the_shares(imputed, wdi, pack):
 
 def test_real_donor_basis_levels_are_scaled_by_income(imputed):
     donor_basis = {c: v for c, v in imputed.items() if v.va_basis == "donor"}
-    assert "PRK" in donor_basis and donor_basis["PRK"].income_source == "unsd"
-    # North Korea at USD 460 per person: about 10 billion USD, not the 43 billion of an unscaled Thai level.
+    assert "PRK" in donor_basis and donor_basis["PRK"].income_source == "maddison"
+    # North Korea at Cambodia's Maddison income (1,657 and 1,659 dollars of 2011): about 7 billion USD, not the 43 billion of an
+    # unscaled Thai level.
     assert 5e3 < donor_basis["PRK"].va.sum() < 3e4
+    assert donor_basis["COK"].income_source == "adb"
     for code, v in donor_basis.items():
-        assert v.income_source in ("pwt", "wdi", "unsd", "none"), code
+        assert v.income_source in ("pwt", "wdi", "adb", "maddison", "none"), code
 
 
 GDP_WITHOUT_SHARES = {
