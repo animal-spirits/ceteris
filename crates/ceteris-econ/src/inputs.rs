@@ -3,7 +3,7 @@
 //! pins it in the snapshot instead.
 
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, N_GOODS, Network, Wedges};
+use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
 
 /// Education levels of a pop: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
@@ -35,6 +35,10 @@ pub struct ProvinceData {
     pub population: Vec<f64>,
     /// Base wage w0, numeraire per effective labour unit. See [`EconInputs::set_base_point`].
     pub w0: Vec<f64>,
+    /// Base delivered unit price q_d of every good at the province: 1 for local goods; for
+    /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
+    /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
+    pub base_price: Vec<[f64; N_GOODS]>,
 }
 
 /// Pops, one per (province, education level), sorted by province.
@@ -63,7 +67,7 @@ pub struct EntData {
     pub va_target: Vec<f64>,
     /// Putty-clay input coefficients (ADR 0020): units of each good per unit of output,
     /// aggregated over the enterprise's capacity vintages. P2 has one vintage, the country's
-    /// ICIO column; see [`EconInputs::set_coefficients`].
+    /// ICIO cost shares at base delivered prices; see [`EconInputs::set_coefficients`].
     pub coef: Vec<[f64; N_GOODS]>,
 }
 
@@ -116,25 +120,51 @@ impl EconInputs {
         self.enterprises.coef[e][k]
     }
 
-    /// Fills every enterprise's coefficients with one vintage, its country's ICIO column for
-    /// its sector (the 2000 state, ADR 0020).
+    /// Fills `ProvinceData::base_price` from sourcing at prices 1 over the kernel of this
+    /// network under `trade` (`world::delivered_prices`, the price index of the data state).
+    pub fn set_base_prices(&mut self, trade: &TradeParams) {
+        self.provinces.base_price = crate::world::base_delivered_prices(self, trade);
+    }
+
+    /// Fills every enterprise's coefficients with one vintage, [`EconInputs::base_column`]
+    /// (the 2000 state, ADR 0020). Needs the base prices.
     pub fn set_coefficients(&mut self) {
         self.enterprises.coef = (0..self.n_enterprises())
-            .map(|e| self.country_column(e))
+            .map(|e| self.base_column(e))
             .collect();
     }
 
-    /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k.
+    /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k: cost shares
+    /// of output at base prices.
     pub fn country_column(&self, e: usize) -> [f64; N_GOODS] {
         let c = self.country_of(self.enterprises.province[e] as usize);
         let g = usize::from(self.enterprises.good[e]);
         std::array::from_fn(|k| self.a(c, k, g))
     }
 
-    /// Whether every enterprise's coefficients are its country's column (one vintage), so
-    /// that both S09 settings read the same numbers.
+    /// Physical coefficients of enterprise `e` from its country's cost shares (owner decision,
+    /// 2026-10-25): coef_k = a_kg / q_k, q_k the base delivered price of k at its province, so
+    /// at base prices every input's cost share is the ICIO share; 0 where k is unreachable.
+    pub fn base_column(&self, e: usize) -> [f64; N_GOODS] {
+        let q = &self.provinces.base_price[self.enterprises.province[e] as usize];
+        let a = self.country_column(e);
+        std::array::from_fn(|k| if a[k] > 0.0 { a[k] / q[k] } else { 0.0 })
+    }
+
+    /// Value-added coefficient of coefficients `coef` at the base prices of province `i`:
+    /// a_VA = 1 - sum_k coef_k q_k over reachable inputs (1 - sum_k a_kg for the base column).
+    pub fn base_a_va(&self, i: usize, coef: &[f64; N_GOODS]) -> f64 {
+        let q = &self.provinces.base_price[i];
+        1.0 - (0..N_GOODS)
+            .filter(|&k| coef[k] > 0.0)
+            .map(|k| coef[k] * q[k])
+            .sum::<f64>()
+    }
+
+    /// Whether every enterprise's coefficients are its base column (one vintage), so that
+    /// both S09 settings read the same numbers.
     pub fn one_vintage(&self) -> bool {
-        (0..self.n_enterprises()).all(|e| self.enterprises.coef[e] == self.country_column(e))
+        (0..self.n_enterprises()).all(|e| self.enterprises.coef[e] == self.base_column(e))
     }
 
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
@@ -232,8 +262,14 @@ impl EconInputs {
 
         let p = &self.provinces;
         assert!(
-            p.population.len() == np && p.w0.len() == np,
-            "province columns disagree in length"
+            p.population.len() == np && p.w0.len() == np && p.base_price.len() == np,
+            "province columns disagree in length; fill base prices with set_base_prices"
+        );
+        assert!(
+            p.base_price
+                .iter()
+                .all(|q| q.iter().all(|&x| x > 0.0 && !x.is_nan())),
+            "base delivered prices must be positive"
         );
         assert_eq!(
             p.country, self.network.province_country,
@@ -310,7 +346,8 @@ impl EconInputs {
             );
             let coef = &e.coef[k];
             assert!(
-                coef.iter().all(|a| a.is_finite() && *a >= 0.0) && coef.iter().sum::<f64>() < 1.0,
+                coef.iter().all(|a| a.is_finite() && *a >= 0.0)
+                    && self.base_a_va(e.province[k] as usize, coef) > 0.0,
                 "enterprise {k}: input coefficients {coef:?}; fill them with set_coefficients"
             );
         }
@@ -348,6 +385,7 @@ impl EconInputs {
             population,
             w0,
             pack,
+            base_price,
         } = provinces;
         let PopData {
             province: pop_province,
@@ -383,6 +421,7 @@ impl EconInputs {
         u16s(&mut e, country);
         e.f64s(population);
         e.f64s(w0);
+        e.f64s(base_price.as_flattened());
         e.u32s(pop_province);
         e.count(edu.len());
         edu.iter().for_each(|&b| e.u8(b));

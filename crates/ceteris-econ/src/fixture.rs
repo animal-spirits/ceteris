@@ -211,10 +211,12 @@ pub fn small_world() -> EconInputs {
             population,
             w0: Vec::new(),
             pack: Vec::new(),
+            base_price: Vec::new(),
         },
         pops,
         enterprises: ent,
     };
+    inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();
     inputs.set_base_point(&EconParams::default().edu_eff);
     inputs
@@ -230,7 +232,8 @@ pub const ISLAND_USER: usize = 4;
 /// `trade`, so the island's delivered price of machinery is infinite. Of the island's sectors
 /// only light manufacturing still uses machinery; were every sector to use it, the whole
 /// island would be input capped and its labour market would have no solution. The base point
-/// does not depend on input coefficients, so it stays that of [`small_world`].
+/// does not depend on input coefficients, so it stays that of [`small_world`], and so do the
+/// base prices: coefficients are set in the base world, the cut comes after.
 pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
     let mut inputs = small_world();
     let island_port = (2 * MAINLAND) as u32;

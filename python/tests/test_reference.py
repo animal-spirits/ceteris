@@ -269,6 +269,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         labour_supply=labour * one,
         population=1e6 * one,
         w0=s_l * 50.0 / l0 * one,
+        base_price=np.ones((2, 1)),
         s_l=np.array([s_l]),
         unemployment=np.array([u]),
         gini=np.array([0.35]),
@@ -642,3 +643,16 @@ def test_newton_steps_use_the_set_krylov_size():
     dx = -jac.solve(f(x0), tol=1e-10)
     assert 30 < calls[0] <= solve.INNER_M + solve.OUTER_K + 2
     assert np.abs(a @ dx - b).max() <= 1e-6 * np.abs(b).max()
+
+
+def test_base_prices_are_the_reference_sourcing_at_prices_one(inputs):
+    """Owner decision 2026-10-25: coefficients are ICIO cost shares at base delivered prices. The
+    exported base prices are the reference's own delivered unit prices at prices 1, so at the
+    data state every enterprise's input cost share is its sector's a_kg."""
+    inp = inputs
+    q = model._sourcing(inp, np.ones((inp.n_provinces, inp.n_goods)))["index"]
+    np.testing.assert_allclose(inp.base_price[:, inp.traded], q[:, inp.traded], rtol=1e-13)
+    assert np.all(inp.base_price[:, ~inp.traded] == 1.0) and np.any(inp.base_price > 1.0)
+    a = inp.io[inp.ent_country, :, inp.ent_good]
+    np.testing.assert_allclose(inp.ent_inputs * inp.base_price[inp.ent_province], a, rtol=1e-15)
+    np.testing.assert_allclose(inp.ent_a_va, 1.0 - a.sum(axis=1), rtol=1e-14)

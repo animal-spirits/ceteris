@@ -852,7 +852,7 @@ fn proportional_rationing_switch() {
     assert!(short > 0, "no shortage at an origin");
 }
 
-/// ADR 0020: with one vintage (the 2000 ICIO column) putty-clay coefficients run exactly as
+/// ADR 0020: with one vintage (the 2000 ICIO cost shares at base prices) putty-clay coefficients run exactly as
 /// fixed Leontief (S09), down to the state hash; a second vintage would tell them apart.
 #[test]
 fn putty_clay_one_vintage_equals_fixed_leontief() {
@@ -880,12 +880,8 @@ fn putty_clay_one_vintage_equals_fixed_leontief() {
     let (inputs, e) = (Arc::new(inputs), 0);
     let fixed_world = EconWorld::new(Arc::clone(&inputs), fixed, t.clone());
     let putty_world = EconWorld::new(Arc::clone(&inputs), putty, t);
-    let c = inputs.country_of(inputs.enterprises.province[e] as usize);
-    let g = usize::from(inputs.enterprises.good[e]);
-    for k in 0..N_GOODS {
-        assert_eq!(fixed_world.layout().coef[e][k], inputs.a(c, k, g));
-        assert_eq!(putty_world.layout().coef[e][k], inputs.coef(e, k));
-    }
+    assert_eq!(fixed_world.layout().coef[e], inputs.base_column(e));
+    assert_eq!(putty_world.layout().coef[e], inputs.enterprises.coef[e]);
 }
 
 /// Review Focus 1 at world level (`fixture::unreachable_island`): machinery has no reachable
