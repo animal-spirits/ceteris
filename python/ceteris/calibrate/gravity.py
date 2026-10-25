@@ -274,8 +274,8 @@ P04 = Transport()
 # P43 time cost of transit lambda_g per day, the starts of `TradeParams::default()` (trade SPEC), traded goods.
 TIME_COST = (0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010)
 # P01 classes of `TradeParams::default()` (ADR 0023) and their current values.
-CLASSES = ((3,), (4, 6), (0, 1, 2, 5))
-THETA_DEFAULT = (2.62, 5.88, 12.55)
+CLASSES = ((3,), (6,), (0, 1, 2, 4, 5))
+THETA_DEFAULT = (2.62, 5.19, 10.57)
 BORDER_DEFAULT = 0.3  # P05 start
 TARIFF_GROUP = (0, 0, 0, 0, 1, 1, 1)  # ceteris_trade::goods::tariff_group: primary, manufactured
 N_TRADED = 7

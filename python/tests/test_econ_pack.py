@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import re
@@ -9,6 +10,7 @@ import pyarrow as pa
 import pytest
 from pyarrow import ipc
 
+from ceteris.calibrate import gravity
 from ceteris.packs import fetch
 from ceteris.packs.econ import build as econ_build
 from ceteris.packs.econ import gateways, goods, people, tariffs, theta
@@ -342,9 +344,9 @@ def caliendo_parro():
 
 
 def test_caliendo_parro_by_good_from_baci(caliendo_parro):
-    """Theta per good to two decimals through the adapted OECD key, and its classes (ADR 0050 amendment). ADR
-    0023's values, which `TradeParams::default()` keeps until the theta task (goods 4 to 6 at 6.73, 12.64, 5.33;
-    classes 2.62, 5.88, 12.55), came from the WITS and UNSD route that the key replaced."""
+    """Theta per good to two decimals through the adapted OECD key, and its classes (ADR 0050 amendment). The
+    WITS and UNSD route that ADR 0023 first used (goods 4 to 6 at 6.73, 12.64, 5.33; classes 2.62, 5.88, 12.55) was
+    replaced by the key."""
     t, v = caliendo_parro
     np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19, 0, 0, 0], atol=0.005)
     assert (v[:7] > 1e11).all() and (v[7:] == 0).all()
@@ -352,6 +354,19 @@ def test_caliendo_parro_by_good_from_baci(caliendo_parro):
     assert of.tolist() == [2, 2, 2, 0, 2, 2, 1]
     np.testing.assert_allclose(ct, [2.62, 5.19, 10.57], atol=0.005)
     assert math.log(ct[-1] / ct[0]) > math.log(theta.CLASS_SPREAD)
+
+
+def test_rust_theta_defaults_follow_the_estimator(caliendo_parro):
+    """`TradeParams::default()` is pinned to the fixture's params.json by the p2_acceptance staleness check, so
+    reading that file ties the Rust defaults, and the calibration constants, to the ADR 0023 rule on the pack."""
+    t, v = caliendo_parro
+    of, ct = theta.classes(t[:7], v[:7])
+    trade = json.loads((FIXTURE / "params.json").read_text())["trade"]
+    n = goods.N_GOODS
+    assert trade["theta_class"] == of.tolist() + [0] * (n - 7)
+    np.testing.assert_allclose(trade["theta"], [ct[c] for c in of] + [0.0] * (n - 7), atol=0.005)
+    assert gravity.CLASSES == tuple(tuple(int(g) for g in np.flatnonzero(of == c)) for c in range(len(ct)))
+    np.testing.assert_allclose(gravity.THETA_DEFAULT, ct, atol=0.005)
 
 
 def test_every_traded_activity_of_the_key_has_a_sector_estimate():

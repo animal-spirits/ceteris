@@ -13,7 +13,7 @@ use crate::kernel::{Access, Kernel};
 /// Origins whose weight `(p_o / p_min)^-theta` is below this are not sourcing targets, and a
 /// destination whose access `Phi_d` (in the same relative units) is below it buys nothing:
 /// its price index is infinite. Markets 1e20x above the best price are left out at theta = 5,
-/// 1e8x at 12.55 (the largest P01 class value).
+/// 3e9x at 10.57 (the largest P01 class value).
 /// It keeps every product of a weight with up to three f32 kernel factors a normal f64, so
 /// the Markov shares stay accurate when prices span orders of magnitude.
 pub const WEIGHT_FLOOR: f64 = 1e-100;

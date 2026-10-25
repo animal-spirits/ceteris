@@ -857,12 +857,12 @@ mod tests {
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
             json.contains(
-                "\"theta\": [12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88, 0.0, 0.0, 0.0]"
+                "\"theta\": [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]"
             ),
             "{json}"
         );
         assert!(
-            json.contains("\"theta_class\": [2, 2, 2, 0, 1, 2, 1, 0, 0, 0]"),
+            json.contains("\"theta_class\": [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]"),
             "{json}"
         );
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
