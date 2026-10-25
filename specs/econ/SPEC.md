@@ -66,6 +66,11 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured | WDI weighted applied rates by importer; zero inside agreements and customs unions (CEPII gravity, WB DTA) |
 | `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph |
 
+**Value added convention.** National VA by good is output less intermediate inputs, summed over
+all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
+`1 - sum_k a_kg` is the VA share of output in every column of `econ_io.arrow`, ICIO and imputed
+alike, and VA + inputs = output holds exactly (the identity the GE reference model relies on).
+
 **Downscaling VA to provinces (traded goods only).** National VA by good from ICIO, then
 province shares from the best proxy available: agriculture by MapSPAM 2000 value of production;
 oil and gas by GEM extraction assets; coal and other mining by GEM coal mines and P1 mineral
@@ -79,7 +84,14 @@ the same proxy, so every enterprise has workers to hire. Every row carries an im
 **Economies outside ICIO.** IO coefficients and final demand shares from the ICIO economy
 nearest in (region, log GDP per capita); national VA by good from WDI sector shares
 (agriculture, industry, manufacturing, services) split within each group by the donor's
-proportions. Agent default under 22.2, ADR 0014.
+proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
+(UNSD) GDP per person against the donors' in the same source, never the region median when an
+income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
+over goods 1 to 8 when only manufacturing is missing); with no GDP, population (WorldPop national
+total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
+parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
+parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
+basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.
 
 **Gateways.** Per country: listed ports and major airports clustered by k-medoids on path cost,
 plus every land crossing (graph edge whose endpoints lie in different 2000 countries, merged
