@@ -618,3 +618,27 @@ def test_country_without_people_spends_nothing(inputs):
     assert empty.base_spend[-1] == 0.0
     np.testing.assert_array_equal(empty.base_spend[:-1], inp.base_spend)
     assert np.isfinite(empty.pigl_weights.scale).all()
+
+
+def test_newton_steps_use_the_set_krylov_size():
+    """scipy ignores inner_maxiter for LGMRES (one cycle of inner_m vectors): the reference sets
+    inner_m, and one Newton step on a linear system that needs more than LGMRES's default 30
+    vectors uses them."""
+    jac = solve.krylov_jacobian()
+    assert jac.method_kw["inner_m"] == solve.INNER_M > 30
+    rng = np.random.default_rng(5)
+    n = 80
+    a = np.diag(np.logspace(0, 4, n)) + 0.01 * rng.normal(size=(n, n))
+    b = rng.normal(size=n)
+    calls = [0]
+
+    def f(x):
+        calls[0] += 1
+        return a @ x - b
+
+    x0 = np.zeros(n)
+    jac.setup(x0, f(x0), f)
+    calls[0] = 0
+    dx = -jac.solve(f(x0), tol=1e-10)
+    assert 30 < calls[0] <= solve.INNER_M + solve.OUTER_K + 2
+    assert np.abs(a @ dx - b).max() <= 1e-6 * np.abs(b).max()
