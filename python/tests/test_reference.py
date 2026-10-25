@@ -583,6 +583,18 @@ def test_calibration_solves_the_fixture_data(calibrated):
     assert np.all(np.isfinite(a) & (a > 0))
 
 
+def test_jax_calibration_reaches_the_same_root(calibrated):
+    """The JAX solver (exact products, two-level preconditioner) follows the same path from the
+    data state to the same root; skipped without the `jax` extra."""
+    pytest.importorskip("jax", reason="skipping: no jax (the `jax` extra)")
+    from ceteris.reference import jax_calibrate
+
+    inp, _, a_star = calibrated
+    a, residuals = jax_calibrate.productivity(inp)
+    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
+    np.testing.assert_allclose(a, a_star, rtol=1e-8)
+
+
 def test_calibration_recovers_fixture_productivity(calibrated):
     """Perturb the calibrated fixture's A (one per enterprise, local ones included), solve its
     equilibrium, and calibrate against that equilibrium's value added with the inputs' A at 1,

@@ -355,6 +355,17 @@ continuation through folds to lambda = 1, Newton with GMRES correcting each arc.
 has several roots in general; the calibration keeps the one reached continuously from the data
 state (controller ruling, 2026-10-25), and reports the distribution of ln A.
 
+Optional JAX solver (`reference/jax_model.py`, `reference/jax_calibrate.py`, the `jax` extra;
+DESIGN 19.1): the same reduced residual in JAX (float64, equal to numpy to 1e-12), exact
+forward-mode Jacobian-vector products, and GMRES right-preconditioned by a two-level
+preconditioner from exact derivatives: the Jacobian with the gateway sums held fixed is block
+diagonal by country, so one batched product per colour (rank of the province in its country,
+good or wage) gives every country's block exactly, LU-factored, with the dense index row as a
+rank-one update; a Galerkin coarse correction per (country, good) and per country's wages carries
+the price levels that trade couples. The continuation follows the same homotopy from the data
+state with exact tangents, a predictor capped in the max norm, corrector step control and
+Euclidean arclength weights; on the fixture it reaches the scipy solver's root.
+
 The 2000 state used for runs is the data state (prices 1, base wages and employment, 2000
 unemployment, inventories and input stocks at target) with the calibrated A. It is not the
 equilibrium: runs start out of it and converge, so V1 tests convergence, not calibration fit.
