@@ -58,6 +58,7 @@ class CountryIO:
     # 2010), unsd (UN National Accounts GDP per person) or none (region median donor, donor's level unscaled).
     income_source: str = "none"
     shed: float = 0.0  # share of this economy's own VA given to territories counted inside it
+    coal_share: float = 0.0  # coal (ICIO B05) in the VA of good 2, coal and other mining; an imputed country has its donor's
 
 
 @dataclass
@@ -92,7 +93,8 @@ def aggregate(path: Path, year: int = YEAR) -> dict[str, CountryIO]:
     coefficient column. A negative share (inventory changes can cause one) stops the build.
 
     Value added is output less intermediate inputs: ICIO's VA plus its taxes less subsidies on products (TLS),
-    so that VA/output = 1 - sum of the column of `io` holds exactly.
+    so that VA/output = 1 - sum of the column of `io` holds exactly. The coal share is B05's part of good 2's VA,
+    which the downscaling uses to weigh coal mines against other mineral sites.
     """
     table = _open_table(path, year)
     labels = table.column(0).to_pylist()
@@ -111,6 +113,8 @@ def aggregate(path: Path, year: int = YEAR) -> dict[str, CountryIO]:
     inputs: dict[str, np.ndarray] = {}
     output: dict[str, np.ndarray] = {}
     final: dict[str, np.ndarray] = {}
+    coal: dict[str, float] = defaultdict(float)
+    mining: dict[str, float] = defaultdict(float)
     for j, name in enumerate(names, start=1):
         column = table.column(j)
         if column.null_count:
@@ -126,6 +130,10 @@ def aggregate(path: Path, year: int = YEAR) -> dict[str, CountryIO]:
             output.setdefault(code, np.zeros(N_GOODS))
             inputs[code][:, g] += np.bincount(row_good, x[rows], N_GOODS)
             output[code][g] += x[out_row]
+            if g == 2:
+                va = x[out_row] - x[rows].sum()
+                mining[code] += va
+                coal[code] += va if tail == "B05" else 0.0
 
     result = {}
     for code, x in output.items():
@@ -133,7 +141,8 @@ def aggregate(path: Path, year: int = YEAR) -> dict[str, CountryIO]:
         if (shares < 0).any():
             raise ValueError(f"negative final demand share for {code}: {shares.round(4).tolist()}")
         io = np.divide(inputs[code], x, out=np.zeros((N_GOODS, N_GOODS)), where=x > 0)
-        result[code] = CountryIO(x, x - inputs[code].sum(axis=0), io, shares)
+        share = min(max(coal[code] / mining[code], 0.0), 1.0) if mining[code] > 0 else 0.0
+        result[code] = CountryIO(x, x - inputs[code].sum(axis=0), io, shares, coal_share=share)
     return result
 
 
@@ -316,6 +325,7 @@ def impute(
                 va_basis=basis,
                 region=region,
                 income_source=source,
+                coal_share=d.coal_share,
             )
     share_of: dict[str, float] = defaultdict(float)
     original = dict(out)

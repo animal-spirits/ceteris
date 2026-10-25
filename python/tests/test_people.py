@@ -125,9 +125,11 @@ def test_xlsx_sheet_reads_numbers_and_shared_strings(tmp_path):
             '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
             '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="n"><v>0.55</v></c></row>'
             '<row r="3"><c r="A3" t="s"><v>2</v></c><c r="B3"/></row>'
+            '<row r="4"><c r="A4" t="s"><v>2</v></c><c r="B4" t="e"><v>#REF!</v></c></row>'
             "</sheetData></worksheet>",
         )
-    assert list(people._xlsx_sheet(path, "Data")) == [{"code": "AAA", "labsh": 0.55}, {"code": "AAA"}]
+    # An error cell (#REF!) reads as empty.
+    assert list(people._xlsx_sheet(path, "Data")) == [{"code": "AAA", "labsh": 0.55}, {"code": "AAA"}, {"code": "AAA"}]
 
 
 def _observed() -> Observed:
