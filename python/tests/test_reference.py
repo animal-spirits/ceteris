@@ -605,3 +605,16 @@ def test_calibration_table_has_the_layout_from_pack_reads(inputs, tmp_path):
     assert t["province"].to_pylist() == pack[inp.ent_province].tolist()
     np.testing.assert_array_equal(t["a"].to_numpy(), a)
     assert json.loads(t.schema.metadata[b"residuals"]) == {"residual_count": 0, "largest_relative_miss": 0.0}
+
+
+def test_country_without_people_spends_nothing(inputs):
+    """A country with no economy province (the pack's uninhabited territories keep a gateway) has
+    base spending 0, not 0 / 0, and the PIGL inversion stays finite."""
+    inp = inputs
+    one = lambda v: np.concatenate([v, v[-1:]])
+    empty = dataclasses.replace(
+        inp, s_l=one(inp.s_l), unemployment=one(inp.unemployment), gini=one(inp.gini), omega=one(inp.omega), io=one(inp.io)
+    )
+    assert empty.base_spend[-1] == 0.0
+    np.testing.assert_array_equal(empty.base_spend[:-1], inp.base_spend)
+    assert np.isfinite(empty.pigl_weights.scale).all()

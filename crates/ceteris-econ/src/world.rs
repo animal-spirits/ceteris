@@ -376,7 +376,7 @@ pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Base spending per person of each country: its provinces' [`base_income`] over its pops'
-/// population. As `ceteris.reference.io.Inputs.base_spend`.
+/// population, 0 for a country without people. As `ceteris.reference.io.Inputs.base_spend`.
 pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let nc = inp.n_countries();
     let (mut spend, mut people) = (vec![0.0; nc], vec![0.0; nc]);
@@ -386,7 +386,12 @@ pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     for k in 0..inp.n_pops() {
         people[inp.country_of(inp.pops.province[k] as usize)] += inp.pops.population[k];
     }
-    spend.iter().zip(&people).map(|(s, n)| s / n).collect()
+    // a country without people (an uninhabited territory keeps a gateway) spends nothing
+    spend
+        .iter()
+        .zip(&people)
+        .map(|(s, &n)| if n > 0.0 { s / n } else { 0.0 })
+        .collect()
 }
 
 /// Per country, the PIGL weights inverted from its final demand shares at prices 1 and its
@@ -1064,6 +1069,22 @@ impl State for EconWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn country_without_people_spends_nothing() {
+        let mut inp = small_world();
+        let params = EconParams::default();
+        let base = base_spend(&inp, &params);
+        let c = &mut inp.countries;
+        c.s_l.push(c.s_l[0]);
+        c.omega.push(c.omega[0]);
+        c.io.push(c.io[0]);
+        c.unemployment.push(c.unemployment[0]);
+        c.gini.push(c.gini[0]);
+        let with_empty = base_spend(&inp, &params);
+        assert_eq!(with_empty[..base.len()], base[..]);
+        assert_eq!(with_empty[base.len()], 0.0);
+    }
     use crate::fixture::small_world;
     use ceteris_core::snapshot::{canonical, decode_canonical_with};
     use ceteris_trade::N_GOODS;

@@ -167,7 +167,7 @@ class Residuals:
         return float(np.abs(np.concatenate([self.enterprise_miss, self.pair_miss])).max(initial=0.0))
 
 
-def _corrector(f, u: np.ndarray, tol: float) -> tuple[np.ndarray, bool, int, float]:
+def _corrector(f, u: np.ndarray, tol: float, deadline: float | None) -> tuple[np.ndarray, bool, int, float]:
     """Newton-Krylov from u, steps capped as `solve.newton`; (u, converged, steps, residual)."""
     fu = f(u)
     jac = KrylovJacobian(method="gmres", inner_maxiter=GMRES_SIZE)
@@ -176,6 +176,7 @@ def _corrector(f, u: np.ndarray, tol: float) -> tuple[np.ndarray, bool, int, flo
         norm = float(np.abs(fu).max())
         if norm <= tol or not np.isfinite(norm) or k == MAX_CORRECTOR:
             return u, norm <= tol, k, norm
+        solve._check(deadline, f"calibration corrector at residual {norm:.3e}")
         dx = -jac.solve(fu, tol=min(0.1, norm))
         u = u + dx * min(1.0, solve.STEP_CAP / np.abs(dx).max())
         fu = f(u)
@@ -183,15 +184,22 @@ def _corrector(f, u: np.ndarray, tol: float) -> tuple[np.ndarray, bool, int, flo
     raise AssertionError("unreachable")
 
 
-def productivity(inp: Inputs, tol: float = TOL, progress=None) -> tuple[np.ndarray, Residuals]:
+def productivity(inp: Inputs, tol: float = TOL, progress=None, budget: float | None = None) -> tuple[np.ndarray, Residuals]:
     """A per enterprise whose equilibrium matches `inp.ent_va_target` (the module documentation
     gives the system and the path), independent of `inp.ent_a`; raises NoConvergence with the
-    path so far. `progress(line)` receives one line per continuation step."""
+    path so far, also once `budget` seconds of wall clock are spent. `progress(line)` follows the
+    anchor solve and receives one line per continuation step."""
     start = time.perf_counter()
+    deadline = None if budget is None else start + budget
     lay = layout(inp)
     one = dataclasses.replace(inp, ent_a=np.ones(len(inp.ent_good)))
     with np.errstate(all="ignore"):
-        anchor = solve.equilibrium(one, tol=tol)
+        anchor = solve.equilibrium(
+            one,
+            tol=tol,
+            progress=progress and (lambda line: progress(f"anchor {line}, {time.perf_counter() - start:.0f} s")),
+            deadline=deadline,
+        )
         v1 = model.evaluate(anchor.x, one)["value_added"]
         if np.any(v1 <= 0):
             raise NoConvergence(f"{int((v1 <= 0).sum())} enterprises without value added at A = 1")
@@ -202,7 +210,7 @@ def productivity(inp: Inputs, tol: float = TOL, progress=None) -> tuple[np.ndarr
             nxt = min(1.0, lam + step)
             at = dataclasses.replace(inp, ent_va_target=v1 ** (1.0 - nxt) * target**nxt)
             guess = u if prev is None else u + (u - prev[0]) * (nxt - lam) / (lam - prev[1])
-            w, ok, k, norm = _corrector(lambda v, at=at: residual(v, at, lay), guess, tol if nxt == 1.0 else STEP_TOL)
+            w, ok, k, norm = _corrector(lambda v, at=at: residual(v, at, lay), guess, tol if nxt == 1.0 else STEP_TOL, deadline)
             path.append((nxt, ok, k, norm))
             if progress:
                 progress(f"lambda {nxt:.6f} {'ok' if ok else 'failed'} after {k} Newton steps, residual {norm:.3e}, "

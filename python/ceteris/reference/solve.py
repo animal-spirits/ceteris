@@ -21,9 +21,15 @@ TATONNEMENT_TOL = 1e-6
 ANDERSON_MEMORY = 5
 
 
-def newton(inp: Inputs, x0: np.ndarray, tol: float) -> tuple[np.ndarray, int]:
+def _check(deadline: float | None, what: str) -> None:
+    if deadline is not None and time.perf_counter() > deadline:
+        raise NoConvergence(f"{what}: wall-clock budget spent")
+
+
+def newton(inp: Inputs, x0: np.ndarray, tol: float, progress=None, deadline=None) -> tuple[np.ndarray, int]:
     """Newton-Krylov (scipy's KrylovJacobian, LGMRES on finite-difference products) with steps
-    capped at STEP_CAP; raises NoConvergence."""
+    capped at STEP_CAP; raises NoConvergence. `progress(line)` gets one line per step; past the
+    `deadline` (perf_counter seconds) it raises NoConvergence."""
 
     def f(x):
         return model.residual(x, inp)
@@ -36,8 +42,11 @@ def newton(inp: Inputs, x0: np.ndarray, tol: float) -> tuple[np.ndarray, int]:
         norm = np.abs(fx).max()
         if not np.isfinite(norm):
             raise NoConvergence(f"residual not finite after {steps} Newton steps")
+        if progress:
+            progress(f"newton {steps} residual {norm:.3e}")
         if norm <= tol:
             return x, steps
+        _check(deadline, f"newton at residual {norm:.3e}")
         dx = -jac.solve(fx, tol=min(0.1, norm))
         dx *= min(1.0, STEP_CAP / np.abs(dx).max())
         x = x + dx
@@ -46,7 +55,7 @@ def newton(inp: Inputs, x0: np.ndarray, tol: float) -> tuple[np.ndarray, int]:
     raise NoConvergence(f"residual {np.abs(fx).max()} after {MAX_NEWTON} Newton steps")
 
 
-def tatonnement(inp: Inputs, x0: np.ndarray, tol: float = TATONNEMENT_TOL) -> np.ndarray:
+def tatonnement(inp: Inputs, x0: np.ndarray, tol: float = TATONNEMENT_TOL, progress=None, deadline=None) -> np.ndarray:
     """ln p and ln w move with their market's scaled excess demand (step clipped like the price
     rule), shifted together after each step so the world price index is 1. The fixed point of that
     map is accelerated by Anderson mixing, restarted from the best iterate whenever the step
@@ -58,11 +67,14 @@ def tatonnement(inp: Inputs, x0: np.ndarray, tol: float = TATONNEMENT_TOL) -> np
 
     xs, rs = [], []
     x, best, best_x = x0.copy(), np.inf, x0.copy()
-    for _ in range(MAX_TATONNEMENT):
+    for it in range(MAX_TATONNEMENT):
         r = step(x) - x
         norm = np.abs(r).max()
+        if progress and it % 50 == 0:
+            progress(f"tatonnement {it} step {norm:.3e} best {best:.3e}")
         if norm <= tol:
             return x
+        _check(deadline, f"tatonnement at best step {best:.3e}")
         if not norm < 10.0 * best:
             xs, rs, x = [], [], best_x
             x = x + step(x) - x
@@ -79,17 +91,19 @@ def tatonnement(inp: Inputs, x0: np.ndarray, tol: float = TATONNEMENT_TOL) -> np
     raise NoConvergence(f"tatonnement step {best} after {MAX_TATONNEMENT} iterations")
 
 
-def equilibrium(inp: Inputs, x0: np.ndarray | None = None, tol: float = 1e-10) -> Equilibrium:
+def equilibrium(inp: Inputs, x0: np.ndarray | None = None, tol: float = 1e-10, progress=None, deadline=None) -> Equilibrium:
     """Solves `model.residual(x) = 0` to `tol` in the max norm, from the data state unless `x0`
-    is given; raises NoConvergence, or ValueError for a root that is not a Rust steady state."""
+    is given; raises NoConvergence (also past `deadline`), or ValueError for a root that is not a
+    Rust steady state. `progress(line)` follows the solve."""
     start = time.perf_counter()
     x0 = model.data_state(inp) if x0 is None else x0
     with np.errstate(all="ignore"):
         try:
-            x, steps = newton(inp, x0, tol)
+            x, steps = newton(inp, x0, tol, progress, deadline)
             method = "newton_krylov"
         except NoConvergence:
-            x, steps = newton(inp, tatonnement(inp, x0), tol)
+            _check(deadline, "equilibrium")
+            x, steps = newton(inp, tatonnement(inp, x0, progress=progress, deadline=deadline), tol, progress, deadline)
             method = "tatonnement, newton_krylov"
     info = {
         "method": method,

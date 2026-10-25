@@ -115,11 +115,12 @@ class Inputs:
 
     @cached_property
     def base_spend(self) -> np.ndarray:
-        """(C,) base spending per person: base income over the pops' population, as `world::base_spend`."""
+        """(C,) base spending per person: base income over the pops' population, 0 for a country
+        without people, as `world::base_spend`."""
         c = self.province_country
-        return np.bincount(c, self.base_income, self.n_countries) / np.bincount(
-            c[self.pop_province], self.pop_population, self.n_countries
-        )
+        income = np.bincount(c, self.base_income, self.n_countries)
+        people = np.bincount(c[self.pop_province], self.pop_population, self.n_countries)
+        return np.divide(income, people, out=np.zeros(self.n_countries), where=people > 0)
 
     @cached_property
     def sigma_income(self) -> np.ndarray:

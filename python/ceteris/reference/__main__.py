@@ -2,10 +2,10 @@
 `ceteris export` and writes it with the column layout of the run export (`prices`, `wages`,
 `enterprises`, `flows`, `home`) plus `solution.json`.
 
-`python -m ceteris.reference calibrate --pack DIR [--out FILE]`: exports the pack's world with
+`python -m ceteris.reference calibrate --pack DIR [--out FILE] [--budget SECONDS]`: exports the pack's world with
 `cargo run --release --bin ceteris -- export --pack DIR` to a temporary directory, calibrates
 productivity (`calibrate.productivity`) and writes `DIR/econ_calib.arrow` (or FILE), printing the
-residual summary."""
+residual summary; progress lines follow the solve, which gives up after the budget (2 hours)."""
 
 import argparse
 import json
@@ -83,14 +83,14 @@ def write(out: Path, inp: io.Inputs, eq: Equilibrium) -> None:
     (out / "solution.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 
-def run_calibration(pack: Path, out: Path) -> None:
+def run_calibration(pack: Path, out: Path, budget: float) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         cmd = ["cargo", "run", "--release", "--bin", "ceteris", "--", "export", "--pack", str(pack.resolve()), "--out", tmp]
         subprocess.run(cmd, check=True, cwd=ROOT)
         inp = io.load(tmp)
         pack_province = io._table(Path(tmp) / "pack_provinces.arrow")["pack"].astype(np.int64)
     try:
-        a, residuals = calibrate.productivity(inp, progress=lambda line: print(line, flush=True))
+        a, residuals = calibrate.productivity(inp, progress=lambda line: print(line, flush=True), budget=budget)
     except (NoConvergence, ValueError) as e:
         sys.exit(f"no calibration: {e}")
     calibrate.write(out, inp, pack_province, a, residuals)
@@ -119,9 +119,10 @@ def main() -> None:
     c = sub.add_parser("calibrate", help="calibrate productivity against the pack's 2000 value added")
     c.add_argument("--pack", type=Path, required=True)
     c.add_argument("--out", type=Path, help="default: PACK/econ_calib.arrow")
+    c.add_argument("--budget", type=float, default=7200.0, help="wall-clock seconds before giving up (default 2 hours)")
     args = parser.parse_args()
     if args.command == "calibrate":
-        run_calibration(args.pack, args.out or args.pack / "econ_calib.arrow")
+        run_calibration(args.pack, args.out or args.pack / "econ_calib.arrow", args.budget)
         return
     inp = io.load(args.inputs)
     try:
