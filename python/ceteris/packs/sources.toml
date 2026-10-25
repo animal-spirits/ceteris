@@ -1453,10 +1453,10 @@ commercial_use = true
 share_alike = false
 use = "primary"
 policy = "bundle"
-reason = "ILO datasets published on or after 2023-05-03 are CC BY 4.0"
-checked = 2026-10-23
-confidence = "medium"
-notes = "ILOSTAT's own terms page was unreachable; pin a post-May-2023 download. P2 reads the modelled estimates EAP_2WAP_SEX_AGE_RT_A and UNE_2EAP_SEX_AGE_RT_A for 2000 through the rplumber.ilo.org data API (the bulk-download page is behind a bot check), accessed 2026-10-24."
+reason = "ILO Rights and permissions page, Data: databases and datasets published as of 3 May 2023, with their referential metadata, are CC BY 4.0 (microdata restricted to the ILO excepted); the pinned downloads are current ILOSTAT releases"
+checked = 2026-10-25
+confidence = "high"
+notes = "Licence read on ILO's own page https://www.ilo.org/rights-and-permissions on 2026-10-25; ilostat.ilo.org/about/terms-of-use answers 403 to scripts. P2 reads the modelled estimates EAP_2WAP_SEX_AGE_RT_A and UNE_2EAP_SEX_AGE_RT_A for 2000 (accessed 2026-10-24) and UNE_2EAP_SEX_AGE_RT_A for 1995 to 2005, the natural rate u* of ADR 0089 (accessed 2026-10-25), through the rplumber.ilo.org data API (the bulk-download page is behind a bot check)."
 
 [[source]]
 id = "kummu-subnational"

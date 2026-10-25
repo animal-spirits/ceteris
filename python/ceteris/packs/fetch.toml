@@ -117,6 +117,13 @@ bytes = 204817
 url = "https://rplumber.ilo.org/data/indicator/?id=UNE_2EAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=2000&timeto=2000"
 
 [[file]]
+source = "ilostat"
+name = "ilostat_UNE_2EAP_SEX_AGE_RT_A_1995-2005.csv"
+sha256 = "8731614cc0c0ab6b6e39fcb77077facf052abdd9c27530591a45a108da7777cc"
+bytes = 2252426
+url = "https://rplumber.ilo.org/data/indicator/?id=UNE_2EAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=1995&timeto=2005"
+
+[[file]]
 source = "pwt"
 name = "pwt110.xlsx"
 sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
