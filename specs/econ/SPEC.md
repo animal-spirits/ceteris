@@ -517,9 +517,9 @@ spillovers, pp. 3-6) has rho(A) <= 1 only without spillovers, and A.6 (forward-l
 pp. 12-15) is unique when alpha + beta <= 0 but has no trade costs. `spectral_bound` raises for a
 nonzero agglomeration or a migration elasticity until the phase that adds one derives its A.
 
-At the P2 defaults (P01 class values 12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88; the fixture's
-value-added shares, 0.46 to 0.73) the bound is 0.932 (chemicals, refined fuels and metals: theta
-12.55, beta 0.46); with labour the only input (beta = 1) it is 12.55 / 13.55 = 0.926. V1 runs in
+At the P2 defaults (P01 class values 10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19; the fixture's
+value-added shares, 0.46 to 0.73) the bound is 0.922 (chemicals, refined fuels and metals: theta
+10.57, beta 0.46); with labour the only input (beta = 1) it is 10.57 / 11.57 = 0.914. V1 runs in
 tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
 
 ## P2 gate (21.1)

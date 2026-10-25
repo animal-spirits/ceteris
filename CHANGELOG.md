@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### BEHAVIOUR: trade elasticities follow the OECD key (ADR 0023 amendment)
+
+`TradeParams::default()` moves from the classes of the WITS and UNSD route to those the ADR 0023 rule
+draws from the OECD BTiGE key with the gold and books adaptations (owner decision, 2026-10-25):
+
+| Good | theta before | theta now |
+|---|---|---|
+| 0 Agriculture, 1 Crude oil and gas, 2 Coal and other mining | 12.55 | 10.57 |
+| 3 Food | 2.62 | 2.62 |
+| 4 Light manufacturing | 5.88 | 10.57 |
+| 5 Chemicals, refined fuels, metals | 12.55 | 10.57 |
+| 6 Machinery, electronics, vehicles | 5.88 | 5.19 |
+
+The class map is [2, 2, 2, 0, 2, 2, 1] (was [2, 2, 2, 0, 1, 2, 1]); the P01 prior is 2.62 to 10.57.
+`python/tests/test_econ_pack.py::test_rust_theta_defaults_follow_the_estimator` ties the fixture export
+of the defaults and `ceteris.calibrate.gravity.CLASSES` and `THETA_DEFAULT` to the estimator.
+
+Effects:
+
+- Re-blessed `tests/golden/p2-econ.txt` (state hashes of the 1200-tick fixture run) and the fixture
+  export `tests/golden/p2-fixture` (`goods`, `params.json`, the three kernels and `provinces`, whose
+  base prices and kernels depend on theta) with its GE reference, because every traded good except
+  food moved.
+- Stability region of the price rule (`specs/trade/SPEC.md`): kappa1 limits rise to 0.141 to 0.169 at
+  theta 10.57, 0.250 to 0.307 at 5.19 (food unchanged). The default (kappa1 0.05) sits at 0.10 to 0.30
+  of its limit (was 0.10 to 0.40). `price_rule_stability.rs` models the small origin at E = 11.57; three
+  of its twenty probe points moved to keep the 10% margin from the boundary.
+- V1 maxima: price 8.1e-6, wage 6.5e-6, flow units 1.5e-5, flow value 1.9e-5 (tolerance 1e-2). A small
+  deviation decays by 0.99597 per tick frictionless and 0.99636 in the default mode. The uniqueness
+  bound is 0.922 (was 0.932).
+
 ### BEHAVIOUR: P2 economic core migrated onto ADRs 0015 to 0023
 
 Model changes (each with its ADR; the econ and trade specs carry the equations):
