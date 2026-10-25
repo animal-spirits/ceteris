@@ -54,6 +54,9 @@ interact with finance and firm exit.
 
 - P8: damage functions per lane in ceteris-climate; the shock tape records draws.
 - Carleton et al. (2022) mortality damages are common to all lanes.
+- The lanes own all heat mortality and heat labour losses (owner, 2026-10-25). Heat exposure
+  (heatwave days, the urban multiplier) comes from ADR 0077, and deaths enter the cause groups of
+  ADR 0033; neither adds a separate heat damage.
 - The H11 test runs per lane.
 
 ## Tests

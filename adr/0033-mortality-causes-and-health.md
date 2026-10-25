@@ -30,7 +30,8 @@ Option 2.
   Estimates by country, age and sex. The non-communicable component trends with income and
   ageing; communicable with income, health spending and urbanization; injuries with conflict
   and road transport.
-- Additive hazards: PM2.5 exposure (ADR 0038), heat (13.2), epidemics (13.3), conflict (11.7),
+- Additive hazards: PM2.5 exposure (ADR 0038), heat (computed by ADR 0036's lanes and recorded
+  here as a cause), epidemics (13.3), conflict (11.7),
   famine (ADR 0029), and a scenario hazard for deaths of despair (P65 sets its default to zero;
   it is a scenario lane until a mechanism passes ablation).
 - Health spending is a fiscal category (9.6) and a household expenditure; it lowers

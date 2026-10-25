@@ -28,9 +28,11 @@ respond to clearing as well as temperature.
 
 Option 2.
 
-- Heat: heatwave days per province from MESMER extremes; mortality and labour losses rise
-  faster in the city class (0074) (P133, from published exposure-response curves); adaptation
-  (air conditioning) rises with income and raises power demand.
+- Heat: heatwave days per province from MESMER extremes and an urban heat multiplier for the
+  city class (0074) (P133, from published exposure-response curves) form the heat exposure.
+  ADR 0036's lanes turn it into mortality and labour losses (owner, 2026-10-25), so this ADR
+  adds no heat damage of its own. Adaptation (air conditioning) rises with income and raises
+  power demand.
 - Wildfire: a hazard per province rising with temperature and dryness and fuel load, destroying
   capital and adding smoke to PM2.5 (0038).
 - Fisheries: logistic biomass per sea zone with harvest effort, warming-driven range shifts and
