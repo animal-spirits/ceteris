@@ -4,6 +4,9 @@ Status: proposed
 Date: 2026-10-24
 Design sections: 4.5, 14.1, 14.4, 15.2, 19.4
 
+Timing: P2's kernels shipped in f64 on p2-econ without this ADR, so adopting it now means
+retrofitting those kernels.
+
 ## Context
 
 Section 19.4 ran one single-threaded run per process. Ensembles (32 seeds by default),

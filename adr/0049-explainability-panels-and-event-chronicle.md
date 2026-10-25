@@ -32,7 +32,8 @@ Option 2.
 - Diplomacy and war tooltips show the Fearon range decomposition (power estimate, costs,
   information, commitment).
 - Every reported statistic in Steward mode carries the uncertainty of its measuring institution
-  (statistical capacity), consistent with the dossier principle.
+  (statistical capacity), consistent with the dossier principle. The published series and their
+  noise come from ADR 0065; this panel only displays them.
 - Chronicle: discrete events (laws, crises, wars, records) become dated entries with their
   causes linked; text is template-based. LLM-written flavour text may be added later only as
   cached presentation, never as input to the simulation, so determinism holds.

@@ -6,6 +6,9 @@ Design sections: 15.2, 15.7, 17, 19.4
 
 Numbering: proposed as 0023; renumbered because p2-econ took 0023 for trade elasticity classes.
 
+Timing: P2's kernels shipped in f64 on p2-econ without this ADR, so adopting it now means
+retrofitting those kernels.
+
 ## Context
 
 Section 15.2 planned gradient-based tuning on JAX relaxations of the price, demand and trade
