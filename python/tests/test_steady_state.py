@@ -89,16 +89,26 @@ def test_closed_forms_zero_the_reference_residual(world):
 
 def test_local_output_is_nonnegative_and_clears_locally(world):
     """Local goods at p = 1: output solves each province's Leontief system against household and
-    intermediate local demand, and is positive."""
+    intermediate local demand."""
     inp, s = world
     local = ~inp.traded[inp.ent_good]
-    assert np.all(s.output[local] > 0)
+    assert np.all(s.output[local] >= 0)
     use = np.zeros((inp.n_provinces, inp.n_goods))
     np.add.at(use, inp.ent_province, s.coef * s.output[:, None])
     out = np.zeros_like(use)
     np.add.at(out, (inp.ent_province, inp.ent_good), s.output)
     lg = ~inp.traded
     np.testing.assert_allclose(out[:, lg], (s.spend_hh + use)[:, lg], rtol=1e-12, atol=0)
+
+
+def test_every_province_produces_and_pays_a_wage(world):
+    """With national profit ownership every province's households earn dividends, so every local
+    enterprise produces and every province has employment and a positive base wage."""
+    inp, s = world
+    local = ~inp.traded[inp.ent_good]
+    assert np.all(s.output[local] > 0)
+    assert np.all(np.bincount(inp.ent_province, s.va0, inp.n_provinces) > 0)
+    assert np.all(np.isfinite(s.w0) & (s.w0 > 0)) and np.all(np.isfinite(s.l0) & (s.l0 > 0))
 
 
 def test_stage5_state_is_stationary_under_the_stock_rules(world):

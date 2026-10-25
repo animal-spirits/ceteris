@@ -7,10 +7,6 @@ Derivatives are forward mode (`jax.jvp`, `jax.linearize`). Two loops are differe
 implicitly or to convergence: the labour ratio's Newton iteration runs on held inputs and one
 differentiable Newton step follows (the implicit derivative), and the rebate fixed point carries
 its tangents to the same relative tolerance as its values.
-
-`cut=True` holds the gateway sums (the international legs of the kernel) fixed in the
-derivative: the residual's Jacobian then couples only unknowns of one country, the index row
-aside. The value is unchanged.
 """
 
 from dataclasses import dataclass
@@ -25,8 +21,6 @@ from .demand import N_CATEGORIES
 from .io import Inputs
 
 jax.config.update("jax_enable_x64", True)
-
-BATCH = 32  # tangents per batched Jacobian-vector product
 
 
 @dataclass(frozen=True)
@@ -81,6 +75,7 @@ def _arrays(inp: Inputs) -> dict:
         "cro_duty": cro.k * cro.tariff / (1.0 + cro.tariff),
         "ep": ep,
         "eg": eg,
+        "ec": inp.ent_country,
         "ecell": ep * n_g + eg,
         "coef": inp.ent_inputs,
         "a_va": inp.ent_a_va,
@@ -112,22 +107,18 @@ def _seg(data, ids, n):
     return jax.ops.segment_sum(data, ids, num_segments=n)
 
 
-def _from_origins(s: Static, d: dict, w, dom_k, acc_k, cro_k, cut: bool):
-    """`model._from_origins`; `cut` holds the gateway sums fixed in the derivative."""
+def _from_origins(s: Static, d: dict, w, dom_k, acc_k, cro_k):
+    """`model._from_origins`."""
     v = _seg(acc_k * w[d["a_prov"]], d["a_gate"], s.n_g * s.n_n)
     u = _seg(cro_k * v[d["c_from"]], d["c_to"], s.n_g * s.n_n)
-    if cut:
-        u = jax.lax.stop_gradient(u)
     dom = 0.0 if dom_k is None else _seg(dom_k * w[d["d_from"]], d["d_to"], s.n_g * s.n_p)
     return w + dom + _seg(acc_k * u[d["a_gate"]], d["a_prov"], s.n_g * s.n_p)
 
 
-def _to_destinations(s: Static, d: dict, r, dom_k, acc_k, cro_k, cut: bool):
+def _to_destinations(s: Static, d: dict, r, dom_k, acc_k, cro_k):
     """`model._to_destinations`."""
     y = _seg(acc_k * r[d["a_prov"]], d["a_gate"], s.n_g * s.n_n)
     z = _seg(cro_k * y[d["c_to"]], d["c_from"], s.n_g * s.n_n)
-    if cut:
-        z = jax.lax.stop_gradient(z)
     return r + _seg(dom_k * r[d["d_to"]], d["d_from"], s.n_g * s.n_p) + _seg(acc_k * z[d["a_gate"]], d["a_prov"], s.n_g * s.n_p)
 
 
@@ -136,7 +127,7 @@ def _split(s: Static, d: dict, x):
     return p.reshape(s.n_p, s.n_g), jnp.exp(x[s.n_cells :])
 
 
-def _sourcing(s: Static, d: dict, price, cut: bool) -> dict:
+def _sourcing(s: Static, d: dict, price) -> dict:
     """`model._sourcing`. p_min is held in the derivative: every quantity is homogeneous of
     degree 0 in the weights, so its derivative terms cancel."""
     p = price.T
@@ -147,9 +138,9 @@ def _sourcing(s: Static, d: dict, price, cut: bool) -> dict:
     w = jnp.where(w < s.weight_floor, 0.0, w)
     wf = w.ravel()
     pf = p.ravel()
-    phi = _from_origins(s, d, wf, d["dom_k"], d["acc_k"], d["cro_k"], cut)
+    phi = _from_origins(s, d, wf, d["dom_k"], d["acc_k"], d["cro_k"])
     per_price = jnp.where(wf > 0, wf / jnp.where(wf > 0, pf, 1.0), 0.0)
-    arrive = _from_origins(s, d, per_price, d["dom_kt"], d["acc_kt"], d["cro_kt"], cut)
+    arrive = _from_origins(s, d, per_price, d["dom_kt"], d["acc_kt"], d["cro_kt"])
     reachable = phi >= s.weight_floor
     alpha = jnp.where(reachable, arrive / jnp.where(reachable, phi, 1.0), 0.0)
     index = jnp.where(alpha > 0, 1.0 / jnp.where(alpha > 0, alpha, 1.0), jnp.inf)
@@ -257,15 +248,15 @@ def _value_added_price(s: Static, d: dict, price, consumer):
     return (price[d["ep"], d["eg"]] - cost) / d["a_va"]
 
 
-def _consumer(s: Static, d: dict, price, cut: bool):
-    src = _sourcing(s, d, price, cut)
+def _consumer(s: Static, d: dict, price):
+    src = _sourcing(s, d, price)
     return src, jnp.where(d["traded"][None, :], src["index"], price)
 
 
-def productivity_of(s: Static, d: dict, x, cut: bool = False):
+def productivity_of(s: Static, d: dict, x):
     """`reduced.productivity_of`."""
     price, wage = _split(s, d, x)
-    _, consumer = _consumer(s, d, price, cut)
+    _, consumer = _consumer(s, d, price)
     ep = d["ep"]
     p_va = jnp.maximum(_value_added_price(s, d, price, consumer), reduced.PVA_FLOOR * price[ep, d["eg"]])
     t = d["target"]
@@ -273,12 +264,12 @@ def productivity_of(s: Static, d: dict, x, cut: bool = False):
     return t / (p_va * d["va0"] * _value_added(s, 1.0, 1.0, 1.0, d["s_l"], ratio))
 
 
-def evaluate(s: Static, d: dict, x, a, cut: bool = False) -> dict:
+def evaluate(s: Static, d: dict, x, a) -> dict:
     """The quantities of `model.evaluate` that `model.market_residual` reads."""
     n_p, n_g = s.n_p, s.n_g
     traded = d["traded"][None, :]
     price, wage = _split(s, d, x)
-    src, consumer = _consumer(s, d, price, cut)
+    src, consumer = _consumer(s, d, price)
     ep, eg = d["ep"], d["eg"]
     coef = d["coef"]
     uses = coef > 0
@@ -302,11 +293,11 @@ def evaluate(s: Static, d: dict, x, a, cut: bool = False) -> dict:
     reached = phi >= s.weight_floor
     unit = jnp.where(d["traded"][:, None], 1.0, 0.0) * jnp.ones((n_g, n_p))
     reach1 = jnp.where(reached, unit.ravel() / jnp.where(reached, phi, 1.0), 0.0)
-    duty_share = (reach1 * (_from_origins(s, d, wf, None, d["acc_k"], d["cro_duty"], cut) - wf)).reshape(n_g, n_p).T
+    duty_share = (reach1 * (_from_origins(s, d, wf, None, d["acc_k"], d["cro_duty"]) - wf)).reshape(n_g, n_p).T
 
     pc, kp, kc = d["pc"], d["kp"], d["kc"]
     people = d["people"]
-    earned = d["eff_share"] * (wage * d["labour_supply"] + _seg(profit, ep, n_p))[kp]
+    earned = d["eff_share"] * (wage * d["labour_supply"])[kp] + d["people_share"] * _seg(profit, d["ec"], s.n_c)[kc]
     from_inputs = _seg((duty_share * spend_int).sum(axis=1), pc, s.n_c)
     prices_k = consumer[kp]
 
@@ -333,7 +324,7 @@ def evaluate(s: Static, d: dict, x, a, cut: bool = False) -> dict:
     spend = jnp.where(traded, spend_hh + spend_int, 0.0)
     ef = spend.T.ravel()
     reach = jnp.where(reached, ef / jnp.where(reached, phi, 1.0), 0.0)
-    orders = src["per_price"] * _to_destinations(s, d, reach, d["dom_k"], d["acc_k"], d["cro_net"], cut)
+    orders = src["per_price"] * _to_destinations(s, d, reach, d["dom_k"], d["acc_k"], d["cro_net"])
     orders = orders.reshape(n_g, n_p).T
     pos = price > 0
     local = jnp.where(traded, 0.0, jnp.where(pos, spend_hh / jnp.where(pos, price, 1.0), 0.0) + local_use)
@@ -353,25 +344,15 @@ def market_residual(s: Static, d: dict, e: dict):
     return jnp.concatenate([goods, labour]).at[s.index_row].set(jnp.log(e["index"]))
 
 
-def log_index(s: Static, d: dict, x):
-    """ln(world price index), the index row of the residual."""
-    price, _ = _split(s, d, x)
-    _, consumer = _consumer(s, d, price, False)
-    fin = jnp.isfinite(consumer)
-    iw = jnp.where(fin, d["index_weights"], 0.0)
-    return jnp.log((iw * jnp.where(fin, consumer, 0.0)).sum() / iw.sum())
-
-
-def residual(s: Static, d: dict, x, cut: bool = False):
+def residual(s: Static, d: dict, x):
     """`reduced.residual`."""
-    return market_residual(s, d, evaluate(s, d, x, productivity_of(s, d, x, cut), cut))
+    return market_residual(s, d, evaluate(s, d, x, productivity_of(s, d, x)))
 
 
 class System:
     """The calibration residual of one set of inputs, jitted, with exact derivatives."""
 
     def __init__(self, inp: Inputs):
-        self.inp = inp
         self.static = Static(
             n_p=inp.n_provinces,
             n_g=inp.n_goods,
@@ -388,43 +369,17 @@ class System:
             eps=inp.pigl.eps,
         )
         self.data = _arrays(inp)
-        self.n = self.static.n_cells + inp.n_provinces
         s = self.static
-        self._residual = jax.jit(partial(residual, s), static_argnames="cut")
+        self._residual = jax.jit(partial(residual, s))
         self._productivity = jax.jit(partial(productivity_of, s))
+        self._jvp = jax.jit(lambda d, x, v: jax.jvp(lambda z: residual(s, d, z), (x,), (v,))[1])
 
-        def jvp(d, x, v, cut):
-            return jax.jvp(lambda z: residual(s, d, z, cut), (x,), (v,))[1]
-
-        self._jvp = jax.jit(jvp, static_argnames="cut")
-        self._jvps = jax.jit(jax.vmap(jvp, in_axes=(None, None, 0, None)), static_argnames="cut")
-        self._index_grad = jax.jit(jax.grad(partial(log_index, s), argnums=1))
-
-    @property
-    def index_row(self) -> int:
-        return self.static.index_row
-
-    def residual(self, x: np.ndarray, cut: bool = False) -> np.ndarray:
-        return np.array(self._residual(self.data, jnp.asarray(x), cut=cut))
+    def residual(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._residual(self.data, jnp.asarray(x)))
 
     def productivity(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._productivity(self.data, jnp.asarray(x)))
 
-    def jvp(self, x: np.ndarray, v: np.ndarray, cut: bool = False) -> np.ndarray:
+    def jvp(self, x: np.ndarray, v: np.ndarray) -> np.ndarray:
         """J(x) v, exact."""
-        return np.array(self._jvp(self.data, jnp.asarray(x), jnp.asarray(v), cut=cut))
-
-    def jvps(self, x: np.ndarray, v: np.ndarray, cut: bool = False, batch: int = BATCH) -> np.ndarray:
-        """J(x) V for the rows of v (k, n), batched: (n, k)."""
-        out = np.empty((self.n, len(v)))
-        xj = jnp.asarray(x)
-        for i in range(0, len(v), batch):
-            chunk = v[i : i + batch]
-            pad = np.zeros((batch, self.n))  # one shape, one compilation
-            pad[: len(chunk)] = chunk
-            out[:, i : i + len(chunk)] = np.asarray(self._jvps(self.data, xj, jnp.asarray(pad), cut))[: len(chunk)].T
-        return out
-
-    def index_gradient(self, x: np.ndarray) -> np.ndarray:
-        """The index row of the Jacobian (reverse mode)."""
-        return np.array(self._index_grad(self.data, jnp.asarray(x)))
+        return np.array(self._jvp(self.data, jnp.asarray(x), jnp.asarray(v)))

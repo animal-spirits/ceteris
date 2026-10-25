@@ -130,11 +130,15 @@ class Inputs:
 
     @cached_property
     def base_income(self) -> np.ndarray:
-        """Household income per province in the data state, as the Rust world mints and pays it:
-        w0 (1 - u) L^s wages plus the profit pool sum (1 - s_L) VA0."""
-        u = self.unemployment[self.province_country]
-        pool = np.bincount(self.ent_province, (1.0 - self.ent_s_l) * self.ent_va0, self.n_provinces)
-        return self.w0 * (1.0 - u) * self.labour_supply + pool
+        """Household income per province in the data state, rebates aside: w0 (1 - u) L^s wages plus
+        the province's population share of its country's profit pool sum (1 - s_L) VA0 (national
+        ownership, owner 2026-10-25)."""
+        c = self.province_country
+        u = self.unemployment[c]
+        pool = np.bincount(c[self.ent_province], (1.0 - self.ent_s_l) * self.ent_va0, self.n_countries)
+        people = np.bincount(c, self.population, self.n_countries)
+        share = np.divide(self.population, people[c], out=np.zeros(self.n_provinces), where=people[c] > 0)
+        return self.w0 * (1.0 - u) * self.labour_supply + share * pool[c]
 
     @cached_property
     def base_spend(self) -> np.ndarray:

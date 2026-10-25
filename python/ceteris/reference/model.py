@@ -263,15 +263,17 @@ def evaluate(x: np.ndarray, inp: Inputs, a: np.ndarray | None = None) -> dict:
 
     # E3, households: PIGL per pop (ADR 0021) at its province's consumer prices and its mean income
     # per person. E4: a pop earns its effective-labour share e_k LF_k / L^s of its province's wages
-    # w L^s and profits, and its population share of its country's rebate, the tariff share of
-    # spending; rebates depend on household spending, so income is a fixed point.
+    # w L^s, and its population share of its country's profits (national ownership, owner
+    # 2026-10-25) and of its country's rebate, the tariff share of spending; rebates depend on
+    # household spending, so income is a fixed point.
     duty_share = _flows(inp, price, np.ones((n_p, n_g)), src)["tariff"]  # tariff per unit spent
     c = inp.province_country
     kp = inp.pop_province
     kc = c[kp]
     people = inp.pop_population
     country_people = np.bincount(kc, people, inp.n_countries)
-    earned = inp.pop_effective / inp.labour_supply[kp] * (wage * inp.labour_supply + _sum(ep, profit, n_p))[kp]
+    country_profit = np.bincount(c[ep], profit, inp.n_countries)
+    earned = inp.pop_effective / inp.labour_supply[kp] * (wage * inp.labour_supply)[kp] + people / country_people[kc] * country_profit[kc]
     from_inputs = np.bincount(c, (duty_share * spend_int).sum(axis=1), inp.n_countries)
     prices_k = consumer[kp]
     sigma_k = inp.sigma_income[kc]
