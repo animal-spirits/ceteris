@@ -29,7 +29,9 @@ Option 2.
 
 - Water: baseline water stress per province from Aqueduct; droughts (SPEI, already in the
   manifest) and floods (Global Flood Database, already listed) as hazards; water stress caps
-  irrigated yields and water-intensive industrial output, relieved by adaptation investment.
+  water-intensive industrial output, relieved by adaptation investment. Aqueduct also sets the
+  initial water state of ADR 0076, whose aquifer and basin stocks are the only cap on irrigated
+  yields (owner, 2026-10-25).
 - Air: PM2.5 concentration per province from combustion by sector and fuel (7.7 already
   computes fuel use) with a source-receptor coefficient per province, plus a background;
   mortality through the GEMM exposure-response (P73) as an additive hazard on the Brass level

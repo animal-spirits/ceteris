@@ -26,7 +26,8 @@ decline after "peak water" (Huss and Hock 2018; Immerzeel et al. 2020).
 Option 2.
 
 - Aquifer stock per province: recharge from the climate emulator, extraction from irrigation
-  and urban demand; depletion raises pumping costs and finally caps irrigated yields (P129).
+  and urban demand; depletion raises pumping costs and finally caps irrigated yields (P129). This is the only
+  cap on irrigated yields; ADR 0038's Aqueduct stress initializes it (owner, 2026-10-25).
 - Basin allocation: upstream reservoirs and withdrawals reduce downstream flow; allocation is a
   bargaining issue between riparian states in the Fearon module (11.2), constrained by existing
   treaties (P130).
