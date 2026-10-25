@@ -1,0 +1,74 @@
+# 0092. Trade frictions consistent with theta
+
+Status: proposed (owner chose the options, 2026-10-25)
+Date: 2026-10-25
+Design sections: 5.4, 8.3, 15.2, 18 (H2), 17 (P01, P05); trade SPEC Two-level kernel, Parameters; econ SPEC Goods; ADRs 0018, 0022, 0023
+
+## Context
+
+- **theta and nu disagree.** P01 takes the Caliendo-Parro class values (2.62, 5.88, 12.55),
+  while P05 keeps nu = 0.3. The PPML border coefficient on 2000 BACI implies nu of about 0.2 at
+  theta 12 to 13, and about 3.0 for food at 2.62. At theta 2.62, nu 0.3 cuts cross-border food
+  access by (1.3)^-2.62 = 0.50, while the data say about (4.0)^-2.62 = 0.026.
+- **Gateway count sets access.** K_od sums over all k_A x k_B gateway pairs. If n pairs are
+  about equally good, access rises n-fold: at 10 x 10 pairs, a 31% trade-cost cut at theta 12.55
+  and 83% at 2.62. Gateway counts scale with the square root of 2000 trade, so trade partly
+  causes its own access.
+- **Good 5 mixes elasticities.** Refined petroleum (ICIO C19, theta 64.85) is averaged with
+  chemicals and metals (1.7 to 3.3) into 12.64 and placed in class 2.
+- **H2 per class is loose.** It accepts any value in the P01 prior (2.62 to 12.55).
+
+## Options
+
+theta: (1) Caliendo-Parro classes; (2) own PPML; (3) a long-run value near 2.
+Frictions: (a) fit nu per class to the cross-border share, H2 stays the gate; (b) also fit a
+leg-cost scale to the PPML distance coefficient and replace H2 with a holdout; (c) keep nu 0.3.
+Petroleum: (i) keep in good 5; (ii) move into good 1; (iii) a new good.
+
+## Decision
+
+(1), (a) and (ii) (owner, 2026-10-25), plus gateway mass weights.
+
+- **theta.** P01 stays at the Caliendo-Parro class values, recomputed after the C19 move. The
+  PPML estimates stay diagnostics.
+- **nu per class.** nu_c (P05, now one per theta class) solves, given theta_c, the
+  absorption-weighted cross-border share of the class's goods in ICIO 2000. One moment per class,
+  exactly identified and monotone in nu. Each evaluation is ADR 0089's stage 1 and 2 solve
+  (about 20 Sinkhorn solves per class). Leg costs stay from P04 and P43, so H2's distance range is
+  not fitted and stays the gate. If H2 misses after this, work stops and the miss goes to the
+  owner, as now.
+- **H2 per class.** Each class must recover its own theta_c within plus or minus 2 standard
+  errors of the PPML estimate, not the whole P01 prior.
+- **Gateway mass weights.**
+
+  ```
+  K_od = sum_a sum_b K_oa m_a K_ab m_b K_bd,    sum_{a in G(A)} m_a = 1
+  ```
+
+  m_a is the gateway's share of its country's 2000 trade throughput, else 1/k_A. Splitting a
+  gateway into copies changes nothing, and the low-rank evaluation is unchanged (m folds into
+  the access and crossing legs).
+- **Refined petroleum.** ICIO C19 moves from good 5 into good 1, renamed "Crude oil, gas and
+  refined fuels". Ten goods remain. Good 5's class value is recomputed (expected about 3,
+  class 0). Crude, gas and refined fuels split in P8 with ADR 0028.
+
+## Tests
+
+- Calibration: at the solved nu_c, the simulated cross-border share matches ICIO per class
+  (1e-6).
+- Gateway invariance: duplicating a gateway with m split in half leaves every flow unchanged
+  (1e-12).
+- H2: distance coefficient in -1.1 to -0.7 (unchanged); per class within 2 s.e. of PPML.
+- Pack: good 1 and good 5 totals equal the ICIO aggregation with C19 moved; econ golden hashes
+  regenerated.
+
+## Consequences
+
+- The border effect is consistent with each class's theta. Food trade across borders falls to
+  what the data show.
+- P05 becomes three values (one per class), calibrated, not a prior.
+- Trade access no longer depends on the gateway-count rule, which can be tuned for speed alone.
+- ADR 0026 must map Pareto k = theta (sigma - 1)/sigma, since tariff-based estimates identify
+  k sigma/(sigma - 1) under Melitz-Chaney; ADR 0027 must keep theta_c as its long run (ADR 0095).
+- The econ SPEC goods table, BACI weights per value w_g of goods 1 and 5, P01 values and the pack
+  pipeline change.
