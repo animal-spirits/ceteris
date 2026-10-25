@@ -129,6 +129,7 @@ def _synthetic_sample(theta, nu=0.0, cost=(0.10, 0.04, 0.008, 0.8), domestic=Fal
     return gravity.Sample(*cat[:7], weight=cat[7], time_cost=time_cost[cat[2]])
 
 
+# Deliberately the first partition: synthetic data for the estimators, independent of the P01 defaults.
 CLASSES = ((3,), (4, 6), (0, 1, 2, 5))
 THETA = (12.0, 12.0, 12.0, 3.0, 6.0, 12.0, 6.0)
 

@@ -356,6 +356,18 @@ def test_caliendo_parro_by_good_from_baci(caliendo_parro):
     assert math.log(ct[-1] / ct[0]) > math.log(theta.CLASS_SPREAD)
 
 
+def test_fixture_defaults_match_the_calibration_constants():
+    """The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by p2_acceptance),
+    against `gravity.CLASSES` and `THETA_DEFAULT`. Needs no BACI; the estimator test below links the literals to
+    `theta.classes`."""
+    trade = json.loads((FIXTURE / "params.json").read_text())["trade"]
+    assert trade["theta_class"] == [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]
+    assert trade["theta"] == [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]
+    of = trade["theta_class"][:7]
+    assert gravity.CLASSES == tuple(tuple(g for g in range(7) if of[g] == c) for c in range(max(of) + 1))
+    assert gravity.THETA_DEFAULT == tuple(trade["theta"][members[0]] for members in gravity.CLASSES)
+
+
 def test_rust_theta_defaults_follow_the_estimator(caliendo_parro):
     """`TradeParams::default()` is pinned to the fixture's params.json by the p2_acceptance staleness check, so
     reading that file ties the Rust defaults, and the calibration constants, to the ADR 0023 rule on the pack."""
