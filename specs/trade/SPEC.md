@@ -255,7 +255,7 @@ fixture's eps:
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
 
-Limits are the first failing value on a 0.0005 grid.
+Limits are the first failing value on a 0.0005 grid (`python -m ceteris.calibrate.stability` prints the rows from the fixture export).
 
 The default (kappa1 0.05, kappa2 0) lies on the edge kappa2 = 0 of the region and counts as
 inside (owner ruling, MIGRATION Task 6): J1 holds with equality, so the stock has a unit root (it
