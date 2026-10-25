@@ -167,7 +167,7 @@ def _donors():
     }
 
 
-DONOR_GDP = {"AAA": 100e6, "BBB": 125e6, "CCC": 200e6}  # USD; donor VA is 100 million USD
+DONOR_GDP = {"AAA": 100e6, "BBB": 200e6, "CCC": 125e6}  # USD; donor VA is 100 million USD, so VA over GDP is 1, 0.5, 0.8
 DONOR_POP = {"AAA": 1e6, "BBB": 5e6, "CCC": 1e6}
 PWT = {"AAA": 1000.0, "BBB": 20000.0, "CCC": 10000.0}
 WDI_INCOME = {"AAA": 10000.0, "BBB": 50000.0, "CCC": 3000.0}
@@ -256,12 +256,13 @@ def test_industry_below_manufacturing_counts_as_missing_manufacturing():
     assert got.va[1:9].sum() == pytest.approx(100.0)
 
 
-def test_all_zero_sector_shares_count_as_missing_and_use_the_donors_va_over_gdp():
+def test_all_zero_sector_shares_count_as_missing_and_use_the_icio_median_va_over_gdp():
     zero = {"agriculture": {"XXX": 0.0}, "industry": {"XXX": 0.0}, "manufacturing": {"XXX": 0.0}, "services": {"XXX": 0.0}}
     got = icio.impute({"XXX": "XXX"}, _donors(), _wdi(**zero), _obs(), {})["XXX"]
-    # No usable share, so GDP 1000 million USD times the donor's VA over GDP (100 over 125).
-    assert got.va_basis == "wdi_gdp" and got.va.sum() == pytest.approx(800.0)
+    # No usable share: GDP 1000 million USD times the median of the donors' VA over GDP (1, 0.5, 0.8), not donor BBB's 0.5.
+    assert got.donor == "BBB" and got.va_basis == "wdi_gdp" and got.va.sum() == pytest.approx(800.0)
     np.testing.assert_allclose(got.va / got.va.sum(), np.array(DONOR_VA) / 100, rtol=1e-12)
+    assert icio.median_va_over_gdp(_donors(), _wdi()) == pytest.approx(0.8)
 
 
 def test_donor_basis_scales_the_donors_level_by_income():
@@ -539,6 +540,28 @@ def test_real_donor_basis_levels_are_scaled_by_income(imputed):
         assert v.income_source in ("pwt", "wdi", "unsd", "none"), code
 
 
+GDP_WITHOUT_SHARES = {
+    "ARM", "ASM", "BHR", "CAF", "DJI", "GNQ", "GUM", "IMN", "LCA", "LIE", "MCO", "MNP", "NRU", "SMR", "SOM", "VEN", "VIR",
+}  # fmt: skip
+
+
+def test_real_gdp_without_shares_uses_the_icio_median_va_over_gdp(imputed, real, wdi, pack):
+    _, iso, _, _ = pack
+    scope = set()
+    ratio = icio.median_va_over_gdp(real, wdi)
+    assert 0.90 < ratio < 0.96
+    for code, c in imputed.items():
+        gdp, shares = icio._sector_shares(wdi, [iso.get(code, code)])
+        if c.va_basis == "wdi_gdp" and gdp > 0 and all(shares[k] is None for k in ("agriculture", "industry", "services")):
+            scope.add(code)
+            # SOM gave 17.9 percent of its VA to Somaliland.
+            assert c.va.sum() * 1e6 == pytest.approx(gdp * ratio * (1 - c.shed), rel=1e-9), code
+    assert scope == GDP_WITHOUT_SHARES
+    # Somalia is no longer scaled by Congo's 0.43 (it was 0.356 of GDP).
+    som = imputed["SOM"]
+    assert som.va.sum() / (1 - som.shed) * 1e6 / wdi.gdp["SOM"] > 0.9
+
+
 def test_real_venezuela_is_not_left_empty(imputed):
-    # WDI reports zero sector shares for 2000, so GDP (117 billion USD) times the donor's VA over GDP.
+    # WDI reports zero sector shares for 2000, so GDP (117 billion USD) times the ICIO median VA over GDP.
     assert imputed["VEN"].va_basis == "wdi_gdp" and 80e3 < imputed["VEN"].va.sum() < 130e3

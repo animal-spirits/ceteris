@@ -189,6 +189,11 @@ def load_wdi(cache: Path, admin0: Path) -> Wdi:
     )
 
 
+def median_va_over_gdp(icio_by_code: Mapping[str, CountryIO], wdi: Wdi) -> float:
+    """Median over the ICIO economies with WDI GDP of their VA (including product taxes) over GDP."""
+    return float(np.median([c.va.sum() * 1e6 / wdi.gdp[k] for k, c in icio_by_code.items() if k in wdi.gdp]))
+
+
 def _sector_shares(wdi: Wdi, ps: list[str]) -> tuple[float, dict[str, float | None]]:
     """GDP (USD) of the parts and their GDP-weighted VA shares of GDP: agriculture, industry, manufacturing, services.
 
@@ -222,7 +227,7 @@ def _value_added(
     shares: dict[str, float | None],
     people_: float,
     donor_people: float,
-    donor_gdp: float,
+    ratio: float,
     scale: float | None,
 ) -> tuple[np.ndarray, str]:
     """VA by good (million USD) and its basis, from what WDI and the population give for this country."""
@@ -239,8 +244,8 @@ def _value_added(
             ), "wdi_gdp"
         return _split(gdp * sum(available), list(range(N_GOODS)), donor), "wdi_gdp"
     if gdp > 0:
-        # WDI has GDP but no usable share (Venezuela): the donor's VA over its own GDP stands in for the shares.
-        return _split(gdp / 1e6 * donor.va.sum() / (donor_gdp / 1e6), list(range(N_GOODS)), donor), "wdi_gdp"
+        # WDI has GDP but no usable share: the median VA over GDP of the ICIO economies, split as the donor's VA.
+        return _split(gdp / 1e6 * ratio, list(range(N_GOODS)), donor), "wdi_gdp"
     if people_ > 0:
         per_person = donor.va.sum() / donor_people * (1.0 if scale is None else scale)
         return _split(people_ * per_person, list(range(N_GOODS)), donor), "donor"
@@ -268,7 +273,7 @@ def impute(
     VA by good: WDI GDP times the sector shares (agriculture, industry, manufacturing, services), each group
     split over its goods by the donor's VA (`va_basis` wdi); with manufacturing missing, industry is split over
     goods 1 to 8; with another share missing, GDP times the shares there are, split as the donor's VA (wdi_gdp);
-    with no share at all, GDP times the donor's VA over GDP (wdi_gdp); with no GDP, population (WDI, else the `worldpop` national total) times the donor's VA per
+    with no share at all, GDP times the ICIO median VA over GDP (wdi_gdp); with no GDP, population (WDI, else the `worldpop` national total) times the donor's VA per
     person, scaled by own over donor income where both are known (donor). Output follows at the donor's
     output per unit of VA, which keeps VA + inputs = output. A territory in `inside` (counted in its parent's
     WDI totals) takes its population share of the parent's VA and output out of the parent's (parent).
@@ -276,6 +281,7 @@ def impute(
     worldpop = worldpop or {}
     eligible = {c: v for c, v in icio_by_code.items() if c in wdi.gdp and c in obs.population}
     by_wdi = people.Observed(region=obs.region, gdp_per_capita=wdi.income)
+    ratio = median_va_over_gdp(icio_by_code, wdi)
     out = {}
     for code, sovereign in countries.items():
         own = iso.get(code, code)
@@ -298,7 +304,7 @@ def impute(
             gdp, shares = _sector_shares(wdi, ps)
             population = sum(obs.population.get(p, 0.0) for p in ps) or worldpop.get(code, 0.0)
             scale = None if level is None else level / ranking.gdp_per_capita[name]
-            va, basis = _value_added(eligible[name], gdp, shares, population, obs.population[name], wdi.gdp[name], scale)
+            va, basis = _value_added(eligible[name], gdp, shares, population, obs.population[name], ratio, scale)
             d = eligible[name]
             per_va = np.divide(d.output, d.va, out=np.zeros(N_GOODS), where=d.va > 0)
             out[code] = CountryIO(

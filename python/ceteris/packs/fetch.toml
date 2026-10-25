@@ -290,7 +290,7 @@ bytes = 142891
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
 
 [[file]]
-source = "unsd-snaama"
+source = "unsd-nama"
 name = "unsd_GDPPC_USD_countries.xlsx"
 sha256 = "9082e75331f67b8210a102a69494a89cd77cd2ca2648f3fab893dca9383293de"
 bytes = 200369

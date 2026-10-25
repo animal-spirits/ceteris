@@ -233,3 +233,16 @@ def test_only_the_2000_icio_package_is_required():
     icio = {e["name"]: e for e in fetch.entries() if e["source"] == "oecd-icio"}
     assert len(icio) == 10
     assert [n for n, e in icio.items() if not e.get("optional")] == ["1995-2000_SML.zip"]
+
+
+def test_pack_build_does_not_demand_uncached_optional_sources(tmp_path, monkeypatch):
+    optional = {"source": "x", "name": "later.zip", "url": "u", "manual": True, "optional": True}
+    required = {"source": "x", "name": "need.zip", "url": "u", "manual": True}
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    monkeypatch.setattr(fetch, "entries", lambda: [optional])
+    # The fetch loop passes; the build then stops for want of the real inputs, which is not a SystemExit about the optional file.
+    with pytest.raises(Exception):  # noqa: B017
+        build.build(tmp_path / "out")
+    monkeypatch.setattr(fetch, "entries", lambda: [optional, required])
+    with pytest.raises(SystemExit, match="need.zip"):
+        build.build(tmp_path / "out")
