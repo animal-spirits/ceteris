@@ -45,10 +45,11 @@ LABOUR_TOL = 1e-15
 MAX_LABOUR_ITERATIONS = 100
 TOL = 1e-10  # max-norm scaled residual of the joint system, as the reference
 STEP_TOL = 1e-8  # corrector tolerance along the path
-ARC_FIRST = 0.2  # arclength steps, in the weighted norm of `_continue`
+ARC_FIRST = 0.02  # arclength steps, in the weighted norm of `_continue`
 ARC_MAX = 2.0
 MIN_STEP = 1e-6
 MAX_CORRECTOR = 15
+MAX_ARC_CORRECTOR = 6  # Newton steps per arc before the arc is halved
 GMRES_SIZE = 300  # Krylov vectors per Newton step (one GMRES cycle)
 FORMAT = "2"
 
@@ -146,7 +147,7 @@ def _cap(d: np.ndarray, n: int) -> float:
     return min(1.0, solve.STEP_CAP / np.abs(d[:n]).max())
 
 
-def _continue(f, x0: np.ndarray, tol: float, deadline: float | None, log) -> tuple[np.ndarray, dict]:
+def _continue(f, x0: np.ndarray, tol: float, deadline: float | None, log, checkpoint=None) -> tuple[np.ndarray, dict]:
     """Pseudo-arclength continuation of H(x, lambda) = f(x) - (1 - lambda) f(x0) from (x0, 0),
     through any fold, to lambda = 1, then Newton at lambda = 1; raises NoConvergence. Arclength
     weighs x by its root mean square against lambda; each step is a secant prediction and Newton
@@ -170,7 +171,7 @@ def _continue(f, x0: np.ndarray, tol: float, deadline: float | None, log) -> tup
         solve._check(deadline, f"calibration continuation at lambda {z[n]:.6f}")
         target = z + ds * t
         w, ok = target.copy(), False
-        for k in range(MAX_CORRECTOR):
+        for k in range(MAX_ARC_CORRECTOR):
             hw = bordered(w)
             norm = float(np.abs(hw).max())
             gap = weight @ (t * (w - target))
@@ -199,6 +200,8 @@ def _continue(f, x0: np.ndarray, tol: float, deadline: float | None, log) -> tup
             continue
         step = (w - z) / norm_w(w - z)
         z, t, ds = w, step if weight @ (step * t) >= 0 else -step, min(ARC_MAX, 1.5 * ds)
+        if checkpoint:
+            checkpoint(z[:n], z[n])
     x = z[:n] - t[:n] * (z[n] - 1.0) / t[n]
     for k in range(MAX_CORRECTOR):
         fx = f(x)
@@ -214,17 +217,18 @@ def _continue(f, x0: np.ndarray, tol: float, deadline: float | None, log) -> tup
 
 
 def productivity(
-    inp: Inputs, tol: float = TOL, progress=None, budget: float | None = None, start: np.ndarray | None = None
+    inp: Inputs, tol: float = TOL, progress=None, budget: float | None = None, start: np.ndarray | None = None, checkpoint=None
 ) -> tuple[np.ndarray, Residuals]:
     """A per enterprise whose equilibrium matches `inp.ent_va_target` (the module documentation
     gives the system and the path), independent of `inp.ent_a`; the path starts at the data
     state unless `start` (an x) is given. Raises NoConvergence, also once `budget` seconds of wall
-    clock are spent. `progress(line)` receives one line per Newton step and per arc."""
+    clock are spent. `progress(line)` receives one line per Newton step and per arc, `checkpoint(x,
+    lambda)` every accepted point of the path."""
     t0 = time.perf_counter()
     deadline = None if budget is None else t0 + budget
     with np.errstate(all="ignore"):
         x0 = model.data_state(inp) if start is None else start
-        x, info = _continue(lambda v: residual(v, inp), x0, tol, deadline, progress)
+        x, info = _continue(lambda v: residual(v, inp), x0, tol, deadline, progress, checkpoint)
         a = productivity_of(x, inp)
         joint = joint_residual(x, a, inp)
     if not np.abs(joint).max() <= tol:

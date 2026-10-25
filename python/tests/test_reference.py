@@ -578,7 +578,7 @@ def calibrated(inputs):
 def test_calibration_solves_the_fixture_data(calibrated):
     """Calibration step 2 on the fixture's own targets (its VA0, local ones the population split):
     the path from the data state reaches a root of the joint system, every A positive."""
-    inp, residuals, a = calibrated
+    _, residuals, a = calibrated
     assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
     assert np.all(np.isfinite(a) & (a > 0))
 
