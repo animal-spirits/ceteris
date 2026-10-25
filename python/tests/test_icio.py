@@ -567,7 +567,7 @@ def test_real_donor_basis_levels_are_scaled_by_income(imputed):
     assert "PRK" in donor_basis and donor_basis["PRK"].income_source == "maddison"
     # North Korea at Cambodia's Maddison income (1,657 and 1,659 dollars of 2011): about 7 billion USD, not the 43 billion of an
     # unscaled Thai level.
-    assert 2e3 < donor_basis["PRK"].va.sum() < 3e4
+    assert 5e3 < donor_basis["PRK"].va.sum() < 3e4
     assert donor_basis["COK"].income_source == "adb"
     for code, v in donor_basis.items():
         assert v.income_source in ("pwt", "wdi", "adb", "maddison", "none"), code
