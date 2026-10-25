@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a Tauri desktop app. The map is drawn with MapLibre and a GPU fill layer today and moves to a native Rust renderer on wgpu. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; it moves to a fully native Rust app, a wgpu map under Slint panels (ADRs 0011, 0088). Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -1150,7 +1150,7 @@ The simulator is built to adjudicate between explanations, so each hypothesis na
 
 ## 19. Technology Stack, Performance and Repository
 
-A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust on wgpu later; the three meet on Apache Arrow.
+A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust (wgpu map, Slint panels) later; the three meet on Apache Arrow.
 
 ### 19.1 Stack
 
@@ -1159,8 +1159,8 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | Simulation core | Rust, plain structure-of-arrays, rayon for parallelism | Determinism control, speed, memory safety for a long-lived codebase |
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
-| App shell | Tauri 2: Rust core in-process, raw buffers to the UI over IPC (Arrow with tick state), pack files served from disk through pack:// | One native macOS app, no server |
-| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
+| App shell | Today Tauri 2: Rust core in-process, raw buffers to the UI over IPC, pack files through pack://. Target: one native Rust process, winit window, Slint panels, core columns read directly (ADR 0088) | One native macOS app, no server |
+| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADRs 0011, 0088) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
 | Bindings | PyO3 + maturin | Python drives headless runs and reads Arrow tables with zero copy |
 | Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
@@ -1205,7 +1205,7 @@ ceteris/
     ceteris-climate/      emissions, emulator, damages
     ceteris-ai/           state planners, policy interfaces
     ceteris-py/           PyO3 bindings
-  app/                    Tauri shell (Rust) + TypeScript map UI
+  app/                    Tauri shell (Rust) + TypeScript map UI, until the native app reaches parity (ADR 0088)
   python/ceteris/
     packs/                data pipeline (any start year 1995-2022), licence manifest
     calibrate/            SBI, MSM, emulators
@@ -1395,7 +1395,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Provinces | Natural Earth first-level regions at 2000 borders, oversized ones split along county borders, 4,796 | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
-| App | Tauri desktop app; map moving to native Rust on wgpu (ADR 0011) | Rust core in-process, no server |
+| App | Tauri desktop app today; moving to a fully native Rust app, wgpu map and Slint panels (ADRs 0011, 0088) | Rust core in-process, no server |
 | Core language | Rust from the start | Python only for pipeline, reference model, calibration |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |
