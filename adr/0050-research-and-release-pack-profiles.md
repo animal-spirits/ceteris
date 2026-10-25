@@ -115,3 +115,36 @@ terms, several underpinning existing or proposed layers:
 
 Research quality and release legality stop competing. The Steam release plan inherits a
 mechanical guarantee instead of a manual review.
+
+## Amendment (owner, 2026-10-25)
+
+The release profile failed on four sources that P2 added. The owner's rule: replace each with a source as good
+or better whose licence allows commercial use on a confident reading; where none exists, enforce the release
+profile only when `distribution` is "open"; run closed for now (ADR 0005). All four were resolved, so the release
+profile stays enforced in every distribution and `check_sources.py` keeps its checks.
+
+- HS to industry bridge: WITS HS 1988/92 to ISIC Rev 3 (no licence stated) chained with the UNSD ISIC Rev 3.1 to
+  Rev 4 table (UN copyright) is replaced by the OECD BTiGE conversion key (2025; OECD terms allow any use,
+  including commercial, with credit), `oecd-btige-key`. It maps each HS 1988/92 line to one CPA 2.1 activity
+  (ISIC Rev 4 at division level, split as ICIO 2025 splits industries), so the equal split over linked divisions
+  and the principal-link rule are gone. Every 2000 BACI line is covered (the old route left 0.6% of trade out).
+  Weights per value move by -26% (coal and other mining, gold now counted with metal ores) to +60% (light
+  manufacturing, which no longer receives a share of repair divisions); coal over machinery stays far above 10
+  (169, was 188).
+- Trade elasticities: each CPA activity takes the ISIC Rev 3 division of Caliendo and Parro's Table A.1
+  (`theta.REV3_OF_CPA`). Theta per good becomes 9.11, 13.53, 13.53, 2.62, 8.81, 10.70, 5.19 (was 6.73, 12.64 and
+  5.33 for goods 4 to 6), and the ADR 0023 rule draws four classes, 2.62 (food), 5.19 (machinery), 9.94
+  (agriculture, light manufacturing, chemicals and metals) and 13.53 (oil and gas, coal and mining), instead of
+  2.62, 5.88 and 12.55. `TradeParams::default()` keeps the ADR 0023 values until the owner decides whether to
+  adopt the new classes.
+- Income where WDI and PWT have none: UNSD National Accounts (UN copyright) is replaced for the Cook Islands by
+  ADB Key Indicators (`adb-kidb`, free for commercial use with attribution; 5,091 against 6,307 USD per person in
+  2000) and for North Korea by the Maddison Project 2023 (`maddison-2023`, CC BY 4.0). Maddison values are 2011
+  international dollars, so North Korea is ranked and scaled against its donors' Maddison values, never against
+  current-USD incomes, as PWT is used. North Korea's value added falls from 10.5 to 6.8 billion USD and its donor
+  moves from Viet Nam to Cambodia; no other economy changes.
+- Validation-only files: a source read only by tests or diagnostics is not a pack source. Such files live in
+  `python/ceteris/packs/validation.toml` (same schema as `fetch.toml`), which `fetch` downloads and verifies but
+  the pack build neither fetches nor lists in its provenance, and which `pack_sources()` does not read.
+  `check_sources.py` requires each to name a source with `use = "validation"`. The Yotov et al. (2016) sample
+  (`yotov-2016`, WTO all rights reserved) moved there; `test_gravity_reproduces_yotov_2016` is unchanged.
