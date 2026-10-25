@@ -14,6 +14,7 @@
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
 //! | `provinces` | province u32, country u32, population f64, w0 f64 |
+//! | `pack_provinces` | province u32, pack u32 (`ProvinceData::pack`); written only for a world loaded from a pack, which the calibration keys by pack province |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
 //! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them: origin markets of traded goods, province markets of local goods) |
@@ -252,6 +253,16 @@ pub fn write_inputs(
             f64s("w0", p.w0.iter().copied()),
         ],
     )?;
+    if !p.pack.is_empty() {
+        write_table(
+            dir,
+            "pack_provinces",
+            vec![
+                u32s("province", 0..np as u32),
+                u32s("pack", p.pack.iter().copied()),
+            ],
+        )?;
+    }
     let pp = &inputs.pops;
     write_table(
         dir,

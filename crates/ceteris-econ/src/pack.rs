@@ -151,7 +151,14 @@ impl EconInputs {
         let mut index = vec![u32::MAX; n];
         let mut provinces = ProvinceData::default();
         for i in 0..n {
-            if va[i].iter().sum::<f64>() > 0.0 && lf[i] > 0.0 {
+            let has_va = va[i].iter().sum::<f64>() > 0.0;
+            if has_va && lf[i] <= 0.0 {
+                // the pipeline gives VA only to provinces with workers; leaving one out loses VA
+                return Err(err(format!(
+                    "pack province {i} has value added but no labour force"
+                )));
+            }
+            if has_va {
                 index[i] = provinces.pack.len() as u32;
                 provinces.pack.push(i as u32);
                 provinces

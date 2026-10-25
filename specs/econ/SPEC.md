@@ -125,8 +125,9 @@ only its own country's provinces and gateways (from a province) or other countri
 network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 
 **Calibration table** `econ_calib.arrow` (not built by the pack pipeline; written by
-`ceteris calibrate p2`, below): productivity A per enterprise, base factor quantities, base
-employment.
+`python -m ceteris.reference calibrate --pack DIR`, below): productivity A per enterprise, keyed by
+(pack province, good), with the residual summary in its schema metadata. The base point is
+derived at load (State components), not stored.
 
 ## State components
 
@@ -340,6 +341,16 @@ initial money and comparisons use a world price index.
    VA of that good equals ICIO).
 3. The result is `econ_calib.arrow`, hashed in `tests/golden/p2-pack.txt`. Residuals (where no
    positive A can match) are reported, not hidden.
+
+As built (`reference/calibrate.py`): value added is nominal, sales less inputs at buyer prices (the
+pack's convention), at equilibrium prices with the world price index at 1. The traded A are
+eliminated in closed form: at given prices and wages, an enterprise with p_VA > 0 matches VA T at
+L / L0 = x with s_L T = w L0 ((1 - s_L) x^(1 - rho) + s_L x) and A = T / (p_VA VA0 g(x)), g the
+normalized CES; the reduced system (ln p, ln w, ln A per pair) has the joint system's roots. The
+equilibrium at A = 1 (unique, ADR 0022) anchors the solve: targets move from its VA V1 to the data
+along V1^(1 - lambda) T^lambda, Newton-Krylov (GMRES) correcting each step. The joint system has
+several roots in general; the path picks the one connected to A = 1, and stops at a fold (the
+fixture's own data stall at lambda 0.199, PLAN Task 18b report).
 
 The 2000 state used for runs is the data state (prices 1, base wages and employment, 2000
 unemployment, inventories and input stocks at target) with the calibrated A. It is not the
