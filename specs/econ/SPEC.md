@@ -125,10 +125,15 @@ only its own country's provinces and gateways (from a province) or other countri
 `network_from_graph` is that step alone, and `EconWorld::set_network` installs a rebuilt
 network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 
-**Calibration table** `econ_calib.arrow` (not built by the pack pipeline; written by
-`python -m ceteris.reference calibrate --pack DIR`, below): productivity A per enterprise, keyed by
-(pack province, good), with the residual summary in its schema metadata. The base point is
-derived at load (State components), not stored.
+**Calibration tables** (not built by the pack pipeline; written by
+`python -m ceteris.reference calibrate --pack DIR`, Calibration below), keyed by pack province:
+`econ_calib.arrow` per enterprise (A, VA0, L0, a_VA, own price, output, sales, profit, coef and
+input stock per good; the summary in its `calibration` metadata), `econ_calib_cells.arrow` per
+(province, good) (posted and buyer prices, lead, Q, D by buyer class, sales, merchant stock),
+`econ_calib_provinces.arrow` (w0, employment, income), `econ_calib_pops.arrow` per (province,
+education) (money at the start of a tick, income, wage), `econ_calib_pipeline.arrow` (goods in
+flight by buyer, good and ticks ahead) and `econ_calib_countries.arrow` (u*, rebate, PIGL
+weights). Every table carries `calibration_format` in its schema metadata.
 
 ## State components
 
@@ -243,9 +248,22 @@ per province (`clip_ticks` in `run_wages`).
 
 Frictionless mode (V1): w_i solves sum_g L*_ig(w) = L^s_i exactly (monotone in w; safeguarded
 Newton in ln w), and eta = 1. The unemployment rate u_i = 1 - sum_g L_ig / L^s_i applies equally
-to each education level. L^s is the whole labour force, so 2000 unemployment rates are only the
-starting point: with the wage rule, unemployment is cyclical and the long-run steady state has
-full employment (owner choice; structural unemployment arrives with matching in P4).
+to each education level.
+
+**Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
+effective labour force, and the wage rule reads excess demand against the country's natural rate
+u*_i, its mean ILOSTAT modelled unemployment rate 1995 to 2005 (`econ_countries.u_star`), so the
+2000 cycle is not frozen in:
+
+```
+dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative
+```
+
+At the calibrated state x_i = -u*_i and the wage step is pi^e = 0, so steady-state unemployment
+is u*, not zero; employment may exceed (1 - u*) L^s in a boom, up to L^s. Frictionless mode
+solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_L VA0_ig / ((1 -
+u*_i) L^s_i). P4 matching replaces u* with matching frictions. The Rust wage rule and loader take
+the wedge in Task 18e Part 2; until then they run the rule above without u*.
 
 **Income.** Pop k in province i receives wages w_i e_k employed_k, a share of the province profit
 pool (enterprise profits plus market cash flow, both signed, trade SPEC), and a share of its
@@ -331,44 +349,68 @@ initial money and comparisons use a world price index.
 
 ## Calibration (`ceteris calibrate p2`)
 
+The 2000 data state is the model's steady state (ADR 0089, owner 2026-10-25; it replaces the
+joint inversion of productivity, whose nominal targets fold and whose real targets have no root,
+PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
+
 1. Rust loads the pack, builds the kernel, and exports kernel legs, enterprises, pops and
    parameters as Arrow. theta per class, the border friction P05 and the mode cost ratios P04 are
    estimated before this, directly by PPML structural gravity on 2000 BACI with least-cost (S05)
    costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
-2. Base point per enterprise: L0_ig = s_L VA0_ig / w0_i (base wage from the State table), so
-   base wages clear base employment. The GE reference model (below) then solves in one joint
-   system for prices, wages and the productivity A of every enterprise: traded enterprises match
-   the pack's downscaled VA, and each local enterprise (province, local good) matches its
-   population-based base VA, so national local totals equal ICIO (owner decision, 2026-10-25,
-   replacing one A per country and local good).
-3. The result is `econ_calib.arrow`, hashed in `tests/golden/p2-pack.txt`. Residuals (where no
-   positive A can match) are reported, not hidden.
+2. `reference/calibrate.py` (numpy, the source of truth) solves stages 1 to 5 below at the pack's
+   u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
 
-As built (`reference/calibrate.py`): value added is nominal, sales less inputs at buyer prices (the
-pack's convention), at equilibrium prices with the world price index at 1. Every A is eliminated
-in closed form: at given prices and wages, an enterprise with p_VA > 0 matches VA T at L / L0 = x
-with s_L T = w L0 ((1 - s_L) x^(1 - rho) + s_L x) and A = T / (p_VA VA0 g(x)), g the normalized
-CES; the reduced system in ln p and ln w alone has the joint system's roots. With cost-share
-coefficients the data state has p_VA = 1, A = 1 and L = L0 everywhere. The solve is a Newton
-homotopy F(x) - (1 - lambda) F(x0) from the data state x0, followed by pseudo-arclength
-continuation through folds to lambda = 1, Newton with GMRES correcting each arc. The joint system
-has several roots in general; the calibration keeps the one reached continuously from the data
-state (controller ruling, 2026-10-25), and reports the distribution of ln A.
+**Stage 1, values.** Output value V_o = VA_o / (1 - sum_k a_kg) per traded enterprise, VA the
+pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
+plus sum_g' a_gg' V_dg' of the province's enterprises. Household income is the province's VA by
+effective labour share plus the country's tariff rebate by population. One scalar r_g per traded
+good rescales its V and VA so that world spending net of tariffs equals world output value (the
+2000 imbalances, reported). Rebates follow from
+sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
+repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-11 relative (Anderson-mixed);
+within a pass the income and local-output fixed point is iterated to 1e-15.
 
-Optional JAX solver (`reference/jax_model.py`, `reference/jax_calibrate.py`, the `jax` extra;
-DESIGN 19.1): the same reduced residual in JAX (float64, equal to numpy to 1e-12), exact
-forward-mode Jacobian-vector products, and GMRES right-preconditioned by a two-level
-preconditioner from exact derivatives: the Jacobian with the gateway sums held fixed is block
-diagonal by country, so one batched product per colour (rank of the province in its country,
-good or wage) gives every country's block exactly, LU-factored, with the dense index row as a
-rank-one update; a Galerkin coarse correction per (country, good) and per country's wages carries
-the price levels that trade couples. The continuation follows the same homotopy from the data
-state with exact tangents, a predictor capped in the max norm, corrector step control and
-Euclidean arclength weights; on the fixture it reaches the scipy solver's root.
+**Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
+w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
+(Sinkhorn 1967). Sweeps run in the log domain (each good's weights shifted by their largest
+before each pass over the kernel), Anderson-accelerated (memory 8), to max |ln(received /
+target)| <= 1e-13. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
+the index is 1. q_d, the arrival slots and the lead follow from sourcing.
 
-The 2000 state used for runs is the data state (prices 1, base wages and employment, 2000
-unemployment, inventories and input stocks at target) with the calibrated A. It is not the
-equilibrium: runs start out of it and converge, so V1 tests convergence, not calibration fit.
+**Stage 3, technology.** coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices,
+so input coefficients differ across enterprises of a country), a_VA = 1 - sum_k a_kg (cost
+shares at the calibrated prices, not at base prices), p_VA = p_o, A = 1 / p_VA, Y_o = V_o / p_o.
+Local goods take p = 1, and local output solves the 3 x 3 Leontief system of each province
+against its local demand (households and every enterprise's a_kg V); local VA = a_VA Y is an
+output of calibration, and its national gap to ICIO is reported. w0_i = sum_g s_L VA0_ig / ((1 -
+u*_i) L^s_i) and L0 = s_L VA0 / w0, so with L = L0 nominal VA is VA0 and the labour first-order
+condition holds. S09 FixedLeontief reads the same calibrated column. A province without traded
+output earns only its rebate share, at which PIGL buys no local goods, so its steady state has
+no output, employment or wage (w0 = 0, listed in the summary as `provinces_without_value_added`;
+35 provinces in 6 countries on the 2000 pack, 0.37% of pack VA): open question below.
+
+**Stage 4, demand weights.** Per country, PIGL weights inverted (ADR 0021 form, omega_A = 0) at
+the country's buyer prices, the unit value of its households' purchases of each good, and its
+mean household income per person (`demand.invert_at`): within a category alpha_g is
+proportional to Omega_g p_g^(sigma - 1), K = Omega_A / sD_A, sB = (Omega - K sD) / (1 - K), lambda
+in closed form. Pops then spend by PIGL at their province's q and income, so national shares
+match Omega only up to the spread of prices and incomes within the country (ADR 0094 is after
+the gate).
+
+**Stage 5, state at the start of a tick.** Input stocks (1 + COVER) months of use, traded and
+local, so the order-up-to rule orders one month of use; the pipeline of every buyer (pops and
+enterprises) holds, j ticks ahead, one month of steady-state shipments of every arrival slot j or
+later; merchant stocks coverage times output (S* = coverage D with D = Q); pops hold one month
+of income less this tick's wages (dividends and rebates; wages come at E2); pi^e = 0; last D, Q
+and sales their steady-state values (D = Q = sales).
+
+**Checks** (`tests/test_steady_state.py`, fixture and full pack): two starts of stage 2 reach the
+same weights up to scale (1e-10); the reference model at the calibrated point, with labour
+supply (1 - u*) L^s, has residual at most 1e-10 and reproduces VA0, L0 and Y; local output is
+positive and clears; the stage 5 state is stationary under the order rule. The reduced residual
+of the former joint inversion stays as `reference/reduced.py`, the numpy twin of
+`reference/jax_model.py` (exact derivatives, kept for ADR 0096).
 
 ## GE reference model (`python/ceteris/reference`)
 
@@ -611,6 +653,11 @@ texture fed from core columns.
 - Benchmarks: `labour`, `produce`, `consume` (criterion, full pack).
 
 ## Open questions
+
+- Provinces without traded output (ADR 0089 calibration): their calibrated steady state is empty
+  (Calibration, stage 3). Options: leave them out of the economy like the provinces below the
+  working-age floor, own profits nationally rather than by province, or give the downscaling
+  traded VA there. Owner ruling pending (Task 18e).
 
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
 - Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on
