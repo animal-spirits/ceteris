@@ -12,7 +12,7 @@ use std::sync::Arc;
 use ceteris_core::sim::{SNAPSHOT_EVERY, Sim};
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
-use ceteris_econ::world::to_numeraire;
+use ceteris_econ::world::{DIVIDEND, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
@@ -524,8 +524,9 @@ fn calibrated_pack() -> Option<Arc<EconInputs>> {
 
 /// What the 100-year run records each tick besides the invariants: pops holding negative
 /// money (allowed: every account may run a negative balance, SPEC Money) and with negative
-/// income, countries whose enterprises lost money in total (a negative dividend pool), and
-/// traded origin markets that ran out (orders above stock plus output).
+/// income, countries whose profit pool (what their enterprises and markets paid in at E4,
+/// read from the tick's journal) was negative, enterprises carrying retained losses (limited
+/// liability), and traded origin markets that ran out (orders above stock plus output).
 #[derive(Default)]
 struct Census {
     negative_money_ticks: u32,
@@ -533,6 +534,7 @@ struct Census {
     worst_money: (f64, u32, usize),
     negative_income_pops: usize,
     negative_pool: (u32, usize),
+    retained: (u32, usize, f64),
     stockouts: [u32; N_GOODS],
     first_stockout: Option<(u32, usize)>,
 }
@@ -557,14 +559,28 @@ impl Census {
         self.negative_income_pops = self
             .negative_income_pops
             .max(w.income.iter().filter(|&&x| x < 0.0).count());
-        let mut pool = vec![0.0; inp.n_countries()];
-        for (e, &profit) in w.profit.iter().enumerate() {
-            pool[inp.country_of(inp.enterprises.province[e] as usize)] += profit;
+        let acc = &lay.accounts;
+        let mut pool = vec![0i64; inp.n_countries()];
+        for x in w.ledger.journal().iter().filter(|x| x.flow == DIVIDEND) {
+            if let Some(c) = acc.dividend.iter().position(|&a| a == x.to) {
+                pool[c] += x.amount;
+            }
         }
-        let losing = pool.iter().filter(|&&x| x < 0.0).count();
+        let losing = pool.iter().filter(|&&x| x < 0).count();
         if losing > 0 {
             self.negative_pool.0 += 1;
             self.negative_pool.1 = self.negative_pool.1.max(losing);
+        }
+        let carrying: Vec<i64> = acc
+            .enterprise
+            .iter()
+            .map(|&a| w.ledger.money(a))
+            .filter(|&x| x < 0)
+            .collect();
+        if !carrying.is_empty() {
+            self.retained.0 += 1;
+            self.retained.1 = self.retained.1.max(carrying.len());
+            self.retained.2 = self.retained.2.min(to_numeraire(carrying.iter().sum()));
         }
         let m = &w.markets;
         for c in (0..m.price.len()).filter(|&c| m.active[c] && TRADED[c % N_GOODS]) {
@@ -600,8 +616,9 @@ fn hundred_years_without_violation() {
         "full pack, {TICKS} ticks of the default run: no violation, prices and wages finite and \
          positive, world price index {}; pops with negative money: {} ticks, at most {} pops, \
          worst {money} (pop {k}, province {}, tick {tick}); at most {} pops with negative income; \
-         negative dividend pools: {} ticks, at most {} countries; stockouts by good (cell \
-         ticks) {:?}, first {:?}; {:?}",
+         negative dividend pools: {} ticks, at most {} countries; enterprises with retained \
+         losses: {} ticks, at most {}, largest total {}; stockouts by good (cell ticks) {:?}, \
+         first {:?}; {:?}",
         w.world_price_index(),
         census.negative_money_ticks,
         census.negative_money_max,
@@ -609,6 +626,9 @@ fn hundred_years_without_violation() {
         census.negative_income_pops,
         census.negative_pool.0,
         census.negative_pool.1,
+        census.retained.0,
+        census.retained.1,
+        census.retained.2,
         census.stockouts,
         census.first_stockout,
         started.elapsed(),
