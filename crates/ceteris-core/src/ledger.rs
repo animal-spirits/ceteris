@@ -2,6 +2,8 @@
 //! Money only moves between accounts; goods appear and disappear only through
 //! `create` and `destroy`, which are tallied and checked every tick.
 
+use rayon::prelude::*;
+
 use crate::invariant::Violation;
 use crate::reduce::fixed_sum;
 use crate::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder};
@@ -22,6 +24,9 @@ pub struct Entry {
 }
 
 pub const GOODS_TOLERANCE: f64 = 1e-9;
+
+/// Entries per parallel chunk of [`Ledger::post`].
+const POST_CHUNK: usize = 1 << 17;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ledger {
@@ -108,17 +113,29 @@ impl Ledger {
         });
     }
 
-    /// [`Ledger::transfer`] of each entry in turn: the same balances and journal.
+    /// [`Ledger::transfer`] of each entry in turn: the same balances and journal. Each
+    /// account's money moves by the integer sum of its entries, summed over chunks in
+    /// parallel, so an overflow is caught in a chunk's sum or the final balance rather than
+    /// at the step that would cross the bound.
     pub fn post(&mut self, entries: &[Entry]) {
-        for e in entries {
-            debug_assert!(self.is_open(e.from) && self.is_open(e.to));
-            let (f, t) = (e.from.0 as usize, e.to.0 as usize);
-            self.money[f] = self.money[f]
-                .checked_sub(e.amount)
-                .expect("ledger overflow");
-            self.money[t] = self.money[t]
-                .checked_add(e.amount)
-                .expect("ledger overflow");
+        let n = self.money.len();
+        let deltas: Vec<Vec<i64>> = entries
+            .par_chunks(POST_CHUNK)
+            .map(|chunk| {
+                let mut delta = vec![0i64; n];
+                for e in chunk {
+                    debug_assert!(self.is_open(e.from) && self.is_open(e.to));
+                    let (f, t) = (e.from.0 as usize, e.to.0 as usize);
+                    delta[f] = delta[f].checked_sub(e.amount).expect("ledger overflow");
+                    delta[t] = delta[t].checked_add(e.amount).expect("ledger overflow");
+                }
+                delta
+            })
+            .collect();
+        for delta in &deltas {
+            for (m, &d) in self.money.iter_mut().zip(delta) {
+                *m = m.checked_add(d).expect("ledger overflow");
+            }
         }
         self.journal.extend_from_slice(entries);
     }
