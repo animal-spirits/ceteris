@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### BEHAVIOUR: enterprises have limited liability (owner decision 2026-10-26, Task 20)
+
+- At E4 an enterprise pays its balance into its country's profit pool only when the balance is
+  positive. A loss stays on the enterprise's own account as retained losses (a negative balance
+  at the clearing facility, no interest), and later cash flow repays it before anything is paid
+  out. Enterprises never pay a negative dividend; before, losses were pooled and could reach pops
+  as negative dividends.
+- `EconWorld::profit` of an enterprise is now its balance before the payout: this tick's cash
+  flow less any loss it carries.
+- Province markets still pay their signed cash flow. Applying the same rule to them, as ruled,
+  makes the fixture's run from the data state inflate without bound (merchants' stock purchases
+  stay as retained losses while pops keep the money: world price index 15 at tick 1,200 and 129
+  at 2,400). It is held for the owner (Task 20 fix round 1).
+- The calibrated steady state is unchanged (every enterprise earns (1 - s_L) VA0 > 0); the
+  fixture golden `tests/golden/p2-econ.txt` moves because enterprises run losses early in the
+  run from the data state.
+
 ### BEHAVIOUR: runs start from the ADR 0089 calibrated steady state (Task 18e)
 
 - The data state is the steady state. A world whose inputs carry the calibration tables of

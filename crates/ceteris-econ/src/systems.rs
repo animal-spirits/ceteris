@@ -789,12 +789,16 @@ pub fn reprice(w: &mut EconWorld) {
     w.update_expectation();
 }
 
-/// E4 (national ownership, owner 2026-10-25): every enterprise and province market pays its
-/// signed cash flow of the tick into its country's profit pool, and each country pays its pool
-/// and its rebate account (tariffs) to its pops by population share N_k / N_c, so all of them
-/// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
-/// cumulative population shares of the country's pops in ID order rounded half to even, so the
-/// parts add up to the pool exactly. Records each pop's income of the tick.
+/// E4 (national ownership, owner 2026-10-25; limited liability of enterprises, owner
+/// 2026-10-26): every enterprise pays its balance into its country's profit pool when the
+/// balance is positive and otherwise keeps it, so a loss stays with the enterprise as
+/// retained losses, which later cash flow repays before anything is paid out; every province
+/// market pays its signed cash flow. Each country pays its pool and its rebate account
+/// (tariffs) to its pops by population share N_k / N_c, so both end the tick at zero. Each
+/// pool is one i64 sum, split once per tick by [`split`]: the cumulative population shares of
+/// the country's pops in ID order rounded half to even, so the parts add up to the pool
+/// exactly. Records each pop's income of the tick, and as each enterprise's profit its
+/// balance before the payout (this tick's cash flow less any loss it carries).
 pub fn distribute(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
@@ -803,7 +807,13 @@ pub fn distribute(w: &mut EconWorld) {
         for e in lay.enterprises(i) {
             let cash = w.ledger.money(acc.enterprise[e]);
             w.profit[e] = to_numeraire(cash);
-            pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, cash);
+            pay(
+                &mut w.ledger,
+                DIVIDEND,
+                acc.enterprise[e],
+                pool,
+                cash.max(0),
+            );
         }
         let cash = w.ledger.money(acc.market[i]);
         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
