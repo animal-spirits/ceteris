@@ -954,7 +954,8 @@ rev 226 (Task 21); re-grep again before editing.
     (ADR 0098, P148); markets keep the signed rule.
   - The `source_dispatch` budget re-set to 8 ms and the whole tick to 35 ms on the full pack (owner,
     2026-10-26); DESIGN 1181 and 1845 state 5 ms for the trade system, where this SPEC budgets trade
-    at 30 ms with `source_dispatch` at 8 ms. The gateway count and rule move to the ADR 0092 rework.
+    at 30 ms with `source_dispatch` at 8 ms; the snapshot takes this SPEC's values (controller ruling,
+    2026-10-26, following the owner's re-budget). The gateway count and rule move to the ADR 0092 rework.
   - The gate decision on V1 (owner, 2026-10-26): V1 is the run from the perturbed steady state; the run
     from the shocked data state is a stress test (`xfail(strict)`), and ADR 0090's price rule is
     redesigned after the gate.
