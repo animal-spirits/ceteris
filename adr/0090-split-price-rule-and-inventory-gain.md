@@ -75,3 +75,56 @@ The as-built rule is the special case kappa_r / E = kappa_n / h = kappa1, kappa2
 - "Merchants see world excess demand" is a modelling shortcut. P5 money and expectations
   (12.2) can replace the aggregate term with a micro-founded anchor.
 - Register: P03a redefined, P143 added; trade SPEC Stability region rewritten.
+
+## Trial before the P2 gate (2026-10-26), parked
+
+The decision was built in full before the gate (PLAN Task 20e) and parked by owner decision. The code,
+tests and records are on the local branch `p2-adr0090` (56b8e7f, ec17126), and the detail is in
+`.superpowers/sdd/PLAN/task-20e-report.md`. p2-econ keeps the round 3 model.
+
+- **kappa_r 0.5 is unstable on the pack.**
+  - J2 limits on the pack's enterprises at kappa2 = 0 (default mode / frictionless): food 0.999 / 0.300,
+    machinery 1.255 / 0.458. For local goods (E = 1) the frictionless limit goes down to 0.162, so at 0.5
+    J2 fails for 1,237, 1,114 and 96 local markets of goods 7, 8 and 9, and for 12 food and 7 machinery
+    markets.
+  - In the default mode, rounding noise around the calibrated steady state grew to a 0.35 price drift by
+    tick 120, in a province mode that one-market J2 does not see (province 3474: an oil producer with
+    eps 24 and a_VA 0.07, its local goods, wage and employment).
+  - Traded 0.25 with local 0.05 was stable in both modes for 300 ticks, and kappa2 by the midpoint rule
+    was then 0.0591.
+- **The nominal anchor fails.**
+  - The mean of log excess demand turns a local real shortage into world inflation. From the fixture's
+    data state, local services short by ln(D / Q) of 1 to 2 hold lbar up, and every price clips at
+    +c_max. Relative prices then freeze, so the shortage never closes and the index explodes.
+  - Money does not anchor the price level, since enterprises may run negative balances.
+  - Fixture data state, default mode, world index at tick 60 and 1,200 (+ = without bound; kappa2 and
+    storage loss on / off):
+
+    | Measure | kappa_r | kappa_n | On | Off |
+    |---|---|---|---|---|
+    | log | traded 0.25, local 0.05 | 0.032 to 0.2 | + | + |
+    | log | as built (0.05 E) | 0.032 | 1.79, 1.09 | 2.59, 1.06 |
+    | log | as built (0.05 E) | 0.2 | + | + |
+    | linear | traded 0.25, local 0.05 | 0.032 | 10.7, 1.09 | 26.6, 1.07 |
+    | linear | either | 0.2 | + | + |
+    | linear | as built (0.05 E) | 0.032 | 1.26, 1.09 | 1.25, 1.06 |
+
+    kappa_n 0.032 is the as-built equivalent, kappa1 h with h = 0.64.
+- **Pack data state** (ruled starts, frictionless):
+  - The world index ran 1.22 at tick 0, 6.5 at 36, 1.92 at 120 and 1.42 at 360. The as-built run is
+    2.38 at 120 and 2.02 at 360.
+  - The partial gate, stopped by the owner decision, gave these results.
+    - V1 from the data state: price 0.847, wage 0.593, flows 1.38, with up to 8,839 pops in negative
+      money.
+    - V1 from the perturbed steady state, which passes as built at 9.1e-3, missed at 0.177.
+    - 100 years and the thread test passed.
+- **What held.**
+  - The special case (a linear measure with kappa_r / E = kappa_n / h = kappa1, kappa2 = 0 and no
+    storage loss) reproduced the as-built state hashes over 120 ticks, which p2-econ records in
+    `tests/golden/p2-as-built-rule.txt`.
+  - The nominal-mode, stock-shock and thread tests passed on the fixture, and the storage-loss
+    calibration held the fixed point.
+- **Owner decision (2026-10-26).** Close the gate on the round 3 model and redesign the anchor after it.
+  As Consequences notes, P5 money and expectations can replace the aggregate term with a micro-founded
+  anchor.
+
