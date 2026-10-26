@@ -44,7 +44,10 @@ fn fixture_dir() -> PathBuf {
 /// world quantity): prices of active cells, buyer prices that are finite, wages, and the flows
 /// (employment, output and sales per enterprise; Q, D, sales and merchant stock per active
 /// cell; each pop's income); and the world price index.
-fn quantities(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<Option<usize>>)> {
+/// A quantity: name, entries and each entry's province (`None` for a world quantity).
+type Quantity = (&'static str, Vec<f64>, Vec<Option<usize>>);
+
+fn quantities(w: &EconWorld) -> Vec<Quantity> {
     let (inp, m) = (w.inputs(), &w.markets);
     let cells: Vec<usize> = (0..m.price.len()).filter(|&c| m.active[c]).collect();
     let active = |x: &[f64]| -> Vec<f64> { cells.iter().map(|&c| x[c]).collect() };
