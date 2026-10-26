@@ -293,17 +293,22 @@ above its limit). Their prices settle on a period-2 cycle (about 0.7% either sid
 reference, output alternating between about 32 and 48 thousand units, the merchant stock growing
 by about 2,300 units a tick, which kappa2 = 0 leaves untargeted) in every frictionless run moved
 off the steady state; the default mode damps it. Growth per tick of the largest price deviation
-from the steady state, ticks 300 to 600 after the 1% perturbation, crossing lags as built
-(`p2_expectation_sweep.rs`, `pack_decay_by_gain`; frictionless / default): at the defaults (gain
-0.006) 1.00000 (the cycle) / 0.99229, and 0.99169 / 0.99229 leaving out São Tomé's two provinces;
-at gain 0 1.00000 / 0.99280, and 0.99148 / 0.99280 without them. The grid
-(`p2_price_rule_sweep.rs`, `pack_grid`, largest deviation over every cell, growth and the
-deviation at 600 in brackets): kappa2 0: kappa1 0.02: 0.9932 (4.6e-4) / 0.9935 (5.5e-4); 0.05:
-1.0000 (9.5e-3) / 0.9923 (4.2e-5); 0.1: 1.0000 (3.6e-1) / 0.9962 (1.5e-5); 0.2: 0.9992 (1.4) /
-1.0003 (0.47). kappa2 0.05: kappa1 0.02: 1.0009 (0.12) / ledger overflow; 0.05: 0.9991 (0.18) /
-1.0108 (9.2); 0.1: 1.0004 (0.45) / 1.0001 (0.14); 0.2: 1.0005 (1.8) / 1.0001 (0.52). The pack's
-small value-added shares shrink the region that the fixture drew: every kappa2 0.05 point and
-kappa1 0.2 leave it, and at kappa1 0.1 the frictionless deviation does not decay.
+from the steady state, ticks 300 to 600 after the 1% perturbation, crossing lags as built, with
+limited liability of enterprises (Task 20 fix round 1; `p2_expectation_sweep.rs`,
+`pack_decay_by_gain`, logs in the Task 20 scratchpad, `r1/pack_decay*.log`; frictionless /
+default): at the defaults (gain 0.006) 1.00000 (the cycle) / 0.99230, and 0.99007 / 0.99230
+leaving out São Tomé's two provinces (`EXCLUDE=3545,3546`); at gain 0 1.00000 / 0.99280, and
+0.98951 / 0.99280 without them (before limited liability, frictionless without them 0.99169 and
+0.99148, the default mode the same). The grid (`p2_price_rule_sweep.rs`, `pack_grid`,
+`r1/pack_grid.log`, largest deviation over every cell, growth and the deviation at 600 in
+brackets): kappa2 0: kappa1 0.02: 0.9932 (4.6e-4) / 0.9935 (5.5e-4); 0.05: 1.0000 (9.7e-3) /
+0.9923 (4.3e-5); 0.1: 1.0000 (0.43) / 0.9962 (1.5e-5); 0.2: frictionless stops at tick 202 on
+the inventory invariant (province 3204, good 0) / 1.0003 (0.46). kappa2 0.05: kappa1 0.02:
+1.0016 (0.12) / ledger overflow; 0.05: 1.0001 (0.14) / ledger overflow; 0.1: 1.0010 (0.56) /
+0.9980 (0.096); 0.2: 0.9997 (1.7) / 1.0003 (0.50). The pack's small value-added shares shrink
+the region that the fixture drew: every kappa2 0.05 point and kappa1 0.2 leave it, and at
+kappa1 0.1 the frictionless deviation does not decay. The table above is
+`r1/stability_table.log`.
 
 Nominal mode. pi^e adds a world mode outside the one-market region: with money fixed, a common
 deviation X of the price level lowers household real demand, e = -h X, and the rule pulls X back
