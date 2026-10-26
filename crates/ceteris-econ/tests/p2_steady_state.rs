@@ -77,6 +77,12 @@ const PACK: Tolerance = Tolerance {
     world: EXACT,
 };
 
+/// A drift over its tolerance; no drift is 0 even where the tolerance is 0 (a zero balance
+/// on the fixture).
+fn over(drift: f64, tolerance: f64) -> f64 {
+    if drift == 0.0 { 0.0 } else { drift / tolerance }
+}
+
 /// A quantity: name, kind and entries.
 type Quantity = (&'static str, Kind, Vec<f64>);
 
@@ -209,9 +215,9 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                 let relative = gap / if b != 0.0 { b.abs() } else { scale };
                 let minor = gap * MINOR_PER_UNIT;
                 let scaled = match kind {
-                    Kind::Real => relative / tol.real,
-                    Kind::World => relative / tol.world,
-                    Kind::Money => minor / tol.minor.max(tol.money * b.abs() * MINOR_PER_UNIT),
+                    Kind::Real => over(relative, tol.real),
+                    Kind::World => over(relative, tol.world),
+                    Kind::Money => over(minor, tol.minor.max(tol.money * b.abs() * MINOR_PER_UNIT)),
                 };
                 if relative > r.relative {
                     (r.relative, r.tick, r.entry) = (relative, tick, entry);
@@ -315,12 +321,15 @@ fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
         PathBuf::from,
     );
     if !EconInputs::has_calibration(&dir) {
-        eprintln!(
-            "skipping: no calibration tables in {}; install them from `python -m \
-             ceteris.reference calibrate --pack {}`",
+        let hint = format!(
+            "no calibration tables in {}; install them from `python -m ceteris.reference \
+             calibrate --pack {}`",
             dir.display(),
             dir.display()
         );
+        // a pack named explicitly must be testable; only the absent default pack skips (CI)
+        assert!(std::env::var_os("CETERIS_PACK").is_none(), "{hint}");
+        eprintln!("skipping: {hint}");
         return;
     }
     let pack =
