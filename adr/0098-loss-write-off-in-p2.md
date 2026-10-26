@@ -34,7 +34,9 @@ Option 2 (owner, 2026-10-26). The design is a controller ruling fixed before any
 
 - **Cap.** Enterprise e keeps retained losses up to T_e = M S_e, S_e its base monthly sales: the
   calibrated steady-state sales value VA0_e / a_VA_e (equal to the ADR 0089 tables' sales). Base
-  sales, so the cap does not shrink in a slump. **M = 3 months** (P143), not tuned to results.
+  sales, so the cap does not shrink in a slump. **M = 3 months** (P148), not tuned to results.
+  M was registered as P143 until Task 20e; ADR 0090 defines kappa_n as P143, so M moved to P148
+  (controller ruling, 2026-10-26), and P147 stays reserved for the held M_F below.
 - **Write-off.** After E4's distribution, the excess E_e = max(0, -balance_e - T_e) of every
   enterprise of a country is credited to it and debited from the country's pops in proportion to
   their positive money. No pop is taken below zero. Where the pops hold less than the excess,
@@ -67,7 +69,7 @@ Option 2 (owner, 2026-10-26). The design is a controller ruling fixed before any
 - M is excluded from the static digest, with the reason in `static_digest`: it fires only on
   retained losses, which the steady states the calibration and the reference solutions describe
   do not have, so changing it does not invalidate calibrations. The snapshot header carries it
-  after the digest and `restore` checks it; `params.json` lists it with P143.
+  after the digest and `restore` checks it; `params.json` lists it with P148.
 - V1 from the data state of the calibrated pack still misses (Task 20 round 2): at tick 1,200 the
   price gap is 0.83 (Mali services), wage 0.58, flows 1.83, outside the former debtor countries
   3.8e-2; at 4,800 it is 7.9e-2, outside 8.3e-3. The write-off clears the enterprises' losses

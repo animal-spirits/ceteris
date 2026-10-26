@@ -351,7 +351,7 @@ pub struct EconWorld {
     pub scratch: Scratch,
 }
 
-/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P143,
+/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148,
 /// which the snapshot header carries after the digest: everything else a snapshot leaves out.
 pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     // destructured so a new parameter cannot be left out of the digest
@@ -1111,7 +1111,7 @@ impl EconWorld {
 }
 
 impl Encode for EconWorld {
-    /// The static digest, the write-off threshold P143, then the dynamic state.
+    /// The static digest, the write-off threshold P148, then the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         self.digest.iter().for_each(|&b| e.u8(b));
         e.f64s(&[self.params.write_off_months]);
@@ -1350,7 +1350,7 @@ impl State for EconWorld {
         let months = d.f64s()?;
         if months != [self.params.write_off_months] {
             return Err(DecodeError(format!(
-                "snapshot taken with write-off threshold (P143) {months:?}"
+                "snapshot taken with write-off threshold (P148) {months:?}"
             )));
         }
         let ledger = Ledger::decode(d)?;
