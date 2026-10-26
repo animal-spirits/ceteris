@@ -21,7 +21,8 @@ investment, finance, the state and politics are later phases.
 | Enterprises set output from demand forecasts and inventory coverage (7.3) | Price-taking enterprises move employment toward the profit-maximizing level at expected (current) prices; inventory coverage lives with the province market (trade SPEC) | Province markets absorb all output at the posted price, so firms face prices, not demand curves; this rule nests the GE optimum exactly. The forecast rule can return as a switch when firms get pricing power |
 | PIGL over five categories: food, energy, housing, manufactures, services (8.6) | PIGL over the three categories the form was estimated on, A (goods 0, 3), M (goods 1, 2, 4, 5, 6), S (goods 7, 8, 9), with a CES over goods within each (ADR 0021, controller ruling 2026-10-24) | Alder, Boppart and Mueller (2022) estimate agriculture, manufacturing and services only; crude oil, coal and utilities have no clean counterpart there and are placed by the nearest category |
 | Intermediates Leontief plus a CES energy nest (7.2) | All intermediates Leontief | The energy nest comes with energy and emissions (P8) |
-| Putty-clay intermediates: coefficients per capacity vintage, chosen at investment by a CES at P38, Leontief once installed (7.2, ADR 0020) | Each enterprise runs on its own coefficient vector (`EntData.coef`, `Layout.coef`), one vintage: its country's 2000 ICIO column, filled at load (`EconInputs::set_coefficients`). S09 `Technology::FixedLeontief` reads the country column instead. With one vintage both settings read the same numbers and run bit for bit alike, state hashes included: the switch enters the static digest only once some enterprise's coefficients differ from its country's (`putty_clay_one_vintage_equals_fixed_leontief`) | No investment in P2, so no vintage beyond the first; the vintage choice and P38 arrive with investment (7.4) |
+| Putty-clay intermediates: coefficients per capacity vintage, chosen at investment by a CES at P38, Leontief once installed (7.2, ADR 0020) | Each enterprise runs on its own coefficient vector (`EntData.coef`, `Layout.coef`), one vintage: its country's 2000 ICIO column as cost shares at base delivered prices (row above), filled at load (`EconInputs::set_coefficients`). S09 `Technology::FixedLeontief` reads that base column (`EconInputs::base_column`) instead. With one vintage both settings read the same numbers and run bit for bit alike, state hashes included: the switch enters the static digest only once some enterprise's coefficients differ from its country's (`putty_clay_one_vintage_equals_fixed_leontief`) | No investment in P2, so no vintage beyond the first; the vintage choice and P38 arrive with investment (7.4) |
+| Input-output coefficients a_kg as quantities (7.2) | ICIO coefficients are cost shares at base delivered prices: coef_e,k = a_kg / q_k(base), q_k(base) the base delivered unit price of k at the enterprise's province (`ProvinceData::base_price`: 1 for local goods, sourcing at prices 1 for traded goods, tariffs and iceberg included; coefficient 0 where unreachable), under both S09 settings (owner decision, 2026-10-25; ADR 0020 mapping) | At base prices every enterprise's input cost share equals the ICIO share, a_VA = 1 - sum_k a_kg > 0, and the national IO value structure is exact; read as quantities, delivered prices above 1 made inputs cost more than output for 11.5% of traded VA at prices 1 |
 | Within-tick rationing, inventories as the buffer (8.2, 19.4, ADR 0020) | Local goods (utilities, construction, services): a same-tick chain at E2 per province (`local.rs`, Production below): a shortage of a local good cuts its users' output in the tick it happens. Traded goods keep their stocks and transit lags. Departures from the migration brief's chain, each needed for exact Leontief use: (1) a producer's own use of its good comes out of its output first, since cutting the producer pro rata with its users leaves the ratio of output to need unchanged and with empty stocks drives the pair to zero; (2) each user covers its residue from its own stock (the ledger holds stocks per enterprise), so the stock that counts for a good is sum min(b, n), and output is split so that each user's residue fits its stock; (3) each good's common fill is solved exactly for its users (the limit of repeating the brief's f_k), so a single shortage settles in two iterations; (4) a cycle between two local goods can still converge slowly (loop gain near 1 when both are fully used): at the bound the remaining shortage is cleared by cutting the users that produce no local good, which changes no local output, and where the producers of local goods alone do not fit, by stopping the users whose stock cannot cover them, so input use always equals coef Y exactly (MIGRATION Task 8) | ADR 0020 Mapping (owner, 2026-10-24): local goods have no transit, so their production, input use and rationing run as one pass within the tick |
 | VA over K, effective L by education, land or resources T (7.2) | Normalized CES over one fixed factor F (capital, land and resources together) and effective labour | No investment in P2, so K and T never move separately; one fixed factor keeps the reference model small |
 | Pops keyed by province, ethnic group, education, labour status (6.1) | Province x education (3 levels); labour status as employed and unemployed counts inside each pop | Ethnicity and status transitions are P4 |
@@ -59,8 +60,8 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 
 | Table | Rows | Content | Sources |
 |---|---|---|---|
-| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, HS to ISIC concordance) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT, WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
+| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
 | `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -90,8 +91,8 @@ reallocated within the country by the same proxy, so every enterprise has worker
 nearest in (region, log GDP per capita); national VA by good from WDI sector shares
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
-(UNSD) GDP per person against the donors' in the same source, never the region median when an
-income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
+(ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
+always against the donors' in the same source, never the region median when an income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
 over goods 1 to 8 when only manufacturing is missing); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
@@ -117,35 +118,59 @@ rate takes its sovereign's, else its donor's (same region, nearest log income), 
 **Loading (`EconInputs::from_pack`).** The economy's provinces are the pack provinces with value
 added and a labour force; the others (below the working-age floor, or uninhabited) stay in the
 transport graph only, and `ProvinceData::pack` maps each economy province to its pack province.
-Enterprises are the (province, good) cells with VA > 0, VA0 the pack VA per month (USD). Leg costs
+Enterprises are the (province, good) cells with VA > 0, VA0 the pack VA per month (USD); a pack
+province with VA but no labour force, or a country with enterprises but no pops, stops the load
+(`PackError`). Leg costs
 are least-cost paths on the graph, run in parallel from every province and gateway, each keeping
 only its own country's provinces and gateways (from a province) or other countries' gateways
 (from a gateway): domestic, access and crossing legs, all gateway pairs of different countries.
 `network_from_graph` is that step alone, and `EconWorld::set_network` installs a rebuilt
 network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 
-**Calibration table** `econ_calib.arrow` (not built by the pack pipeline; written by
-`python -m ceteris.reference calibrate --pack DIR`, below): productivity A per enterprise, keyed by
-(pack province, good), with the residual summary in its schema metadata. The base point is
-derived at load (State components), not stored.
+**Calibration tables** (not built by the pack pipeline; written by
+`python -m ceteris.reference calibrate --pack DIR`, Calibration below), keyed by pack province:
+`econ_calib.arrow` per enterprise (A, VA0, L0, a_VA, own price, output, sales, profit, coef and
+input stock per good; the summary in its `calibration` metadata), `econ_calib_cells.arrow` per
+(province, good) (posted and buyer prices, lead, Q, D by buyer class, sales, merchant stock),
+`econ_calib_provinces.arrow` (w0, employment, income), `econ_calib_pops.arrow` per (province,
+education) (money at the start of a tick, income, wage), `econ_calib_pipeline.arrow` (goods in
+flight by buyer, good and ticks ahead) and `econ_calib_countries.arrow` (u*, rebate, PIGL
+weights). Every table carries `calibration_format` in its schema metadata. Installed into the
+pack (copied next to the econ tables; their sha256 then joins `tests/golden/p2-pack.txt`), they are
+read by `EconInputs::from_pack` (`EconInputs::calibrate`, `calibration.rs`) into A, VA0, L0,
+a_VA, the coefficients (both S09 settings), w0, the PIGL weights and the initial state (State
+components): only at `calibration_format` 3 and only when the `static_digest` in the
+`calibration` metadata is that of the uncalibrated inputs under default parameters
+(`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack build,
+another format or other coefficients stop the load with a `PackError`.
 
 ## State components
 
 | Component | Entity | Type | Units | Initialized from |
 |---|---|---|---|---|
 | Population, working-age, labour force | pop (province, education) | `f64` | persons | econ pack; static in P2 |
-| Employed | pop | `f64` | persons | (1 - unemployment rate) x labour force |
-| Ownership share | pop | `f64` | share of province profit pool | base wage income share |
+| Employed | pop | `f64` | persons | (1 - u*) x labour force (natural rate, ADR 0089) |
+| Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership) |
 | Income last tick | pop | `f64` | numeraire | |
 | Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
 | Output, sales, profit last tick | enterprise | `f64` | | |
-| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage: the country's 2000 ICIO column |
-| Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | one month of base input use |
-| Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u_2000) L^s_i) |
+| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage, the 2000 column `EntData::column`: calibrated a_kg p_o / q_ik (calibration tables), else the country's ICIO column over base delivered prices, a_kg / q_k(base) |
+| VA coefficient a_VA | enterprise | `f64` | real VA per unit of output | calibrated 1 - sum_k a_kg, else 1 - sum_k coef_k q_k(base) |
+| Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | calibrated (1 + COVER) months of use, else one month of base input use |
+| Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u*_i) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
-| Accounts | pops, enterprises, rebate (one per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
+| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
+
+**Initial state.** A world whose inputs carry the calibration tables (`EconInputs::calibrate`,
+`EconInputs::from_pack` when the pack holds them) starts from the calibrated steady state of ADR
+0089 (Calibration, stage 5): its posted prices, last D, Q and sales, merchant and input stocks,
+the pipeline, each pop's money (dividends and rebates; wages come at E2) and last income, each
+enterprise's last output, sales and profit; wages w0, employment L0, unemployment u*, pi^e = 0
+and buyer prices refreshed at the posted prices. Otherwise it starts from the data state: prices
+1, the same base point, input stocks at one month of base use, merchant stocks at coverage times
+initial demand, nothing in flight and one month of base dividends minted to each pop.
 
 Enterprises exist for every (province, traded good) with VA > 0 and every (province, local
 good). About 4,796 x 10 rows at most, sorted by province (CSR offsets, 19.4). Every pop and
@@ -154,8 +179,9 @@ enterprise belongs to one province; per-province work is a contiguous slice.
 ## Equations
 
 **Production.** For enterprise e = (i, g) with input coefficients coef_k (`Layout.coef`: its
-putty-clay coefficients, one vintage in P2, or its country's a_kg under S09 fixed Leontief) and
-VA coefficient a_VA = 1 - sum_k coef_k (at reference prices):
+putty-clay coefficients, one vintage in P2, or its 2000 column under S09 fixed Leontief; both the
+same numbers in P2) and VA coefficient a_VA (`EntData::a_va`: 1 - sum_k a_kg, the cost shares at
+the calibrated prices, for a calibrated world; 1 - sum_k coef_k q_k(base) for the base column):
 
 ```
 Y  = min( VA / a_VA,  min_k M_k / coef_k )                       (Leontief)
@@ -226,11 +252,11 @@ checks the closed form against numerical maximization. Employment moves toward t
 L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t exceeds L^s_i, all are scaled down pro
 rata.
 
-**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, expected inflation pi^e
-(trade SPEC, Origin market; ADR 0019):
+**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, read against the natural
+rate u*_i (below), expected inflation pi^e (trade SPEC, Origin market; ADR 0019):
 
 ```
-dlnw = clip( pi^e + kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
+dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
 ```
 
 Unit pass-through of pi^e is a homogeneity restriction, not a parameter; downward rigidity
@@ -240,15 +266,56 @@ infinite (no reachable origin) are left out of the index (owner ruling, MIGRATIO
 change in reachability moves its weights. c_max is P03c; every tick the clip binds is counted
 per province (`clip_ticks` in `run_wages`).
 
-Frictionless mode (V1): w_i solves sum_g L*_ig(w) = L^s_i exactly (monotone in w; safeguarded
-Newton in ln w), and eta = 1. The unemployment rate u_i = 1 - sum_g L_ig / L^s_i applies equally
-to each education level. L^s is the whole labour force, so 2000 unemployment rates are only the
-starting point: with the wage rule, unemployment is cyclical and the long-run steady state has
-full employment (owner choice; structural unemployment arrives with matching in P4).
+Frictionless mode (V1): w_i solves sum_g L*_ig(w) = (1 - u*_i) L^s_i exactly (monotone in w;
+safeguarded Newton in ln w), and eta = 1, so frictionless unemployment is u*. The unemployment
+rate u_i = 1 - sum_g L_ig / L^s_i applies equally to each education level.
 
-**Income.** Pop k in province i receives wages w_i e_k employed_k, a share of the province profit
-pool (enterprise profits plus market cash flow, both signed, trade SPEC), and a share of its
-country's tariff rebate by population. Shares are fixed at load.
+**Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
+effective labour force, and the wage rule reads excess demand against the country's natural rate
+u*_i, its mean ILOSTAT modelled unemployment rate 1995 to 2005 (`econ_countries.u_star`), so the
+2000 cycle is not frozen in:
+
+```
+dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative
+```
+
+At the calibrated state x_i = -u*_i and the wage step is pi^e = 0, so steady-state unemployment
+is u*, not zero; employment may exceed (1 - u*) L^s in a boom, up to L^s. Frictionless mode
+solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_L VA0_ig / ((1 -
+u*_i) L^s_i), and the data state starts at unemployment u* (a generated world, which has no 1995
+to 2005 window, takes its 2000 rate as u*). P4 matching replaces u* with matching frictions.
+
+**Income (national profit ownership, owner 2026-10-25).** Labour income stays local; profits
+and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
+
+```
+income_k = w_i * e_k * employed_k                  (wages, local)
+         + N_k / N_c * sum_(e in c) profit_e       (profits, national)
+         + N_k / N_c * rebate_c                    (tariffs, national)
+```
+
+employed_k = LF_k L_i / L^s_i is set by E1 (LF_k the pop's labour force, L_i = sum_g L_ig the
+province's employment, L^s_i its labour supply), so sum_(k in i) e_k employed_k = L_i exactly and
+the wage term is the pop's share of the province's wage bill w_i L_i. N_k the pop's population,
+N_c its country's pops' population, profit_e = sales - wages - purchases of enterprise e
+(signed) plus, in the profit pool, each province market's signed cash flow (trade SPEC), so the
+pool is sum over the country's enterprises and markets. Shares are fixed at load. At a steady
+state profit_e = (1 - s_L) VA0_e and market cash flow is 0. A province without traded output so
+earns dividends and buys local goods (it had only its rebate share under provincial ownership,
+Task 18e). The base income of a province, rebates aside (`world::base_income`,
+`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
+population of its pops. A pack country with enterprises but no pops stops the load (`PackError`):
+nobody would own its profits.
+
+*Rounding (E4).* Every enterprise and province market pays its signed cash flow, in minor units,
+into its country's profit pool account; each country then pays its pool, one i64 sum per tick,
+and its rebate account to its pops in pop ID order by cumulative population shares rounded half
+to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
+pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
+pool, the rebate account and every enterprise and market end the tick at zero and money is
+conserved exactly; each part is within one minor unit of N_k / N_c of the pool
+(`national_profit_pool_conserves_money_exactly`). Wages use the same rule over the province's
+pops by employed effective labour.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
@@ -321,7 +388,8 @@ or a negative omega_c stops the load (never clipped). On the fixture z = 0.284, 
 Spending on traded goods is sourced over origins (trade SPEC) and paid at dispatch for what is
 filled; rationed purchases leave money unspent until the next tick.
 
-**Money.** The mint issues one month of base income to each pop at tick 0. Enterprises and
+**Money.** The mint issues each pop's initial money at tick 0 (Initial state: its calibrated
+balance, or one month of base dividends in the data state). Enterprises and
 markets pay out their signed cash flow every tick, so their balances return to zero; any
 account may be negative within or across ticks (clearing facility, no interest). Every payment
 is a ledger transfer rounded half to even to minor units. Prices and wages scale freely: the
@@ -330,31 +398,74 @@ initial money and comparisons use a world price index.
 
 ## Calibration (`ceteris calibrate p2`)
 
+The 2000 data state is the model's steady state (ADR 0089, owner 2026-10-25; it replaces the
+joint inversion of productivity, whose nominal targets fold and whose real targets have no root,
+PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
+
 1. Rust loads the pack, builds the kernel, and exports kernel legs, enterprises, pops and
    parameters as Arrow. theta per class, the border friction P05 and the mode cost ratios P04 are
    estimated before this, directly by PPML structural gravity on 2000 BACI with least-cost (S05)
    costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
-2. Base point per enterprise: L0_ig = s_L VA0_ig / w0_i (base wage from the State table), so
-   base wages clear base employment. The GE reference model (below) then solves in one joint
-   system for prices, wages, the productivity A of every traded enterprise (equilibrium VA
-   equals the pack's downscaled VA) and one A per (country, local good) (equilibrium national
-   VA of that good equals ICIO).
-3. The result is `econ_calib.arrow`, hashed in `tests/golden/p2-pack.txt`. Residuals (where no
-   positive A can match) are reported, not hidden.
+2. `reference/calibrate.py` (numpy, the source of truth) solves stages 1 to 5 below at the pack's
+   u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
+   Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"
+   section.
 
-As built (`reference/calibrate.py`): value added is nominal, sales less inputs at buyer prices (the
-pack's convention), at equilibrium prices with the world price index at 1. The traded A are
-eliminated in closed form: at given prices and wages, an enterprise with p_VA > 0 matches VA T at
-L / L0 = x with s_L T = w L0 ((1 - s_L) x^(1 - rho) + s_L x) and A = T / (p_VA VA0 g(x)), g the
-normalized CES; the reduced system (ln p, ln w, ln A per pair) has the joint system's roots. The
-equilibrium at A = 1 (unique, ADR 0022) anchors the solve: targets move from its VA V1 to the data
-along V1^(1 - lambda) T^lambda, Newton-Krylov (GMRES) correcting each step. The joint system has
-several roots in general; the path picks the one connected to A = 1, and stops at a fold (the
-fixture's own data stall at lambda 0.199, PLAN Task 18b report).
+**Stage 1, values.** Output value V_o = VA_o / (1 - sum_k a_kg) per traded enterprise, VA the
+pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
+plus sum_g' a_gg' V_dg' of the province's enterprises. Household income follows Income above:
+the province's wages s_L VA by effective labour share, and the country's profits (1 - s_L) VA and
+tariff rebate by population. One scalar r_g per traded
+good rescales its V and VA so that world spending net of tariffs equals world output value (the
+2000 imbalances, reported). Rebates follow from
+sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
+repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-11 relative (Anderson-mixed);
+within a pass the income and local-output fixed point is iterated until no local output changes by more than 1e-14 relative.
 
-The 2000 state used for runs is the data state (prices 1, base wages and employment, 2000
-unemployment, inventories and input stocks at target) with the calibrated A. It is not the
-equilibrium: runs start out of it and converge, so V1 tests convergence, not calibration fit.
+**Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
+w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
+(Sinkhorn 1967). Sweeps run in the log domain (each good's weights shifted by their largest
+before each pass over the kernel), Anderson-accelerated (memory 8), to max |ln(received /
+target)| <= 1e-13. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
+the index is 1. q_d, the arrival slots and the lead follow from sourcing.
+
+**Stage 3, technology.** coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices,
+so input coefficients differ across enterprises of a country), a_VA = 1 - sum_k a_kg (cost
+shares at the calibrated prices, not at base prices), p_VA = p_o, A = 1 / p_VA, Y_o = V_o / p_o.
+Local goods take p = 1, and local output solves the 3 x 3 Leontief system of each province
+against its local demand (households and every enterprise's a_kg V); local VA = a_VA Y is an
+output of calibration, and its national gap to ICIO is reported. w0_i = sum_g s_L VA0_ig / ((1 -
+u*_i) L^s_i) and L0 = s_L VA0 / w0, so with L = L0 nominal VA is VA0 and the labour first-order
+condition holds. S09 FixedLeontief reads the same calibrated column. Every province produces:
+under national ownership even a province without traded output earns dividends and buys local
+goods.
+
+**Stage 4, demand weights.** Per country, PIGL weights inverted (ADR 0021 form, omega_A = 0) at
+the country's buyer prices, the unit value of its households' purchases of each good, and its
+mean household income per person (`demand.invert_at`): within a category alpha_g is
+proportional to Omega_g p_g^(sigma - 1), K = Omega_A / sD_A, sB = (Omega - K sD) / (1 - K), lambda
+in closed form. Pops then spend by PIGL at their province's q and income, so national shares
+match Omega only up to the spread of prices and incomes within the country (ADR 0094 is after
+the gate).
+
+**Stage 5, state at the start of a tick.** Input stocks (1 + COVER) months of use, traded and
+local, so the order-up-to rule orders one month of use; the pipeline of every buyer (pops and
+enterprises) holds, j ticks ahead, one month of steady-state shipments of every arrival slot j or
+later; merchant stocks coverage times output (S* = coverage D with D = Q); pops hold one month
+of income less this tick's wages (dividends and rebates; wages come at E2); pi^e = 0; last D, Q
+and sales their steady-state values (D = Q = sales).
+
+**Checks** (`tests/test_steady_state.py`, fixture and full pack): two starts of stage 2 reach the
+same weights up to scale (1e-10); the reference model at the calibrated point, with labour
+supply (1 - u*) L^s, has residual at most 1e-10 and reproduces VA0, L0 and Y; local output is
+positive and clears; the stage 5 state is stationary under the order rule. In Rust
+(`crates/ceteris-econ/tests/p2_steady_state.rs`), 120 ticks from the calibrated state with every
+friction on hold every quantity to 1e-9 on the fixture. On the full pack, integer money bounds
+them: real quantities to 2e-6, money to 2e-6 or 4 minor units, world aggregates to 1e-9, and the
+drift stays bounded (ADR 0089, As built). The reduced residual
+of the former joint inversion stays as `reference/reduced.py`, the numpy twin of
+`reference/jax_model.py` (exact derivatives, kept for ADR 0096).
 
 ## GE reference model (`python/ceteris/reference`)
 
@@ -362,10 +473,11 @@ Static equilibrium of the same economy with all frictions off: unknowns are ln p
 active (province, good) cell (origin markets of traded goods, province markets of local goods)
 and ln w for every province. Conditions: every origin sells its output, output = sum_d X_od /
 (p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (PIGL at
-q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; each pop
+q_d) and enterprises (a Y q_d); local goods clear locally; labour clears at the natural rate,
+sum_g L*_ig = (1 - u*_i) L^s_i (`io.Inputs.employed_supply`), with p_VA at q; each pop
 spends its income by PIGL (`reference/demand.py`, the mirror of `demand.rs`): its effective
-labour share e_k LF_k / L^s of its province's wages and profits, and its population share of its
-country's rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
+labour share e_k LF_k / L^s of its province's wages w (1 - u*) L^s, and its population share of its country's
+profits (national ownership, Income) and rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
 spending, so income is iterated to a fixed point (relative 1e-15) inside each evaluation; the
 world price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals
 1. Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
@@ -385,7 +497,7 @@ optional, 19.1).
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
-| E4 | distribute | enterprise and market cash flow, rebates | pop money for next tick | finance (P2 stand-in) |
+| E4 | distribute | enterprise and market cash flow, rebates | profit pools, pop money for next tick | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
 System IDs 201 to 210 in this order.
@@ -503,9 +615,9 @@ spillovers, pp. 3-6) has rho(A) <= 1 only without spillovers, and A.6 (forward-l
 pp. 12-15) is unique when alpha + beta <= 0 but has no trade costs. `spectral_bound` raises for a
 nonzero agglomeration or a migration elasticity until the phase that adds one derives its A.
 
-At the P2 defaults (P01 class values 12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88; the fixture's
-value-added shares, 0.46 to 0.73) the bound is 0.932 (chemicals, refined fuels and metals: theta
-12.55, beta 0.46); with labour the only input (beta = 1) it is 12.55 / 13.55 = 0.926. V1 runs in
+At the P2 defaults (P01 class values 10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19; the fixture's
+value-added shares, 0.46 to 0.73) the bound is 0.922 (chemicals, refined fuels and metals: theta
+10.57, beta 0.46); with labour the only input (beta = 1) it is 10.57 / 11.57 = 0.914. V1 runs in
 tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
 
 ## P2 gate (21.1)
@@ -531,14 +643,41 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
+  - Measured (Task 19 after its fix rounds, M4 Pro on AC power, full pack from its calibrated
+    steady state, tick 1, criterion medians of `cargo bench -p ceteris-econ`; Task 19 budgets
+    in brackets): consume (E3) 6.83 ms [10], of which the price refresh, E3's unit `source`
+    and `dispatch` of each traded good (migration carry), 5.85; labour 0.73 + produce 3.38 =
+    4.12 ms [12], of which the same-tick chain of local goods (migration carry, parallel by
+    province) 0.54; clear_reprice 0.24 ms [2] (econ clear 1.89, reprice 0.22);
+    source_dispatch_parallel, T2's warm sourcing and T2b's dispatch of the seven traded goods
+    in parallel as the tick runs them, 7.90 ms [5] (41.3 ms one good after another): missed,
+    each good's dispatch (about 5.3 ms over 356,080 crossings per class) is the critical path;
+    the E3 carry in parallel 5.42; kernel_build 120 ms. A whole tick 33.9 to 34.1 ms
+    (deliver 1.03, source 1.42, dispatch 20.6 to 20.9, distribute 0.67, end_tick 2.39); a run
+    35 to 37 ms per tick with snapshots, 150 ms before Task 19; peak memory of 120 ticks with
+    history 1.88 GB (1.80 GB before). State hashes, run files and goldens are unchanged, and
+    identical at 1 thread and at all threads.
+  - Tried for dispatch and not kept: two-lane SIMD division (`wide`), bit-identical but 0.4 ms
+    slower in parallel; and a structure-of-arrays layout for the crossings, not built: reading
+    every crossing and domestic entry as often as dispatch does takes at most 1.2 of its
+    5.2 ms per good, and the CPU counters put 55% of its cycles as useful and 44% stalled on
+    instruction processing (dependent sums, divisions), not on memory.
+  - Pruning gateway crossings by contribution (Task 19b, not kept): within a country pair every
+    crossing's tau is within about 1.3 times the best, and every live crossing carries at least
+    1% of its pair's largest flow. Only the 10,710 crossings to countries with no economy
+    province are exactly negligible (about 0.25 ms); 5 ms needs about 190,000 crossings, which
+    moves Phi_d by 50% to 95%, a change of the model and not of its speed.
+  - Re-budget (owner, 2026-10-26): source_dispatch 8 ms and a whole tick 35 ms on the full pack;
+    trade stays inside the 30 ms of 19.2. The gateway count, which sets the crossing count and
+    the access it buys, moves to the ADR 0092 rework after the gate.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
 
-## App (after the native app reaches parity, ADR 0011 option 3)
+## App (after the native app reaches parity, ADRs 0011 and 0088)
 
-The owner chose a fully native app (no React, webview or Tauri), panels in iced or Slint, picked
-by the stage 1 spike. P2's UI is built there, not in `app/`. Map modes: price by good
+The app is fully native (no React, webview or Tauri), with Slint panels over a wgpu map
+(ADR 0088). P2's UI is built there, not in `app/`. Map modes: price by good
 (index-normalized), output by sector, net exports by good, wage, unemployment. Province panel:
 market rows per good (price, inventory, supply, demand), its enterprises (sector, employment,
 output, profit), its pops (education, labour force, employed, income). Time controls: play,

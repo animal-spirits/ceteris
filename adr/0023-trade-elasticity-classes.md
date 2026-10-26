@@ -51,11 +51,16 @@ the table is used as printed. With the replication vector the goods change as no
 
 ### Mapping to the P2 goods
 
-Each HS 1992 6-digit line takes the estimate of its ISIC Rev 3 division (WITS HS 1988/92 to ISIC
-Rev 3 concordance) and its good shares from the Task 13 concordance (`goods.hs_goods_shares`).
-Theta of good g is the arithmetic mean of the line estimates weighted by share times the line's
-2000 BACI trade value (all flows, v in thousands of USD), `theta.caliendo_parro_by_good`. Every
-traded good's value is covered; 0.6% of world trade sits on lines outside the concordance.
+Each HS 1992 6-digit line takes one CPA 2.1 activity from the OECD BTiGE key, adapted locally (gold
+to basic metals, books and recorded media to printing; ADR 0050 amendment), which fixes its good
+(`goods.hs_goods_shares`) and, through the ISIC Rev 3 division of that activity (`theta.REV3_OF_CPA`),
+its Caliendo-Parro estimate. Theta of good g is the arithmetic mean of the line estimates weighted by
+the line's 2000 BACI trade value (all flows, v in thousands of USD), `theta.caliendo_parro_by_good`.
+
+The values below were drawn on 2026-10-24 through the route the key replaced: the ISIC Rev 3 division
+of the WITS HS 1988/92 to ISIC Rev 3 concordance, and good shares split equally over the ISIC Rev 4
+divisions the UNSD Rev 3.1 to Rev 4 table links (0.6% of world trade sat on lines outside it). The
+adapted key gives 9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 (amendment below).
 
 | Good | theta | 2000 trade, USD bn |
 |---|---|---|
@@ -87,27 +92,38 @@ largest spread, then the first in order. If 5 classes cannot meet the bound, the
 owner decides. Class theta is the mean of its goods' thetas weighted by their 2000 trade value;
 classes are numbered from the lowest theta. `theta.classes` implements the rule.
 
-Result, stored to two decimals (the precision of the source) in `TradeParams::default()`:
+Result, stored to two decimals (the precision of the source) in `TradeParams::default()`, on the
+thetas of the OECD key with its adaptations (amendment below):
 
 | Class | Goods | theta |
 |---|---|---|
 | 0 | 3 Food | 2.62 |
-| 1 | 4 Light manufacturing, 6 Machinery, electronics and vehicles | 5.88 |
-| 2 | 0 Agriculture, 1 Crude oil and gas, 2 Coal and other mining, 5 Chemicals, refined fuels and metals | 12.55 |
+| 1 | 6 Machinery, electronics and vehicles | 5.19 |
+| 2 | 0 Agriculture, 1 Crude oil and gas, 2 Coal and other mining, 4 Light manufacturing, 5 Chemicals, refined fuels and metals | 10.57 |
 
-Class 2 spans 9.11 to 13.53, a factor 1.485. The full-sample column and the replication vector
-give the same classes except that Agriculture moves to class 1 (class values 2.55, 5.64, 13.33 and
-2.62, 7.39, 12.91).
+Class 2 spans 9.11 to 13.53, a factor 1.485. On the original WITS and UNSD thetas the rule drew
+2.62 (food), 5.88 (goods 4 and 6) and 12.55 (goods 0, 1, 2, 5), the values of the first
+implementation. On that route the full-sample column and the replication vector gave the same classes
+except that Agriculture moved to class 1 (class values 2.55, 5.64, 13.33 and 2.62, 7.39, 12.91).
 
 ## Consequences
 
-- The P01 prior widens from 4 to 8 to the range of the class values, 2.62 to 12.55
-  (`specs/trade/SPEC.md`, P01).
+- The P01 prior widens from 4 to 8 to the range of the class values, 2.62 to 10.57 (12.55 on
+  the original thetas; `specs/trade/SPEC.md`, P01).
 - Kernels stay per good in P2 (weight classes are goods, ADR 0018); `TradeParams.theta_class`
   carries the map so goods of one class can share kernels once weight classes merge.
 - H2 per class (`test_h2_theta_by_class`, PLAN Task 20) estimates each class's theta by PPML on
   simulated flows (`ppml.trade_elasticity`).
-- At theta 12.55 the sourcing weight floor (1e-100) drops origins priced 1e8 times above the best,
-  against 1e20 at theta 5.
+- At theta 10.57 the sourcing weight floor (1e-100) drops origins priced 3e9 times above the best
+  (1e8 at 12.55), against 1e20 at theta 5.
 - Direct estimation on BACI (ADR 0022) replaces these values and may redraw the classes by the
   same rule.
+- Amended by ADR 0050 (2026-10-25): the WITS and UNSD concordance gave way to the OECD BTiGE HS to CPA
+  key. Through the unadapted key the rule drew four classes (2.62, 5.19, 9.94, 13.53), and the owner
+  adopted the key's classes on 2026-10-25. With the local adaptations (gold to basic metals, books
+  and recorded media to printing) light manufacturing rises to 9.15 and chemicals and metals falls to
+  10.57, so the rule draws three classes again: 2.62 (food), 5.19 (machinery, electronics and
+  vehicles) and 10.57 (agriculture, crude oil and gas, coal and other mining, light manufacturing,
+  chemicals, refined fuels and metals; 9.11 to 13.53, a factor 1.485). `TradeParams::default()`
+  holds the adopted classes since the theta task (2026-10-25), and `test_rust_theta_defaults_follow_the_estimator`
+  ties the fixture export of those defaults to `theta.classes`.

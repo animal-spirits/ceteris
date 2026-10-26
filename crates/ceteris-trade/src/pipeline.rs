@@ -81,6 +81,20 @@ impl Pipeline {
             .flat_map(|s| s.iter().skip(g).step_by(N_GOODS))
             .sum()
     }
+
+    /// [`Pipeline::in_flight`] of every good in one pass, each summed in the same order.
+    pub fn in_flight_all(&self) -> [f64; N_GOODS] {
+        // -0.0 is where `Iterator::sum` starts
+        let mut total = [-0.0; N_GOODS];
+        for s in &self.slots {
+            for row in s.chunks_exact(N_GOODS) {
+                for (t, &x) in total.iter_mut().zip(row) {
+                    *t += x;
+                }
+            }
+        }
+        total
+    }
 }
 
 impl Encode for Pipeline {
@@ -121,6 +135,17 @@ impl Decode for Pipeline {
 mod tests {
     use super::*;
     use ceteris_core::snapshot::canonical;
+
+    #[test]
+    fn in_flight_of_all_goods_matches_each_good() {
+        let mut p = Pipeline::new(3);
+        for (i, units) in [0.1, 1e-17, 3.0, 0.7, 1e16, 0.3].into_iter().enumerate() {
+            p.push(1 + i % SLOTS, i % 3, (i * 7) % N_GOODS, units);
+        }
+        for (g, total) in p.in_flight_all().iter().enumerate() {
+            assert_eq!(total.to_bits(), p.in_flight(g).to_bits(), "good {g}");
+        }
+    }
 
     #[test]
     fn pipeline_delivers_each_buyer_after_its_slot() {

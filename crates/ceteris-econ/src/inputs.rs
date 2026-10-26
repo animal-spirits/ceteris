@@ -2,8 +2,13 @@
 //! Everything here is fixed for a run and lives outside snapshots; [`EconInputs::digest`]
 //! pins it in the snapshot instead.
 
+use std::sync::Arc;
+
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, N_GOODS, Network, Wedges};
+use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
+
+use crate::calibration::Steady;
+use crate::demand::PiglWeights;
 
 /// Education levels of a pop: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
@@ -17,10 +22,16 @@ pub struct Countries {
     pub io: Vec<[f64; N_GOODS * N_GOODS]>,
     /// Labour share s_L, used for every sector.
     pub s_l: Vec<f64>,
-    /// 2000 unemployment rate.
+    /// 2000 unemployment rate (data; the model runs on `u_star`).
     pub unemployment: Vec<f64>,
+    /// Natural rate u*, the mean unemployment rate 1995 to 2005 (ADR 0089): the base point,
+    /// the wage rule's wedge and the frictionless labour target.
+    pub u_star: Vec<f64>,
     /// 2000 Gini of income, the dispersion of each pop's lognormal income (ADR 0021).
     pub gini: Vec<f64>,
+    /// Calibrated PIGL weights (ADR 0089, stage 4); `None` inverts them at load at prices 1
+    /// (`world::household_preferences`).
+    pub pigl: Option<Vec<PiglWeights>>,
 }
 
 /// Per-province data, indexed by province.
@@ -35,6 +46,10 @@ pub struct ProvinceData {
     pub population: Vec<f64>,
     /// Base wage w0, numeraire per effective labour unit. See [`EconInputs::set_base_point`].
     pub w0: Vec<f64>,
+    /// Base delivered unit price q_d of every good at the province: 1 for local goods; for
+    /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
+    /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
+    pub base_price: Vec<[f64; N_GOODS]>,
 }
 
 /// Pops, one per (province, education level), sorted by province.
@@ -62,16 +77,24 @@ pub struct EntData {
     /// Value added the calibration matches (pack VA for traded goods).
     pub va_target: Vec<f64>,
     /// Putty-clay input coefficients (ADR 0020): units of each good per unit of output,
-    /// aggregated over the enterprise's capacity vintages. P2 has one vintage, the country's
-    /// ICIO column; see [`EconInputs::set_coefficients`].
+    /// aggregated over the enterprise's capacity vintages. P2 has one vintage, `column`.
     pub coef: Vec<[f64; N_GOODS]>,
+    /// The 2000 vintage, which S09 FixedLeontief runs on: the country's ICIO cost shares at
+    /// base delivered prices ([`EconInputs::set_coefficients`]) or at the calibrated prices
+    /// (ADR 0089, [`EconInputs::calibrate`]).
+    pub column: Vec<[f64; N_GOODS]>,
+    /// Value-added coefficient a_VA, real VA per unit of output: 1 - sum_k coef_k q_k at base
+    /// prices for the base column, 1 - sum_k a_kg (the cost shares at the calibrated prices)
+    /// for a calibrated one.
+    pub a_va: Vec<f64>,
 }
 
 /// All static data of a P2 world.
 ///
 /// The base point (`ProvinceData::w0`, `EntData::l0`) is data here, not derived at load: the
-/// builder of the inputs fills it once with [`EconInputs::set_base_point`] (the fixture) or
-/// reads it from the calibration table (the pack), and `EconWorld::new` uses it as given.
+/// builder of the inputs fills it once with [`EconInputs::set_base_point`] (the data state) or
+/// reads it from the calibration tables ([`EconInputs::calibrate`]), and `EconWorld::new` uses
+/// it as given.
 #[derive(Clone, Debug, Default)]
 pub struct EconInputs {
     pub network: Network,
@@ -82,6 +105,9 @@ pub struct EconInputs {
     pub provinces: ProvinceData,
     pub pops: PopData,
     pub enterprises: EntData,
+    /// The calibrated steady state a world starts from (ADR 0089, stage 5); `None` starts
+    /// from the data state. Not in the digest: snapshots carry the state.
+    pub steady: Option<Arc<Steady>>,
 }
 
 impl EconInputs {
@@ -116,25 +142,62 @@ impl EconInputs {
         self.enterprises.coef[e][k]
     }
 
-    /// Fills every enterprise's coefficients with one vintage, its country's ICIO column for
-    /// its sector (the 2000 state, ADR 0020).
-    pub fn set_coefficients(&mut self) {
-        self.enterprises.coef = (0..self.n_enterprises())
-            .map(|e| self.country_column(e))
-            .collect();
+    /// Fills `ProvinceData::base_price` from sourcing at prices 1 over the kernel of this
+    /// network under `trade` (`world::delivered_prices`, the price index of the data state).
+    pub fn set_base_prices(&mut self, trade: &TradeParams) {
+        self.provinces.base_price = crate::world::base_delivered_prices(self, trade);
     }
 
-    /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k.
+    /// Fills every enterprise's 2000 column with [`EconInputs::cost_share_column`], its
+    /// coefficients with that one vintage (ADR 0020) and a_VA with [`EconInputs::base_a_va`].
+    /// Needs the base prices.
+    pub fn set_coefficients(&mut self) {
+        let column: Vec<[f64; N_GOODS]> = (0..self.n_enterprises())
+            .map(|e| self.cost_share_column(e))
+            .collect();
+        self.enterprises.a_va = (0..self.n_enterprises())
+            .map(|e| self.base_a_va(self.enterprises.province[e] as usize, &column[e]))
+            .collect();
+        self.enterprises.coef = column.clone();
+        self.enterprises.column = column;
+    }
+
+    /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k: cost shares
+    /// of output at base prices.
     pub fn country_column(&self, e: usize) -> [f64; N_GOODS] {
         let c = self.country_of(self.enterprises.province[e] as usize);
         let g = usize::from(self.enterprises.good[e]);
         std::array::from_fn(|k| self.a(c, k, g))
     }
 
-    /// Whether every enterprise's coefficients are its country's column (one vintage), so
-    /// that both S09 settings read the same numbers.
+    /// The 2000 column of enterprise `e`, which S09 FixedLeontief runs on.
+    pub fn base_column(&self, e: usize) -> [f64; N_GOODS] {
+        self.enterprises.column[e]
+    }
+
+    /// Physical coefficients of enterprise `e` from its country's cost shares (owner decision,
+    /// 2026-10-25): coef_k = a_kg / q_k, q_k the base delivered price of k at its province, so
+    /// at base prices every input's cost share is the ICIO share; 0 where k is unreachable.
+    pub fn cost_share_column(&self, e: usize) -> [f64; N_GOODS] {
+        let q = &self.provinces.base_price[self.enterprises.province[e] as usize];
+        let a = self.country_column(e);
+        std::array::from_fn(|k| if a[k] > 0.0 { a[k] / q[k] } else { 0.0 })
+    }
+
+    /// Value-added coefficient of coefficients `coef` at the base prices of province `i`:
+    /// a_VA = 1 - sum_k coef_k q_k over reachable inputs (1 - sum_k a_kg for the base column).
+    pub fn base_a_va(&self, i: usize, coef: &[f64; N_GOODS]) -> f64 {
+        let q = &self.provinces.base_price[i];
+        1.0 - (0..N_GOODS)
+            .filter(|&k| coef[k] > 0.0)
+            .map(|k| coef[k] * q[k])
+            .sum::<f64>()
+    }
+
+    /// Whether every enterprise's coefficients are its 2000 column (one vintage), so that
+    /// both S09 settings read the same numbers.
     pub fn one_vintage(&self) -> bool {
-        (0..self.n_enterprises()).all(|e| self.enterprises.coef[e] == self.country_column(e))
+        self.enterprises.coef == self.enterprises.column
     }
 
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
@@ -152,10 +215,9 @@ impl EconInputs {
         out
     }
 
-    /// Fills the base point from VA0 (spec Calibration step 2):
-    /// w0_i = sum_g s_L VA0_ig / ((1 - u_2000) L^s_i) and L0_ig = s_L VA0_ig / w0_i, so base
-    /// wages clear base employment at the 2000 unemployment rate. Panics for a province with
-    /// no value added or no labour supply.
+    /// Fills the base point from VA0 (ADR 0089): w0_i = sum_g s_L VA0_ig / ((1 - u*_i)
+    /// L^s_i) and L0_ig = s_L VA0_ig / w0_i, so base wages clear base employment at the
+    /// natural rate. Panics for a province with no value added or no labour supply.
     pub fn set_base_point(&mut self, edu_eff: &[f64; N_EDU]) {
         let supply = self.labour_supply(edu_eff);
         let mut bill = vec![0.0; self.n_provinces()];
@@ -169,7 +231,7 @@ impl EconInputs {
                     bill[i] > 0.0 && supply[i] > 0.0,
                     "province {i} needs value added and labour for a base wage"
                 );
-                bill[i] / ((1.0 - self.countries.unemployment[self.country_of(i)]) * supply[i])
+                bill[i] / ((1.0 - self.countries.u_star[self.country_of(i)]) * supply[i])
             })
             .collect();
         self.enterprises.l0 = (0..self.n_enterprises())
@@ -189,7 +251,9 @@ impl EconInputs {
             c.omega.len() == nc
                 && c.io.len() == nc
                 && c.unemployment.len() == nc
-                && c.gini.len() == nc,
+                && c.u_star.len() == nc
+                && c.gini.len() == nc
+                && c.pigl.as_ref().is_none_or(|w| w.len() == nc),
             "country columns disagree in length"
         );
         assert_eq!(
@@ -207,6 +271,11 @@ impl EconInputs {
                 (0.0..1.0).contains(&c.unemployment[k]),
                 "country {k}: unemployment {}",
                 c.unemployment[k]
+            );
+            assert!(
+                (0.0..1.0).contains(&c.u_star[k]),
+                "country {k}: natural rate {}",
+                c.u_star[k]
             );
             assert!(
                 (0.0..1.0).contains(&c.gini[k]),
@@ -232,8 +301,14 @@ impl EconInputs {
 
         let p = &self.provinces;
         assert!(
-            p.population.len() == np && p.w0.len() == np,
-            "province columns disagree in length"
+            p.population.len() == np && p.w0.len() == np && p.base_price.len() == np,
+            "province columns disagree in length; fill base prices with set_base_prices"
+        );
+        assert!(
+            p.base_price
+                .iter()
+                .all(|q| q.iter().all(|&x| x > 0.0 && !x.is_nan())),
+            "base delivered prices must be positive"
         );
         assert_eq!(
             p.country, self.network.province_country,
@@ -284,7 +359,9 @@ impl EconInputs {
                 && e.va0.len() == n
                 && e.l0.len() == n
                 && e.va_target.len() == n
-                && e.coef.len() == n,
+                && e.coef.len() == n
+                && e.column.len() == n
+                && e.a_va.len() == n,
             "enterprise columns disagree in length"
         );
         for k in 0..n {
@@ -308,10 +385,16 @@ impl EconInputs {
                     && e.va_target[k].is_finite(),
                 "enterprise {k}: non-finite data"
             );
-            let coef = &e.coef[k];
+            for coef in [&e.coef[k], &e.column[k]] {
+                assert!(
+                    coef.iter().all(|a| a.is_finite() && *a >= 0.0),
+                    "enterprise {k}: input coefficients {coef:?}; fill them with set_coefficients"
+                );
+            }
             assert!(
-                coef.iter().all(|a| a.is_finite() && *a >= 0.0) && coef.iter().sum::<f64>() < 1.0,
-                "enterprise {k}: input coefficients {coef:?}; fill them with set_coefficients"
+                e.a_va[k] > 0.0 && e.a_va[k] <= 1.0,
+                "enterprise {k}: value-added coefficient {}",
+                e.a_va[k]
             );
         }
     }
@@ -327,6 +410,8 @@ impl EconInputs {
             provinces,
             pops,
             enterprises,
+            // the initial state, which snapshots carry
+            steady: _,
         } = self;
         let Network {
             province_country,
@@ -341,13 +426,16 @@ impl EconInputs {
             io,
             s_l,
             unemployment,
+            u_star,
             gini,
+            pigl,
         } = countries;
         let ProvinceData {
             country,
             population,
             w0,
             pack,
+            base_price,
         } = provinces;
         let PopData {
             province: pop_province,
@@ -363,6 +451,8 @@ impl EconInputs {
             l0,
             va_target,
             coef,
+            column,
+            a_va,
         } = enterprises;
 
         let mut e = Encoder::default();
@@ -379,10 +469,12 @@ impl EconInputs {
         e.f64s(io.as_flattened());
         e.f64s(s_l);
         e.f64s(unemployment);
+        e.f64s(u_star);
         e.f64s(gini);
         u16s(&mut e, country);
         e.f64s(population);
         e.f64s(w0);
+        e.f64s(base_price.as_flattened());
         e.u32s(pop_province);
         e.count(edu.len());
         edu.iter().for_each(|&b| e.u8(b));
@@ -396,6 +488,16 @@ impl EconInputs {
         e.f64s(l0);
         e.f64s(va_target);
         e.f64s(coef.as_flattened());
+        e.f64s(column.as_flattened());
+        e.f64s(a_va);
+        if let Some(weights) = pigl {
+            b"pigl-weights".iter().for_each(|&b| e.u8(b));
+            for w in weights {
+                e.f64(w.scale);
+                e.f64s(&w.omega);
+                e.f64s(&w.within);
+            }
+        }
         // appended only when present, so generated worlds keep their digest
         if !pack.is_empty() {
             b"pack-provinces".iter().for_each(|&b| e.u8(b));

@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import re
@@ -9,6 +10,7 @@ import pyarrow as pa
 import pytest
 from pyarrow import ipc
 
+from ceteris.calibrate import gravity
 from ceteris.packs import fetch
 from ceteris.packs.econ import build as econ_build
 from ceteris.packs.econ import gateways, goods, people, tariffs, theta
@@ -127,44 +129,81 @@ def test_division_to_good_covers_isic_goods_divisions():
     assert goods.good_of_division("04") is None
 
 
-def test_hs_goods_shares_split_ambiguous_codes_equally():
-    hs_isic3 = {"010111": "0121", "270900": "1110", "999999": "9999"}
-    bridge = {"0121": ["0141", "0145"], "1110": ["0610", "0910"]}
-    shares = goods.hs_goods_shares(hs_isic3, bridge)
-    assert shares["010111"] == {0: 1.0}
-    assert shares["270900"] == {1: 1.0}
-    assert "999999" not in shares
-
-    bridge = {"1110": ["0610", "0510"]}
-    assert goods.hs_goods_shares({"270900": "1110"}, bridge)["270900"] == {1: 0.5, 2: 0.5}
-
-
-def test_hs_goods_shares_fall_back_to_the_three_digit_prefix():
-    bridge = {"0501": ["0311"], "0502": ["0321"]}
-    assert goods.hs_goods_shares({"030212": "0500"}, bridge)["030212"] == {0: 1.0}
+def test_cpa_codes_map_to_goods_through_their_division():
+    assert goods.good_of_cpa("A01") == 0
+    assert goods.good_of_cpa("B05") == 2 and goods.good_of_cpa("B06") == 1 and goods.good_of_cpa("B072") == 2
+    assert goods.good_of_cpa("C24A") == 5 and goods.good_of_cpa("C254") == 5
+    assert goods.good_of_cpa("C302_309") == 6 and goods.good_of_cpa("C262") == 6
+    assert goods.good_of_cpa("C32X325") == 4 and goods.good_of_cpa("C325") == 4
+    assert goods.good_of_cpa("D35") == 7 and goods.good_of_cpa("E38") == 7
+    assert goods.good_of_cpa("J58") == 9 and goods.good_of_cpa("R90") == 9
+    assert goods.good_of_cpa("_X") is None
 
 
-def test_bridge_keeps_principal_links_and_drops_mining_support(tmp_path):
-    path = tmp_path / "bridge.txt"
-    path.write_text(
-        '"ISIC31code","partialISIC31","ISIC4code","partialISIC4","Detail"\n'
-        '"1010",1,"0510",0,""\n"1010",1,"0990",1,"Support"\n"1010",1,"1920",1,"Briquettes"\n'
-        '"1410",1,"0810",1,"Quarrying"\n"1410",1,"0990",1,"Support"\n'
-        '"2411",1,"1910",1,"Pitch"\n"2411",1,"2011",1,"Basic chemicals"\n'
-    )
-    assert goods.read_bridge(path) == {"1010": ["0510"], "1410": ["0810"], "2411": ["1910", "2011"]}
+def test_hs_goods_shares_put_each_line_in_one_good():
+    shares = goods.hs_goods_shares({"270111": "B05", "270900": "B06", "270120": "C19", "999999": "_X"})
+    assert shares == {"270111": {2: 1.0}, "270900": {1: 1.0}, "270120": {5: 1.0}}
+
+
+def _key(path: Path, lines: dict[str, str], version: int = 0) -> Path:
+    """An xlsx shaped like the OECD BTiGE key: HS-version, HS-code, CPA, ENDUSE; a version-1 decoy row."""
+    strings = ["HS-version", "HS-code", "CPA", "ENDUSE", "INT"]
+
+    def s(text: str) -> int:
+        if text not in strings:
+            strings.append(text)
+        return strings.index(text)
+
+    def row(r: int, cells: list[tuple[str, object]]) -> str:
+        out = "".join(
+            f'<c r="{c}{r}"><v>{v}</v></c>' if isinstance(v, int) else f'<c r="{c}{r}" t="s"><v>{s(v)}</v></c>' for c, v in cells
+        )
+        return f'<row r="{r}">{out}</row>'
+
+    rows = [row(1, [("A", "HS-version"), ("B", "HS-code"), ("C", "CPA"), ("D", "ENDUSE")])]
+    body = [*((version, hs, cpa) for hs, cpa in lines.items()), (1, next(iter(lines)), "_X")]
+    rows += [row(i, [("A", v), ("B", hs), ("C", cpa), ("D", "INT")]) for i, (v, hs, cpa) in enumerate(body, start=2)]
+    main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(
+            "xl/workbook.xml",
+            f'<workbook xmlns="{main}" xmlns:r="{rel}"><sheets><sheet name="{goods.KEY_SHEET}" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        )
+        z.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+        )
+        z.writestr("xl/sharedStrings.xml", f'<sst xmlns="{main}">' + "".join(f"<si><t>{t}</t></si>" for t in strings) + "</sst>")
+        z.writestr("xl/worksheets/sheet1.xml", f'<worksheet xmlns="{main}"><sheetData>{"".join(rows)}</sheetData></worksheet>')
+    return path
+
+
+def test_read_hs_cpa_keeps_hs_1988_92_lines(tmp_path):
+    key = _key(tmp_path / "key.xlsx", {"010111": "A01", "270900": "B06"})
+    assert goods.read_hs_cpa(key) == {"010111": "A01", "270900": "B06"}
+
+
+def test_read_hs_cpa_moves_gold_to_basic_metals_and_books_to_printing(tmp_path):
+    lines = {"710812": "B072", "710813": "C24B", "490199": "J58", "852410": "J59_60", "271600": "D35", "970110": "R90"}
+    got = goods.read_hs_cpa(_key(tmp_path / "key.xlsx", lines))
+    assert got == {"710812": "C24B", "710813": "C24B", "490199": "C18", "852410": "C18", "271600": "D35", "970110": "R90"}
+    shares = goods.hs_goods_shares(got)
+    assert shares["710812"] == {5: 1.0} and shares["490199"] == {4: 1.0} and shares["852410"] == {4: 1.0}
+    assert shares["271600"] == {7: 1.0} and shares["970110"] == {9: 1.0}
 
 
 def test_weights_from_baci_pins_tonnes_per_usd(tmp_path):
-    # One HS line per traded good: hs6 -> (ISIC Rev 3 class, ISIC Rev 4 class) in divisions 01, 06, 05, 10, 13, 20, 26.
+    # One HS line per traded good: hs6 -> CPA 2.1 activity in divisions 01, 06, 05, 10, 13, 20, 26.
     lines = {
-        "010121": ("0111", "0111"),
-        "270900": ("1110", "0610"),
-        "270112": ("1010", "0510"),
-        "020110": ("1511", "1010"),
-        "520100": ("1711", "1310"),
-        "290110": ("2411", "2011"),
-        "850110": ("3110", "2610"),
+        "010121": "A01",
+        "270900": "B06",
+        "270112": "B05",
+        "020110": "C10",
+        "520100": "C13",
+        "290110": "C20",
+        "850110": "C261",
     }
     # BACI v is thousands of USD, q is tonnes; k carries no leading zero. t,i,j,k,v,q.
     rows = [
@@ -178,24 +217,14 @@ def test_weights_from_baci_pins_tonnes_per_usd(tmp_path):
         "2000,1,2,520100,10,1",
         "2000,1,2,290110,20,4",
         "2000,1,2,850110,50,1",
-        "2000,1,2,999999,7,7",  # absent from the concordance
+        "2000,1,2,999999,7,7",  # absent from the key
     ]
     baci = tmp_path / "baci.zip"
     with zipfile.ZipFile(baci, "w") as z:
         z.writestr("BACI_HS92_Y2000_V202601.csv", "t,i,j,k,v,q\n" + "\n".join(rows) + "\n")
         z.writestr("BACI_HS92_Y2001_V202601.csv", "t,i,j,k,v,q\n2001,1,2,10121,1,999\n")
-    wits = tmp_path / "wits.zip"
-    with zipfile.ZipFile(wits, "w") as z:
-        text = "HS1988-92 Product Code,Product Description,ISIC Revision 3 Product Code\n"
-        text += "".join(f"{hs},x,{i3}\n" for hs, (i3, _) in lines.items())
-        z.writestr("JobID-0_Concordance_H0_to_I3.CSV", text)
-    bridge = tmp_path / "bridge.txt"
-    bridge.write_text(
-        '"ISIC31code","partialISIC31","ISIC4code","partialISIC4","Detail"\n'
-        + "".join(f'"{i3}",0,"{i4}",0,""\n' for i3, i4 in lines.values())
-    )
 
-    w = goods.weights_from_baci(baci, wits, bridge)
+    w = goods.weights_from_baci(baci, _key(tmp_path / "key.xlsx", lines))
 
     # tonnes / (v x 1000): the 100 and 0.5 kUSD rows without q must not enter the denominator.
     expected = [4 / 5000, 2 / 8000, 40 / 4000, 10 / 5000, 1 / 10000, 4 / 20000, 1 / 50000]
@@ -223,8 +252,8 @@ def test_caliendo_parro_values_transcribed():
 
 
 def test_theta_by_good_weighted_by_trade(tmp_path):
-    # Two light-manufacturing lines (Textile 8.10, Wood 11.50) and one food line (2.62); one line out of the concordance.
-    lines = {"520100": ("1711", "1310"), "440310": ("2010", "1610"), "020110": ("1511", "1010")}
+    # Two light-manufacturing lines (Textile 8.10, Wood 11.50) and one food line (2.62); one line out of the key.
+    lines = {"520100": "C13", "440310": "C16", "020110": "C10"}
     rows = [
         "2000,1,2,520100,1,",  # no q: still weighs by value
         "2000,1,3,520100,2,5",
@@ -236,18 +265,8 @@ def test_theta_by_good_weighted_by_trade(tmp_path):
     with zipfile.ZipFile(baci, "w") as z:
         z.writestr("BACI_HS92_Y2000_V202601.csv", "t,i,j,k,v,q\n" + "\n".join(rows) + "\n")
         z.writestr("BACI_HS92_Y2001_V202601.csv", "t,i,j,k,v,q\n2001,1,2,440310,1000,1\n")
-    wits = tmp_path / "wits.zip"
-    with zipfile.ZipFile(wits, "w") as z:
-        text = "HS1988-92 Product Code,Product Description,ISIC Revision 3 Product Code\n"
-        text += "".join(f"{hs},x,{i3}\n" for hs, (i3, _) in lines.items())
-        z.writestr("JobID-0_Concordance_H0_to_I3.CSV", text)
-    bridge = tmp_path / "bridge.txt"
-    bridge.write_text(
-        '"ISIC31code","partialISIC31","ISIC4code","partialISIC4","Detail"\n'
-        + "".join(f'"{i3}",0,"{i4}",0,""\n' for i3, i4 in lines.values())
-    )
 
-    t = theta.caliendo_parro_by_good(baci, wits, bridge)
+    t = theta.caliendo_parro_by_good(baci, _key(tmp_path / "key.xlsx", lines))
 
     assert t.shape == (goods.N_GOODS,)
     assert t[4] == pytest.approx((3 * 8.10 + 1 * 11.50) / 4, rel=1e-12)
@@ -301,10 +320,7 @@ def _cached(name: str):
 
 @pytest.fixture(scope="module")
 def weights():
-    baci = _cached("BACI_HS92_V202601.zip")
-    hs_isic = _cached("Concordance_H0_to_I3.zip")
-    bridge = _cached("ISIC31_ISIC4.txt")
-    return goods.weights_from_baci(baci, hs_isic, bridge)
+    return goods.weights_from_baci(_cached("BACI_HS92_V202601.zip"), _cached(econ_build.HS_KEY))
 
 
 def test_weights_positive_for_traded(weights):
@@ -324,21 +340,55 @@ def test_bulk_heavier_than_machinery(weights):
 
 @pytest.fixture(scope="module")
 def caliendo_parro():
-    baci = _cached("BACI_HS92_V202601.zip")
-    hs_isic = _cached("Concordance_H0_to_I3.zip")
-    bridge = _cached("ISIC31_ISIC4.txt")
-    return theta.caliendo_parro_with_value(baci, hs_isic, bridge)
+    return theta.caliendo_parro_with_value(_cached("BACI_HS92_V202601.zip"), _cached(econ_build.HS_KEY))
 
 
 def test_caliendo_parro_by_good_from_baci(caliendo_parro):
-    """ADR 0023 values: theta per good to two decimals, and the classes of `TradeParams::default()`."""
+    """Theta per good to two decimals through the adapted OECD key, and its classes (ADR 0050 amendment). The
+    WITS and UNSD route that ADR 0023 first used (goods 4 to 6 at 6.73, 12.64, 5.33; classes 2.62, 5.88, 12.55) was
+    replaced by the key."""
     t, v = caliendo_parro
-    np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 6.73, 12.64, 5.33, 0, 0, 0], atol=0.005)
+    np.testing.assert_allclose(t, [9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19, 0, 0, 0], atol=0.005)
     assert (v[:7] > 1e11).all() and (v[7:] == 0).all()
     of, ct = theta.classes(t[:7], v[:7])
-    assert of.tolist() == [2, 2, 2, 0, 1, 2, 1]
-    np.testing.assert_allclose(ct, [2.62, 5.88, 12.55], atol=0.005)
+    assert of.tolist() == [2, 2, 2, 0, 2, 2, 1]
+    np.testing.assert_allclose(ct, [2.62, 5.19, 10.57], atol=0.005)
     assert math.log(ct[-1] / ct[0]) > math.log(theta.CLASS_SPREAD)
+
+
+def test_fixture_defaults_match_the_calibration_constants():
+    """The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by p2_acceptance),
+    against `gravity.CLASSES` and `THETA_DEFAULT`. Needs no BACI; the estimator test below links the literals to
+    `theta.classes`."""
+    trade = json.loads((FIXTURE / "params.json").read_text())["trade"]
+    assert trade["theta_class"] == [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]
+    assert trade["theta"] == [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]
+    of = trade["theta_class"][:7]
+    assert gravity.CLASSES == tuple(tuple(g for g in range(7) if of[g] == c) for c in range(max(of) + 1))
+    assert gravity.THETA_DEFAULT == tuple(trade["theta"][members[0]] for members in gravity.CLASSES)
+
+
+def test_rust_theta_defaults_follow_the_estimator(caliendo_parro):
+    """`TradeParams::default()` is pinned to the fixture's params.json by the p2_acceptance staleness check, so
+    reading that file ties the Rust defaults, and the calibration constants, to the ADR 0023 rule on the pack."""
+    t, v = caliendo_parro
+    of, ct = theta.classes(t[:7], v[:7])
+    trade = json.loads((FIXTURE / "params.json").read_text())["trade"]
+    n = goods.N_GOODS
+    assert trade["theta_class"] == of.tolist() + [0] * (n - 7)
+    np.testing.assert_allclose(trade["theta"], [ct[c] for c in of] + [0.0] * (n - 7), atol=0.005)
+    assert gravity.CLASSES == tuple(tuple(int(g) for g in np.flatnonzero(of == c)) for c in range(len(ct)))
+    np.testing.assert_allclose(gravity.THETA_DEFAULT, ct, atol=0.005)
+
+
+def test_every_traded_activity_of_the_key_has_a_sector_estimate():
+    key = goods.read_hs_cpa(_cached(econ_build.HS_KEY))
+    traded = {c for c in key.values() if goods.good_of_cpa(c) in goods.TRADED}
+    assert traded <= set(theta.REV3_OF_CPA)
+    assert {d for _, (divisions, _) in theta.CALIENDO_PARRO.items() for d in divisions} >= set(theta.REV3_OF_CPA.values())
+    # Coal, crude oil and natural gas sit wholly in their goods (the principal-link rule of the old route).
+    shares = goods.hs_goods_shares(key)
+    assert shares["270112"] == {2: 1.0} and shares["270900"] == {1: 1.0} and shares["271121"] == {1: 1.0}
 
 
 # Tariffs (Task 17)
@@ -554,19 +604,35 @@ def test_pack_econ_tables_are_consistent():
     assert (lf <= pop).all()
 
 
-def _p2_lines(tables: dict[str, str]) -> str:
+# Written by `python -m ceteris.reference calibrate` and installed into the pack (ADR 0089).
+CALIBRATION_TABLES = (
+    "econ_calib.arrow",
+    "econ_calib_cells.arrow",
+    "econ_calib_provinces.arrow",
+    "econ_calib_pops.arrow",
+    "econ_calib_pipeline.arrow",
+    "econ_calib_countries.arrow",
+)
+
+
+def _p2_lines(tables: dict[str, str], calibration: dict[str, str]) -> str:
     lines = [f"{name} {tables[name]}" for name in econ_build.TABLES]
+    # then the sha256 of the calibration tables installed in the pack
+    lines += [f"{name} {calibration[name]}" for name in CALIBRATION_TABLES if name in calibration]
     return "# P2 pack 2000: econ table sha256 from manifest.json\n" + "\n".join(lines) + "\n"
 
 
 def test_pack_econ_tables_match_golden():
-    """Regenerate deliberately with CETERIS_BLESS=1 after rebuilding, and say why in the commit."""
+    """Regenerate deliberately with CETERIS_BLESS=1 after rebuilding or recalibrating, and say why in the commit."""
     manifest = PACK / "manifest.json"
     if not manifest.exists():
         pytest.skip(f"skipping: no manifest.json in {PACK}; build the pack with `uv run python -m ceteris.packs`")
-    import json
+    import hashlib
 
-    actual = _p2_lines(json.loads(manifest.read_text())["tables"])
+    calibration = {
+        name: hashlib.sha256((PACK / name).read_bytes()).hexdigest() for name in CALIBRATION_TABLES if (PACK / name).exists()
+    }
+    actual = _p2_lines(json.loads(manifest.read_text())["tables"], calibration)
     if os.environ.get("CETERIS_BLESS"):
         GOLDEN_P2.write_text(actual)
         return

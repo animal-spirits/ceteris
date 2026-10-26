@@ -46,6 +46,19 @@ def test_read_ilostat_keeps_both_sexes_and_the_asked_age_class_as_fractions(tmp_
     assert people.read_ilostat(path, "AGE_YTHADULT_Y15-64") == {"AFG": pytest.approx(0.475)}
 
 
+def test_read_ilostat_mean_averages_the_years_of_the_natural_rate_window(tmp_path):
+    path = tmp_path / "une.csv"
+    rows = ['"ref_area","source","indicator","sex","classif1","time","obs_value","obs_status"']
+    for year, value in ((1994, 90.0), (1995, 4.0), (2000, 6.0), (2005, 8.0), (2006, 90.0)):
+        rows.append(f'"AFG","XA:1","UNE","SEX_T","AGE_YTHADULT_YGE15","{year}",{value},')
+    rows.append('"AFG","XA:1","UNE","SEX_F","AGE_YTHADULT_YGE15","2000",50.0,')
+    rows.append('"AFG","XA:1","UNE","SEX_T","AGE_YTHADULT_Y15-24","2000",50.0,')
+    rows.append('"ALB","XA:1","UNE","SEX_T","AGE_YTHADULT_YGE15","2000",,')
+    rows.append('"ALB","XA:1","UNE","SEX_T","AGE_YTHADULT_YGE15","1990",3.0,')
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8-sig")
+    assert people.read_ilostat_mean(path, "AGE_YTHADULT_YGE15", 1995, 2005) == {"AFG": pytest.approx(0.06)}
+
+
 def test_read_wic_groups_working_ages_into_three_levels(tmp_path):
     rows = ['"Time","sex","edu","agest","pop","region","source"']
     for sex in "fm":
@@ -140,6 +153,7 @@ def _observed() -> Observed:
     return Observed(
         participation={"AAA": 0.6, "BBB": 0.7, "CCC": 0.8, "DDD": 0.75},
         unemployment={"AAA": 0.1, "BBB": 0.2, "CCC": 0.05, "DDD": 0.06},
+        natural_unemployment={"AAA": 0.08, "CCC": 0.04},
         working_age={k: 0.6 for k in income},
         edu_wic={"AAA": low, "CCC": mid},
         edu_barro_lee={"BBB": np.array([0.5, 0.4, 0.1])},
@@ -173,6 +187,15 @@ def test_country_labour_prefers_data_then_fallback_source_then_donor():
     assert not (a.participation_imputed or a.unemployment_imputed or a.labour_share_imputed or a.working_age_imputed)
 
 
+def test_natural_rate_comes_from_the_window_mean_else_the_donor():
+    obs = _observed()
+    out = people.country_labour({c: c for c in ("AAA", "BBB", "DDD")}, obs, {})
+    assert (out["AAA"].u_star, out["AAA"].u_star_imputed) == (0.08, False)
+    # BBB (R1) takes AAA's, DDD (R2) takes CCC's: the donor rule of every series.
+    assert (out["BBB"].u_star, out["BBB"].u_star_imputed) == (0.08, True)
+    assert (out["DDD"].u_star, out["DDD"].u_star_imputed) == (0.04, True)
+
+
 def test_country_labour_donor_uses_the_region_median_without_income():
     obs = _observed()
     out = people.country_labour({"ZZZ": "ZZZ"}, obs, {})
@@ -203,12 +226,13 @@ def test_labour_columns_and_flags():
     assert cols["gini"].to_pylist() == [0.4, 0.3]
     assert cols["gini_imputed"].to_pylist() == [True, False]
     assert cols["edu_imputed"].to_pylist() == [True, False]
+    assert cols["u_star"].to_pylist() == [0.04, 0.08] and cols["u_star_imputed"].to_pylist() == [True, False]
     total = sum(np.array(cols[k].to_pylist()) for k in ("edu_low", "edu_secondary", "edu_tertiary"))
     assert total == pytest.approx([1.0, 1.0])
 
 
 def _labour(shares, participation=0.5, working_age=0.6, **flags) -> Labour:
-    return Labour(participation, 0.1, np.array(shares), 0.5, working_age, 0.3, "wdi", **flags)
+    return Labour(participation, 0.1, 0.1, np.array(shares), 0.5, working_age, 0.3, "wdi", **flags)
 
 
 def test_pops_split_each_province_by_its_countrys_education_shares():
@@ -343,6 +367,7 @@ NAMES = [
     "BPJresult_AGE_V01.csv",
     "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv",
     "ilostat_UNE_2EAP_SEX_AGE_RT_A_2000.csv",
+    "ilostat_UNE_2EAP_SEX_AGE_RT_A_1995-2005.csv",
     "pwt110.xlsx",
     "wdi_SI.POV.GINI.zip",
     "wdi_SP.POP.TOTL.zip",
@@ -383,10 +408,22 @@ def test_edu_shares_sum_to_one(labour):
 
 
 def test_labour_share_in_unit_interval(labour):
-    for field in ("labour_share", "participation", "unemployment", "working_age_share"):
+    for field in ("labour_share", "participation", "unemployment", "u_star", "working_age_share"):
         v = np.array([getattr(l, field) for l in labour.values()])
         assert ((v > 0) & (v < 1)).all(), field
     assert 0.3 < np.median([l.labour_share for l in labour.values()]) < 0.8
+
+
+def test_u_star_covers_every_pack_country(labour, observed):
+    """ADR 0089: u* is the ILOSTAT modelled mean of 1995 to 2005; a country without it takes its donor's,
+    flagged, and only such countries are flagged."""
+    iso, _ = people.read_codes(fetch.path_of("ne_10m_admin_0_countries.zip"))
+    have = observed.natural_unemployment
+    assert len(have) > 180
+    for code, l in labour.items():
+        parts = people.PARTS.get(code, (iso.get(code, code),))
+        assert l.u_star_imputed == (not any(p in have for p in parts)), code
+    assert sum(not l.u_star_imputed for l in labour.values()) > 150
 
 
 def test_gini_in_unit_interval_with_source_flag(labour):

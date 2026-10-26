@@ -100,10 +100,10 @@ impl Toy {
     }
 }
 
-/// A small origin among many (E = theta + 1 at theta 12.55) and one facing total household
+/// A small origin among many (E = theta + 1 at theta 10.57) and one facing total household
 /// demand (E = sigma = 0.6) with an elastic supply, both at the default employment speed.
 const SMALL_ORIGIN: Toy = Toy {
-    e: 13.55,
+    e: 11.57,
     eta: 0.3,
     eps: 1.42,
     cover: 2.0,
@@ -119,17 +119,18 @@ const TOTAL_DEMAND: Toy = Toy {
 fn stability_region_matches_simulation() {
     const X0: f64 = 1e-9;
     const STEPS: usize = 2000;
-    let pairs: [(&Toy, f64, f64, bool); 20] = [
+    let pairs: [(&Toy, f64, f64, bool); 21] = [
         (&SMALL_ORIGIN, 0.01, 0.005, true),
         (&SMALL_ORIGIN, 0.02, 0.01, true),
         (&SMALL_ORIGIN, 0.05, 0.02, true),
         (&SMALL_ORIGIN, 0.1, 0.01, true),
+        (&SMALL_ORIGIN, 0.14, 0.005, true),
         (&SMALL_ORIGIN, 0.02, 0.06, true),
         (&SMALL_ORIGIN, 0.02, -0.01, false),
-        (&SMALL_ORIGIN, 0.16, 0.005, false),
+        (&SMALL_ORIGIN, 0.19, 0.005, false),
         (&SMALL_ORIGIN, 0.2, 0.02, false),
-        (&SMALL_ORIGIN, 0.1, 0.06, false),
-        (&SMALL_ORIGIN, 0.02, 0.12, false),
+        (&SMALL_ORIGIN, 0.1, 0.1, false),
+        (&SMALL_ORIGIN, 0.02, 0.2, false),
         (&TOTAL_DEMAND, 0.04, 0.005, true),
         (&TOTAL_DEMAND, 0.08, 0.02, true),
         (&TOTAL_DEMAND, 0.16, 0.04, true),

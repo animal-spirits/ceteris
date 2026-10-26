@@ -200,7 +200,7 @@ impl EconWorld {
         // enterprises: inputs used, traded inputs bought at a Y q_d, profits
         let mut ent_spend = vec![0.0; n_ent * N_GOODS];
         let mut output = vec![0.0; np * N_GOODS];
-        let mut pool = vec![0.0; np];
+        let mut pool = vec![0.0; nc];
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
             let g = usize::from(inp.enterprises.good[e]);
@@ -216,10 +216,12 @@ impl EconWorld {
                     cost += ent_spend[e * N_GOODS + k];
                 }
             }
-            pool[i] += price(i * N_GOODS + g) * y - self.wage[i] * self.employment[e] - cost;
+            pool[inp.country_of(i)] +=
+                price(i * N_GOODS + g) * y - self.wage[i] * self.employment[e] - cost;
         }
 
-        // households: income with rebates and market cash, by fixed point
+        // households: wages, and by population share their country's profits, market cash and
+        // rebate (national ownership), by fixed point
         let edu_eff = self.params.edu_eff;
         let wages: Vec<f64> = (0..n_pops)
             .map(|k| {
@@ -227,13 +229,9 @@ impl EconWorld {
                 self.wage[i] * edu_eff[usize::from(inp.pops.edu[k])] * self.employed[k]
             })
             .collect();
-        let population: Vec<f64> = lay
-            .country_pops
-            .iter()
-            .map(|pops| pops.iter().map(|&k| inp.pops.population[k as usize]).sum())
-            .collect();
+        let country = |k: usize| inp.country_of(inp.pops.province[k] as usize);
         let mut income: Vec<f64> = (0..n_pops)
-            .map(|k| wages[k] + lay.ownership[k] * pool[inp.pops.province[k] as usize])
+            .map(|k| wages[k] + lay.ownership[k] * pool[country(k)])
             .collect();
         let mut pop_spend = vec![0.0; n_pops * N_GOODS];
         let mut spend = vec![[0.0; 2]; np * N_GOODS];
@@ -261,23 +259,20 @@ impl EconWorld {
                     }
                 }
             }
-            let (mut rebate, mut market) = (vec![0.0; nc], vec![0.0; np]);
+            let (mut rebate, mut market) = (vec![0.0; nc], vec![0.0; nc]);
             for &g in &traded {
                 let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
                 ship(self, g, &s, &mut out);
                 for d in 0..np {
                     let cell = d * N_GOODS + g;
                     rebate[inp.country_of(d)] += out.tariff[d];
-                    market[d] += price(cell) * (out.shipped[d] - output[cell]);
+                    market[inp.country_of(d)] += price(cell) * (out.shipped[d] - output[cell]);
                 }
             }
             let next: Vec<f64> = (0..n_pops)
                 .map(|k| {
-                    let i = inp.pops.province[k] as usize;
-                    let c = inp.country_of(i);
-                    wages[k]
-                        + lay.ownership[k] * (pool[i] + market[i])
-                        + rebate[c] * inp.pops.population[k] / population[c]
+                    let c = country(k);
+                    wages[k] + lay.ownership[k] * (pool[c] + market[c] + rebate[c])
                 })
                 .collect();
             let change = next

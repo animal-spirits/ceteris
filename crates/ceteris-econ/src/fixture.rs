@@ -172,7 +172,10 @@ pub fn small_world() -> EconInputs {
         io: vec![io; n_countries],
         s_l: S_L.to_vec(),
         unemployment: UNEMPLOYMENT.to_vec(),
+        // a generated world has no 1995 to 2005 window: its 2000 rate is its natural rate
+        u_star: UNEMPLOYMENT.to_vec(),
         gini: GINI.to_vec(),
+        pigl: None,
     };
 
     let mut pops = PopData::default();
@@ -211,10 +214,13 @@ pub fn small_world() -> EconInputs {
             population,
             w0: Vec::new(),
             pack: Vec::new(),
+            base_price: Vec::new(),
         },
         pops,
         enterprises: ent,
+        steady: None,
     };
+    inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();
     inputs.set_base_point(&EconParams::default().edu_eff);
     inputs
@@ -230,7 +236,8 @@ pub const ISLAND_USER: usize = 4;
 /// `trade`, so the island's delivered price of machinery is infinite. Of the island's sectors
 /// only light manufacturing still uses machinery; were every sector to use it, the whole
 /// island would be input capped and its labour market would have no solution. The base point
-/// does not depend on input coefficients, so it stays that of [`small_world`].
+/// does not depend on input coefficients, so it stays that of [`small_world`], and so do the
+/// base prices: coefficients are set in the base world, the cut comes after.
 pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
     let mut inputs = small_world();
     let island_port = (2 * MAINLAND) as u32;
@@ -388,7 +395,7 @@ mod tests {
                 .filter(|&e| w.enterprises.province[e] as usize == i)
                 .map(|e| w.enterprises.l0[e])
                 .sum();
-            let u = w.countries.unemployment[w.country_of(i)];
+            let u = w.countries.u_star[w.country_of(i)];
             assert!((l / ((1.0 - u) * s) - 1.0).abs() < 1e-12);
         }
     }
