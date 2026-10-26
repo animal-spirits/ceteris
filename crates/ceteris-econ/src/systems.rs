@@ -353,53 +353,68 @@ pub fn demand(w: &mut EconWorld) {
     let n_pops = inp.n_pops();
     let r = rho(w.params.sigma_fl);
     let sc = &mut w.scratch;
-    w.markets.demand.copy_from_slice(&sc.drawn);
-    let mut x = [0.0; N_GOODS];
-    for i in 0..inp.n_provinces() {
-        let c = inp.country_of(i);
-        let row = i * N_GOODS..(i + 1) * N_GOODS;
-        let prices: [f64; N_GOODS] = w.price_index[row.clone()]
+    let (ledger, params, index) = (&w.ledger, &w.params, &w.price_index);
+    let row = |i: usize| -> [f64; N_GOODS] {
+        index[i * N_GOODS..(i + 1) * N_GOODS]
             .try_into()
-            .expect("one row of goods");
-        for k in lay.pops(i) {
-            let money = to_numeraire(w.ledger.money(acc.pop[k]));
-            lay.pop_demand(inp, &w.params, k, &prices, money, &mut x);
+            .expect("one row of goods")
+    };
+    sc.pop_demand
+        .par_chunks_mut(N_GOODS)
+        .zip(sc.pop_spend.par_chunks_mut(N_GOODS))
+        .enumerate()
+        .for_each(|(k, (x, spend))| {
+            let prices = row(inp.pops.province[k] as usize);
+            let money = to_numeraire(ledger.money(acc.pop[k]));
+            let x: &mut [f64; N_GOODS] = x.try_into().expect("one row of goods");
+            lay.pop_demand(inp, params, k, &prices, money, x);
             for g in 0..N_GOODS {
-                let at = k * N_GOODS + g;
-                sc.pop_demand[at] = x[g];
-                sc.pop_spend[at] = if TRADED[g] && x[g] > 0.0 {
+                spend[g] = if TRADED[g] && x[g] > 0.0 {
                     x[g] * prices[g]
                 } else {
                     0.0
                 };
-                if !TRADED[g] {
-                    w.markets.demand[i * N_GOODS + g] += x[g];
-                }
             }
-        }
-        let s_l = inp.countries.s_l[c];
-        for e in lay.enterprises(i) {
+        });
+    let (pipeline, lead) = (&w.pipeline, &sc.lead);
+    sc.ent_order
+        .par_chunks_mut(N_GOODS)
+        .zip(sc.ent_spend.par_chunks_mut(N_GOODS))
+        .enumerate()
+        .for_each(|(e, (orders, spend))| {
             let ent = &inp.enterprises;
+            let i = ent.province[e] as usize;
+            let (prices, s_l) = (row(i), inp.countries.s_l[inp.country_of(i)]);
             let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, w.employment[e]);
             let capacity = va / lay.a_va[e];
             for k in 0..N_GOODS {
                 let a = lay.coef[e][k];
-                let at = e * N_GOODS + k;
                 let order = if a > 0.0 {
-                    let held = w.ledger.goods(acc.enterprise[e], k);
-                    let on_order = w.pipeline.on_order(n_pops + e, k);
-                    let target = 1.0 + COVER + sc.lead[i * N_GOODS + k];
+                    let held = ledger.goods(acc.enterprise[e], k);
+                    let on_order = pipeline.on_order(n_pops + e, k);
+                    let target = 1.0 + COVER + lead[i * N_GOODS + k];
                     (target * a * capacity - held - on_order).max(0.0)
                 } else {
                     0.0
                 };
-                sc.ent_order[at] = order;
-                sc.ent_spend[at] = 0.0;
-                if !TRADED[k] {
-                    w.markets.demand[i * N_GOODS + k] += order;
-                } else if order > 0.0 && prices[k].is_finite() {
-                    sc.ent_spend[at] = order * prices[k];
-                }
+                orders[k] = order;
+                spend[k] = if TRADED[k] && order > 0.0 && prices[k].is_finite() {
+                    order * prices[k]
+                } else {
+                    0.0
+                };
+            }
+        });
+    // local goods: demand at the province market, in pop then enterprise order
+    w.markets.demand.copy_from_slice(&sc.drawn);
+    for i in 0..inp.n_provinces() {
+        for g in (0..N_GOODS).filter(|&g| !TRADED[g]) {
+            let cell = i * N_GOODS + g;
+            for k in lay.pops(i) {
+                w.markets.demand[cell] += sc.pop_demand[k * N_GOODS + g];
+            }
+            for e in lay.enterprises(i) {
+                w.markets.demand[cell] += sc.ent_order[e * N_GOODS + g];
             }
         }
     }
