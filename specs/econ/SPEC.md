@@ -817,7 +817,9 @@ texture fed from core columns.
   2,481 cross-border road and rail edges, 1,359 after merging within 50 km, which as gateways
   would make about 2,700 gateways and the all-pairs crossing matrix twenty times its budget. The
   built pack has 600 gateways (287 ports, 168 airports, 145 land crossings). Revisit with path
-  cost medoids, or sparse land crossings joined only to their neighbour, when the benchmark sets it.
+  cost medoids, or sparse land crossings joined only to their neighbour, in the ADR 0092 rework after the
+  P2 gate; the 356,080 crossings per traded good, the Task 19b pruning result and the 8 ms re-budget are in
+  the trade SPEC, Open questions.
 - Tariffs: WDI applied rates are effectively applied rates, preferences included, so the
   rate charged outside agreements understates each importer's MFN rate; rescaling it so the
   trade-weighted mean over all partners matches the WDI rate, or the MFN series, would correct it.
@@ -872,3 +874,10 @@ texture fed from core columns.
   then finds no sign change and the wage is indeterminate below the true root. Searching on
   uncapped targets (capping only the allocation) would follow the closed form. No fixture
   province is affected.
+- Money headroom: the i64 ledger (1 minor unit = 1e-4) holds the full pack with about 300 times one
+  month of world income to spare, and about 800 times the money the mint issues: the mint holds minus
+  the world's money (-1.15e16 minor units), so it overflows first, at a uniform scale of about 802 on
+  prices, wages and balances (a scale of 1,000 overflowed, ADR 0089, Evidence); the largest country
+  pool (the United States) reaches 2.7e18 against the i64 maximum of 9.2e18. The overflows seen at the
+  loss write-off came from a hyperinflation of the trial that ADR 0098 (second decision) did not
+  adopt, not from this limit. The currency scale is a P5 decision (core SPEC, Money scale).
