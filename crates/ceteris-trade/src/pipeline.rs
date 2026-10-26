@@ -134,6 +134,7 @@ impl Decode for Pipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ceteris_core::snapshot::canonical;
 
     #[test]
     fn in_flight_of_all_goods_matches_each_good() {
@@ -145,7 +146,6 @@ mod tests {
             assert_eq!(total.to_bits(), p.in_flight(g).to_bits(), "good {g}");
         }
     }
-    use ceteris_core::snapshot::canonical;
 
     #[test]
     fn pipeline_delivers_each_buyer_after_its_slot() {

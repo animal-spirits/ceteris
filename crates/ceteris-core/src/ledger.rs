@@ -240,6 +240,7 @@ impl Decode for Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn post_is_transfer_in_turn() {
@@ -257,7 +258,6 @@ mod tests {
         b.post(&entries);
         assert_eq!(a, b);
     }
-    use proptest::prelude::*;
 
     #[derive(Debug, Clone)]
     enum Op {
