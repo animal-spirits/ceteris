@@ -1,16 +1,18 @@
 //! ADR 0089: the calibrated data state is the model's steady state. From the calibration
-//! tables (`python -m ceteris.reference calibrate`), 120 ticks with every friction on move no
-//! price, wage or flow by more than the money resolution allows: on the fixture
-//! (`tests/golden/p2-fixture/calibration`) and, when the pack holds its calibration, on the
-//! full 2000 pack. Run with `--release`; the pack run takes about 20 s.
+//! tables (`python -m ceteris.reference calibrate`), 120 ticks with every friction on stay at
+//! the calibrated state: on the fixture (`tests/golden/p2-fixture/calibration`) and, when the
+//! pack holds its calibration, on the full 2000 pack. Run with `--release`; the pack run takes
+//! about 20 s.
 //!
-//! Money is integer minor units (1e-4 numeraire), so a province's prices and flows can hold
-//! only to about one minor unit over its monthly income. The tolerance of an entry is
-//! max(1e-9, C minor / income) with C = 100, income the calibrated monthly household income of
-//! the province the entry belongs to (owner decision, 2026-10-25); world quantities hold to
-//! 1e-9. The ratio drift / (minor / income) must stay below C / 2 everywhere, and the drift
-//! must stay bounded: its largest value over ticks 61 to 120 at most twice that over ticks 5
-//! to 60 (ticks 1 to 4, where prices and wages settle onto the rounding lattice, left out).
+//! Acceptance (owner decision 2026-10-25, a resolution-aware test; controller ruling on its
+//! form, ADR 0089 As built): on the fixture every quantity holds to 1e-9 relative. On the full
+//! pack money is integer minor units (1e-4 USD), and national dividends and domestic trade
+//! carry each pop's rounding through its country, so prices and flows hold to 1e-6 relative,
+//! money (pop income and balances) to 4 minor units per pop or 1e-9 relative, whichever is
+//! larger, and world aggregates (price index, income, unemployment) to 1e-9. Every quantity's
+//! drift stays bounded: its largest value over ticks 61 to 120, scaled by its tolerance, is at
+//! most twice that over ticks 5 to 60 (ticks 1 to 4, where prices and wages settle onto the
+//! rounding lattice, left out).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,20 +20,20 @@ use std::sync::Arc;
 use ceteris_core::sim::Sim;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::systems::{SEED, schedule};
-use ceteris_econ::world::MINOR_PER_UNIT;
+use ceteris_econ::world::{MINOR_PER_UNIT, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
-use ceteris_trade::{N_GOODS, TradeParams};
+use ceteris_trade::TradeParams;
 
 const TICKS: u32 = 120;
-/// The floor of every tolerance, and the tolerance of world quantities.
-const FLOOR: f64 = 1e-9;
-/// Minor units of income per unit of relative drift a province may show.
-const C: f64 = 100.0;
-/// Ticks left out of the first boundedness window.
 const SETTLE: u32 = 4;
 const SPLIT: u32 = 60;
-const MINOR: f64 = 1.0 / MINOR_PER_UNIT;
+/// The relative tolerance of ADR 0089, and of world aggregates on the pack.
+const EXACT: f64 = 1e-9;
+/// The pack's relative tolerance of prices and flows.
+const PACK_REAL: f64 = 1e-6;
+/// The pack's absolute tolerance of money per pop, in minor units.
+const PACK_MINOR: f64 = 4.0;
 
 fn fixture_dir() -> PathBuf {
     std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(
@@ -40,125 +42,151 @@ fn fixture_dir() -> PathBuf {
     )
 }
 
-/// The quantities the fixed point holds, by name, each entry with its province (`None` for a
-/// world quantity): prices of active cells, buyer prices that are finite, wages, and the flows
-/// (employment, output and sales per enterprise; Q, D, sales and merchant stock per active
-/// cell; each pop's income); and the world price index.
-/// A quantity: name, entries and each entry's province (`None` for a world quantity).
-type Quantity = (&'static str, Vec<f64>, Vec<Option<usize>>);
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Kind {
+    /// Prices and flows in units.
+    Real,
+    /// Money per pop, numeraire.
+    Money,
+    /// One world number.
+    World,
+}
 
+/// The tolerances of a world: relative for real quantities, absolute minor units (or the
+/// relative floor) for money, relative for world aggregates.
+#[derive(Clone, Copy, Debug)]
+struct Tolerance {
+    real: f64,
+    minor: f64,
+    world: f64,
+}
+
+/// Every quantity at 1e-9 relative (the fixture).
+const FIXTURE: Tolerance = Tolerance {
+    real: EXACT,
+    minor: 0.0,
+    world: EXACT,
+};
+const PACK: Tolerance = Tolerance {
+    real: PACK_REAL,
+    minor: PACK_MINOR,
+    world: EXACT,
+};
+
+/// A quantity: name, kind and entries.
+type Quantity = (&'static str, Kind, Vec<f64>);
+
+/// The quantities the fixed point holds: prices of active cells, buyer prices that are
+/// finite, wages, employment, output and sales per enterprise, Q, D, sales and merchant stock
+/// per active cell; each pop's income and money balance; the world price index, world
+/// household income and world unemployment.
 fn quantities(w: &EconWorld) -> Vec<Quantity> {
-    let (inp, m) = (w.inputs(), &w.markets);
-    let cells: Vec<usize> = (0..m.price.len()).filter(|&c| m.active[c]).collect();
-    let active = |x: &[f64]| -> Vec<f64> { cells.iter().map(|&c| x[c]).collect() };
-    let cell_provinces: Vec<Option<usize>> = cells.iter().map(|&c| Some(c / N_GOODS)).collect();
-    let all_cells: Vec<Option<usize>> = (0..m.price.len()).map(|c| Some(c / N_GOODS)).collect();
-    let ent: Vec<Option<usize>> = inp
-        .enterprises
-        .province
-        .iter()
-        .map(|&i| Some(i as usize))
-        .collect();
-    let pops: Vec<Option<usize>> = inp
-        .pops
-        .province
-        .iter()
-        .map(|&i| Some(i as usize))
-        .collect();
-    let provinces: Vec<Option<usize>> = (0..inp.n_provinces()).map(Some).collect();
+    let m = &w.markets;
+    let active = |x: &[f64]| -> Vec<f64> {
+        x.iter()
+            .zip(&m.active)
+            .filter(|&(_, &on)| on)
+            .map(|(&v, _)| v)
+            .collect()
+    };
     let finite = w
         .price_index
         .iter()
         .map(|&p| if p.is_finite() { p } else { 0.0 })
         .collect();
+    let lay = w.layout();
+    let money = lay
+        .accounts
+        .pop
+        .iter()
+        .map(|&a| to_numeraire(w.ledger.money(a)))
+        .collect();
+    let employed: f64 = w.employment.iter().sum();
+    let supply: f64 = lay.labour_supply.iter().sum();
     vec![
-        ("price", active(&m.price), cell_provinces.clone()),
-        ("buyer price", finite, all_cells),
-        ("wage", w.wage.clone(), provinces),
-        ("employment", w.employment.clone(), ent.clone()),
-        ("output", w.output.clone(), ent.clone()),
-        ("enterprise sales", w.sales.clone(), ent),
-        ("supply Q", active(&m.supply), cell_provinces.clone()),
-        ("demand D", active(&m.demand), cell_provinces.clone()),
-        ("market sales", active(&m.sales), cell_provinces.clone()),
-        ("merchant stock", active(&m.inventory), cell_provinces),
-        ("pop income", w.income.clone(), pops),
-        ("world price index", vec![w.world_price_index()], vec![None]),
+        ("price", Kind::Real, active(&m.price)),
+        ("buyer price", Kind::Real, finite),
+        ("wage", Kind::Real, w.wage.clone()),
+        ("employment", Kind::Real, w.employment.clone()),
+        ("output", Kind::Real, w.output.clone()),
+        ("enterprise sales", Kind::Real, w.sales.clone()),
+        ("supply Q", Kind::Real, active(&m.supply)),
+        ("demand D", Kind::Real, active(&m.demand)),
+        ("market sales", Kind::Real, active(&m.sales)),
+        ("merchant stock", Kind::Real, active(&m.inventory)),
+        ("pop income", Kind::Money, w.income.clone()),
+        ("pop money", Kind::Money, money),
+        (
+            "world price index",
+            Kind::World,
+            vec![w.world_price_index()],
+        ),
+        ("world income", Kind::World, vec![w.income.iter().sum()]),
+        (
+            "world unemployment",
+            Kind::World,
+            vec![1.0 - employed / supply],
+        ),
     ]
 }
 
-/// Relative drift of every entry of `now` from `base`; entries at 0 are measured against the
-/// largest entry.
-fn drifts(base: &[f64], now: &[f64]) -> Vec<f64> {
-    let scale = base.iter().fold(0.0f64, |a, &b| a.max(b.abs()));
-    base.iter()
-        .zip(now)
-        .map(|(&b, &n)| {
-            let d = (n - b).abs();
-            if b != 0.0 { d / b.abs() } else { d / scale }
-        })
-        .collect()
-}
-
 /// One quantity's record over the run.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Record {
     name: &'static str,
-    /// Largest relative drift, its tick and entry.
-    drift: f64,
+    kind: Kind,
+    /// Largest relative drift (entries at 0 measured against the largest entry), its tick and
+    /// entry.
+    relative: f64,
     tick: u32,
     entry: usize,
-    /// Largest drift / (minor / income), its tick and entry (province quantities only).
-    ratio: f64,
-    ratio_tick: u32,
-    ratio_entry: usize,
-    /// The largest ratio where the resolution sets the tolerance (C minor / income above the
-    /// floor), its tick and entry.
-    resolved: f64,
-    resolved_entry: usize,
-    /// Largest drift / tolerance, and its tick and entry.
+    /// Largest absolute drift in minor units, its tick and entry.
+    minor: f64,
+    minor_tick: u32,
+    minor_entry: usize,
+    /// Largest drift over its tolerance, over the run and over ticks SETTLE + 1 to SPLIT and
+    /// SPLIT + 1 to TICKS.
     over: f64,
-    over_tick: u32,
-    over_entry: usize,
-    /// Largest scaled drift (drift / tolerance) over ticks SETTLE + 1 to SPLIT and SPLIT + 1
-    /// to TICKS, and over ticks 1 to SPLIT.
     early: f64,
     late: f64,
-    first_window: f64,
 }
 
 /// Runs `TICKS` ticks from the steady state of `inputs` and returns the record of every
-/// quantity; prints them, the world price index path and the time per tick.
-fn run(inputs: EconInputs, what: &str) -> Vec<Record> {
+/// quantity under `tol`; prints them, the world price index path and the time per tick.
+fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
     let world = EconWorld::new(
         Arc::new(inputs),
         EconParams::default(),
         TradeParams::default(),
     );
-    let inp = world.inputs().clone();
-    let steady = inp.steady.clone().unwrap();
-    let mut income = vec![0.0; inp.n_provinces()];
-    for k in 0..inp.n_pops() {
-        income[inp.pops.province[k] as usize] += steady.income[k];
-    }
-    // the resolution of a province: one minor unit over its monthly income
-    let resolution: Vec<f64> = income.iter().map(|&x| MINOR / x).collect();
+    let steady = world.inputs().steady.clone().unwrap();
     let mut base = quantities(&world);
     // the calibrated state's last tick, which the first tick must reproduce
-    for (name, values, _) in &mut base {
+    for (name, _, values) in &mut base {
         match *name {
             "output" => values.clone_from(&steady.output),
             "enterprise sales" => values.clone_from(&steady.ent_sales),
             "pop income" => values.clone_from(&steady.income),
+            "pop money" => values.clone_from(&steady.money),
+            "world income" => *values = vec![steady.income.iter().sum()],
             _ => {}
         }
     }
     let mut records: Vec<Record> = base
         .iter()
-        .map(|(name, _, _)| Record {
+        .map(|&(name, kind, _)| Record {
             name,
-            ..Record::default()
+            kind,
+            relative: 0.0,
+            tick: 0,
+            entry: 0,
+            minor: 0.0,
+            minor_tick: 0,
+            minor_entry: 0,
+            over: 0.0,
+            early: 0.0,
+            late: 0.0,
         })
         .collect();
     let mut sim = Sim::new(world, schedule(), SEED);
@@ -168,33 +196,29 @@ fn run(inputs: EconInputs, what: &str) -> Vec<Record> {
         sim.step().unwrap_or_else(|v| panic!("{what}: {v}"));
         let w = sim.world();
         index.push(w.world_price_index());
-        for (r, ((_, b, provinces), (_, now, _))) in
+        for (r, ((_, kind, b), (_, _, now))) in
             records.iter_mut().zip(base.iter().zip(quantities(w)))
         {
-            for (entry, (d, province)) in drifts(b, &now).into_iter().zip(provinces).enumerate() {
-                let tolerance = province.map_or(FLOOR, |i| FLOOR.max(C * resolution[i]));
-                if d > r.drift {
-                    (r.drift, r.tick, r.entry) = (d, tick, entry);
+            let scale = b.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
+            for (entry, (&b, &n)) in b.iter().zip(&now).enumerate() {
+                let gap = (n - b).abs();
+                let relative = gap / if b != 0.0 { b.abs() } else { scale };
+                let minor = gap * MINOR_PER_UNIT;
+                let scaled = match kind {
+                    Kind::Real => relative / tol.real,
+                    Kind::World => relative / tol.world,
+                    Kind::Money => minor / tol.minor.max(EXACT * b.abs() * MINOR_PER_UNIT),
+                };
+                if relative > r.relative {
+                    (r.relative, r.tick, r.entry) = (relative, tick, entry);
                 }
-                if let Some(i) = province {
-                    let ratio = d / resolution[*i];
-                    if ratio > r.ratio {
-                        (r.ratio, r.ratio_tick, r.ratio_entry) = (ratio, tick, entry);
-                    }
-                    if tolerance > FLOOR && ratio > r.resolved {
-                        (r.resolved, r.resolved_entry) = (ratio, entry);
-                    }
+                if minor > r.minor {
+                    (r.minor, r.minor_tick, r.minor_entry) = (minor, tick, entry);
                 }
-                let scaled = d / tolerance;
-                if scaled > r.over {
-                    (r.over, r.over_tick, r.over_entry) = (scaled, tick, entry);
-                }
-                if tick <= SPLIT {
-                    r.first_window = r.first_window.max(scaled);
-                    if tick > SETTLE {
-                        r.early = r.early.max(scaled);
-                    }
-                } else {
+                r.over = r.over.max(scaled);
+                if tick > SETTLE && tick <= SPLIT {
+                    r.early = r.early.max(scaled);
+                } else if tick > SPLIT {
                     r.late = r.late.max(scaled);
                 }
             }
@@ -204,23 +228,18 @@ fn run(inputs: EconInputs, what: &str) -> Vec<Record> {
     println!("{what}: {TICKS} ticks from the calibrated state, {per_tick:?} per tick");
     for r in &records {
         println!(
-            "  {:>17}: max drift {:.3e} (tick {}, entry {}); max drift / (minor / income) {:.3e} \
-             (tick {}, entry {}), where the resolution sets the tolerance {:.3e} (entry {}); \
-             max drift / tolerance {:.3e} (tick {}, entry {}); windows (drift / tolerance): \
-             ticks 1-{SPLIT} {:.3e}, {}-{SPLIT} {:.3e}, {}-{TICKS} {:.3e}",
+            "  {:>18} ({:?}): max relative drift {:.3e} (tick {}, entry {}), max absolute \
+             {:.3} minor units (tick {}, entry {}); max drift / tolerance {:.3e}, ticks \
+             {}-{SPLIT} {:.3e}, {}-{TICKS} {:.3e}",
             r.name,
-            r.drift,
+            r.kind,
+            r.relative,
             r.tick,
             r.entry,
-            r.ratio,
-            r.ratio_tick,
-            r.ratio_entry,
-            r.resolved,
-            r.resolved_entry,
+            r.minor,
+            r.minor_tick,
+            r.minor_entry,
             r.over,
-            r.over_tick,
-            r.over_entry,
-            r.first_window,
             SETTLE + 1,
             r.early,
             SPLIT + 1,
@@ -240,25 +259,22 @@ fn run(inputs: EconInputs, what: &str) -> Vec<Record> {
 
 fn assert_fixed(records: &[Record], what: &str) {
     for r in records {
-        let name = r.name;
         assert!(
             r.over <= 1.0,
-            "{what}: {name} drifts to {:.3} times its tolerance (largest drift {:.3e} at tick {})",
+            "{what}: {} reaches {:.3} times its tolerance (relative {:.3e} at tick {}, {:.3} \
+             minor units at tick {})",
+            r.name,
             r.over,
-            r.drift,
-            r.tick
-        );
-        assert!(
-            r.ratio <= C / 2.0,
-            "{what}: {name} drift / (minor / income) {:.3e} at tick {} (entry {}) passes C / 2",
-            r.ratio,
-            r.ratio_tick,
-            r.ratio_entry
+            r.relative,
+            r.tick,
+            r.minor,
+            r.minor_tick
         );
         assert!(
             r.late <= 2.0 * r.early,
-            "{what}: {name} is not bounded: ticks {}-{TICKS} reach {:.3e} of the tolerance, \
-             ticks {}-{SPLIT} {:.3e}",
+            "{what}: {} is not bounded: ticks {}-{TICKS} reach {:.3e} of the tolerance, ticks \
+             {}-{SPLIT} {:.3e}",
+            r.name,
             SPLIT + 1,
             r.late,
             SETTLE + 1,
@@ -268,12 +284,12 @@ fn assert_fixed(records: &[Record], what: &str) {
 }
 
 #[test]
-fn fixture_calibrated_state_is_a_fixed_point() {
+fn fixture_calibrated_state_holds_to_1e_9() {
     let mut inputs = small_world();
     inputs
         .calibrate(&fixture_dir().join("calibration"))
         .unwrap();
-    let records = run(inputs, "fixture");
+    let records = run(inputs, FIXTURE, "fixture");
     assert_fixed(&records, "fixture");
 }
 
@@ -289,7 +305,7 @@ fn calibration_of_other_inputs_does_not_load() {
 }
 
 #[test]
-fn pack_calibrated_state_is_a_fixed_point() {
+fn pack_calibrated_state_holds_to_the_money_resolution() {
     let dir = std::env::var_os("CETERIS_PACK").map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/packs/2000"),
         PathBuf::from,
@@ -306,6 +322,6 @@ fn pack_calibrated_state_is_a_fixed_point() {
     let pack =
         ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).expect("pack loads");
     let inputs = EconInputs::from_pack(&pack, &dir).unwrap();
-    let records = run(inputs, "full pack");
+    let records = run(inputs, PACK, "full pack");
     assert_fixed(&records, "full pack");
 }
