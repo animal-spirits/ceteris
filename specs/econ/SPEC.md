@@ -617,8 +617,12 @@ nonzero agglomeration or a migration elasticity until the phase that adds one de
 
 At the P2 defaults (P01 class values 10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19; the fixture's
 value-added shares, 0.46 to 0.73) the bound is 0.922 (chemicals, refined fuels and metals: theta
-10.57, beta 0.46); with labour the only input (beta = 1) it is 10.57 / 11.57 = 0.914. V1 runs in
-tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
+10.57, beta 0.46); with labour the only input (beta = 1) it is 10.57 / 11.57 = 0.914. On the 2000
+pack (smallest value-added shares over countries 0.040 to 0.252 for the traded goods) the bound
+is 0.967 (machinery, electronics and vehicles: theta 5.19, beta 0.040); both run V1 in tolerance
+mode (Task 20). The restatement above was checked against the January 2024 version in Task 20
+(Theorem 1 p. 6, Remarks 4 and 5 pp. 10 to 11, Online Appendix A.3 pp. 6 to 9 with Gamma, B and
+the radius on p. 9, footnote 10 p. 7).
 
 ## P2 gate (21.1)
 
@@ -673,6 +677,25 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
   - Re-budget (owner, 2026-10-26): source_dispatch 8 ms and a whole tick 35 ms on the full pack;
     trade stays inside the 30 ms of 19.2. The gateway count, which sets the crossing count and
     the access it buys, moves to the ADR 0092 rework after the gate.
+- Measured on the 2000 pack (Task 20, `p2_acceptance.rs` and `test_p2_gate.py`; owner review
+  pending):
+  - V1, tolerance mode (bound 0.967). From the steady state perturbed by 10% (seed 20): price
+    7.8e-3 (São Tomé and Príncipe light manufacturing, the period-2 cycle of the trade SPEC,
+    Stability region), wage 8.4e-4, flow units 3.2e-5, value 3.5e-5 at 1,200 ticks: passes.
+    From the data state of the calibrated inputs (prices 1, nothing in flight): price 0.88, wage
+    0.61, flows 1.95 at 1,200 ticks and price 0.82 at 4,800: misses. The transient's losses,
+    paid as negative national dividends, leave pops in Albania, Mali, Uganda, Namibia and
+    Pitcairn holding debts of thousands of months of income (up to 6,331 pops negative at tick
+    24, 82 at 1,200, 17 at 4,800); pops with negative money buy nothing, so those countries stay
+    off the reference until the debt is repaid. Elsewhere the gap is 4.0e-2 at 1,200 and 8.1e-3
+    at 4,800.
+  - H2: distance elasticity -0.753 (s.e. 0.016, pseudo-R2 0.982, 47,306 pairs): passes. Per
+    class, on what the importer pays (FOB value times 1 + t): food 1.75 (s.e. 0.15), machinery
+    3.72 (0.47), the five-good class 9.52 (0.33), all in their bands (pseudo-R2 0.998, 0.993,
+    0.959). The FOB value gives theta + 1 (2.78, 4.70, 10.55), as the kernel implies.
+  - 100 years: no violation, prices and wages finite and positive; the default run stays at the
+    steady state (no pop with negative money, no losing country, no stockout).
+  - 1 vs 8 threads, 120 ticks: identical hashes.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
@@ -759,10 +782,20 @@ texture fed from core columns.
   chain small deviations decay by 0.9964 (frictionless) and 0.9968 (default) per tick at the P2 defaults (kappa1 0.05, kappa2
   0, expectation gain 0.006; trade SPEC, Stability region and P03a, P03b, P45). The slowest
   mode is the world price level, which expected inflation turns into a damped oscillation
-  (trade SPEC, Nominal mode). Re-measure on the pack in Task 20.
+  (trade SPEC, Nominal mode). On the pack (Task 20; trade SPEC, Stability region) the default
+  mode decays by 0.99229 per tick; frictionless, the rest of the world decays by 0.99169 while São
+  Tomé and Príncipe's light manufacturing (value-added share 0.04, supply elasticity 30.4) sits
+  outside the region on a period-2 cycle of about 0.7%. Whether V1's frictionless mode should
+  hold for such cells (a slower kappa1, or a supply elasticity cap) is for the owner.
 - The run from the data state passes through a deep coal-led shortage before it converges (the
   equilibrium's coal output is about twice base output and intermediate demand is inelastic in
   units); V1 holds on the fixture at 1,200 ticks.
+- Debt overhang (Task 20): pops may hold negative money (clearing facility, no interest), pay
+  no interest and buy nothing while negative, and national ownership passes enterprise losses
+  to them as negative dividends. A deep transient (the data state of the calibrated pack) leaves
+  debts that take thousands of ticks to repay and keep their countries off the steady state
+  (P2 gate, measured). Limited liability for dividends, a spending rule for indebted pops, or
+  interest belong to the owner (A9 banks arrive in P5).
 - PIGL aggregation across pops: the inversion matches the 2000 shares for one lognormal at the
   country's mean income per person; the country's pops differ in mean income (education,
   province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
