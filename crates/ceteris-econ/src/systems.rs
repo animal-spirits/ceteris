@@ -33,7 +33,7 @@ use crate::local::{self, LOCAL};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, WAGE, to_minor, to_numeraire,
+    TRADE, WAGE, WRITE_OFF, to_minor, to_numeraire,
 };
 
 /// Months of use an enterprise keeps in stock beyond replacement and transit (Task 7b).
@@ -790,15 +790,15 @@ pub fn reprice(w: &mut EconWorld) {
 }
 
 /// E4 (national ownership, owner 2026-10-25; limited liability of enterprises, owner
-/// 2026-10-26): every enterprise pays its balance into its country's profit pool when the
-/// balance is positive and otherwise keeps it, so a loss stays with the enterprise as
-/// retained losses, which later cash flow repays before anything is paid out; every province
-/// market pays its signed cash flow. Each country pays its pool and its rebate account
-/// (tariffs) to its pops by population share N_k / N_c, so both end the tick at zero. Each
-/// pool is one i64 sum, split once per tick by [`split`]: the cumulative population shares of
-/// the country's pops in ID order rounded half to even, so the parts add up to the pool
-/// exactly. Records each pop's income of the tick, and as each enterprise's profit its
-/// balance before the payout (this tick's cash flow less any loss it carries).
+/// 2026-10-26; loss write-off, ADR 0097): every enterprise pays its balance into its country's
+/// profit pool when the balance is positive and otherwise keeps it, so a loss stays with the
+/// enterprise as retained losses, which later cash flow repays before anything is paid out;
+/// every province market pays its signed cash flow (ADR 0097, Markets). Each country pays its pool and its rebate account (tariffs) to its pops by population
+/// share N_k / N_c, so both end the tick at zero. Each pool is one i64 sum, split once per tick
+/// by [`split`]: the cumulative population shares of the country's pops in ID order rounded
+/// half to even, so the parts add up to the pool exactly. Then [`write_off`]. Records each
+/// pop's income of the tick, and as each enterprise's profit its balance before the payout
+/// (this tick's cash flow less any loss it carries).
 pub fn distribute(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
@@ -831,6 +831,78 @@ pub fn distribute(w: &mut EconWorld) {
     }
     for (income, &paid) in w.income.iter_mut().zip(&w.scratch.income_paid) {
         *income = to_numeraire(paid);
+    }
+    write_off(w);
+}
+
+/// The loss write-off of E4 (ADR 0097): per country, the excess of every enterprise's retained
+/// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in proportion to their positive money, never
+/// taking a pop below zero. Where the pops hold less than the excess, what they hold is
+/// written off, shared over the holders by their excess, and the rest stays with them. Both
+/// sides are exact [`largest_remainder`] splits of one i64 per country, moved through the
+/// country's profit pool account, which ends at zero.
+pub fn write_off(w: &mut EconWorld) {
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let acc = &lay.accounts;
+    let mut holders: Vec<Vec<(AccountId, i64)>> = vec![Vec::new(); inp.n_countries()];
+    for i in 0..inp.n_provinces() {
+        let c = inp.country_of(i);
+        for e in lay.enterprises(i) {
+            let excess = (-w.ledger.money(acc.enterprise[e])).saturating_sub(lay.ent_loss_cap[e]);
+            if excess > 0 {
+                holders[c].push((acc.enterprise[e], excess));
+            }
+        }
+    }
+    let (mut weights, mut parts) = (Vec::new(), Vec::new());
+    for (c, holders) in holders.iter().enumerate().filter(|(_, h)| !h.is_empty()) {
+        let pool = acc.dividend[c];
+        let pops = &lay.country_pops[c];
+        weights.clear();
+        weights.extend(
+            pops.iter()
+                .map(|&k| w.ledger.money(acc.pop[k as usize]).max(0)),
+        );
+        let held: i128 = weights.iter().map(|&m| i128::from(m)).sum();
+        let excess: i128 = holders.iter().map(|&(_, x)| i128::from(x)).sum();
+        let total = i64::try_from(held.min(excess)).expect("write-off within i64");
+        if total == 0 {
+            continue;
+        }
+        largest_remainder(total, &weights, &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, WRITE_OFF, acc.pop[k as usize], pool, part);
+        }
+        weights.clear();
+        weights.extend(holders.iter().map(|&(_, x)| x));
+        largest_remainder(total, &weights, &mut parts);
+        for (&(account, _), &part) in holders.iter().zip(&parts) {
+            pay(&mut w.ledger, WRITE_OFF, pool, account, part);
+        }
+    }
+}
+
+/// Splits `total` minor units over nonnegative `weights` (summing to at least `total`) by the
+/// largest remainder: each part is the floor of its exact share, and the units left over go
+/// one each to the largest remainders, ties to the first. The parts add up to `total`, and
+/// none exceeds the ceiling of its share, so none exceeds its weight.
+fn largest_remainder(total: i64, weights: &[i64], out: &mut Vec<i64>) {
+    let sum: i128 = weights.iter().map(|&x| i128::from(x)).sum();
+    let t = i128::from(total);
+    out.clear();
+    let mut remainders: Vec<(i128, usize)> = Vec::with_capacity(weights.len());
+    for (j, &x) in weights.iter().enumerate() {
+        let product = t * i128::from(x);
+        out.push(i64::try_from(product / sum).expect("part within i64"));
+        remainders.push((product % sum, j));
+    }
+    let left = total - out.iter().sum::<i64>();
+    remainders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    for &(_, j) in remainders
+        .iter()
+        .take(usize::try_from(left).expect("nonnegative"))
+    {
+        out[j] += 1;
     }
 }
 

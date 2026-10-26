@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use ceteris_core::ledger::AccountId;
 use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
 use ceteris_econ::inputs::EconInputs;
@@ -11,8 +12,8 @@ use ceteris_econ::params::Technology;
 use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
-    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, active_cells, static_digest, to_minor,
-    to_numeraire,
+    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, WRITE_OFF, active_cells,
+    static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::TRADED;
@@ -179,9 +180,15 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
     out
 }
 
+/// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0097),
+/// so scaling every nominal value moves losses past the cap in one run and not the other.
 #[test]
 fn homogeneity_of_degree_zero() {
     for params in [EconParams::default(), EconParams::frictionless()] {
+        let params = EconParams {
+            write_off_months: f64::INFINITY,
+            ..params
+        };
         let mut base = sim_of(world(params.clone()));
         let mut big = sim_of(scaled(world(params), 10_000));
         // 120 ticks: the fixture's dynamics are stable (Task 7b) and the rounding gap between
@@ -446,13 +453,14 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
     }
 }
 
-/// National profit ownership (owner, 2026-10-25; SPEC Income) with limited liability of
-/// enterprises (owner, 2026-10-26): at E4 every enterprise's positive balance and every province
-/// market's signed cash flow join one pool per country, paid to the country's pops by
-/// population share N_k / N_c, the cumulative shares rounded half to even. Money is conserved
+/// National profit ownership (owner, 2026-10-25; SPEC Income) with limited liability (owner,
+/// 2026-10-26): at E4 every enterprise's and province market's positive balance joins one pool
+/// per country, paid to the country's pops by population share N_k / N_c, the cumulative shares
+/// rounded half to even, with every province market's signed cash flow. Money is conserved
 /// exactly: each country's pops receive, in minor units, exactly what joined its pool; each
 /// pop's part is within one minor unit of N_k / N_c of the pool; enterprises keep a negative
-/// balance and end at zero otherwise; markets and rebate accounts end at zero.
+/// balance, less any write-off (ADR 0097), and end at zero otherwise; markets and rebate
+/// accounts end at zero.
 #[test]
 fn national_profit_pool_conserves_money_exactly() {
     for params in [EconParams::default(), EconParams::frictionless()] {
@@ -502,7 +510,8 @@ fn national_profit_pool_conserves_money_exactly() {
             }
             assert_eq!(paid, pool, "tick {tick}: pools paid out exactly");
             for (a, &before) in acc.enterprise.iter().zip(&held) {
-                assert_eq!(w.ledger.money(*a), before.min(0), "tick {tick}");
+                let written = written(&w, start, *a);
+                assert_eq!(w.ledger.money(*a), before.min(0) + written, "tick {tick}");
             }
             for a in acc.market.iter().chain(&acc.rebate) {
                 assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
@@ -1134,4 +1143,181 @@ fn unreachable_destination_buys_nothing_in_the_world() {
         let mut others = lay.enterprises(island).filter(|&e| e != user);
         assert!(others.all(|e| w.output[e] > 0.0));
     }
+}
+
+/// The calibrated fixture, run up to E4 of its first tick.
+fn calibrated_before_distribute() -> EconWorld {
+    let calibration = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/golden/p2-fixture/calibration");
+    let mut inputs = small_world();
+    inputs.calibrate(&calibration).unwrap();
+    let mut w = EconWorld::new(
+        Arc::new(inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    up_to_dispatch(&mut w);
+    systems::dispatch(&mut w);
+    systems::reprice(&mut w);
+    w
+}
+
+/// Sets `account`'s balance to `target` against the mint (no pop involved).
+fn set_balance(w: &mut EconWorld, account: AccountId, target: i64) {
+    let mint = w.layout().accounts.mint;
+    let have = w.ledger.money(account);
+    w.ledger.transfer(MINT, account, mint, have - target);
+}
+
+/// Sum of WRITE_OFF entries from `start` on into (positive) or out of (negative) `account`.
+fn written(w: &EconWorld, start: usize, account: AccountId) -> i64 {
+    w.ledger.journal()[start..]
+        .iter()
+        .filter(|x| x.flow == WRITE_OFF)
+        .map(|x| i64::from(x.to == account) * x.amount - i64::from(x.from == account) * x.amount)
+        .sum()
+}
+
+/// Loss write-off (ADR 0097): an enterprise's retained loss beyond M months of its base sales
+/// is written off at E4 against its country's pops in proportion to their positive money,
+/// exactly in minor units; no pop pays more than it holds.
+#[test]
+fn write_off_takes_the_excess_beyond_the_cap_from_the_pops() {
+    let mut w = calibrated_before_distribute();
+    let lay = w.layout().clone();
+    let acc = &lay.accounts;
+    let (account, cap) = (acc.enterprise[0], lay.ent_loss_cap[0]);
+    let c = w
+        .inputs()
+        .country_of(w.inputs().enterprises.province[0] as usize);
+    assert!(cap > 0);
+    let excess = 12_345;
+    set_balance(&mut w, account, -cap - excess);
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    assert_eq!(w.ledger.money(account), -cap, "only the excess goes");
+    assert_eq!(written(&w, start, account), excess);
+    let levied: i64 = lay.country_pops[c]
+        .iter()
+        .map(|&k| -written(&w, start, acc.pop[k as usize]))
+        .sum();
+    assert_eq!(levied, excess, "the country's pops pay exactly the excess");
+    assert!(acc.pop.iter().all(|&a| written(&w, start, a) <= 0));
+    assert!(acc.pop.iter().all(|&a| w.ledger.money(a) >= 0));
+    assert_eq!(w.ledger.money(acc.dividend[c]), 0);
+    w.end_tick(0).unwrap();
+}
+
+/// The cap is M months of base sales, the calibrated steady-state sales value, and a loss up to
+/// it stays where it is.
+#[test]
+fn write_off_spares_losses_within_the_cap() {
+    let mut w = calibrated_before_distribute();
+    let lay = w.layout().clone();
+    let acc = &lay.accounts;
+    let steady = w.inputs().steady.clone().unwrap();
+    for (e, &cap) in lay.ent_loss_cap.iter().enumerate() {
+        let want = to_minor(3.0 * steady.ent_sales[e]) as f64;
+        assert!(
+            (cap as f64 - want).abs() <= 1e-12 * want + 1.0,
+            "enterprise {e}"
+        );
+    }
+    let cap = lay.ent_loss_cap[0];
+    set_balance(&mut w, acc.enterprise[0], -cap);
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    assert!(
+        w.ledger.journal()[start..]
+            .iter()
+            .all(|x| x.flow != WRITE_OFF)
+    );
+    assert_eq!(w.ledger.money(acc.enterprise[0]), -cap);
+    w.end_tick(0).unwrap();
+}
+
+/// Where the country's pops hold less positive money than the excess, all of it is taken (no
+/// pop below zero, pops already negative untouched), shared over the enterprises by their
+/// excess, and the rest stays with them for the next tick.
+#[test]
+fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
+    let mut w = calibrated_before_distribute();
+    let lay = w.layout().clone();
+    let acc = &lay.accounts;
+    let inp = w.inputs().clone();
+    let c = inp.country_of(inp.enterprises.province[0] as usize);
+    let e2 = (1..inp.n_enterprises())
+        .find(|&e| inp.country_of(inp.enterprises.province[e] as usize) == c)
+        .unwrap();
+    let (a1, cap1) = (acc.enterprise[0], lay.ent_loss_cap[0]);
+    let (a2, cap2) = (acc.enterprise[e2], lay.ent_loss_cap[e2]);
+    // nothing else reaches the pops this tick: every holder and rebate account at zero
+    for &a in acc.enterprise.iter().chain(&acc.market).chain(&acc.rebate) {
+        set_balance(&mut w, a, 0);
+    }
+    let pops: Vec<usize> = lay.country_pops[c].iter().map(|&k| k as usize).collect();
+    for (n, &k) in pops.iter().enumerate() {
+        set_balance(&mut w, acc.pop[k], if n == 0 { -500 } else { 7 });
+    }
+    let room = 7 * (pops.len() as i64 - 1);
+    let (x1, x2) = (3 * room, room);
+    set_balance(&mut w, a1, -cap1 - x1);
+    set_balance(&mut w, a2, -cap2 - x2);
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    assert_eq!(written(&w, start, a1) + written(&w, start, a2), room);
+    assert!(
+        (written(&w, start, a1) - 3 * room / 4).abs() <= 1,
+        "shared by excess"
+    );
+    assert_eq!(
+        w.ledger.money(acc.pop[pops[0]]),
+        -500,
+        "a negative pop pays nothing"
+    );
+    for &k in &pops[1..] {
+        assert_eq!(
+            w.ledger.money(acc.pop[k]),
+            0,
+            "pop {k} paid all it had, no more"
+        );
+    }
+    assert!(
+        w.ledger.money(a1) < -cap1 && w.ledger.money(a2) < -cap2,
+        "the rest is carried"
+    );
+    w.end_tick(0).unwrap();
+}
+
+/// A run with write-offs is identical at 1 and 4 threads.
+#[test]
+fn write_off_runs_are_thread_independent() {
+    let run = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        pool.install(|| {
+            let mut w = world(EconParams::frictionless());
+            for (c, p) in w.markets.price.iter_mut().enumerate() {
+                *p *= if c % 3 == 0 { 0.2 } else { 3.0 };
+            }
+            let mut sim = sim_of(w);
+            let mut fired = 0;
+            for _ in 0..120 {
+                sim.step().unwrap();
+                fired += sim
+                    .world()
+                    .ledger
+                    .journal()
+                    .iter()
+                    .filter(|x| x.flow == WRITE_OFF)
+                    .count();
+            }
+            (sim.snapshot_hashes(), fired)
+        })
+    };
+    let ((one, fired), (four, _)) = (run(1), run(4));
+    assert!(fired > 0, "no write-off fired");
+    assert_eq!(one, four);
 }
