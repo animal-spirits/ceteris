@@ -6,6 +6,8 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use rayon::prelude::*;
+
 use crate::goods::{N_GOODS, TRADED, tariff_group};
 use crate::network::{Leg, Network, Wedges};
 use crate::params::TradeParams;
@@ -139,6 +141,7 @@ pub struct Kernel {
     /// all goods share the network's legs and their order.
     crossings_by_target: ByColumn,
     access_by_gateway: ByColumn,
+    domestic_by_destination: ByColumn,
     /// Unique per build and per change, so `source` can tell a kernel it has seen.
     id: u64,
 }
@@ -185,12 +188,14 @@ impl Kernel {
             TRADED[g].then(|| good_kernel(net, np, ng, g, weight[g], wedges, p))
         });
         let first: Option<&GoodKernel> = goods.iter().flatten().next();
-        let (crossings_by_target, access_by_gateway) = first.map_or_else(Default::default, |gk| {
-            (
-                ByColumn::new(&gk.crossings, |e| e.col as usize, ng),
-                ByColumn::new(&gk.access, |e| e.col as usize, ng),
-            )
-        });
+        let (crossings_by_target, access_by_gateway, domestic_by_destination) = first
+            .map_or_else(Default::default, |gk| {
+                (
+                    ByColumn::new(&gk.crossings, |e| e.col as usize, ng),
+                    ByColumn::new(&gk.access, |e| e.col as usize, ng),
+                    ByColumn::new(&gk.domestic, |e| e.col as usize, np),
+                )
+            });
         Kernel {
             n_provinces: np,
             n_gateways: ng,
@@ -198,6 +203,7 @@ impl Kernel {
             goods,
             crossings_by_target,
             access_by_gateway,
+            domestic_by_destination,
             id: next_id(),
         }
     }
@@ -228,6 +234,11 @@ impl Kernel {
         &self.access_by_gateway
     }
 
+    /// Every good's `domestic` legs grouped by destination: (origin, entry).
+    pub fn domestic_by_destination(&self) -> &ByColumn {
+        &self.domestic_by_destination
+    }
+
     /// Origin-side low-rank evaluation into reused buffers. `weight` must be floored
     /// sourcing weights as [`crate::source::origin_weights`] writes them: `(p_o / p_min)^-theta_g`
     /// for an active origin at or above `WEIGHT_FLOOR`, 0 otherwise. Unfloored weights can
@@ -245,29 +256,36 @@ impl Kernel {
                 out.v[e.col as usize] += f64::from(e.k) * w;
             }
         }
-        out.u.clear();
-        out.u.resize(self.n_gateways, 0.0);
-        for (a, &va) in out.v.iter().enumerate() {
-            for e in gk.crossings.row(a) {
-                out.u[e.col as usize] += va * f64::from(e.k);
+        // u and Phi gather what flows into each gateway and province, in the order of the
+        // rows feeding them, and run in parallel
+        let u = &mut out.u;
+        u.clear();
+        u.resize(self.n_gateways, 0.0);
+        let v = &out.v;
+        u.par_iter_mut().enumerate().for_each(|(b, u)| {
+            for &(a, j) in self.crossings_by_target.column(b) {
+                *u += v[a as usize] * f64::from(gk.crossings.entries[j as usize].k);
             }
-        }
+        });
+        let u = &out.u;
         out.pi.clear();
         out.pi.extend_from_slice(weight);
-        for (o, &w) in weight.iter().enumerate() {
-            for e in gk.domestic.row(o) {
-                out.pi[e.col as usize] += f64::from(e.k) * w;
-            }
-        }
-        for (d, phi) in out.pi.iter_mut().enumerate() {
-            let abroad: f64 = gk
-                .access
-                .row(d)
-                .iter()
-                .map(|e| f64::from(e.k) * out.u[e.col as usize])
-                .sum();
-            *phi += abroad;
-        }
+        out.pi
+            .par_iter_mut()
+            .enumerate()
+            .with_min_len(64)
+            .for_each(|(d, phi)| {
+                for &(o, j) in self.domestic_by_destination.column(d) {
+                    *phi += f64::from(gk.domestic.entries[j as usize].k) * weight[o as usize];
+                }
+                let abroad: f64 = gk
+                    .access
+                    .row(d)
+                    .iter()
+                    .map(|e| f64::from(e.k) * u[e.col as usize])
+                    .sum();
+                *phi += abroad;
+            });
     }
 }
 
