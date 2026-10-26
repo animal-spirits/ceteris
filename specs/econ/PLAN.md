@@ -376,8 +376,8 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 ### Task 21: Records
 
-**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P47, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0011 option 3).
-- Carried from the migration (MIGRATION Tasks 4 and 7): the DESIGN.md refresh must carry the ADR 0017 deferral (lines 257, 1324 and 1856 still describe route choice as the P2 cost model) and ADR 0021's three PIGL categories (DESIGN 8.6 names five)
+**Files:** Modify `specs/econ/SPEC.md` (status line: gate passed with date and evidence), `specs/trade/SPEC.md` (gateway rule as built); append to the design-doc change list for the next snapshot: register entries P39 to P47, the 21 development-slice change (ADR 0012), 19.1 app stack (ADR 0088, which amends ADR 0011).
+- Carried from the migration (MIGRATION Tasks 4 and 7): the DESIGN.md refresh, whose change list is the last section of `specs/econ/SPEC.md`, must carry the ADR 0017 deferral (lines 257, 265, 441, 1242, 1245, 1337, 1788, 1856 and 1875 of the rev 226 snapshot still describe route choice as the P2 cost model; 1324 was a stale number) and ADR 0021's three PIGL categories (DESIGN 8.6 names five)
 
 - [ ] **Step 1: Write** the gate evidence (commands, measured V1 maxima, H2 estimate with standard error, benchmark medians).
 - [ ] **Step 2: Commit** `docs(specs): record p2 gate evidence`
