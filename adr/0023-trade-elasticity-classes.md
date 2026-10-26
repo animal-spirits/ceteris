@@ -146,3 +146,9 @@ The band is not widened after a result (Task 20 stop rule): a miss goes to the o
   chemicals, refined fuels and metals; 9.11 to 13.53, a factor 1.485). `TradeParams::default()`
   holds the adopted classes since the theta task (2026-10-25), and `test_rust_theta_defaults_follow_the_estimator`
   ties the fixture export of those defaults to `theta.classes`.
+- Amended by ADR 0101 (owner, 2026-10-26): class theta becomes the trade-weighted harmonic mean
+  over the HS lines of the class, (sum_l w_l / theta_l)^-1, inside the same class rule. It is
+  computed after ADR 0092 moves refined petroleum (C19) into good 1, and ADR 0092's nu_c fit then
+  runs at the new values. Tariff experiments report a theta-scale lane {0.6, 1, 1.4} until the
+  ADR 0022 estimates replace the literature values. `TradeParams::default()` keeps the values
+  above until the pipeline task that recomputes them.

@@ -46,7 +46,7 @@ sum_d E_d K_od w_o / ((1 + t_od) Phi_d) = V_o,    Phi_d = sum_o K_od w_o
 
 The solution is unique up to scale (Sinkhorn 1967). The scale is fixed by the world index at 1.
 Then p_o = w_o^(-1/theta), and q_d and L_d follow from sourcing. Solve in the log domain
-(ADR 0093); if plain sweeps contract slowly at theta 12.55, use Anderson acceleration or Newton
+(ADR 0093); if plain sweeps contract slowly at the top class theta (10.57 since the OECD key), use Anderson acceleration or Newton
 on the convex dual.
 
 **Stage 3, technology.** Keep the 2000 value shares at the solved prices:
