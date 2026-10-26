@@ -24,7 +24,6 @@ use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::kernel::Csr;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{N_GOODS, dispatch as dispatch_good, source as source_good};
 
@@ -103,32 +102,6 @@ fn largest(values: impl Iterator<Item = f64>) -> Option<usize> {
         }
     }
     best.map(|(j, _)| j)
-}
-
-/// Entries of a CSR grouped by column, stable: `(offsets by column, (row, entry) pairs)`.
-fn by_column<E>(
-    csr: &Csr<E>,
-    col: impl Fn(&E) -> usize,
-    n_cols: usize,
-) -> (Vec<usize>, Vec<(usize, usize)>) {
-    let mut offsets = vec![0usize; n_cols + 1];
-    for e in &csr.entries {
-        offsets[col(e) + 1] += 1;
-    }
-    for c in 0..n_cols {
-        offsets[c + 1] += offsets[c];
-    }
-    let mut next = offsets.clone();
-    let mut pairs = vec![(0, 0); csr.entries.len()];
-    for row in 0..csr.n_rows() {
-        let lo = csr.offsets[row] as usize;
-        for (j, e) in csr.row(row).iter().enumerate() {
-            let c = col(e);
-            pairs[next[c]] = (row, lo + j);
-            next[c] += 1;
-        }
-    }
-    (offsets, pairs)
 }
 
 /// T1: goods due this tick move from the transit accounts to their buyers: pops consume
@@ -682,23 +655,22 @@ pub fn dispatch(w: &mut EconWorld) {
         }
         // b to the origin gateways a that fed it, then a to the origins: exact splits
         let mut from_gateway = vec![0i64; ng];
-        let (off, pairs) = by_column(&gk.crossings, |e| e.col as usize, ng);
         for b in 0..ng {
-            let legs = &pairs[off[b]..off[b + 1]];
-            let weights = legs.iter().map(|&(_, j)| r.crossing_value[j]);
+            let legs = kernel.crossings_by_target().column(b);
+            let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
             split(at_gateway[b], weights, &mut parts);
             for (&(a, _), &part) in legs.iter().zip(&parts) {
+                let a = a as usize;
                 pay(&mut w.ledger, TRADE, acc.gateway[b], acc.gateway[a], part);
                 from_gateway[a] += part;
             }
         }
-        let (off, pairs) = by_column(&gk.access, |e| e.col as usize, ng);
         for a in 0..ng {
-            let legs = &pairs[off[a]..off[a + 1]];
-            let weights = legs.iter().map(|&(_, j)| r.access_out_value[j]);
+            let legs = kernel.access_by_gateway().column(a);
+            let weights = legs.iter().map(|&(_, j)| r.access_out_value[j as usize]);
             split(from_gateway[a], weights, &mut parts);
             for (&(o, _), &part) in legs.iter().zip(&parts) {
-                pay(&mut w.ledger, TRADE, acc.gateway[a], acc.market[o], part);
+                pay(&mut w.ledger, TRADE, acc.gateway[a], acc.market[o as usize], part);
             }
         }
         for d in 0..np {
