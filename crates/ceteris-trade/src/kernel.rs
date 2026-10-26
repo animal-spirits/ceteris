@@ -4,6 +4,8 @@
 //! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
 //! materialized: [`Kernel::origin_access_into`] evaluates the sums through gateway aggregates.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::goods::{N_GOODS, TRADED, tariff_group};
 use crate::network::{Leg, Network, Wedges};
 use crate::params::TradeParams;
@@ -12,6 +14,12 @@ use crate::params::TradeParams;
 const MAX_LAG: f64 = 3.0;
 /// Hours per month for transit lags.
 const HOURS_PER_MONTH: f64 = 730.0;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+fn next_id() -> u64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Rows of entries in compressed sparse row layout.
 #[derive(Clone, Debug, Default)]
@@ -92,6 +100,8 @@ pub struct Kernel {
     /// (ADR 0018).
     pub theta: [f64; N_GOODS],
     goods: [Option<GoodKernel>; N_GOODS],
+    /// Unique per build and per change, so `source` can tell a kernel it has seen.
+    id: u64,
 }
 
 /// Results of the origin-side low-rank evaluation for one good, written by
@@ -140,7 +150,13 @@ impl Kernel {
             n_gateways: ng,
             theta: p.theta,
             goods,
+            id: next_id(),
         }
+    }
+
+    /// Identifies this kernel's contents: kernels with the same id are equal.
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Kernel of a traded good; panics for a local good.
@@ -203,6 +219,7 @@ impl Kernel {
     /// tests (lags 0) and stability studies (the longest lag).
     pub fn set_crossing_lags(&mut self, lag: u8) {
         assert!(f64::from(lag) <= MAX_LAG, "lag {lag} above {MAX_LAG}");
+        self.id = next_id();
         for gk in self.goods.iter_mut().flatten() {
             gk.crossings.entries.iter_mut().for_each(|e| e.lag = lag);
         }

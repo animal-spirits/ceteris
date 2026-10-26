@@ -190,15 +190,14 @@ pub struct Scratch {
     pub spoiled: Vec<f64>,
     /// Pipeline arrivals at T1, `[buyer * N_GOODS + g]` (pops, then enterprises).
     pub due: Vec<f64>,
-    /// Sourcing of each traded good, from T2 to its dispatch at T2b.
+    /// Sourcing of each traded good: at unit spending from the price refresh of E3, then
+    /// from T2 to its dispatch at T2b.
     pub sourced: Vec<Sourced>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * N_GOODS + g]`, refreshed with
     /// [`EconWorld::price_index`].
     pub lead: Vec<f64>,
-    /// Unit-spending sourcing of the price refresh.
-    pub unit: Sourced,
     /// Country-pair flows of the last 12 ticks, for the run export.
     pub flows: FlowWindow,
 }
@@ -225,7 +224,6 @@ impl Scratch {
             due: vec![0.0; (n_pops + n_ent) * N_GOODS],
             sourced: (0..n_traded).map(|_| Sourced::new()).collect(),
             lead: vec![0.0; np * N_GOODS],
-            unit: Sourced::new(),
             flows: FlowWindow::new(nc, np),
         }
     }
@@ -487,11 +485,13 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
 /// arriving per unit of intermediate spending, `source` and `dispatch` of one unit at every
 /// destination; infinite where no active origin is reachable) and the expected months in
 /// transit (`lead`, arrival slots weighted by units); a local good's posted price, lead 0.
+/// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
+/// same good at the same prices on it again, and `source` then reuses the origin access.
 fn delivered_prices(
     kernel: &Kernel,
     price: &[f64],
     active: &[bool],
-    unit: &mut Sourced,
+    sourced: &mut [Sourced],
     index: &mut [f64],
     lead: &mut [f64],
 ) {
@@ -511,6 +511,7 @@ fn delivered_prices(
             p[o] = price[o * N_GOODS + g];
             on[o] = active[o * N_GOODS + g];
         }
+        let unit = &mut sourced[g];
         source(kernel, g, &p, &on, &spend, unit);
         dispatch(kernel, g, &p, &fill, unit);
         for d in 0..np {
@@ -543,11 +544,13 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
     }
     let (mut index, mut lead) = (vec![0.0; np * N_GOODS], vec![0.0; np * N_GOODS]);
     let price = vec![1.0; np * N_GOODS];
+    let n_traded = TRADED.iter().filter(|&&t| t).count();
+    let mut sourced: Vec<Sourced> = (0..n_traded).map(|_| Sourced::new()).collect();
     delivered_prices(
         &kernel,
         &price,
         &active,
-        &mut Sourced::new(),
+        &mut sourced,
         &mut index,
         &mut lead,
     );
@@ -858,7 +861,7 @@ impl EconWorld {
             &self.kernel,
             &self.markets.price,
             &self.markets.active,
-            &mut sc.unit,
+            &mut sc.sourced,
             &mut self.price_index,
             &mut sc.lead,
         );

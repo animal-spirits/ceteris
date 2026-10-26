@@ -1,7 +1,8 @@
 //! P2 system benchmarks (`specs/econ/SPEC.md`, Gate): every system of the tick on the full
-//! pack from its calibrated steady state, each measured on the state the systems before it
-//! leave. Without a calibrated pack (`CETERIS_PACK`, default `data/packs/2000`) they run on
-//! the fixture, so `cargo bench --no-run` and CI work.
+//! pack, on tick 1 from its calibrated steady state (the first tick whose E3 finds prices
+//! moved), each measured on the state the systems before it leave. Without a calibrated pack
+//! (`CETERIS_PACK`, default `data/packs/2000`) they run on the fixture, so `cargo bench
+//! --no-run` and CI work.
 //!
 //! Budgets per tick (M4 Pro): `labour` + `produce` 12 ms, `consume` (E3 demand) 10 ms. The
 //! migration carries are measured on their own: `price_refresh` (E3's unit `source` and
@@ -52,6 +53,13 @@ fn inputs() -> (EconInputs, &'static str) {
     (small_world(), "fixture")
 }
 
+/// One whole tick, as `Sim::step` runs it.
+fn step(w: &mut EconWorld, tick: u32) {
+    w.begin_tick();
+    systems::schedule().run_tick(w, systems::SEED, tick);
+    w.end_tick(tick).expect("invariants hold");
+}
+
 /// A world at the start of a tick, after `begin_tick` and the first `n` systems.
 fn before(base: &EconWorld, n: usize) -> EconWorld {
     let mut w = base.clone();
@@ -65,7 +73,14 @@ fn before(base: &EconWorld, n: usize) -> EconWorld {
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
     let (params, trade) = (EconParams::default(), TradeParams::default());
-    let base = EconWorld::new(Arc::new(inputs), params, trade.clone());
+    // tick 1: its prices are those of tick 0's repricing, so the sourcing that `source`
+    // keeps from tick 0 is stale at E3, as in any tick away from an exact fixed point
+    let mut base = EconWorld::new(Arc::new(inputs), params, trade.clone());
+    let posted = base.markets.price.clone();
+    step(&mut base, 0);
+    if base.markets.price == posted {
+        eprintln!("notice: prices did not move at tick 0; E3 reuses the sourcing of T2");
+    }
     let mut g = c.benchmark_group(format!("econ_{what}"));
     g.sample_size(20);
 
@@ -92,22 +107,24 @@ fn bench(c: &mut Criterion) {
     });
 
     let consume = SYSTEMS.iter().position(|s| s.0 == "consume").unwrap();
-    let mut w = before(&base, consume);
-    g.bench_function("price_refresh", |b| b.iter(|| w.refresh_price_index()));
+    let start = before(&base, consume);
+    g.bench_function("price_refresh", |b| {
+        b.iter_batched(
+            || start.clone(),
+            |mut w| w.refresh_price_index(),
+            BatchSize::LargeInput,
+        )
+    });
 
     let start = base.clone();
     g.bench_function("end_tick", |b| {
         let w = before(&start, SYSTEMS.len());
-        b.iter(|| w.end_tick(0).expect("invariants hold"))
+        b.iter(|| w.end_tick(1).expect("invariants hold"))
     });
     g.bench_function("tick", |b| {
         b.iter_batched(
             || base.clone(),
-            |mut w| {
-                w.begin_tick();
-                systems::schedule().run_tick(&mut w, systems::SEED, 0);
-                w.end_tick(0).expect("invariants hold");
-            },
+            |mut w| step(&mut w, 1),
             BatchSize::LargeInput,
         )
     });
