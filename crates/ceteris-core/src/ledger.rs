@@ -127,22 +127,26 @@ impl Ledger {
         &self.journal
     }
 
-    fn good_total(&self, good: usize) -> f64 {
-        let column: Vec<f64> = self
-            .goods
-            .iter()
-            .skip(good)
-            .step_by(self.n_goods)
-            .copied()
-            .collect();
-        fixed_sum(&column)
+    /// Every good's total over the accounts, each column summed by `fixed_sum`.
+    fn good_totals(&self) -> Vec<f64> {
+        let n = self.n_accounts();
+        let mut columns = vec![0.0; self.n_goods * n];
+        for (a, holdings) in self.goods.chunks_exact(self.n_goods).enumerate() {
+            for (g, &q) in holdings.iter().enumerate() {
+                columns[g * n + a] = q;
+            }
+        }
+        if n == 0 {
+            return vec![fixed_sum(&[]); self.n_goods];
+        }
+        columns.chunks_exact(n).map(fixed_sum).collect()
     }
 
     pub fn begin_tick(&mut self) {
         self.journal.clear();
         self.created.fill(0.0);
         self.destroyed.fill(0.0);
-        self.opening = (0..self.n_goods).map(|g| self.good_total(g)).collect();
+        self.opening = self.good_totals();
     }
 
     pub fn check(&self, tick: u32) -> Result<(), Violation> {
@@ -163,9 +167,10 @@ impl Ledger {
             );
             return Err(Violation::new(tick, "goods sign", detail));
         }
+        let closing = self.good_totals();
         for g in 0..self.n_goods {
             let (open, made, gone) = (self.opening[g], self.created[g], self.destroyed[g]);
-            let close = self.good_total(g);
+            let close = closing[g];
             let gap = close - (open + made - gone);
             if gap.abs() > GOODS_TOLERANCE * (open + made + gone).max(1.0) {
                 let detail = format!(
