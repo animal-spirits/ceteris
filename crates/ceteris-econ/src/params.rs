@@ -65,8 +65,9 @@ pub struct EconParams {
     pub rationing: Rationing,
     /// S09 input coefficients: `PuttyClay` (default) or `FixedLeontief`.
     pub technology: Technology,
-    /// P143 loss write-off threshold M (ADR 0098): an enterprise or province market keeps
-    /// retained losses up to M months of its base sales; the rest is written off.
+    /// P143 loss write-off threshold M (ADR 0098): an enterprise keeps retained losses up to M
+    /// months of its base sales; the rest is written off. Province markets keep the signed
+    /// rule. An infinite M turns the write-off off.
     pub write_off_months: f64,
 }
 
