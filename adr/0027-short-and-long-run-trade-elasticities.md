@@ -1,9 +1,9 @@
 # 0027. Short- and long-run trade elasticities
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 8.3, 15.5, 17.1 (P01), 17.2
-Phase: P2
+Phase: P3; S12 stays instant before P3 (ADR 0111)
 
 ## Context
 
@@ -42,6 +42,10 @@ theta_c and is still estimated by PPML (0022); rho_c is identified from the dyna
 bilateral flows to tariff changes in BACI (local projections around 2018-19), outside SBI.
 Domestic legs adjust instantly: inertia sits in cross-border sourcing, which is where the
 evidence is. Switch S12 selects instant (rho = 1) or partial adjustment.
+
+Amendment (ADR 0095): the long run is theta_c of ADR 0092, not a value near 2. The short-run
+order elasticity rho_c theta_c + 1 enters ADR 0090's E_o, and the stability region is re-derived
+with rho_c.
 
 ## Migration
 

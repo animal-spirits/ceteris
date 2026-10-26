@@ -33,7 +33,7 @@ Option 2.
 - Additive hazards: PM2.5 exposure (ADR 0038), heat (computed by ADR 0036's lanes and recorded
   here as a cause), epidemics (13.3), conflict (11.7),
   famine (ADR 0029), and a scenario hazard for deaths of despair (P65 sets its default to zero;
-  it is a scenario lane until a mechanism passes ablation).
+  it is a scenario lane until a mechanism passes ablation; ADR 0063 is that mechanism).
 - Health spending is a fiscal category (9.6) and a household expenditure; it lowers
   communicable and part of non-communicable mortality with diminishing returns. Health-system
   capacity and its saturation are ADR 0061.

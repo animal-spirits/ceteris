@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 6.2, 8.2, 8.3, 8.6, 13.2; amends ADRs 0027, 0033, 0036, 0091 (proposed, on
+Design sections: 6.2, 8.2, 8.3, 8.6, 13.2; amends ADRs 0027, 0033, 0091 (proposed, on
 `design/p2-review-adrs`)
 
 ## Context
@@ -25,13 +25,13 @@ no ADR now are listed at the end.
   Brass level's income response includes a time shift, estimated on WPP 1950-2000 with the
   rest of 0033's offline fit (ADR 0108 window), and the shift's future rate is a lane (low,
   central, high).
-- **0036, climate damages.** Add a lane following Kotz, Levermann and Wenz (2024) beside the
-  existing ones, so the lane set spans the post-2020 empirical estimates.
 - **0091, competitive storage.** Per-market adaptive expectations make stocks chase past prices.
-  Amendment: when 0091 is accepted, each storable good's storage rule is a rational-expectations
-  policy function (Deaton and Laroque 1992) solved offline on a grid of availability and
-  stored as a lookup table in the pack; the run interpolates it, which is deterministic and
-  costs one table read per market. Adaptive expectations stay as the fallback switch.
+  They stay the P2 rule (owner choice D5b, 2026-10-25; confirmed 2026-10-26). Amendment: a
+  rational-expectations policy function (Deaton and Laroque 1992), solved offline on a grid of
+  availability and stored as a lookup table in the pack, is added as an alternative switch; the
+  run interpolates it, which is deterministic and costs one table read per market. P9 makes it
+  the default only if it beats adaptive expectations on commodity price and stock moments (FAO,
+  EIA, LME).
 
 ## Raised, no ADR now
 
@@ -43,6 +43,8 @@ no ADR now are listed at the end.
 - Koijen-Yogo latent demand (9.9): fewer classes and mean-reverting latent demand; take up in
   P5 design.
 - Informality and u* (0031, decision D1): no change.
+- A Kotz, Levermann and Wenz damage lane for 0036: wait for the corrected paper. The 2024 version
+  was retracted in December 2025 and cannot anchor a lane (ADR 0036; owner, 2026-10-26).
 
 ## Consequences
 

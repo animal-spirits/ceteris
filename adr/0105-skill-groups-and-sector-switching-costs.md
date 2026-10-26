@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 6.3, 7.2, 8.7, 15.5; econ SPEC Labour market
+Design sections: 6.3, 7.2, 8.7, 15.5; econ SPEC Labour market; amends ADRs 0089, 0093
 
 ## Context
 
@@ -38,9 +38,15 @@ Option 2, as two independent switches so ablation can drop either.
   Each province has two wages.
 - **Sector switching.** Workers belong to a sector. Each month a share m of workers in each
   sector re-chooses by logit over sectors in the province, on expected wages, with dispersion
-  nu_s; m and nu_s from Artuc, Chaudhuri and McLaren (2010), moved to monthly frequency
+  omega_s (not nu, the border friction P05); m and omega_s from Artuc, Chaudhuri and
+  McLaren (2010), moved to monthly frequency
   (literature, not free; one lane over their confidence range). Sector wages clear sector
   labour markets; the wage rule of the econ SPEC applies per (province, sector, skill).
+- **Natural rate.** ADR 0089's wedge applies per segment with the country's u*: the wage rule per
+  (province, sector, skill) reads x + u*_i, and the frictionless search (ADR 0093) finds each
+  segment's root of L*(w) = (1 - u*_i) L^s on uncapped targets.
+- **Education efficiency.** P42's e_k weights the education levels inside each skill group
+  (secondary against below secondary in the low group); the CES applies between the groups.
 - With both switches off, the current model is reproduced exactly.
 
 ## Migration
