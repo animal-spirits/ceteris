@@ -351,7 +351,8 @@ pub struct EconWorld {
     pub scratch: Scratch,
 }
 
-/// BLAKE3 over the inputs digest and both parameter sets: everything a snapshot leaves out.
+/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P143,
+/// which the snapshot header carries after the digest: everything else a snapshot leaves out.
 pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     // destructured so a new parameter cannot be left out of the digest
     let EconParams {
@@ -366,7 +367,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         rationing,
         technology,
         // fires only on retained losses, which the steady states that calibration and the
-        // reference solutions describe do not have
+        // reference solutions describe do not have; the snapshot header carries it
         write_off_months: _,
     } = params;
     let TradeParams {
@@ -1110,9 +1111,10 @@ impl EconWorld {
 }
 
 impl Encode for EconWorld {
-    /// The static digest, then the dynamic state.
+    /// The static digest, the write-off threshold P143, then the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         self.digest.iter().for_each(|&b| e.u8(b));
+        e.f64s(&[self.params.write_off_months]);
         self.ledger.encode(e);
         self.markets.encode(e);
         self.pipeline.encode(e);
@@ -1152,8 +1154,8 @@ impl State for EconWorld {
 
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
-    /// (S >= 0 and held by the market account), transit (pipeline and transit accounts
-    /// agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// (S >= 0, and held by the market account to 1e-9 of the turnover S + Q + D), transit
+    /// (pipeline and transit accounts agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
     /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
     /// dispatch mass (units dispatched = origin sales, 1e-12)
@@ -1218,11 +1220,14 @@ impl State for EconWorld {
 
         for (i, &account) in lay.accounts.market.iter().enumerate() {
             for g in 0..N_GOODS {
-                let s = self.markets.inventory[i * N_GOODS + g];
+                let cell = i * N_GOODS + g;
+                let s = self.markets.inventory[cell];
                 let held = self.ledger.goods(account, g);
+                // both sides are sums of the order of the turnover, so their rounding is too
+                let turnover = s + self.markets.supply[cell] + self.markets.demand[cell];
                 if s.is_nan()
                     || s < 0.0
-                    || (held - s).abs() > GOODS_TOLERANCE * s.max(held).max(1.0)
+                    || (held - s).abs() > GOODS_TOLERANCE * turnover.max(held).max(1.0)
                 {
                     let detail = format!("province {i} good {g}: stock {s}, market holds {held}");
                     return fail("inventory", detail);
@@ -1341,6 +1346,12 @@ impl State for EconWorld {
             return Err(DecodeError(
                 "snapshot belongs to other inputs or parameters".into(),
             ));
+        }
+        let months = d.f64s()?;
+        if months != [self.params.write_off_months] {
+            return Err(DecodeError(format!(
+                "snapshot taken with write-off threshold (P143) {months:?}"
+            )));
         }
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d)?;
@@ -1679,6 +1690,22 @@ mod tests {
         assert_eq!(back.price_level, w.price_level);
         assert_eq!(back.wage_clip_ticks, w.wage_clip_ticks);
         assert_eq!(back.markets.clip_ticks, w.markets.clip_ticks);
+    }
+
+    #[test]
+    fn restore_rejects_another_write_off_threshold() {
+        let w = world();
+        let bytes = canonical(0, &w);
+        let other = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams {
+                write_off_months: 6.0,
+                ..EconParams::default()
+            },
+            TradeParams::default(),
+        );
+        assert_eq!(other.digest(), w.digest());
+        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
     }
 
     #[test]

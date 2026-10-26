@@ -454,6 +454,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("expectation_gain", "P45"),
         ("rationing", "S11"),
         ("technology", "S09"),
+        ("write_off_months", "P143"),
     ];
     let register: Vec<String> = register
         .iter()
@@ -472,6 +473,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", num(p.eta)),
         ("edu_eff", nums(&p.edu_eff)),
         ("frictionless", p.frictionless.to_string()),
+        ("write_off_months", num(p.write_off_months)),
         (
             "rationing",
             match p.rationing {

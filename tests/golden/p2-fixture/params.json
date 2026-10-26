@@ -26,7 +26,8 @@
     "time_cost": "P43",
     "expectation_gain": "P45",
     "rationing": "S11",
-    "technology": "S09"
+    "technology": "S09",
+    "write_off_months": "P143"
   },
   "econ": {
     "sigma_demand": 0.6,
@@ -41,6 +42,7 @@
     "eta": 0.3,
     "edu_eff": [1.0, 1.5, 2.3],
     "frictionless": false,
+    "write_off_months": 3.0,
     "rationing": "priority",
     "technology": "putty_clay"
   },
