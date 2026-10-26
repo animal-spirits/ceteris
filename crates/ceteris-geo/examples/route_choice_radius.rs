@@ -72,6 +72,8 @@ fn time_solves(pack: &Pack, f: &EdgeFactors, gateways: &[u32], countries: &[Vec<
                 .filter(|t| t.is_finite())
                 .count()
         })
+        .collect::<Vec<usize>>()
+        .into_iter()
         .sum();
     let gateway_s = t0.elapsed().as_secs_f64();
     assert!(reached > 0);

@@ -108,6 +108,14 @@ widen the data. Option (c) stays rejected: the hot loops are sparse, latency-bou
 need f64 `powf` and `exp`, Apple GPUs have no f64, and the M4 matrix unit needs nightly
 intrinsics or unsafe code, which the workspace forbids.
 
+### As built
+
+Clippy 0.1.93 neither errors nor warns on a `clippy.toml` path it cannot resolve; the ban
+silently never fires. The algebraic paths do resolve. The fixture
+(`scripts/check_clippy_bans.sh`, crate in `scripts/clippy-bans/`, outside the workspace)
+therefore counts the diagnostics: one per banned method (20) and one per use of each banned
+type (6), and fails on any other count, so a path that stops resolving fails CI.
+
 ## Tests
 
 - A clippy fixture calling each banned method and naming each banned type fails
