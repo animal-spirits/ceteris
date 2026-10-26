@@ -27,6 +27,10 @@ proptest = "1.12.0"
 name = "econ"
 harness = false
 
+[[bench]]
+name = "trade"
+harness = false
+
 [[bin]]
 name = "ceteris"
 path = "src/bin/ceteris.rs"

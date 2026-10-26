@@ -1,15 +1,16 @@
 //! Trade benchmarks (`specs/trade/SPEC.md`, Test plan) on the full pack from its calibrated
-//! steady state: sourcing and dispatch of every traded good on the spending and fills of the
-//! first tick, and the clearing and repricing of every market. Without a calibrated pack
-//! (`CETERIS_PACK`, default `data/packs/2000`) they run on the econ fixture, so `cargo bench
-//! --no-run` and CI work.
+//! steady state: sourcing and dispatch of every traded good on the spending and fills of tick
+//! 1, and the clearing and repricing of every market. They live in ceteris-econ, which builds
+//! the world they run on. Without a calibrated pack (`CETERIS_PACK`, default
+//! `data/packs/2000`) they run on the econ fixture, so `cargo bench --no-run` and CI work.
 //!
 //! Budgets per tick (M4 Pro): `source_dispatch` 5 ms, `clear_reprice` 2 ms; `kernel_build` is
-//! reported only (2 s, not per tick). The migration carry of E3, one more `source` and
-//! `dispatch` of every traded good at unit spending for q_d and the lead time, is
-//! `unit_source_dispatch`. In the tick, E3 sources cold and T2 repeats the sourcing at the same
-//! prices warm, so a tick's trade work is `unit_source_dispatch` + `source_warm` + `dispatch`.
-//! The tick runs the goods in parallel, one task each: the `_parallel` benches.
+//! reported only (2 s, not per tick). `source` keeps the origin access of its last prices: E3
+//! sources each good cold at unit spending and dispatches it in full for q_d and the lead time
+//! (the migration carry, `unit_source_dispatch`), then T2 sources at the same prices warm and
+//! T2b dispatches the fills (`source_dispatch`). `source` alone is the cold sourcing. The tick
+//! runs the goods in parallel, one task each: the `_parallel` benches time a tick's two trade
+//! phases as it runs them.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -86,10 +87,20 @@ fn dispatch_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     }
 }
 
-/// One task per good, as the econ tick runs them.
-fn source_dispatch_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
+/// One task per good, sourcing and dispatch together, as E3 runs them.
+fn unit_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
         source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        dispatch(k, g, &c.price[g], &c.fill[g], r);
+    });
+}
+
+/// One task per good, sourcing for every good and then dispatch, as T2 and T2b run them.
+fn tick_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
+    out.par_iter_mut().enumerate().for_each(|(g, r)| {
+        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+    });
+    out.par_iter_mut().enumerate().for_each(|(g, r)| {
         dispatch(k, g, &c.price[g], &c.fill[g], r);
     });
 }
@@ -99,9 +110,13 @@ fn bench(c: &mut Criterion) {
     let (params, trade) = (EconParams::default(), TradeParams::default());
     let mut w = EconWorld::new(Arc::new(inputs), params, trade.clone());
     // tick 1, whose prices moved at tick 0's repricing: the sourcing kept from tick 0 is stale
+    let posted = w.markets.price.clone();
     w.begin_tick();
     systems::schedule().run_tick(&mut w, systems::SEED, 0);
     w.end_tick(0).expect("invariants hold");
+    if w.markets.price == posted {
+        eprintln!("notice: prices did not move at tick 0; E3 reuses the sourcing of T2");
+    }
     let stale = w.scratch.sourced.clone();
     w.begin_tick();
     for run in [
@@ -112,6 +127,8 @@ fn bench(c: &mut Criterion) {
     ] {
         run(&mut w);
     }
+    // as E3 leaves it: sourced at this tick's prices, so T2 sources warm
+    let refreshed = w.scratch.sourced.clone();
     // the markets as T3 finds them, then the fills it leaves for T2b
     systems::source(&mut w);
     let markets = w.markets.clone();
@@ -155,7 +172,7 @@ fn bench(c: &mut Criterion) {
     });
     g.bench_function("source_dispatch", |b| {
         b.iter_batched(
-            || stale.clone(),
+            || refreshed.clone(),
             |mut s| {
                 source_all(kernel, &cols, &mut s);
                 dispatch_all(kernel, &cols, &mut s);
@@ -175,15 +192,23 @@ fn bench(c: &mut Criterion) {
             BatchSize::LargeInput,
         )
     });
-    for (name, columns) in [
-        ("source_dispatch_parallel", &cols),
-        ("unit_source_dispatch_parallel", &unit),
-    ] {
+    // T2 and T2b from E3's sourcing, warm; E3 from tick 0's, cold
+    type Run = fn(&Kernel, &Columns, &mut [Sourced]);
+    let runs: [(&str, &Columns, &Vec<Sourced>, Run); 2] = [
+        ("source_dispatch_parallel", &cols, &refreshed, tick_parallel),
+        (
+            "unit_source_dispatch_parallel",
+            &unit,
+            &stale,
+            unit_parallel,
+        ),
+    ];
+    for (name, columns, start, run) in runs {
         g.bench_function(name, |b| {
             b.iter_batched(
-                || stale.clone(),
+                || start.clone(),
                 |mut s| {
-                    source_dispatch_parallel(kernel, columns, &mut s);
+                    run(kernel, columns, &mut s);
                     s
                 },
                 BatchSize::LargeInput,
