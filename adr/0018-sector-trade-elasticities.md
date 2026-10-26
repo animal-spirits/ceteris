@@ -29,7 +29,8 @@ scales with classes, not sectors. Values are estimated outside the simulation (0
 
 ## Tests
 
-H2 per class: PPML on simulated flows recovers each class's theta within its prior band.
+H2 per class: PPML on simulated flows recovers each class's theta within its prior band (defined in
+ADR 0023, Prior band: theta_c plus or minus 2 standard errors of its Caliendo-Parro estimate).
 
 ## Mapping to P2 as built
 

@@ -38,7 +38,16 @@ CALIENDO_PARRO: dict[str, tuple[tuple[str, ...], float]] = {
     "Other": (("36", "37"), 3.98),
 }
 
+# Heteroskedasticity-robust standard errors of the same column (Table 1, p. 18; ADR 0023).
+CALIENDO_PARRO_SE: dict[str, float] = {
+    "Agriculture": 2.01, "Mining": 3.67, "Food": 0.61, "Textile": 1.28, "Wood": 2.87, "Paper": 2.65,
+    "Petroleum": 15.61, "Chemicals": 1.78, "Plastic": 2.23, "Minerals": 1.60, "Basic metals": 2.51,
+    "Metal products": 2.12, "Machinery n.e.c.": 2.80, "Office": 4.53, "Electrical": 1.64, "Communication": 1.77,
+    "Medical": 1.56, "Auto": 0.92, "Other Transport": 1.08, "Other": 1.08,
+}  # fmt: skip
+
 _THETA_OF_DIVISION = {d: theta for divisions, theta in CALIENDO_PARRO.values() for d in divisions}
+_SECTOR_OF_DIVISION = {d: sector for sector, (divisions, _) in CALIENDO_PARRO.items() for d in divisions}
 
 # ISIC Rev 3 division of each CPA 2.1 activity of the OECD key (`goods.read_hs_cpa`), from the Rev 3 to Rev 4
 # breaks: weapons (C254) and military vehicles (C304) were Rev 3 2927, computers (C262) Rev 3 30, magnetic and
@@ -93,6 +102,33 @@ def by_good(
             num[good] += share * v * theta
             den[good] += share * v
     return np.divide(num, den, out=np.zeros(goods.N_GOODS), where=den > 0), den
+
+
+def sector_values(hs_cpa: dict[str, str], shares: dict[str, dict[int, float]], value: dict[str, float]) -> np.ndarray:
+    """Trade value (USD) of each good's lines by Caliendo-Parro sector, `[good, sector]` in the order of
+    `CALIENDO_PARRO`: the weights behind `by_good`, whose theta of good g is the row's mean of the sector thetas."""
+    sectors = list(CALIENDO_PARRO)
+    out = np.zeros((goods.N_GOODS, len(sectors)))
+    for hs, line_shares in shares.items():
+        sector = _SECTOR_OF_DIVISION.get(REV3_OF_CPA.get(hs_cpa[hs], ""))
+        v = value.get(hs, 0.0)
+        if sector is None or v == 0.0:
+            continue
+        for good, share in line_shares.items():
+            out[good, sectors.index(sector)] += share * v
+    return out
+
+
+def class_bands(values: np.ndarray, of: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """H2 prior band of each class (ADR 0023, Prior band): its theta is the mean of the sector estimates weighted
+    by the class's trade value per sector (the weights of `classes`), and its standard error that of the same
+    weighted mean of independent estimates, sqrt(sum_s w_s^2 se_s^2). `values` is `sector_values` of the traded
+    goods, `of` their classes. Returns each class's theta and standard error; the band is theta +/- 2 se."""
+    theta = np.array([t for _, t in CALIENDO_PARRO.values()])
+    se = np.array([CALIENDO_PARRO_SE[s] for s in CALIENDO_PARRO])
+    by_class = np.stack([values[of == c].sum(axis=0) for c in range(int(of.max()) + 1)])
+    w = by_class / by_class.sum(axis=1, keepdims=True)
+    return w @ theta, np.sqrt((w**2) @ se**2)
 
 
 def caliendo_parro_by_good(baci_2000: Path, hs_key: Path) -> np.ndarray:

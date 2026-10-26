@@ -248,6 +248,7 @@ def test_caliendo_parro_values_transcribed():
     assert len(rows) == 20
     transcribed = {name: (_isic_divisions(span), float(t)) for _, name, span, t, _ in rows}
     assert transcribed == theta.CALIENDO_PARRO
+    assert {name: float(se) for _, name, _, _, se in rows} == theta.CALIENDO_PARRO_SE
     assert min(t for _, t in transcribed.values()) == 0.39 and max(t for _, t in transcribed.values()) == 64.85
 
 
@@ -379,6 +380,20 @@ def test_rust_theta_defaults_follow_the_estimator(caliendo_parro):
     np.testing.assert_allclose(trade["theta"], [ct[c] for c in of] + [0.0] * (n - 7), atol=0.005)
     assert gravity.CLASSES == tuple(tuple(int(g) for g in np.flatnonzero(of == c)) for c in range(len(ct)))
     np.testing.assert_allclose(gravity.THETA_DEFAULT, ct, atol=0.005)
+
+
+def test_h2_prior_bands_follow_the_standard_errors():
+    """ADR 0023, Prior band: each class's theta +/- 2 standard errors of its trade-weighted mean of sector
+    estimates, the band `test_p2_gate.py` holds (to two decimals)."""
+    key = goods.read_hs_cpa(_cached(econ_build.HS_KEY))
+    shares = goods.hs_goods_shares(key)
+    value = theta.baci_values(_cached("BACI_HS92_V202601.zip"))
+    t, v = theta.by_good(key, shares, value)
+    of, ct = theta.classes(t[:7], v[:7])
+    centre, se = theta.class_bands(theta.sector_values(key, shares, value)[:7], of)
+    np.testing.assert_allclose(centre, ct, rtol=1e-12)
+    np.testing.assert_allclose(se, [0.61, 0.917, 1.211], atol=5e-4)
+    np.testing.assert_allclose(2 * se, [1.22, 1.83, 2.42], atol=5e-3)
 
 
 def test_every_traded_activity_of_the_key_has_a_sector_estimate():
