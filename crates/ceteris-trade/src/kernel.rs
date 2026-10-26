@@ -128,14 +128,15 @@ pub struct GoodKernel {
     pub crossings: Csr<Crossing>,
 }
 
+/// Fields are private so that every change goes through a method that renews `id`.
 #[derive(Clone, Debug)]
 pub struct Kernel {
-    pub n_provinces: usize,
-    pub n_gateways: usize,
+    n_provinces: usize,
+    n_gateways: usize,
     /// P01 per good as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
     /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
     /// (ADR 0018).
-    pub theta: [f64; N_GOODS],
+    theta: [f64; N_GOODS],
     goods: [Option<GoodKernel>; N_GOODS],
     /// Crossings by destination gateway and access legs by gateway, the same for every good:
     /// all goods share the network's legs and their order.
@@ -206,6 +207,19 @@ impl Kernel {
             domestic_by_destination,
             id: next_id(),
         }
+    }
+
+    pub fn n_provinces(&self) -> usize {
+        self.n_provinces
+    }
+
+    pub fn n_gateways(&self) -> usize {
+        self.n_gateways
+    }
+
+    /// P01 of good `g`, as the kernel of `g` was built with.
+    pub fn theta(&self, g: usize) -> f64 {
+        self.theta[g]
     }
 
     /// Identifies this kernel's contents: kernels with the same id are equal.
@@ -537,7 +551,7 @@ mod tests {
         let mut wedges = Wedges::none(2);
         wedges.tariff.iter_mut().for_each(|t| *t = 0.2);
         let k = Kernel::build(&net, &W, &wedges, &p);
-        assert_eq!((k.theta[0], k.theta[4]), (2.0, 8.0));
+        assert_eq!((k.theta(0), k.theta(4)), (2.0, 8.0));
         let nu = 1.0 + p.border_nu;
         for g in [0, 4] {
             let gk = k.good(g);

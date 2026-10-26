@@ -635,7 +635,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let kernel = std::sync::Arc::clone(&w.kernel);
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
-    let np = kernel.n_provinces;
+    let np = kernel.n_provinces();
     let sc = &mut w.scratch;
     let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
     let spending = Spending {
@@ -726,7 +726,7 @@ fn trade_legs(
     r: &Sourced,
     p: &mut Payments,
 ) {
-    let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
+    let (np, ng) = (kernel.n_provinces(), kernel.n_gateways());
     let gk = kernel.good(g);
     let entries = &mut p.entries;
     let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
