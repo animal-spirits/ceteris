@@ -200,7 +200,7 @@ ADR 0021.
 - [ ] **Step 2: Write failing tests** `pigl_pop_demand_matches_quadrature` (64-node Gauss-Hermite over the lognormal: 1e-10 relative), `pigl_adds_up` (spending = money, 1e-14 relative), `pigl_inversion_reproduces_base_shares` (prices 1, base spending: shares = omega, 1e-12), `engel_curves_on_the_fixture` (across fixture pops ordered by income: food share falls, services share rises), `pigl_shares_stay_in_unit_interval_far_from_base` (money x 1e-3 and x 1e3), `homogeneity_of_degree_zero` (kept); Python `test_pigl_matches_rust` (shares on 100 random (price, money, sigma) draws, 1e-12) and `test_two_province_closed_form` (adapted).
 - [ ] **Step 3: Run**; expected: FAIL.
 - [ ] **Step 4: Implement** in Rust and the reference; research start values from the paper's estimates and record them.
-- [ ] **Step 5: Note** in `specs/econ/PLAN.md` Task 15: `people.country_labour` also returns the 2000 Gini (WDI SI.POV.GINI nearest year 1995-2005, else WIID; imputed flag), and `econ_countries.arrow` gains `gini`.
+- [ ] **Step 5: Note** in `specs/econ/PLAN.md` Task 15: `people.country_labour` also returns the 2000 Gini (WDI SI.POV.GINI nearest year 1995-2005, else SWIID; imputed flag), and `econ_countries.arrow` gains `gini`.
 - [ ] **Step 6: Run** the WIP check; expected: PASS.
 - [ ] **Step 7: Commit** `feat(econ): replace homothetic ces with pigl demand over lognormal pop income`
 

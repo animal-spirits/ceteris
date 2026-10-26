@@ -376,8 +376,10 @@ output (D = Q) and every local market clears (and S = S* when kappa2 > 0; with t
 kappa2 = 0 the stock stays where the transient left it). That is the structural-gravity
 equilibrium of destination sourcing, computed directly by the GE reference model
 (`python/ceteris/reference`, econ SPEC) on the same kernel. V1: frictionless runs reach it within
-1%. H2: PPML on simulated country-pair flows gives a distance elasticity in -0.7 to -1.1, and per
-theta class, a PPML on ln(1 + tariff) recovers the class's theta within its prior band (ADR 0018,
+1%. H2: PPML on simulated country-pair flows (the origin value of the shipped units) gives a distance
+elasticity in -0.7 to -1.1, and per
+theta class, a PPML on ln(1 + tariff) of the flows valued at what the importer pays (value times 1 + t:
+the kernel carries (1 + t)^-theta on spending, so the origin value's tariff elasticity is theta + 1) recovers the class's theta within its prior band (ADR 0018,
 `ppml.trade_elasticity`). S02:
 balanced Sinkhorn on the dense kernel with the equilibrium's origin supplies and destination
 expenditures reproduces the sourcing flows (1e-8, reference test), and a Rust run started at the

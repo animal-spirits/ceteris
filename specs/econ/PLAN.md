@@ -216,7 +216,7 @@ tests/golden/  p2-econ.txt  p2-pack.txt  p2-fixture/ (export + reference solutio
 **Interfaces:**
 - Produces:
   - `export::write_inputs(dir: &Path, inputs: &EconInputs, kernel: &Kernel, params: &EconParams, trade: &TradeParams)`: `goods.arrow, countries.arrow, provinces.arrow, pops.arrow, enterprises.arrow, kernel_domestic.arrow (good, o, d, k, tau), kernel_access.arrow (good, province, gateway, k, tau), kernel_crossing.arrow (good, a, b, k, tau, border_tau, lag), params.json`
-  - `export::write_run(dir: &Path, world: &EconWorld)`: `run_prices.arrow (province, good, price, active), run_wages.arrow, run_flows.arrow (exporter_country, importer_country, good, fob_value, units)` with flows averaged over the last 12 ticks
+  - `export::write_run(dir: &Path, world: &EconWorld)`: `run_prices.arrow (province, good, price, active), run_wages.arrow, run_flows.arrow (exporter_country, importer_country, good, value, units)` with flows averaged over the last 12 ticks
   - CLI: `ceteris export --fixture|--pack DIR --out DIR` and `ceteris run --fixture|--pack DIR --ticks N [--frictionless] --out DIR`
 
 - [ ] **Step 1: Write failing test** `export_round_trips_fixture` (write, read back with `ceteris_geo::pack::read_table`: row counts and a sample of values equal).
@@ -299,10 +299,10 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Interfaces:** Produces `people.province_population(worldpop_2000, cells) -> np.ndarray[P]` (H3 cell aggregation as `raster.py` does for elevation); `people.country_labour(ilostat, wic, barro_lee, pwt) -> dict[str, Labour(participation, unemployment, edu_shares[3], labour_share)]`; `people.pops(provinces, labour) -> pa.Table` (province x 3 education rows).
 
-- `people.country_labour` also returns the 2000 Gini (`Labour.gini`, `Labour.gini_imputed`): WDI SI.POV.GINI, the year nearest 2000 within 1995 to 2005, else WIID; imputed flag set for WIID or donor values. `econ_countries.arrow` gains `gini` (and its flag), which `EconInputs::from_pack` reads into `Countries.gini` (PIGL income dispersion, ADR 0021; MIGRATION Task 7).
+- `people.country_labour` also returns the 2000 Gini (`Labour.gini`, `Labour.gini_imputed`): WDI SI.POV.GINI, the year nearest 2000 within 1995 to 2005, else SWIID (the disposable-income Gini; WIID's licence is non-commercial); imputed flag set for SWIID or donor values. `econ_countries.arrow` gains `gini` (and its flag), which `EconInputs::from_pack` reads into `Countries.gini` (PIGL income dispersion, ADR 0021; MIGRATION Task 7).
 
 - [ ] **Step 1: Write failing tests** `test_population_sums_match_country_totals_within_2pct` (WorldPop vs WDI 2000), `test_edu_shares_sum_to_one`, `test_labour_share_in_unit_interval`, `test_gini_in_unit_interval_with_source_flag`.
-- [ ] **Step 2: Fetch** WorldPop 2000 global mosaic (1 km), ILOSTAT bulk (participation, unemployment 2000), WIC reconstruction, Barro-Lee v3, PWT 11, WDI SI.POV.GINI, WIID.
+- [ ] **Step 2: Fetch** WorldPop 2000 global mosaic (1 km), ILOSTAT bulk (participation, unemployment 2000), WIC reconstruction, Barro-Lee v3, PWT 11, WDI SI.POV.GINI, SWIID.
 - [ ] **Step 3: Implement; run** `-k people`; expected: PASS.
 - [ ] **Step 4: Commit** `feat(packs): add 2000 population, education and labour by province`
 
@@ -369,7 +369,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 **Interfaces:** Consumes everything above.
 - Carried from the migration (MIGRATION Tasks 5 and 6): define ADR 0018's per-class prior band for H2 before testing `test_h2_theta_by_class` (none is defined; for example the Caliendo and Parro standard errors aggregated per class), and re-measure the stability region and the growth factors on the pack with the committed harnesses `crates/ceteris-econ/tests/p2_price_rule_sweep.rs` and `p2_expectation_sweep.rs`
 
-- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (first `uniqueness.spectral_bound` at the pack's theta and `uniqueness.value_added_share`, then runs `ceteris run --pack ... --ticks 1200 --frictionless` and solves the reference from the data state; `uniqueness.v1_mode` picks the check: in tolerance mode the V1 tolerances of the econ SPEC, in report mode a report of which equilibrium each model reaches, per the econ SPEC P2 gate), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
+- [ ] **Step 1: Write tests** (all skip without a pack) Rust `hundred_years_without_violation` (default run, 1,200 ticks, prices and wages finite and positive), `full_pack_one_vs_eight_threads` (120 ticks); Python `test_v1_full_pack` (first `uniqueness.spectral_bound` at the pack's theta and `uniqueness.value_added_share`, then runs `ceteris run --pack ... --ticks 1200 --frictionless` and solves the reference from the data state; `uniqueness.v1_mode` picks the check: in tolerance mode the V1 tolerances of the econ SPEC, in report mode a report of which equilibrium each model reaches, per the econ SPEC P2 gate), `test_h2_distance_elasticity` (default run, `ppml.distance_elasticity` on the origin value `run_flows.value`, in [-1.1, -0.7]), `test_h2_theta_by_class` (ADR 0018: PPML on simulated flows valued at what the importer pays, `run_flows.value` times 1 + t, `ppml.trade_elasticity` per theta class of ADR 0023, recovers each class's theta within its prior band).
 - [ ] **Step 2: Run** `cargo test -p ceteris-econ --release --test p2_acceptance` and `uv run --project python pytest python/tests/test_p2_gate.py`.
 - [ ] **Step 3: If V1 fails,** use superpowers:systematic-debugging; no parameter changes to pass. **If H2 misses, stop and report the estimate to the owner before changing anything** (owner decision, ADR 0013).
 - [ ] **Step 4: Commit** `test(econ): add the p2 gate on the full pack`

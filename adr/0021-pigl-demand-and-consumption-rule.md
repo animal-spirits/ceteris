@@ -63,7 +63,7 @@ that this ADR reverses. MIGRATION Task 7 implements it as follows (controller ru
   category shares; a negative weight stops the load, never clipped.
 - Each pop's income is lognormal: mean its money per person, sigma = sqrt(2) Phi^(-1)((G + 1)
   / 2) from its country's 2000 Gini (`Countries.gini`; pack column in PLAN Task 15, WDI
-  SI.POV.GINI or WIID). Pop demand is the share equation integrated in closed form through
+  SI.POV.GINI, else SWIID). Pop demand is the share equation integrated in closed form through
   E[y^(1 - eps)]; tests use 64-node Gauss-Hermite quadrature rather than Monte Carlo.
 - Spend-all (m = 1, lambda = 0) is P2's current rule, so the consumption rule adds no behaviour
   yet.

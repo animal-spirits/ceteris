@@ -301,7 +301,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0 under IFPRI default terms"
 checked = 2026-10-24
 confidence = "medium"
-notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 (value of production) ships SPAM_License_v3.2.pdf: non-commercial, no redistribution without IFPRI permission; it is unused (not in fetch.toml), and a copy in data/cache must not be read by the pipeline. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
+notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 (value of production) ships SPAM_License_v3.2.pdf: non-commercial, no redistribution without IFPRI permission; it is unused (not in fetch.toml), and no copy is kept in data/cache. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
 
 [[source]]
 id = "mapspam-2005"

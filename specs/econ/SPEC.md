@@ -61,7 +61,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else WIID |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else SWIID (disposable-income Gini, CC0; WIID is non-commercial) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
 | `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -659,13 +659,15 @@ the radius on p. 9, footnote 10 p. 7).
   there (Newton-Krylov moved the residual from 53.6 to 51.7 in 7 steps of 35 s, Task 20).
   Comparisons with the perfect-foresight references (Caliendo-Dvorkin-Parro, Kleinman-Liu-Redding)
   are sign and rank only: agents with heuristic expectations cannot match their transition paths.
-- H2: PPML of simulated country-pair trade (traded goods, FOB value, steady state of the default
+- H2: PPML of simulated country-pair trade (traded goods; the origin value of the shipped units,
+  `run_flows.value`, which is what the exporter receives and excludes the tariff; steady state of the default
   run) on ln distance (CEPII population-weighted) and contiguity, with exporter and importer
   effects, excluding domestic pairs: distance coefficient in -1.1 to -0.7. H2 blocks the gate
   (owner decision). Nothing is fitted to it: costs come from P04 and the literature time cost
   P43. If it misses, work stops and the miss is reported to the owner before any parameter
   moves; any change then goes through the register.
-- H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade on ln(1 +
+- H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade, valued at what
+  the importer pays (`run_flows.value` times 1 + t), on ln(1 +
   tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity` for a
   one-good class; `ppml.hdfe` on (pair, good) rows with exporter x good and importer x good
   effects for a class of several goods) recovers
