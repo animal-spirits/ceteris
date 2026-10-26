@@ -70,7 +70,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
 | `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
-| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing), mass (share of the country's trade throughput, ADR 0092) | P1 graph, BACI 2000 trade by country |
+| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph, BACI 2000 trade by country |
 
 **Coverage.** `TradeParams::coverage` (P02, trade SPEC) is the authoritative value: the model, the
 snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The
@@ -114,10 +114,10 @@ edges (road, rail) whose two ends lie in different 2000 countries, merged within
 midpoint per country pair. k is proportional to the square root of 2000 trade (BACI exports
 plus imports), at least one and at most the candidate count, scaled to about 600 in total; each
 gateway's kind is its candidate's. Agent default under 22.2, set by benchmark (open questions).
-Each gateway's mass m_a (ADR 0092; trade SPEC, Two-level kernel) is its share of its country's
-2000 trade throughput. The pack's sources carry no throughput per gateway (Natural Earth ports
-and OurAirports airports list no tonnage, value or passengers, and land crossings no traffic),
-so every gateway of a country with k gateways has mass 1/k.
+ADR 0092's gateway mass weights are deferred to the fit of the border friction per theta class
+(they land together): the pack's sources carry no throughput per gateway (Natural Earth ports and
+OurAirports airports list no tonnage, value or passengers, and land crossings no traffic), so the
+masses would be 1/k per country.
 
 **Tariffs.** The importer's WDI weighted mean applied rate of each group (primary goods 0 to 3,
 manufactures 4 to 6), the year nearest 2000 within five years (a year at 100% or more is a data
@@ -766,14 +766,14 @@ the radius on p. 9, footnote 10 p. 7).
     steady state (no pop with negative money, no negative pool, no retained loss, no stockout),
     and is byte-identical with and without limited liability and the write-off.
   - 1 vs 8 threads, 120 ticks: identical hashes.
-  - After the gateway masses (ADR 0092), the country-scaled weights (ADR 0093) and the stored
-    reciprocals (ADR 0097), recalibrated (62 passes, Sinkhorn residual 9.8e-14): V1 from the
-    perturbed steady state passes (price 9.25e-3, wage 1.47e-3, flow units 5.9e-3, value
-    5.7e-3); H2 per class passes (food 1.93, s.e. 0.10; machinery 4.36, 0.34; the five-good class
-    10.31, 0.25); **H2 distance misses: -0.536 (s.e. 0.013)**, outside -1.1 to -0.7. With masses
-    1/k the cross-border kernel averages over gateway pairs instead of summing them; how that
-    moves the distance coefficient is not yet analysed. Held for the owner; nothing was refitted (the
-    border friction per class of ADR 0092 is a later step).
+  - After the country-scaled weights (ADR 0093) and the stored reciprocals (ADR 0097),
+    recalibrated (46 passes, Sinkhorn residual 8.9e-14): V1 from the perturbed steady state
+    passes (price 9.085e-3, wage 9.06e-4, flow units 4.6e-5, value 5.0e-5); H2 distance -0.753
+    (s.e. 0.016) passes; H2 per class passes (food 1.75, s.e. 0.15; machinery 3.72, 0.47; the
+    five-good class 9.52, 0.33). The reference matches Rust's delivered prices to 2.8e-15.
+    A first build that also had ADR 0092's gateway masses (1/k per country) missed H2 distance
+    at -0.536 (s.e. 0.013) with V1 and H2 per class passing; the owner deferred the masses to the
+    border friction fit per class (2026-10-26).
   - Commands (M4 Pro, `data/packs/2000` built and calibrated, `PACK=$PWD/data/packs/2000`,
     `EXPORT` a scratch directory):
     - `cargo run --release --bin ceteris -- export --pack $PACK --out $EXPORT`, the export the

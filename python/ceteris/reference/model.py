@@ -11,7 +11,7 @@ Destination d spends E_d on traded good g, households (each pop by PIGL across c
 within them, ADR 0021) at the delivered unit price q_d = 1 / alpha_d, alpha_d the units arriving
 per unit of spending (owner decision, 2026-10-24), and enterprises a Y q_d, so arrivals replace
 use; X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (theta per good, ADR 0018), K
-carrying the tariff and the gateway masses (ADR 0092) on crossings. Origin o ships X_od / (p_o (1 +
+carrying the tariff on crossings. Origin o ships X_od / (p_o (1 +
 t)) units and receives p_o per unit, the importer's rebate account t p_o. Weights are relative to
 one p_min per good: Rust holds them per country in log scale (ADR 0093), which gives the same
 shares wherever the global scale does not underflow, as on every pack and fixture price vector. A

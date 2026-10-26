@@ -17,7 +17,7 @@ EXPORT_FORMAT = "9"
 class Entries:
     """Kernel legs of all traded goods. Domestic: row origin, col destination province. Access:
     row province, col gateway (origin access read forward, destination access backward).
-    Crossing: row and col gateways, `k` with the gateway masses (ADR 0092). `inv_tau` is the share
+    Crossing: row and col gateways. `inv_tau` is the share
     of shipped units that arrives over a domestic or access leg; crossings carry `inv_loss` (the
     same, border loss included), `inv_duty` (1 / (1 + tariff)) and `lag` (transit months)
     instead."""
@@ -73,7 +73,6 @@ class Inputs:
     calibrated_coef: np.ndarray | None = None  # (E, G)
     calibrated_a_va: np.ndarray | None = None  # (E,)
     calibrated_weights: demand.Weights | None = None
-    gateway_mass: np.ndarray | None = None  # (N,) share of the country's trade throughput (ADR 0092)
 
     @property
     def n_provinces(self) -> int:
@@ -224,7 +223,6 @@ def load(directory: Path | str) -> Inputs:
     ent = _table(d / "enterprises.arrow")
     active = _table(d / "active.arrow")
     io = _table(d / "country_io.arrow")
-    gateways = _table(d / "gateways.arrow")
 
     n_goods = params["n_goods"]
     n_c, n_p = len(countries["country"]), len(provinces["province"])
@@ -248,7 +246,7 @@ def load(directory: Path | str) -> Inputs:
         sigma_fl=float(params["econ"]["sigma_fl"]),
         traded=goods["traded"].astype(bool),
         province_country=provinces["country"].astype(np.int64),
-        gateway_country=gateways["country"].astype(np.int64),
+        gateway_country=_table(d / "gateways.arrow")["country"].astype(np.int64),
         labour_supply=np.bincount(pop_province, edu_eff[pops["edu"]] * pops["labour_force"], n_p),
         population=np.bincount(pop_province, pops["population"], n_p),
         w0=provinces["w0"].astype(np.float64),
@@ -275,7 +273,6 @@ def load(directory: Path | str) -> Inputs:
         coverage=goods["coverage"].astype(np.float64),
         pop_edu=pops["edu"].astype(np.int64),
         static_digest=params["static_digest"],
-        gateway_mass=gateways["mass"],
     )
     validate(inp)
     return inp

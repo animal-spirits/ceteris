@@ -9,7 +9,7 @@
 //! | file | columns |
 //! |---|---|
 //! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
-//! | `gateways` | gateway u32, country u32, mass f64 (share of the country's trade throughput, ADR 0092) |
+//! | `gateways` | gateway u32, country u32 |
 //! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
@@ -21,7 +21,7 @@
 //! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64 |
 //! | `kernel_domestic` | good u8, o u32, d u32, k f64, inv_tau f64 |
 //! | `kernel_access` | good u8, province u32, gateway u32, k f64, inv_tau f64 |
-//! | `kernel_crossing` | good u8, a u32, b u32, k f64 (gateway masses included), inv_duty f64, inv_loss f64, lag u8 |
+//! | `kernel_crossing` | good u8, a u32, b u32, k f64, inv_duty f64, inv_loss f64, lag u8 |
 //! | `pigl_check` | draw u32, country u32, money f64 (mean spending per person), sigma f64, price_0 to price_9 f64 (some infinite), x_0 to x_9 f64: `demand::pigl` with the country's weights on [`PIGL_CHECK_DRAWS`] random draws, which the reference reproduces |
 //! | `params.json` | both parameter sets by field name, the register IDs, constants |
 //!
@@ -69,10 +69,9 @@ use crate::world::{
 /// `params.json`, the `pigl_check` table. 6: `params.json` has `technology` (S09) and
 /// `rationing` may be `mixed` (ADR 0020). 7: `provinces` has the base delivered prices from which
 /// enterprise coefficients follow as cost shares (owner decision, 2026-10-25). 8: `countries`
-/// has the natural rate `u_star` (ADR 0089). 9: `gateways` has `mass` (ADR 0092), kernel
-/// factors are f64 with the gateway masses in the crossings', the kernel tables carry the
-/// reciprocal loss and duty factors in place of tau, border tau and tariff (ADR 0097), and
-/// `params.json` has no `weight_floor` (ADR 0093).
+/// has the natural rate `u_star` (ADR 0089). 9: kernel factors are f64 (ADR 0093), the kernel
+/// tables carry the reciprocal loss and duty factors in place of tau, border tau and tariff
+/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093).
 pub const EXPORT_FORMAT: &str = "9";
 
 /// Rows of the `pigl_check` table.
@@ -204,7 +203,6 @@ pub fn write_inputs(
         vec![
             u32s("gateway", 0..net.n_gateways() as u32),
             u32s("country", net.gateway_country.iter().map(|&c| u32::from(c))),
-            f64s("mass", net.gateway_mass.iter().copied()),
         ],
     )?;
 
@@ -711,10 +709,6 @@ mod tests {
 
         let gateways = table("gateways");
         assert_eq!(u32s(&gateways, "country").unwrap().len(), 7);
-        assert_eq!(
-            f64s(&gateways, "mass").unwrap(),
-            inputs.network.gateway_mass
-        );
 
         let countries = table("countries");
         assert_eq!(countries.num_rows(), 4);
