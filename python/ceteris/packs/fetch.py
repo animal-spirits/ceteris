@@ -1,4 +1,4 @@
-"""Download pack sources into the cache and verify their checksums (Section 16.1).
+"""Download pack sources and validation files into the cache and verify their checksums (Section 16.1).
 
 uv run python -m ceteris.packs.fetch [--record]
 """
@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 FETCH = Path(__file__).with_name("fetch.toml")
+VALIDATION = Path(__file__).with_name("validation.toml")
 SOURCES = Path(__file__).with_name("sources.toml")
 CACHE = Path(__file__).resolve().parents[3] / "data" / "cache"
 
@@ -23,15 +24,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def entries() -> list[dict]:
-    from . import counties
-
-    files = tomllib.loads(FETCH.read_text())["file"] + counties.entries()
+def _known(files: list[dict], path: Path) -> list[dict]:
     known = {s["id"] for s in tomllib.loads(SOURCES.read_text())["source"]}
     unknown = [f["name"] for f in files if f["source"] not in known]
     if unknown:
-        raise SystemExit(f"fetch.toml names sources missing from sources.toml: {unknown}")
+        raise SystemExit(f"{path.name} names sources missing from sources.toml: {unknown}")
     return files
+
+
+def entries() -> list[dict]:
+    """Files the pack build reads."""
+    from . import counties
+
+    return _known(tomllib.loads(FETCH.read_text())["file"] + counties.entries(), FETCH)
+
+
+def validation_entries() -> list[dict]:
+    """Files only tests and diagnostics read (ADR 0050); never fetched or listed by a pack build."""
+    return _known(tomllib.loads(VALIDATION.read_text())["file"], VALIDATION)
 
 
 def path_of(name: str) -> Path:
@@ -40,6 +50,10 @@ def path_of(name: str) -> Path:
 
 def fetch(entry: dict) -> Path:
     path = path_of(entry["name"])
+    if entry.get("optional") and not path.exists():
+        return path
+    if not path.exists() and entry.get("manual"):
+        raise SystemExit(f"{entry['name']}: the host rejects scripted downloads; save {entry['url']} into {CACHE} in a browser")
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         part = path.with_suffix(path.suffix + ".part")
@@ -57,7 +71,9 @@ def main() -> int:
     parser.add_argument("--record", action="store_true", help="print checksums for unpinned files")
     args = parser.parse_args()
     bad = 0
-    for entry in entries():
+    for entry in entries() + validation_entries():
+        if entry.get("optional") and not path_of(entry["name"]).exists():
+            continue
         path = fetch(entry)
         digest, size = sha256(path), path.stat().st_size
         if "sha256" not in entry:

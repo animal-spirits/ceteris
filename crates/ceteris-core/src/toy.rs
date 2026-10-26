@@ -385,6 +385,10 @@ impl State for Toy {
         }
         Ok(())
     }
+
+    fn restore(&self, d: &mut Decoder) -> Result<Self, DecodeError> {
+        Toy::decode(d)
+    }
 }
 
 fn account_ids(ids: &[AccountId]) -> Vec<u32> {

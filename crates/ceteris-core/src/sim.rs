@@ -4,15 +4,18 @@
 use crate::invariant::Violation;
 use crate::rng::Seed;
 use crate::schedule::Schedule;
-use crate::snapshot::{self, Decode, DecodeError, Encode, Hash, SnapshotStore};
+use crate::snapshot::{self, DecodeError, Decoder, Encode, Hash, SnapshotStore};
 
 pub const SNAPSHOT_EVERY: u32 = 12;
 
-pub trait State: Encode + Decode {
+pub trait State: Encode + Sized {
     /// Resets per-tick scratch (ledger journal and tallies).
     fn begin_tick(&mut self);
     /// Asserts invariants after all systems ran.
     fn end_tick(&self, tick: u32) -> Result<(), Violation>;
+    /// Rebuilds a world from its encoding. Runs on the live world so static inputs
+    /// held outside snapshots (shared through an `Arc`) can be reused.
+    fn restore(&self, d: &mut Decoder) -> Result<Self, DecodeError>;
 }
 
 #[derive(Debug)]
@@ -69,6 +72,12 @@ impl<W: State> Sim<W> {
         &self.world
     }
 
+    /// The world between ticks, for changes the schedule does not make (a shock). Snapshots
+    /// taken before the change keep the world as it was.
+    pub fn world_mut(&mut self) -> &mut W {
+        &mut self.world
+    }
+
     /// Number of completed ticks.
     pub fn tick(&self) -> u32 {
         self.tick
@@ -113,7 +122,8 @@ impl<W: State> Sim<W> {
             .store
             .at_or_before(tick)
             .expect("tick 0 is always snapshotted");
-        let (decoded_tick, world) = snapshot::decode_canonical(&bytes)?;
+        let (decoded_tick, world) =
+            snapshot::decode_canonical_with(&bytes, |d| self.world.restore(d))?;
         debug_assert_eq!(decoded_tick, t);
         self.world = world;
         self.tick = t;

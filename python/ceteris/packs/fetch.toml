@@ -1,6 +1,8 @@
 # Files the pack pipeline downloads (Section 16.1). Each names its manifest source.
 # fetch.py verifies sha256 and size; `python -m ceteris.packs.fetch --record` fills them
-# for a new entry, which must then be reviewed and committed.
+# for a new entry, which must then be reviewed and committed. An entry with manual = true is
+# saved into the cache by hand (its host rejects scripted downloads); fetch only verifies it. An
+# entry with optional = true is kept for later phases: fetch skips it unless it is in the cache.
 
 [[file]]
 source = "natural-earth-admin1"
@@ -71,3 +73,316 @@ name = "mrds-csv.zip"
 sha256 = "31be4baaa86b082787bc74989146183db21badf7157db39b3f0a6fe0b38a5477"
 bytes = 25791223
 url = "https://mrdata.usgs.gov/mrds/mrds-csv.zip"
+
+[[file]]
+source = "baci"
+name = "BACI_HS92_V202601.zip"
+sha256 = "43259580059fa83e17fcdb6866e7b7f39aaf0dd50277cfe494a1ed05a4844faf"
+bytes = 2417732497
+url = "https://www.cepii.fr/DATA_DOWNLOAD/baci/data/BACI_HS92_V202601.zip"
+
+[[file]]
+source = "oecd-btige-key"
+name = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
+sha256 = "16b1e00e98d44948ea6e807db5787149e6c84c1e3f5cf5db11ff33e2092cee4f"
+bytes = 807017
+url = "https://webfs-sti.oecd.org/files/STI-PIE/BTIGE/OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
+
+[[file]]
+source = "wic-reconstruction"
+name = "BPJresult_AGE_V01.csv"
+sha256 = "c1fec8888ae8de1ead8f2fdf8b7f31c86ae9eb251887259128fe4cc95504841a"
+bytes = 35665550
+url = "https://zenodo.org/api/records/16927371/files/BPJresult_AGE_V01.csv/content"
+
+[[file]]
+source = "barro-lee"
+name = "BL_v3_MF1564.csv"
+sha256 = "349374c63cb869455dd208a2dd6bc4f7119003a9fc19b06188f4c443abd80861"
+bytes = 274760
+url = "https://raw.githubusercontent.com/barrolee/BarroLeeDataSet/ee575b42f659bad7445dfc26d19816ede8000e47/BLData/BL_v3_MF1564.csv"
+
+[[file]]
+source = "ilostat"
+name = "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv"
+sha256 = "350493edbacc7dcab02bada7ec1ec51801ee6d8740844cc9c35389555c815a9a"
+bytes = 621033
+url = "https://rplumber.ilo.org/data/indicator/?id=EAP_2WAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=2000&timeto=2000"
+
+[[file]]
+source = "ilostat"
+name = "ilostat_UNE_2EAP_SEX_AGE_RT_A_2000.csv"
+sha256 = "614ec8ec463b07354e41d38bee2606aca6553b39b5a1f85a97ab7a7bf084ae90"
+bytes = 204817
+url = "https://rplumber.ilo.org/data/indicator/?id=UNE_2EAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=2000&timeto=2000"
+
+[[file]]
+source = "ilostat"
+name = "ilostat_UNE_2EAP_SEX_AGE_RT_A_1995-2005.csv"
+sha256 = "8731614cc0c0ab6b6e39fcb77077facf052abdd9c27530591a45a108da7777cc"
+bytes = 2252426
+url = "https://rplumber.ilo.org/data/indicator/?id=UNE_2EAP_SEX_AGE_RT_A&lang=en&type=code&format=.csv&timefrom=1995&timeto=2005"
+
+[[file]]
+source = "pwt"
+name = "pwt110.xlsx"
+sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
+bytes = 5839841
+url = "https://dataverse.nl/api/access/datafile/554105"
+
+[[file]]
+source = "wdi"
+name = "wdi_SI.POV.GINI.zip"
+sha256 = "ee7af858347bc313934732f51830864df83bcd77def0be4a2556cff5447639de"
+bytes = 20080
+url = "https://api.worldbank.org/v2/en/indicator/SI.POV.GINI?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_SP.POP.TOTL.zip"
+sha256 = "9c8a27460bb951b2b6e18fe9c01fac3938c78fd6b8862a84240d01f218b649b0"
+bytes = 90332
+url = "https://api.worldbank.org/v2/en/indicator/SP.POP.TOTL?downloadformat=csv"
+
+[[file]]
+source = "swiid"
+name = "swiid9_92.zip"
+sha256 = "d36c541307a4e3d16f79f878ae9c23f88effb6650ebc634be829870f383dbbf0"
+bytes = 24593134
+url = "https://dataverse.harvard.edu/api/access/datafile/13657070"
+
+[[file]]
+source = "wdi"
+name = "wdi_SP.POP.1564.TO.ZS.zip"
+sha256 = "0488393fecd4589401b8017b8d34efa8e42fbaf4f9a24f1c41756d6cee1d1a39"
+bytes = 160605
+url = "https://api.worldbank.org/v2/en/indicator/SP.POP.1564.TO.ZS?downloadformat=csv"
+
+[[file]]
+source = "worldpop"
+name = "ppp_2000_1km_Aggregated.tif"
+sha256 = "3404d3fff958acf6bba98f88edbfdc0e9ff8062d85a5bc609da0e9c3b2bef148"
+bytes = 1165526326
+url = "https://data.worldpop.org/GIS/Population/Global_2000_2020/2000/0_Mosaicked/ppp_2000_1km_Aggregated.tif"
+
+[[file]]
+source = "oecd-icio"
+name = "1995-2000_SML.zip"
+sha256 = "3bfd5cb014bf3436e3435ad50c0e6b66039ad2f6c484e6e26fad0bc92ef4725b"
+bytes = 110135258
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "1995-2000_EXT.zip"
+optional = true
+sha256 = "318875a509d208852e6adcc902bcfb8e6266cd318ea8201878a4766ce4eb0de7"
+bytes = 112406672
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/1995-2000_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2001-2005_SML.zip"
+optional = true
+sha256 = "75015a66e7944e7377a5a08a02155a472517efe4e4a36b1116c7542f759f78f6"
+bytes = 99391392
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2001-2005_EXT.zip"
+optional = true
+sha256 = "182d6d6dc723a73585b57beebe3b6565b061cd109e50b2df128a37a3817d4312"
+bytes = 101621382
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2001-2005_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2006-2010_SML.zip"
+optional = true
+sha256 = "e57685c00ad30b4353e1e7de24910ba70b181c5198c9dbb6d46eb349de76f35a"
+bytes = 111587430
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2006-2010_EXT.zip"
+optional = true
+sha256 = "343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533"
+bytes = 114156164
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2011-2015_SML.zip"
+optional = true
+sha256 = "d9025195bdb9a03278ba6403066cef2969cc30185a1b28117c9452994a203619"
+bytes = 116134326
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2011-2015_EXT.zip"
+optional = true
+sha256 = "171c74914cdb1d6952492441f2a771a1a1a65cd3eba015dbf8522754b1e11b0a"
+bytes = 118820898
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_EXT.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2016-2022_SML.zip"
+optional = true
+sha256 = "46db55c45747e26dde5c1716d072b2aa74ace362a4424491ac646d2ab175befb"
+bytes = 166241019
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2016-2022_SML.zip"
+
+[[file]]
+source = "oecd-icio"
+name = "2016-2022_EXT.zip"
+optional = true
+sha256 = "80ea6fb868ccaafbdd0f430532e638f0971b3b6712a2fc7eb08d88fff6405c4e"
+bytes = 170150625
+manual = true
+url = "https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2016-2022_EXT.zip"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.AGR.TOTL.ZS.zip"
+sha256 = "b74440759337932e724a3e623a94914c384c2a7c2408f41491e0b710f5185895"
+bytes = 114978
+url = "https://api.worldbank.org/v2/en/indicator/NV.AGR.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.IND.TOTL.ZS.zip"
+sha256 = "dc9ee04da6fcdc3d22b125de391204e30ad369143eedf795b42a82966373d265"
+bytes = 113516
+url = "https://api.worldbank.org/v2/en/indicator/NV.IND.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.IND.MANF.ZS.zip"
+sha256 = "8cf1fcc0f5b7a0f5ebeaccc86ffbca6cc051197c4f4da3a3cdd574377354f3e2"
+bytes = 101959
+url = "https://api.worldbank.org/v2/en/indicator/NV.IND.MANF.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NV.SRV.TOTL.ZS.zip"
+sha256 = "796663c59cdd989af2772da9c81669885e6683400af2ab45b599f5dacef52234"
+bytes = 108912
+url = "https://api.worldbank.org/v2/en/indicator/NV.SRV.TOTL.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.MKTP.CD.zip"
+sha256 = "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81"
+bytes = 142891
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
+
+# GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
+[[file]]
+source = "adb-kidb"
+name = "adb_kidb_NY_GDP_PCAP_CD_COO.csv"
+sha256 = "fff1e442fba05e11ffb46dcfc75a9ee4a4d678623cf61ea81cd18cefdf9b9325"
+bytes = 1421
+url = "https://kidb.adb.org/api/v5/sdmx/data/ADB,DF_NA/A.NY_GDP_PCAP_CD.COO?format=sdmx-csv&startPeriod=2000&endPeriod=2010"
+
+[[file]]
+source = "maddison-2023"
+name = "mpd2023_web.xlsx"
+sha256 = "ecc5916ca12789b983fc4be437f8a354bbf4291323605324ac3e0aea4c57cbb6"
+bytes = 4903804
+url = "https://dataverse.nl/api/access/datafile/421302"
+
+# Downscaling VA to provinces (Task 16). SPAM2000 has no value of production; its physical area (cropland of
+# all crops) is the agriculture proxy. SPAM2005 has value of production but ships a non-commercial licence.
+[[file]]
+source = "mapspam-2000"
+name = "spam2000v3.0.7_global_physical-area.geotiff.zip"
+sha256 = "4ddfc353bc4c87ac7e7cb2eb35101c48d4d5da2efbc3d6942e543e910986fb86"
+bytes = 88551524
+url = "https://dataverse.harvard.edu/api/access/datafile/3666793"
+
+[[file]]
+source = "dose"
+name = "DOSE_V2.14.csv"
+sha256 = "28c4501aa87314cce4dbb2054f64eb82276caf01f4674ee22e02864a177c900c"
+bytes = 17472502
+url = "https://zenodo.org/api/records/20035157/files/DOSE_V2.14.csv/content"
+
+# EIA State Energy Data System, current release: crude oil and marketed gas production by state (US oil and gas).
+[[file]]
+source = "eia"
+name = "Complete_SEDS.csv"
+sha256 = "f541facb1d1ab1cdb1ca564700c1a27fa09e0a153f5be16341582198d143e654"
+bytes = 86526567
+url = "https://www.eia.gov/state/seds/CDF/Complete_SEDS.csv"
+
+# Dryad serves files only with an API bearer token (401) or a browser session (403).
+[[file]]
+source = "kummu-gdp"
+name = "GDP_PPP_1990_2015_5arcmin_v2.nc"
+optional = true
+sha256 = "975ddfad5d2ee71aa227c269b530a4917f8305299b77d09ee0f9cfabc83e5e5b"
+bytes = 134025184
+url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
+manual = true
+
+# GEM releases sit behind a web form; the downscaling falls back to other proxies without them.
+[[file]]
+source = "gem-trackers"
+name = "Global Coal Mine Tracker, August 2026.xlsx"
+optional = true
+sha256 = "9aa804479c4b76456678fa02f1b5b9af826e12fa57d98cbcade35f4ee0417d43"
+bytes = 3085251
+url = "https://globalenergymonitor.org/projects/global-coal-mine-tracker/"
+manual = true
+
+[[file]]
+source = "gem-trackers"
+name = "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx"
+optional = true
+sha256 = "10ed7bc007e47895c2f387449365c20d0a87679cb8c69be678d0cc60df4d1aa5"
+bytes = 5393993
+url = "https://globalenergymonitor.org/projects/global-oil-gas-extraction-tracker/"
+manual = true
+
+# Tariffs (Task 17): WDI weighted mean applied rates by importer (primary, manufactured), and the trade agreements in
+# force on 1 January 2000 (CEPII gravity RTA flags by pair and year; World Bank DTA agreement list).
+[[file]]
+source = "wdi"
+name = "wdi_TM.TAX.TCOM.WM.AR.ZS.zip"
+sha256 = "a79f2589136cec8136f9b2e9af57d875264d551a04285ddaa46aa07448c2ef73"
+bytes = 23394
+url = "https://api.worldbank.org/v2/en/indicator/TM.TAX.TCOM.WM.AR.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_TM.TAX.MANF.WM.AR.ZS.zip"
+sha256 = "0e1cdd868fd2cd152bee4aa941118b42d2bcf9c3a1613ff5185fab959744a8ca"
+bytes = 23110
+url = "https://api.worldbank.org/v2/en/indicator/TM.TAX.MANF.WM.AR.ZS?downloadformat=csv"
+
+[[file]]
+source = "cepii-gravity"
+name = "Gravity_csv_V202211.zip"
+sha256 = "7ffea0510a536587f2f9295bbafef4a312a36b366acc256eb6d9770fe35e44b1"
+bytes = 206707748
+url = "https://www.cepii.fr/DATA_DOWNLOAD/gravity/data/Gravity_csv_V202211.zip"
+
+[[file]]
+source = "wb-dta"
+name = "DTA 1.0 - Horizontal Content (v2).xlsx"
+sha256 = "7c7a5b1e47233749290ffb54ce8546ef7d23094cf05b2f59291566b8bd4b7ede"
+bytes = 11141676
+url = "https://datacatalogfiles.worldbank.org/ddh-published/0065624/2/DR0093615/DTA%201.0%20-%20Horizontal%20Content%20(v2).xlsx"

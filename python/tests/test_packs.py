@@ -9,7 +9,7 @@ import shapely
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ceteris.packs import build, counties, fills, geo, provinces, transport
+from ceteris.packs import build, counties, fetch, fills, geo, provinces, transport
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "data" / "packs" / "2000"
@@ -158,8 +158,10 @@ def test_every_link_endpoint_is_named_and_ordered():
 
 
 def _pack_lines() -> str:
+    from ceteris.packs.econ import build as econ_build
+
     manifest = json.loads((PACK / "manifest.json").read_text())
-    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items()]
+    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items() if name not in econ_build.TABLES]
     return "# P1 pack 2000: table sha256 from manifest.json\n" + "\n".join(lines) + "\n"
 
 
@@ -194,3 +196,71 @@ def test_pack_invariants():
     stats = json.loads((PACK / "manifest.json").read_text())["stats"]
     assert stats["county_area_outside_province"] < 0.05
     assert stats["split_by_counties"] > stats["split_by_voronoi"]
+
+
+def test_fetch_does_not_download_manual_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    entry = {"name": "x.zip", "url": "https://example.invalid/x.zip", "manual": True}
+    with pytest.raises(SystemExit, match="save https://example.invalid/x.zip"):
+        fetch.fetch(entry)
+    (tmp_path / "x.zip").write_bytes(b"data")
+    assert fetch.fetch(entry) == tmp_path / "x.zip"
+
+
+def test_icio_packages_are_manual_downloads():
+    icio = [e for e in fetch.entries() if e["source"] == "oecd-icio"]
+    assert len(icio) == 10 and all(e.get("manual") and e["sha256"] for e in icio)
+
+
+def test_fetch_skips_optional_files_that_are_not_cached(tmp_path, monkeypatch, capsys):
+    entries = [
+        {"source": "x", "name": "need.zip", "url": "u", "manual": True, "sha256": "0" * 64, "bytes": 1},
+        {"source": "x", "name": "later.zip", "url": "u", "manual": True, "optional": True, "sha256": "0" * 64, "bytes": 1},
+    ]
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    monkeypatch.setattr(fetch, "entries", lambda: entries)
+    monkeypatch.setattr(fetch, "validation_entries", list)
+    monkeypatch.setattr("sys.argv", ["fetch"])
+    with pytest.raises(SystemExit, match="need.zip"):
+        fetch.main()
+    (tmp_path / "need.zip").write_bytes(b"x")
+    # The cached required file must match its pin (wrong here), the missing optional one is not asked for.
+    assert fetch.main() == 1
+    err = capsys.readouterr().err
+    assert "need.zip: checksum mismatch" in err and "later.zip" not in err
+    (tmp_path / "later.zip").write_bytes(b"x")
+    assert fetch.main() == 1 and "later.zip: checksum mismatch" in capsys.readouterr().err
+
+
+def test_validation_files_are_fetched_but_not_pack_sources():
+    pack = {e["name"] for e in fetch.entries()}
+    validation = {e["name"]: e for e in fetch.validation_entries()}
+    assert "AdvancedGuideFiles.zip" in validation and not pack & set(validation)
+    assert all(e["sha256"] for e in validation.values())
+
+
+def test_no_pack_code_names_a_validation_file():
+    names = {e["name"] for e in fetch.validation_entries()}
+    code = Path(fetch.__file__).parent
+    for path in code.rglob("*.py"):
+        text = path.read_text()
+        assert not [n for n in names if n in text], path
+
+
+def test_only_the_2000_icio_package_is_required():
+    icio = {e["name"]: e for e in fetch.entries() if e["source"] == "oecd-icio"}
+    assert len(icio) == 10
+    assert [n for n, e in icio.items() if not e.get("optional")] == ["1995-2000_SML.zip"]
+
+
+def test_pack_build_does_not_demand_uncached_optional_sources(tmp_path, monkeypatch):
+    optional = {"source": "x", "name": "later.zip", "url": "u", "manual": True, "optional": True}
+    required = {"source": "x", "name": "need.zip", "url": "u", "manual": True}
+    monkeypatch.setattr(fetch, "CACHE", tmp_path)
+    monkeypatch.setattr(fetch, "entries", lambda: [optional])
+    # The fetch loop passes; the build then stops for want of the real inputs, which is not a SystemExit about the optional file.
+    with pytest.raises(Exception):  # noqa: B017
+        build.build(tmp_path / "out")
+    monkeypatch.setattr(fetch, "entries", lambda: [optional, required])
+    with pytest.raises(SystemExit, match="need.zip"):
+        build.build(tmp_path / "out")

@@ -176,6 +176,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0; rasters too large to bundle whole"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 reads ppp_2000_1km_Aggregated.tif (unconstrained, not UN-adjusted), summed to provinces through the H3 cells."
 
 [[source]]
 id = "ghsl"
@@ -286,10 +287,10 @@ replaces = "gaez-v4"
 
 [[source]]
 id = "mapspam-2000"
-name = "MapSPAM SPAM2000 (and 2005, 2010, 2020)"
+name = "MapSPAM SPAM2000 (and 2010, 2020)"
 provider = "IFPRI / HarvestChoice"
 version = "SPAM2000 v3.0.7"
-role = "Harvested area, production and yield around 2000 (5.2, 7.2)"
+role = "Harvested area, production and yield around 2000 (5.2, 7.2); physical area of all crops places agricultural VA in provinces"
 licence = "CC-BY-4.0"
 licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/A50I2T"
 attribution = "IFPRI SPAM citation; adaptations carry the IFPRI disclaimer sentence"
@@ -298,8 +299,28 @@ share_alike = false
 use = "primary"
 policy = "bundle-aggregates"
 reason = "CC BY 4.0 under IFPRI default terms"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "medium"
+notes = "IFPRI Dataverse terms (Dec 2019, section 4): CC BY 4.0 except where a non-CC licence is stated. SPAM2000 v3.0.7 states none. SPAM2005 v3.2 (value of production) ships SPAM_License_v3.2.pdf: non-commercial, no redistribution without IFPRI permission; it is unused (not in fetch.toml), and no copy is kept in data/cache. SPAM2000 has no value of production. Adaptations add: This data was provided by the International Food Policy Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or interpretations of the data presented here."
+
+[[source]]
+id = "mapspam-2005"
+name = "MapSPAM SPAM2005 value of production"
+provider = "IFPRI / IIASA"
+version = "SPAM2005 v3.2 (Dataverse doi:10.7910/DVN/DHXBJX)"
+role = "Value of crop production around 2005; considered as the agriculture proxy for province VA and not used"
+licence = "LicenseRef-MapSPAM-EULA-3.2"
+licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DHXBJX"
+attribution = "You, L., U. Wood-Sichra, S. Fritz, Z. Guo, L. See, and J. Koo. 2014. Spatial Production Allocation Model (SPAM) 2005 v3.2. Available from http://mapspam.info"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "The dataset ships SPAM_License_v3.2.pdf: own non-commercial use only, no distribution to third parties without IFPRI permission (a non-CC licence, which the IFPRI Dataverse terms let override CC BY)"
+checked = 2026-10-24
+confidence = "high"
+replaced_by = "mapspam-2000"
+notes = "Unused: not in fetch.toml, and no copy is kept (the file downloaded in Task 16 was deleted). The pipeline must not read it."
 
 [[source]]
 id = "gdhy"
@@ -339,10 +360,10 @@ confidence = "high"
 id = "gem-trackers"
 name = "Global Energy Monitor trackers (coal, oil and gas plants, pipelines, mines)"
 provider = "Global Energy Monitor"
-version = "Latest release per tracker, pinned by date"
-role = "Energy assets (5.2, 7.7)"
+version = "Latest release per tracker, pinned by date (Coal Mine Tracker August 2026; Oil and Gas Extraction Tracker March 2026)"
+role = "Energy assets (5.2, 7.7); coal mines and oil and gas fields place mining VA in provinces"
 licence = "CC-BY-4.0"
-licence_url = "https://globalenergymonitor.org/creative-commons-public-license/"
+licence_url = "https://globalenergymonitor.org/creative-commons-license"
 attribution = "<Tracker name>, Global Energy Monitor, <release>"
 commercial_use = true
 share_alike = false
@@ -351,7 +372,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0 unless otherwise noted"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Drop rows flagged with third-party NC licences (e.g. TransitionZero solar records). Check the licence sheet in each download."
+notes = "Saved by hand through GEM's download form (manual in fetch.toml). The form's licence page (checked 2026-10-24) is the unmodified text of the Creative Commons Attribution 4.0 International Public License. The README sheets state: Copyright (c) Global Energy Monitor; Distributed under a Creative Commons Attribution 4.0 International License; recommended citation \"Global Energy Monitor, Global Coal Mine Tracker, August 2026 release.\" and \"Global Oil and Gas Extraction Tracker, 2026 release\". Neither tracker flags third-party NC rows. Drop rows flagged with third-party NC licences in other trackers (e.g. TransitionZero solar records). Check the licence sheet in each download."
 
 [[source]]
 id = "usgs-mrds"
@@ -658,7 +679,7 @@ policy = "bundle-aggregates"
 reason = "OECD data terms allow distribution for any purpose, including commercial"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices."
+notes = "Read via a 2026-10-17 archive copy (live page 403). Check the ICIO ReadMe for third-party notices. The 2025 ReadMe (webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/ReadMe_ICIO_small.xlsx, reachable live) lists 50 industries with B05 and B06 split. The OECD host rejects scripted downloads (403 on every zip, ReadMe files are fine): the packages in fetch.toml (`manual = true`) are saved by hand in a browser from the dataset page into data/cache, and fetch only verifies their pins. Task 14 reads the small edition (SML) 1995-2000 package, one CSV per year; the other periods and the extended edition are pinned for later phases."
 
 [[source]]
 id = "baci"
@@ -681,8 +702,8 @@ confidence = "high"
 id = "cepii-gravity"
 name = "CEPII Gravity database"
 provider = "CEPII"
-version = "1948-2020"
-role = "Distances, RTA and WTO membership by country pair (5.4, 8.5)"
+version = "V202211, 1948-2021"
+role = "Distances, RTA and WTO membership by country pair (5.4, 8.5); P2 tariffs: goods FTAs and customs unions in force in 1999 and 2000 (fta_wto, rta_type)"
 licence = "etalab-2.0"
 licence_url = "https://www.cepii.fr/CEPII/en/bdd_modele/bdd_modele_item.asp?id=8"
 attribution = "Conte, Cotterlaz and Mayer (2022), CEPII"
@@ -691,15 +712,34 @@ share_alike = false
 use = "primary"
 policy = "bundle"
 reason = "Etalab 2.0"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "high"
+
+[[source]]
+id = "yotov-2016"
+name = "An Advanced Guide to Trade Policy Analysis: application and exercise files"
+provider = "WTO and UNCTAD"
+version = "2016 (AdvancedGuideFiles.zip, files dated October and November 2016)"
+role = "Reproduction test of the PPML gravity estimator before it runs on BACI (ADR 0022): Chapter 1 datasets, 69 countries, 1986 to 2006"
+licence = "LicenseRef-WTO-all-rights-reserved"
+licence_url = "https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm"
+attribution = "Yotov, Piermartini, Monteiro and Larch (2016), An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model, WTO and UNCTAD"
+commercial_use = false
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "The publication page offers the files for free download; the book's copyright page reserves all rights and requires the WTO Publications Manager's written permission for reproduction. Read only by a test, never in a pack or artifact."
+checked = 2026-10-24
+confidence = "medium"
+closed_source_only = true
+notes = "The data are Zylkin's manufacturing panel (UN COMTRADE, CEPII TradeProd, UNIDO INDSTAT; CEPII GeoDist; Larch RTA database) as the guide distributes them. An open release drops this row with the test, which skips without the file."
 
 [[source]]
 id = "wb-dta"
 name = "Deep Trade Agreements database"
 provider = "World Bank"
-version = "v2, 1958-2022"
-role = "Preferential agreement content (8.5)"
+version = "v2, 1958-2022; DTA 1.0 Horizontal Content (v2) workbook"
+role = "Preferential agreement content (8.5); P2 tariffs: goods FTAs and customs unions in force on 1 January 2000 (Agreements and Bilateral Information sheets)"
 licence = "CC-BY-4.0"
 licence_url = "https://datacatalog.worldbank.org/search/dataset/0065624"
 attribution = "World Bank, Deep Trade Agreements"
@@ -708,8 +748,9 @@ share_alike = false
 use = "primary"
 policy = "bundle"
 reason = "CC BY 4.0"
-checked = 2026-10-23
+checked = 2026-10-24
 confidence = "high"
+notes = "The data catalog page (dataset 0065624) states Creative Commons Attribution 4.0 for the collection on 2026-10-24."
 
 [[source]]
 id = "wto-tariffs"
@@ -770,9 +811,9 @@ id = "dose"
 name = "DOSE sub-national economic output"
 provider = "PIK / MCC (Wenz et al. 2023)"
 version = "V2.14 (Zenodo 20035157)"
-role = "Province output by sector (5.2)"
+role = "Province output by sector (5.2); manufacturing GVA places manufacturing VA in provinces"
 licence = "CC-BY-4.0"
-licence_url = "https://zenodo.org/records/7573249"
+licence_url = "https://zenodo.org/records/20035157"
 attribution = "Wenz et al. (2023), Scientific Data, doi:10.1038/s41597-023-02323-8"
 commercial_use = true
 share_alike = false
@@ -781,7 +822,7 @@ policy = "bundle"
 reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
-notes = "Region keys reference GADM: join on codes, never bundle GADM geometries."
+notes = "Region keys reference GADM (GID_1) and carry no ISO 3166-2 codes: regions are joined to provinces by exact name (ignoring case), never through GADM geometries."
 
 [[source]]
 id = "kummu-gdp"
@@ -799,6 +840,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
+notes = "Dryad serves files only with an API bearer token (401) or a browser session (403, 2026-10-24); GDP_PPP_1990_2015_5arcmin_v2.nc is a manual, optional download."
 
 [[source]]
 id = "chen-gdp"
@@ -853,7 +895,7 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS."
 
 [[source]]
 id = "wb-gem"
@@ -928,19 +970,59 @@ notes = "Commodity price series: confirm no vendor exception before bundling."
 [[source]]
 id = "unsd-nama"
 name = "UN National Accounts Main Aggregates"
-provider = "UN Statistics Division (UNdata)"
-version = "1970-2023"
-role = "GDP gaps outside WDI"
-licence = "LicenseRef-UNdata"
-licence_url = "https://data.un.org/Host.aspx?Content=UNdataUse"
-attribution = "UNSD, National Accounts Main Aggregates Database"
+provider = "UN Statistics Division"
+version = "Downloads page file 9 (GDP per capita, current USD), data upload January 2026"
+role = "GDP per person for North Korea and the Cook Islands; replaced"
+licence = "LicenseRef-UN-terms-of-use"
+licence_url = "https://www.un.org/en/about-us/copyright"
+attribution = "United Nations Statistics Division, National Accounts Main Aggregates Database, GDP per capita (current US dollars)"
 commercial_use = false
 share_alike = false
-use = "complement"
-policy = "fetch"
-reason = "Free redistribution with citation, but commercial use is not addressed; treated as not granted"
-checked = 2026-10-23
+use = "rejected"
+policy = "exclude"
+reason = "UN copyright: free for non-commercial use with attribution, all other rights reserved (the UNdata terms add free redistribution with citation but do not address commercial use)."
+checked = 2026-10-24
 confidence = "medium"
+replaced_by = "adb-kidb"
+notes = "Replaced on 2026-10-25 (ADR 0050 amendment): the Cook Islands by adb-kidb (5,091 USD per person in 2000 against UNSD's 6,307), North Korea by maddison-2023 (1,657 international dollars of 2011, ranked and scaled against the donors' Maddison values). Not in fetch.toml; the pipeline does not read it."
+
+[[source]]
+id = "adb-kidb"
+name = "ADB Key Indicators Database, GDP per capita in current USD"
+provider = "Asian Development Bank"
+version = "KIDB Online, dataflow DF_NA, indicator NY_GDP_PCAP_CD, Cook Islands 2000 to 2010 (downloaded 2026-10-25)"
+role = "GDP per person where WDI and PWT have none: the Cook Islands, for the donor ranking and level scaling of imputed economies (7.2, 16.1)"
+licence = "LicenseRef-ADB-KIDB-terms"
+licence_url = "https://kidb.adb.org/terms"
+attribution = "Asian Development Bank: Key Indicators Database Online (https://kidb.adb.org). Accessed on 2026-10-25; pass the acknowledgement requirement on to sub-licensees"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "KIDB terms of use: unless otherwise indicated, all data and metadata may be copied, downloaded, distributed, adapted, duplicated, linked, displayed or included in other products for commercial and noncommercial purposes at no cost, with attribution to ADB and its content providers; sub-licences must carry the same acknowledgement requirement. The SDMX API answers a plain scripted request, no key or login."
+checked = 2026-10-25
+confidence = "medium"
+replaces = "unsd-nama"
+notes = "The Cook Islands series names the Cook Islands Statistics Office as its source and marks its years as ending 30 June; the terms warn that third-party content may carry other terms, and none is stated for this series. One derived income number enters the pack. ADB economy codes differ from ISO (COO is the Cook Islands, SOL the Solomon Islands): icio.ADB_ISO maps them. The API returns the current release, so a revision breaks the pin."
+
+[[source]]
+id = "maddison-2023"
+name = "Maddison Project Database 2023"
+provider = "Groningen Growth and Development Centre, University of Groningen"
+version = "MPD 2023 (DataverseNL doi:10.34894/INZBF2, version 1, mpd2023_web.xlsx)"
+role = "GDP per person in 2011 international dollars where PWT, WDI and ADB have none: North Korea, ranked and scaled against the donors' Maddison values (7.2, 16.1)"
+licence = "CC-BY-4.0"
+licence_url = "https://dataverse.nl/dataset.xhtml?persistentId=doi:10.34894/INZBF2"
+attribution = "Bolt, J. and van Zanden, J. L. (2024), Maddison style estimates of the evolution of the world economy: a new 2023 update, Journal of Economic Surveys; Maddison Project Database, version 2023. North Korea: Cha, M.S., Kim, N.N., Park, K.-J. and Park, Y. (Eds.) (2020), Historical Statistics of Korea, Springer"
+commercial_use = true
+share_alike = false
+use = "complement"
+policy = "bundle-aggregates"
+reason = "The DataverseNL record states CC BY 4.0; the file downloads by a plain scripted request to the Dataverse access API (it redirects to a signed object-store URL)."
+checked = 2026-10-25
+confidence = "high"
+replaces = "unsd-nama"
+notes = "PPP-based, like PWT: it is never mixed with current-USD incomes; the ranking and the level ratio use Maddison values for both the country and its donors. North Korea 1990-2011 comes from Cha, Kim, Park and Park (2020), Historical Statistics of Korea (Springer), per the database's Sources sheet. The Cook Islands are not covered."
 
 [[source]]
 id = "oecd-stats"
@@ -1036,6 +1118,25 @@ confidence = "medium"
 replaced_by = "oecd-stats"
 
 [[source]]
+id = "wiid"
+name = "UNU-WIDER World Income Inequality Database (WIID) and WIID Companion"
+provider = "UNU-WIDER"
+version = "8 September 2026"
+role = "Gini fallback named in the P2 spec for countries without a WDI value (replaced by SWIID)"
+licence = "CC-BY-NC-SA-3.0-IGO"
+licence_url = "https://www.wider.unu.edu/about/copyright"
+attribution = "UNU-WIDER, World Income Inequality Database (WIID), version 8 September 2026, doi:10.35188/UNU-WIDER/WIID-080926"
+commercial_use = false
+share_alike = true
+use = "rejected"
+policy = "exclude"
+reason = "Non-commercial share-alike (site-wide UNU-WIDER terms); the download links return 403 to scripted requests; SWIID (CC0) covers the role"
+checked = 2026-10-24
+confidence = "medium"
+replaced_by = "swiid"
+notes = "Files: https://www.wider.unu.edu/sites/default/files/WIID/WIID_08SEP2026.zip and WIID-08SEP2026.xlsx. The licence is read from the site-wide copyright page, not from a WIID-specific statement."
+
+[[source]]
 id = "pip"
 name = "Poverty and Inequality Platform (incl. percentiles)"
 provider = "World Bank"
@@ -1069,6 +1170,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 uses the disposable-income Gini (gini_disp) for 2000 where WDI SI.POV.GINI has no value within 1995 to 2005; such rows are flagged imputed. Replaces WIID in that role."
 
 [[source]]
 id = "wid"
@@ -1182,7 +1284,7 @@ id = "eia"
 name = "US EIA energy data (EIA-collected series)"
 provider = "US Energy Information Administration"
 version = "Current"
-role = "Energy prices and quantities (7.7, 15.4)"
+role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces"
 licence = "LicenseRef-USGov-PublicDomain"
 licence_url = "https://www.eia.gov/about/copyrights_reuse.php"
 attribution = "Source: U.S. Energy Information Administration"
@@ -1193,7 +1295,7 @@ policy = "bundle"
 reason = "US public domain for EIA's own series"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily)."
+notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily). SEDS (Complete_SEDS.csv, current release) is EIA's own series, downloaded by a plain scripted request on 2026-10-24; its pin breaks when EIA updates the file, by design."
 
 [[source]]
 id = "fao-ffpi"
@@ -1351,10 +1453,10 @@ commercial_use = true
 share_alike = false
 use = "primary"
 policy = "bundle"
-reason = "ILO datasets published on or after 2023-05-03 are CC BY 4.0"
-checked = 2026-10-23
-confidence = "medium"
-notes = "ILOSTAT's own terms page was unreachable; pin a post-May-2023 download."
+reason = "ILO Rights and permissions page, Data: databases and datasets published as of 3 May 2023, with their referential metadata, are CC BY 4.0 (microdata restricted to the ILO excepted); the pinned downloads are current ILOSTAT releases"
+checked = 2026-10-25
+confidence = "high"
+notes = "Licence read on ILO's own page https://www.ilo.org/rights-and-permissions on 2026-10-25; ilostat.ilo.org/about/terms-of-use answers 403 to scripts. P2 reads the modelled estimates EAP_2WAP_SEX_AGE_RT_A and UNE_2EAP_SEX_AGE_RT_A for 2000 (accessed 2026-10-24) and UNE_2EAP_SEX_AGE_RT_A for 1995 to 2005, the natural rate u* of ADR 0089 (accessed 2026-10-25), through the rplumber.ilo.org data API (the bulk-download page is behind a bot check)."
 
 [[source]]
 id = "kummu-subnational"
@@ -1771,3 +1873,60 @@ reason = "No licence stated; atop-3 ends 2003"
 checked = 2026-10-23
 confidence = "high"
 closed_source_only = true
+
+[[source]]
+id = "wits-concordance"
+name = "WITS product concordance, HS 1988/92 to ISIC Revision 3"
+provider = "World Bank WITS"
+version = "H0 to I3 (JobID-6, 2013)"
+role = "Product to industry bridge for weight per value and the theta mapping (7.2, 15.4); replaced"
+licence = "LicenseRef-WITS-no-licence-stated"
+licence_url = "https://wits.worldbank.org/faqs.html#Databases"
+attribution = "World Bank, World Integrated Trade Solution (WITS), product concordance H0 to I3"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "No licence stated for the concordance files; the WITS usage conditions cover Comtrade, IDB and CTS data, not the correspondence tables."
+checked = 2026-10-24
+confidence = "low"
+replaced_by = "oecd-btige-key"
+notes = "Replaced on 2026-10-25 (ADR 0050 amendment) by the OECD BTiGE key, which maps HS 1988/92 straight to CPA 2.1 activities. Not in fetch.toml; the pipeline does not read it."
+
+[[source]]
+id = "unsd-isic-correspondence"
+name = "UNSD correspondence table ISIC Rev 3.1 to ISIC Rev 4"
+provider = "United Nations Statistics Division"
+version = "ISIC31_ISIC4"
+role = "Industry revision bridge for weight per value (7.2, 15.4); replaced"
+licence = "LicenseRef-UN-terms-of-use"
+licence_url = "https://www.un.org/en/about-us/copyright"
+attribution = "United Nations Statistics Division, ISIC Rev.3.1 to ISIC Rev.4 correspondence table"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "UN copyright: all rights reserved except as the UN terms of use allow; no open licence for the classification tables."
+checked = 2026-10-24
+confidence = "low"
+replaced_by = "oecd-btige-key"
+notes = "Replaced on 2026-10-25 with wits-concordance: the OECD key needs no revision bridge. Not in fetch.toml; the pipeline does not read it."
+
+[[source]]
+id = "oecd-btige-key"
+name = "OECD Bilateral Trade in Goods by End-use (BTiGE): HS to CPA 2.1 and end-use conversion key"
+provider = "OECD, Directorate for Science, Technology and Innovation"
+version = "2025 release (OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx, HS versions 0 to 6)"
+role = "Product to industry bridge: HS 1988/92 6-digit lines to CPA 2.1 activities, for weight per value, the theta mapping and the BACI flows by good (7.2, 15.4, ADR 0023)"
+licence = "LicenseRef-OECD-Terms"
+licence_url = "https://www.oecd.org/en/about/terms-conditions.html"
+attribution = "OECD (2025) Bilateral Trade in Goods by End-use (BTiGE): HS to end-use conversion key"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "OECD terms, section 3 (Data): except where additional restrictions apply, data may be extracted, downloaded, copied, adapted, printed, distributed, shared and embedded for any purpose, even for commercial use, with credit to the OECD. The BTiGE ReadMe (https://webfs-sti.oecd.org/files/STI-PIE/BTIGE/OECD-Bilateral-Trade-in-Goods-End-use-ReadMe.xlsx) says the trade flows are mapped using a correspondence table developed by the OECD. The file on webfs-sti.oecd.org answers a plain scripted request (the dataset page itself is 403 to scripts)."
+checked = 2026-10-25
+confidence = "medium"
+replaces = "wits-concordance"
+notes = "Read via the live file and a 2026-10-17 archive copy of the terms page (live page 403). Every one of the 5,017 HS lines BACI HS92 has in 2000 is in the key (version 0: 5,134 lines); 23 lines are unallocated (_X), none traded in 2000. The key splits divisions where ICIO 2025 does (B05, B06, C24A, C24B, C301, C302_309) and where ISIC Rev 3 sectors break (C254, C262, C268, C304, C325). The 2011 BTDIxE documentation says the earlier keys drew on UNSD correspondences; confirm with stan.contact@oecd.org before an open release if a third-party claim is a concern. The pipeline adapts the key, which section 3 permits: HS 7108 (non-monetary gold; the key puts 710812 in B072) is read as C24B, basic metals, and J58 and J59_60 (printed books, recorded media) as C18, printing and reproduction (goods.read_hs_cpa). Only ten derived weights and seven thetas enter the pack."

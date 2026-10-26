@@ -2,6 +2,8 @@
 //! Money only moves between accounts; goods appear and disappear only through
 //! `create` and `destroy`, which are tallied and checked every tick.
 
+use rayon::prelude::*;
+
 use crate::invariant::Violation;
 use crate::reduce::fixed_sum;
 use crate::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder};
@@ -22,6 +24,18 @@ pub struct Entry {
 }
 
 pub const GOODS_TOLERANCE: f64 = 1e-9;
+
+/// Entries per parallel chunk of [`Ledger::post`].
+const POST_CHUNK: usize = 1 << 17;
+
+/// Working space of [`Ledger::post`], kept by the caller between calls: one sum per account
+/// for each chunk of entries, zero between calls. `dirty` marks a call that did not finish
+/// (an overflow panic), whose sums the next call clears first.
+#[derive(Clone, Debug, Default)]
+pub struct PostScratch {
+    deltas: Vec<Vec<i64>>,
+    dirty: bool,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ledger {
@@ -68,6 +82,11 @@ impl Ledger {
         self.open[a.0 as usize] = false;
     }
 
+    /// Accounts ever opened, closed ones included.
+    pub fn n_accounts(&self) -> usize {
+        self.money.len()
+    }
+
     pub fn is_open(&self, a: AccountId) -> bool {
         self.open[a.0 as usize]
     }
@@ -103,6 +122,45 @@ impl Ledger {
         });
     }
 
+    /// [`Ledger::transfer`] of each entry in turn: the same balances and journal. Each
+    /// account's money moves by the integer sum of its entries, summed over chunks in
+    /// parallel and added in chunk order, so an overflow is caught in a chunk's sum or the
+    /// final balance rather than at the step that would cross the bound. `scratch` keeps the
+    /// chunks' sums between calls.
+    pub fn post(&mut self, entries: &[Entry], scratch: &mut PostScratch) {
+        let (n, chunks) = (self.money.len(), entries.len().div_ceil(POST_CHUNK));
+        if scratch.dirty {
+            scratch.deltas.iter_mut().for_each(|d| d.fill(0));
+        }
+        if scratch.deltas.len() < chunks {
+            scratch.deltas.resize_with(chunks, Vec::new);
+        }
+        let deltas = &mut scratch.deltas[..chunks];
+        // every delta is zero between calls, so this only sizes them
+        deltas.iter_mut().for_each(|d| d.resize(n, 0));
+        let open = &self.open;
+        scratch.dirty = true;
+        entries
+            .par_chunks(POST_CHUNK)
+            .zip(deltas.par_iter_mut())
+            .for_each(|(chunk, delta)| {
+                for e in chunk {
+                    debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
+                    let (f, t) = (e.from.0 as usize, e.to.0 as usize);
+                    delta[f] = delta[f].checked_sub(e.amount).expect("ledger overflow");
+                    delta[t] = delta[t].checked_add(e.amount).expect("ledger overflow");
+                }
+            });
+        for delta in deltas {
+            for (m, d) in self.money.iter_mut().zip(delta.iter_mut()) {
+                *m = m.checked_add(*d).expect("ledger overflow");
+                *d = 0;
+            }
+        }
+        scratch.dirty = false;
+        self.journal.extend_from_slice(entries);
+    }
+
     pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
         *self.slot(from, good) -= qty;
         *self.slot(to, good) += qty;
@@ -122,22 +180,26 @@ impl Ledger {
         &self.journal
     }
 
-    fn good_total(&self, good: usize) -> f64 {
-        let column: Vec<f64> = self
-            .goods
-            .iter()
-            .skip(good)
-            .step_by(self.n_goods)
-            .copied()
-            .collect();
-        fixed_sum(&column)
+    /// Every good's total over the accounts, each column summed by `fixed_sum`.
+    fn good_totals(&self) -> Vec<f64> {
+        let n = self.n_accounts();
+        let mut columns = vec![0.0; self.n_goods * n];
+        for (a, holdings) in self.goods.chunks_exact(self.n_goods).enumerate() {
+            for (g, &q) in holdings.iter().enumerate() {
+                columns[g * n + a] = q;
+            }
+        }
+        if n == 0 {
+            return vec![fixed_sum(&[]); self.n_goods];
+        }
+        columns.chunks_exact(n).map(fixed_sum).collect()
     }
 
     pub fn begin_tick(&mut self) {
         self.journal.clear();
         self.created.fill(0.0);
         self.destroyed.fill(0.0);
-        self.opening = (0..self.n_goods).map(|g| self.good_total(g)).collect();
+        self.opening = self.good_totals();
     }
 
     pub fn check(&self, tick: u32) -> Result<(), Violation> {
@@ -158,9 +220,9 @@ impl Ledger {
             );
             return Err(Violation::new(tick, "goods sign", detail));
         }
-        for g in 0..self.n_goods {
+        let closing = self.good_totals();
+        for (g, &close) in closing.iter().enumerate() {
             let (open, made, gone) = (self.opening[g], self.created[g], self.destroyed[g]);
-            let close = self.good_total(g);
             let gap = close - (open + made - gone);
             if gap.abs() > GOODS_TOLERANCE * (open + made + gone).max(1.0) {
                 let detail = format!(
@@ -200,6 +262,78 @@ impl Decode for Ledger {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn post_is_transfer_in_turn() {
+        let (mut a, mut b) = (Ledger::new(1), Ledger::new(1));
+        let ids: Vec<AccountId> = (0..3).map(|_| (a.open(), b.open()).0).collect();
+        let entries = [(0, 1, 5), (1, 2, -3), (2, 0, 7), (0, 2, 0)].map(|(f, t, amount)| Entry {
+            flow: Flow(4),
+            from: ids[f],
+            to: ids[t],
+            amount,
+        });
+        for e in &entries {
+            a.transfer(e.flow, e.from, e.to, e.amount);
+        }
+        b.post(&entries, &mut PostScratch::default());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn post_over_several_chunks_is_transfer_in_turn() {
+        let n = 1000;
+        let (mut a, mut b) = (Ledger::new(1), Ledger::new(1));
+        let ids: Vec<AccountId> = (0..n).map(|_| (a.open(), b.open()).0).collect();
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let mut scratch = PostScratch::default();
+        // three and a half chunks, then one chunk on the same scratch
+        for len in [7 * POST_CHUNK / 2, POST_CHUNK / 3] {
+            let entries: Vec<Entry> = (0..len)
+                .map(|_| Entry {
+                    flow: Flow(4),
+                    from: ids[next() as usize % n],
+                    to: ids[next() as usize % n],
+                    amount: (next() % 2_000_001) as i64 - 1_000_000,
+                })
+                .collect();
+            for e in &entries {
+                a.transfer(e.flow, e.from, e.to, e.amount);
+            }
+            b.post(&entries, &mut scratch);
+            assert_eq!(a, b);
+        }
+        assert!(scratch.deltas.iter().flatten().all(|&d| d == 0));
+    }
+
+    #[test]
+    fn post_after_an_overflow_starts_from_clean_sums() {
+        let mut ledger = Ledger::new(1);
+        let (x, y) = (ledger.open(), ledger.open());
+        let entry = |amount| Entry {
+            flow: Flow(4),
+            from: x,
+            to: y,
+            amount,
+        };
+        let mut scratch = PostScratch::default();
+        let overflow = [entry(5), entry(i64::MAX)];
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ledger.clone().post(&overflow, &mut scratch)
+        }));
+        assert!(caught.is_err() && scratch.dirty);
+        let mut want = ledger.clone();
+        want.transfer(Flow(4), x, y, 3);
+        ledger.post(&[entry(3)], &mut scratch);
+        assert_eq!(ledger, want);
+        assert!(!scratch.dirty && scratch.deltas.iter().flatten().all(|&d| d == 0));
+    }
 
     #[derive(Debug, Clone)]
     enum Op {

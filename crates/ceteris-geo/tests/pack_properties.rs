@@ -5,6 +5,7 @@ mod common;
 
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::paths::{PathCache, shortest};
+use ceteris_geo::route_choice::EdgeFactors;
 use common::{PROBES, pack, province};
 
 #[test]
@@ -115,4 +116,36 @@ fn warm_cache_is_identical_across_thread_counts() {
             .collect::<Vec<_>>()
     };
     assert_eq!(warm(1), warm(8));
+}
+
+/// Traded goods' weight per value (t/USD, BACI 2000) and time cost lambda_g (trade P43).
+const TRADED: [(&str, f64, f64); 7] = [
+    ("agriculture", 0.0026752, 0.002),
+    ("oil and gas", 0.0049491, 0.002),
+    ("coal and mining", 0.0190502, 0.002),
+    ("food", 0.0016041, 0.005),
+    ("light manufacturing", 0.00026893, 0.010),
+    ("chemicals, fuels, metals", 0.0015934, 0.010),
+    ("machinery", 0.00010144, 0.010),
+];
+/// P44 point estimate (trade `TradeParams::theta_r`; ceteris-geo does not depend on ceteris-trade).
+const THETA_R: f64 = 111.5;
+
+// On the P1 graph the radius at the P44 prior's upper end (182) is 2.96 to 6.04 (MIGRATION
+// Task 4 report, ADR 0017 Deferral).
+#[test]
+#[ignore = "route choice deferred past P2 (ADR 0017)"]
+fn route_choice_radius_below_one_at_theta_r() {
+    let Some(pack) = pack() else { return };
+    let radii: Vec<(&str, f64)> = TRADED
+        .iter()
+        .map(|&(name, w, lambda)| {
+            let f = EdgeFactors::new(&pack.graph, w, lambda, THETA_R);
+            (name, f.spectral_radius())
+        })
+        .collect();
+    assert!(
+        radii.iter().all(|&(_, rho)| rho < 1.0),
+        "spectral radius at theta_r {THETA_R}: {radii:?}"
+    );
 }

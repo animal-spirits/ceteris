@@ -12,7 +12,7 @@ use arrow_ipc::reader::FileReader;
 use crate::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
 
 /// Bumped with `PACK_FORMAT` in `python/ceteris/packs/build.py`.
-pub const PACK_FORMAT: &str = "2";
+pub const PACK_FORMAT: &str = "3";
 
 #[derive(Debug)]
 pub struct PackError(pub String);

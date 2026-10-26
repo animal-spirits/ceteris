@@ -1,6 +1,6 @@
 # 0019. Expected inflation in price and wage rules
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 6)
 Date: 2026-10-24
 Design sections: 8.2, 8.7, 12.2, 15.3 (V1)
 
@@ -50,8 +50,9 @@ not a parameter.
   S04 adaptive only). Its gain is a new register entry.
 - The stability region in (kappa1, kappa2) is derived for the linearized origin market of ADR
   0016 and checked on the fixture; it replaces the measured growth factors behind the 2026-10-24
-  owner decision (kappa1 0.02, kappa2 0), which stay as start values until the derivation says
-  otherwise.
+  owner decision (kappa1 0.02, kappa2 0). Outcome: at kappa1 0.02 every P45 gain in the prior
+  broke V1, so the owner set kappa1 0.05 and gain 0.006, kappa2 0 unchanged (2026-10-24,
+  MIGRATION Task 6).
 - P03c (step clip) is already registered; runs count every tick it binds, per market, in the run
   export.
 - Register clash: rev 180 assigns P37 to the consumption rule and P38 to the putty-clay

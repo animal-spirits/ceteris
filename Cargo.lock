@@ -261,6 +261,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceteris-econ"
+version = "0.0.1"
+dependencies = [
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
+ "ceteris-core",
+ "ceteris-geo",
+ "ceteris-trade",
+ "criterion",
+ "libm",
+ "proptest",
+ "rayon",
+]
+
+[[package]]
 name = "ceteris-geo"
 version = "0.0.1"
 dependencies = [
@@ -269,6 +285,17 @@ dependencies = [
  "arrow-schema",
  "blake3",
  "criterion",
+ "libm",
+ "proptest",
+ "rayon",
+]
+
+[[package]]
+name = "ceteris-trade"
+version = "0.0.1"
+dependencies = [
+ "ceteris-core",
+ "libm",
  "proptest",
  "rayon",
 ]
