@@ -115,3 +115,41 @@ terms, several underpinning existing or proposed layers:
 
 Research quality and release legality stop competing. The Steam release plan inherits a
 mechanical guarantee instead of a manual review.
+
+## Amendment (owner, 2026-10-25)
+
+The release profile failed on four sources that P2 added. The owner's rule: replace each with a source as good
+or better whose licence allows commercial use on a confident reading; where none exists, enforce the release
+profile only when `distribution` is "open"; run closed for now (ADR 0005). All four were resolved, so the release
+profile stays enforced in every distribution and `check_sources.py` keeps its checks.
+
+- HS to industry bridge: WITS HS 1988/92 to ISIC Rev 3 (no licence stated) chained with the UNSD ISIC Rev 3.1 to
+  Rev 4 table (UN copyright) is replaced by the OECD BTiGE conversion key (2025; OECD terms allow any use,
+  including commercial, with credit), `oecd-btige-key`. It maps each HS 1988/92 line to one CPA 2.1 activity
+  (ISIC Rev 4 at division level, split as ICIO 2025 splits industries), so the equal split over linked divisions
+  and the principal-link rule are gone. Every 2000 BACI line is covered (the old route left 0.6% of trade out).
+  The pipeline adapts the key in two places, which the OECD terms permit (`goods.read_hs_cpa`): non-monetary
+  gold (HS 7108; the key puts unwrought gold in metal ores, B072) is read as basic metals (C24B), so good 2
+  stays physical bulk; printed books and recorded media (J58, J59_60) are read as printing and reproduction
+  (C18), light manufacturing. Electricity (D35), recycling (E38) and the service and art codes (H53, M71, M74,
+  R90, R91) stay with the local goods: 23.1 billion USD, 0.35% of 2000 BACI trade, outside the traded goods.
+  Weights per value, new over old: agriculture 1.05, crude oil and gas 1.00, coal and other mining 0.96, food
+  0.96, light manufacturing 1.55 (it no longer receives a share of the repair divisions), chemicals, refined
+  fuels and metals 0.87, machinery, electronics and vehicles 0.82; coal over machinery is 221 (was 188).
+- Trade elasticities: each CPA activity takes the ISIC Rev 3 division of Caliendo and Parro's Table A.1
+  (`theta.REV3_OF_CPA`). Theta per good becomes 9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 (was 6.73, 12.64 and
+  5.33 for goods 4 to 6). The ADR 0023 rule draws three classes: 2.62 (food), 5.19 (machinery, electronics and
+  vehicles) and 10.57 (the other five goods), instead of 2.62, 5.88 and 12.55. Before the gold and books
+  adaptations it drew four (2.62, 5.19, 9.94, 13.53); the owner adopted the key's classes on 2026-10-25, and
+  `TradeParams::default()` moves to them in a separate P2 task (done, ADR 0023).
+- Income where WDI and PWT have none: UNSD National Accounts (UN copyright) is replaced for the Cook Islands by
+  ADB Key Indicators (`adb-kidb`, free for commercial use with attribution; 5,091 against 6,307 USD per person in
+  2000) and for North Korea by the Maddison Project 2023 (`maddison-2023`, CC BY 4.0). Maddison values are 2011
+  international dollars, so North Korea is ranked and scaled against its donors' Maddison values, never against
+  current-USD incomes, as PWT is used. North Korea's value added falls from 10.5 to 6.8 billion USD and its donor
+  moves from Viet Nam to Cambodia; no other economy changes.
+- Validation-only files: a source read only by tests or diagnostics is not a pack source. Such files live in
+  `python/ceteris/packs/validation.toml` (same schema as `fetch.toml`), which `fetch` downloads and verifies but
+  the pack build neither fetches nor lists in its provenance, and which `pack_sources()` does not read.
+  `check_sources.py` requires each to name a source with `use = "validation"`. The Yotov et al. (2016) sample
+  (`yotov-2016`, WTO all rights reserved) moved there; `test_gravity_reproduces_yotov_2016` is unchanged.

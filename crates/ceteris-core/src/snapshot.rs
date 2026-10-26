@@ -162,8 +162,11 @@ pub fn hex(hash: &Hash) -> String {
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Decodes canonical bytes into (tick, world).
-pub fn decode_canonical<W: Decode>(bytes: &[u8]) -> Result<(u32, W), DecodeError> {
+/// Decodes canonical bytes into (tick, world) with `decode` reading the world part.
+pub fn decode_canonical_with<W>(
+    bytes: &[u8],
+    decode: impl FnOnce(&mut Decoder) -> Result<W, DecodeError>,
+) -> Result<(u32, W), DecodeError> {
     let mut d = Decoder::new(bytes);
     if &d.take::<4>()? != MAGIC {
         return Err(DecodeError("bad magic".into()));
@@ -173,9 +176,14 @@ pub fn decode_canonical<W: Decode>(bytes: &[u8]) -> Result<(u32, W), DecodeError
         return Err(DecodeError(format!("unsupported format {format}")));
     }
     let tick = d.u32()?;
-    let world = W::decode(&mut d)?;
+    let world = decode(&mut d)?;
     d.finish()?;
     Ok((tick, world))
+}
+
+/// Decodes canonical bytes into (tick, world).
+pub fn decode_canonical<W: Decode>(bytes: &[u8]) -> Result<(u32, W), DecodeError> {
+    decode_canonical_with(bytes, W::decode)
 }
 
 /// In-memory snapshots, content-addressed so identical states share one blob.

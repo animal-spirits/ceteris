@@ -1,6 +1,6 @@
 # 0018. Sector-specific trade elasticities
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 5)
 Date: 2026-10-24
 Design sections: 8.3, 17.1 (P01), 19.4, 18 (H2)
 
@@ -29,13 +29,14 @@ scales with classes, not sectors. Values are estimated outside the simulation (0
 
 ## Tests
 
-H2 per class: PPML on simulated flows recovers each class's theta within its prior band.
+H2 per class: PPML on simulated flows recovers each class's theta within its prior band (defined in
+ADR 0023, Prior band: theta_c plus or minus 2 standard errors of its Caliendo-Parro estimate).
 
 ## Mapping to P2 as built
 
 - P01 becomes a vector over the 7 traded goods (`TradeParams.theta`, one f64 today). Starting
   values are Caliendo and Parro (2015) estimates mapped to the P2 goods with 2000 BACI trade
-  weights; class boundaries are an agent default recorded in their own ADR.
+  weights; class boundaries are an agent default recorded in their own ADR (0023).
 - P2 already builds one kernel per traded good, and each good has its own weight w_g, so weight
   classes are goods and theta classes add no kernels while goods number 7. The cache key becomes
   (theta class, weight class) all the same, so classes can merge later.

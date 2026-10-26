@@ -8,7 +8,8 @@ With --profile, it also checks the sources the pack build reads (fetch.toml, plu
 when the county lock exists) against that profile (ADR 0050): a research pack may read
 non-commercial and closed-source-only sources for calibration and validation; a release pack may
 read only sources whose licence allows commercial use on a confident reading. No profile reads
-an excluded source.
+an excluded source. Files that only tests read (validation.toml) are not pack sources; each must
+name a source with use = "validation".
 """
 
 import argparse
@@ -19,6 +20,7 @@ from pathlib import Path
 
 MANIFEST = Path(__file__).with_name("sources.toml")
 FETCH = Path(__file__).with_name("fetch.toml")
+VALIDATION = Path(__file__).with_name("validation.toml")
 COUNTY_LOCK = Path(__file__).with_name("counties.lock.toml")
 
 REQUIRED = {
@@ -91,6 +93,18 @@ def pack_sources() -> set[str]:
     return used
 
 
+def validation_problems(by_id: dict[str, dict]) -> list[str]:
+    """Files outside the pack must belong to validation-only sources, so the file list cannot hide a pack input."""
+    found = []
+    for f in tomllib.loads(VALIDATION.read_text()).get("file", []):
+        source = by_id.get(f["source"])
+        if source is None:
+            found.append(f"{f['source']}: named in validation.toml but missing from sources.toml")
+        elif source.get("use") != "validation":
+            found.append(f"{f['source']}: in validation.toml but its use is '{source.get('use')}', not validation")
+    return found
+
+
 def profile_problems(source: dict, profile: str) -> list[str]:
     sid = source["id"]
     if source["policy"] == "exclude":
@@ -123,8 +137,9 @@ def main(argv: list[str] | None = None) -> int:
         # Opening the project requires every closed-source fallback to be resolved (ADR 0005).
         if distribution == "open" and source.get("closed_source_only"):
             errors.append(f"{source.get('id')}: closed-source-only data in an open distribution")
+    by_id = {s.get("id"): s for s in sources}
+    errors += validation_problems(by_id)
     if args.profile:
-        by_id = {s.get("id"): s for s in sources}
         for sid in sorted(pack_sources()):
             if sid not in by_id:
                 errors.append(f"{sid}: read by the pack but missing from sources.toml")

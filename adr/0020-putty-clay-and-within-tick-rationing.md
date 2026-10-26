@@ -1,6 +1,6 @@
 # 0020. Putty-clay intermediates and within-tick rationing
 
-Status: accepted (owner, 2026-10-24, PR 1); implementation pending on `p2-econ`
+Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 8)
 Date: 2026-10-24
 Design sections: 7.2, 7.4, 8.2, 17.1 (P38), 17.2 (S09, S11), 19.4
 
@@ -43,9 +43,19 @@ of within-tick rationing.
 
 - Putty-clay: each enterprise holds its own coefficient vector, initialized from its country's
   ICIO row (one vintage). P2 output is unchanged by this step, and the golden equals S09.
+- Coefficients are cost shares (owner decision, 2026-10-25): the ICIO a_kg is the value of input
+  k per unit value of output g, so the enterprise's physical coefficient is a_kg / q_k(base),
+  q_k(base) the base delivered unit price of k at its province (1 for local goods; for traded
+  goods, sourcing at prices 1 with tariffs and iceberg, `ProvinceData::base_price`; 0 where k is
+  unreachable). At base prices every input's cost share is the ICIO share and a_VA = 1 - sum_k
+  a_kg. S09 `FixedLeontief` reads the same base column, so the two settings still coincide with
+  one vintage. Before this, a_kg was read as units per unit, and delivered prices above 1 left
+  2,606 traded enterprises of the 2000 pack (11.5% of traded VA) with inputs costing more than
+  their output at prices 1.
 - Priority: P2 already fills enterprise input orders before household demand (controller ruling
   during Task 7). With no subsistence levels before P4, that is the review's order (essential
-  consumption, then intermediate users, then the rest). Proportional and mixed become S11.
+  consumption, then intermediate users, then the rest). Proportional and mixed become S11; Mixed
+  fills as Priority until P4 adds essential consumption levels.
 - Same-tick chain: local goods (utilities, construction, services) have no transit, so their
   production, input use and rationing run as one pass within the tick, in input-output order with
   a fixed iteration bound, so an upstream local shortage reaches downstream output in the same
