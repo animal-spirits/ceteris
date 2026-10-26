@@ -568,10 +568,6 @@ def test_every_country_gets_a_gateway_from_its_ports_airports_or_land_crossings(
     # BBB has only its two land crossing points (its centroid, an endpoint of both crossings, counts once)
     assert [(n, k) for n, c, k in rows if c == 1] == [(1, gateways.LAND)]
     assert {k for _, c, k in rows if c == 0} <= {gateways.PORT, gateways.AIRPORT, gateways.LAND}
-    # no throughput per gateway in the sources: each of a country's k gateways has mass 1/k
-    country, mass = t["country"].to_numpy(), t["mass"].to_numpy()
-    np.testing.assert_allclose(mass, 1.0 / np.bincount(country)[country], rtol=0)
-    np.testing.assert_allclose(np.bincount(country, mass), 1.0, rtol=0, atol=1e-15)
 
 
 # The built pack (Task 17): skipped without it.
@@ -594,15 +590,6 @@ def test_every_country_has_a_gateway():
 
 def test_gateway_count_near_600():
     assert 500 <= _pack_table("gateways.arrow").num_rows <= 700
-
-
-def test_gateway_mass_sums_to_one():
-    """ADR 0092: the masses of each country's gateways sum to 1; without throughput data each is 1/k."""
-    g = _pack_table("gateways.arrow")
-    country, mass = g["country"].to_numpy(), g["mass"].to_numpy()
-    assert np.all(mass > 0)
-    np.testing.assert_allclose(np.bincount(country, mass), 1.0, rtol=0, atol=1e-12)
-    np.testing.assert_allclose(mass, 1.0 / np.bincount(country)[country], rtol=0)
 
 
 def test_pack_econ_tables_are_consistent():

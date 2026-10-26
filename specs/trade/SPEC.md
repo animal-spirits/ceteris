@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022, 0023, 0092 (gateway mass), 0093 (kernel range, log-domain weights) and 0097 (dispatch)
+Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022, 0023, 0093 (kernel range, log-domain weights) and 0097 (dispatch)
 
 ## Purpose
 
@@ -38,7 +38,7 @@ them only as quantities offered to and demanded from each market.
 | Clip ticks: ticks at which the price step clip bound | (province, good) | `u32` | ticks | zero |
 | Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the initial prices (the data state's, or the calibrated steady state's) |
 | Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | sourcing at the initial posted prices (the data state's, or the calibrated steady state's) |
-| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g (crossings with the gateway masses) and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) and gateway masses (pack) at load; rebuilt when the graph version moves |
+| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
 | Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
@@ -98,17 +98,15 @@ K_od = tau_od^-theta, dense within each country. A cross-border pair is reached 
 gateways of the two countries:
 
 ```
-K_od = sum over a in G(A), b in G(B) of  K_oa * m_a * K_ab * m_b * K_bd
-K_ab = (tau_ab * (1 + nu_AB) * (1 + t_AB,g)) ^ -theta,      sum over a in G(A) of m_a = 1
+K_od = sum over a in G(A), b in G(B) of  K_oa * K_ab * K_bd
+K_ab = (tau_ab * (1 + nu_AB) * (1 + t_AB,g)) ^ -theta
 ```
 
-m_a is the gateway's mass (ADR 0092), its share of its country's 2000 trade throughput; the pack
-has no throughput per gateway, so it is 1/k_A (econ SPEC, Gateways). The masses fold into the
-stored crossing factor, m_a K_ab m_b, so the low-rank evaluation is unchanged. Splitting a
-gateway into copies that share its mass changes no flow (1e-12,
-`duplicating_a_gateway_with_half_mass_changes_no_flow`), and access no longer grows with the
-number of gateway pairs. Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and
-theta 64.85 (about 4e-260, `kernel_round_trip_at_extreme_tau`), beyond ADR 0093's 1e-7, so K is
+ADR 0092's gateway mass weights (K_oa m_a K_ab m_b K_bd with the masses of a country's gateways
+summing to 1, so access no longer grows with the number of gateway pairs) are not built: they
+are deferred to the fit of the border friction per theta class, with which they land (owner,
+2026-10-26). Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and theta 64.85
+(about 4e-260, `kernel_round_trip_at_extreme_tau`), beyond ADR 0093's 1e-7, so K is
 stored in f64 (ADR 0093's second option), which holds it down to about 1e-308.
 
 nu is the non-tariff border friction (P05): an iceberg cost, destroyed at the crossing and
@@ -447,15 +445,12 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 - Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7 traded
   goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the owner on
   2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
-  After the gather dispatch, the stored reciprocals, the log-domain weights and the gateway masses
-  (ADRs 0092, 0093, 0097; M4 Pro, AC, 98 W, full pack from its calibrated steady state, criterion
-  medians, two rounds run alternately against the build before the change on the same machine):
-  `source_dispatch_parallel` 10.9 ms (10.5 to 10.7 before) against the 8 ms budget, missed; a
-  whole tick 45.6 to 48.1 ms (44.4 to 44.5 before) against 35 ms, missed; one good's dispatch
-  2.74 to 2.75 ms (2.66 to 2.71); warm `source` 7.9 to 8.3 ms (7.0 to 7.4), the country scale
-  factors adding about 1 ms over seven goods; the E3 price refresh 7.7 to 9.4 ms (7.1 to 7.2).
-  The same machine measured the build before the change at 10.5 ms and 44.4 ms, not the 7.9 and
-  34 ms of the earlier record, so the budget verdict needs the earlier conditions as well.
+  After the gather dispatch, the stored reciprocals and the log-domain weights (ADRs 0093,
+  0097; M4 Pro, AC, 98 W, full pack from its calibrated steady state, criterion medians):
+  `source_dispatch_parallel` 10.6 ms against the 8 ms budget, missed; a whole tick 42.9 ms
+  against 35 ms, missed; one good's dispatch 2.66 ms. The build before these changes measured
+  10.5 to 10.7 ms and 44.4 to 44.5 ms on the same machine the same day, not the 7.9 and 34 ms
+  of the earlier record, so the budget verdict needs the earlier conditions as well.
 
 ## Open questions
 
@@ -472,8 +467,8 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   crossings to countries without an economy province are exactly negligible (about 0.25 ms), and
   the 5 ms budget needs about 190,000 crossings, which moves Phi_d by 50% to 95%. Owner decision
   (2026-10-26): the budget moves to 8 ms and the gateway count and rule move to the ADR 0092
-  rework after the P2 gate. With the gateway masses (ADR 0092) access no longer grows with the
-  number of gateway pairs, so the count can be set for speed alone.
+  rework after the P2 gate. Once the gateway masses (ADR 0092) land with the border friction fit,
+  access no longer grows with the number of gateway pairs and the count can be set for speed.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.

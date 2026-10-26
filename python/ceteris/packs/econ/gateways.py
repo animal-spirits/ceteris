@@ -6,11 +6,6 @@ country's listed ports and airports and its land crossing points: the endpoints 
 ends lie in different 2000 countries, merged within `MERGE_KM` per country pair. The k gateways are the k-medoids of
 the candidates on great-circle distance (an agent default, ADR 0014; the spec's path cost needs the Rust paths).
 
-Each gateway's mass m_a (ADR 0092) is its share of its country's 2000 trade throughput, so the masses of a country's
-gateways sum to 1. The pack's sources give no throughput per gateway (Natural Earth ports and OurAirports airports
-carry no tonnage, value or passenger counts, and land crossings no traffic), so every gateway of a country with k
-gateways takes 1/k.
-
 Every land crossing enters as a candidate, not as a gateway of its own: the P1 graph has 1,359 merged crossings, so
 gateways for all of them would make the all-pairs crossing matrix about twenty times larger than the kernel's
 budget of about 600 gateways (trade SPEC, cost per good).
@@ -163,8 +158,7 @@ def kmedoids(lon: np.ndarray, lat: np.ndarray, k: int, iterations: int = 100) ->
 def select(
     nodes: pa.Table, edges: pa.Table, provinces: pa.Table, trade_by_country: Mapping[str, float], total: int = TOTAL
 ) -> pa.Table:
-    """`gateways.arrow`: node, country (index into the sorted country codes), kind, mass (1/k of the country's k
-    gateways); sorted by country, then node."""
+    """`gateways.arrow`: node, country (index into the sorted country codes), kind; sorted by country, then node."""
     country = node_country(nodes, provinces)
     kind = nodes.column("kind").to_numpy()
     lon, lat = nodes.column("lon").to_numpy(), nodes.column("lat").to_numpy()
@@ -185,13 +179,11 @@ def select(
         for m in kmedoids(lon[ids], lat[ids], k[c]):
             rows.append((int(ids[m]), ci, cand[c][int(ids[m])]))
     node, ctry, knd = zip(*rows)
-    per = np.bincount(ctry)
     return pa.table(
         {
             "node": pa.array(node, pa.uint32()),
             "country": pa.array(ctry, pa.uint32()),
             "kind": pa.array(knd, pa.uint8()),
-            "mass": pa.array(1.0 / per[np.asarray(ctry)], pa.float64()),
         }
     )
 

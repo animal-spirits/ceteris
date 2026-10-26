@@ -214,11 +214,10 @@ def test_trade_money_matches_dense_route_oracle(inputs):
 
 
 def test_routing_matches_rust(inputs):
-    """The reference routes on the kernel Rust exports, and that kernel is the mass-weighted one (ADR
-    0092): every crossing factor rebuilt from the legs, gateway masses and tariffs as
-    K_ab = m_a m_b (tau (1 + nu) (1 + t))^-theta, with 1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12;
-    the masses sum to 1 per country; and the reference's delivered prices at prices 1 are Rust's base
-    prices to 1e-12."""
+    """The reference routes on the kernel Rust exports, and that kernel is the spec's: every crossing
+    factor rebuilt from the legs and tariffs as K_ab = (tau (1 + nu) (1 + t))^-theta, with
+    1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12; and the reference's delivered prices at prices 1
+    are Rust's base prices to 1e-12."""
     inp = inputs
 
     def table(name):
@@ -226,9 +225,7 @@ def test_routing_matches_rust(inputs):
 
     legs, goods, tariffs = table("legs"), table("goods"), table("tariffs")
     nu = json.loads((FIXTURE / "params.json").read_text())["trade"]["border_nu"]
-    mass, gc = inp.gateway_mass, inp.gateway_country
-    np.testing.assert_allclose(np.bincount(gc, mass), 1.0, rtol=0, atol=1e-12)
-    assert len(np.unique(mass)) > 1
+    gc = inp.gateway_country
     rate = np.zeros((inp.n_countries, inp.n_countries, 2))
     rate[tariffs["importer"].to_numpy(), tariffs["exporter"].to_numpy(), tariffs["group"].to_numpy()] = tariffs["rate"].to_numpy()
     crossing = legs["kind"].to_numpy() == 2
@@ -242,7 +239,7 @@ def test_routing_matches_rust(inputs):
         want = {(x, y): i for i, (x, y) in enumerate(zip(a, b))}
         sel = np.flatnonzero(cro.good == g)
         at = np.array([want[(x, y)] for x, y in zip(cro.row[sel], cro.col[sel])])
-        k = mass[a] * mass[b] * (tau * (1.0 + nu) * duty) ** -inp.theta[g]
+        k = (tau * (1.0 + nu) * duty) ** -inp.theta[g]
         np.testing.assert_allclose(cro.k[sel], k[at], rtol=1e-12, atol=0)
         np.testing.assert_allclose(cro.inv_loss[sel], 1.0 / (tau * (1.0 + nu))[at], rtol=1e-12, atol=0)
         np.testing.assert_allclose(cro.inv_duty[sel], 1.0 / duty[at], rtol=1e-12, atol=0)

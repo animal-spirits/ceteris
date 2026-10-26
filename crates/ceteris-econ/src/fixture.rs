@@ -13,7 +13,7 @@
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass};
+use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -113,7 +113,6 @@ pub fn small_world() -> EconInputs {
     let mut net = Network {
         province_country: province_country.clone(),
         gateway_country: gateway_country.clone(),
-        gateway_mass: equal_gateway_mass(&gateway_country),
         ..Network::default()
     };
     for o in 0..np {
