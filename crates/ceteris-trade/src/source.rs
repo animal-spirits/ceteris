@@ -795,6 +795,36 @@ mod tests {
     }
 
     #[test]
+    fn parallel_splits_do_not_depend_on_the_thread_count() {
+        // enough provinces and gateways that the loops over them split into several tasks
+        let provinces = (0..300).map(|i| (i / 100) as u16).collect();
+        let gateways = (0..24).map(|i| (i / 8) as u16).collect();
+        let mut r = rng(7);
+        let (net, wedges) = complete_world(&mut r, provinces, gateways);
+        let k = kernel(&net, &wedges);
+        let np = net.n_provinces();
+        assert!(np > 4 * ROWS && net.n_gateways() > 16);
+        let price = draw(&mut r, np, 0.5, 2.0);
+        let active: Vec<bool> = (0..np).map(|o| o % 7 != 3).collect();
+        let spend = draw2(&mut r, np, 0.0, 10.0);
+        let fill = draw2(&mut r, np, 0.2, 1.0);
+        let run = |threads: usize| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                let mut out = Sourced::new();
+                source(&k, 4, &price, &active, &spend, &mut out);
+                dispatch(&k, 4, &price, &fill, &mut out);
+                format!("{out:?}")
+            })
+        };
+        // Debug prints every f64 in its shortest round-trip form, one per bit pattern
+        assert_eq!(run(1), run(4));
+    }
+
+    #[test]
     fn sourcing_spends_destination_expenditure() {
         for seed in 1..=20u64 {
             let (net, wedges) = random_world(seed);
