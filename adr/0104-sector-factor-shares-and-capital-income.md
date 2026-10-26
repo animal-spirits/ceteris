@@ -2,7 +2,8 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 6.1, 7.2, 8.7, 9.1; econ SPEC Income; amends ADR 0014
+Design sections: 6.1, 7.2, 8.7, 9.1; econ SPEC Income; amends ADRs 0014, 0089 (national
+per-person profit ownership, owner 2026-10-25; this change accepted by the owner 2026-10-26)
 
 ## Context
 
@@ -54,6 +55,9 @@ Option 2. Option 3 follows with 0041 and P5.
 - National VA-weighted labour share equals PWT within 1e-12.
 - Sum of dividends paid equals the profit pool each tick (ledger exact).
 - Model top-10% income share at t = 0 against WID within 5 points for ICIO economies.
+- The 35 pack provinces without traded output keep positive local output and w0 at the calibrated
+  state, the case ADR 0089 chose national ownership for: every pop still receives a dividend
+  share.
 
 ## Consequences
 
@@ -61,3 +65,5 @@ Option 2. Option 3 follows with 0041 and P5.
   foreign investors.
 - t = 0 wages per worker change by sector mix; A absorbs it at calibration.
 - CDIS is post-2000; its use for 2000 is an approximation recorded in the pack.
+- ADR 0041's profit shifting moves part of this foreign share to havens; it adds no second
+  ownership layer.

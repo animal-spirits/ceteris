@@ -28,7 +28,8 @@ Option 2. Option 3 is the target once P5 adds forward-looking saving and P4 adds
 
 - Each country gets two drifts at t = 0:
   - TFP drift g_A,c: the 1995-2000 trend of PWT TFP (rtfpna) relative to the world, by
-    country, shrunk toward its regional mean (empirical Bayes) to damp noise.
+    country, net of ADR 0108's catch-up term so the same convergence is not counted twice,
+    shrunk toward its regional mean (empirical Bayes) to damp noise.
   - Capital deepening drift g_K,c: the gap between the country's 2000 capital-output ratio
     (PWT) and its 1995-2000 trend steady-state value, entering as growth of the fixed factor F.
 - Both fade as exp(-t / h) with one global half-life h (new register entry, prior 3 to 15

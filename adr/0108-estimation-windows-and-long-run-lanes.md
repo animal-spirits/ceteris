@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 6.2, 7.5, 10, 11, 15.1, 15.2, 17; amends ADRs 0024, 0032, 0036
+Design sections: 6.2, 7.5, 10, 11, 15.1, 15.2, 17; amends ADRs 0024, 0031, 0032, 0036, 0103
 
 ## Context
 
@@ -32,7 +32,10 @@ Option 2.
 - **Windows.**
   - Economy: 2000-2010 (unchanged).
   - Technology catch-up: PWT 1960-2019, with catch-up speed depending on education and the V-Dem
-    institution vector (interaction terms, two parameters), by panel regression offline.
+    institution vector (interaction terms, two parameters), by panel regression offline. This is
+    the catch-up equation's single home: ADR 0031's sector-class factor (P60) multiplies its
+    rate, and ADR 0103's drifts are the 1995-2000 residuals left after it, so convergence is not
+    counted twice.
   - Politics (10): V-Dem 1900+ for transition hazards.
   - War (11): COW 1816+ and UCDP 1946+ for onset and termination (with ADR 0110).
   - Mortality and fertility (6.2): HMD and WPP 1950+.

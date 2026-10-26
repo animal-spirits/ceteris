@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 7.4, 8.6, 9.6, 15.3; econ SPEC Deviations; amends ADRs 0021, 0089
+Design sections: 7.4, 8.6, 9.6, 15.3; econ SPEC Deviations; amends ADRs 0021, 0025, 0089
 
 ## Context
 
@@ -52,7 +52,7 @@ Option 2. Option 3 replaces the two fixed rules when P5 and P4 arrive.
   GFCF) plus g_c and s_c.
 - Ledger: one fiscal and one investment account per country; both spend in full each tick so
   the money stock is unchanged.
-- 0089 stage 3: the PIGL inversion uses the HFCE vector; government and investment spending are
+- 0089 stage 4: the PIGL inversion uses the HFCE vector; government and investment spending are
   fixed values in the Sinkhorn targets.
 
 ## Tests
@@ -61,6 +61,8 @@ Option 2. Option 3 replaces the two fixed rules when P5 and P4 arrive.
 - With beta = 1, a 1% permanent income shock raises spending on each column by 1% of its base
   in the new steady state.
 - V1 holds from the perturbed starts.
+- ADR 0025's harness: with m = 1 and lambda = 0 the households' intertemporal MPC matrix is
+  (1 - s_c - g_c) times the identity, and aggregate spending out of income is 1.
 
 ## Consequences
 
