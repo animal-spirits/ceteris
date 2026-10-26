@@ -300,6 +300,7 @@ dependencies = [
  "criterion",
  "libm",
  "proptest",
+ "rayon",
 ]
 
 [[package]]
