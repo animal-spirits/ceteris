@@ -9,8 +9,9 @@ Design sections: 8.2, 17 (P02, P03a, P03b); trade SPEC Origin market, Stability 
 The price rule `dlnp = pi^e + kappa1 (D - Q)/Q - kappa2 (S' - S*)/S*` uses one gain for two
 modes of very different speed:
 
-- **Relative prices.** A small origin faces an order elasticity E = theta_g + 1, up to 13.55.
-  J2 caps kappa1 at 0.14 for the theta-12.55 goods and 0.51 for food, so one global kappa1 makes
+- **Relative prices.** A small origin faces an order elasticity E = theta_g + 1, up to 11.57 at
+  the current classes (13.55 at the first thetas). J2 caps kappa1 at about 0.17 for the
+  theta-10.57 goods and 0.51 for food (trade SPEC, Stability region; 0.14 at theta 12.55), so one global kappa1 makes
   food and manufactures adjust 2 to 4 times slower than they could.
 - **Price level.** The world price level faces only household demand (input orders are in
   units, money is fixed) and returns at kappa1 h, with h about 0.24. With pi^e the mode has a

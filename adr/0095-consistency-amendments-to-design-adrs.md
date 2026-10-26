@@ -7,7 +7,8 @@ Design sections: 7.2, 8.3, 13.4, 17; ADRs 0026, 0027, 0028, 0029, 0032, 0034, 00
 ## Context
 
 Eight ADRs proposed on the `design/*` branches conflict with P2 as built or with ADRs 0089 to
-0094. Each must be amended before it is accepted.
+0094. Each must be amended before it is accepted. The table was applied to the target ADRs on main
+on 2026-10-26 (ADR audit).
 
 ## Decision
 
