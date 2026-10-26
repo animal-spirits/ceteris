@@ -97,8 +97,8 @@ struct Scratch {
     reach: Vec<[f64; 2]>,
     /// Backward pass, per gateway: value sent to destination gateway b, and value net of
     /// tariff arriving back at origin gateway a.
-    to_dest_gateway: Vec<f64>,
-    at_origin_gateway: Vec<f64>,
+    to_dest_gateway: Vec<[f64; 2]>,
+    at_origin_gateway: Vec<[f64; 2]>,
     /// Forward pass, per gateway: destination access `y_b = sum_d K_bd reach_d`, onward
     /// access `z_a = sum_b K_ab y_b` and the share of z_a left after tariffs.
     y: Vec<f64>,
@@ -223,48 +223,64 @@ pub fn source(
     }));
     let reach = &s.reach;
 
-    // Orders are accumulated as value net of tariff and turned into units at the end.
+    // Orders are accumulated as value net of tariff and turned into units at the end. Both
+    // classes go through each loop together; every accumulator is per class, so each sees
+    // the additions of a pass of its own.
     let orders = &mut out.orders;
     zeroed2(orders, np);
-    for c in 0..2 {
-        // home and domestic routes
-        for o in (0..np).filter(|&o| w[o] > 0.0) {
-            let mut x = w[o] * reach[o][c];
-            for e in gk.domestic.row(o) {
-                x += f64::from(e.k) * w[o] * reach[e.col as usize][c];
-            }
-            orders[o][c] += x;
+    // home and domestic routes
+    for o in (0..np).filter(|&o| w[o] > 0.0) {
+        let mut x = [w[o] * reach[o][0], w[o] * reach[o][1]];
+        for e in gk.domestic.row(o) {
+            let (kw, r) = (f64::from(e.k) * w[o], reach[e.col as usize]);
+            x[0] += kw * r[0];
+            x[1] += kw * r[1];
         }
-        // destinations to their gateways
-        let to_b = &mut s.to_dest_gateway;
-        zeroed(to_b, ng);
-        for d in (0..np).filter(|&d| reach[d][c] > 0.0) {
-            for e in gk.access.row(d) {
-                let b = e.col as usize;
-                to_b[b] += reach[d][c] * f64::from(e.k) * u[b];
-            }
+        orders[o][0] += x[0];
+        orders[o][1] += x[1];
+    }
+    // destinations to their gateways
+    let to_b = &mut s.to_dest_gateway;
+    zeroed2(to_b, ng);
+    for (d, r) in reach.iter().enumerate() {
+        let on = [r[0] > 0.0, r[1] > 0.0];
+        if !(on[0] || on[1]) {
+            continue;
         }
-        // across the border, net of tariff
-        let at_a = &mut s.at_origin_gateway;
-        zeroed(at_a, ng);
-        for a in (0..ng).filter(|&a| v[a] > 0.0) {
-            for e in gk.crossings.row(a) {
-                let b = e.col as usize;
-                if to_b[b] == 0.0 {
-                    continue;
-                }
-                let share = f64::from(e.k) * v[a] / u[b];
-                at_a[a] += to_b[b] * share / (1.0 + f64::from(e.tariff));
+        for e in gk.access.row(d) {
+            let b = e.col as usize;
+            for c in (0..2).filter(|&c| on[c]) {
+                to_b[b][c] += r[c] * f64::from(e.k) * u[b];
             }
         }
-        // origin gateways to origins
-        for o in (0..np).filter(|&o| w[o] > 0.0) {
-            for e in gk.access.row(o) {
-                let a = e.col as usize;
-                if at_a[a] == 0.0 {
-                    continue;
-                }
-                orders[o][c] += at_a[a] * (f64::from(e.k) * w[o] / v[a]);
+    }
+    // across the border, net of tariff
+    let at_a = &mut s.at_origin_gateway;
+    zeroed2(at_a, ng);
+    for a in (0..ng).filter(|&a| v[a] > 0.0) {
+        for e in gk.crossings.row(a) {
+            let b = e.col as usize;
+            let t = to_b[b];
+            if t == [0.0; 2] {
+                continue;
+            }
+            let share = f64::from(e.k) * v[a] / u[b];
+            for c in (0..2).filter(|&c| t[c] != 0.0) {
+                at_a[a][c] += t[c] * share / (1.0 + f64::from(e.tariff));
+            }
+        }
+    }
+    // origin gateways to origins
+    for o in (0..np).filter(|&o| w[o] > 0.0) {
+        for e in gk.access.row(o) {
+            let a = e.col as usize;
+            let t = at_a[a];
+            if t == [0.0; 2] {
+                continue;
+            }
+            let factor = f64::from(e.k) * w[o] / v[a];
+            for c in (0..2).filter(|&c| t[c] != 0.0) {
+                orders[o][c] += t[c] * factor;
             }
         }
     }
