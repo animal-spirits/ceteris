@@ -114,6 +114,7 @@ pub fn deliver(w: &mut EconWorld) {
     let n_pops = acc.pop.len();
     w.scratch.due.copy_from_slice(w.pipeline.pop_due());
     let in_flight = w.pipeline.in_flight_all();
+    let due = &w.scratch.due;
     let account = |b: usize| {
         if b < n_pops {
             acc.pop[b]
@@ -121,24 +122,37 @@ pub fn deliver(w: &mut EconWorld) {
             acc.enterprise[b - n_pops]
         }
     };
-    for (g, &transit) in acc.transit.iter().enumerate() {
-        let due = |b: usize| w.scratch.due[b * N_GOODS + g];
-        let Some(last) = largest((0..n_buyers).map(due)) else {
-            continue;
-        };
-        let receive = |ledger: &mut Ledger, b: usize, x: f64| {
-            ledger.ship(transit, account(b), g, x);
-            if b < n_pops {
-                ledger.destroy(account(b), g, x);
+    let n_traded = acc.transit.len();
+    // the first largest delivery of each good, as `largest` finds it
+    let mut last: [Option<(usize, f64)>; N_GOODS] = [None; N_GOODS];
+    for (b, row) in due.chunks_exact(N_GOODS).enumerate() {
+        for (best, &x) in last.iter_mut().zip(&row[..n_traded]) {
+            if x > 0.0 && best.is_none_or(|(_, v)| x > v) {
+                *best = Some((b, x));
             }
-        };
-        for b in (0..n_buyers).filter(|&b| b != last && due(b) > 0.0) {
-            let x = due(b).min(w.ledger.goods(transit, g));
-            receive(&mut w.ledger, b, x);
         }
-        // the largest delivery takes what the account holds beyond the goods still in flight
-        let x = (w.ledger.goods(transit, g) - in_flight[g]).max(0.0);
-        receive(&mut w.ledger, last, x);
+    }
+    let receive = |ledger: &mut Ledger, g: usize, b: usize, x: f64| {
+        ledger.ship(acc.transit[g], account(b), g, x);
+        if b < n_pops {
+            ledger.destroy(account(b), g, x);
+        }
+    };
+    // buyer by buyer; each good's account sees its deliveries in buyer order
+    for (b, row) in due.chunks_exact(N_GOODS).enumerate().take(n_buyers) {
+        for g in 0..n_traded {
+            if row[g] > 0.0 && last[g].is_some_and(|(l, _)| l != b) {
+                let x = row[g].min(w.ledger.goods(acc.transit[g], g));
+                receive(&mut w.ledger, g, b, x);
+            }
+        }
+    }
+    // the largest delivery takes what the account holds beyond the goods still in flight
+    for (g, best) in last.iter().enumerate().take(n_traded) {
+        if let Some((b, _)) = *best {
+            let x = (w.ledger.goods(acc.transit[g], g) - in_flight[g]).max(0.0);
+            receive(&mut w.ledger, g, b, x);
+        }
     }
 }
 
