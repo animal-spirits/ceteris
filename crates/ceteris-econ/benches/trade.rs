@@ -170,6 +170,10 @@ fn bench(c: &mut Criterion) {
     g.bench_function("dispatch", |b| {
         b.iter(|| dispatch_all(kernel, &cols, &mut sourced))
     });
+    // the critical path of the parallel stage, which runs one task per good
+    g.bench_function("dispatch_one_good", |b| {
+        b.iter(|| dispatch(kernel, 0, &cols.price[0], &cols.fill[0], &mut sourced[0]))
+    });
     g.bench_function("source_dispatch", |b| {
         b.iter_batched(
             || refreshed.clone(),
