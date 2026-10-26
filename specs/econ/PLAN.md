@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part.** This plan was written before the economy migrated onto ADRs 0015 to 0022 and ADR 0089, and is kept as the record of the original tasks. Where it disagrees, `specs/econ/MIGRATION.md`, the as-built `specs/econ/SPEC.md` and `specs/trade/SPEC.md`, and the ADRs win. Replaced: `route.rs`, `route()`, the FOB flow and netback (below) by value-based trade flows and `source`/`dispatch` (ADR 0015, trade SPEC, Payments), and the joint productivity calibration (Task 18, Steps 2 to 5) by the steady-state calibration of ADR 0089 (econ SPEC, Calibration).
+
 **Goal:** Build the P2 economic core on the full globe with 2000 data and pass the P2 gate (V0, V1, H2, 100 years, budgets).
 
 **Architecture:** `ceteris-trade` (markets, two-level kernel, logit routing, transit) and `ceteris-econ` (pops, enterprises, labour, demand, world, schedule) are pure Rust over a graph-independent `EconInputs`, so everything is built and tested first on a generated small world. The Python pack pipeline adds the 2000 economic tables; a Rust `ceteris` binary exports inputs and runs to Arrow; the Python GE reference model reads the export, calibrates productivity and checks V1 and H2.
@@ -41,7 +43,7 @@ crates/ceteris-trade/
   src/params.rs     TradeParams (P01, P02, P03a-c, P05, P43)
   src/network.rs    Network, Leg: graph-independent leg costs
   src/kernel.rs     Kernel::build, access sums (v, u, Pi)
-  src/route.rs      route(): flows, payments, tariffs, losses, netback
+  src/route.rs      route(): flows, payments, tariffs, losses, netback (superseded: `source.rs`, ADR 0015, trade SPEC)
   src/transit.rs    TransitWheel
   src/market.rs     Markets: clear, reprice
   benches/trade.rs
@@ -88,6 +90,8 @@ tests/golden/  p2-econ.txt  p2-pack.txt  p2-fixture/ (export + reference solutio
 - [ ] **Step 5: Commit** `feat(trade): add goods, trade parameters and the two-level kernel`
 
 ### Task 2: Routing, payments and transit
+
+> Superseded: routing with `route()`, `fob_paid` and `netback` was replaced by value-based sourcing and dispatch (`ceteris-trade/src/source.rs`, ADR 0015, trade SPEC, Sourcing and Payments). Only transit and the arrival slots survive.
 
 **Files:**
 - Create: `crates/ceteris-trade/src/route.rs`, `src/transit.rs`
@@ -183,7 +187,7 @@ tests/golden/  p2-econ.txt  p2-pack.txt  p2-fixture/ (export + reference solutio
 - Test: `crates/ceteris-econ/tests/p2_properties.rs`
 
 **Interfaces:**
-- Produces: `systems::schedule() -> Schedule<EconWorld>` in the spec order (T1 deliver, E1 labour, E2 produce, T2 route, E3 demand, T3 clear, T4 reprice, E4 distribute, E5 assert; system IDs 201 to 209); `EconWorld::sim(inputs, params, trade) -> Sim<EconWorld>`; ledger `Flow` tags `WAGE, SALE, PURCHASE, FOB, TARIFF, DIVIDEND, REBATE, MINT` (u16 constants in `world.rs`).
+- Produces: `systems::schedule() -> Schedule<EconWorld>` in the spec order (T1 deliver, E1 labour, E2 produce, T2 route, E3 demand, T3 clear, T4 reprice, E4 distribute, E5 assert; system IDs 201 to 209); `EconWorld::sim(inputs, params, trade) -> Sim<EconWorld>`; ledger `Flow` tags `WAGE, SALE, PURCHASE, FOB, TARIFF, DIVIDEND, REBATE, MINT` (superseded: there is no FOB tag; trade is paid in `TRADE` legs at dispatch, trade SPEC, Payments) (u16 constants in `world.rs`).
 - Parallelism: per-province systems run with rayon over fixed chunks of provinces, writing to their slices; ledger transfers are applied afterwards in stable ID order.
 
 - [ ] **Step 1: Write failing tests** `conservation_over_120_ticks` (proptest over fixture perturbations: initial prices x U(0.5, 2) per cell; no `Violation`), `employment_within_bounds`, `homogeneity_of_degree_zero` (prices, wages and minted money x 1e6: all quantities identical bit for bit after 60 ticks, no overflow; Review Focus 5), `inactive_cells_use_netback_price`.
@@ -342,7 +346,7 @@ All data tasks: register each download in `fetch.toml` with `python -m ceteris.p
 
 **Files:** Create `python/ceteris/calibrate/{__init__,gravity}.py`, `python/ceteris/reference/calibrate.py`; modify `__main__.py`, `python/ceteris/packs/sources.toml` (the Yotov et al. sample's licence row, added with its fetch)
 
-**Interfaces:** Produces `calibrate.productivity(inp: Inputs) -> (a: np.ndarray, residuals)`: one joint Newton-Krylov solve for ln p, ln w, ln A of traded enterprises (equilibrium VA = `va_target`) and ln A per (country, local good) (national VA = ICIO); `python -m ceteris.reference calibrate --pack data/packs/2000` runs `cargo run --release --bin ceteris -- export --pack ...` to a temp dir, solves, writes `data/packs/2000/econ_calib.arrow`, prints the residual summary (count and largest relative miss).
+**Interfaces:** (Steps 2 to 5 and this interface are superseded by ADR 0089: the data state is calibrated as a steady state in `reference/calibrate.py` (econ SPEC, Calibration), not by a joint productivity solve.) Produces `calibrate.productivity(inp: Inputs) -> (a: np.ndarray, residuals)`: one joint Newton-Krylov solve for ln p, ln w, ln A of traded enterprises (equilibrium VA = `va_target`) and ln A per (country, local good) (national VA = ICIO); `python -m ceteris.reference calibrate --pack data/packs/2000` runs `cargo run --release --bin ceteris -- export --pack ...` to a temp dir, solves, writes `data/packs/2000/econ_calib.arrow`, prints the residual summary (count and largest relative miss).
 
 - [x] **Step 1: Estimate trade costs directly (ADR 0022)** in `python/ceteris/calibrate/gravity.py`, PPML from `reference/ppml.py`. First `test_gravity_reproduces_yotov_2016`: the code reproduces the published PPML estimates of Yotov, Piermartini, Monteiro and Larch (2016, "An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model", WTO and UNCTAD) on their sample, to the printed precision (fetched to the cache with its licence row in `sources.toml`; skips without the cache). Then PPML structural gravity on 2000 BACI per theta class (ADR 0023), exporter and importer fixed effects, with costs between countries the least-cost (S05) costs of the pack built in Task 17 (route choice is deferred past P2, ADR 0017): minus the coefficient on ln(1 + tariff) is the class's theta, a border term on a sample with domestic flows (2000 ICIO output less exports) gives the border friction P05, and the S05 path length by mode gives the mode cost ratios P04. Outputs enter the pack with provenance "data" (not "calibrated") and the P01, P04 and P05 rows of the registers say so. Commit `feat(calibrate): estimate theta, border friction and mode costs by ppml on 2000 baci`. Done (b967494): the Yotov et al. reproduction passes to the printed precision; on 2000 BACI theta 13.36, 13.20, 11.82 by class, P05 0.204, P04 not identified (stop rule). Owner decision 2026-10-24: P2 keeps the literature values (Caliendo-Parro class thetas, P05 0.3, geo SPEC P04); the estimates are a diagnostic recorded in ADR 0022 and in the register rows, and enter neither the pack nor the defaults.
 - Note: Steps 2 to 5 (productivity) run at the literature values of P01, P04 and P05.
