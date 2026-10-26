@@ -188,8 +188,8 @@ impl Kernel {
             TRADED[g].then(|| good_kernel(net, np, ng, g, weight[g], wedges, p))
         });
         let first: Option<&GoodKernel> = goods.iter().flatten().next();
-        let (crossings_by_target, access_by_gateway, domestic_by_destination) = first
-            .map_or_else(Default::default, |gk| {
+        let (crossings_by_target, access_by_gateway, domestic_by_destination) =
+            first.map_or_else(Default::default, |gk| {
                 (
                     ByColumn::new(&gk.crossings, |e| e.col as usize, ng),
                     ByColumn::new(&gk.access, |e| e.col as usize, ng),

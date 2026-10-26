@@ -8,7 +8,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use ceteris_core::invariant::Violation;
-use ceteris_core::ledger::{AccountId, Flow, GOODS_TOLERANCE, Ledger};
+use ceteris_core::ledger::{AccountId, Entry, Flow, GOODS_TOLERANCE, Ledger};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
@@ -261,19 +261,12 @@ impl Columns {
     }
 }
 
-/// One traded good's money legs of T2b in minor units, computed with its dispatch and paid
-/// afterwards in ledger order: per domestic entry (destination to origin market), per access
-/// entry inward (destination market to gateway), per crossing in
-/// `Kernel::crossings_by_target` order (destination gateway to origin gateway), per access entry
-/// outward in `Kernel::access_by_gateway` order (gateway to origin market), and the tariff of
-/// each destination. `at_gateway`, `from_gateway` and `parts` are working space.
+/// One traded good's money legs of T2b as ledger entries, computed with its dispatch and
+/// posted afterwards (`systems::trade_legs`). `at_gateway`, `from_gateway` and `parts` are
+/// working space.
 #[derive(Clone, Debug, Default)]
 pub struct Payments {
-    pub domestic: Vec<i64>,
-    pub access_in: Vec<i64>,
-    pub crossing: Vec<i64>,
-    pub access_out: Vec<i64>,
-    pub tariff: Vec<i64>,
+    pub entries: Vec<Entry>,
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
     pub parts: Vec<i64>,

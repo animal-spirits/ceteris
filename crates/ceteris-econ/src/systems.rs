@@ -18,7 +18,7 @@
 
 use rayon::prelude::*;
 
-use ceteris_core::ledger::{AccountId, Flow, Ledger};
+use ceteris_core::ledger::{AccountId, Entry, Flow, Ledger};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
@@ -27,11 +27,12 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch as dispatch_good, source as source_good};
 
+use crate::inputs::EconInputs;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local::{self, LOCAL};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
-    DIVIDEND, EconWorld, PURCHASE, Payments, REBATE, SALE, TARIFF, TRADE, WAGE, to_minor,
+    Accounts, DIVIDEND, EconWorld, PURCHASE, Payments, REBATE, SALE, TARIFF, TRADE, WAGE, to_minor,
     to_numeraire,
 };
 
@@ -600,7 +601,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let kernel = std::sync::Arc::clone(&w.kernel);
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
-    let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
+    let np = kernel.n_provinces;
     let mut buyers = Vec::new();
     let sc = &mut w.scratch;
     let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
@@ -625,7 +626,7 @@ pub fn dispatch(w: &mut EconWorld) {
                 &col.price,
                 r,
             );
-            trade_legs(kernel, g, r, legs);
+            trade_legs(inp, acc, kernel, g, r, legs);
         });
     let sourced = std::mem::take(&mut w.scratch.sourced);
     let payments = std::mem::take(&mut w.scratch.payments);
@@ -661,40 +662,7 @@ pub fn dispatch(w: &mut EconWorld) {
             }
         }
 
-        let gk = kernel.good(g);
-        let ledger = &mut w.ledger;
-        for o in 0..np {
-            let lo = gk.domestic.offsets[o] as usize;
-            for (j, e) in gk.domestic.row(o).iter().enumerate() {
-                let from = acc.market[e.col as usize];
-                pay(ledger, TRADE, from, acc.market[o], legs.domestic[lo + j]);
-            }
-        }
-        for d in 0..np {
-            let lo = gk.access.offsets[d] as usize;
-            for (j, e) in gk.access.row(d).iter().enumerate() {
-                let to = acc.gateway[e.col as usize];
-                pay(ledger, TRADE, acc.market[d], to, legs.access_in[lo + j]);
-            }
-        }
-        let crossings = kernel.crossings_by_target();
-        let mut parts = legs.crossing.iter();
-        for b in 0..ng {
-            for (&(a, _), &part) in crossings.column(b).iter().zip(parts.by_ref()) {
-                pay(ledger, TRADE, acc.gateway[b], acc.gateway[a as usize], part);
-            }
-        }
-        let access = kernel.access_by_gateway();
-        let mut parts = legs.access_out.iter();
-        for a in 0..ng {
-            for (&(o, _), &part) in access.column(a).iter().zip(parts.by_ref()) {
-                pay(ledger, TRADE, acc.gateway[a], acc.market[o as usize], part);
-            }
-        }
-        for d in 0..np {
-            let rebate = acc.rebate[inp.country_of(d)];
-            pay(ledger, TARIFF, acc.market[d], rebate, legs.tariff[d]);
-        }
+        w.ledger.post(&legs.entries);
     }
     // the losses take what each transit account holds beyond the goods now in flight
     let in_flight = w.pipeline.in_flight_all();
@@ -706,47 +674,73 @@ pub fn dispatch(w: &mut EconWorld) {
     w.scratch.payments = payments;
 }
 
-/// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg:
-/// destinations pay origins and their gateways, each gateway splits what it takes in over the
-/// legs that fed it ([`split`]), so it pays out exactly that.
-fn trade_legs(kernel: &Kernel, g: usize, r: &Sourced, p: &mut Payments) {
+/// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
+/// as ledger entries in payment order: destinations pay origins and their gateways, each
+/// gateway splits what it takes in over the legs that fed it ([`split`]), so it pays out
+/// exactly that, and destinations pay tariffs to their country's rebate account. Zero
+/// amounts are left out, as `pay` leaves them.
+fn trade_legs(
+    inp: &EconInputs,
+    acc: &Accounts,
+    kernel: &Kernel,
+    g: usize,
+    r: &Sourced,
+    p: &mut Payments,
+) {
     let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
     let gk = kernel.good(g);
-    p.domestic.clear();
-    p.domestic
-        .extend(r.domestic_value.iter().map(|&v| to_minor(v)));
-    p.access_in.clear();
-    p.access_in
-        .extend(r.access_in_value.iter().map(|&v| to_minor(v)));
+    let entries = &mut p.entries;
+    entries.clear();
+    let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
+        if amount != 0 {
+            entries.push(Entry {
+                flow,
+                from,
+                to,
+                amount,
+            });
+        }
+    };
+    for o in 0..np {
+        let lo = gk.domestic.offsets[o] as usize;
+        for (j, e) in gk.domestic.row(o).iter().enumerate() {
+            let value = to_minor(r.domestic_value[lo + j]);
+            leg(TRADE, acc.market[e.col as usize], acc.market[o], value);
+        }
+    }
     p.at_gateway.clear();
     p.at_gateway.resize(ng, 0);
     for d in 0..np {
         let lo = gk.access.offsets[d] as usize;
         for (j, e) in gk.access.row(d).iter().enumerate() {
-            p.at_gateway[e.col as usize] += p.access_in[lo + j];
+            let (b, value) = (e.col as usize, to_minor(r.access_in_value[lo + j]));
+            leg(TRADE, acc.market[d], acc.gateway[b], value);
+            p.at_gateway[b] += value;
         }
     }
     p.from_gateway.clear();
     p.from_gateway.resize(ng, 0);
-    p.crossing.clear();
     for b in 0..ng {
         let legs = kernel.crossings_by_target().column(b);
         let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
         split(p.at_gateway[b], weights, &mut p.parts);
         for (&(a, _), &part) in legs.iter().zip(&p.parts) {
+            leg(TRADE, acc.gateway[b], acc.gateway[a as usize], part);
             p.from_gateway[a as usize] += part;
         }
-        p.crossing.extend_from_slice(&p.parts);
     }
-    p.access_out.clear();
     for a in 0..ng {
         let legs = kernel.access_by_gateway().column(a);
         let weights = legs.iter().map(|&(_, j)| r.access_out_value[j as usize]);
         split(p.from_gateway[a], weights, &mut p.parts);
-        p.access_out.extend_from_slice(&p.parts);
+        for (&(o, _), &part) in legs.iter().zip(&p.parts) {
+            leg(TRADE, acc.gateway[a], acc.market[o as usize], part);
+        }
     }
-    p.tariff.clear();
-    p.tariff.extend(r.tariff.iter().map(|&t| to_minor(t)));
+    for d in 0..np {
+        let rebate = acc.rebate[inp.country_of(d)];
+        leg(TARIFF, acc.market[d], rebate, to_minor(r.tariff[d]));
+    }
 }
 
 /// T4: the stock-flow price rule with expected inflation on every active market (cells
