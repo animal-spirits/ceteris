@@ -437,26 +437,31 @@ pub fn source(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*w.inputs, &*w.layout, &*w.kernel);
     let np = inp.n_provinces();
     let sc = &mut w.scratch;
-    let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
-    let mut spend = vec![[0.0; 2]; np];
-    for (g, sourced) in sc.sourced.iter_mut().enumerate() {
-        for d in 0..np {
-            let cell = d * N_GOODS + g;
-            let mut s = [0.0; 2];
-            for e in lay.enterprises(d) {
-                s[INTERMEDIATE] += sc.ent_spend[e * N_GOODS + g];
-            }
-            for k in lay.pops(d) {
-                s[HOUSEHOLD] += sc.pop_spend[k * N_GOODS + g];
-            }
-            sc.class_spend[cell] = s;
-            spend[d] = s;
-            price[d] = w.markets.price[cell];
-            active[d] = w.markets.active[cell];
-        }
-        source_good(kernel, g, &price, &active, &spend, sourced);
+    let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
+    let markets = &w.markets;
+    sc.sourced
+        .par_iter_mut()
+        .zip(sc.columns.par_iter_mut())
+        .enumerate()
+        .for_each(|(g, (sourced, col))| {
+            col.spend.clear();
+            col.spend.extend((0..np).map(|d| {
+                let mut s = [0.0; 2];
+                for e in lay.enterprises(d) {
+                    s[INTERMEDIATE] += ent_spend[e * N_GOODS + g];
+                }
+                for k in lay.pops(d) {
+                    s[HOUSEHOLD] += pop_spend[k * N_GOODS + g];
+                }
+                s
+            }));
+            col.gather(&markets.price, &markets.active, g);
+            source_good(kernel, g, &col.price, &col.active, &col.spend, sourced);
+        });
+    for (g, (sourced, col)) in sc.sourced.iter().zip(&sc.columns).enumerate() {
         for o in 0..np {
             let cell = o * N_GOODS + g;
+            sc.class_spend[cell] = col.spend[o];
             w.markets.demand_int[cell] = sourced.orders[o][INTERMEDIATE];
             w.markets.demand_hh[cell] = sourced.orders[o][HOUSEHOLD];
         }
@@ -592,23 +597,28 @@ pub fn dispatch(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
     let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
-    let mut price = vec![0.0; np];
-    let (mut fill, mut parts, mut buyers) = (vec![[0.0; 2]; np], Vec::new(), Vec::new());
+    let (mut parts, mut buyers) = (Vec::new(), Vec::new());
     let mut sourced = std::mem::take(&mut w.scratch.sourced);
-    for (g, r) in sourced.iter_mut().enumerate() {
+    let mut columns = std::mem::take(&mut w.scratch.columns);
+    let (markets, fill) = (&w.markets, &w.scratch.fill);
+    sourced
+        .par_iter_mut()
+        .zip(columns.par_iter_mut())
+        .enumerate()
+        .for_each(|(g, (r, col))| {
+            col.gather(&markets.price, &markets.active, g);
+            col.fill.clear();
+            col.fill.extend((0..np).map(|o| fill[o * N_GOODS + g]));
+            dispatch_good(kernel, g, &col.price, &col.fill, r);
+        });
+    for (g, (r, col)) in sourced.iter().zip(&columns).enumerate() {
         let transit = acc.transit[g];
-        for o in 0..np {
-            let cell = o * N_GOODS + g;
-            price[o] = w.markets.price[cell];
-            fill[o] = w.scratch.fill[cell];
-        }
-        dispatch_good(kernel, g, &price, &fill, r);
         w.scratch.flows.record(
             kernel,
             &inp.network.province_country,
             &inp.network.gateway_country,
             g,
-            &price,
+            &col.price,
             r,
         );
 
@@ -703,6 +713,7 @@ pub fn dispatch(w: &mut EconWorld) {
         }
     }
     w.scratch.sourced = sourced;
+    w.scratch.columns = columns;
 }
 
 /// T4: the stock-flow price rule with expected inflation on every active market (cells

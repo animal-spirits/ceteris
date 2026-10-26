@@ -5,6 +5,8 @@
 use std::ops::Range;
 use std::sync::Arc;
 
+use rayon::prelude::*;
+
 use ceteris_core::invariant::Violation;
 use ceteris_core::ledger::{AccountId, Flow, GOODS_TOLERANCE, Ledger};
 use ceteris_core::reduce::fixed_sum;
@@ -193,6 +195,8 @@ pub struct Scratch {
     /// Sourcing of each traded good: at unit spending from the price refresh of E3, then
     /// from T2 to its dispatch at T2b.
     pub sourced: Vec<Sourced>,
+    /// Per traded good, its columns for `sourced`.
+    pub columns: Vec<Columns>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * N_GOODS + g]`, refreshed with
@@ -223,9 +227,34 @@ impl Scratch {
             spoiled: vec![0.0; np * N_GOODS],
             due: vec![0.0; (n_pops + n_ent) * N_GOODS],
             sourced: (0..n_traded).map(|_| Sourced::new()).collect(),
+            columns: vec![Columns::default(); n_traded],
             lead: vec![0.0; np * N_GOODS],
             flows: FlowWindow::new(nc, np),
         }
+    }
+}
+
+/// One traded good's columns over provinces, gathered from the `[province * N_GOODS + g]`
+/// arrays so that each good's sourcing and dispatch run on their own: posted prices, active
+/// origins, spending by class, fill ratios, and the buyer price and lead of the price refresh.
+#[derive(Clone, Debug, Default)]
+pub struct Columns {
+    pub price: Vec<f64>,
+    pub active: Vec<bool>,
+    pub spend: Vec<[f64; 2]>,
+    pub fill: Vec<[f64; 2]>,
+    pub index: Vec<f64>,
+    pub lead: Vec<f64>,
+}
+
+impl Columns {
+    /// Posted prices and active origins of good `g`.
+    pub fn gather(&mut self, price: &[f64], active: &[bool], g: usize) {
+        let cells = (0..price.len() / N_GOODS).map(|o| o * N_GOODS + g);
+        self.price.clear();
+        self.price.extend(cells.clone().map(|c| price[c]));
+        self.active.clear();
+        self.active.extend(cells.map(|c| active[c]));
     }
 }
 
@@ -487,42 +516,47 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
 /// transit (`lead`, arrival slots weighted by units); a local good's posted price, lead 0.
 /// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
 /// same good at the same prices on it again, and `source` then reuses the origin access.
+/// Traded goods run in parallel, each on its own `sourced` and `columns` entry.
 fn delivered_prices(
     kernel: &Kernel,
     price: &[f64],
     active: &[bool],
     sourced: &mut [Sourced],
+    columns: &mut [Columns],
     index: &mut [f64],
     lead: &mut [f64],
 ) {
     let np = price.len() / N_GOODS;
-    let (mut p, mut on) = (vec![0.0; np], vec![false; np]);
     let (spend, fill) = (vec![[1.0, 0.0]; np], vec![[1.0; 2]; np]);
-    for (g, &traded) in TRADED.iter().enumerate() {
-        if !traded {
+    sourced
+        .par_iter_mut()
+        .zip(columns.par_iter_mut())
+        .enumerate()
+        .for_each(|(g, (unit, col))| {
+            col.gather(price, active, g);
+            source(kernel, g, &col.price, &col.active, &spend, unit);
+            dispatch(kernel, g, &col.price, &fill, unit);
+            col.index.clear();
+            col.lead.clear();
             for d in 0..np {
-                let cell = d * N_GOODS + g;
-                index[cell] = price[cell];
-                lead[cell] = 0.0;
+                let slots = unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
+                let alpha: f64 = slots.clone().sum();
+                let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
+                let (q, l) = if alpha > 0.0 {
+                    (1.0 / alpha, weighted / alpha)
+                } else {
+                    (f64::INFINITY, 0.0)
+                };
+                col.index.push(q);
+                col.lead.push(l);
             }
-            continue;
-        }
-        for o in 0..np {
-            p[o] = price[o * N_GOODS + g];
-            on[o] = active[o * N_GOODS + g];
-        }
-        let unit = &mut sourced[g];
-        source(kernel, g, &p, &on, &spend, unit);
-        dispatch(kernel, g, &p, &fill, unit);
-        for d in 0..np {
+        });
+    for d in 0..np {
+        for g in 0..N_GOODS {
             let cell = d * N_GOODS + g;
-            let slots = unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
-            let alpha: f64 = slots.clone().sum();
-            let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
-            (index[cell], lead[cell]) = if alpha > 0.0 {
-                (1.0 / alpha, weighted / alpha)
-            } else {
-                (f64::INFINITY, 0.0)
+            (index[cell], lead[cell]) = match columns.get(g) {
+                Some(col) => (col.index[d], col.lead[d]),
+                None => (price[cell], 0.0),
             };
         }
     }
@@ -546,11 +580,13 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
     let price = vec![1.0; np * N_GOODS];
     let n_traded = TRADED.iter().filter(|&&t| t).count();
     let mut sourced: Vec<Sourced> = (0..n_traded).map(|_| Sourced::new()).collect();
+    let mut columns = vec![Columns::default(); n_traded];
     delivered_prices(
         &kernel,
         &price,
         &active,
         &mut sourced,
+        &mut columns,
         &mut index,
         &mut lead,
     );
@@ -862,6 +898,7 @@ impl EconWorld {
             &self.markets.price,
             &self.markets.active,
             &mut sc.sourced,
+            &mut sc.columns,
             &mut self.price_index,
             &mut sc.lead,
         );
