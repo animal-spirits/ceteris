@@ -168,7 +168,7 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
 /// (`python/ceteris/reference/uniqueness.py`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
-/// special case the SPEC states) is 0.932 at the fixture's theta and value-added shares, at most
+/// special case the SPEC states) is 0.922 at the fixture's theta and value-added shares, at most
 /// 1, so one equilibrium is presumed; `test_trade_only_is_unique` checks it on the same export.
 #[test]
 fn v1_fixture_frictionless_matches_reference() {
@@ -310,8 +310,8 @@ fn built_pack() -> Option<(ceteris_geo::pack::Pack, PathBuf)> {
 
 /// The full-pack world loads: every province has a country whose final demand shares sum to
 /// one and at least one enterprise, every enterprise has workers and a positive finite A (1
-/// without `econ_calib.arrow`), every pop belongs to a province with value added, and the
-/// inputs pass `validate`.
+/// without the calibration tables, which also bring the steady state to start from), every pop
+/// belongs to a province with value added, and the inputs pass `validate`.
 #[test]
 fn pack_inputs_load() {
     let Some((pack, dir)) = built_pack() else {
@@ -328,7 +328,8 @@ fn pack_inputs_load() {
             "province {i}: final demand shares {omega:?}"
         );
     }
-    let calibrated = dir.join("econ_calib.arrow").exists();
+    let calibrated = ceteris_econ::EconInputs::has_calibration(&dir);
+    assert_eq!(inputs.steady.is_some(), calibrated);
     let mut firms = vec![0usize; inputs.n_provinces()];
     for e in 0..inputs.n_enterprises() {
         let ent = &inputs.enterprises;

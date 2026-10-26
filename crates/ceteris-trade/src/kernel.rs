@@ -4,6 +4,10 @@
 //! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
 //! materialized: [`Kernel::origin_access_into`] evaluates the sums through gateway aggregates.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use rayon::prelude::*;
+
 use crate::goods::{N_GOODS, TRADED, tariff_group};
 use crate::network::{Leg, Network, Wedges};
 use crate::params::TradeParams;
@@ -12,6 +16,12 @@ use crate::params::TradeParams;
 const MAX_LAG: f64 = 3.0;
 /// Hours per month for transit lags.
 const HOURS_PER_MONTH: f64 = 730.0;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+fn next_id() -> u64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Rows of entries in compressed sparse row layout.
 #[derive(Clone, Debug, Default)]
@@ -44,6 +54,41 @@ impl<E> Csr<E> {
             offsets,
             entries: order.into_iter().map(|i| entry(i, &legs[i])).collect(),
         }
+    }
+}
+
+/// Entries of a [`Csr`] grouped by column, stable: the entries of column c are
+/// `pairs[offsets[c]..offsets[c + 1]]`, as (row, index into `Csr::entries`) in row order.
+#[derive(Clone, Debug, Default)]
+pub struct ByColumn {
+    pub offsets: Vec<u32>,
+    pub pairs: Vec<(u32, u32)>,
+}
+
+impl ByColumn {
+    fn new<E>(csr: &Csr<E>, col: impl Fn(&E) -> usize, n_cols: usize) -> Self {
+        let mut offsets = vec![0u32; n_cols + 1];
+        for e in &csr.entries {
+            offsets[col(e) + 1] += 1;
+        }
+        for c in 0..n_cols {
+            offsets[c + 1] += offsets[c];
+        }
+        let mut next = offsets.clone();
+        let mut pairs = vec![(0, 0); csr.entries.len()];
+        for row in 0..csr.n_rows() {
+            let lo = csr.offsets[row];
+            for (j, e) in csr.row(row).iter().enumerate() {
+                let c = col(e);
+                pairs[next[c] as usize] = (row as u32, lo + j as u32);
+                next[c] += 1;
+            }
+        }
+        Self { offsets, pairs }
+    }
+
+    pub fn column(&self, c: usize) -> &[(u32, u32)] {
+        &self.pairs[self.offsets[c] as usize..self.offsets[c + 1] as usize]
     }
 }
 
@@ -83,15 +128,23 @@ pub struct GoodKernel {
     pub crossings: Csr<Crossing>,
 }
 
+/// Fields are private so that every change goes through a method that renews `id`.
 #[derive(Clone, Debug)]
 pub struct Kernel {
-    pub n_provinces: usize,
-    pub n_gateways: usize,
+    n_provinces: usize,
+    n_gateways: usize,
     /// P01 per good as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
     /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
     /// (ADR 0018).
-    pub theta: [f64; N_GOODS],
+    theta: [f64; N_GOODS],
     goods: [Option<GoodKernel>; N_GOODS],
+    /// Crossings by destination gateway and access legs by gateway, the same for every good:
+    /// all goods share the network's legs and their order.
+    crossings_by_target: ByColumn,
+    access_by_gateway: ByColumn,
+    domestic_by_destination: ByColumn,
+    /// Unique per build and per change, so `source` can tell a kernel it has seen.
+    id: u64,
 }
 
 /// Results of the origin-side low-rank evaluation for one good, written by
@@ -135,12 +188,43 @@ impl Kernel {
         let goods = std::array::from_fn(|g| {
             TRADED[g].then(|| good_kernel(net, np, ng, g, weight[g], wedges, p))
         });
+        let first: Option<&GoodKernel> = goods.iter().flatten().next();
+        let (crossings_by_target, access_by_gateway, domestic_by_destination) =
+            first.map_or_else(Default::default, |gk| {
+                (
+                    ByColumn::new(&gk.crossings, |e| e.col as usize, ng),
+                    ByColumn::new(&gk.access, |e| e.col as usize, ng),
+                    ByColumn::new(&gk.domestic, |e| e.col as usize, np),
+                )
+            });
         Kernel {
             n_provinces: np,
             n_gateways: ng,
             theta: p.theta,
             goods,
+            crossings_by_target,
+            access_by_gateway,
+            domestic_by_destination,
+            id: next_id(),
         }
+    }
+
+    pub fn n_provinces(&self) -> usize {
+        self.n_provinces
+    }
+
+    pub fn n_gateways(&self) -> usize {
+        self.n_gateways
+    }
+
+    /// P01 of good `g`, as the kernel of `g` was built with.
+    pub fn theta(&self, g: usize) -> f64 {
+        self.theta[g]
+    }
+
+    /// Identifies this kernel's contents: kernels with the same id are equal.
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Kernel of a traded good; panics for a local good.
@@ -152,6 +236,21 @@ impl Kernel {
 
     pub fn try_good(&self, g: usize) -> Option<&GoodKernel> {
         self.goods[g].as_ref()
+    }
+
+    /// Every good's `crossings` grouped by destination gateway b: (origin gateway a, entry).
+    pub fn crossings_by_target(&self) -> &ByColumn {
+        &self.crossings_by_target
+    }
+
+    /// Every good's `access` grouped by gateway: (province, entry).
+    pub fn access_by_gateway(&self) -> &ByColumn {
+        &self.access_by_gateway
+    }
+
+    /// Every good's `domestic` legs grouped by destination: (origin, entry).
+    pub fn domestic_by_destination(&self) -> &ByColumn {
+        &self.domestic_by_destination
     }
 
     /// Origin-side low-rank evaluation into reused buffers. `weight` must be floored
@@ -171,29 +270,36 @@ impl Kernel {
                 out.v[e.col as usize] += f64::from(e.k) * w;
             }
         }
-        out.u.clear();
-        out.u.resize(self.n_gateways, 0.0);
-        for (a, &va) in out.v.iter().enumerate() {
-            for e in gk.crossings.row(a) {
-                out.u[e.col as usize] += va * f64::from(e.k);
+        // u and Phi gather what flows into each gateway and province, in the order of the
+        // rows feeding them, and run in parallel
+        let u = &mut out.u;
+        u.clear();
+        u.resize(self.n_gateways, 0.0);
+        let v = &out.v;
+        u.par_iter_mut().enumerate().for_each(|(b, u)| {
+            for &(a, j) in self.crossings_by_target.column(b) {
+                *u += v[a as usize] * f64::from(gk.crossings.entries[j as usize].k);
             }
-        }
+        });
+        let u = &out.u;
         out.pi.clear();
         out.pi.extend_from_slice(weight);
-        for (o, &w) in weight.iter().enumerate() {
-            for e in gk.domestic.row(o) {
-                out.pi[e.col as usize] += f64::from(e.k) * w;
-            }
-        }
-        for (d, phi) in out.pi.iter_mut().enumerate() {
-            let abroad: f64 = gk
-                .access
-                .row(d)
-                .iter()
-                .map(|e| f64::from(e.k) * out.u[e.col as usize])
-                .sum();
-            *phi += abroad;
-        }
+        out.pi
+            .par_iter_mut()
+            .enumerate()
+            .with_min_len(64)
+            .for_each(|(d, phi)| {
+                for &(o, j) in self.domestic_by_destination.column(d) {
+                    *phi += f64::from(gk.domestic.entries[j as usize].k) * weight[o as usize];
+                }
+                let abroad: f64 = gk
+                    .access
+                    .row(d)
+                    .iter()
+                    .map(|e| f64::from(e.k) * u[e.col as usize])
+                    .sum();
+                *phi += abroad;
+            });
     }
 }
 
@@ -203,6 +309,7 @@ impl Kernel {
     /// tests (lags 0) and stability studies (the longest lag).
     pub fn set_crossing_lags(&mut self, lag: u8) {
         assert!(f64::from(lag) <= MAX_LAG, "lag {lag} above {MAX_LAG}");
+        self.id = next_id();
         for gk in self.goods.iter_mut().flatten() {
             gk.crossings.entries.iter_mut().for_each(|e| e.lag = lag);
         }
@@ -444,7 +551,7 @@ mod tests {
         let mut wedges = Wedges::none(2);
         wedges.tariff.iter_mut().for_each(|t| *t = 0.2);
         let k = Kernel::build(&net, &W, &wedges, &p);
-        assert_eq!((k.theta[0], k.theta[4]), (2.0, 8.0));
+        assert_eq!((k.theta(0), k.theta(4)), (2.0, 8.0));
         let nu = 1.0 + p.border_nu;
         for g in [0, 4] {
             let gk = k.good(g);

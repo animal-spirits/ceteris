@@ -274,8 +274,8 @@ P04 = Transport()
 # P43 time cost of transit lambda_g per day, the starts of `TradeParams::default()` (trade SPEC), traded goods.
 TIME_COST = (0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010)
 # P01 classes of `TradeParams::default()` (ADR 0023) and their current values.
-CLASSES = ((3,), (4, 6), (0, 1, 2, 5))
-THETA_DEFAULT = (2.62, 5.88, 12.55)
+CLASSES = ((3,), (6,), (0, 1, 2, 4, 5))
+THETA_DEFAULT = (2.62, 5.19, 10.57)
 BORDER_DEFAULT = 0.3  # P05 start
 TARIFF_GROUP = (0, 0, 0, 0, 1, 1, 1)  # ceteris_trade::goods::tariff_group: primary, manufactured
 N_TRADED = 7
@@ -474,15 +474,15 @@ def _pack_index(codes, iso) -> dict[str, int]:
     return index
 
 
-def baci_flows(baci_2000, hs_isic, isic_bridge, codes, iso) -> np.ndarray:
-    """2000 BACI trade by (exporter, importer, traded good) of the pack countries, USD; HS lines split over
-    goods by the Task 13 concordance (`goods.hs_goods_shares`)."""
+def baci_flows(baci_2000, hs_key, codes, iso) -> np.ndarray:
+    """2000 BACI trade by (exporter, importer, traded good) of the pack countries, USD; HS lines assigned to
+    goods by the OECD HS to CPA key (`goods.hs_goods_shares`)."""
     import pyarrow as pa
     import pyarrow.csv as pacsv
 
     from ..packs.econ import goods
 
-    shares = goods.hs_goods_shares(goods.read_hs_isic3(hs_isic), goods.read_bridge(isic_bridge))
+    shares = goods.hs_goods_shares(goods.read_hs_cpa(hs_key))
     hs = np.array(sorted(int(k) for k in shares))
     share = np.zeros((len(hs) + 1, N_TRADED))  # last row: lines outside the concordance
     for i, k in enumerate(hs):
@@ -728,7 +728,7 @@ def samples(pack, cache) -> tuple[Sample, Sample, dict]:
     codes = read("countries.arrow").column("code").to_pylist()
     iso, _ = people.read_codes(cache / downscale.ADMIN0)
     nc = len(codes)
-    flows = baci_flows(cache / econ_build.BACI, cache / econ_build.HS_ISIC, cache / econ_build.ISIC_BRIDGE, codes, iso)
+    flows = baci_flows(cache / econ_build.BACI, cache / econ_build.HS_KEY, codes, iso)
     domestic = icio_domestic(cache / econ_build.ICIO, codes, iso, read("econ_countries.arrow").column("va_basis").to_pylist())
     t = read("econ_tariffs.arrow")
     rate = np.zeros((nc, nc, 2))

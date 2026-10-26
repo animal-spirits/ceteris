@@ -11,6 +11,11 @@ from .io import Inputs
 from .model import Equilibrium
 
 MAX_NEWTON = 200
+# Krylov vectors of each Newton step's LGMRES cycle. scipy's KrylovJacobian runs LGMRES for one
+# cycle (it forces maxiter=1 and ignores inner_maxiter), whose size is LGMRES's inner_m (default
+# 30), so the size is set there.
+INNER_M = 100
+OUTER_K = 10
 # Largest change of any ln p or ln w in one Newton step. Full steps from the data state overshoot
 # into regions where whole sectors shut down and the Jacobian loses rank.
 STEP_CAP = 0.3
@@ -26,6 +31,11 @@ def _check(deadline: float | None, what: str) -> None:
         raise NoConvergence(f"{what}: wall-clock budget spent")
 
 
+def krylov_jacobian() -> KrylovJacobian:
+    """The Newton steps' Jacobian: LGMRES with INNER_M Krylov vectors per step."""
+    return KrylovJacobian(method="lgmres", inner_inner_m=INNER_M, outer_k=OUTER_K)
+
+
 def newton(inp: Inputs, x0: np.ndarray, tol: float, progress=None, deadline=None) -> tuple[np.ndarray, int]:
     """Newton-Krylov (scipy's KrylovJacobian, LGMRES on finite-difference products) with steps
     capped at STEP_CAP; raises NoConvergence. `progress(line)` gets one line per step; past the
@@ -36,7 +46,7 @@ def newton(inp: Inputs, x0: np.ndarray, tol: float, progress=None, deadline=None
 
     x = x0.copy()
     fx = f(x)
-    jac = KrylovJacobian(method="lgmres", inner_maxiter=100, outer_k=10)
+    jac = krylov_jacobian()
     jac.setup(x.copy(), fx, f)
     for steps in range(MAX_NEWTON):
         norm = np.abs(fx).max()

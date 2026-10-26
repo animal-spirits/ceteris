@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 6)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 8)."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,14 +10,15 @@ from pyarrow import ipc
 
 from . import demand
 
-EXPORT_FORMAT = "6"
+EXPORT_FORMAT = "8"
 
 
 @dataclass(frozen=True)
 class Entries:
     """Kernel legs of all traded goods. Domestic: row origin, col destination province. Access:
     row province, col gateway (origin access read forward, destination access backward).
-    Crossing: row and col gateways; `border_tau` and `tariff` are set for crossings only."""
+    Crossing: row and col gateways; `border_tau`, `tariff` and `lag` (transit months) are set for
+    crossings only."""
 
     good: np.ndarray
     row: np.ndarray
@@ -26,6 +27,7 @@ class Entries:
     tau: np.ndarray
     border_tau: np.ndarray | None = None
     tariff: np.ndarray | None = None
+    lag: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -42,8 +44,10 @@ class Inputs:
     labour_supply: np.ndarray  # (P,) effective units, sum_k e_k LF_k
     population: np.ndarray  # (P,) sum of the province's pops, rebate weights
     w0: np.ndarray  # (P,)
+    base_price: np.ndarray  # (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable)
     s_l: np.ndarray  # (C,)
-    unemployment: np.ndarray  # (C,)
+    unemployment: np.ndarray  # (C,) 2000 rate (data)
+    u_star: np.ndarray  # (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s
     gini: np.ndarray  # (C,)
     omega: np.ndarray  # (C, G)
     io: np.ndarray  # (C, G, G), io[c, k, g] = a_kg
@@ -60,7 +64,14 @@ class Inputs:
     access: Entries
     crossing: Entries
     ent_va_target: np.ndarray | None = None  # (E,) value added the calibration matches
+    coverage: np.ndarray | None = None  # (G,) P02 merchant stock target in months of orders
+    pop_edu: np.ndarray | None = None  # (K,) education level
     static_digest: str = field(default="")
+    # A calibrated steady state (`calibrate.reference_inputs`) replaces the base column, its a_VA and
+    # the PIGL weights inverted at prices 1.
+    calibrated_coef: np.ndarray | None = None  # (E, G)
+    calibrated_a_va: np.ndarray | None = None  # (E,)
+    calibrated_weights: demand.Weights | None = None
 
     @property
     def n_provinces(self) -> int:
@@ -84,12 +95,25 @@ class Inputs:
 
     @cached_property
     def ent_inputs(self) -> np.ndarray:
-        """(E, G): a_kg of each enterprise's sector, by input k."""
-        return self.io[self.ent_country, :, self.ent_good]
+        """(E, G): physical input coefficients, as `EconInputs::base_column`: the sector's ICIO
+        cost share a_kg over the base delivered price of k at the enterprise's province, 0 where
+        the sector does not use k."""
+        if self.calibrated_coef is not None:
+            return self.calibrated_coef
+        a = self.io[self.ent_country, :, self.ent_good]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(a > 0, a / self.base_price[self.ent_province], 0.0)
 
     @cached_property
     def ent_a_va(self) -> np.ndarray:
-        return 1.0 - self.ent_inputs.sum(axis=1)
+        """1 - sum_k coef_k q_k at base prices, as `EconInputs::base_a_va` (1 - sum_k a_kg)."""
+        if self.calibrated_a_va is not None:
+            return self.calibrated_a_va
+        coef = self.ent_inputs
+        cost = np.zeros(len(coef))
+        for k in range(coef.shape[1]):  # summed in Rust's order
+            cost += np.where(coef[:, k] > 0, coef[:, k] * self.base_price[self.ent_province, k], 0.0)
+        return 1.0 - cost
 
     @cached_property
     def ent_s_l(self) -> np.ndarray:
@@ -106,12 +130,22 @@ class Inputs:
         return np.flatnonzero(self.active.ravel())
 
     @cached_property
+    def employed_supply(self) -> np.ndarray:
+        """(P,) effective labour employed at the natural rate, (1 - u*) L^s: the frictionless
+        wage clears labour there (ADR 0089, as Rust's E1)."""
+        return (1.0 - self.u_star[self.province_country]) * self.labour_supply
+
+    @cached_property
     def base_income(self) -> np.ndarray:
-        """Household income per province in the data state, as the Rust world mints and pays it:
-        w0 (1 - u) L^s wages plus the profit pool sum (1 - s_L) VA0."""
-        u = self.unemployment[self.province_country]
-        pool = np.bincount(self.ent_province, (1.0 - self.ent_s_l) * self.ent_va0, self.n_provinces)
-        return self.w0 * (1.0 - u) * self.labour_supply + pool
+        """Household income per province at the base point, rebates aside: w0 (1 - u*) L^s wages
+        plus the province's population share of its country's profit pool sum (1 - s_L) VA0
+        (national ownership, owner 2026-10-25), as `world::base_income`."""
+        c = self.province_country
+        u = self.u_star[c]
+        pool = np.bincount(c[self.ent_province], (1.0 - self.ent_s_l) * self.ent_va0, self.n_countries)
+        people = np.bincount(c, self.population, self.n_countries)
+        share = np.divide(self.population, people[c], out=np.zeros(self.n_provinces), where=people[c] > 0)
+        return self.w0 * (1.0 - u) * self.labour_supply + share * pool[c]
 
     @cached_property
     def base_spend(self) -> np.ndarray:
@@ -130,6 +164,8 @@ class Inputs:
     @cached_property
     def pigl_weights(self) -> demand.Weights:
         """PIGL weights per country, as `world::household_preferences`."""
+        if self.calibrated_weights is not None:
+            return self.calibrated_weights
         return demand.invert(self.omega, self.base_spend, self.sigma_income, self.category, self.pigl)
 
     @cached_property
@@ -160,7 +196,11 @@ def _table(path: Path) -> dict[str, np.ndarray]:
 
 
 def _entries(t: dict[str, np.ndarray], row: str, col: str, crossing: bool = False) -> Entries:
-    extra = {"border_tau": t["border_tau"].astype(np.float64), "tariff": t["tariff"].astype(np.float64)} if crossing else {}
+    extra = (
+        {"border_tau": t["border_tau"].astype(np.float64), "tariff": t["tariff"].astype(np.float64), "lag": t["lag"].astype(np.int64)}
+        if crossing
+        else {}
+    )
     return Entries(
         good=t["good"].astype(np.int64),
         row=t[row].astype(np.int64),
@@ -211,8 +251,10 @@ def load(directory: Path | str) -> Inputs:
         labour_supply=np.bincount(pop_province, edu_eff[pops["edu"]] * pops["labour_force"], n_p),
         population=np.bincount(pop_province, pops["population"], n_p),
         w0=provinces["w0"].astype(np.float64),
+        base_price=np.stack([provinces[f"base_price_{g}"] for g in range(n_goods)], axis=1).astype(np.float64),
         s_l=countries["s_l"],
         unemployment=countries["unemployment"],
+        u_star=countries["u_star"],
         gini=countries["gini"],
         omega=np.stack([countries[f"omega_{g}"] for g in range(n_goods)], axis=1),
         io=a,
@@ -229,6 +271,8 @@ def load(directory: Path | str) -> Inputs:
         access=_entries(_table(d / "kernel_access.arrow"), "province", "gateway"),
         crossing=_entries(_table(d / "kernel_crossing.arrow"), "a", "b", crossing=True),
         ent_va_target=ent["va_target"].astype(np.float64),
+        coverage=goods["coverage"].astype(np.float64),
+        pop_edu=pops["edu"].astype(np.int64),
         static_digest=params["static_digest"],
     )
     validate(inp)

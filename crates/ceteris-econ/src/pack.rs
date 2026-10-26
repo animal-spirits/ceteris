@@ -10,7 +10,7 @@ use std::path::Path;
 
 use ceteris_geo::pack::{Pack, PackError, f64s, read_table, strings, u8s, u32s};
 use ceteris_geo::paths::{Tree, shortest};
-use ceteris_trade::{Leg, N_GOODS, Network, Wedges};
+use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
 use rayon::prelude::*;
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
@@ -21,6 +21,32 @@ const VA_TO_MONTHLY: f64 = 1e6 / 12.0;
 
 fn err(msg: impl Into<String>) -> PackError {
     PackError(msg.into())
+}
+
+/// Every country with enterprises has people to own them: national ownership divides its
+/// profit pool by the population of its pops (`EconWorld::new`).
+fn check_owners(
+    codes: &[String],
+    provinces: &ProvinceData,
+    pops: &PopData,
+    ent: &EntData,
+) -> Result<(), PackError> {
+    let mut people = vec![0.0; codes.len()];
+    for (&i, &n) in pops.province.iter().zip(&pops.population) {
+        people[usize::from(provinces.country[i as usize])] += n;
+    }
+    match ent
+        .province
+        .iter()
+        .map(|&i| usize::from(provinces.country[i as usize]))
+        .find(|&c| people[c] <= 0.0)
+    {
+        Some(c) => Err(err(format!(
+            "country {} has enterprises but no population to own them",
+            codes[c]
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// Gateways of the pack (`gateways.arrow`): graph node and country of each, and its kind
@@ -77,12 +103,24 @@ fn per_good(
 }
 
 impl EconInputs {
-    /// Loads the P2 world from the econ tables of a pack in `dir` and its transport graph.
-    /// Leg costs are least-cost paths ([`EconInputs::network_from_graph`]); productivity A
-    /// comes from `econ_calib.arrow` (columns province, the pack province, good and a) when
-    /// present, else 1. The base point is filled with the default education efficiencies
-    /// (`EconParams::default().edu_eff`), coefficients with one vintage.
+    /// Loads the P2 world from the econ tables of a pack in `dir` and its transport graph,
+    /// [`EconInputs::from_pack_data`], calibrated by the tables of ADR 0089 when the pack
+    /// holds them ([`EconInputs::calibrate`]): a world from these inputs starts from the
+    /// calibrated steady state.
     pub fn from_pack(pack: &Pack, dir: &Path) -> Result<EconInputs, PackError> {
+        let mut inputs = EconInputs::from_pack_data(pack, dir)?;
+        if EconInputs::has_calibration(dir) {
+            inputs.calibrate(dir)?;
+        }
+        Ok(inputs)
+    }
+
+    /// The uncalibrated P2 world of a pack, the data state, which the calibration starts from
+    /// and `ceteris export` writes. Leg costs are least-cost paths
+    /// ([`EconInputs::network_from_graph`]); A is 1. The base point is filled with the default
+    /// education efficiencies (`EconParams::default().edu_eff`) at the natural rate u*, base
+    /// prices under the default trade parameters, coefficients with one vintage.
+    pub fn from_pack_data(pack: &Pack, dir: &Path) -> Result<EconInputs, PackError> {
         let table = |name: &str| read_table(&dir.join(name));
         let c = table("econ_countries.arrow")?;
         let codes = strings(&c, "code")?;
@@ -105,7 +143,9 @@ impl EconInputs {
                 .collect(),
             s_l: f64s(&c, "labour_share")?,
             unemployment: f64s(&c, "unemployment")?,
+            u_star: f64s(&c, "u_star")?,
             gini: f64s(&c, "gini")?,
+            pigl: None,
         };
 
         let goods = table("econ_goods.arrow")?;
@@ -177,7 +217,6 @@ impl EconInputs {
                 pop_data.labour_force.push(labour_force[k]);
             }
         }
-        let calib = calibration(dir)?;
         let mut ent = EntData::default();
         for (i, &node) in provinces.pack.iter().enumerate() {
             for (g, &v) in va[node as usize].iter().enumerate() {
@@ -185,14 +224,14 @@ impl EconInputs {
                     let va0 = v * VA_TO_MONTHLY;
                     ent.province.push(i as u32);
                     ent.good.push(g as u8);
-                    ent.a
-                        .push(calib.as_ref().map_or(Ok(1.0), |c| c.a(node, g))?);
+                    ent.a.push(1.0);
                     ent.va0.push(va0);
                     ent.va_target.push(va0);
                 }
             }
         }
 
+        check_owners(&codes, &provinces, &pop_data, &ent)?;
         let mut inputs = EconInputs {
             network: Network {
                 province_country: provinces.country.clone(),
@@ -204,10 +243,12 @@ impl EconInputs {
             provinces,
             pops: pop_data,
             enterprises: ent,
+            steady: None,
         };
+        inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
+        inputs.set_base_prices(&TradeParams::default());
         inputs.set_coefficients();
         inputs.set_base_point(&EconParams::default().edu_eff);
-        inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
         Ok(inputs)
     }
 
@@ -288,38 +329,6 @@ impl EconInputs {
     }
 }
 
-/// Productivity A by (pack province, good) from `econ_calib.arrow`.
-struct Calibration {
-    key: Vec<(u32, u8)>,
-    a: Vec<f64>,
-}
-
-impl Calibration {
-    fn a(&self, province: u32, good: usize) -> Result<f64, PackError> {
-        self.key
-            .binary_search(&(province, good as u8))
-            .map(|r| self.a[r])
-            .map_err(|_| {
-                err(format!(
-                    "econ_calib has no A for province {province} good {good}"
-                ))
-            })
-    }
-}
-
-fn calibration(dir: &Path) -> Result<Option<Calibration>, PackError> {
-    let path = dir.join("econ_calib.arrow");
-    if !path.exists() {
-        return Ok(None);
-    }
-    let t = read_table(&path)?;
-    let (province, good, a) = (u32s(&t, "province")?, u8s(&t, "good")?, f64s(&t, "a")?);
-    let mut rows: Vec<((u32, u8), f64)> = province.into_iter().zip(good).zip(a).collect();
-    rows.sort_by_key(|r| r.0);
-    let (key, a) = rows.into_iter().unzip();
-    Ok(Some(Calibration { key, a }))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +405,30 @@ mod tests {
             node: vec![4, 5],
             country: vec![0, 1],
             kind: vec![0, 0],
+        }
+    }
+
+    #[test]
+    fn country_with_enterprises_needs_population() {
+        let codes = ["A".to_owned(), "B".to_owned()];
+        let provinces = ProvinceData {
+            country: vec![0, 1],
+            ..ProvinceData::default()
+        };
+        let ent = EntData {
+            province: vec![0, 1],
+            ..EntData::default()
+        };
+        let pops = |population: [f64; 2]| PopData {
+            province: vec![0, 1],
+            population: population.to_vec(),
+            ..PopData::default()
+        };
+        assert!(check_owners(&codes, &provinces, &pops([1.0, 2.0]), &ent).is_ok());
+        for none in [[1.0, 0.0], [0.0, 2.0]] {
+            let e = check_owners(&codes, &provinces, &pops(none), &ent).unwrap_err();
+            let owner = if none[0] == 0.0 { "A" } else { "B" };
+            assert!(e.to_string().contains(&format!("country {owner} ")), "{e}");
         }
     }
 

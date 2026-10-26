@@ -44,7 +44,7 @@ runs on the pack.
   Online Appendix A.3 (Eaton-Kortum with intermediates and quasi-symmetric costs) good by good, at
   theta_g and the good's smallest value-added share, and takes the largest radius; the SPEC lists
   what this leaves out. P2 has no agglomeration (A5 off) and no migration; the function raises for
-  either until a phase that adds one derives its matrix. At the P2 defaults the bound is 0.932, so
+  either until a phase that adds one derives its matrix. At the P2 defaults the bound is 0.922 (0.932 at the first thetas, before the OECD key, ADR 0023), so
   V1 runs in tolerance mode. It runs before V1 in `python/tests/test_p2_gate.py` (PLAN Task 20);
   its tests are in `python/tests/test_reference.py`.
 - V1 already compares steady states with the custom static GE (the reference model).
@@ -76,7 +76,7 @@ VA; the Python legs equal the `ceteris export` crossing legs to 4.4e-16
 (`test_s05_costs_match_the_rust_crossing_legs`). Domestic flows for P05: 2000 ICIO output less exports
 for the 80 ICIO economies (44,800 rows). Fixed effects exporter x good and importer x good.
 
-**Estimates** (default in brackets):
+**Estimates** (default in brackets; classes and defaults as of the estimate, 2026-10-24):
 
 | Parameter | Estimate (s.e.) | N | pseudo-R2 | Default |
 |---|---|---|---|---|
@@ -87,6 +87,9 @@ for the 80 ICIO economies (44,800 rows). Fixed effects exporter x good and impor
 | P04 rail / road | 52.6 (24.1) | 301,351 | 0.866 | 0.4 |
 | P04 sea / road | 115.3 (46.3) | 301,351 | 0.866 | 0.08 |
 | P04 air / road | -2.39 (34.4) | 301,351 | 0.866 | 8 |
+
+Since the OECD key (ADR 0023 amendment, 2026-10-25) the P01 defaults are 2.62 for food, 5.19 for good 6
+and 10.57 for goods 0, 1, 2, 4 and 5. The estimates were made on the first partition and were not rerun.
 
 theta is minus the coefficient on ln(1 + tariff), with ln tau (S05) as a free control. P05 pools the
 classes' ln(1 + nu_c) = b_c / beta_c (border and tariff coefficients of one fit; class nu 0.388, 0.158,
@@ -108,7 +111,7 @@ tau = 1 + c w is negligible, so ln tau becomes ln of cost-weighted km and its co
 ratio has no support. A linear km form keeps the ordering (rail 0.12, sea 0.09, air 3.8) but is imprecise.
 
 **Owner decision (2026-10-24).** P2 keeps the literature values: Caliendo-Parro class thetas 12.55, 5.88,
-2.62 (ADR 0023), P05 0.3 and the geo SPEC P04 mode costs. The estimates are a recorded diagnostic; no
+2.62 (ADR 0023; 10.57, 5.19, 2.62 since the OECD key), P05 0.3 and the geo SPEC P04 mode costs. The estimates are a recorded diagnostic; no
 default, pack table or model input changes, and `--write` writes nothing while a stop rule fires.
 Productivity calibration (PLAN Task 18 Steps 2 to 5) runs at the literature values. Joint estimation of
 P01, P05 and P04 is revisited in P9 with richer tariff data (line-level applied and preferential rates).
@@ -116,6 +119,15 @@ P01, P05 and P04 is revisited in P9 with richer tariff data (line-level applied 
 **Risk for H2 (PLAN Task 20).** The 2000 data prefer log distance to the S05 iceberg form. Simulated
 flows under S05 iceberg costs may therefore give a distance elasticity outside H2's -0.7 to -1.1, or a
 tariff-based theta off its class value, for reasons of functional form rather than code.
+
+**Amendment (2026-10-25, ADR 0050).** The sample's split of BACI lines over goods changed after these
+estimates: the WITS and UNSD concordance gave way to the OECD BTiGE HS to CPA key, adapted locally
+(gold to basic metals, books and recorded media to printing). Every line now lies in one good and all
+2000 BACI lines are mapped. Traded value by good moves most for light manufacturing (1,563 to 952
+billion USD), chemicals, refined fuels and metals (1,276 to 1,586) and machinery, electronics and
+vehicles (2,421 to 2,891); the rest move by less than 10%. The ADR 0023 rule regroups the goods (light
+manufacturing joins agriculture, mining and chemicals in the top class). The estimates above are
+pending a re-run on the new sample and classes; the owner decision stands.
 
 ## Consequences
 

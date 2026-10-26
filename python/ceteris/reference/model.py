@@ -1,6 +1,7 @@
 """Steady state of the P2 tick pipeline with frictions off (`specs/econ/SPEC.md`, GE reference
 model). Mirrors `ceteris-trade` `source` and `dispatch` (ADRs 0015 and 0016) and `ceteris-econ` E1
-to E4 at a fixed point: frictionless wage (full employment), every origin market selling its
+to E4 at a fixed point: frictionless wage (employment at the natural rate, (1 - u*) L^s, ADR
+0089), every origin market selling its
 output (orders = Q), every local market clearing, input stocks never binding (orders replace use),
 pops spending their whole income. Expected inflation (ADR 0019) is zero at a steady state, since
 the world price index is constant there, so the price and wage rules' pi^e term leaves this
@@ -16,9 +17,9 @@ p_o per unit, the importer's rebate account t p_o.
 Unknowns x: ln p of every active (province, good) cell in row-major order (origin markets of
 traded goods, province markets of local goods), then ln w per province. Equations: excess demand
 of every active market, ln(D / Q) (with a floor far below market size), D the orders placed at an
-origin or the demand at a local market, and of every labour market, (sum L* - L^s) / L^s. Market
-cash flow is zero at a fixed point and left out, and households are paid w L^s (full employment),
-so Walras' law reads sum p (D - Q) + sum w (L* - L^s) = 0 identically; the labour equation of the
+origin or the demand at a local market, and of every labour market, (sum L* - N) / N with N =
+(1 - u*) L^s employed at the natural rate. Market cash flow is zero at a fixed point and left out,
+and households are paid w N, so Walras' law reads sum p (D - Q) + sum w (L* - N) = 0 identically; the labour equation of the
 province with the largest base wage bill is replaced by ln(world price index) = 0, the index
 weighting consumer prices (q_d for traded goods, the local price for local goods) and leaving out
 cells with no reachable origin (q_d infinite), as `EconWorld::world_price_index`.
@@ -263,15 +264,17 @@ def evaluate(x: np.ndarray, inp: Inputs, a: np.ndarray | None = None) -> dict:
 
     # E3, households: PIGL per pop (ADR 0021) at its province's consumer prices and its mean income
     # per person. E4: a pop earns its effective-labour share e_k LF_k / L^s of its province's wages
-    # w L^s and profits, and its population share of its country's rebate, the tariff share of
-    # spending; rebates depend on household spending, so income is a fixed point.
+    # w (1 - u*) L^s, and its population share of its country's profits (national ownership, owner
+    # 2026-10-25) and of its country's rebate, the tariff share of spending; rebates depend on
+    # household spending, so income is a fixed point.
     duty_share = _flows(inp, price, np.ones((n_p, n_g)), src)["tariff"]  # tariff per unit spent
     c = inp.province_country
     kp = inp.pop_province
     kc = c[kp]
     people = inp.pop_population
     country_people = np.bincount(kc, people, inp.n_countries)
-    earned = inp.pop_effective / inp.labour_supply[kp] * (wage * inp.labour_supply + _sum(ep, profit, n_p))[kp]
+    country_profit = np.bincount(c[ep], profit, inp.n_countries)
+    earned = inp.pop_effective / inp.labour_supply[kp] * (wage * inp.employed_supply)[kp] + people / country_people[kc] * country_profit[kc]
     from_inputs = np.bincount(c, (duty_share * spend_int).sum(axis=1), inp.n_countries)
     prices_k = consumer[kp]
     sigma_k = inp.sigma_income[kc]
@@ -324,7 +327,7 @@ def _excess(s: dict, inp: Inputs) -> np.ndarray:
     cells = inp.active_cells
     eps = MARKET_FLOOR * (inp.base_demand + inp.base_output).ravel()[cells]
     goods = np.log((s["demand"].ravel()[cells] + eps) / (s["q"].ravel()[cells] + eps))
-    labour = (s["labour_demand"] - inp.labour_supply) / inp.labour_supply
+    labour = (s["labour_demand"] - inp.employed_supply) / inp.employed_supply
     return np.concatenate([goods, labour])
 
 

@@ -4,14 +4,16 @@ use crate::goods::N_GOODS;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
-    /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.62 to 12.55, the
-    /// range of the class values (ADR 0018). Each traded good carries its class's theta
-    /// (ADR 0023): Caliendo and Parro (2015, Table 1, 99% sample) sector estimates averaged
-    /// over the HS lines of the good with BACI 2000 trade weights (`ceteris.packs.econ.theta`):
-    /// agriculture 9.11, crude oil and gas 13.53, coal and other mining 13.53, food 2.62, light
-    /// manufacturing 6.73, chemicals, refined fuels and metals 12.64, machinery, electronics and
-    /// vehicles 5.33; grouped into 3 classes within a factor 1.5, each at the trade-weighted
-    /// mean of its goods, to two decimals.
+    /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.62 to 10.57, the
+    /// range of the class values (ADR 0018). Each traded good carries its class's theta, derived
+    /// by the ADR 0023 rule from the OECD concordance (`ceteris.packs.econ.theta`): Caliendo and
+    /// Parro (2015, Table 1, 99% sample) sector estimates averaged over the HS lines of the good
+    /// with BACI 2000 trade weights: agriculture 9.11, crude oil and gas 13.53, coal and other
+    /// mining 13.53, food 2.62, light manufacturing 9.15, chemicals, refined fuels and metals
+    /// 10.57, machinery, electronics and vehicles 5.19; grouped into 3 classes within a factor
+    /// 1.5, each at the trade-weighted mean of its goods, to two decimals. The Python test
+    /// `test_rust_theta_defaults_follow_the_estimator` keeps these and `theta_class` equal to the
+    /// estimator's output.
     pub theta: [f64; N_GOODS],
     /// P01 theta class of each good (ADR 0023), 0 for the lowest theta; local goods 0
     /// (unused). Kernels stay per good, since weight classes are goods in P2 (ADR 0018); the
@@ -23,11 +25,12 @@ pub struct TradeParams {
     /// from 0.05 by owner decision, 2026-10-24, for stability), default 0.05 (owner decision,
     /// 2026-10-24, MIGRATION Task 6: at 0.02 the expectation loop of ADR 0019 breaks V1 for
     /// every gain in the P45 prior). The derived stability region (`specs/trade/SPEC.md`,
-    /// Stability region) bounds it at 0.124 to 0.145 for the theta-12.55 goods, 0.230 to 0.278
-    /// at theta 5.88 and 0.368 to 0.507 for food. Growth factor per tick of a small deviation
+    /// Stability region) bounds it at 0.141 to 0.169 for the theta-10.57 goods, 0.250 to 0.307
+    /// at theta 5.19 and 0.368 to 0.508 for food. Growth factor per tick of a small deviation
     /// from the fixture's GE equilibrium between ticks 300 and 600 at the per-good thetas,
-    /// kappa2 = 0 (frictionless / default): at the defaults (pi^e gain 0.006) 0.99644 /
-    /// 0.99676 on the blessed fixture (after MIGRATION Task 8; 0.9963 / 0.9969 at Task 6);
+    /// kappa2 = 0 (frictionless / default): at the defaults (pi^e gain 0.006) 0.99597 /
+    /// 0.99636 on the blessed fixture (after the theta task; 0.99644 / 0.99676 at MIGRATION
+    /// Task 8 and 0.9963 / 0.9969 at Task 6, at the previous thetas);
     /// measured at MIGRATION Task 6, with pi^e = 0, kappa1 0.02: 0.9954 / 0.9954; 0.05:
     /// 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756; 0.2: 1.0000 / 1.0000 (oscillates), the same with
     /// every crossing lag at 3 months (the full pack's cap).
@@ -66,8 +69,8 @@ pub struct TradeParams {
 impl Default for TradeParams {
     fn default() -> Self {
         Self {
-            theta: [12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88, 0.0, 0.0, 0.0],
-            theta_class: [2, 2, 2, 0, 1, 2, 1, 0, 0, 0],
+            theta: [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0],
+            theta_class: [2, 2, 2, 0, 2, 2, 1, 0, 0, 0],
             coverage: [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.05,
             kappa2: 0.0,

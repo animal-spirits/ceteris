@@ -1,6 +1,6 @@
 {
-  "format": "6",
-  "static_digest": "da51121c1c9cc59697dbe41c790fd2b49fcc786abd9256cd2395cb769ced8f98",
+  "format": "8",
+  "static_digest": "c2022dbbd05bb7ed18d6cc3655350a00a60262c60ccdf8df65fbfba97a31c46c",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "weight_floor": 1e-100,
@@ -45,8 +45,8 @@
     "technology": "putty_clay"
   },
   "trade": {
-    "theta": [12.55, 12.55, 12.55, 2.62, 5.88, 12.55, 5.88, 0.0, 0.0, 0.0],
-    "theta_class": [2, 2, 2, 0, 1, 2, 1, 0, 0, 0],
+    "theta": [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0],
+    "theta_class": [2, 2, 2, 0, 2, 2, 1, 0, 0, 0],
     "coverage": [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
     "kappa1": 0.05,
     "kappa2": 0.0,

@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+### BEHAVIOUR: runs start from the ADR 0089 calibrated steady state (Task 18e)
+
+- The data state is the steady state. A world whose inputs carry the calibration tables of
+  `python -m ceteris.reference calibrate` (`EconInputs::calibrate`; `EconInputs::from_pack` when the
+  pack holds them) reads A, VA0, L0, a_VA, the coefficients (both S09 settings), w0 and the PIGL
+  weights from them and starts from their steady state: posted prices, the last D, Q and sales,
+  merchant and input stocks, the pipeline and pop money. The loader checks `calibration_format` 3
+  and the static digest of the uncalibrated inputs. `ceteris export --pack` writes the
+  uncalibrated world (`from_pack_data`); `ceteris run --pack` starts calibrated.
+- Natural-rate wage wedge: dlnw = clip(pi^e + kappa_w (x + u*), -c_max, c_max), the frictionless
+  wage clears (1 - u*) L^s, and the base point and initial employment use u*
+  (`econ_countries.u_star`; a generated world takes its 2000 rate). The GE reference clears labour
+  at (1 - u*) L^s too.
+- National profit ownership (owner, 2026-10-25): at E4 enterprises and province markets pay
+  their cash flow into one profit pool per country, paid to its pops by population share. The
+  rounding is cumulative shares, half to even, so the split is exact in minor units.
+- Export format 8: `countries.u_star`.
+- 2000 pack: the calibration tables are installed into `data/packs/2000`, and their sha256 joins
+  `tests/golden/p2-pack.txt`.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash, because of the profit pool accounts, national dividends
+  and the wedge.
+- `tests/golden/p2-fixture`: format 8, and the reference re-solved at the natural rate under
+  national ownership.
+- `tests/golden/p2-fixture/calibration`: new.
+- `tests/golden/p2-pack.txt`: the six calibration tables' sha256.
+
+Fixed point over 120 ticks with every friction on:
+
+- Fixture: largest relative drift 5.7e-11 (pop money), inside 1e-9.
+- Full pack: limited by integer money (1e-4 USD) and carried through each country by national
+  dividends and domestic trade (ADR 0089 As built). The test holds:
+  - real quantities to 2e-6 relative;
+  - money to 2e-6 relative or 4 minor units;
+  - world aggregates to 1e-9;
+  - bounded drift.
+- Full-pack maxima: price 1.9e-7, employment 5.1e-7, pop income 155 minor units (5.2e-9
+  relative), world price index 5.4e-15. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6,
+  flow units 5.3e-6, flow value 5.4e-6. Decay per tick is 0.99505 frictionless and 0.99564 in the
+  default mode.
+
+### BEHAVIOUR: trade elasticities follow the OECD key (ADR 0023 amendment)
+
+`TradeParams::default()` moves from the classes of the WITS and UNSD route to those the ADR 0023 rule
+draws from the OECD BTiGE key with the gold and books adaptations (owner decision, 2026-10-25):
+
+| Good | theta before | theta now |
+|---|---|---|
+| 0 Agriculture, 1 Crude oil and gas, 2 Coal and other mining | 12.55 | 10.57 |
+| 3 Food | 2.62 | 2.62 |
+| 4 Light manufacturing | 5.88 | 10.57 |
+| 5 Chemicals, refined fuels, metals | 12.55 | 10.57 |
+| 6 Machinery, electronics, vehicles | 5.88 | 5.19 |
+
+The class map is [2, 2, 2, 0, 2, 2, 1] (was [2, 2, 2, 0, 1, 2, 1]); the P01 prior is 2.62 to 10.57.
+`python/tests/test_econ_pack.py::test_rust_theta_defaults_follow_the_estimator` ties the fixture export
+of the defaults and `ceteris.calibrate.gravity.CLASSES` and `THETA_DEFAULT` to the estimator.
+
+Effects:
+
+- Re-blessed `tests/golden/p2-econ.txt` (state hashes of the 1200-tick fixture run) and the fixture
+  export `tests/golden/p2-fixture` (`goods`, `params.json`, the three kernels and `provinces`, whose
+  base prices and kernels depend on theta) with its GE reference, because every traded good except
+  food moved.
+- Stability region of the price rule (`specs/trade/SPEC.md`): kappa1 limits rise to 0.141 to 0.169 at
+  theta 10.57, 0.250 to 0.307 at 5.19 (food unchanged). The default (kappa1 0.05) sits at 0.10 to 0.30
+  of its limit (was 0.10 to 0.40). `price_rule_stability.rs` models the small origin at E = 11.57; three
+  of its twenty probe points moved to keep the 10% margin from the boundary.
+- V1 maxima: price 8.1e-6, wage 6.5e-6, flow units 1.5e-5, flow value 1.9e-5 (tolerance 1e-2). A small
+  deviation decays by 0.99597 per tick frictionless and 0.99636 in the default mode. The uniqueness
+  bound is 0.922 (was 0.932).
+
 ### BEHAVIOUR: P2 economic core migrated onto ADRs 0015 to 0023
 
 Model changes (each with its ADR; the econ and trade specs carry the equations):

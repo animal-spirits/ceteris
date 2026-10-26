@@ -21,8 +21,8 @@ jobs:
       - name: Toolchain (pinned by rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - name: Data-source licence manifest (ADR 0005)
-        run: python3 -I python/ceteris/packs/check_sources.py
+      - name: Data-source licence manifest and research pack profile (ADRs 0005, 0050)
+        run: python3 -I python/ceteris/packs/check_sources.py --profile research
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace

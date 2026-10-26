@@ -7,7 +7,9 @@
 //! ```
 //!
 //! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
-//! generated fixture. `--from-equilibrium` starts the run from a GE reference solution
+//! generated fixture: `run` starts from its calibrated steady state when the pack holds the
+//! calibration tables (ADR 0089), `export` writes its uncalibrated data state, which the
+//! calibration starts from. `--from-equilibrium` starts the run from a GE reference solution
 //! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--history` also
 //! writes the per-tick series of `ceteris_econ::history`, every N ticks (default 1).
 
@@ -38,13 +40,20 @@ enum Source {
 }
 
 impl Source {
-    fn load(&self) -> Result<EconInputs, String> {
+    /// The world's inputs: calibrated when the pack holds calibration tables, or the data
+    /// state (`calibrated` false, as `export` writes it for the calibration).
+    fn load(&self, calibrated: bool) -> Result<EconInputs, String> {
         match self {
             Source::Fixture => Ok(small_world()),
             Source::Pack(dir) => {
                 let pack =
                     Pack::load(dir, &TransportParams::default()).map_err(|e| e.to_string())?;
-                EconInputs::from_pack(&pack, dir).map_err(|e| e.to_string())
+                let inputs = if calibrated {
+                    EconInputs::from_pack(&pack, dir)
+                } else {
+                    EconInputs::from_pack_data(&pack, dir)
+                };
+                inputs.map_err(|e| e.to_string())
             }
         }
     }
@@ -116,7 +125,7 @@ fn export(args: &Args) -> Result<(), String> {
                 .into(),
         );
     }
-    let inputs = args.source.load()?;
+    let inputs = args.source.load(false)?;
     let (params, trade) = (EconParams::default(), TradeParams::default());
     let kernel = Kernel::build(&inputs.network, &inputs.weight, &inputs.wedges, &trade);
     write_inputs(&args.out, &inputs, &kernel, &params, &trade).map_err(|e| e.to_string())
@@ -132,7 +141,7 @@ fn run(args: &Args) -> Result<(), String> {
     } else {
         EconParams::default()
     };
-    let (inputs, trade) = (Arc::new(args.source.load()?), TradeParams::default());
+    let (inputs, trade) = (Arc::new(args.source.load(true)?), TradeParams::default());
     let world = match &args.equilibrium {
         Some(dir) => {
             let solution = Equilibrium::read(dir).map_err(|e| e.to_string())?;

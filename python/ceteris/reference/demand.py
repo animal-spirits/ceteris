@@ -55,6 +55,38 @@ def invert(omega: np.ndarray, base_spend: np.ndarray, sigma: np.ndarray, categor
     return Weights(scale=scale, omega=weight, within=within)
 
 
+def invert_at(
+    omega: np.ndarray, price: np.ndarray, spend: np.ndarray, sigma: np.ndarray, category: np.ndarray, sigma_demand: float, p: Pigl
+) -> Weights:
+    """Stage 4 of ADR 0089: the weights of every country whose shares at buyer prices `price` (C, G)
+    and spending per person `spend` (C,) are its final demand shares `omega`; `invert` at prices 1.
+    Within a category, alpha_g is proportional to Omega_g p_g^(sigma - 1); across categories,
+    omega_A = 0 gives the income-effect weight K = Omega_A / sD_A, then sB = (Omega - K sD) / (1 - K)
+    and lambda in closed form. Raises where a weight would be negative."""
+    om = omega / omega.sum(axis=1, keepdims=True)
+    onehot = (category[:, None] == np.arange(N_CATEGORIES)[None, :]).astype(np.float64)
+    cat = om @ onehot
+    raw = np.where(om > 0, om * price ** (sigma_demand - 1.0), 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        within = np.where(om > 0, raw / (raw @ onehot)[:, category], 0.0)
+        term = np.where(within > 0, within * price ** (1.0 - sigma_demand), 0.0) @ onehot
+        index = np.where(cat > 0, term ** (1.0 / (1.0 - sigma_demand)), 1.0)
+    dt, s_d = _aggregate(np.broadcast_to(p.theta, index.shape), index, p.phi)
+    k = cat[:, 0] / s_d[:, 0]
+    s_b = (cat - k[:, None] * s_d) / (1.0 - k[:, None])
+    s_b[:, 0] = 0.0
+    bad = (k >= 1.0) | (s_b < 0).any(axis=1)
+    if bad.any():
+        raise ValueError(f"PIGL inversion gives a negative weight in countries {np.flatnonzero(bad).tolist()}")
+    weight = s_b * index ** (p.sigma_b - 1.0)
+    weight /= weight.sum(axis=1, keepdims=True)
+    b, _ = _aggregate(weight, index, p.sigma_b)
+    eps = p.eps
+    with np.errstate(divide="ignore"):  # a country without people spends 0 and gets scale 0, as `invert`
+        scale = k / ((dt / b) ** p.gamma * (spend / b) ** -eps * np.exp(-eps * (1.0 - eps) * sigma**2 / 2.0))
+    return Weights(scale=scale, omega=weight, within=within)
+
+
 def _aggregate(weight: np.ndarray, index: np.ndarray, sigma: float) -> tuple[np.ndarray, np.ndarray]:
     """CES aggregator over categories with a weight and a finite index, weights renormalized over
     them: the aggregate (K,) and each category's share (K, 3)."""

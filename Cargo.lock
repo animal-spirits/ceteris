@@ -270,6 +270,7 @@ dependencies = [
  "ceteris-core",
  "ceteris-geo",
  "ceteris-trade",
+ "criterion",
  "libm",
  "proptest",
  "rayon",
@@ -296,6 +297,7 @@ dependencies = [
  "ceteris-core",
  "libm",
  "proptest",
+ "rayon",
 ]
 
 [[package]]

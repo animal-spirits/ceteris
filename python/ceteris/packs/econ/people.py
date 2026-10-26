@@ -1,8 +1,8 @@
 """2000 population, education, labour and Gini (specs/econ/SPEC.md, Pack additions; ADR 0014).
 
 Provinces get WorldPop 2000 summed through the H3 cells. Countries get education shares (WIC
-reconstruction, Barro-Lee as the second source), participation and unemployment (ILOSTAT modelled
-estimates), the working-age share (WDI), the labour share (PWT 11) and the Gini (WDI, else SWIID).
+reconstruction, Barro-Lee as the second source), participation, unemployment and the natural rate
+u* (ILOSTAT modelled estimates; u* is the mean of 1995 to 2005, ADR 0089), the working-age share (WDI), the labour share (PWT 11) and the Gini (WDI, else SWIID).
 A country with no value from any source takes the value of its nearest donor (same World Bank region,
 closest log GDP per capita) and is flagged imputed.
 """
@@ -28,6 +28,8 @@ YEAR = 2000
 # A value from a year other than 2000 is used when it lies within this many years (SPEC, Gini; same rule for all series).
 WINDOW = 5
 N_EDU = 3
+# Years whose mean unemployment rate is the natural rate u* (ADR 0089), so the 2000 cycle is not frozen in.
+U_STAR_YEARS = (1995, 2005)
 # WIC levels: no education, some primary, primary | lower and upper secondary | post secondary.
 WIC_LEVEL = {"e1": 0, "e2": 0, "e3": 0, "e4": 1, "e5": 1, "e6": 2}
 # The working ages, the starting ages of the WIC five-year groups 15-19 to 60-64.
@@ -59,6 +61,7 @@ class Labour:
 
     participation: float  # labour force over the population aged 15 to 64
     unemployment: float  # unemployed over labour force
+    u_star: float  # natural rate: mean unemployment rate over U_STAR_YEARS
     edu_shares: np.ndarray  # shares of the working-age population: below secondary, secondary, tertiary
     labour_share: float  # compensation of employees over GDP
     working_age_share: float  # population aged 15 to 64 over the whole population
@@ -66,6 +69,7 @@ class Labour:
     gini_source: str  # wdi, swiid or donor
     participation_imputed: bool = False
     unemployment_imputed: bool = False
+    u_star_imputed: bool = False
     edu_imputed: bool = False
     labour_share_imputed: bool = False
     working_age_imputed: bool = False
@@ -78,6 +82,7 @@ class Observed:
 
     participation: dict[str, float] = field(default_factory=dict)
     unemployment: dict[str, float] = field(default_factory=dict)
+    natural_unemployment: dict[str, float] = field(default_factory=dict)  # mean over U_STAR_YEARS
     working_age: dict[str, float] = field(default_factory=dict)
     edu_wic: dict[str, np.ndarray] = field(default_factory=dict)
     edu_barro_lee: dict[str, np.ndarray] = field(default_factory=dict)
@@ -125,6 +130,17 @@ def read_ilostat(path: Path, age: str) -> dict[str, float]:
             for r in _csv(f)
             if r["sex"] == "SEX_T" and r["classif1"] == age and r["obs_value"]
         }
+
+
+def read_ilostat_mean(path: Path, age: str, first: int, last: int) -> dict[str, float]:
+    """ILOSTAT indicator CSV: mean rate over the years `first` to `last` with a value, as a fraction, for both sexes
+    and one age class."""
+    values: dict[str, list[float]] = defaultdict(list)
+    with path.open("rb") as f:
+        for r in _csv(f):
+            if r["sex"] == "SEX_T" and r["classif1"] == age and r["obs_value"] and first <= int(r["time"]) <= last:
+                values[r["ref_area"]].append(float(r["obs_value"]) / 100)
+    return {k: statistics.fmean(v) for k, v in values.items()}
 
 
 def read_wic(path: Path, m49_to_iso: Mapping[int, str]) -> dict[str, np.ndarray]:
@@ -181,11 +197,8 @@ def read_swiid(path: Path, names: Mapping[str, str]) -> dict[str, dict[int, floa
     return dict(out)
 
 
-def _xlsx_sheet(path: Path, sheet: str, header_cell: str | None = None) -> Iterator[dict[str, object]]:
-    """Rows of one worksheet as dicts by header; numbers as float, text as str.
-
-    The first row is the header, or the first row holding a cell with the text `header_cell` (UNSD files put a title above it).
-    """
+def _xlsx_sheet(path: Path, sheet: str) -> Iterator[dict[str, object]]:
+    """Rows of one worksheet as dicts by its first row; numbers as float, text as str."""
     main = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
     rel = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
     with zipfile.ZipFile(path) as z:
@@ -209,8 +222,6 @@ def _xlsx_sheet(path: Path, sheet: str, header_cell: str | None = None) -> Itera
                 col = "".join(ch for ch in c.get("r") if ch.isalpha())
                 cells[col] = strings[int(v.text)] if c.get("t") == "s" else v.text if c.get("t") == "str" else float(v.text)
             row.clear()
-            if not header and header_cell is not None and header_cell not in cells.values():
-                continue
             if not header:
                 header = {col: str(v) for col, v in cells.items()}
             elif cells:
@@ -249,6 +260,9 @@ def load_observed(cache: Path, admin0: Path) -> Observed:
     return Observed(
         participation=read_ilostat(cache / "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv", "AGE_YTHADULT_Y15-64"),
         unemployment=read_ilostat(cache / "ilostat_UNE_2EAP_SEX_AGE_RT_A_2000.csv", "AGE_YTHADULT_YGE15"),
+        natural_unemployment=read_ilostat_mean(
+            cache / "ilostat_UNE_2EAP_SEX_AGE_RT_A_1995-2005.csv", "AGE_YTHADULT_YGE15", *U_STAR_YEARS
+        ),
         working_age={k: v / 100 for k, v in _nearest(read_wdi(cache / "wdi_SP.POP.1564.TO.ZS.zip")).items()},
         edu_wic=read_wic(cache / "BPJresult_AGE_V01.csv", m49_to_iso),
         edu_barro_lee=read_barro_lee(cache / "BL_v3_MF1564.csv"),
@@ -319,6 +333,7 @@ def country_labour(countries: Mapping[str, str], obs: Observed, iso: Mapping[str
     for code in countries:
         participation, p_i = value(code, obs.participation)
         unemployment, u_i = value(code, obs.unemployment)
+        u_star, s_i = value(code, obs.natural_unemployment)
         working_age, w_i = value(code, obs.working_age)
         labour_share, l_i = value(code, obs.labour_share)
         edu, e_i = value(code, obs.edu_wic, obs.edu_barro_lee)
@@ -326,6 +341,7 @@ def country_labour(countries: Mapping[str, str], obs: Observed, iso: Mapping[str
         out[code] = Labour(
             participation=participation,
             unemployment=unemployment,
+            u_star=u_star,
             edu_shares=edu / edu.sum(),
             labour_share=labour_share,
             working_age_share=working_age,
@@ -333,6 +349,7 @@ def country_labour(countries: Mapping[str, str], obs: Observed, iso: Mapping[str
             gini_source=("wdi", "swiid", "donor")[g_i],
             participation_imputed=p_i == 1,
             unemployment_imputed=u_i == 1,
+            u_star_imputed=s_i == 1,
             edu_imputed=e_i == 2,
             labour_share_imputed=l_i == 1,
             working_age_imputed=w_i == 1,
@@ -347,6 +364,7 @@ def country_columns(codes: Sequence[str], labour: Mapping[str, Labour]) -> dict[
     column = {
         "participation": [r.participation for r in rows],
         "unemployment": [r.unemployment for r in rows],
+        "u_star": [r.u_star for r in rows],
         "working_age_share": [r.working_age_share for r in rows],
         "labour_share": [r.labour_share for r in rows],
         "gini": [r.gini for r in rows],
@@ -354,7 +372,7 @@ def country_columns(codes: Sequence[str], labour: Mapping[str, Labour]) -> dict[
     out = {k: pa.array(v, pa.float64()) for k, v in column.items()}
     for level, name in enumerate(("edu_low", "edu_secondary", "edu_tertiary")):
         out[name] = pa.array([r.edu_shares[level] for r in rows], pa.float64())
-    for flag in ("participation", "unemployment", "working_age", "labour_share", "edu", "gini"):
+    for flag in ("participation", "unemployment", "u_star", "working_age", "labour_share", "edu", "gini"):
         out[f"{flag}_imputed"] = pa.array([getattr(r, f"{flag}_imputed") for r in rows], pa.bool_())
     return out
 

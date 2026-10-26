@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pyarrow import ipc as pa_ipc
 
-from ceteris.reference import calibrate, demand, io, model, ppml, sinkhorn, solve, uniqueness
+from ceteris.reference import demand, io, model, ppml, sinkhorn, solve, uniqueness
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
@@ -269,8 +269,10 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         labour_supply=labour * one,
         population=1e6 * one,
         w0=s_l * 50.0 / l0 * one,
+        base_price=np.ones((2, 1)),
         s_l=np.array([s_l]),
         unemployment=np.array([u]),
+        u_star=np.zeros(1),
         gini=np.array([0.35]),
         omega=np.array([[1.0]]),
         io=np.zeros((1, 1, 1)),
@@ -285,7 +287,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         pop_population=np.array([4e5, 6e5, 4e5, 6e5]),
         domestic=io.Entries(np.zeros(2, dtype=np.int64), np.array([0, 1]), np.array([1, 0]), k * one, tau * one),
         access=empty,
-        crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4),
+        crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4, lag=np.zeros(0, dtype=np.int64)),
     )
 
 
@@ -564,57 +566,51 @@ def test_v1_mode():
     assert uniqueness.v1_mode(float("inf")) == "report"
 
 
-# Log sd of the perturbation. The calibration has several roots: at 0.1 one seed in four reaches
-# another, at 0.2 the continuation stalls at folds or reaches another (task 18b report).
-SPREAD = 0.05
-
-
-def test_calibration_recovers_fixture_productivity(inputs):
-    """Calibration step 2: perturb the fixture's A (per traded enterprise, per country and local
-    good), solve its equilibrium, and calibrate against that equilibrium's value added (per traded
-    enterprise, national per local good) with the inputs' A at 1: the solve recovers the
-    perturbed A, and its root solves the joint system."""
-    inp = inputs
-    rng = np.random.default_rng(18)
-    local = ~inp.traded[inp.ent_good]
-    pair = np.unique(inp.ent_country * inp.n_goods + inp.ent_good, return_inverse=True)[1]
-    a = np.exp(rng.normal(0.0, SPREAD, len(inp.ent_good)))
-    a[local] = np.exp(rng.normal(0.0, SPREAD, pair.max() + 1))[pair[local]]
-    truth = dataclasses.replace(inp, ent_a=a)
-    eq = solve.equilibrium(truth, tol=1e-13)
-    va = model.evaluate(eq.x, truth)["value_added"]
-    assert np.all(va > 0)
-    data = dataclasses.replace(inp, ent_a=np.ones_like(a), ent_va_target=va)
-    got, residuals = calibrate.productivity(data)
-    assert len(residuals) == 0 and residuals.info["residual"] <= 1e-10
-    np.testing.assert_allclose(got, a, rtol=1e-8)
-
-
-def test_calibration_table_has_the_layout_from_pack_reads(inputs, tmp_path):
-    """`econ_calib.arrow`: province (pack province) u32, good u8, a f64, one row per enterprise in
-    (province, good) order, the residual summary in the metadata."""
-    inp = inputs
-    pack = 2 * np.arange(inp.n_provinces) + 1
-    a = np.linspace(0.5, 2.0, len(inp.ent_good))
-    none = calibrate.Residuals(*(np.zeros(0),) * 4)
-    calibrate.write(tmp_path / "econ_calib.arrow", inp, pack, a, none)
-    t = pa_ipc.open_file(str(tmp_path / "econ_calib.arrow")).read_all()
-    assert [(f.name, f.type) for f in t.schema] == [("province", pa.uint32()), ("good", pa.uint8()), ("a", pa.float64())]
-    key = list(zip(t["province"].to_pylist(), t["good"].to_pylist()))
-    assert key == sorted(key) and len(set(key)) == len(key) == len(inp.ent_good)
-    assert t["province"].to_pylist() == pack[inp.ent_province].tolist()
-    np.testing.assert_array_equal(t["a"].to_numpy(), a)
-    assert json.loads(t.schema.metadata[b"residuals"]) == {"residual_count": 0, "largest_relative_miss": 0.0}
-
-
 def test_country_without_people_spends_nothing(inputs):
     """A country with no economy province (the pack's uninhabited territories keep a gateway) has
     base spending 0, not 0 / 0, and the PIGL inversion stays finite."""
     inp = inputs
     one = lambda v: np.concatenate([v, v[-1:]])
     empty = dataclasses.replace(
-        inp, s_l=one(inp.s_l), unemployment=one(inp.unemployment), gini=one(inp.gini), omega=one(inp.omega), io=one(inp.io)
+        inp, s_l=one(inp.s_l), unemployment=one(inp.unemployment), u_star=one(inp.u_star), gini=one(inp.gini), omega=one(inp.omega), io=one(inp.io)
     )
     assert empty.base_spend[-1] == 0.0
     np.testing.assert_array_equal(empty.base_spend[:-1], inp.base_spend)
     assert np.isfinite(empty.pigl_weights.scale).all()
+
+
+def test_newton_steps_use_the_set_krylov_size():
+    """scipy ignores inner_maxiter for LGMRES (one cycle of inner_m vectors): the reference sets
+    inner_m, and one Newton step on a linear system that needs more than LGMRES's default 30
+    vectors uses them."""
+    jac = solve.krylov_jacobian()
+    assert jac.method_kw["inner_m"] == solve.INNER_M > 30
+    rng = np.random.default_rng(5)
+    n = 80
+    a = np.diag(np.logspace(0, 4, n)) + 0.01 * rng.normal(size=(n, n))
+    b = rng.normal(size=n)
+    calls = [0]
+
+    def f(x):
+        calls[0] += 1
+        return a @ x - b
+
+    x0 = np.zeros(n)
+    jac.setup(x0, f(x0), f)
+    calls[0] = 0
+    dx = -jac.solve(f(x0), tol=1e-10)
+    assert 30 < calls[0] <= solve.INNER_M + solve.OUTER_K + 2
+    assert np.abs(a @ dx - b).max() <= 1e-6 * np.abs(b).max()
+
+
+def test_base_prices_are_the_reference_sourcing_at_prices_one(inputs):
+    """Owner decision 2026-10-25: coefficients are ICIO cost shares at base delivered prices. The
+    exported base prices are the reference's own delivered unit prices at prices 1, so at the
+    data state every enterprise's input cost share is its sector's a_kg."""
+    inp = inputs
+    q = model._sourcing(inp, np.ones((inp.n_provinces, inp.n_goods)))["index"]
+    np.testing.assert_allclose(inp.base_price[:, inp.traded], q[:, inp.traded], rtol=1e-13)
+    assert np.all(inp.base_price[:, ~inp.traded] == 1.0) and np.any(inp.base_price > 1.0)
+    a = inp.io[inp.ent_country, :, inp.ent_good]
+    np.testing.assert_allclose(inp.ent_inputs * inp.base_price[inp.ent_province], a, rtol=1e-15)
+    np.testing.assert_allclose(inp.ent_a_va, 1.0 - a.sum(axis=1), rtol=1e-14)
