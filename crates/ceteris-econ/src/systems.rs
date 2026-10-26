@@ -571,30 +571,28 @@ pub fn dispatch(w: &mut EconWorld) {
     let acc = &lay.accounts;
     let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
     let (mut parts, mut buyers) = (Vec::new(), Vec::new());
-    let mut sourced = std::mem::take(&mut w.scratch.sourced);
-    let mut columns = std::mem::take(&mut w.scratch.columns);
-    let (markets, fill) = (&w.markets, &w.scratch.fill);
-    sourced
-        .par_iter_mut()
-        .zip(columns.par_iter_mut())
+    let sc = &mut w.scratch;
+    let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
+    (&mut sc.sourced, &mut sc.columns, sc.flows.current())
+        .into_par_iter()
         .enumerate()
-        .for_each(|(g, (r, col))| {
+        .for_each(|(g, (r, col, flows))| {
             col.gather(&markets.price, &markets.active, g);
             col.fill.clear();
             col.fill.extend((0..np).map(|o| fill[o * N_GOODS + g]));
             dispatch_good(kernel, g, &col.price, &col.fill, r);
+            flows.record(
+                kernel,
+                &net.province_country,
+                &net.gateway_country,
+                g,
+                &col.price,
+                r,
+            );
         });
-    for (g, (r, col)) in sourced.iter().zip(&columns).enumerate() {
+    let sourced = std::mem::take(&mut w.scratch.sourced);
+    for (g, r) in sourced.iter().enumerate() {
         let transit = acc.transit[g];
-        w.scratch.flows.record(
-            kernel,
-            &inp.network.province_country,
-            &inp.network.gateway_country,
-            g,
-            &col.price,
-            r,
-        );
-
         for d in 0..np {
             let (cell, market) = (d * N_GOODS + g, acc.market[d]);
             w.scratch.dispatched[cell] = r.shipped[d];
@@ -685,7 +683,6 @@ pub fn dispatch(w: &mut EconWorld) {
         }
     }
     w.scratch.sourced = sourced;
-    w.scratch.columns = columns;
 }
 
 /// T4: the stock-flow price rule with expected inflation on every active market (cells
