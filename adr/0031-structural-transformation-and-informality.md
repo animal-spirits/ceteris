@@ -28,8 +28,8 @@ a formalization mechanism.
 
 Option 2.
 
-- Catch-up rate lambda in 7.5 gains a sector-class factor (P60): manufacturing, tradable
-  services, non-tradable services, agriculture. Priors from the unconditional-convergence
+- Catch-up rate lambda in 7.5 (its equation is ADR 0108's) gains a sector-class factor (P60):
+  manufacturing, tradable services, non-tradable services, agriculture. Priors from the unconditional-convergence
   literature.
 - Informal and formal employment and firms: transitions between labour statuses (6.3) and
   between informal and formal firm cells depend on the cost of formality (taxes, regulation)

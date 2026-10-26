@@ -1,9 +1,9 @@
 # 0032. Cohort demography: education transitions, fertility timing and households
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 6.1, 6.2, 6.3, 8.6, 8.7 (land and housing), 17.1
-Phase: P4; P2 reads age bands for labour supply
+Phase: P4; age bands arrive in P4 (P2 pops are province by education)
 
 ## Context
 
@@ -44,8 +44,8 @@ Option 2.
 
 ## Migration
 
-- P4: demography module; P2's labour supply reads age bands and age-specific participation from
-  the start, so labour supply is right before full demography lands.
+- P4: demography module, which brings age bands and age-specific participation to labour supply.
+  P2 pops are province by education (ADR 0095).
 - Data: WCDE v3 transition schedules and life tables (licence to audit, ADR 0050), UN WPP
   (already listed), WIC reconstruction.
 - Register P62, P63. Nesting benchmark: with WCDE scenario inputs held fixed, the module

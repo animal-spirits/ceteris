@@ -1,6 +1,6 @@
 # 0029. Food system: competitive storage, export restrictions and famine
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 7.1, 8.2, 8.5, 6.2, 13, 15.7
 Phase: P2 (storage and export rules), P4 (famine mortality)
@@ -27,10 +27,10 @@ Section 15.7 already lists competitive storage as a targeted addition; this ADR 
 
 Option 2.
 
-- Competitive storage for grains, other storable crops, crude oil and metals: speculators hold
-  stocks when the expected price rise exceeds storage cost plus interest, and stocks cannot go
-  negative. Storage cost and convenience yield by good are register entry P56. Stocks are an
-  asset in the balance sheets of 9.1.
+- Competitive storage is ADR 0091's, implemented in P2 for agriculture, crude oil, gas and
+  refined fuels, coal and other mining, and chemicals and metals, with storage cost and
+  convenience yield in P56 (used from P2). Stocks are an asset in the balance sheets of 9.1. This
+  ADR keeps export restrictions and famine.
 - Export restrictions: a state restricts exports of a food good when its domestic price rises
   above trend by more than a threshold (P57), weighted by the food share of the poorest pops
   and by the state's net-exporter status. The restriction enters the trade kernel as a wedge on
@@ -44,16 +44,14 @@ Option 2.
 
 ## Migration
 
-- P2: storage and export rules on the food and energy goods.
+- P2: export rules on the food goods; storage is ADR 0091's.
 - P4: famine mortality and displacement, which need the demography module.
 - Data: FAOSTAT production, trade and food balances (CC BY 4.0, to add to the manifest); AMIS
   stock-to-use; FAO food price index (already listed, fao-ffpi).
 
 ## Tests
 
-- With storage off, results equal the status quo.
-- Storage produces positive skew and price spikes in a toy single-good market, matching the
-  Deaton-Laroque closed form for the storage threshold.
+- With export rules off, results equal the status quo.
 - A simulated 2007-08 shock with and without export rules: the rules raise the world price
   peak, with the direction and rough magnitude reported by Martin and Anderson.
 

@@ -1,6 +1,6 @@
 # 0028. Oil and gas market structure
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 7.1, 7.7, 8.2, 8.4, 15.4, 17.1, 17.2
 Phase: P2 (crude oil), P8 (natural gas and LNG)
@@ -43,10 +43,12 @@ Option 2.
   capacity constraints; liquefaction and regasification capacity are capital stocks. Built
   pipelines arrive with the pipeline mode (5.3).
 - P55 holds the OPEC rule's coefficients. Switch S13: competitive supply or the cartel rule.
+- In P2 the rule applies to good 1 (crude oil, gas and refined fuels, ADR 0092) through its crude
+  share; crude, gas and refined fuels split in P8 before the rule binds (ADR 0095).
 
 ## Migration
 
-- P2: crude oil (an ICIO split good) gains the OPEC rule and storage; no new crates.
+- P2: good 1 gains the OPEC rule on its crude share, and storage (ADR 0091); no new crates.
 - P8: gas markets, LNG capacity, pipelines.
 - Data: OPEC membership and quotas from public OPEC reports; capacity from Global Energy
   Monitor oil and gas trackers (already in the manifest); EIA international data (public

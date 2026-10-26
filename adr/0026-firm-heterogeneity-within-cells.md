@@ -1,6 +1,6 @@
 # 0026. Firm heterogeneity within cells
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 7.2, 7.4, 8.3, 15.3 (V2), 17.1
 
@@ -32,8 +32,10 @@ share are closed form.
 
 ## Migration
 
-- Reinterpret theta_g (P01) as the Pareto shape k_g; the PPML estimates of 0022 are
-  unchanged.
+- Set the Pareto shape k_g = theta_g (sigma_g - 1) / sigma_g. Under Melitz-Chaney with ad
+  valorem tariffs the tariff elasticity that 0022 and Caliendo-Parro estimate is
+  k sigma / (sigma - 1), not k (Costinot and Rodriguez-Clare 2014; Felbermayr, Jung and Larch
+  2015). Alternatively estimate k from freight-cost variation (ADR 0095).
 - Add sigma_g (P50), fixed export costs by border (P51, identified by exporter shares) and
   entry costs (P52, identified by firm counts by size class) to the register.
 - Gateway links carry the fixed-cost factor beside tariffs.

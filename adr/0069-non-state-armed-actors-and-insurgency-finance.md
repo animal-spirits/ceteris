@@ -26,6 +26,8 @@ and loyalty risk.
 
 Option 2.
 
+- Territorial control per province is one stock shared by insurgents and criminal groups; ADR
+  0060 feeds drug-route rents and its homicide model into it.
 - Revenue per armed group from rents in controlled provinces (mineral output at world prices,
   drug-route flows from 0060, extortion of local output, diaspora and state sponsors) funds
   recruitment and operations (P118).
