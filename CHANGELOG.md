@@ -19,9 +19,8 @@
   their cash flow into one profit pool per country, paid to its pops by population share. The
   rounding is cumulative shares, half to even, so the split is exact in minor units.
 - Export format 8: `countries.u_star`.
-- 2000 pack: once installed into `data/packs/2000`, the calibration tables' sha256 joins
-  `tests/golden/p2-pack.txt`. They are not installed yet: on the full pack the fixed point misses
-  1e-9 (below).
+- 2000 pack: the calibration tables are installed into `data/packs/2000`, and their sha256 joins
+  `tests/golden/p2-pack.txt`.
 
 Goldens re-blessed:
 
@@ -30,12 +29,19 @@ Goldens re-blessed:
 - `tests/golden/p2-fixture`: format 8, and the reference re-solved at the natural rate under
   national ownership.
 - `tests/golden/p2-fixture/calibration`: new.
+- `tests/golden/p2-pack.txt`: the six calibration tables' sha256.
 
-Fixed point over 120 ticks with every friction on: largest relative drift 1.5e-11 on the fixture.
-On the full pack it is 1.9e-7 (prices), past 1e-9 from tick 1 (D) and tick 2 (prices). The drift
-falls as province income rises, and it shrinks 65-fold when every nominal value is scaled by 100,
-so it is the ledger's minor unit (1e-4 USD) in provinces with an income of 1e4 to 1e6 USD a month.
-The world price index stays at 1 to 7e-15. This needs an owner ruling. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6, flow units
+Fixed point over 120 ticks with every friction on:
+
+- Fixture: largest relative drift 1.5e-11, inside 1e-9.
+- Full pack: limited by integer money (1e-4 USD) and carried through each country by national
+  dividends and domestic trade (ADR 0089 As built). The test holds:
+  - real quantities to 2e-6 relative;
+  - money to 2e-6 relative or 4 minor units;
+  - world aggregates to 1e-9;
+  - bounded drift.
+- Full-pack maxima: price 1.9e-7, employment 5.1e-7, pop income 155 minor units (5.2e-9
+  relative), world price index 5.4e-15. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6, flow units
 5.3e-6, flow value 5.4e-6. Decay per tick is 0.99505 frictionless and 0.99564 in the default mode.
 
 ### BEHAVIOUR: trade elasticities follow the OECD key (ADR 0023 amendment)
