@@ -23,6 +23,32 @@ fn err(msg: impl Into<String>) -> PackError {
     PackError(msg.into())
 }
 
+/// Every country with enterprises has people to own them: national ownership divides its
+/// profit pool by the population of its pops (`EconWorld::new`).
+fn check_owners(
+    codes: &[String],
+    provinces: &ProvinceData,
+    pops: &PopData,
+    ent: &EntData,
+) -> Result<(), PackError> {
+    let mut people = vec![0.0; codes.len()];
+    for (&i, &n) in pops.province.iter().zip(&pops.population) {
+        people[usize::from(provinces.country[i as usize])] += n;
+    }
+    match ent
+        .province
+        .iter()
+        .map(|&i| usize::from(provinces.country[i as usize]))
+        .find(|&c| people[c] <= 0.0)
+    {
+        Some(c) => Err(err(format!(
+            "country {} has enterprises but no population to own them",
+            codes[c]
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// Gateways of the pack (`gateways.arrow`): graph node and country of each, and its kind
 /// (0 port, 1 airport, 2 land crossing).
 #[derive(Clone, Debug, PartialEq)]
@@ -205,21 +231,7 @@ impl EconInputs {
             }
         }
 
-        let mut has_pops = vec![false; nc];
-        for &i in &pop_data.province {
-            has_pops[usize::from(provinces.country[i as usize])] = true;
-        }
-        if let Some(&i) = ent
-            .province
-            .iter()
-            .find(|&&i| !has_pops[usize::from(provinces.country[i as usize])])
-        {
-            let c = provinces.country[i as usize];
-            return Err(err(format!(
-                "country {} has enterprises but no pops to own them",
-                codes[usize::from(c)]
-            )));
-        }
+        check_owners(&codes, &provinces, &pop_data, &ent)?;
         let mut inputs = EconInputs {
             network: Network {
                 province_country: provinces.country.clone(),
@@ -393,6 +405,30 @@ mod tests {
             node: vec![4, 5],
             country: vec![0, 1],
             kind: vec![0, 0],
+        }
+    }
+
+    #[test]
+    fn country_with_enterprises_needs_population() {
+        let codes = ["A".to_owned(), "B".to_owned()];
+        let provinces = ProvinceData {
+            country: vec![0, 1],
+            ..ProvinceData::default()
+        };
+        let ent = EntData {
+            province: vec![0, 1],
+            ..EntData::default()
+        };
+        let pops = |population: [f64; 2]| PopData {
+            province: vec![0, 1],
+            population: population.to_vec(),
+            ..PopData::default()
+        };
+        assert!(check_owners(&codes, &provinces, &pops([1.0, 2.0]), &ent).is_ok());
+        for none in [[1.0, 0.0], [0.0, 2.0]] {
+            let e = check_owners(&codes, &provinces, &pops(none), &ent).unwrap_err();
+            let owner = if none[0] == 0.0 { "A" } else { "B" };
+            assert!(e.to_string().contains(&format!("country {owner} ")), "{e}");
         }
     }
 

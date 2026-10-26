@@ -99,16 +99,15 @@ fn calibrated_digest(t: &RecordBatch) -> Result<String, PackError> {
         .get("calibration")
         .cloned()
         .ok_or_else(|| err("econ_calib.arrow has no calibration metadata"))?;
-    let key = "\"static_digest\": \"";
-    let start = json
-        .find(key)
-        .ok_or_else(|| err("calibration metadata has no static_digest"))?
-        + key.len();
-    Ok(json[start..]
-        .split('"')
-        .next()
-        .unwrap_or_default()
-        .to_owned())
+    let key = "\"static_digest\"";
+    let missing = || err("calibration metadata has no static_digest");
+    let after_key = &json[json.find(key).ok_or_else(missing)? + key.len()..];
+    let value = after_key
+        .trim_start()
+        .strip_prefix(':')
+        .and_then(|v| v.trim_start().strip_prefix('"'))
+        .ok_or_else(missing)?;
+    Ok(value.split('"').next().unwrap_or_default().to_owned())
 }
 
 impl EconInputs {
@@ -283,5 +282,69 @@ impl EconInputs {
             pipeline,
         }));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use arrow_array::Float64Array;
+    use arrow_ipc::writer::FileWriter;
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
+
+    fn batch(metadata: &[(&str, &str)]) -> RecordBatch {
+        let meta: HashMap<String, String> = metadata
+            .iter()
+            .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+            .collect();
+        let schema = Arc::new(Schema::new_with_metadata(
+            vec![Field::new("x", DataType::Float64, false)],
+            meta,
+        ));
+        RecordBatch::try_new(schema, vec![Arc::new(Float64Array::from(vec![1.0]))]).unwrap()
+    }
+
+    #[test]
+    fn digest_is_read_with_or_without_json_whitespace() {
+        for json in [
+            r#"{"static_digest": "abc"}"#,
+            r#"{"static_digest":"abc"}"#,
+            r#"{ "other": 1, "static_digest" : "abc" , "n": 2 }"#,
+        ] {
+            let t = batch(&[("calibration", json)]);
+            assert_eq!(calibrated_digest(&t).unwrap(), "abc", "{json}");
+        }
+    }
+
+    #[test]
+    fn digest_missing_is_an_error() {
+        assert!(calibrated_digest(&batch(&[])).is_err());
+        let t = batch(&[("calibration", r#"{"digest": "abc"}"#)]);
+        assert!(calibrated_digest(&t).is_err());
+    }
+
+    #[test]
+    fn table_of_another_calibration_format_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("ceteris-calib-format-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, format: &str| {
+            let t = batch(&[("calibration_format", format)]);
+            let file = std::fs::File::create(dir.join(name)).unwrap();
+            let mut w = FileWriter::try_new(file, &t.schema()).unwrap();
+            w.write(&t).unwrap();
+            w.finish().unwrap();
+        };
+        write("current.arrow", FORMAT);
+        write("old.arrow", "2");
+        let accepted = table(&dir, "current.arrow").is_ok();
+        let rejected = table(&dir, "old.arrow");
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(accepted);
+        let message = rejected.unwrap_err().to_string();
+        assert!(message.contains("calibration format"), "{message}");
     }
 }
