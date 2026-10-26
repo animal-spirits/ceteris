@@ -6,7 +6,7 @@ H2 distance -0.753 (s.e. 0.016), H2 per class 1.75, 3.72 and 9.52, all in their 
 violation; 1 vs 8 threads identical; tick about 34 ms and `source_dispatch` 7.9 ms against the re-budgeted
 35 ms and 8 ms. Numbers and commands: P2 gate, Measured
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0023, 0089 and 0098
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0023, 0089 and 0112
 
 ## Purpose
 
@@ -306,8 +306,8 @@ plus the losses it carries, paid only when positive (limited liability, owner 20
 loss stays with the enterprise as retained losses and later cash flow repays it before any
 payout, so enterprises pay no negative dividend), and in the profit pool each province market's
 signed cash flow (trade SPEC), so the pool is sum over the country's enterprises and markets.
-Markets keep the signed rule (ADR 0098, Markets). Retained losses beyond M months of base sales
-are written off against the country's pops (loss write-off, ADR 0098, below). Shares are fixed
+Markets keep the signed rule (ADR 0112, Markets). Retained losses beyond M months of base sales
+are written off against the country's pops (loss write-off, ADR 0112, below). Shares are fixed
 at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, nothing is
 written off, and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
@@ -328,7 +328,7 @@ N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
 `limited_liability_keeps_losses_and_repays_them_first`). Wages use the same cumulative-share
 rule (`split`) over the province's pops by employed effective labour.
 
-*Loss write-off (E4, ADR 0098).* After the distribution, enterprise e's retained loss beyond
+*Loss write-off (E4, ADR 0112).* After the distribution, enterprise e's retained loss beyond
 T_e = M S_e (M P148, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
 steady-state sales value) is written off: per country the excesses E_e = max(0, -balance_e -
 T_e) are credited to their enterprises and debited from the country's pops in proportion to
@@ -521,7 +521,7 @@ optional, 19.1).
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
-| E4 | distribute | enterprise and market cash flow, rebates, pop money | profit pools (positive enterprise balances, signed market cash flow), pop money for next tick, then the loss write-off (ADR 0098) | finance (P2 stand-in) |
+| E4 | distribute | enterprise and market cash flow, rebates, pop money | profit pools (positive enterprise balances, signed market cash flow), pop money for next tick, then the loss write-off (ADR 0112) | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
 System IDs 201 to 210 in this order.
@@ -558,7 +558,7 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
 | P41 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
-| P148 | Loss write-off threshold M (ADR 0098): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
+| P148 | Loss write-off threshold M (ADR 0112): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
 populations, education and labour-force shares, Gini. Calibrated: A (inversion, not
@@ -710,7 +710,7 @@ the radius on p. 9, footnote 10 p. 7).
     trade stays inside the 30 ms of 19.2. The gateway count, which sets the crossing count and
     the access it buys, moves to the ADR 0092 rework after the gate.
 - Measured on the 2000 pack (Task 20 and its fix rounds; limited liability of enterprises and the
-  loss write-off of ADR 0098; `p2_acceptance.rs` and `test_p2_gate.py`; owner review pending):
+  loss write-off of ADR 0112; `p2_acceptance.rs` and `test_p2_gate.py`; owner review pending):
   - V1, tolerance mode (bound 0.967), against the calibrated root. From the steady state
     perturbed by 10% (seed 20; prices, wages and stocks, though frictionless mode re-solves wages
     every tick, so this start tests prices and stocks): price 9.085e-3 (São Tomé and Príncipe light
@@ -725,7 +725,7 @@ the radius on p. 9, footnote 10 p. 7).
     (8.43e12 of 8.63e12 by tick 60; 2.1e12 in Sudan, 8.9e11 Mali, 7.7e11 Namibia, 6.9e11 the United
     States, 5.5e11 Uganda, 3.9e11 Albania), and the world price index returns from 2.38 at tick
     120 to 1.28 at 1,200 and 0.96 at 4,800. What remains is market losses, which the signed rule
-    passes to pops as negative dividends (ADR 0098, Markets): up to 5,299 pops with negative money
+    passes to pops as negative dividends (ADR 0112, Markets): up to 5,299 pops with negative money
     (tick 32), 40 at 1,200 (Albania, Mali and Uganda), 1 at 4,800 (Albania), who buy nothing
     until repaid. Before the write-off: price 0.83 and 0.33 outside at 1,200, 0.21 and 5.9e-2 at
     4,800, with 5.0e12 of retained losses repaid over about 33,000 ticks and an index of 7.1 at
@@ -733,7 +733,7 @@ the radius on p. 9, footnote 10 p. 7).
   - Gate decision (owner, 2026-10-26): P2's V1 is the run from the perturbed steady state, now
     that the data state is the steady state (ADR 0089). The run from the shocked data state is a
     stress test, `xfail(strict=True)` in `test_p2_gate.py`. Two pre-gate trials did not cure it
-    and are parked on local branches: producers holding inventory and planning output (ADR 0098,
+    and are parked on local branches: producers holding inventory and planning output (ADR 0112,
     second decision, `p2-r3-producer-stock`; frictionless mode pins employment at the natural
     rate), and ADR 0090's split price rule (`p2-adr0090`; its nominal anchor turns a local real
     shortage into world inflation). The anchor is redesigned after the gate.
@@ -800,7 +800,7 @@ texture fed from core columns.
 - Property (proptest): money and goods conservation through a full tick on random small
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
   identical; pi^e is a log difference and stays; run with the loss write-off off, whose cap is
-  nominal, ADR 0098); pi^e follows the world price index
+  nominal, ADR 0112); pi^e follows the world price index
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
 - Unreachable destination at world level (Review Focus 1, `fixture::unreachable_island`:
   machinery has no route to or from the island, and of the island's sectors only light
@@ -860,7 +860,7 @@ texture fed from core columns.
   units); V1 holds on the fixture at 1,200 ticks.
 - Debt overhang (Task 20): pops may hold negative money (clearing facility, no interest) and buy
   nothing while negative. Enterprises have limited liability and their losses beyond three
-  months of base sales are written off against their country's pops (ADR 0098), which clears the
+  months of base sales are written off against their country's pops (ADR 0112), which clears the
   data-state transient's losses early (8.43e12 of 8.63e12 by tick 60). Markets keep the signed rule,
   since limited liability inflates the fixture without bound and the write-off only bounds it
   (index 13 at tick 1,200), so a deep transient still leaves market losses as pop debts (Albania
@@ -898,7 +898,7 @@ texture fed from core columns.
   the world's money (-1.15e16 minor units), so it overflows first, at a uniform scale of about 802 on
   prices, wages and balances (a scale of 1,000 overflowed, ADR 0089, Evidence); the largest country
   pool (the United States) reaches 2.7e18 against the i64 maximum of 9.2e18. The overflows seen at the
-  loss write-off came from a hyperinflation of the trial that ADR 0098 (second decision) did not
+  loss write-off came from a hyperinflation of the trial that ADR 0112 (second decision) did not
   adopt, not from this limit. The currency scale is a P5 decision (core SPEC, Money scale).
 
 ## Changes for the next design-doc snapshot
@@ -917,9 +917,9 @@ rev 226 (Task 21); re-grep again before editing.
     parameters") changes.
   - P03 splits into P03a kappa1 (start 0.05), P03b kappa2 (start 0) and P03c the step clip (0.1);
     P01 takes its class values 2.62, 5.19 and 10.57 (ADR 0023; DESIGN 1061 says "centre 5").
-  - P148 loss write-off threshold M, 3 months of base sales (ADR 0098, accepted). Held or proposed, not
+  - P148 loss write-off threshold M, 3 months of base sales (ADR 0112, accepted). Held or proposed, not
     built in P2: P143 kappa_n of ADR 0090 (proposed; the split price rule is parked on `p2-adr0090`),
-    P147 M_F of ADR 0098's second decision (reserved, held; `p2-r3-producer-stock`) and P56 storage
+    P147 M_F of ADR 0112's second decision (reserved, held; `p2-r3-producer-stock`) and P56 storage
     cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it).
   - DESIGN 2133 says P44 to P49 stay free for P2 work in progress; P44 to P47 are now taken.
 - Section 21 and 22.1 (ADR 0012): the development-slice paragraph (DESIGN 1329) and the Map scope row
@@ -940,7 +940,7 @@ rev 226 (Task 21); re-grep again before editing.
   and S (goods 7, 8, 9), the ones Alder, Boppart and Mueller (2022) estimate, with a CES over the goods of
   each at P06; DESIGN 459 names five (food, energy, housing, manufactures, services). The Gini feeding
   PIGL is WDI, else SWIID (ADR 0021).
-- P2 acceptance (DESIGN 1338, "ADRs 0015 to 0022 implemented"): 0015 to 0023, 0089 and 0098, plus the
+- P2 acceptance (DESIGN 1338, "ADRs 0015 to 0022 implemented"): 0015 to 0023, 0089 and 0112, plus the
   gate decision below.
 - What P2 as built adds, one line each:
   - Trade elasticity in 3 classes (2.62, 5.19, 10.57), drawn from the OECD key's thetas by ADR 0023's
@@ -951,7 +951,7 @@ rev 226 (Task 21); re-grep again before editing.
   - National profit ownership (owner, 2026-10-25; ADR 0089): the enterprises' profits go to the pops of
     their country by population, wages stay local.
   - Limited liability of enterprises and the loss write-off beyond M = 3 months of base sales
-    (ADR 0098, P148); markets keep the signed rule.
+    (ADR 0112, P148); markets keep the signed rule.
   - The `source_dispatch` budget re-set to 8 ms and the whole tick to 35 ms on the full pack (owner,
     2026-10-26); DESIGN 1181 and 1845 state 5 ms for the trade system, where this SPEC budgets trade
     at 30 ms with `source_dispatch` at 8 ms; the snapshot takes this SPEC's values (controller ruling,

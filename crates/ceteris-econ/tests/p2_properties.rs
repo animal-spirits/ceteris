@@ -180,7 +180,7 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
     out
 }
 
-/// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0098),
+/// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0112),
 /// so scaling every nominal value moves losses past the cap in one run and not the other.
 #[test]
 fn homogeneity_of_degree_zero() {
@@ -459,7 +459,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
 /// rounded half to even, with every province market's signed cash flow. Money is conserved
 /// exactly: each country's pops receive, in minor units, exactly what joined its pool; each
 /// pop's part is within one minor unit of N_k / N_c of the pool; enterprises keep a negative
-/// balance, less any write-off (ADR 0098), and end at zero otherwise; markets and rebate
+/// balance, less any write-off (ADR 0112), and end at zero otherwise; markets and rebate
 /// accounts end at zero.
 #[test]
 fn national_profit_pool_conserves_money_exactly() {
@@ -1178,7 +1178,7 @@ fn written(w: &EconWorld, start: usize, account: AccountId) -> i64 {
         .sum()
 }
 
-/// Loss write-off (ADR 0098): an enterprise's retained loss beyond M months of its base sales
+/// Loss write-off (ADR 0112): an enterprise's retained loss beyond M months of its base sales
 /// is written off at E4 against its country's pops in proportion to their positive money,
 /// exactly in minor units; no pop pays more than it holds.
 #[test]

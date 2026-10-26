@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### BEHAVIOUR: loss write-off beyond three months of base sales (ADR 0098, Task 20b)
+### BEHAVIOUR: loss write-off beyond three months of base sales (ADR 0112, Task 20b)
 
 - After E4's distribution, an enterprise's retained loss beyond M = 3 months of its base sales
   (P148; VA0 / a_VA, the calibrated steady-state sales value) is written off against its
@@ -30,7 +30,7 @@
 - Province markets still pay their signed cash flow. Applying the same rule to them, as ruled,
   makes the fixture's run from the data state inflate without bound (merchants' stock purchases
   stay as retained losses while pops keep the money: world price index 15 at tick 1,200 and 129
-  at 2,400). It is held for the owner (Task 20 fix round 1); ADR 0098 records the outcome.
+  at 2,400). It is held for the owner (Task 20 fix round 1); ADR 0112 records the outcome.
 - The calibrated steady state is unchanged (every enterprise earns (1 - s_L) VA0 > 0); the
   fixture golden `tests/golden/p2-econ.txt` moves because enterprises run losses early in the
   run from the data state.

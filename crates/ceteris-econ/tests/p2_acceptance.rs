@@ -669,7 +669,7 @@ fn full_pack_one_vs_eight_threads() {
     assert_eq!(one, eight);
 }
 
-/// Measurement for the P2 gate's V1 from the data state (ADR 0098): the frictionless run of
+/// Measurement for the P2 gate's V1 from the data state (ADR 0112): the frictionless run of
 /// the calibrated pack from the data state of its inputs, `TICKS_CENSUS` ticks (default
 /// 4,800), printing at checkpoints the world price index, the enterprises carrying retained
 /// losses and their total, pops with negative money, and the write-offs so far by country.
