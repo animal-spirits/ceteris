@@ -3,11 +3,13 @@
 //! input use and rationing run as one pass inside E2: a shortage of a local good cuts its
 //! users' output in the same tick. Traded inputs keep their stocks and transit lags.
 
-use std::sync::Arc;
+use rayon::prelude::*;
 
+use ceteris_core::ledger::Ledger;
 use ceteris_trade::N_GOODS;
 
-use crate::world::EconWorld;
+use crate::inputs::EconInputs;
+use crate::world::{EconWorld, Layout};
 
 /// Iteration bound of the chain.
 pub const N_LOCAL: usize = 32;
@@ -135,14 +137,23 @@ impl Province {
 /// producers alone do not fit, the users of the good that their stock cannot cover stop, and
 /// so on, so every good fits exactly. The draws are then split at the final outputs
 /// ([`split`]).
-pub fn chain(w: &mut EconWorld, i: usize) -> usize {
-    let (inp, lay) = (Arc::clone(&w.inputs), Arc::clone(&w.layout));
+///
+/// `produced` and `from_output` are the province's rows of `Scratch::produced` and
+/// `Scratch::from_output`; no other province's state is read or written.
+pub fn chain(
+    inp: &EconInputs,
+    lay: &Layout,
+    ledger: &Ledger,
+    i: usize,
+    produced: &mut [f64],
+    from_output: &mut [f64],
+) -> usize {
     let ents = lay.enterprises(i);
     let first = ents.start;
     let good = |e: usize| usize::from(inp.enterprises.good[e]);
     let producer = LOCAL.map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first));
     let province = Province {
-        cap: w.scratch.produced[ents.clone()].to_vec(),
+        cap: produced.to_vec(),
         coef: ents
             .clone()
             .map(|e| {
@@ -155,7 +166,7 @@ pub fn chain(w: &mut EconWorld, i: usize) -> usize {
             .collect(),
         stock: ents
             .clone()
-            .map(|e| LOCAL.map(|k| w.ledger.goods(lay.accounts.enterprise[e], k)))
+            .map(|e| LOCAL.map(|k| ledger.goods(lay.accounts.enterprise[e], k)))
             .collect(),
         producer,
         own: std::array::from_fn(|j| producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])),
@@ -228,7 +239,6 @@ pub fn chain(w: &mut EconWorld, i: usize) -> usize {
         }
     }
 
-    let sc = &mut w.scratch;
     let mut draws = Vec::new();
     for (j, &k) in LOCAL.iter().enumerate() {
         let rest = province.users(j, &y, &mut users);
@@ -236,8 +246,7 @@ pub fn chain(w: &mut EconWorld, i: usize) -> usize {
         split(rest, &users, &mut draws);
         let mut d = draws.iter();
         for (u, &yu) in y.iter().enumerate() {
-            let at = (first + u) * N_GOODS + k;
-            sc.from_output[at] = if Some(u) == producer[j] {
+            from_output[u * N_GOODS + k] = if Some(u) == producer[j] {
                 province.own[j] * yu
             } else if province.coef[u][j] * yu > 0.0 {
                 *d.next().expect("one draw per user")
@@ -246,10 +255,31 @@ pub fn chain(w: &mut EconWorld, i: usize) -> usize {
             };
         }
     }
-    for (u, &yu) in y.iter().enumerate() {
-        sc.produced[first + u] = yu;
-    }
+    produced.copy_from_slice(&y);
     iterations
+}
+
+/// [`chain`] for every province, in parallel: `Scratch::produced` from the capped outputs to
+/// the outputs, `Scratch::from_output` and `Scratch::chain_iterations`.
+pub fn chain_all(w: &mut EconWorld) {
+    let (inp, lay, ledger) = (&*w.inputs, &*w.layout, &w.ledger);
+    let sc = &mut w.scratch;
+    let mut produced: &mut [f64] = &mut sc.produced;
+    let mut from_output: &mut [f64] = &mut sc.from_output;
+    let mut rows = Vec::with_capacity(inp.n_provinces());
+    for i in 0..inp.n_provinces() {
+        let n = lay.enterprises(i).len();
+        let (p, rest) = std::mem::take(&mut produced).split_at_mut(n);
+        let (f, rest_f) = std::mem::take(&mut from_output).split_at_mut(n * N_GOODS);
+        (produced, from_output) = (rest, rest_f);
+        rows.push((p, f));
+    }
+    (sc.chain_iterations.par_iter_mut(), rows)
+        .into_par_iter()
+        .enumerate()
+        .for_each(|(i, (iterations, (p, f)))| {
+            *iterations = chain(inp, lay, ledger, i, p, f) as u32;
+        });
 }
 
 #[cfg(test)]

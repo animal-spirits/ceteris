@@ -261,8 +261,8 @@ pub fn produce(w: &mut EconWorld) {
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
     let mut parts = Vec::new();
+    local::chain_all(w);
     for i in 0..inp.n_provinces() {
-        w.scratch.chain_iterations[i] = local::chain(w, i) as u32;
         let pops = lay.pops(i);
         let effective: Vec<f64> = pops
             .clone()
