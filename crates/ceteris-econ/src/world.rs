@@ -197,6 +197,8 @@ pub struct Scratch {
     pub sourced: Vec<Sourced>,
     /// Per traded good, its columns for `sourced`.
     pub columns: Vec<Columns>,
+    /// Per traded good, the money legs of its dispatch at T2b.
+    pub payments: Vec<Payments>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * N_GOODS + g]`, refreshed with
@@ -228,6 +230,7 @@ impl Scratch {
             due: vec![0.0; (n_pops + n_ent) * N_GOODS],
             sourced: (0..n_traded).map(|_| Sourced::new()).collect(),
             columns: vec![Columns::default(); n_traded],
+            payments: vec![Payments::default(); n_traded],
             lead: vec![0.0; np * N_GOODS],
             flows: FlowWindow::new(nc, np),
         }
@@ -256,6 +259,24 @@ impl Columns {
         self.active.clear();
         self.active.extend(cells.map(|c| active[c]));
     }
+}
+
+/// One traded good's money legs of T2b in minor units, computed with its dispatch and paid
+/// afterwards in ledger order: per domestic entry (destination to origin market), per access
+/// entry inward (destination market to gateway), per crossing in
+/// `Kernel::crossings_by_target` order (destination gateway to origin gateway), per access entry
+/// outward in `Kernel::access_by_gateway` order (gateway to origin market), and the tariff of
+/// each destination. `at_gateway`, `from_gateway` and `parts` are working space.
+#[derive(Clone, Debug, Default)]
+pub struct Payments {
+    pub domestic: Vec<i64>,
+    pub access_in: Vec<i64>,
+    pub crossing: Vec<i64>,
+    pub access_out: Vec<i64>,
+    pub tariff: Vec<i64>,
+    pub at_gateway: Vec<i64>,
+    pub from_gateway: Vec<i64>,
+    pub parts: Vec<i64>,
 }
 
 /// The P2 world. Static parts (inputs, kernel, parameters, layout) are read-only; the
