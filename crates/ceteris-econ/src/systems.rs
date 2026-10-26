@@ -113,6 +113,7 @@ pub fn deliver(w: &mut EconWorld) {
     let n_buyers = w.pipeline.n_buyers();
     let n_pops = acc.pop.len();
     w.scratch.due.copy_from_slice(w.pipeline.pop_due());
+    let in_flight = w.pipeline.in_flight_all();
     let account = |b: usize| {
         if b < n_pops {
             acc.pop[b]
@@ -136,7 +137,7 @@ pub fn deliver(w: &mut EconWorld) {
             receive(&mut w.ledger, b, x);
         }
         // the largest delivery takes what the account holds beyond the goods still in flight
-        let x = (w.ledger.goods(transit, g) - w.pipeline.in_flight(g)).max(0.0);
+        let x = (w.ledger.goods(transit, g) - in_flight[g]).max(0.0);
         receive(&mut w.ledger, last, x);
     }
 }
@@ -645,9 +646,6 @@ pub fn dispatch(w: &mut EconWorld) {
                 w.ledger.ship(market, transit, g, x);
             }
         }
-        // the losses take what the account holds beyond the goods now in flight
-        let lost = (w.ledger.goods(transit, g) - w.pipeline.in_flight(g)).max(0.0);
-        w.ledger.destroy(transit, g, lost);
 
         let gk = kernel.good(g);
         let ledger = &mut w.ledger;
@@ -683,6 +681,12 @@ pub fn dispatch(w: &mut EconWorld) {
             let rebate = acc.rebate[inp.country_of(d)];
             pay(ledger, TARIFF, acc.market[d], rebate, legs.tariff[d]);
         }
+    }
+    // the losses take what each transit account holds beyond the goods now in flight
+    let in_flight = w.pipeline.in_flight_all();
+    for (g, &transit) in acc.transit.iter().enumerate() {
+        let lost = (w.ledger.goods(transit, g) - in_flight[g]).max(0.0);
+        w.ledger.destroy(transit, g, lost);
     }
     w.scratch.sourced = sourced;
     w.scratch.payments = payments;
