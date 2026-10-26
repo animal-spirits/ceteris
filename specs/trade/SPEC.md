@@ -146,8 +146,10 @@ origin market receives p_o per unit sold.
 
 **Market cash flow (merchant rule, ADR 0112).** A province market buys all the output of its
 producers at its posted price at E2 (p Q, flow SALE), whether or not it sells it, and carries
-what it does not sell as stock without revaluing it. Buyers pay it at T2b and T3 (p_o per unit
-sold at an origin, and the buyer price for local goods), so its signed cash flow in a tick is
+what it does not sell as stock without revaluing it; a local good's unsold output perishes
+(`clear_local` tallies it as spoilage), a pure cash loss of p times the unsold amount. Buyers pay
+it at E2 (local draws by enterprises), T2b and T3 (p_o per unit sold at an origin, and the buyer
+price for local goods), so its signed cash flow in a tick is
 revenue minus p Q: negative while it builds stock or sells below the price it paid, positive while
 it draws stock down. At E4 it passes that cash flow, whatever its sign, to its country's profit pool
 (econ SPEC, Income), so a market carries no balance between ticks and no limited liability or
