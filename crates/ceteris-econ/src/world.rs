@@ -8,7 +8,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use ceteris_core::invariant::Violation;
-use ceteris_core::ledger::{AccountId, Entry, Flow, GOODS_TOLERANCE, Ledger};
+use ceteris_core::ledger::{AccountId, Entry, Flow, GOODS_TOLERANCE, Ledger, PostScratch};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
@@ -199,6 +199,8 @@ pub struct Scratch {
     pub columns: Vec<Columns>,
     /// Per traded good, the money legs of its dispatch at T2b.
     pub payments: Vec<Payments>,
+    /// Working space of `Ledger::post` at T2b.
+    pub post: PostScratch,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * N_GOODS + g]`, refreshed with
@@ -231,6 +233,7 @@ impl Scratch {
             sourced: (0..n_traded).map(|_| Sourced::new()).collect(),
             columns: vec![Columns::default(); n_traded],
             payments: vec![Payments::default(); n_traded],
+            post: PostScratch::default(),
             lead: vec![0.0; np * N_GOODS],
             flows: FlowWindow::new(nc, np),
         }
