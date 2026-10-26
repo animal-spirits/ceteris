@@ -29,10 +29,12 @@ pub const GOODS_TOLERANCE: f64 = 1e-9;
 const POST_CHUNK: usize = 1 << 17;
 
 /// Working space of [`Ledger::post`], kept by the caller between calls: one sum per account
-/// for each chunk of entries, zero between calls.
+/// for each chunk of entries, zero between calls. `dirty` marks a call that did not finish
+/// (an overflow panic), whose sums the next call clears first.
 #[derive(Clone, Debug, Default)]
 pub struct PostScratch {
     deltas: Vec<Vec<i64>>,
+    dirty: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -127,6 +129,9 @@ impl Ledger {
     /// chunks' sums between calls.
     pub fn post(&mut self, entries: &[Entry], scratch: &mut PostScratch) {
         let (n, chunks) = (self.money.len(), entries.len().div_ceil(POST_CHUNK));
+        if scratch.dirty {
+            scratch.deltas.iter_mut().for_each(|d| d.fill(0));
+        }
         if scratch.deltas.len() < chunks {
             scratch.deltas.resize_with(chunks, Vec::new);
         }
@@ -134,6 +139,7 @@ impl Ledger {
         // every delta is zero between calls, so this only sizes them
         deltas.iter_mut().for_each(|d| d.resize(n, 0));
         let open = &self.open;
+        scratch.dirty = true;
         entries
             .par_chunks(POST_CHUNK)
             .zip(deltas.par_iter_mut())
@@ -151,6 +157,7 @@ impl Ledger {
                 *d = 0;
             }
         }
+        scratch.dirty = false;
         self.journal.extend_from_slice(entries);
     }
 
@@ -303,6 +310,29 @@ mod tests {
             assert_eq!(a, b);
         }
         assert!(scratch.deltas.iter().flatten().all(|&d| d == 0));
+    }
+
+    #[test]
+    fn post_after_an_overflow_starts_from_clean_sums() {
+        let mut ledger = Ledger::new(1);
+        let (x, y) = (ledger.open(), ledger.open());
+        let entry = |amount| Entry {
+            flow: Flow(4),
+            from: x,
+            to: y,
+            amount,
+        };
+        let mut scratch = PostScratch::default();
+        let overflow = [entry(5), entry(i64::MAX)];
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ledger.clone().post(&overflow, &mut scratch)
+        }));
+        assert!(caught.is_err() && scratch.dirty);
+        let mut want = ledger.clone();
+        want.transfer(Flow(4), x, y, 3);
+        ledger.post(&[entry(3)], &mut scratch);
+        assert_eq!(ledger, want);
+        assert!(!scratch.dirty && scratch.deltas.iter().flatten().all(|&d| d == 0));
     }
 
     #[derive(Debug, Clone)]
