@@ -325,7 +325,7 @@ N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
 rule (`split`) over the province's pops by employed effective labour.
 
 *Loss write-off (E4, ADR 0098).* After the distribution, enterprise e's retained loss beyond
-T_e = M S_e (M P143, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
+T_e = M S_e (M P148, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
 steady-state sales value) is written off: per country the excesses E_e = max(0, -balance_e -
 T_e) are credited to their enterprises and debited from the country's pops in proportion to
 their positive money, never taking a pop below zero. If the pops hold less than the sum of the
@@ -554,7 +554,7 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
 | P41 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
-| P143 | Loss write-off threshold M (ADR 0098): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
+| P148 | Loss write-off threshold M (ADR 0098): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
 populations, education and labour-force shares, Gini. Calibrated: A (inversion, not

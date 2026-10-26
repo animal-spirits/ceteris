@@ -5,14 +5,14 @@
 ### BEHAVIOUR: loss write-off beyond three months of base sales (ADR 0098, Task 20b)
 
 - After E4's distribution, an enterprise's retained loss beyond M = 3 months of its base sales
-  (P143; VA0 / a_VA, the calibrated steady-state sales value) is written off against its
+  (P148; VA0 / a_VA, the calibrated steady-state sales value) is written off against its
   country's pops in proportion to their positive money: no pop goes below zero, a shortfall is
   shared over the enterprises and carried, and both sides are exact i64 largest-remainder splits
   moved through the country's pool account (flow `WRITE_OFF`, not income).
 - Province markets keep the signed rule: limited liability with a write-off still inflates the
   fixture's run from the data state (world price index 13 at tick 1,200).
 - `EconParams::write_off_months` is new and outside the static digest; the snapshot header carries
-  it after the digest (checked by `restore`) and `params.json` lists it with P143, so every state
+  it after the digest (checked by `restore`) and `params.json` lists it with P148, so every state
   hash and the fixture golden move. An infinite value turns the write-off off. The homogeneity
   property test runs with it off, since the cap is nominal.
 - Steady states and the pack's default run are unchanged apart from the header: no balance is

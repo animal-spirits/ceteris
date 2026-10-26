@@ -27,7 +27,7 @@
     "expectation_gain": "P45",
     "rationing": "S11",
     "technology": "S09",
-    "write_off_months": "P143"
+    "write_off_months": "P148"
   },
   "econ": {
     "sigma_demand": 0.6,
