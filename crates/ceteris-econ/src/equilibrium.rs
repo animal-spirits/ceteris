@@ -19,7 +19,7 @@ use crate::export::ExportError;
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
 use crate::systems::COVER;
-use crate::world::{EconWorld, MINT, static_digest, to_minor};
+use crate::world::{EconWorld, MINT, structural_digest, to_minor};
 
 /// Relative change of every pop's income below which the steady-state income iteration
 /// (tariff rebates and market cash depend on spending) stops.
@@ -130,23 +130,7 @@ impl EconWorld {
     /// parameters (adjustment speeds, the frictionless and rationing switches are free);
     /// panics otherwise.
     pub fn settle(&mut self, solution: &Equilibrium) {
-        let structural = static_digest(
-            &self.inputs,
-            &EconParams {
-                sigma_demand: self.params.sigma_demand,
-                pigl: self.params.pigl.clone(),
-                sigma_fl: self.params.sigma_fl,
-                edu_eff: self.params.edu_eff,
-                ..EconParams::default()
-            },
-            &TradeParams {
-                theta: self.trade.theta,
-                coverage: self.trade.coverage,
-                border_nu: self.trade.border_nu,
-                time_cost: self.trade.time_cost,
-                ..TradeParams::default()
-            },
-        );
+        let structural = structural_digest(&self.inputs, &self.params, &self.trade);
         assert_eq!(
             solution.static_digest,
             hex(&structural),

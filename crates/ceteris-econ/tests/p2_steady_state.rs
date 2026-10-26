@@ -314,6 +314,38 @@ fn calibration_of_other_inputs_does_not_load() {
     assert!(err.0.contains("other inputs"), "{err}");
 }
 
+fn calibrated_fixture() -> Arc<EconInputs> {
+    let mut inputs = small_world();
+    inputs
+        .calibrate(&fixture_dir().join("calibration"))
+        .unwrap();
+    Arc::new(inputs)
+}
+
+/// The calibrated start belongs to the structural parameters it was built under.
+#[test]
+#[should_panic(expected = "calibrated steady state")]
+fn calibrated_start_rejects_other_theta() {
+    let mut trade = TradeParams::default();
+    trade.theta[0] *= 1.1;
+    EconWorld::new(calibrated_fixture(), EconParams::default(), trade);
+}
+
+/// The adjustment speeds do not move the steady state, so they load.
+#[test]
+fn calibrated_start_accepts_other_speeds() {
+    let trade = TradeParams {
+        kappa1: 0.02,
+        expectation_gain: 0.01,
+        ..TradeParams::default()
+    };
+    let params = EconParams {
+        kappa_w: 0.2,
+        ..EconParams::default()
+    };
+    EconWorld::new(calibrated_fixture(), params, trade);
+}
+
 #[test]
 fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let dir = std::env::var_os("CETERIS_PACK").map_or_else(
