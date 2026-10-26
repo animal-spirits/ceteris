@@ -662,6 +662,14 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
     every crossing and domestic entry as often as dispatch does takes at most 1.2 of its
     5.2 ms per good, and the CPU counters put 55% of its cycles as useful and 44% stalled on
     instruction processing (dependent sums, divisions), not on memory.
+  - Pruning gateway crossings by contribution (Task 19b, not kept): within a country pair every
+    crossing's tau is within about 1.3 times the best, and every live crossing carries at least
+    1% of its pair's largest flow. Only the 10,710 crossings to countries with no economy
+    province are exactly negligible (about 0.25 ms); 5 ms needs about 190,000 crossings, which
+    moves Phi_d by 50% to 95%, a change of the model and not of its speed.
+  - Re-budget (owner, 2026-10-26): source_dispatch 8 ms and a whole tick 35 ms on the full pack;
+    trade stays inside the 30 ms of 19.2. The gateway count, which sets the crossing count and
+    the access it buys, moves to the ADR 0092 rework after the gate.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
