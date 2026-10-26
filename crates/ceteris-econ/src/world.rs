@@ -410,6 +410,30 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     state_hash(&e.into_bytes())
 }
 
+/// [`static_digest`] of `inputs` under the structural subset of the parameters, the rest at
+/// their defaults: the parameters a steady state (calibrated or solved) depends on, `sigma_demand`,
+/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `coverage`, `border_nu` and `time_cost`.
+/// The adjustment speeds and the frictionless and rationing switches are free.
+pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
+    static_digest(
+        inputs,
+        &EconParams {
+            sigma_demand: params.sigma_demand,
+            pigl: params.pigl.clone(),
+            sigma_fl: params.sigma_fl,
+            edu_eff: params.edu_eff,
+            ..EconParams::default()
+        },
+        &TradeParams {
+            theta: trade.theta,
+            coverage: trade.coverage,
+            border_nu: trade.border_nu,
+            time_cost: trade.time_cost,
+            ..TradeParams::default()
+        },
+    )
+}
+
 /// Which (province, good) cells have a market, `[province * N_GOODS + g]`. A traded good's
 /// market is the origin market of the province's output: active where an enterprise of the
 /// province produces the good with positive capacity (A VA0 > 0). A local good's market is
@@ -673,7 +697,8 @@ impl EconWorld {
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
     /// per enterprise) minted to each pop: tick 0 wages are paid at E2, so tick 0 spending is
     /// one month of base income. Panics on invalid inputs or a base point other than base
-    /// employment = (1 - u*) L^s under `params.edu_eff`.
+    /// employment = (1 - u*) L^s under `params.edu_eff`, and on a calibrated start under structural
+    /// parameters other than the defaults ([`structural_digest`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
         let inp = &*inputs;
@@ -797,7 +822,15 @@ impl EconWorld {
             digest,
         };
         match w.inputs.steady.clone() {
-            Some(steady) => w.start_steady(&steady),
+            Some(steady) => {
+                assert_eq!(
+                    structural_digest(&w.inputs, &w.params, &w.trade),
+                    structural_digest(&w.inputs, &EconParams::default(), &TradeParams::default()),
+                    "the calibrated steady state was built under the default structural \
+                     parameters; start from the data state (`--data-state`) or recalibrate"
+                );
+                w.start_steady(&steady)
+            }
             None => w.start_data_state(),
         }
         w
