@@ -60,6 +60,8 @@ fn step(w: &mut EconWorld, tick: u32) {
     w.end_tick(tick).expect("invariants hold");
 }
 
+// Batched routines return their input, so that criterion drops it untimed.
+
 /// A world at the start of a tick, after `begin_tick` and the first `n` systems.
 fn before(base: &EconWorld, n: usize) -> EconWorld {
     let mut w = base.clone();
@@ -87,7 +89,14 @@ fn bench(c: &mut Criterion) {
     for (n, (name, run)) in SYSTEMS.iter().enumerate() {
         let start = before(&base, n);
         g.bench_function(*name, |b| {
-            b.iter_batched(|| start.clone(), |mut w| run(&mut w), BatchSize::LargeInput)
+            b.iter_batched(
+                || start.clone(),
+                |mut w| {
+                    run(&mut w);
+                    w
+                },
+                BatchSize::LargeInput,
+            )
         });
     }
 
@@ -101,6 +110,7 @@ fn bench(c: &mut Criterion) {
                 for i in 0..w.inputs().n_provinces() {
                     local::chain(&mut w, i);
                 }
+                w
             },
             BatchSize::LargeInput,
         )
@@ -111,7 +121,10 @@ fn bench(c: &mut Criterion) {
     g.bench_function("price_refresh", |b| {
         b.iter_batched(
             || start.clone(),
-            |mut w| w.refresh_price_index(),
+            |mut w| {
+                w.refresh_price_index();
+                w
+            },
             BatchSize::LargeInput,
         )
     });
@@ -124,7 +137,10 @@ fn bench(c: &mut Criterion) {
     g.bench_function("tick", |b| {
         b.iter_batched(
             || base.clone(),
-            |mut w| step(&mut w, 1),
+            |mut w| {
+                step(&mut w, 1);
+                w
+            },
             BatchSize::LargeInput,
         )
     });

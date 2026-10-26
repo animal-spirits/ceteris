@@ -9,6 +9,7 @@
 //! `dispatch` of every traded good at unit spending for q_d and the lead time, is
 //! `unit_source_dispatch`. In the tick, E3 sources cold and T2 repeats the sourcing at the same
 //! prices warm, so a tick's trade work is `unit_source_dispatch` + `source_warm` + `dispatch`.
+//! The tick runs the goods in parallel, one task each: the `_parallel` benches.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use ceteris_geo::pack::Pack;
 use ceteris_trade::goods::TRADED;
 use ceteris_trade::{Kernel, N_GOODS, Sourced, TradeParams, dispatch, source};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use rayon::prelude::*;
 
 fn inputs() -> (EconInputs, &'static str) {
     let dir = std::env::var_os("CETERIS_PACK").map_or_else(
@@ -84,6 +86,14 @@ fn dispatch_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     }
 }
 
+/// One task per good, as the econ tick runs them.
+fn source_dispatch_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
+    out.par_iter_mut().enumerate().for_each(|(g, r)| {
+        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        dispatch(k, g, &c.price[g], &c.fill[g], r);
+    });
+}
+
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
     let (params, trade) = (EconParams::default(), TradeParams::default());
@@ -130,7 +140,10 @@ fn bench(c: &mut Criterion) {
     g.bench_function("source", |b| {
         b.iter_batched(
             || stale.clone(),
-            |mut s| source_all(kernel, &cols, &mut s),
+            |mut s| {
+                source_all(kernel, &cols, &mut s);
+                s
+            },
             BatchSize::LargeInput,
         )
     });
@@ -146,6 +159,7 @@ fn bench(c: &mut Criterion) {
             |mut s| {
                 source_all(kernel, &cols, &mut s);
                 dispatch_all(kernel, &cols, &mut s);
+                s
             },
             BatchSize::LargeInput,
         )
@@ -156,10 +170,26 @@ fn bench(c: &mut Criterion) {
             |mut s| {
                 source_all(kernel, &unit, &mut s);
                 dispatch_all(kernel, &unit, &mut s);
+                s
             },
             BatchSize::LargeInput,
         )
     });
+    for (name, columns) in [
+        ("source_dispatch_parallel", &cols),
+        ("unit_source_dispatch_parallel", &unit),
+    ] {
+        g.bench_function(name, |b| {
+            b.iter_batched(
+                || stale.clone(),
+                |mut s| {
+                    source_dispatch_parallel(kernel, columns, &mut s);
+                    s
+                },
+                BatchSize::LargeInput,
+            )
+        });
+    }
     let (rationing, pi) = (w.params().rationing, w.expected_inflation);
     g.bench_function("clear_reprice", |b| {
         b.iter_batched(
@@ -168,6 +198,7 @@ fn bench(c: &mut Criterion) {
                 m.clear(rationing, &mut fill);
                 m.clear_local(&mut spoiled);
                 m.reprice(&trade, pi);
+                m
             },
             BatchSize::LargeInput,
         )
