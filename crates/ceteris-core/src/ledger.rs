@@ -108,6 +108,21 @@ impl Ledger {
         });
     }
 
+    /// [`Ledger::transfer`] of each entry in turn: the same balances and journal.
+    pub fn post(&mut self, entries: &[Entry]) {
+        for e in entries {
+            debug_assert!(self.is_open(e.from) && self.is_open(e.to));
+            let (f, t) = (e.from.0 as usize, e.to.0 as usize);
+            self.money[f] = self.money[f]
+                .checked_sub(e.amount)
+                .expect("ledger overflow");
+            self.money[t] = self.money[t]
+                .checked_add(e.amount)
+                .expect("ledger overflow");
+        }
+        self.journal.extend_from_slice(entries);
+    }
+
     pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
         *self.slot(from, good) -= qty;
         *self.slot(to, good) += qty;
@@ -209,6 +224,23 @@ impl Decode for Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn post_is_transfer_in_turn() {
+        let (mut a, mut b) = (Ledger::new(1), Ledger::new(1));
+        let ids: Vec<AccountId> = (0..3).map(|_| (a.open(), b.open()).0).collect();
+        let entries = [(0, 1, 5), (1, 2, -3), (2, 0, 7), (0, 2, 0)].map(|(f, t, amount)| Entry {
+            flow: Flow(4),
+            from: ids[f],
+            to: ids[t],
+            amount,
+        });
+        for e in &entries {
+            a.transfer(e.flow, e.from, e.to, e.amount);
+        }
+        b.post(&entries);
+        assert_eq!(a, b);
+    }
     use proptest::prelude::*;
 
     #[derive(Debug, Clone)]
