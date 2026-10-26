@@ -32,8 +32,8 @@ use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local::{self, LOCAL};
 use crate::production::{labour_target, rho, value_added};
 use crate::world::{
-    Accounts, DIVIDEND, EconWorld, PURCHASE, Payments, REBATE, SALE, TARIFF, TRADE, WAGE, to_minor,
-    to_numeraire,
+    Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
+    TRADE, WAGE, to_minor, to_numeraire,
 };
 
 /// Months of use an enterprise keeps in stock beyond replacement and transit (Task 7b).
@@ -547,23 +547,22 @@ pub fn clear(w: &mut EconWorld) {
     }
 }
 
-/// One buyer of a traded good at its destination: ledger account, pipeline index, class
-/// and spending.
-struct Buyer {
-    account: AccountId,
-    index: usize,
-    class: usize,
-    spend: f64,
+/// Spending on traded goods per enterprise, per pop and per destination cell by class
+/// (`Scratch::ent_spend`, `pop_spend`, `class_spend`).
+#[derive(Clone, Copy)]
+struct Spending<'a> {
+    enterprise: &'a [f64],
+    pop: &'a [f64],
+    class: &'a [[f64; 2]],
 }
 
 /// Buyers of good `g` in province `d` with positive spending, enterprises then pops.
-fn buyers_of(w: &EconWorld, d: usize, g: usize, out: &mut Vec<Buyer>) {
-    let (lay, sc) = (&*w.layout, &w.scratch);
+fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Buyer>) {
     let acc = &lay.accounts;
     let n_pops = acc.pop.len();
     out.clear();
     for e in lay.enterprises(d) {
-        let spend = sc.ent_spend[e * N_GOODS + g];
+        let spend = spend.enterprise[e * N_GOODS + g];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.enterprise[e],
@@ -574,7 +573,7 @@ fn buyers_of(w: &EconWorld, d: usize, g: usize, out: &mut Vec<Buyer>) {
         }
     }
     for k in lay.pops(d) {
-        let spend = sc.pop_spend[k * N_GOODS + g];
+        let spend = spend.pop[k * N_GOODS + g];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.pop[k],
@@ -583,6 +582,39 @@ fn buyers_of(w: &EconWorld, d: usize, g: usize, out: &mut Vec<Buyer>) {
                 spend,
             });
         }
+    }
+}
+
+/// Each buyer's share of good `g`'s dispatch `r` at its destination, in province and buyer
+/// order: what it may take home now, what it gets in each pipeline slot, and its payment to
+/// the destination market, a ledger entry (left out when zero, as `pay` leaves it).
+fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Payments) {
+    let acc = &lay.accounts;
+    (p.orders.clear(), p.order_ends.clear(), p.entries.clear());
+    for d in 0..acc.market.len() {
+        let (cell, market) = (d * N_GOODS + g, acc.market[d]);
+        buyers_of(lay, spend, d, g, &mut p.buyers);
+        for b in &p.buyers {
+            let share = b.spend / spend.class[cell][b.class];
+            let slots = std::array::from_fn(|s| r.arrive[s + 1][d][b.class] * share);
+            p.orders.push(Order {
+                account: b.account,
+                buyer: b.index,
+                household: b.class == HOUSEHOLD,
+                home: r.arrive[0][d][b.class] * share,
+                slots,
+            });
+            let amount = to_minor(r.paid_by_class[d][b.class] * share);
+            if amount != 0 {
+                p.entries.push(Entry {
+                    flow: PURCHASE,
+                    from: b.account,
+                    to: market,
+                    amount,
+                });
+            }
+        }
+        p.order_ends.push(p.orders.len() as u32);
     }
 }
 
@@ -602,9 +634,13 @@ pub fn dispatch(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
     let np = kernel.n_provinces;
-    let mut buyers = Vec::new();
     let sc = &mut w.scratch;
     let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
+    let spending = Spending {
+        enterprise: &sc.ent_spend,
+        pop: &sc.pop_spend,
+        class: &sc.class_spend,
+    };
     (
         &mut sc.sourced,
         &mut sc.columns,
@@ -624,36 +660,37 @@ pub fn dispatch(w: &mut EconWorld) {
                     let (pc, gc) = (&net.province_country, &net.gateway_country);
                     flows.record(kernel, pc, gc, g, &col.price, r);
                 },
-                || trade_legs(inp, acc, kernel, g, r, legs),
+                || {
+                    buyer_orders(lay, spending, g, r, legs);
+                    trade_legs(inp, acc, kernel, g, r, legs);
+                },
             );
         });
     let sourced = std::mem::take(&mut w.scratch.sourced);
     let payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
         let transit = acc.transit[g];
+        let mut first = 0;
         for d in 0..np {
             let (cell, market) = (d * N_GOODS + g, acc.market[d]);
             w.scratch.dispatched[cell] = r.shipped[d];
-            // buyers at d: home purchases now, shipments into the pipeline, payments
-            buyers_of(w, d, g, &mut buyers);
-            for b in &buyers {
-                let share = b.spend / w.scratch.class_spend[cell][b.class];
-                let home = (r.arrive[0][d][b.class] * share).min(w.ledger.goods(market, g));
+            // buyers at d: home purchases now, shipments into the pipeline
+            let end = legs.order_ends[d] as usize;
+            for o in &legs.orders[first..end] {
+                let home = o.home.min(w.ledger.goods(market, g));
                 if home > 0.0 {
-                    w.ledger.ship(market, b.account, g, home);
-                    if b.class == HOUSEHOLD {
-                        w.ledger.destroy(b.account, g, home);
+                    w.ledger.ship(market, o.account, g, home);
+                    if o.household {
+                        w.ledger.destroy(o.account, g, home);
                     }
                 }
-                for slot in 1..r.arrive.len() {
-                    let units = r.arrive[slot][d][b.class] * share;
+                for (slot, &units) in o.slots.iter().enumerate() {
                     if units > 0.0 {
-                        w.pipeline.push(slot, b.index, g, units);
+                        w.pipeline.push(slot + 1, o.buyer, g, units);
                     }
                 }
-                let value = to_minor(r.paid_by_class[d][b.class] * share);
-                pay(&mut w.ledger, PURCHASE, b.account, market, value);
             }
+            first = end;
             // what leaves the origin market beyond its home sales and its carried stock
             let x = (w.ledger.goods(market, g) - w.markets.inventory[cell]).max(0.0);
             if x > 0.0 {
@@ -661,6 +698,7 @@ pub fn dispatch(w: &mut EconWorld) {
             }
         }
 
+        // the buyers' payments, then the legs
         w.ledger.post(&legs.entries);
     }
     // the losses take what each transit account holds beyond the goods now in flight
@@ -674,7 +712,7 @@ pub fn dispatch(w: &mut EconWorld) {
 }
 
 /// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
-/// as ledger entries in payment order: destinations pay origins and their gateways, each
+/// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations pay origins and their gateways, each
 /// gateway splits what it takes in over the legs that fed it ([`split`]), so it pays out
 /// exactly that, and destinations pay tariffs to their country's rebate account. Zero
 /// amounts are left out, as `pay` leaves them.
@@ -689,7 +727,6 @@ fn trade_legs(
     let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
     let gk = kernel.good(g);
     let entries = &mut p.entries;
-    entries.clear();
     let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
         if amount != 0 {
             entries.push(Entry {
