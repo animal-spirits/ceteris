@@ -1,9 +1,8 @@
 {
-  "format": "8",
-  "static_digest": "c2022dbbd05bb7ed18d6cc3655350a00a60262c60ccdf8df65fbfba97a31c46c",
+  "format": "9",
+  "static_digest": "35636869f0eb845c5c7b0572be725d4ee2d03345f272b5e866285ce8467f0205",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
-  "weight_floor": 1e-100,
   "register": {
     "theta": "P01",
     "theta_class": "P01",
