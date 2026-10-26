@@ -107,9 +107,7 @@ fn bench(c: &mut Criterion) {
         b.iter_batched(
             || start.clone(),
             |mut w| {
-                for i in 0..w.inputs().n_provinces() {
-                    local::chain(&mut w, i);
-                }
+                local::chain_all(&mut w);
                 w
             },
             BatchSize::LargeInput,
