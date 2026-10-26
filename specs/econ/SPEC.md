@@ -298,23 +298,29 @@ employed_k = LF_k L_i / L^s_i is set by E1 (LF_k the pop's labour force, L_i = s
 province's employment, L^s_i its labour supply), so sum_(k in i) e_k employed_k = L_i exactly and
 the wage term is the pop's share of the province's wage bill w_i L_i. N_k the pop's population,
 N_c its country's pops' population, profit_e = sales - wages - purchases of enterprise e
-(signed) plus, in the profit pool, each province market's signed cash flow (trade SPEC), so the
-pool is sum over the country's enterprises and markets. Shares are fixed at load. At a steady
-state profit_e = (1 - s_L) VA0_e and market cash flow is 0. A province without traded output so
+plus the losses it carries, paid only when positive (limited liability, owner 2026-10-26: a
+loss stays with the enterprise as retained losses and later cash flow repays it before any
+payout, so enterprises pay no negative dividend), and in the profit pool each province market's
+signed cash flow (trade SPEC), so the pool is sum over the country's enterprises and markets.
+Markets keep the signed rule while the owner decides (Open questions, Debt overhang). Shares
+are fixed at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, and
+market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
 `io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
 population of its pops. A pack country with enterprises but no pops stops the load (`PackError`):
 nobody would own its profits.
 
-*Rounding (E4).* Every enterprise and province market pays its signed cash flow, in minor units,
-into its country's profit pool account; each country then pays its pool, one i64 sum per tick,
+*Rounding (E4).* Every enterprise pays its balance when positive, and every province market its
+signed cash flow, in minor units, into its country's profit pool account; an enterprise with a
+negative balance pays nothing and keeps it. Each country then pays its pool, one i64 sum per tick,
 and its rebate account to its pops in pop ID order by cumulative population shares rounded half
 to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
 pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
-pool, the rebate account and every enterprise and market end the tick at zero and money is
-conserved exactly; each part is within one minor unit of N_k / N_c of the pool
-(`national_profit_pool_conserves_money_exactly`). Wages use the same rule over the province's
+pool, the rebate account and every market end the tick at zero, every enterprise at its
+retained losses or zero, and money is conserved exactly; each part is within one minor unit of
+N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
+`limited_liability_keeps_losses_and_repays_them_first`). Wages use the same rule over the province's
 pops by employed effective labour.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;

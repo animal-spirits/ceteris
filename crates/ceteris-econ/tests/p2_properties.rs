@@ -45,9 +45,13 @@ proptest! {
         prop_assert!(run.is_ok(), "{}", run.unwrap_err());
         let w = sim.world();
         prop_assert!(w.markets.price.iter().all(|p| p.is_finite() && *p > 0.0));
-        // all money is back with the pops at the end of every tick
+        // every profit is back with the pops at the end of every tick; losses stay with
+        // their enterprise (limited liability)
         let acc = &w.layout().accounts;
-        for a in acc.enterprise.iter().chain(&acc.market).chain(&acc.rebate) {
+        for a in &acc.enterprise {
+            prop_assert!(w.ledger.money(*a) <= 0);
+        }
+        for a in acc.market.iter().chain(&acc.rebate) {
             prop_assert_eq!(w.ledger.money(*a), 0);
         }
     }
@@ -442,12 +446,13 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
     }
 }
 
-/// National profit ownership (owner, 2026-10-25; SPEC Income): at E4 every enterprise's and
-/// every province market's signed cash flow joins one pool per country, paid to the country's
-/// pops by population share N_k / N_c, the cumulative shares rounded half to even. Money is
-/// conserved exactly: each country's pops receive, in minor units, exactly the cash its
-/// enterprises and markets held; each pop's part is within one minor unit of N_k / N_c of the
-/// pool; every enterprise, market and rebate account ends at zero.
+/// National profit ownership (owner, 2026-10-25; SPEC Income) with limited liability of
+/// enterprises (owner, 2026-10-26): at E4 every enterprise's positive balance and every province
+/// market's signed cash flow join one pool per country, paid to the country's pops by
+/// population share N_k / N_c, the cumulative shares rounded half to even. Money is conserved
+/// exactly: each country's pops receive, in minor units, exactly what joined its pool; each
+/// pop's part is within one minor unit of N_k / N_c of the pool; enterprises keep a negative
+/// balance and end at zero otherwise; markets and rebate accounts end at zero.
 #[test]
 fn national_profit_pool_conserves_money_exactly() {
     for params in [EconParams::default(), EconParams::frictionless()] {
@@ -466,9 +471,10 @@ fn national_profit_pool_conserves_money_exactly() {
                 pool[c] += w.ledger.money(acc.market[i]);
                 pool[c] += lay
                     .enterprises(i)
-                    .map(|e| w.ledger.money(acc.enterprise[e]))
+                    .map(|e| w.ledger.money(acc.enterprise[e]).max(0))
                     .sum::<i64>();
             }
+            let held: Vec<i64> = acc.enterprise.iter().map(|&a| w.ledger.money(a)).collect();
             let start = w.ledger.journal().len();
             systems::distribute(&mut w);
             let pop_of = |a| acc.pop.iter().position(|&p| p == a);
@@ -495,12 +501,87 @@ fn national_profit_pool_conserves_money_exactly() {
                 );
             }
             assert_eq!(paid, pool, "tick {tick}: pools paid out exactly");
-            for a in acc.enterprise.iter().chain(&acc.market).chain(&acc.rebate) {
+            for (a, &before) in acc.enterprise.iter().zip(&held) {
+                assert_eq!(w.ledger.money(*a), before.min(0), "tick {tick}");
+            }
+            for a in acc.market.iter().chain(&acc.rebate) {
                 assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
             }
             w.end_tick(tick).unwrap();
         }
     }
+}
+
+/// Limited liability of enterprises (owner, 2026-10-26; SPEC Income): an enterprise whose
+/// balance is negative at E4 keeps it as retained losses, pays no dividend and takes none from
+/// its country's pool; while enterprises earn, no pop is paid a negative dividend; later profit
+/// first repays the loss and only the rest joins the pool. Money is conserved exactly.
+#[test]
+fn limited_liability_keeps_losses_and_repays_them_first() {
+    let calibration = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/golden/p2-fixture/calibration");
+    let mut inputs = small_world();
+    inputs.calibrate(&calibration).unwrap();
+    let mut w = EconWorld::new(
+        Arc::new(inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let lay = w.layout().clone();
+    let acc = &lay.accounts;
+    // DIVIDEND entries from account `from`, or else to pops
+    let dividends = |w: &EconWorld, start: usize, from: Option<usize>| -> Vec<i64> {
+        w.ledger.journal()[start..]
+            .iter()
+            .filter(|x| x.flow == DIVIDEND)
+            .filter(|x| from.map_or(acc.pop.contains(&x.to), |a| x.from.0 as usize == a))
+            .map(|x| x.amount)
+            .collect()
+    };
+
+    // tick 0: the most profitable enterprise ends with a loss of half its profit (the other
+    // half taken by the mint)
+    up_to_dispatch(&mut w);
+    systems::dispatch(&mut w);
+    systems::reprice(&mut w);
+    let e = (0..acc.enterprise.len())
+        .max_by_key(|&e| w.ledger.money(acc.enterprise[e]))
+        .unwrap();
+    let profit = w.ledger.money(acc.enterprise[e]);
+    assert!(profit > 0, "the steady state is profitable");
+    let loss = profit / 2;
+    w.ledger
+        .transfer(MINT, acc.enterprise[e], acc.mint, profit + loss);
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    assert_eq!(w.ledger.money(acc.enterprise[e]), -loss, "the loss stays");
+    let enterprise_account = acc.enterprise[e].0 as usize;
+    assert!(dividends(&w, start, Some(enterprise_account)).is_empty());
+    assert!(
+        dividends(&w, start, None).iter().all(|&d| d >= 0),
+        "a negative dividend"
+    );
+    w.end_tick(0).unwrap();
+
+    // tick 1: the profit repays the loss before anything joins the pool
+    up_to_dispatch(&mut w);
+    systems::dispatch(&mut w);
+    systems::reprice(&mut w);
+    let balance = w.ledger.money(acc.enterprise[e]);
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    let paid: i64 = dividends(&w, start, Some(enterprise_account)).iter().sum();
+    assert_eq!(
+        paid,
+        balance.max(0),
+        "pays out only what is left after the loss"
+    );
+    assert_eq!(w.ledger.money(acc.enterprise[e]), balance.min(0));
+    assert!(
+        dividends(&w, start, None).iter().all(|&d| d >= 0),
+        "a negative dividend"
+    );
+    w.end_tick(1).unwrap();
 }
 
 /// ADR 0089: the frictionless wage clears labour at the natural rate, sum_g L*_ig(w) =
@@ -1041,7 +1122,10 @@ fn unreachable_destination_buys_nothing_in_the_world() {
             assert!(w.expected_inflation.is_finite());
             let traded = (0..N_GOODS).filter(|&g| TRADED[g]);
             assert!(traded.map(|g| w.pipeline.in_flight(g)).all(f64::is_finite));
-            for a in lay.accounts.enterprise.iter().chain(&lay.accounts.market) {
+            for a in &lay.accounts.enterprise {
+                assert!(w.ledger.money(*a) <= 0, "a profit was not paid out");
+            }
+            for a in &lay.accounts.market {
                 assert_eq!(w.ledger.money(*a), 0);
             }
         }
