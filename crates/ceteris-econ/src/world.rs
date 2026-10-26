@@ -110,7 +110,7 @@ pub struct Layout {
     pub pigl: Vec<PiglWeights>,
     /// Log income dispersion sigma of every pop of a country, from the country's Gini.
     pub sigma_income: Vec<f64>,
-    /// Retained loss each enterprise keeps before the write-off (ADR 0098), minor units: M
+    /// Retained loss each enterprise keeps before the write-off (ADR 0112), minor units: M
     /// months of its base sales VA0 / a_VA (the calibrated steady-state sales value).
     pub ent_loss_cap: Vec<i64>,
 }

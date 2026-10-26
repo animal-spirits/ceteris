@@ -1,4 +1,4 @@
-# 0098. Loss write-off in P2
+# 0112. Loss write-off in P2
 
 Status: accepted (owner, 2026-10-26; design a controller ruling, PLAN Task 20b)
 Date: 2026-10-26

@@ -790,10 +790,10 @@ pub fn reprice(w: &mut EconWorld) {
 }
 
 /// E4 (national ownership, owner 2026-10-25; limited liability of enterprises, owner
-/// 2026-10-26; loss write-off, ADR 0098): every enterprise pays its balance into its country's
+/// 2026-10-26; loss write-off, ADR 0112): every enterprise pays its balance into its country's
 /// profit pool when the balance is positive and otherwise keeps it, so a loss stays with the
 /// enterprise as retained losses, which later cash flow repays before anything is paid out;
-/// every province market pays its signed cash flow (ADR 0098, Markets). Each country pays its
+/// every province market pays its signed cash flow (ADR 0112, Markets). Each country pays its
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
 /// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
@@ -836,7 +836,7 @@ pub fn distribute(w: &mut EconWorld) {
     write_off(w);
 }
 
-/// The loss write-off of E4 (ADR 0098): per country, the excess of every enterprise's retained
+/// The loss write-off of E4 (ADR 0112): per country, the excess of every enterprise's retained
 /// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in
 /// proportion to their positive money, never taking a pop below zero. Where the pops hold less than the excess, what they hold is
 /// written off, shared over the holders by their excess, and the rest stays with them. Both
