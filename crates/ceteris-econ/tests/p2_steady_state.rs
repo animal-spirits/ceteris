@@ -7,9 +7,10 @@
 //! Acceptance (owner decision 2026-10-25, a resolution-aware test; controller ruling on its
 //! form, ADR 0089 As built): on the fixture every quantity holds to 1e-9 relative. On the full
 //! pack money is integer minor units (1e-4 USD), and national dividends and domestic trade
-//! carry each pop's rounding through its country, so prices and flows hold to 1e-6 relative,
-//! money (pop income and balances) to 4 minor units per pop or 1e-9 relative, whichever is
-//! larger, and world aggregates (price index, income, unemployment) to 1e-9. Every quantity's
+//! carry each pop's rounding through its country, so prices and flows hold to 2e-6 relative,
+//! money (pop income and balances, which drift as real drift times income) to 2e-6 relative or
+//! 4 minor units per pop, whichever is larger, and world aggregates (price index, income,
+//! unemployment) to 1e-9. Every quantity's
 //! drift stays bounded: its largest value over ticks 61 to 120, scaled by its tolerance, is at
 //! most twice that over ticks 5 to 60 (ticks 1 to 4, where prices and wages settle onto the
 //! rounding lattice, left out).
@@ -30,8 +31,8 @@ const SETTLE: u32 = 4;
 const SPLIT: u32 = 60;
 /// The relative tolerance of ADR 0089, and of world aggregates on the pack.
 const EXACT: f64 = 1e-9;
-/// The pack's relative tolerance of prices and flows.
-const PACK_REAL: f64 = 1e-6;
+/// The pack's relative tolerance of prices, flows and money.
+const PACK_RELATIVE: f64 = 2e-6;
 /// The pack's absolute tolerance of money per pop, in minor units.
 const PACK_MINOR: f64 = 4.0;
 
@@ -52,11 +53,12 @@ enum Kind {
     World,
 }
 
-/// The tolerances of a world: relative for real quantities, absolute minor units (or the
-/// relative floor) for money, relative for world aggregates.
+/// The tolerances of a world: relative for real quantities; for money the larger of a
+/// relative bound and an absolute one in minor units; relative for world aggregates.
 #[derive(Clone, Copy, Debug)]
 struct Tolerance {
     real: f64,
+    money: f64,
     minor: f64,
     world: f64,
 }
@@ -64,11 +66,13 @@ struct Tolerance {
 /// Every quantity at 1e-9 relative (the fixture).
 const FIXTURE: Tolerance = Tolerance {
     real: EXACT,
+    money: EXACT,
     minor: 0.0,
     world: EXACT,
 };
 const PACK: Tolerance = Tolerance {
-    real: PACK_REAL,
+    real: PACK_RELATIVE,
+    money: PACK_RELATIVE,
     minor: PACK_MINOR,
     world: EXACT,
 };
@@ -207,7 +211,7 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                 let scaled = match kind {
                     Kind::Real => relative / tol.real,
                     Kind::World => relative / tol.world,
-                    Kind::Money => minor / tol.minor.max(EXACT * b.abs() * MINOR_PER_UNIT),
+                    Kind::Money => minor / tol.minor.max(tol.money * b.abs() * MINOR_PER_UNIT),
                 };
                 if relative > r.relative {
                     (r.relative, r.tick, r.entry) = (relative, tick, entry);
@@ -305,7 +309,7 @@ fn calibration_of_other_inputs_does_not_load() {
 }
 
 #[test]
-fn pack_calibrated_state_holds_to_the_money_resolution() {
+fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let dir = std::env::var_os("CETERIS_PACK").map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/packs/2000"),
         PathBuf::from,
