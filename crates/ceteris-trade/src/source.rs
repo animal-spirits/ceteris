@@ -146,7 +146,7 @@ pub fn origin_weights(
     active: &[bool],
     out: &mut Vec<f64>,
 ) -> f64 {
-    assert!(price.len() == k.n_provinces && active.len() == k.n_provinces);
+    assert!(price.len() == k.n_provinces() && active.len() == k.n_provinces());
     let mut p_min = f64::INFINITY;
     for (o, &p) in price.iter().enumerate() {
         if active[o] {
@@ -155,11 +155,11 @@ pub fn origin_weights(
         }
     }
     out.clear();
-    out.extend((0..k.n_provinces).map(|o| {
+    out.extend((0..k.n_provinces()).map(|o| {
         if !active[o] {
             return 0.0;
         }
-        let w = libm::pow(price[o] / p_min, -k.theta[g]);
+        let w = libm::pow(price[o] / p_min, -k.theta(g));
         if w >= WEIGHT_FLOOR { w } else { 0.0 }
     }));
     p_min
@@ -189,7 +189,7 @@ pub fn source(
     spend: &[[f64; 2]],
     out: &mut Sourced,
 ) {
-    let (np, ng) = (k.n_provinces, k.n_gateways);
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(spend.len(), np, "spend must have one entry per province");
     let gk = k.good(g);
     let s = &mut out.scratch;
@@ -207,7 +207,7 @@ pub fn source(
             s.access
                 .pi
                 .iter()
-                .map(|&f| price_index(p_min, f, k.theta[g])),
+                .map(|&f| price_index(p_min, f, k.theta(g))),
         );
         s.price.clear();
         s.price.extend_from_slice(price);
@@ -318,7 +318,7 @@ pub fn source(
 /// physical factor (iceberg, and the border loss on crossings), and a crossing divides the
 /// value by its `1 + t`, so arrivals are the sum over routes of `X / (p_o (1 + t) tau_route)`.
 pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mut Sourced) {
-    let (np, ng) = (k.n_provinces, k.n_gateways);
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(
         out.scratch.good,
         Some(g),
@@ -998,7 +998,7 @@ mod tests {
             let (net, wedges) = random_world(seed);
             let n = net.n_provinces();
             let k = Kernel::build(&net, &W, &wedges, &p);
-            assert_eq!(k.theta[g], p.theta[g]);
+            assert_eq!(k.theta(g), p.theta[g]);
             let mut rng = rng(seed);
             let price = draw(&mut rng, n, 0.5, 1.5);
             let spend = draw2(&mut rng, n, 1.0, 100.0);
@@ -1109,7 +1109,7 @@ mod tests {
             let out = run(&k, g, &price, &vec![true; n], &spend, &fill);
 
             let gk = k.good(g);
-            let (mut m_in, mut m_out) = (vec![0.0; k.n_gateways], vec![0.0; k.n_gateways]);
+            let (mut m_in, mut m_out) = (vec![0.0; k.n_gateways()], vec![0.0; k.n_gateways()]);
             let mut paid: Vec<f64> = out.tariff.clone();
             let mut received = vec![0.0; n];
             for p in 0..n {
@@ -1139,7 +1139,7 @@ mod tests {
                     due += f64::from(e.tariff) * out.crossing_value[lo + i];
                 }
             }
-            for a in 0..k.n_gateways {
+            for a in 0..k.n_gateways() {
                 assert!(close(m_in[a], m_out[a], 1e-12), "gateway {a}");
             }
             assert_close("paid", &paid, &out.paid, 1e-12);

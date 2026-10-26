@@ -64,7 +64,7 @@ impl GoodFlows {
         let gk = kernel.good(g);
         let pair = |ex: u16, im: u16| usize::from(ex) * nc + usize::from(im);
 
-        for o in 0..kernel.n_provinces {
+        for o in 0..kernel.n_provinces() {
             let home = r.arrive[0][o][0] + r.arrive[0][o][1];
             self.home_value[o] += price[o] * home;
             self.home_units[o] += home;
@@ -75,7 +75,7 @@ impl GoodFlows {
                 self.pair_units[at] += r.domestic_value[j] / price[o];
             }
         }
-        for a in 0..kernel.n_gateways {
+        for a in 0..kernel.n_gateways() {
             let lo = gk.crossings.offsets[a] as usize;
             for (j, e) in gk.crossings.row(a).iter().enumerate() {
                 let at = pair(gateway_country[a], gateway_country[e.col as usize]);
