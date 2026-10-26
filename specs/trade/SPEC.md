@@ -302,8 +302,9 @@ leaving out São Tomé's two provinces (`EXCLUDE=3545,3546`); at gain 0 1.00000 
 0.99148, the default mode the same). The grid (`p2_price_rule_sweep.rs`, `pack_grid`,
 `r1/pack_grid.log`, largest deviation over every cell, growth and the deviation at 600 in
 brackets): kappa2 0: kappa1 0.02: 0.9932 (4.6e-4) / 0.9935 (5.5e-4); 0.05: 1.0000 (9.7e-3) /
-0.9923 (4.3e-5); 0.1: 1.0000 (0.43) / 0.9962 (1.5e-5); 0.2: frictionless stops at tick 202 on
-the inventory invariant (province 3204, good 0) / 1.0003 (0.46). kappa2 0.05: kappa1 0.02:
+0.9923 (4.3e-5); 0.1: 1.0000 (0.43) / 0.9962 (1.5e-5); 0.2: 1.0000 (1.1) / 1.0003 (0.46)
+(frictionless first stopped at tick 202 on a false inventory violation, since fixed; rerun with
+the write-off, `r3/pack_grid_k1_0.2.log`). kappa2 0.05: kappa1 0.02:
 1.0016 (0.12) / ledger overflow; 0.05: 1.0001 (0.14) / ledger overflow; 0.1: 1.0010 (0.56) /
 0.9980 (0.096); 0.2: 0.9997 (1.7) / 1.0003 (0.50). The pack's small value-added shares shrink
 the region that the fixture drew: every kappa2 0.05 point and kappa1 0.2 leave it, and at
@@ -344,7 +345,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | Gateway clearing | Each gateway's money and goods net to zero every tick | exact money, 1e-9 goods | every tick |
 | Sourcing | sum_o X_od = E_d for each reachable destination and good | 1e-12 relative | `source` unit and property tests |
 | Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 relative | every tick |
-| Inventory sign | S >= 0 | exact | every tick |
+| Inventory sign | S >= 0, and the market account holds S | exact; holding to 1e-9 of the turnover S + Q + D (Task 20 round 3) | every tick |
 | Price bounds | Prices finite and positive | exact | every tick |
 | Two-level vs single-level | On small worlds, flows from the gateway kernel versus direct-path kernel: median absolute log difference reported, and both nest in their GE solutions | report only; V1 tolerances apply to each | `tests/trade_nesting.rs` |
 | Pipeline | goods in the transit accounts = goods in the pipeline, per good | 1e-9 relative | every tick |
