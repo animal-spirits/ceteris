@@ -6,7 +6,8 @@ Design sections: 5.4, 8.3, 15.2, 18 (H2), 17 (P01, P05); trade SPEC Two-level ke
 
 ## Context
 
-- **theta and nu disagree.** P01 takes the Caliendo-Parro class values (2.62, 5.88, 12.55),
+- **theta and nu disagree.** P01 takes the Caliendo-Parro class values (2.62, 5.88, 12.55 when written;
+  2.62, 5.19, 10.57 since the OECD key, ADR 0023),
   while P05 keeps nu = 0.3. The PPML border coefficient on 2000 BACI implies nu of about 0.2 at
   theta 12 to 13, and about 3.0 for food at 2.62. At theta 2.62, nu 0.3 cuts cross-border food
   access by (1.3)^-2.62 = 0.50, while the data say about (4.0)^-2.62 = 0.026.
