@@ -261,15 +261,41 @@ impl Columns {
     }
 }
 
-/// One traded good's money legs of T2b as ledger entries, computed with its dispatch and
-/// posted afterwards (`systems::trade_legs`). `at_gateway`, `from_gateway` and `parts` are
-/// working space.
+/// One traded good's dispatch to its buyers and its money legs at T2b, computed in the
+/// good's task and applied afterwards (`systems::buyer_orders`, `systems::trade_legs`): each
+/// buyer's order in province and buyer order, with the end of each province's orders, and the
+/// ledger entries, the buyers' payments then the legs. `buyers`, `at_gateway`,
+/// `from_gateway` and `parts` are working space.
 #[derive(Clone, Debug, Default)]
 pub struct Payments {
+    pub orders: Vec<Order>,
+    pub order_ends: Vec<u32>,
     pub entries: Vec<Entry>,
+    pub buyers: Vec<Buyer>,
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
     pub parts: Vec<i64>,
+}
+
+/// One buyer of a traded good at its destination: ledger account, pipeline index, class
+/// and spending.
+#[derive(Clone, Debug)]
+pub struct Buyer {
+    pub account: AccountId,
+    pub index: usize,
+    pub class: usize,
+    pub spend: f64,
+}
+
+/// One buyer's share of a good's dispatch: units it may take home now (at most what the
+/// market holds), units due in each pipeline slot 1 to 4, and whether it consumes them.
+#[derive(Clone, Debug)]
+pub struct Order {
+    pub account: AccountId,
+    pub buyer: usize,
+    pub household: bool,
+    pub home: f64,
+    pub slots: [f64; 4],
 }
 
 /// The P2 world. Static parts (inputs, kernel, parameters, layout) are read-only; the
