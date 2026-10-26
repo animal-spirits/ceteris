@@ -55,6 +55,41 @@ impl<E> Csr<E> {
     }
 }
 
+/// Entries of a [`Csr`] grouped by column, stable: the entries of column c are
+/// `pairs[offsets[c]..offsets[c + 1]]`, as (row, index into `Csr::entries`) in row order.
+#[derive(Clone, Debug, Default)]
+pub struct ByColumn {
+    pub offsets: Vec<u32>,
+    pub pairs: Vec<(u32, u32)>,
+}
+
+impl ByColumn {
+    fn new<E>(csr: &Csr<E>, col: impl Fn(&E) -> usize, n_cols: usize) -> Self {
+        let mut offsets = vec![0u32; n_cols + 1];
+        for e in &csr.entries {
+            offsets[col(e) + 1] += 1;
+        }
+        for c in 0..n_cols {
+            offsets[c + 1] += offsets[c];
+        }
+        let mut next = offsets.clone();
+        let mut pairs = vec![(0, 0); csr.entries.len()];
+        for row in 0..csr.n_rows() {
+            let lo = csr.offsets[row];
+            for (j, e) in csr.row(row).iter().enumerate() {
+                let c = col(e);
+                pairs[next[c] as usize] = (row as u32, lo + j as u32);
+                next[c] += 1;
+            }
+        }
+        Self { offsets, pairs }
+    }
+
+    pub fn column(&self, c: usize) -> &[(u32, u32)] {
+        &self.pairs[self.offsets[c] as usize..self.offsets[c + 1] as usize]
+    }
+}
+
 /// A domestic or access leg: `tau = 1 + c w + lambda T` on the least-cost leg (S05), or the
 /// route-choice factor when the network carries one, and `k = tau^-theta_g`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -100,6 +135,10 @@ pub struct Kernel {
     /// (ADR 0018).
     pub theta: [f64; N_GOODS],
     goods: [Option<GoodKernel>; N_GOODS],
+    /// Crossings by destination gateway and access legs by gateway, the same for every good:
+    /// all goods share the network's legs and their order.
+    crossings_by_target: ByColumn,
+    access_by_gateway: ByColumn,
     /// Unique per build and per change, so `source` can tell a kernel it has seen.
     id: u64,
 }
@@ -145,11 +184,20 @@ impl Kernel {
         let goods = std::array::from_fn(|g| {
             TRADED[g].then(|| good_kernel(net, np, ng, g, weight[g], wedges, p))
         });
+        let first: Option<&GoodKernel> = goods.iter().flatten().next();
+        let (crossings_by_target, access_by_gateway) = first.map_or_else(Default::default, |gk| {
+            (
+                ByColumn::new(&gk.crossings, |e| e.col as usize, ng),
+                ByColumn::new(&gk.access, |e| e.col as usize, ng),
+            )
+        });
         Kernel {
             n_provinces: np,
             n_gateways: ng,
             theta: p.theta,
             goods,
+            crossings_by_target,
+            access_by_gateway,
             id: next_id(),
         }
     }
@@ -168,6 +216,16 @@ impl Kernel {
 
     pub fn try_good(&self, g: usize) -> Option<&GoodKernel> {
         self.goods[g].as_ref()
+    }
+
+    /// Every good's `crossings` grouped by destination gateway b: (origin gateway a, entry).
+    pub fn crossings_by_target(&self) -> &ByColumn {
+        &self.crossings_by_target
+    }
+
+    /// Every good's `access` grouped by gateway: (province, entry).
+    pub fn access_by_gateway(&self) -> &ByColumn {
+        &self.access_by_gateway
     }
 
     /// Origin-side low-rank evaluation into reused buffers. `weight` must be floored
