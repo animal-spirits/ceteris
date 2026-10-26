@@ -12,7 +12,9 @@
 //! ```
 //!
 //! `CETERIS_FIXTURE_DIR` defaults to `tests/golden/p2-fixture`; `GAINS`, `K1` and `K2` to the
-//! defaults.
+//! defaults. `pack_decay_by_gain` measures the same growth factors on the calibrated full pack
+//! (`CETERIS_PACK`, default `data/packs/2000`; PLAN Task 20). The harness of MIGRATION Task 6
+//! (`task-6-gain-harness.rs.txt`) is this file's `v1_by_gain` and `decay_by_gain`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -21,8 +23,9 @@ use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::systems::{SEED, schedule};
-use ceteris_econ::{EconParams, EconWorld};
-use ceteris_trade::TradeParams;
+use ceteris_econ::{EconInputs, EconParams, EconWorld};
+use ceteris_geo::graph::TransportParams;
+use ceteris_trade::{N_GOODS, TradeParams};
 
 fn solution() -> Equilibrium {
     let dir = std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(
@@ -145,6 +148,70 @@ fn decay_by_gain() {
             eprintln!(
                 "DECAY k1 {} k2 {} lag {lag:?} gain {g} frictionless {f}: {mid:.2e} at 300, \
                  {end:.2e} at 600, growth {:.5} {:?} {:?}",
+                t.kappa1,
+                t.kappa2,
+                (end / mid).powf(1.0 / 300.0),
+                r.err(),
+                r2.err()
+            );
+        }
+    }
+}
+
+/// `decay_by_gain` on the calibrated full pack from its steady state (crossing lags as built):
+/// the growth per tick between ticks 300 and 600 of the distance from the steady state after
+/// the same 1% perturbation of every active price, per gain, in both modes. `EXCLUDE` (a
+/// comma list of provinces) leaves their cells out of the distance, to measure the rest of
+/// the world past a local cycle.
+#[test]
+#[ignore = "measurement harness"]
+fn pack_decay_by_gain() {
+    let dir = std::env::var_os("CETERIS_PACK").map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/packs/2000"),
+        PathBuf::from,
+    );
+    assert!(
+        EconInputs::has_calibration(&dir),
+        "no calibrated pack at {}",
+        dir.display()
+    );
+    let pack = ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).unwrap();
+    let inputs = Arc::new(EconInputs::from_pack(&pack, &dir).unwrap());
+    for g in gains() {
+        for params in [EconParams::frictionless(), EconParams::default()] {
+            let f = params.frictionless;
+            let mut w = EconWorld::new(Arc::clone(&inputs), params, trade(g));
+            let steady = w.markets.price.clone();
+            let cells: Vec<usize> = (0..w.markets.price.len())
+                .filter(|&c| w.markets.active[c])
+                .collect();
+            let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+            for c in cells {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                let u = (state >> 11) as f64 / (1u64 << 53) as f64;
+                w.markets.price[c] *= 1.0 + 0.01 * (2.0 * u - 1.0);
+            }
+            let excluded: Vec<usize> = std::env::var("EXCLUDE").map_or_else(
+                |_| vec![],
+                |v| v.split(',').map(|i| i.parse().unwrap()).collect(),
+            );
+            let distance = |w: &EconWorld| {
+                (0..w.markets.price.len())
+                    .filter(|&c| w.markets.active[c] && !excluded.contains(&(c / N_GOODS)))
+                    .map(|c| (w.markets.price[c].ln() - steady[c].ln()).abs())
+                    .fold(0.0, f64::max)
+            };
+            let mut sim = Sim::new(w, schedule(), SEED);
+            let r = sim.run_until(300).map_err(|v| format!("{v}"));
+            let mid = distance(sim.world());
+            let r2 = sim.run_until(600).map_err(|v| format!("{v}"));
+            let end = distance(sim.world());
+            let t = trade(g);
+            eprintln!(
+                "PACK DECAY k1 {} k2 {} gain {g} frictionless {f} excluding {excluded:?}: {mid:.2e} at 300, {end:.2e} at \
+                 600, growth {:.5} {:?} {:?}",
                 t.kappa1,
                 t.kappa2,
                 (end / mid).powf(1.0 / 300.0),

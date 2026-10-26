@@ -11,7 +11,8 @@
 //!
 //! `CETERIS_FIXTURE_DIR` defaults to `tests/golden/p2-fixture`; `K1` and `K2` to the defaults.
 //! The grid runs at the default P45 gain; the growth factors at pi^e = 0 come from
-//! `p2_expectation_sweep.rs` (`decay_by_gain` with `GAINS=0`).
+//! `p2_expectation_sweep.rs` (`decay_by_gain` with `GAINS=0`). `pack_grid` runs the grid on the
+//! calibrated full pack (`CETERIS_PACK`, default `data/packs/2000`; PLAN Task 20).
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -21,7 +22,8 @@ use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::systems::{SEED, schedule};
-use ceteris_econ::{EconParams, EconWorld};
+use ceteris_econ::{EconInputs, EconParams, EconWorld};
+use ceteris_geo::graph::TransportParams;
 use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
 
 fn solution() -> Equilibrium {
@@ -341,6 +343,81 @@ fn grid() {
                     cells[0], cells[1]
                 );
             }
+        }
+    }
+}
+
+/// Max |ln p_a - ln p_b| over active cells of a world and a price vector, leaving out the
+/// cells of the provinces in `EXCLUDE` (a comma list).
+fn distance_to(w: &EconWorld, price: &[f64]) -> f64 {
+    let excluded: Vec<usize> = std::env::var("EXCLUDE").map_or_else(
+        |_| vec![],
+        |v| v.split(',').map(|i| i.parse().unwrap()).collect(),
+    );
+    active(w)
+        .filter(|&c| !excluded.contains(&(c / N_GOODS)))
+        .map(|c| (w.markets.price[c].ln() - price[c].ln()).abs())
+        .fold(0.0, f64::max)
+}
+
+/// The grid on the calibrated full pack, from its steady state (crossing lags as built: the
+/// steady state's pipeline is laid out for them): growth per tick between ticks 300 and 600
+/// of the distance from the steady state after the 1% perturbation, and in parentheses the
+/// distance at 600; `K1S` and `K2S` (comma lists) override the grid, `EXCLUDE` as in
+/// [`distance_to`].
+#[test]
+#[ignore = "measurement harness"]
+fn pack_grid() {
+    let dir = std::env::var_os("CETERIS_PACK").map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/packs/2000"),
+        PathBuf::from,
+    );
+    assert!(
+        EconInputs::has_calibration(&dir),
+        "no calibrated pack at {}",
+        dir.display()
+    );
+    let pack = ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).unwrap();
+    let inputs = Arc::new(EconInputs::from_pack(&pack, &dir).unwrap());
+    let list = |name: &str, default: &[f64]| -> Vec<f64> {
+        std::env::var(name).map_or_else(
+            |_| default.to_vec(),
+            |v| v.split(',').map(|x| x.parse().unwrap()).collect(),
+        )
+    };
+    for k2 in list("K2S", &[0.0, 0.05]) {
+        for k1 in list("K1S", &[0.02, 0.05, 0.1, 0.2]) {
+            let mut cells = vec![];
+            for params in [EconParams::frictionless(), EconParams::default()] {
+                let trade = TradeParams {
+                    kappa1: k1,
+                    kappa2: k2,
+                    ..TradeParams::default()
+                };
+                let base = EconWorld::new(Arc::clone(&inputs), params, trade);
+                let steady = base.markets.price.clone();
+                let mut p = Sim::new(perturbed(base), schedule(), SEED);
+                let r = catch_unwind(AssertUnwindSafe(|| -> Result<[f64; 2], String> {
+                    let err = |v| format!("{v}");
+                    p.run_until(300).map_err(err)?;
+                    let mid = distance_to(p.world(), &steady);
+                    p.run_until(600).map_err(err)?;
+                    Ok([mid, distance_to(p.world(), &steady)])
+                }))
+                .unwrap_or_else(|e| {
+                    let msg = e.downcast_ref::<String>().cloned();
+                    let msg = msg.or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()));
+                    Err(msg.unwrap_or_default())
+                });
+                cells.push(match r {
+                    Ok([a, b]) => format!("{:.4} ({:.1e})", (b / a).powf(1.0 / 300.0), b),
+                    Err(e) => format!("fails: {}", &e[..e.len().min(60)]),
+                });
+            }
+            eprintln!(
+                "PACK GRID k1 {k1} k2 {k2} | frictionless {} | default {}",
+                cells[0], cells[1]
+            );
         }
     }
 }
