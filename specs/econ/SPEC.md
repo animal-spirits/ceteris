@@ -639,6 +639,9 @@ the radius on p. 9, footnote 10 p. 7).
   the data state, the run frictionless for 1,200 ticks and the reference solve from
   `model.data_state`, and the test reports which equilibrium each reaches (index-normalized
   prices, wages and flows of each, and their largest gaps) instead of a pass or fail at 1%.
+  On the calibrated pack the reference is the calibrated root, read from the calibration tables
+  (`calibrate.read_reference`, residual 5.6e-12): a solve from `model.data_state` is infeasible
+  there (Newton-Krylov moved the residual from 53.6 to 51.7 in 7 steps of 35 s, Task 20).
   Comparisons with the perfect-foresight references (Caliendo-Dvorkin-Parro, Kleinman-Liu-Redding)
   are sign and rank only: agents with heuristic expectations cannot match their transition paths.
 - H2: PPML of simulated country-pair trade (traded goods, FOB value, steady state of the default
@@ -648,7 +651,9 @@ the radius on p. 9, footnote 10 p. 7).
   P43. If it misses, work stops and the miss is reported to the owner before any parameter
   moves; any change then goes through the register.
 - H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade on ln(1 +
-  tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity`) recovers
+  tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity` for a
+  one-good class; `ppml.hdfe` on (pair, good) rows with exporter x good and importer x good
+  effects for a class of several goods) recovers
   the class's theta (ADR 0023) within its prior band: theta_c plus or minus 2 standard errors of
   the trade-weighted mean of the Caliendo-Parro sector estimates (ADR 0023, Prior band), 1.40 to
   3.84 (food), 3.36 to 7.02 (machinery, electronics and vehicles) and 8.15 to 12.99 (the other
@@ -683,24 +688,37 @@ the radius on p. 9, footnote 10 p. 7).
   - Re-budget (owner, 2026-10-26): source_dispatch 8 ms and a whole tick 35 ms on the full pack;
     trade stays inside the 30 ms of 19.2. The gateway count, which sets the crossing count and
     the access it buys, moves to the ADR 0092 rework after the gate.
-- Measured on the 2000 pack (Task 20, `p2_acceptance.rs` and `test_p2_gate.py`; owner review
-  pending):
-  - V1, tolerance mode (bound 0.967). From the steady state perturbed by 10% (seed 20): price
-    7.8e-3 (São Tomé and Príncipe light manufacturing, the period-2 cycle of the trade SPEC,
-    Stability region), wage 8.4e-4, flow units 3.2e-5, value 3.5e-5 at 1,200 ticks: passes.
-    From the data state of the calibrated inputs (prices 1, nothing in flight): price 0.88, wage
-    0.61, flows 1.95 at 1,200 ticks and price 0.82 at 4,800: misses. The transient's losses,
-    paid as negative national dividends, leave pops in Albania, Mali, Uganda, Namibia and
-    Pitcairn holding debts of thousands of months of income (up to 6,331 pops negative at tick
-    24, 82 at 1,200, 17 at 4,800); pops with negative money buy nothing, so those countries stay
-    off the reference until the debt is repaid. Elsewhere the gap is 4.0e-2 at 1,200 and 8.1e-3
-    at 4,800.
+- Measured on the 2000 pack (Task 20 and its fix round 1, with limited liability of enterprises;
+  `p2_acceptance.rs` and `test_p2_gate.py`; owner review pending):
+  - V1, tolerance mode (bound 0.967), against the calibrated root. From the steady state
+    perturbed by 10% (seed 20; prices, wages and stocks, though frictionless mode re-solves wages
+    every tick, so this start tests prices and stocks): price 9.1e-3 (São Tomé and Príncipe light
+    manufacturing, the period-2 cycle of the trade SPEC, Stability region), wage 9.1e-4, flow
+    units 4.8e-5, value 5.2e-5 at 1,200 ticks: passes (7.8e-3, 8.4e-4, 3.2e-5, 3.5e-5 before
+    limited liability).
+  - V1 from the data state of the calibrated inputs (prices 1, nothing in flight) misses, for two
+    reasons. First, money off its steady-state distribution: the deep coal-led transient leaves
+    losses, now retained by enterprises (27,134 enterprises at most; 59 carrying -5.5e12 at tick
+    1,200 and 17 carrying -5.0e12 at 4,800, mostly coal in Sudan, Namibia, Albania, Mali, Uganda
+    and North Macedonia), while markets' signed losses still reach pops (up to 4,011 pops with
+    negative money at tick 36, 37 at 1,200, 4 at 4,800). Second, slow nominal convergence: the
+    pops hold the money the retained losses owe, so the world price index follows household money
+    (index 5.62 at tick 120, 13.5 at 360, 7.11 at 1,200, 5.30 at 4,800; the largest price gap
+    2.8e3 at 120 and 7.3e3 at 240),
+    and the losses are repaid from profits at about 1.5e8 a tick against 5.0e12, about 33,000
+    ticks. Gaps: at 1,200 price 0.83 (Mali services), wage 0.52, flows 2.06; outside the former
+    debtor countries (Albania, Mali, Namibia, Pitcairn, Uganda) price 0.33 (Sudan services). At
+    4,800 price 0.21 and outside 5.9e-2. Before limited liability: 0.88 and 4.0e-2 at 1,200, 0.82
+    and 8.1e-3 at 4,800, with pops in those countries holding debts of thousands of months of
+    income.
   - H2: distance elasticity -0.753 (s.e. 0.016, pseudo-R2 0.982, 47,306 pairs): passes. Per
-    class, on what the importer pays (FOB value times 1 + t): food 1.75 (s.e. 0.15), machinery
-    3.72 (0.47), the five-good class 9.52 (0.33), all in their bands (pseudo-R2 0.998, 0.993,
-    0.959). The FOB value gives theta + 1 (2.78, 4.70, 10.55), as the kernel implies.
+    class, on what the importer pays (FOB value times 1 + t; the FOB value gives 2.78, 4.70 and
+    10.55): food 1.75 (s.e. 0.15), machinery 3.72 (0.47), the five-good class 9.52 (0.33), all in
+    their bands (pseudo-R2 0.998, 0.993, 0.959), but below the model's 2.62, 5.19 and 10.57 (Open
+    questions, H2 per class).
   - 100 years: no violation, prices and wages finite and positive; the default run stays at the
-    steady state (no pop with negative money, no losing country, no stockout).
+    steady state (no pop with negative money, no negative pool, no retained loss, no stockout),
+    and is byte-identical with and without limited liability.
   - 1 vs 8 threads, 120 ticks: identical hashes.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
@@ -789,19 +807,30 @@ texture fed from core columns.
   0, expectation gain 0.006; trade SPEC, Stability region and P03a, P03b, P45). The slowest
   mode is the world price level, which expected inflation turns into a damped oscillation
   (trade SPEC, Nominal mode). On the pack (Task 20; trade SPEC, Stability region) the default
-  mode decays by 0.99229 per tick; frictionless, the rest of the world decays by 0.99169 while São
-  Tomé and Príncipe's light manufacturing (value-added share 0.04, supply elasticity 30.4) sits
+  mode decays by 0.99230 per tick; frictionless, the rest of the world decays by 0.99007 while São
+  Tomé and Príncipe's light manufacturing (value-added share 0.0742, supply elasticity 30.4) sits
   outside the region on a period-2 cycle of about 0.7%. Whether V1's frictionless mode should
   hold for such cells (a slower kappa1, or a supply elasticity cap) is for the owner.
 - The run from the data state passes through a deep coal-led shortage before it converges (the
   equilibrium's coal output is about twice base output and intermediate demand is inelastic in
   units); V1 holds on the fixture at 1,200 ticks.
-- Debt overhang (Task 20): pops may hold negative money (clearing facility, no interest), pay
-  no interest and buy nothing while negative, and national ownership passes enterprise losses
-  to them as negative dividends. A deep transient (the data state of the calibrated pack) leaves
-  debts that take thousands of ticks to repay and keep their countries off the steady state
-  (P2 gate, measured). Limited liability for dividends, a spending rule for indebted pops, or
-  interest belong to the owner (A9 banks arrive in P5).
+- Debt overhang (Task 20): pops may hold negative money (clearing facility, no interest) and buy
+  nothing while negative. Enterprises now have limited liability (owner 2026-10-26), so their
+  losses stay with them as retained losses; markets still pass signed cash flow. A deep
+  transient (the data state of the calibrated pack) leaves losses that take tens of thousands of
+  ticks to repay, and households hold the money those losses owe, which sets the price level and
+  keeps the losing countries off the steady state (P2 gate, measured). Applying limited liability
+  to markets as ruled makes the fixture's run from the data state inflate without bound
+  (merchants' stock purchases stay as retained losses: world price index 15 at tick 1,200, 129
+  at 2,400), so it is held for the owner, as are interest, repayment terms or a spending rule for
+  indebted pops (A9 banks arrive in P5).
+- H2 per class (Task 20): the tariff elasticity recovered from simulated flows is below the
+  model's theta for food (1.75 against 2.62) and machinery (3.72 against 5.19), and closer for
+  the five-good class (9.52 against 10.57). Replacing ln distance by the model's own country-pair
+  kernel without the tariff, ln sum over crossings of (v_a / V_A) K_ab (1 + t)^theta (y_b / Y_B)
+  at the reference equilibrium, recovers 2.6200, 5.1900 and 10.5700 with pseudo-R2 1, so the
+  flows and kernel are right and the gap is the ln distance regressor, which does not span the
+  S05 costs (ADR 0022). Whether the gate should test theta on the model's costs is for the owner.
 - PIGL aggregation across pops: the inversion matches the 2000 shares for one lognormal at the
   country's mean income per person; the country's pops differ in mean income (education,
   province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
