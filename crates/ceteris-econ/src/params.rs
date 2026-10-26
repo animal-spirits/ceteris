@@ -37,7 +37,8 @@ impl Default for Pigl {
 pub enum Technology {
     /// Each enterprise's own coefficients, `EntData::coef`, fixed by its capacity vintages.
     PuttyClay,
-    /// Every enterprise on its country's ICIO column.
+    /// Every enterprise on the 2000 column, `EntData::column` (its country's ICIO column, or
+    /// the calibrated per-enterprise column on a calibrated world), whatever its vintage.
     FixedLeontief,
 }
 

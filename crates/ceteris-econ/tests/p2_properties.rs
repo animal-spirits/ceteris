@@ -191,7 +191,7 @@ fn homogeneity_of_degree_zero() {
         };
         let mut base = sim_of(world(params.clone()));
         let mut big = sim_of(scaled(world(params), 10_000));
-        // 120 ticks: the fixture's dynamics are stable (Task 7b) and the rounding gap between
+        // 120 ticks: the fixture's dynamics are stable and the rounding gap between
         // the two runs is about 1e-11, except that under PIGL demand (MIGRATION Task 7) the
         // default run passes a transient between ticks 40 and 90 where it peaks at 7.5e-9
         // (the island's sales and input stocks), back to 2e-10 by tick 100
@@ -703,7 +703,7 @@ fn input_orders_count_goods_on_order() {
 }
 
 /// Input orders plan on capacity output VA(L) / a_VA at this tick's employment, not on output
-/// cut by a short input (owner decision, Task 7b), less the goods already on order.
+/// cut by a short input (owner decision, 2026-10-24), less the goods already on order.
 #[test]
 fn input_orders_plan_on_capacity_output() {
     let mut w = world(EconParams::default());
@@ -955,7 +955,7 @@ fn traded_shortage_still_lags() {
     assert!(lower.is_some(), "downstream output never fell");
 }
 
-/// Review Focus 5: services feeding services, and construction and services feeding each
+/// Local-good chains: services feeding services, and construction and services feeding each
 /// other. From the data state the chain binds in every mainland province at tick 1 and
 /// converges there within its bound; over 120 ticks every local input used equals coef Y
 /// (the Leontief invariant, exactly, at every tick), including the province ticks where a
@@ -1058,7 +1058,7 @@ fn putty_clay_one_vintage_equals_fixed_leontief() {
     assert_eq!(putty_world.layout().coef[e], inputs.enterprises.coef[e]);
 }
 
-/// Review Focus 1 at world level (`fixture::unreachable_island`): machinery has no reachable
+/// Unreachable origins at world level (`fixture::unreachable_island`): machinery has no reachable
 /// origin at the island. Its delivered price there is the only infinite one and the world
 /// price index leaves it out; island pops buy none of it and spend the rest of their money;
 /// the island's light manufacturing, its one user there, orders none, never restocks, and is

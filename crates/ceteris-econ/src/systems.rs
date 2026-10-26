@@ -36,7 +36,8 @@ use crate::world::{
     TRADE, WAGE, WRITE_OFF, to_minor, to_numeraire,
 };
 
-/// Months of use an enterprise keeps in stock beyond replacement and transit (Task 7b).
+/// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
+/// decision, 2026-10-24; a constant, outside the static digest: calibration stage 5 uses it).
 pub const COVER: f64 = 1.0;
 
 /// No RNG draws in P2; streams stay reserved per system ID.
@@ -356,8 +357,8 @@ pub fn cap_output(w: &mut EconWorld) {
 /// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_cap` of each input k:
 /// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
 /// capacity output at this tick's employment and L the expected months in transit of the
-/// input to the province (0 for local goods), so where L = 0 this is the two-month rule of
-/// Task 7b. Owner decisions, 2026-10-24: planning on realized output Y, which a short input
+/// input to the province (0 for local goods), so where L = 0 this is a fixed two-month
+/// rule. Owner decisions, 2026-10-24: planning on realized output Y, which a short input
 /// caps, let one shortage cut the next order and the next output; a fixed target that counts
 /// goods on order cannot hold a month in transit. Traded orders are spending, units times
 /// q_d, so the units ordered are the units that arrive; local orders are units at the

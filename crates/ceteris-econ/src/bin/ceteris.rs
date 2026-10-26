@@ -164,6 +164,9 @@ fn run(args: &Args) -> Result<(), String> {
     if args.data_state && args.equilibrium.is_some() {
         return Err("--data-state and --from-equilibrium choose different starts".into());
     }
+    if args.data_state && matches!(args.source, Source::Fixture) {
+        return Err("--data-state needs --pack: the fixture has no calibrated steady state".into());
+    }
     let mut inputs = args.source.load(true)?;
     if args.data_state {
         inputs.steady = None;

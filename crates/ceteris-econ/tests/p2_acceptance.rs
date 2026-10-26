@@ -53,7 +53,7 @@ fn one_vs_eight_threads_identical() {
 }
 
 /// Replay from every snapshot on a world with every crossing at lag 3, so goods sit in all
-/// four pipeline slots at every snapshot after the first (Review Focus 3): domestic
+/// four pipeline slots at every snapshot after the first: domestic
 /// shipments in the next slot, crossings dispatched over the last three ticks in the others.
 #[test]
 fn replay_from_every_snapshot() {
@@ -421,7 +421,7 @@ fn assert_finite(w: &EconWorld, when: &str) {
     );
 }
 
-/// Review Focus 3 on the full pack: 12 ticks from the data state, then the Suez Canal closes,
+/// A network change on the full pack: 12 ticks from the data state, then the Suez Canal closes,
 /// the network is rebuilt from the graph (`network_from_graph`, `set_network`) and the run
 /// goes on for 24 ticks with every invariant checked. Against a control run without the
 /// closure, the country pairs whose cheapest crossing went through Suez (more than 1% dearer
