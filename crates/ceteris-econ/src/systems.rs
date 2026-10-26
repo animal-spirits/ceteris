@@ -714,10 +714,10 @@ pub fn dispatch(w: &mut EconWorld) {
 }
 
 /// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
-/// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations pay origins and their gateways, each
-/// gateway splits what it takes in over the legs that fed it ([`split`]), so it pays out
-/// exactly that, and destinations pay tariffs to their country's rebate account. Zero
-/// amounts are left out, as `pay` leaves them.
+/// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations
+/// pay origins and their gateways, each gateway splits what it takes in over the legs that
+/// fed it ([`split`]), so it pays out exactly that, and destinations pay tariffs to their
+/// country's rebate account. Zero amounts are left out, as `pay` leaves them.
 fn trade_legs(
     inp: &EconInputs,
     acc: &Accounts,
