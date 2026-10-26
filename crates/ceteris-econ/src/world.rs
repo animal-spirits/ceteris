@@ -1337,6 +1337,10 @@ impl State for EconWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fixture::small_world;
+    use ceteris_core::snapshot::{canonical, decode_canonical_with};
+    use ceteris_trade::N_GOODS;
+    use ceteris_trade::goods::TRADED;
 
     /// Owner decision, 2026-10-25: ICIO coefficients are cost shares at base delivered prices.
     /// The base prices are the world's buyer prices at tick 0, and at them every input's cost
@@ -1387,10 +1391,6 @@ mod tests {
         assert_eq!(with_empty[..base.len()], base[..]);
         assert_eq!(with_empty[base.len()], 0.0);
     }
-    use crate::fixture::small_world;
-    use ceteris_core::snapshot::{canonical, decode_canonical_with};
-    use ceteris_trade::N_GOODS;
-    use ceteris_trade::goods::TRADED;
 
     fn world() -> EconWorld {
         EconWorld::new(
