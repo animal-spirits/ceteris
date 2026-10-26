@@ -1,7 +1,8 @@
 //! P2 fixture determinism: identical hashes across two runs and across 1 vs 8 threads,
 //! and restore-and-replay from every snapshot; V1, the frictionless run from the data state
-//! against the GE reference committed under `tests/golden/p2-fixture/reference`. Slow in debug
-//! builds; run with `--release`.
+//! against the GE reference committed under `tests/golden/p2-fixture/reference`. On the full
+//! pack with its calibration (P2 gate): 100 years of the default run without violation, and 1
+//! vs 8 threads. Slow in debug builds; run with `--release`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -11,9 +12,11 @@ use std::sync::Arc;
 use ceteris_core::sim::{SNAPSHOT_EVERY, Sim};
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
-use ceteris_econ::{EconParams, EconWorld};
+use ceteris_econ::world::to_numeraire;
+use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
+use ceteris_trade::goods::TRADED;
 use ceteris_trade::{Kernel, N_GOODS, TradeParams};
 
 const TICKS: u32 = 1200;
@@ -498,4 +501,150 @@ fn kernel_rebuilds_after_chokepoint_closure() {
         with.0 < without.0 && with.1 < without.1,
         "Suez-dependent shares {with:?} did not fall below {without:?}"
     );
+}
+
+/// The full pack's calibrated inputs, or None (with a notice) where the default pack has not
+/// been built or calibrated, as in CI; a pack named by `CETERIS_PACK` must be calibrated.
+fn calibrated_pack() -> Option<Arc<EconInputs>> {
+    let dir = ceteris_geo::pack::default_dir();
+    if !EconInputs::has_calibration(&dir) {
+        let hint = format!(
+            "no calibrated pack at {}; build it with `uv run python -m ceteris.packs` and \
+             install its calibration from `python -m ceteris.reference calibrate --pack`",
+            dir.display()
+        );
+        assert!(std::env::var_os("CETERIS_PACK").is_none(), "{hint}");
+        eprintln!("skipping: {hint}");
+        return None;
+    }
+    let pack =
+        ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).expect("pack loads");
+    Some(Arc::new(EconInputs::from_pack(&pack, &dir).unwrap()))
+}
+
+/// What the 100-year run records each tick besides the invariants: pops holding negative
+/// money (allowed: every account may run a negative balance, SPEC Money) and with negative
+/// income, countries whose enterprises lost money in total (a negative dividend pool), and
+/// traded origin markets that ran out (orders above stock plus output).
+#[derive(Default)]
+struct Census {
+    negative_money_ticks: u32,
+    negative_money_max: usize,
+    worst_money: (f64, u32, usize),
+    negative_income_pops: usize,
+    negative_pool: (u32, usize),
+    stockouts: [u32; N_GOODS],
+    first_stockout: Option<(u32, usize)>,
+}
+
+impl Census {
+    fn record(&mut self, w: &EconWorld, tick: u32) {
+        let (inp, lay) = (w.inputs(), w.layout());
+        let mut negative = 0;
+        for (k, &a) in lay.accounts.pop.iter().enumerate() {
+            let money = to_numeraire(w.ledger.money(a));
+            if money < 0.0 {
+                negative += 1;
+                if money < self.worst_money.0 {
+                    self.worst_money = (money, tick, k);
+                }
+            }
+        }
+        if negative > 0 {
+            self.negative_money_ticks += 1;
+        }
+        self.negative_money_max = self.negative_money_max.max(negative);
+        self.negative_income_pops = self
+            .negative_income_pops
+            .max(w.income.iter().filter(|&&x| x < 0.0).count());
+        let mut pool = vec![0.0; inp.n_countries()];
+        for (e, &profit) in w.profit.iter().enumerate() {
+            pool[inp.country_of(inp.enterprises.province[e] as usize)] += profit;
+        }
+        let losing = pool.iter().filter(|&&x| x < 0.0).count();
+        if losing > 0 {
+            self.negative_pool.0 += 1;
+            self.negative_pool.1 = self.negative_pool.1.max(losing);
+        }
+        let m = &w.markets;
+        for c in (0..m.price.len()).filter(|&c| m.active[c] && TRADED[c % N_GOODS]) {
+            if m.sales[c] < m.demand[c] {
+                self.stockouts[c % N_GOODS] += 1;
+                self.first_stockout.get_or_insert((tick, c));
+            }
+        }
+    }
+}
+
+/// P2 gate, 100 years (econ SPEC, Invariants, Long run): the default run on the full pack
+/// from its calibrated steady state, 1,200 ticks with every invariant checked each tick and
+/// every active price, every wage and the world price index finite and positive after each
+/// tick. Prints the census of negative money, negative dividend pools and stockouts.
+#[test]
+fn hundred_years_without_violation() {
+    let Some(inputs) = calibrated_pack() else {
+        return;
+    };
+    let started = std::time::Instant::now();
+    let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
+    let mut census = Census::default();
+    for tick in 1..=TICKS {
+        sim.step().unwrap_or_else(|v| panic!("tick {tick}: {v}"));
+        let w = sim.world();
+        assert_finite(w, &format!("tick {tick}"));
+        census.record(w, tick);
+    }
+    let w = sim.world();
+    let (money, tick, k) = census.worst_money;
+    println!(
+        "full pack, {TICKS} ticks of the default run: no violation, prices and wages finite and \
+         positive, world price index {}; pops with negative money: {} ticks, at most {} pops, \
+         worst {money} (pop {k}, province {}, tick {tick}); at most {} pops with negative income; \
+         negative dividend pools: {} ticks, at most {} countries; stockouts by good (cell \
+         ticks) {:?}, first {:?}; {:?}",
+        w.world_price_index(),
+        census.negative_money_ticks,
+        census.negative_money_max,
+        w.inputs().pops.province.get(k).copied().unwrap_or(0),
+        census.negative_income_pops,
+        census.negative_pool.0,
+        census.negative_pool.1,
+        census.stockouts,
+        census.first_stockout,
+        started.elapsed(),
+    );
+}
+
+/// Determinism on the full pack (V0): 120 ticks of the default run give identical snapshot
+/// hashes at 1 and 8 threads.
+#[test]
+fn full_pack_one_vs_eight_threads() {
+    const PACK_TICKS: u32 = 120;
+    let Some(inputs) = calibrated_pack() else {
+        return;
+    };
+    let run = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let hashes = pool.install(|| {
+            let mut sim = EconWorld::sim(
+                Arc::clone(&inputs),
+                EconParams::default(),
+                TradeParams::default(),
+            );
+            sim.run_until(PACK_TICKS).unwrap_or_else(|v| panic!("{v}"));
+            sim.snapshot_hashes()
+        });
+        (hashes, started.elapsed())
+    };
+    let ((one, t1), (eight, t8)) = (run(1), run(8));
+    println!(
+        "full pack, {PACK_TICKS} ticks: {} snapshot hashes, 1 thread {t1:?}, 8 threads {t8:?}",
+        one.len()
+    );
+    assert_eq!(one.len() as u32, PACK_TICKS / SNAPSHOT_EVERY + 1);
+    assert_eq!(one, eight);
 }
