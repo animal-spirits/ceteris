@@ -44,8 +44,8 @@ runs on the pack.
   Online Appendix A.3 (Eaton-Kortum with intermediates and quasi-symmetric costs) good by good, at
   theta_g and the good's smallest value-added share, and takes the largest radius; the SPEC lists
   what this leaves out. P2 has no agglomeration (A5 off) and no migration; the function raises for
-  either until a phase that adds one derives its matrix. At the P2 defaults the bound is 0.922 (0.932 at the first thetas, before the OECD key, ADR 0023), so
-  V1 runs in tolerance mode. It runs before V1 in `python/tests/test_p2_gate.py` (PLAN Task 20);
+  either until a phase that adds one derives its matrix. At the P2 defaults the bound is 0.922 (0.932 at the first thetas, before the OECD key, ADR 0023; 0.967
+  on the 2000 pack's value-added shares, Task 20), so V1 runs in tolerance mode. It runs before V1 in `python/tests/test_p2_gate.py` (PLAN Task 20);
   its tests are in `python/tests/test_reference.py`.
 - V1 already compares steady states with the custom static GE (the reference model).
 - PPML on 2000 BACI runs on least-cost (S05) costs between countries, not route-choice costs:

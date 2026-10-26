@@ -272,6 +272,39 @@ replaces the simplified 3 x 3 of the migration plan (owner ruling, MIGRATION Tas
 stock before clearing against a fixed target misclassifies that toy market both ways (at E =
 13.55, theta 12.55 as before the OECD key, it calls (0.02, 0.06) unstable and (0.1, 0.06) stable).
 
+On the 2000 pack (PLAN Task 20; `python -m ceteris.calibrate.stability EXPORT` on a pack export).
+The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30.4 (medians 1.5 to
+3.0 by good; fixture 0.90 to 2.61), since value-added shares go down to 0.04:
+
+| Good | theta_g | s_g | kappa1 limit | kappa2 limit at kappa1 0.05 (default) | at kappa1 0.02 |
+|---|---|---|---|---|---|
+| 0 Agriculture | 10.57 | 3 | 0.150 / 0.094 | 0.097 / 0.062 | 0.033 / 0.104 |
+| 1 Crude oil and gas | 10.57 | 1 | 0.124 / 0.053 | 0.026 / 0.004 | 0.009 / 0.041 |
+| 2 Coal and other mining | 10.57 | 2 | 0.152 / 0.097 | 0.062 / 0.058 | 0.021 / 0.095 |
+| 3 Food | 2.62 | 2 | 0.276 / 0.083 | 0.056 / 0.082 | 0.020 / 0.157 |
+| 4 Light manufacturing | 10.57 | 2 | 0.118 / 0.048 | 0.055 / 0.000 | 0.019 / 0.053 |
+| 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.125 / 0.054 | 0.055 / 0.008 | 0.019 / 0.061 |
+| 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.203 / 0.074 | 0.056 / 0.050 | 0.020 / 0.113 |
+
+In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
+outside for light manufacturing: J2 fails for the two light-manufacturing enterprises of São Tomé
+and Príncipe (eps 30.4 against 2 / kappa1 - theta - 1 = 28.4; no other enterprise of any good is
+above its limit). Their prices settle on a period-2 cycle (about 0.7% either side of the
+reference, output alternating between about 32 and 48 thousand units, the merchant stock growing
+by about 2,300 units a tick, which kappa2 = 0 leaves untargeted) in every frictionless run moved
+off the steady state; the default mode damps it. Growth per tick of the largest price deviation
+from the steady state, ticks 300 to 600 after the 1% perturbation, crossing lags as built
+(`p2_expectation_sweep.rs`, `pack_decay_by_gain`; frictionless / default): at the defaults (gain
+0.006) 1.00000 (the cycle) / 0.99229, and 0.99169 / 0.99229 leaving out São Tomé's two provinces;
+at gain 0 1.00000 / 0.99280, and 0.99148 / 0.99280 without them. The grid
+(`p2_price_rule_sweep.rs`, `pack_grid`, largest deviation over every cell, growth and the
+deviation at 600 in brackets): kappa2 0: kappa1 0.02: 0.9932 (4.6e-4) / 0.9935 (5.5e-4); 0.05:
+1.0000 (9.5e-3) / 0.9923 (4.2e-5); 0.1: 1.0000 (3.6e-1) / 0.9962 (1.5e-5); 0.2: 0.9992 (1.4) /
+1.0003 (0.47). kappa2 0.05: kappa1 0.02: 1.0009 (0.12) / ledger overflow; 0.05: 0.9991 (0.18) /
+1.0108 (9.2); 0.1: 1.0004 (0.45) / 1.0001 (0.14); 0.2: 1.0005 (1.8) / 1.0001 (0.52). The pack's
+small value-added shares shrink the region that the fixture drew: every kappa2 0.05 point and
+kappa1 0.2 leave it, and at kappa1 0.1 the frictionless deviation does not decay.
+
 Nominal mode. pi^e adds a world mode outside the one-market region: with money fixed, a common
 deviation X of the price level lowers household real demand, e = -h X, and the rule pulls X back
 at a = kappa1 h per tick (h the household share of orders, about 0.24 on the fixture: a = 0.0048
