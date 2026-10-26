@@ -321,7 +321,8 @@ pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool
 pool, the rebate account and every market end the tick at zero, every enterprise at its
 retained losses or zero, and money is conserved exactly; each part is within one minor unit of
 N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
-`limited_liability_keeps_losses_and_repays_them_first`).
+`limited_liability_keeps_losses_and_repays_them_first`). Wages use the same cumulative-share
+rule (`split`) over the province's pops by employed effective labour.
 
 *Loss write-off (E4, ADR 0098).* After the distribution, enterprise e's retained loss beyond
 T_e = M S_e (M P143, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
@@ -333,8 +334,8 @@ rest is carried to the next tick. Both sides are one exact i64 split per country
 largest remainder (floor of each exact share; the leftover units one each to the largest
 remainders, ties to the first), routed through the country's pool account; flow `WRITE_OFF`,
 which is not income. The cap is nominal, so homogeneity of degree zero holds only while nothing
-is written off. Wages use the same rule over the province's
-pops by employed effective labour.
+is written off. An enterprise that loses money every month becomes a perpetual levy on its
+country's pops once its cap is full.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
@@ -714,15 +715,15 @@ the radius on p. 9, footnote 10 p. 7).
     ticks: price 0.83 (Mali services), wage 0.58, flows 1.83; outside the former debtor countries
     (Albania, Mali, Namibia, Pitcairn, Uganda) price 3.8e-2 (Burkina Faso coal), wage 2.2e-2. At
     4,800 the gap is 7.9e-2 (Mali) and 8.3e-3 outside them (the São Tomé cycle), within 1% outside
-    from tick 3,600. The deep coal-led transient's enterprise losses are written off within about
-    60 ticks (8.6e12 in all, 2.1e12 in Sudan, 8.9e11 Mali, 7.7e11 Namibia, 6.9e11 the United
+    from tick 3,600. The deep coal-led transient's enterprise losses are written off early
+    (8.43e12 of 8.63e12 by tick 60; 2.1e12 in Sudan, 8.9e11 Mali, 7.7e11 Namibia, 6.9e11 the United
     States, 5.5e11 Uganda, 3.9e11 Albania), and the world price index returns from 2.38 at tick
     120 to 1.28 at 1,200 and 0.96 at 4,800. What remains is market losses, which the signed rule
     passes to pops as negative dividends (ADR 0098, Markets): up to 5,299 pops with negative money
-    (tick 32), 40 at 1,200, 1 at 4,800, in Albania and Mali, who buy nothing until repaid. Before
-    the write-off: price 0.83 and 0.33 outside at 1,200, 0.21 and 5.9e-2 at 4,800, with 5.0e12 of
-    retained losses repaid over about 33,000 ticks and an index of 7.1 at 1,200; before limited
-    liability 0.88 and 4.0e-2 at 1,200, 0.82 and 8.1e-3 at 4,800.
+    (tick 32), 40 at 1,200 (Albania, Mali and Uganda), 1 at 4,800 (Albania), who buy nothing
+    until repaid. Before the write-off: price 0.83 and 0.33 outside at 1,200, 0.21 and 5.9e-2 at
+    4,800, with 5.0e12 of retained losses repaid over about 33,000 ticks and an index of 7.1 at
+    1,200; before limited liability 0.88 and 4.0e-2 at 1,200, 0.82 and 8.1e-3 at 4,800.
   - H2: distance elasticity -0.753 (s.e. 0.016, pseudo-R2 0.982, 47,306 pairs): passes. Per
     class, on what the importer pays (FOB value times 1 + t; the FOB value gives 2.78, 4.70 and
     10.55): food 1.75 (s.e. 0.15), machinery 3.72 (0.47), the five-good class 9.52 (0.33), all in
@@ -830,18 +831,17 @@ texture fed from core columns.
 - Debt overhang (Task 20): pops may hold negative money (clearing facility, no interest) and buy
   nothing while negative. Enterprises have limited liability and their losses beyond three
   months of base sales are written off against their country's pops (ADR 0098), which clears the
-  data-state transient's 8.6e12 of losses within about 60 ticks. Markets keep the signed rule,
+  data-state transient's losses early (8.43e12 of 8.63e12 by tick 60). Markets keep the signed rule,
   since limited liability inflates the fixture without bound and the write-off only bounds it
   (index 13 at tick 1,200), so a deep transient still leaves market losses as pop debts (Albania
   and Mali, P2 gate, measured). How merchants finance stock, interest and repayment terms belong
   to the owner (A9 banks arrive in P5).
-- Inventory invariant (Task 20b): it compares a market's stock S' = S + (Q - D) with the
-  ledger's holding to 1e-9 of max(S', held, 1), but both come from sums of the order of the
-  turnover, so when sales nearly empty a large market they differ by rounding of the turnover:
-  frictionless at kappa1 0.2 (outside the stability region, Task 20 fix round 1) province 3204's
-  agriculture held 1.8543306161 against 1.8543306142 after selling 3.59e7 units, a false
-  violation. A tolerance relative to the turnover S + Q + D, as the ledger's goods invariant has
-  (open + made + gone), would remove it; left for the controller.
+- Inventory invariant (resolved, Task 20 round 3): it compared a market's stock S' = S + (Q - D)
+  with the ledger's holding to 1e-9 of max(S', held, 1), but both are sums of the order of the
+  turnover, so a market sold almost empty gave a false violation (frictionless at kappa1 0.2,
+  province 3204's agriculture: 1.8543306161 against 1.8543306142 after selling 3.59e7 units). The
+  tolerance is now 1e-9 of the turnover S + Q + D, as the ledger's goods invariant has; that grid
+  cell runs its 600 ticks (frictionless 1.0000, deviation 1.1 at 600; default 1.0003).
 - H2 per class (Task 20): the tariff elasticity recovered from simulated flows is below the
   model's theta for food (1.75 against 2.62) and machinery (3.72 against 5.19), and closer for
   the five-good class (9.52 against 10.57). Replacing ln distance by the model's own country-pair

@@ -11,9 +11,11 @@
   moved through the country's pool account (flow `WRITE_OFF`, not income).
 - Province markets keep the signed rule: limited liability with a write-off still inflates the
   fixture's run from the data state (world price index 13 at tick 1,200).
-- `EconParams::write_off_months` is new and outside the static digest; an infinite value turns
-  the write-off off. The homogeneity property test runs with it off, since the cap is nominal.
-- Steady states, the fixture golden and the pack's default run are unchanged: no balance is
+- `EconParams::write_off_months` is new and outside the static digest; the snapshot header carries
+  it after the digest (checked by `restore`) and `params.json` lists it with P143, so every state
+  hash and the fixture golden move. An infinite value turns the write-off off. The homogeneity
+  property test runs with it off, since the cap is nominal.
+- Steady states and the pack's default run are unchanged apart from the header: no balance is
   negative there.
 
 ### BEHAVIOUR: enterprises have limited liability (owner decision 2026-10-26, Task 20)
@@ -28,7 +30,7 @@
 - Province markets still pay their signed cash flow. Applying the same rule to them, as ruled,
   makes the fixture's run from the data state inflate without bound (merchants' stock purchases
   stay as retained losses while pops keep the money: world price index 15 at tick 1,200 and 129
-  at 2,400). It is held for the owner (Task 20 fix round 1).
+  at 2,400). It is held for the owner (Task 20 fix round 1); ADR 0098 records the outcome.
 - The calibrated steady state is unchanged (every enterprise earns (1 - s_L) VA0 > 0); the
   fixture golden `tests/golden/p2-econ.txt` moves because enterprises run losses early in the
   run from the data state.
