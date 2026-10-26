@@ -24,8 +24,9 @@ hazard; ADR 0060 adds drug routes. An epidemic model connects them.
 Option 2, as an SIR-like model per province and age band: initiation rises with availability
 and falls with price; potency shocks (a fentanyl-type wave) raise death rates; naloxone,
 treatment and prescribing rules are levers (P108). Deaths enter the injury and despair
-components of 0033. Kept only if it passes ablation; otherwise it moves to the extended
-profile.
+components of 0033. Kept only if it passes ablation, and then it replaces 0033's
+deaths-of-despair scenario hazard (P65); otherwise it moves to the extended profile and P65
+stays.
 
 ## Migration
 

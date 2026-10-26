@@ -1,6 +1,6 @@
 # 0045. Economic statecraft: critical minerals, export controls and sanctions evasion
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 8.5, 9.12, 11.8, 7.1
 Phase: P5 (trade side), P6 (state decisions)
@@ -12,8 +12,9 @@ their inputs, Chinese controls on gallium, germanium and graphite (2023), and th
 sanctions on Russia with large rerouting through third countries. Supply of many transition
 minerals is highly concentrated by country. Clayton, Maggiori and Schreger (2023) model
 geoeconomic power as leverage over the input-output dependencies of other states. The design
-has sanctions and export controls as wedges (8.5) and route choice (0017), which already
-reroutes around them, but no evasion cost, no mineral detail and no measure of leverage.
+has sanctions and export controls as wedges (8.5) and least-cost routing (S05; route choice,
+ADR 0017, returns in P8), which reroutes around them, but no evasion cost, no
+mineral detail and no measure of leverage.
 
 ## Options
 
@@ -32,7 +33,9 @@ Option 2.
   sectors: their flows are shares of the mining good.
 - Export controls and sanctions as wedges by good, origin and destination; evasion through
   third countries costs an extra wedge on transshipment links (P83), so rerouting is partial,
-  as observed after 2022.
+  as observed after 2022. The two-level kernel has only direct gateway pairs, so this adds a
+  transit hop a to c to b in the gateway layer, still low rank (ADR 0095). The hop also carries
+  ADR 0102's transit compliance cost.
 - Leverage index per state pair: the output loss in the target from cutting the controlled
   flows, computed from the input-output matrices; it feeds the state planner's diplomacy scores
   (12.3) in P6.

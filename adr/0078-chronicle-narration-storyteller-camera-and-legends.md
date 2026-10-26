@@ -27,6 +27,9 @@ sparse cues, so terse chronicles work better than cinematic ones.
 
 Option 2, all in the presentation layer:
 
+- Chronicle entries (moved here from ADR 0049): discrete events (laws, crises, wars, records)
+  become dated entries with their causes linked. LLM-written flavour text may be added later
+  only as cached presentation, never as input to the simulation, so determinism holds.
 - Narration: each chronicle entry is written by a grammar from its event, its top attributed
   causes and the narrator's perspective (state media, opposition, foreign press), so the same
   event can carry competing accounts. Deterministic from the event log and seed.

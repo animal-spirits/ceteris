@@ -31,11 +31,13 @@ Option 2.
 - Interpersonal homicide rate per province as a function of the young-male share, inequality,
   urbanization, the marriage squeeze (0057) and policing capacity (P102).
 - Illicit drugs as goods produced in a few regions (coca, opium, synthetic precursors) and
-  shipped over the same route-choice graph (0017) to consumer markets; interdiction is a policy
+  shipped over the transport graph to consumer markets, on least-cost legs (S05) with ADR 0095's
+  transit hop until route choice (0017) returns in P8; interdiction is a policy
   wedge on links. Route rents fund criminal groups, and their violence rises with rival groups
   and enforcement shocks (P103, P104).
-- Organized-crime control: a stock per province of territory controlled by armed non-state
-  actors, which taxes local output, corrupts officials (0046) and lowers state capacity (0067).
+- Territorial control: the stock of territory held by armed non-state actors is ADR 0069's, and
+  criminal groups are actors in it. Drug-route rents from this ADR feed their revenue; control
+  taxes local output, corrupts officials (0046) and lowers state capacity (0067).
 - Homicide victimization lowers trust (0056) and enters the mortality causes (0033).
 
 ## Migration
