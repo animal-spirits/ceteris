@@ -1810,9 +1810,9 @@ mod tests {
         w.set_network(net.clone());
         assert_ne!(w.digest(), digest);
         assert_eq!(w.inputs().network.crossings, net.crossings);
-        let tau = w.kernel().good(6).crossings.row(6)[0].tau;
+        let loss = w.kernel().good(6).crossings.row(6)[0].inv_loss;
         let base = Kernel::build(&net, &w.inputs().weight, &w.inputs().wedges, w.trade());
-        assert_eq!(tau, base.good(6).crossings.row(6)[0].tau);
+        assert_eq!(loss, base.good(6).crossings.row(6)[0].inv_loss);
         // the buyer prices of the last E3 stand; at the next refresh the island's machinery,
         // all imported, costs more
         assert_eq!(w.price_index[island], before);

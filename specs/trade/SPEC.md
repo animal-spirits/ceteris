@@ -2,7 +2,7 @@
 
 Status: approved (owner, 2026-10-23)
 Phase: P2
-Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022 and 0023
+Design sections: 3.4, 4.4, 4.6, 5.4, 8.1, 8.2, 8.3, 8.4, 8.5, 17 (P01-P05, S01, S02, S05), 19.4, 21.1 (P2); ADRs 0012, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022, 0023, 0092 (gateway mass), 0093 (kernel range, log-domain weights) and 0097 (dispatch)
 
 ## Purpose
 
@@ -38,7 +38,7 @@ them only as quantities offered to and demanded from each market.
 | Clip ticks: ticks at which the price step clip bound | (province, good) | `u32` | ticks | zero |
 | Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the initial prices (the data state's, or the calibrated steady state's) |
 | Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | sourcing at the initial posted prices (the data state's, or the calibrated steady state's) |
-| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f32` K = tau^-theta_g, CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
+| Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g (crossings with the gateway masses) and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) and gateway masses (pack) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
 | Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
@@ -78,22 +78,38 @@ under either source. Inside a province trade is costless (A2): K_oo = 1.
 produces g with positive capacity (A VA0 > 0); a local cell (d, g) has a province market if
 anyone at d buys g (its country's final demand share Omega_g > 0 or a local enterprise uses g
 as an input). Only active cells carry a price state; destinations are every province with
-spending. Origin weights are relative to the good's lowest active price, w_o = (p_o /
-p_min)^-theta, and floored at WEIGHT_FLOOR = 1e-100 (subnormal weights broke the gateways' mass balance, Task 2): an
-origin below the floor is not a source, and a destination whose Phi_d (in the same relative units) is
-below it reaches no origin, buys
-nothing and has an infinite buyer price. A price spread above about 1e20 at theta 5, or 3e9 at
-the largest class value 10.57, can make a destination unreachable. Since every weight is relative to one global p_min, a single cheap
-origin anywhere sets the scale for all destinations.
+spending. Origin weights are held in log scale, per country (ADR 0093): ln w_o = -theta ln(p_o /
+p_A) with p_A the lowest active price of o's country A, and the country's shift s_A = -theta
+ln(p_A / p_min). Gateway sums carry the shifts as in a log-sum-exp whose maximum is fixed per
+country: each destination country B measures access in its destination scale s'_B, the largest
+shift among B and the countries with a crossing into B that carries access, and a crossing's terms move
+from A's scale into B's by exp(s_A - s'_B) <= 1, computed once per good and price vector; home and
+domestic routes by exp(s_A - s'_A). No term overflows, and a term is lost to underflow only when it
+is below 1e-308 of the destination's best supplier, kernel factors aside. There is no weight floor:
+a destination is unreachable (buys nothing, infinite buyer price) only when no path with K > 0
+leads to it from an active origin, tested on ln Phi_d (Phi_d in its scale below the smallest
+normal f64 counts as underflow, not a path). A price spread between countries makes no
+destination unreachable. Where a source is so dear (about 1e57 against its buyers' best at theta
+5) that the units it ships, value / p_o, fall below the smallest normal f64, those units lose
+their precision.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
 K_od = tau_od^-theta, dense within each country. A cross-border pair is reached only through
 gateways of the two countries:
 
 ```
-K_od = sum over a in G(A), b in G(B) of  K_oa * K_ab * K_bd
-K_ab = (tau_ab * (1 + nu_AB) * (1 + t_AB,g)) ^ -theta
+K_od = sum over a in G(A), b in G(B) of  K_oa * m_a * K_ab * m_b * K_bd
+K_ab = (tau_ab * (1 + nu_AB) * (1 + t_AB,g)) ^ -theta,      sum over a in G(A) of m_a = 1
 ```
+
+m_a is the gateway's mass (ADR 0092), its share of its country's 2000 trade throughput; the pack
+has no throughput per gateway, so it is 1/k_A (econ SPEC, Gateways). The masses fold into the
+stored crossing factor, m_a K_ab m_b, so the low-rank evaluation is unchanged. Splitting a
+gateway into copies that share its mass changes no flow (1e-12,
+`duplicating_a_gateway_with_half_mass_changes_no_flow`), and access no longer grows with the
+number of gateway pairs. Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and
+theta 64.85 (about 4e-260, `kernel_round_trip_at_extreme_tau`), beyond ADR 0093's 1e-7, so K is
+stored in f64 (ADR 0093's second option), which holds it down to about 1e-308.
 
 nu is the non-tariff border friction (P05): an iceberg cost, destroyed at the crossing and
 tallied as border loss. t is the applied tariff: a routing wedge only, no goods lost; its revenue
@@ -132,7 +148,18 @@ Orders split as a Markov chain: d sends E_d K_bd u'_b / Phi_d to gateway b, b sp
 K_ab v'_a / u'_b over origin gateways (the tariff stays at the crossing), a by K_oa w_o / v'_a over
 origins. Dispatch runs the same split forwards with destination weights E_d / Phi_d, scaled by
 each origin's fill; iceberg losses apply per leg, the border loss on the crossing. Cost per good:
-O(sum_A n_A^2 + P k + G^2), with k gateways per country and G about 600.
+O(sum_A n_A^2 + P k + G^2 + C^2), with k gateways per country, G about 600 and C countries (the
+scale factors).
+
+**Dispatch (ADR 0097).** Every sum at a gateway or province gathers its legs by target, in the
+order a serial pass over the legs adds them, so its bits do not depend on the thread count; the
+run-wide loss is one add chain in that order. Losses and duties multiply by the reciprocals the
+kernel stores (1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t)), and the divisions by the price p_o,
+the onward access z_a and the destination access y_b are by reciprocals hoisted per origin, per
+origin gateway and per destination gateway (by division where y_b or z_a is subnormal and its
+reciprocal overflows). x (1 / d) rounds differently from x / d, so these bits differ from the
+divisions of the first build; `dispatch_scatter`, the serial oracle, uses the same arithmetic,
+and the gather matches it bit for bit.
 
 **Payments.** Buyers pay at dispatch for what is filled: p_o (1 + t) per shipped unit, so a
 fully filled destination pays E_d. Each buyer pays its share of its class's filled spending to
@@ -420,6 +447,15 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 - Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7 traded
   goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the owner on
   2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
+  After the gather dispatch, the stored reciprocals, the log-domain weights and the gateway masses
+  (ADRs 0092, 0093, 0097; M4 Pro, AC, 98 W, full pack from its calibrated steady state, criterion
+  medians, two rounds run alternately against the build before the change on the same machine):
+  `source_dispatch_parallel` 10.9 ms (10.5 to 10.7 before) against the 8 ms budget, missed; a
+  whole tick 45.6 to 48.1 ms (44.4 to 44.5 before) against 35 ms, missed; one good's dispatch
+  2.74 to 2.75 ms (2.66 to 2.71); warm `source` 7.9 to 8.3 ms (7.0 to 7.4), the country scale
+  factors adding about 1 ms over seven goods; the E3 price refresh 7.7 to 9.4 ms (7.1 to 7.2).
+  The same machine measured the build before the change at 10.5 ms and 44.4 ms, not the 7.9 and
+  34 ms of the earlier record, so the budget verdict needs the earlier conditions as well.
 
 ## Open questions
 
@@ -436,7 +472,8 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   crossings to countries without an economy province are exactly negligible (about 0.25 ms), and
   the 5 ms budget needs about 190,000 crossings, which moves Phi_d by 50% to 95%. Owner decision
   (2026-10-26): the budget moves to 8 ms and the gateway count and rule move to the ADR 0092
-  rework after the P2 gate.
+  rework after the P2 gate. With the gateway masses (ADR 0092) access no longer grows with the
+  number of gateway pairs, so the count can be set for speed alone.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.

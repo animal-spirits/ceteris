@@ -7,18 +7,21 @@
 //! is what d pays: the origin ships `X / (p_o (1 + t))` units and receives `p_o` per unit, the
 //! importer's rebate account `t p_o` per unit, and d receives the shipped units over the
 //! physical loss factor of the route. Domestic and home routes have t = 0.
+//!
+//! Weights and access are held in the log scale of each country (ADR 0093,
+//! [`crate::kernel::Access`]), so a price spread between countries makes no destination
+//! unreachable: only a destination with no path from an active origin buys nothing. Losses and
+//! tariffs are applied by multiplying with the kernel's stored reciprocals (ADR 0097).
 
 use rayon::prelude::*;
 
 use crate::kernel::{Access, Kernel};
 
-/// Origins whose weight `(p_o / p_min)^-theta` is below this are not sourcing targets, and a
-/// destination whose access `Phi_d` (in the same relative units) is below it buys nothing:
-/// its price index is infinite. Markets 1e20x above the best price are left out at theta = 5,
-/// 3e9x at 10.57 (the largest P01 class value).
-/// It keeps every product of a weight with up to three f32 kernel factors a normal f64, so
-/// the Markov shares stay accurate when prices span orders of magnitude.
-pub const WEIGHT_FLOOR: f64 = 1e-100;
+/// Whether a destination with access `phi`, in its country's scale, reaches an active origin.
+/// Access below the smallest normal f64 is underflow of kernel factors, not a path.
+fn reachable(phi: f64) -> bool {
+    phi >= f64::MIN_POSITIVE
+}
 
 /// Provinces per parallel task at least, in loops over provinces.
 const ROWS: usize = 64;
@@ -48,8 +51,7 @@ pub struct Sourced {
     /// Units ordered at each origin by class, at its price `p_o`. Per province.
     pub orders: Vec<[f64; 2]>,
     /// Delivered price index `P_d = Phi_d^(-1/theta)` in price units, tariff included;
-    /// `f64::INFINITY` where no active origin is reachable (`Phi_d` below [`WEIGHT_FLOOR`]).
-    /// Per province.
+    /// `f64::INFINITY` where no active origin is reachable. Per province.
     pub price_index: Vec<f64>,
     /// Units leaving each origin market, home purchases included: the filled orders. Per
     /// province.
@@ -96,17 +98,23 @@ struct Scratch {
     price: Vec<f64>,
     active: Vec<bool>,
     price_index: Vec<f64>,
+    /// Log weights and country shifts of [`origin_weights`], and the weights `exp(ln_w)`.
+    ln_w: Vec<f64>,
+    shift: Vec<f64>,
     weight: Vec<f64>,
     access: Access,
-    /// Spending per unit of access by class, `E_d / Phi_d`; 0 where unreachable.
+    /// Spending per unit of access by class, `E_d / Phi_d` in d's country scale; 0 where
+    /// unreachable.
     reach: Vec<[f64; 2]>,
     /// Backward pass, per gateway: value sent to destination gateway b, and value net of
     /// tariff arriving back at origin gateway a.
     to_dest_gateway: Vec<[f64; 2]>,
     at_origin_gateway: Vec<[f64; 2]>,
-    /// Forward pass, per gateway: destination access `y_b = sum_d K_bd reach_d`, onward
-    /// access `z_a = sum_b K_ab y_b` and the share of z_a left after tariffs.
+    /// Forward pass, per gateway: destination access `y_b = sum_d K_bd reach_d` and its
+    /// reciprocal, onward access `z_a = sum_b K_ab carry(A, B) y_b` and the share of z_a left
+    /// after tariffs.
     y: Vec<f64>,
+    inv_y: Vec<f64>,
     z: Vec<f64>,
     net_ratio: Vec<f64>,
     /// Value entering origin gateway a, the same over `p_o tau_oa` (units at a before the
@@ -163,6 +171,12 @@ impl Sourced {
     }
 }
 
+/// `x / d` by the reciprocal `inv = 1 / d`, or by division for a subnormal d, whose
+/// reciprocal overflows.
+fn over(x: f64, inv: f64, d: f64) -> f64 {
+    if inv.is_finite() { x * inv } else { x / d }
+}
+
 fn zeroed(v: &mut Vec<f64>, n: usize) {
     v.clear();
     v.resize(n, 0.0);
@@ -173,40 +187,59 @@ fn zeroed2(v: &mut Vec<[f64; 2]>, n: usize) {
     v.resize(n, [0.0; 2]);
 }
 
-/// Sourcing weights `(p_o / p_min)^-theta_g` of good `g` at the active origins into `out` (0
-/// for inactive origins and below [`WEIGHT_FLOOR`]), and returns `p_min`, the lowest active
-/// price (`f64::INFINITY` when no origin is active). Prices of inactive origins are not read.
+/// Log sourcing weights of good `g`, each relative to its country's best (ADR 0093):
+/// `ln_w[o] = -theta ln(p_o / p_A)` for an active origin o of country A, `p_A` the lowest
+/// active price in A, minus infinity for an inactive origin; and per country the shift
+/// `shift[A] = -theta ln(p_A / p_min)`, minus infinity for a country without an active origin.
+/// Returns `p_min`, the lowest active price (`f64::INFINITY` when no origin is active). Prices
+/// of inactive origins are not read.
 pub fn origin_weights(
     k: &Kernel,
     g: usize,
     price: &[f64],
     active: &[bool],
-    out: &mut Vec<f64>,
+    ln_w: &mut Vec<f64>,
+    shift: &mut Vec<f64>,
 ) -> f64 {
-    assert!(price.len() == k.n_provinces() && active.len() == k.n_provinces());
+    let np = k.n_provinces();
+    assert!(price.len() == np && active.len() == np);
+    let (country, theta) = (k.province_country(), k.theta(g));
+    // the lowest active price per country first, then its shift in place
+    shift.clear();
+    shift.resize(k.n_countries(), f64::INFINITY);
     let mut p_min = f64::INFINITY;
     for (o, &p) in price.iter().enumerate() {
         if active[o] {
             assert!(p.is_finite() && p > 0.0, "active market {o} has price {p}");
+            let c = usize::from(country[o]);
+            shift[c] = shift[c].min(p);
             p_min = p_min.min(p);
         }
     }
-    out.clear();
-    out.extend((0..k.n_provinces()).map(|o| {
-        if !active[o] {
-            return 0.0;
+    ln_w.clear();
+    ln_w.extend((0..np).map(|o| {
+        if active[o] {
+            -theta * libm::log(price[o] / shift[usize::from(country[o])])
+        } else {
+            f64::NEG_INFINITY
         }
-        let w = libm::pow(price[o] / p_min, -k.theta(g));
-        if w >= WEIGHT_FLOOR { w } else { 0.0 }
     }));
+    for s in shift.iter_mut() {
+        *s = if s.is_finite() {
+            -theta * libm::log(*s / p_min)
+        } else {
+            f64::NEG_INFINITY
+        };
+    }
     p_min
 }
 
-/// Delivered price index from the relative access `phi` of [`Kernel::origin_access_into`]
-/// on [`origin_weights`]: `p_min phi^(-1/theta)`, infinite below [`WEIGHT_FLOOR`].
-pub fn price_index(p_min: f64, phi: f64, theta: f64) -> f64 {
-    if phi >= WEIGHT_FLOOR {
-        p_min * libm::pow(phi, -1.0 / theta)
+/// Delivered price index `p_min exp(-ln_phi / theta)` from the log access `ln_phi` relative
+/// to `p_min^-theta`, a destination's shift plus the log of its access of
+/// [`Kernel::origin_access_into`]; infinite for minus infinity (unreachable).
+pub fn price_index(p_min: f64, ln_phi: f64, theta: f64) -> f64 {
+    if ln_phi > f64::NEG_INFINITY {
+        p_min * libm::exp(-ln_phi / theta)
     } else {
         f64::INFINITY
     }
@@ -237,27 +270,40 @@ pub fn source(
             .zip(price)
             .all(|(a, b)| a.to_bits() == b.to_bits());
     if s.prepared != Some((k.id(), g)) || s.active != active || !same_prices {
-        let p_min = origin_weights(k, g, price, active, &mut s.weight);
-        k.origin_access_into(g, &s.weight, &mut s.access);
+        let p_min = origin_weights(k, g, price, active, &mut s.ln_w, &mut s.shift);
+        s.weight.clear();
+        s.weight.extend(s.ln_w.iter().map(|&x| libm::exp(x)));
+        k.origin_access_into(g, &s.weight, &s.shift, &mut s.access);
+        let acc = &s.access;
         s.price_index.clear();
-        s.price_index.extend(
-            s.access
-                .pi
-                .iter()
-                .map(|&f| price_index(p_min, f, k.theta(g))),
-        );
+        s.price_index
+            .extend(acc.pi.iter().zip(k.province_country()).map(|(&phi, &c)| {
+                let ln_phi = if reachable(phi) {
+                    acc.dest_shift[usize::from(c)] + libm::log(phi)
+                } else {
+                    f64::NEG_INFINITY
+                };
+                price_index(p_min, ln_phi, k.theta(g))
+            }));
         s.price.clear();
         s.price.extend_from_slice(price);
         s.active.clear();
         s.active.extend_from_slice(active);
         s.prepared = Some((k.id(), g));
     }
-    let (w, v, u, phi) = (&s.weight, &s.access.v, &s.access.u, &s.access.pi);
+    let (w, local, v, u, phi) = (
+        &s.weight,
+        &s.access.local,
+        &s.access.v,
+        &s.access.u,
+        &s.access.pi,
+    );
+    let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &s.access.carry);
 
     out.price_index.clone_from(&s.price_index);
     s.reach.clear();
     s.reach.extend((0..np).map(|d| {
-        if phi[d] >= WEIGHT_FLOOR {
+        if reachable(phi[d]) {
             [spend[d][0] / phi[d], spend[d][1] / phi[d]]
         } else {
             [0.0; 2]
@@ -278,9 +324,9 @@ pub fn source(
         .with_min_len(ROWS)
         .filter(|(o, _)| w[*o] > 0.0)
         .for_each(|(o, order)| {
-            let mut x = [w[o] * reach[o][0], w[o] * reach[o][1]];
+            let mut x = [local[o] * reach[o][0], local[o] * reach[o][1]];
             for e in gk.domestic.row(o) {
-                let (kw, r) = (f64::from(e.k) * w[o], reach[e.col as usize]);
+                let (kw, r) = (e.k * local[o], reach[e.col as usize]);
                 x[0] += kw * r[0];
                 x[1] += kw * r[1];
             }
@@ -298,7 +344,7 @@ pub fn source(
         for e in gk.access.row(d) {
             let b = e.col as usize;
             for c in (0..2).filter(|&c| on[c]) {
-                to_b[b][c] += r[c] * f64::from(e.k) * u[b];
+                to_b[b][c] += r[c] * e.k * u[b];
             }
         }
     }
@@ -310,15 +356,16 @@ pub fn source(
         .enumerate()
         .filter(|(a, _)| v[*a] > 0.0)
         .for_each(|(a, at_a)| {
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
             for e in gk.crossings.row(a) {
                 let b = e.col as usize;
                 let t = to_b[b];
                 if t == [0.0; 2] {
                     continue;
                 }
-                let share = f64::from(e.k) * v[a] / u[b];
+                let share = e.k * carry_a[usize::from(gc[b])] * v[a] / u[b];
                 for c in (0..2).filter(|&c| t[c] != 0.0) {
-                    at_a[c] += t[c] * share / (1.0 + f64::from(e.tariff));
+                    at_a[c] += t[c] * share * e.inv_duty;
                 }
             }
         });
@@ -336,7 +383,7 @@ pub fn source(
                 if t == [0.0; 2] {
                     continue;
                 }
-                let factor = f64::from(e.k) * w[o] / v[a];
+                let factor = e.k * w[o] / v[a];
                 for c in (0..2).filter(|&c| t[c] != 0.0) {
                     order[c] += t[c] * factor;
                 }
@@ -351,9 +398,11 @@ pub fn source(
 /// ships `fill[o][c]` of its class-c orders along the routes they were placed on. `price` is
 /// the one passed to `source`. The forward pass is the backward split read the other way:
 /// origin o sends value `fill w_o K_oa z_a` to gateway a, a splits by `K_ab y_b / z_a`, b by
-/// `K_bd reach_d / y_b`, with `reach_d = E_d / Phi_d`. Each leg divides the units by its
-/// physical factor (iceberg, and the border loss on crossings), and a crossing divides the
-/// value by its `1 + t`, so arrivals are the sum over routes of `X / (p_o (1 + t) tau_route)`.
+/// `K_bd reach_d / y_b`, with `reach_d = E_d / Phi_d`. Each leg multiplies the units by its
+/// stored reciprocal physical factor (iceberg, and the border loss on crossings), and a
+/// crossing the value by its `1 / (1 + t)`, so arrivals are the sum over routes of
+/// `X / (p_o (1 + t) tau_route)`. Divisions are by reciprocals hoisted per origin, per
+/// origin gateway and per destination gateway.
 pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mut Sourced) {
     let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(
@@ -397,8 +446,10 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     *lost = 0.0;
     let Scratch {
         weight: w,
+        access,
         reach,
         y,
+        inv_y,
         z,
         net_ratio,
         gross_a,
@@ -415,6 +466,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     // every pass writes all of its entries, so these need no zeroing
     for v in [
         &mut *y,
+        &mut *inv_y,
         &mut *z,
         &mut *net_ratio,
         &mut *gross_a,
@@ -432,6 +484,8 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     loss.resize(n_origin + cross.entries.len() + 4 * acc.entries.len(), 0.0);
     let [arrive_home, arrive_1, arrive_2, arrive_3, arrive_4] = arrive;
     let (w, reach) = (&*w, &*reach);
+    let (gc, nc) = (k.gateway_country(), k.n_countries());
+    let (carry, local) = (&access.carry, &access.local);
 
     for c in 0..2 {
         // a class that spends nothing anywhere ships nothing: its pass would add only zeros
@@ -447,26 +501,31 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         // unchanged.
 
         // destination-side access sums on the spending weights of this class
-        y.par_iter_mut().enumerate().for_each(|(b, y)| {
-            let mut sum = 0.0;
-            for &(d, j) in k.access_by_gateway().column(b) {
-                let r = reach[d as usize][c];
-                if r > 0.0 {
-                    sum += f64::from(acc.entries[j as usize].k) * r;
+        y.par_iter_mut()
+            .zip(inv_y.par_iter_mut())
+            .enumerate()
+            .for_each(|(b, (y, inv))| {
+                let mut sum = 0.0;
+                for &(d, j) in k.access_by_gateway().column(b) {
+                    let r = reach[d as usize][c];
+                    if r > 0.0 {
+                        sum += acc.entries[j as usize].k * r;
+                    }
                 }
-            }
-            *y = sum;
-        });
-        let y = &*y;
+                (*y, *inv) = (sum, 1.0 / sum);
+            });
+        let (y, inv_y) = (&*y, &*inv_y);
         z.par_iter_mut()
             .zip(net_ratio.par_iter_mut())
             .enumerate()
             .for_each(|(a, (z, ratio))| {
+                let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
                 let (mut gross, mut net) = (0.0, 0.0);
                 for e in cross.row(a) {
-                    let x = f64::from(e.k) * y[e.col as usize];
+                    let b = e.col as usize;
+                    let x = e.k * carry_a[usize::from(gc[b])] * y[b];
                     gross += x;
-                    net += x / (1.0 + f64::from(e.tariff));
+                    net += x * e.inv_duty;
                 }
                 *z = gross;
                 *ratio = if gross > 0.0 { net / gross } else { 0.0 };
@@ -527,24 +586,24 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
                         acc_loss.fill(0.0);
                         continue;
                     }
-                    let (m, p) = (f * w[o], price[o]);
+                    let (m, m_local, inv_p) = (f * w[o], f * local[o], 1.0 / price[o]);
                     let (mut sent, mut got_paid) = (shipped[r], received[r]);
-                    let x = m * reach[o][c];
+                    let x = m_local * reach[o][c];
                     if x > 0.0 {
-                        let units = x / p;
+                        let units = x * inv_p;
                         arrive[r][c] += units;
                         sent += units;
                         got_paid += x;
                         home[r] = x;
                     }
                     for (((e, value), leg), loss) in dom_row.iter().zip(dv).zip(dl).zip(dom_loss) {
-                        let x = m * f64::from(e.k) * reach[e.col as usize][c];
+                        let x = m_local * e.k * reach[e.col as usize][c];
                         if x == 0.0 {
                             (*leg, *loss) = (DomesticLeg::default(), 0.0);
                             continue;
                         }
-                        let units = x / p;
-                        let got = units / e.tau;
+                        let units = x * inv_p;
+                        let got = units * e.inv_tau;
                         sent += units;
                         *value += x;
                         got_paid += x;
@@ -552,22 +611,23 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
                     }
                     for (((e, value), leg), loss) in acc_row.iter().zip(av).zip(ol).zip(acc_loss) {
                         let a = e.col as usize;
-                        let x = m * f64::from(e.k) * z[a];
+                        let x = m * e.k * z[a];
                         if x == 0.0 {
                             (*leg, *loss) = (OriginLeg::default(), 0.0);
                             continue;
                         }
                         let net = x * net_ratio[a];
-                        let units = net / p;
+                        let units = net * inv_p;
                         *value += net;
                         got_paid += net;
                         sent += units;
+                        let origin_units = x * inv_p;
                         *leg = OriginLeg {
                             gross: x,
-                            units: x / (p * e.tau),
-                            origin_units: x / p,
+                            units: origin_units * e.inv_tau,
+                            origin_units,
                         };
-                        *loss = units - units / e.tau;
+                        *loss = units - units * e.inv_tau;
                     }
                     (shipped[r], received[r]) = (sent, got_paid);
                 }
@@ -607,26 +667,30 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         rows.into_par_iter()
             .enumerate()
             .for_each(|(a, (((values, units_out), legs), loss))| {
-                if gross_a[a] <= 0.0 {
+                // as the scatter's `gross_a > 0` filter, NaN included
+                let sends = gross_a[a] > 0.0;
+                if !sends {
                     legs.fill(CrossingLeg::default());
                     loss.fill(0.0);
                     return;
                 }
+                let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+                let inv_z = 1.0 / z[a];
                 let row = cross.row(a).iter().zip(values).zip(units_out);
                 for (((e, value), units_out), (leg, loss)) in row.zip(legs.iter_mut().zip(loss)) {
-                    let weight = f64::from(e.k) * y[e.col as usize];
+                    let b = e.col as usize;
+                    let weight = e.k * carry_a[usize::from(gc[b])] * y[b];
                     if weight == 0.0 {
                         (*leg, *loss) = (CrossingLeg::default(), 0.0);
                         continue;
                     }
-                    let share = weight / z[a];
-                    let duty = 1.0 + f64::from(e.tariff);
+                    let share = over(weight, inv_z, z[a]);
                     let gross = gross_a[a] * share;
-                    let net = gross / duty;
-                    let units = units_a[a] * share / duty;
-                    let got = units / (e.tau * e.border_tau);
+                    let net = gross * e.inv_duty;
+                    let units = units_a[a] * share * e.inv_duty;
+                    let got = units * e.inv_loss;
                     *value += net;
-                    *units_out += origin_units_a[a] * share / duty;
+                    *units_out += origin_units_a[a] * share * e.inv_duty;
                     let lag = e.lag;
                     (*leg, *loss) = (
                         CrossingLeg {
@@ -709,15 +773,16 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
                     let rc = reach[d][c];
                     for ((e, value), loss) in row.iter().zip(av).zip(loss.chunks_exact_mut(4)) {
                         let b = e.col as usize;
-                        let weight = f64::from(e.k) * rc;
-                        if rc <= 0.0 || weight == 0.0 {
+                        let weight = e.k * rc;
+                        let buys = rc > 0.0;
+                        if !buys || weight == 0.0 {
                             loss.fill(0.0);
                             continue;
                         }
-                        let share = weight / y[b];
+                        let share = over(weight, inv_y[b], y[b]);
                         for ((slot, loss), &at) in slots.iter_mut().zip(loss).zip(&at_b[b].units) {
                             let units = at * share;
-                            let got = units / e.tau;
+                            let got = units * e.inv_tau;
                             *slot += got;
                             *loss = units - got;
                         }
@@ -804,6 +869,8 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
     *lost = 0.0;
 
     let (w, reach) = (&s.weight, &s.reach);
+    let (gc, nc) = (k.gateway_country(), k.n_countries());
+    let (carry, local) = (&s.access.carry, &s.access.local);
     for c in 0..2 {
         // a class that spends nothing anywhere ships nothing: its pass would add only zeros
         if reach.iter().all(|r| r[c] == 0.0) {
@@ -813,17 +880,19 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
         zeroed(&mut s.y, ng);
         for d in (0..np).filter(|&d| reach[d][c] > 0.0) {
             for e in gk.access.row(d) {
-                s.y[e.col as usize] += f64::from(e.k) * reach[d][c];
+                s.y[e.col as usize] += e.k * reach[d][c];
             }
         }
         zeroed(&mut s.z, ng);
         zeroed(&mut s.net_ratio, ng);
         for a in 0..ng {
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
             let (mut gross, mut net) = (0.0, 0.0);
             for e in gk.crossings.row(a) {
-                let x = f64::from(e.k) * s.y[e.col as usize];
+                let b = e.col as usize;
+                let x = e.k * carry_a[usize::from(gc[b])] * s.y[b];
                 gross += x;
-                net += x / (1.0 + f64::from(e.tariff));
+                net += x * e.inv_duty;
             }
             s.z[a] = gross;
             if gross > 0.0 {
@@ -840,10 +909,10 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
             if w[o] == 0.0 || f == 0.0 {
                 continue;
             }
-            let (m, p) = (f * w[o], price[o]);
-            let x = m * reach[o][c];
+            let (m, m_local, inv_p) = (f * w[o], f * local[o], 1.0 / price[o]);
+            let x = m_local * reach[o][c];
             if x > 0.0 {
-                let units = x / p;
+                let units = x * inv_p;
                 arrive[0][o][c] += units;
                 shipped[o] += units;
                 paid[o] += x;
@@ -853,12 +922,12 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
             let lo = gk.domestic.offsets[o] as usize;
             for (i, e) in gk.domestic.row(o).iter().enumerate() {
                 let d = e.col as usize;
-                let x = m * f64::from(e.k) * reach[d][c];
+                let x = m_local * e.k * reach[d][c];
                 if x == 0.0 {
                     continue;
                 }
-                let units = x / p;
-                let got = units / e.tau;
+                let units = x * inv_p;
+                let got = units * e.inv_tau;
                 arrive[1][d][c] += got;
                 *lost += units - got;
                 shipped[o] += units;
@@ -870,19 +939,20 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
             let lo = gk.access.offsets[o] as usize;
             for (i, e) in gk.access.row(o).iter().enumerate() {
                 let a = e.col as usize;
-                let x = m * f64::from(e.k) * s.z[a];
+                let x = m * e.k * s.z[a];
                 if x == 0.0 {
                     continue;
                 }
                 let net = x * s.net_ratio[a];
-                let units = net / p;
+                let units = net * inv_p;
                 access_out_value[lo + i] += net;
                 received[o] += net;
                 shipped[o] += units;
-                *lost += units - units / e.tau;
+                *lost += units - units * e.inv_tau;
+                let origin_units = x * inv_p;
                 s.gross_a[a] += x;
-                s.units_a[a] += x / (p * e.tau);
-                s.origin_units_a[a] += x / p;
+                s.units_a[a] += origin_units * e.inv_tau;
+                s.origin_units_a[a] += origin_units;
             }
         }
 
@@ -891,20 +961,21 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
         let mut units_b: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ng]);
         for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
             let lo = gk.crossings.offsets[a] as usize;
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let inv_z = 1.0 / s.z[a];
             for (i, e) in gk.crossings.row(a).iter().enumerate() {
                 let b = e.col as usize;
-                let weight = f64::from(e.k) * s.y[b];
+                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
                 if weight == 0.0 {
                     continue;
                 }
-                let share = weight / s.z[a];
-                let duty = 1.0 + f64::from(e.tariff);
+                let share = over(weight, inv_z, s.z[a]);
                 let gross = s.gross_a[a] * share;
-                let net = gross / duty;
-                let units = s.units_a[a] * share / duty;
-                let got = units / (e.tau * e.border_tau);
+                let net = gross * e.inv_duty;
+                let units = s.units_a[a] * share * e.inv_duty;
+                let got = units * e.inv_loss;
                 crossing_value[lo + i] += net;
-                crossing_units[lo + i] += s.origin_units_a[a] * share / duty;
+                crossing_units[lo + i] += s.origin_units_a[a] * share * e.inv_duty;
                 *lost += units - got;
                 units_b[usize::from(e.lag)][b] += got;
                 gross_b[b] += gross;
@@ -917,14 +988,14 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
             let lo = gk.access.offsets[d] as usize;
             for (i, e) in gk.access.row(d).iter().enumerate() {
                 let b = e.col as usize;
-                let weight = f64::from(e.k) * reach[d][c];
+                let weight = e.k * reach[d][c];
                 if weight == 0.0 {
                     continue;
                 }
-                let share = weight / s.y[b];
+                let share = over(weight, 1.0 / s.y[b], s.y[b]);
                 for (lag, at_b) in units_b.iter().enumerate() {
                     let units = at_b[b] * share;
-                    let got = units / e.tau;
+                    let got = units * e.inv_tau;
                     arrive[1 + lag][d][c] += got;
                     *lost += units - got;
                 }
@@ -981,12 +1052,23 @@ mod tests {
     }
 
     /// Complete leg sets for the given province and gateway countries, random costs (lags 0
-    /// to 3) and random tariffs.
+    /// to 3), random gateway masses and random tariffs.
     fn complete_world(rng: &mut Rng, provinces: Vec<u16>, gateways: Vec<u16>) -> (Network, Wedges) {
         let n_countries = usize::from(*provinces.iter().chain(&gateways).max().unwrap()) + 1;
+        let raw: Vec<f64> = gateways.iter().map(|_| 0.2 + rng.next()).collect();
+        let mut total = vec![0.0; n_countries];
+        for (&c, m) in gateways.iter().zip(&raw) {
+            total[usize::from(c)] += m;
+        }
+        let gateway_mass = gateways
+            .iter()
+            .zip(&raw)
+            .map(|(&c, m)| m / total[usize::from(c)])
+            .collect();
         let mut net = Network {
             province_country: provinces,
             gateway_country: gateways,
+            gateway_mass,
             ..Network::default()
         };
         let (np, ng) = (net.n_provinces() as u32, net.n_gateways() as u32);
@@ -1034,22 +1116,27 @@ mod tests {
         complete_world(&mut rng(seed), provinces, vec![0, 0, 1])
     }
 
-    /// Kernel at theta = [`THETA`] for every good, the value the oracles below use.
-    fn kernel(net: &Network, wedges: &Wedges) -> Kernel {
+    /// Kernel at `theta` for every good.
+    fn kernel_at(net: &Network, wedges: &Wedges, theta: f64) -> Kernel {
         let p = TradeParams {
-            theta: [THETA; N_GOODS],
+            theta: [theta; N_GOODS],
             ..TradeParams::default()
         };
         Kernel::build(net, &W, wedges, &p)
+    }
+
+    /// Kernel at theta = [`THETA`] for every good, the value most oracles below use.
+    fn kernel(net: &Network, wedges: &Wedges) -> Kernel {
+        kernel_at(net, wedges, THETA)
     }
 
     fn tau_leg(g: usize, l: &Leg) -> f64 {
         1.0 + l.cost_per_t * W[g] + TradeParams::default().time_cost[g] * l.hours / 24.0
     }
 
-    /// K of a leg by the spec formula, stored as f32 like the kernel.
-    fn k_leg(g: usize, l: &Leg, extra: f64) -> f64 {
-        f64::powf(tau_leg(g, l) * extra, -THETA) as f32 as f64
+    /// K of a leg by the spec formula.
+    fn k_leg(g: usize, l: &Leg, extra: f64, theta: f64) -> f64 {
+        f64::powf(tau_leg(g, l) * extra, -theta)
     }
 
     fn find(legs: &[Leg], from: usize, to: usize) -> &Leg {
@@ -1067,7 +1154,7 @@ mod tests {
     }
 
     /// Every route o to d, by explicit enumeration of gateway pairs.
-    fn hops(net: &Network, wedges: &Wedges, g: usize, o: usize, d: usize) -> Vec<Hop> {
+    fn hops(net: &Network, wedges: &Wedges, g: usize, o: usize, d: usize, theta: f64) -> Vec<Hop> {
         let nu = 1.0 + TradeParams::default().border_nu;
         let (co, cd) = (net.province_country[o], net.province_country[d]);
         if o == d {
@@ -1081,7 +1168,7 @@ mod tests {
         if co == cd {
             let l = find(&net.domestic, o, d);
             return vec![Hop {
-                k: k_leg(g, l, 1.0),
+                k: k_leg(g, l, 1.0, theta),
                 tau: tau_leg(g, l),
                 slot: 1,
                 tariff: 0.0,
@@ -1099,8 +1186,12 @@ mod tests {
                     find(&net.access, d, b),
                 );
                 let t = f64::from(wedges.rate(cd as usize, co as usize, tariff_group(g)));
+                let m = net.gateway_mass[a] * net.gateway_mass[b];
                 hs.push(Hop {
-                    k: k_leg(g, oa, 1.0) * k_leg(g, ab, nu * (1.0 + t)) * k_leg(g, bd, 1.0),
+                    k: k_leg(g, oa, 1.0, theta)
+                        * m
+                        * k_leg(g, ab, nu * (1.0 + t), theta)
+                        * k_leg(g, bd, 1.0, theta),
                     tau: tau_leg(g, oa) * tau_leg(g, ab) * nu * tau_leg(g, bd),
                     slot: 1 + ((ab.hours / 730.0).round().min(3.0)) as usize,
                     tariff: t,
@@ -1132,9 +1223,11 @@ mod tests {
         lost: f64,
     }
 
-    /// ADR 0015 on a dense route table, independent of the Markov split: d spends E_d over
-    /// routes by K_route p_o^-theta / Phi_d; the origin ships X / (p_o (1 + t)) units, d
-    /// receives that over the physical tau, pays X and the tariff takes t / (1 + t).
+    /// ADR 0015 on a dense route table, independent of the Markov split and of the country
+    /// scales: d spends E_d over routes by K_route p_o^-theta / Phi_d, weights relative to one
+    /// world p_min, unfloored; the origin ships X / (p_o (1 + t)) units, d receives that over
+    /// the physical tau, pays X and the tariff takes t / (1 + t).
+    #[allow(clippy::too_many_arguments)]
     fn dense(
         net: &Network,
         wedges: &Wedges,
@@ -1143,6 +1236,7 @@ mod tests {
         active: &[bool],
         spend: &[[f64; 2]],
         fill: &[[f64; 2]],
+        theta: f64,
     ) -> Dense {
         let n = net.n_provinces();
         let p_min = (0..n)
@@ -1151,9 +1245,8 @@ mod tests {
             .fold(f64::INFINITY, f64::min);
         let w: Vec<f64> = (0..n)
             .map(|o| {
-                let w = f64::powf(price[o] / p_min, -THETA);
-                if active[o] && w >= WEIGHT_FLOOR {
-                    w
+                if active[o] {
+                    f64::powf(price[o] / p_min, -theta)
                 } else {
                     0.0
                 }
@@ -1170,14 +1263,14 @@ mod tests {
             lost: 0.0,
         };
         for (d, sd) in spend.iter().enumerate() {
-            let all: Vec<Vec<Hop>> = (0..n).map(|o| hops(net, wedges, g, o, d)).collect();
+            let all: Vec<Vec<Hop>> = (0..n).map(|o| hops(net, wedges, g, o, d, theta)).collect();
             let phi: f64 = (0..n)
                 .map(|o| all[o].iter().map(|h| h.k).sum::<f64>() * w[o])
                 .sum();
-            if phi < WEIGHT_FLOOR {
+            if phi == 0.0 {
                 continue;
             }
-            r.price_index[d] = p_min * f64::powf(phi, -1.0 / THETA);
+            r.price_index[d] = p_min * f64::powf(phi, -1.0 / theta);
             for o in (0..n).filter(|&o| w[o] > 0.0) {
                 for h in &all[o] {
                     for c in 0..2 {
@@ -1350,7 +1443,7 @@ mod tests {
             if o == d {
                 1.0
             } else {
-                k_leg(g, find(&net.domestic, o, d), 1.0)
+                k_leg(g, find(&net.domestic, o, d), 1.0, THETA)
             }
         };
         for o in 0..3 {
@@ -1387,7 +1480,7 @@ mod tests {
                 let fill = vec![[1.0; 2]; 10];
                 let mut out = Sourced::new();
                 source(&k, g, &price, &active, &spend, &mut out);
-                let want = dense(&net, &wedges, g, &price, &active, &spend, &fill);
+                let want = dense(&net, &wedges, g, &price, &active, &spend, &fill, THETA);
                 for c in 0..2 {
                     assert_close(
                         &format!("seed {seed} g {g} orders class {c}"),
@@ -1413,7 +1506,7 @@ mod tests {
                 let spend = draw2(&mut rng, 10, 0.0, 100.0);
                 let fill = draw2(&mut rng, 10, 0.0, 1.0);
                 let out = run(&k, g, &price, &active, &spend, &fill);
-                let want = dense(&net, &wedges, g, &price, &active, &spend, &fill);
+                let want = dense(&net, &wedges, g, &price, &active, &spend, &fill, THETA);
                 let tag = |what: &str| format!("seed {seed} g {g} {what}");
                 for s in 0..5 {
                     for c in 0..2 {
@@ -1450,7 +1543,10 @@ mod tests {
                     let want: f64 = (0..10)
                         .filter(|&o| active[o])
                         .map(|o| {
-                            let k_od: f64 = hops(&net, &wedges, g, o, d).iter().map(|h| h.k).sum();
+                            let k_od: f64 = hops(&net, &wedges, g, o, d, THETA)
+                                .iter()
+                                .map(|h| h.k)
+                                .sum();
                             k_od * price[o].powf(-THETA)
                         })
                         .sum();
@@ -1610,7 +1706,7 @@ mod tests {
                 for (i, e) in gk.crossings.row(a).iter().enumerate() {
                     *m_in_a += out.crossing_value[lo + i];
                     m_out[e.col as usize] += out.crossing_value[lo + i];
-                    due += f64::from(e.tariff) * out.crossing_value[lo + i];
+                    due += (1.0 / e.inv_duty - 1.0) * out.crossing_value[lo + i];
                 }
             }
             for a in 0..k.n_gateways() {
@@ -1658,8 +1754,9 @@ mod tests {
                     let (ca, cb) = (net.gateway_country[a], net.gateway_country[e.col as usize]);
                     let mut want = 0.0;
                     for d in (0..n).filter(|&d| net.province_country[d] == cb) {
-                        let all: Vec<Vec<Hop>> =
-                            (0..n).map(|o| hops(&net, &wedges, g, o, d)).collect();
+                        let all: Vec<Vec<Hop>> = (0..n)
+                            .map(|o| hops(&net, &wedges, g, o, d, THETA))
+                            .collect();
                         let phi: f64 = (0..n)
                             .map(|o| all[o].iter().map(|h| h.k).sum::<f64>() * w[o])
                             .sum();
@@ -1708,19 +1805,26 @@ mod tests {
 
         assert_eq!(out.price_index[0], 1.0);
         assert!(close(out.price_index[1], 1e18, 1e-12));
-        // province 2 reaches only province 1, whose weight 1e-90 times K ~ 1e-13 is below the
-        // floor; province 3 reaches nobody
-        assert_eq!(out.price_index[2], f64::INFINITY);
+        // province 2 reaches only province 1, 1e18 times dearer than province 0: weights are
+        // relative to their country's best, so it buys there; province 3 reaches nobody
+        let k12 = k_leg(g, &road(1, 2), 1.0, THETA);
+        assert!(close(
+            out.price_index[2],
+            1e18 * k12.powf(-1.0 / THETA),
+            1e-12
+        ));
         assert_eq!(out.price_index[3], f64::INFINITY);
         assert!(close(out.orders[0][0] * 1.0, 1.0, 1e-12));
-        assert!(close(out.orders[1][1] * 1e18, 4.0, 1e-12));
+        assert!(close(out.orders[1][0] * 1e18, 3.0 + 5.0, 1e-12));
+        assert!(close(out.orders[1][1] * 1e18, 4.0 + 6.0, 1e-12));
         assert_eq!(out.orders[2], [0.0; 2]);
         assert_eq!(out.orders[3], [0.0; 2]);
-        for d in [2, 3] {
-            assert_eq!(out.paid[d], 0.0);
-            assert_eq!(out.paid_by_class[d], [0.0; 2]);
-            assert!(out.arrive.iter().all(|a| a[d] == [0.0; 2]));
+        for (paid, want) in out.paid_by_class[2].iter().zip(spend[2]) {
+            assert!(close(*paid, want, 1e-12));
         }
+        assert_eq!(out.paid[3], 0.0);
+        assert_eq!(out.paid_by_class[3], [0.0; 2]);
+        assert!(out.arrive.iter().all(|a| a[3] == [0.0; 2]));
         let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
         assert!(finite(&out.shipped) && finite(&out.paid) && finite(&out.received));
         assert!(out.orders.iter().flatten().all(|x| x.is_finite()));
@@ -1851,8 +1955,13 @@ mod tests {
             let shipped: f64 = out.shipped.iter().sum();
             let arrived: f64 = out.arrive.iter().flatten().flatten().sum();
             prop_assert!(close(shipped - out.lost, arrived, 1e-12));
+            // with no weight floor a source 1e57 dearer than its buyers' best still sells a
+            // value that is a normal f64, but its units, value / p, can underflow: each leg's
+            // units are then off by up to the smallest normal f64
+            let legs = (n * n * 4) as f64;
             for ((r, p), q) in out.received.iter().zip(&price).zip(&out.shipped) {
-                prop_assert!(close(*r, p * q, 1e-12));
+                let slack = p * f64::MIN_POSITIVE * legs;
+                prop_assert!((r - p * q).abs() <= 1e-12 * r.max(p * q) + slack);
             }
         }
     }
@@ -1978,6 +2087,112 @@ mod tests {
             dispatch(&k, g, &price, &fill, &mut gather);
             dispatch_scatter(&k, g, &price, &fill, &mut scatter);
             assert_same_dispatch(g, &gather, &scatter);
+        }
+    }
+
+    fn assert_matches_dense(tag: &str, out: &Sourced, want: &Dense, tol: f64) {
+        for c in 0..2 {
+            let what = format!("{tag} orders class {c}");
+            assert_close(&what, &class(&out.orders, c), &class(&want.orders, c), tol);
+            for s in 0..5 {
+                let (got, want) = (class(&out.arrive[s], c), class(&want.arrive[s], c));
+                assert_close(&format!("{tag} arrive[{s}] class {c}"), &got, &want, tol);
+            }
+        }
+        assert_close(
+            &format!("{tag} index"),
+            &out.price_index,
+            &want.price_index,
+            tol,
+        );
+        assert_close(&format!("{tag} shipped"), &out.shipped, &want.shipped, tol);
+        assert_close(&format!("{tag} paid"), &out.paid, &want.paid, tol);
+        assert_close(
+            &format!("{tag} received"),
+            &out.received,
+            &want.received,
+            tol,
+        );
+        assert_close(&format!("{tag} tariff"), &out.tariff, &want.tariff, tol);
+        assert_close(&format!("{tag} lost"), &[out.lost], &[want.lost], tol);
+    }
+
+    #[test]
+    fn wide_price_spread_keeps_both_countries_reachable() {
+        // country 1's prices are 1e12 times country 0's: at theta 10.57 its weights are about
+        // 1e-127 of the world's best, under the former floor of 1e-100. Without gateways each
+        // country sources at home only, and with them the country scales are carried across
+        // the crossings; either way flows match the dense f64 reference.
+        let theta = 10.57;
+        for gateways in [vec![], vec![0, 0, 1, 1]] {
+            let mut r = rng(17);
+            let (net, wedges) = complete_world(&mut r, vec![0, 0, 0, 1, 1, 1], gateways);
+            let k = kernel_at(&net, &wedges, theta);
+            let price: Vec<f64> = (0..6)
+                .map(|o| if o < 3 { 1.0 } else { 1e12 } * (0.8 + 0.4 * r.next()))
+                .collect();
+            let active = [true, true, false, true, true, false];
+            let spend = draw2(&mut r, 6, 1.0, 100.0);
+            let fill = draw2(&mut r, 6, 0.2, 1.0);
+            for g in [0, 4] {
+                let out = run(&k, g, &price, &active, &spend, &fill);
+                assert!(out.price_index.iter().all(|p| p.is_finite()));
+                let want = dense(&net, &wedges, g, &price, &active, &spend, &fill, theta);
+                let tag = format!("{} gateways, good {g}", net.n_gateways());
+                assert_matches_dense(&tag, &out, &want, 1e-12);
+            }
+        }
+    }
+
+    #[test]
+    fn duplicating_a_gateway_with_half_mass_changes_no_flow() {
+        for seed in 1..=8u64 {
+            let (net, wedges) = random_world(seed * 0x3c6e_f372);
+            let n = net.n_provinces();
+            // gateway a and its copy share a's legs and half its mass each
+            let a = rng(seed).below(net.n_gateways());
+            let copy = net.n_gateways() as u32;
+            let mut split = net.clone();
+            split.gateway_country.push(net.gateway_country[a]);
+            split.gateway_mass[a] /= 2.0;
+            split.gateway_mass.push(split.gateway_mass[a]);
+            for l in net.access.iter().filter(|l| l.to as usize == a) {
+                split.access.push(Leg { to: copy, ..*l });
+            }
+            for l in &net.crossings {
+                if l.from as usize == a {
+                    split.crossings.push(Leg { from: copy, ..*l });
+                }
+                if l.to as usize == a {
+                    split.crossings.push(Leg { to: copy, ..*l });
+                }
+            }
+            let (one, two) = (kernel(&net, &wedges), kernel(&split, &wedges));
+            let mut r = rng(seed + 50);
+            let price = draw(&mut r, n, 0.5, 2.0);
+            let mut active = vec![true; n];
+            active[r.below(n)] = false;
+            let spend = draw2(&mut r, n, 0.0, 100.0);
+            let fill = draw2(&mut r, n, 0.0, 1.0);
+            for g in [0, 3, 5] {
+                let base = run(&one, g, &price, &active, &spend, &fill);
+                let out = run(&two, g, &price, &active, &spend, &fill);
+                let tag = |what: &str| format!("seed {seed} g {g} {what}");
+                for c in 0..2 {
+                    let (got, want) = (class(&out.orders, c), class(&base.orders, c));
+                    assert_close(&tag("orders"), &got, &want, 1e-12);
+                    for s in 0..5 {
+                        let (got, want) = (class(&out.arrive[s], c), class(&base.arrive[s], c));
+                        assert_close(&tag("arrive"), &got, &want, 1e-12);
+                    }
+                }
+                assert_close(&tag("index"), &out.price_index, &base.price_index, 1e-12);
+                assert_close(&tag("shipped"), &out.shipped, &base.shipped, 1e-12);
+                assert_close(&tag("paid"), &out.paid, &base.paid, 1e-12);
+                assert_close(&tag("received"), &out.received, &base.received, 1e-12);
+                assert_close(&tag("tariff"), &out.tariff, &base.tariff, 1e-12);
+                assert_close(&tag("lost"), &[out.lost], &[base.lost], 1e-12);
+            }
         }
     }
 

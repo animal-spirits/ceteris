@@ -49,13 +49,15 @@ fn check_owners(
     }
 }
 
-/// Gateways of the pack (`gateways.arrow`): graph node and country of each, and its kind
-/// (0 port, 1 airport, 2 land crossing).
+/// Gateways of the pack (`gateways.arrow`): graph node and country of each, its kind
+/// (0 port, 1 airport, 2 land crossing) and its mass, the share of its country's trade
+/// throughput (ADR 0092; the pack builder's source is in the econ SPEC, Gateways).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gateways {
     pub node: Vec<u32>,
     pub country: Vec<u16>,
     pub kind: Vec<u8>,
+    pub mass: Vec<f64>,
 }
 
 impl Gateways {
@@ -69,6 +71,7 @@ impl Gateways {
             node: u32s(&t, "node")?,
             country,
             kind: u8s(&t, "kind")?,
+            mass: f64s(&t, "mass")?,
         })
     }
 
@@ -315,6 +318,7 @@ impl EconInputs {
         let mut net = Network {
             province_country: country.clone(),
             gateway_country: gateways.country.clone(),
+            gateway_mass: gateways.mass.clone(),
             ..Network::default()
         };
         for (s, (first, second)) in legs.into_iter().enumerate() {
@@ -405,6 +409,7 @@ mod tests {
             node: vec![4, 5],
             country: vec![0, 1],
             kind: vec![0, 0],
+            mass: vec![1.0, 1.0],
         }
     }
 
@@ -445,6 +450,7 @@ mod tests {
             (net.province_country, net.gateway_country),
             (vec![0, 0, 1], vec![0, 1])
         );
+        assert_eq!(net.gateway_mass, gateways().mass);
         let g = &pack.graph;
         let road = g.cost[0] + g.cost[1];
         assert_eq!(net.domestic[0].cost_per_t, road);

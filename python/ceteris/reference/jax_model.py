@@ -34,7 +34,6 @@ class Static:
     n_cells: int
     index_row: int
     rho: float
-    weight_floor: float
     sigma_demand: float
     sigma_b: float
     phi: float
@@ -52,7 +51,7 @@ def _arrays(inp: Inputs) -> dict:
     country_people = np.bincount(kc, people, inp.n_countries)
     w = inp.pigl_weights
     cells = inp.active_cells
-    loss = cro.tau * cro.border_tau * (1.0 + cro.tariff)
+    net = cro.k * cro.inv_duty
     a = {
         "cells": cells,
         "traded": inp.traded,
@@ -66,13 +65,13 @@ def _arrays(inp: Inputs) -> dict:
         "c_from": cro.good * n_n + cro.row,
         "c_to": cro.good * n_n + cro.col,
         "dom_k": dom.k,
-        "dom_kt": dom.k / dom.tau,
+        "dom_kt": dom.k * dom.inv_tau,
         "acc_k": acc.k,
-        "acc_kt": acc.k / acc.tau,
+        "acc_kt": acc.k * acc.inv_tau,
         "cro_k": cro.k,
-        "cro_kt": cro.k / loss,
-        "cro_net": cro.k / (1.0 + cro.tariff),
-        "cro_duty": cro.k * cro.tariff / (1.0 + cro.tariff),
+        "cro_kt": net * cro.inv_loss,
+        "cro_net": net,
+        "cro_duty": cro.k - net,
         "ep": ep,
         "eg": eg,
         "ec": inp.ent_country,
@@ -135,13 +134,12 @@ def _sourcing(s: Static, d: dict, price) -> dict:
     p_min = jax.lax.stop_gradient(jnp.min(jnp.where(act, p, jnp.inf), axis=1, keepdims=True))
     ratio = jnp.where(act, p / jnp.where(jnp.isfinite(p_min), p_min, 1.0), 1.0)
     w = jnp.where(act, ratio ** -d["theta"][:, None], 0.0)
-    w = jnp.where(w < s.weight_floor, 0.0, w)
     wf = w.ravel()
     pf = p.ravel()
     phi = _from_origins(s, d, wf, d["dom_k"], d["acc_k"], d["cro_k"])
     per_price = jnp.where(wf > 0, wf / jnp.where(wf > 0, pf, 1.0), 0.0)
     arrive = _from_origins(s, d, per_price, d["dom_kt"], d["acc_kt"], d["cro_kt"])
-    reachable = phi >= s.weight_floor
+    reachable = phi > 0
     alpha = jnp.where(reachable, arrive / jnp.where(reachable, phi, 1.0), 0.0)
     index = jnp.where(alpha > 0, 1.0 / jnp.where(alpha > 0, alpha, 1.0), jnp.inf)
     return {"w": wf, "phi": phi, "per_price": per_price, "index": index.reshape(s.n_g, s.n_p).T}
@@ -290,7 +288,7 @@ def evaluate(s: Static, d: dict, x, a) -> dict:
 
     # tariff per unit spent: `model._flows(..., ones, src)["tariff"]`
     phi, wf = src["phi"], src["w"]
-    reached = phi >= s.weight_floor
+    reached = phi > 0
     unit = jnp.where(d["traded"][:, None], 1.0, 0.0) * jnp.ones((n_g, n_p))
     reach1 = jnp.where(reached, unit.ravel() / jnp.where(reached, phi, 1.0), 0.0)
     duty_share = (reach1 * (_from_origins(s, d, wf, None, d["acc_k"], d["cro_duty"]) - wf)).reshape(n_g, n_p).T
@@ -361,7 +359,6 @@ class System:
             n_cells=len(inp.active_cells),
             index_row=model.index_row(inp),
             rho=model.rho(inp),
-            weight_floor=inp.weight_floor,
             sigma_demand=inp.sigma_demand,
             sigma_b=inp.pigl.sigma_b,
             phi=inp.pigl.phi,
