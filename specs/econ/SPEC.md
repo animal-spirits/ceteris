@@ -459,7 +459,11 @@ and sales their steady-state values (D = Q = sales).
 **Checks** (`tests/test_steady_state.py`, fixture and full pack): two starts of stage 2 reach the
 same weights up to scale (1e-10); the reference model at the calibrated point, with labour
 supply (1 - u*) L^s, has residual at most 1e-10 and reproduces VA0, L0 and Y; local output is
-positive and clears; the stage 5 state is stationary under the order rule. The reduced residual
+positive and clears; the stage 5 state is stationary under the order rule. In Rust
+(`crates/ceteris-econ/tests/p2_steady_state.rs`), 120 ticks from the calibrated state with every
+friction on hold every quantity to 1e-9 on the fixture. On the full pack, integer money bounds
+them: real quantities to 2e-6, money to 2e-6 or 4 minor units, world aggregates to 1e-9, and the
+drift stays bounded (ADR 0089, As built). The reduced residual
 of the former joint inversion stays as `reference/reduced.py`, the numpy twin of
 `reference/jax_model.py` (exact derivatives, kept for ADR 0096).
 

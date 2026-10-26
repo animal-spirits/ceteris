@@ -140,3 +140,72 @@ where the text's form cannot give an exact steady state of the model as built:
 
 On the 2000 pack the reference model's residual at the calibrated point is 1.0e-11. The econ
 SPEC (Income, Calibration) states the rules.
+
+### The fixed point in Rust (Task 18e-2)
+
+`EconInputs::calibrate` reads the calibration tables into the world. A world from those inputs
+starts from the stage 5 state. The loader checks the tables' `calibration_format` and the static
+digest of the uncalibrated inputs. The Rust side also runs the natural-rate wedge, the
+frictionless target (1 - u*) L^s and national ownership. National ownership means one profit
+pool per country per tick, split over the pops by cumulative population shares rounded half to
+even, so the split is exact in minor units. The GE reference clears labour at (1 - u*) L^s.
+
+**Integer-money limit.**
+
+- On the fixture, 120 ticks with every friction on move no quantity by more than 1.5e-11 (the
+  test above holds at 1e-9).
+- On the 2000 pack the drift is larger, about 1e-7, set by the ledger's money resolution.
+  - Money is integer minor units of 1e-4 USD.
+  - Provinces with household incomes of 1e4 to 1e6 USD a month carry relative rounding of 1e-8
+    to 1e-10 per payment.
+  - Pops as small as 0.017 persons carry far more.
+- National dividends and domestic trade carry that rounding through each country. Andorra's
+  largest province (8.6e6 USD a month) drifts with the country's smallest (5.6e5), so the binding
+  resolution is not a province's own.
+- **Evidence that the drift is resolution, not model.**
+  - Scaling every price, wage and balance by 100 (the dynamics are homogeneous of degree zero)
+    cut the 120-tick maxima about 65 times: price from 1.9e-7 to 2.9e-9, wage from 1.4e-7 to
+    2.3e-9, employment from 5.1e-7 to 8.6e-9. A scale of 1000 overflows the i64 ledger on the
+    US profit pool.
+  - The price drift falls with province income: 1.8e-7 at 1e4 to 1e5 USD a month, 8e-10 above
+    1e7.
+  - The world price index stays at 1 to within 7e-15.
+
+**Acceptance rule.** The owner chose a resolution-aware test on 2026-10-25. The controller then
+ruled its form, after a per-province rule (100 minor units over the province's income) failed on
+that coupling.
+
+- Fixture: every quantity to 1e-9 relative.
+- Full pack:
+  - real quantities (prices, buyer prices, wages, employment, output, sales, Q, D, market sales,
+    merchant stock) to 2e-6 relative;
+  - money (pop income and balances) to 2e-6 relative or 4 minor units per pop, whichever is
+    larger, since money drift is real drift times income;
+  - world aggregates (price index, world income, world unemployment) to 1e-9.
+- Boundedness: each quantity's largest drift over ticks 61 to 120 is at most twice its largest
+  over ticks 5 to 60. Ticks 1 to 4 are left out of the first window, while prices and wages
+  settle onto the rounding lattice.
+- 2e-6 is 5,000 times inside V1's 1e-2.
+- Test: `crates/ceteris-econ/tests/p2_steady_state.rs`.
+
+**Observed maxima over 120 ticks** (2000 pack with the installed tables, 152 ms per tick, no
+invariant violation). Every pack quantity has its 61-120 maximum within 1.4 times its 5-60
+maximum.
+
+| quantity | fixture (relative) | pack |
+|---|---|---|
+| price | 2.7e-12 | 1.906e-7 |
+| buyer price | 2.7e-12 | 1.906e-7 |
+| wage | 1.6e-12 | 1.390e-7 |
+| employment | 4.3e-12 | 5.108e-7 |
+| output | 2.6e-12 | 3.108e-7 |
+| enterprise sales | 5.3e-12 | 4.039e-7 |
+| supply Q | 2.6e-12 | 3.108e-7 |
+| demand D | 5.2e-12 | 4.425e-7 |
+| market sales | 5.2e-12 | 3.219e-7 |
+| merchant stock | 1.5e-11 | 5.201e-7 |
+| pop income | 1.4e-11 (5.3 minor units) | 155.4 minor units, 5.2e-9 relative (0.65 of its bound) |
+| pop money | 5.7e-11 (4.6 minor units) | 155.2 minor units (0.69 of its bound) |
+| world price index | 4.2e-14 | 5.4e-15 |
+| world income | 6.2e-13 | 2.8e-13 |
+| world unemployment | 1.6e-12 | 4.0e-12 |
