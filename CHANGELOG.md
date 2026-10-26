@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### BEHAVIOUR: runs start from the ADR 0089 calibrated steady state (Task 18e)
+
+- The data state is the steady state. A world whose inputs carry the calibration tables of
+  `python -m ceteris.reference calibrate` (`EconInputs::calibrate`; `EconInputs::from_pack` when the
+  pack holds them) reads A, VA0, L0, a_VA, the coefficients (both S09 settings), w0 and the PIGL
+  weights from them and starts from their steady state: posted prices, the last D, Q and sales,
+  merchant and input stocks, the pipeline and pop money. The loader checks `calibration_format` 3
+  and the static digest of the uncalibrated inputs. `ceteris export --pack` writes the
+  uncalibrated world (`from_pack_data`); `ceteris run --pack` starts calibrated.
+- Natural-rate wage wedge: dlnw = clip(pi^e + kappa_w (x + u*), -c_max, c_max), the frictionless
+  wage clears (1 - u*) L^s, and the base point and initial employment use u*
+  (`econ_countries.u_star`; a generated world takes its 2000 rate). The GE reference clears labour
+  at (1 - u*) L^s too.
+- National profit ownership (owner, 2026-10-25): at E4 enterprises and province markets pay
+  their cash flow into one profit pool per country, paid to its pops by population share. The
+  rounding is cumulative shares, half to even, so the split is exact in minor units.
+- Export format 8: `countries.u_star`.
+- 2000 pack: once installed into `data/packs/2000`, the calibration tables' sha256 joins
+  `tests/golden/p2-pack.txt`. They are not installed yet: on the full pack the fixed point misses
+  1e-9 (below).
+
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash, because of the profit pool accounts, national dividends
+  and the wedge.
+- `tests/golden/p2-fixture`: format 8, and the reference re-solved at the natural rate under
+  national ownership.
+- `tests/golden/p2-fixture/calibration`: new.
+
+Fixed point over 120 ticks with every friction on: largest relative drift 1.5e-11 on the fixture.
+On the full pack it is 1.9e-7 (prices), past 1e-9 from tick 1 (D) and tick 2 (prices). The drift
+falls as province income rises, and it shrinks 65-fold when every nominal value is scaled by 100,
+so it is the ledger's minor unit (1e-4 USD) in provinces with an income of 1e4 to 1e6 USD a month.
+The world price index stays at 1 to 7e-15. This needs an owner ruling. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6, flow units
+5.3e-6, flow value 5.4e-6. Decay per tick is 0.99505 frictionless and 0.99564 in the default mode.
+
 ### BEHAVIOUR: trade elasticities follow the OECD key (ADR 0023 amendment)
 
 `TradeParams::default()` moves from the classes of the WITS and UNSD route to those the ADR 0023 rule
