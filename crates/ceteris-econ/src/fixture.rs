@@ -1,6 +1,6 @@
 //! A generated small world for tests, golden hashes and the GE reference: three mainland
 //! countries of eight provinces each, side by side on a plane, and a one-province island
-//! country with one port far offshore (Review Focus 4). Fully deterministic.
+//! country with one port far offshore. Fully deterministic.
 //!
 //! Countries 0, 1, 2 have a west and an east gateway each; the east gateway of one and the
 //! west gateway of the next form a land crossing, the outer gateways of countries 0 and 2
@@ -231,7 +231,7 @@ pub const UNREACHABLE: usize = 6;
 /// The one island sector that still uses [`UNREACHABLE`] in [`unreachable_island`].
 pub const ISLAND_USER: usize = 4;
 
-/// The small world with machinery unreachable at the island (Review Focus 1): no route to or
+/// The small world with machinery unreachable at the island: no route to or
 /// from the island port for that good, every other leg at its least-cost factor (S05) under
 /// `trade`, so the island's delivered price of machinery is infinite. Of the island's sectors
 /// only light manufacturing still uses machinery; were every sector to use it, the whole

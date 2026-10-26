@@ -538,6 +538,10 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 /// receives (trade SPEC, Payments). Units are origin units at dispatch, before losses.
 /// Domestic pairs (exporter = importer) are the shipments between provinces of one country;
 /// `run_home` has the home purchases (for every traded cell, valued at the cell's price).
+///
+/// The 12-tick window is scratch, not state, so a world restored by `seek` (or a snapshot)
+/// starts it empty: its export averages only the ticks run since the restore, fewer than the
+/// continuous run's, and `ticks_averaged` says how many.
 pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
     fs::create_dir_all(dir)?;
     let inputs = world.inputs();

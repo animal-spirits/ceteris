@@ -26,7 +26,7 @@ const GOODS: [(&str, f64, f64); 7] = [
 /// P44 prior: Fan, Lu and Luo (2021) theta = 111.5, s.e. 35.4; point estimate +- 2 s.e.
 const PRIOR: (f64, f64) = (41.0, 182.0);
 const RHO_MAX: f64 = 0.99;
-/// Gateway proxy until `gateways.arrow` exists (PLAN Task 17): about this many ports and
+/// Gateway proxy: about this many ports and
 /// airports, every k-th in node order.
 const GATEWAYS: usize = 600;
 /// Rotterdam, then Hamburg, Shanghai, New York.

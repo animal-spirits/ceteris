@@ -300,8 +300,6 @@ def test_fixture_theta_follows_the_classes():
     if not (FIXTURE / "goods.arrow").exists():
         pytest.skip(f"skipping: no export in {FIXTURE}")
     g = ipc.open_file(str(FIXTURE / "goods.arrow")).read_all()
-    if "theta_class" not in g.column_names:
-        pytest.skip(f"skipping: {FIXTURE} predates export format 3")
     t, of, traded = (g[c].to_numpy() for c in ("theta", "theta_class", "traded"))
     assert (t[~traded] == 0).all() and (of[~traded] == 0).all()
     classes = sorted(set(of[traded].tolist()))

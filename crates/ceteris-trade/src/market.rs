@@ -232,7 +232,7 @@ mod tests {
     const L: usize = 9; // services, local
 
     /// Both terms of the rule on, at the speeds these tests were written for (the defaults
-    /// switch the inventory term off since Task 7b).
+    /// switch the inventory term off, kappa2 = 0).
     fn rule() -> TradeParams {
         TradeParams {
             kappa1: 0.2,
@@ -374,12 +374,9 @@ mod tests {
     #[test]
     fn local_good_ignores_inventory_term() {
         let (mut m, p) = one();
-        set(&mut m, L, 0.0, 1.0, 1.1);
-        // a stale stock must not enter the local price rule
-        m.inventory[L] = 1e6;
-        let mut spoiled = vec![0.0; N_GOODS];
-        m.clear_local(&mut spoiled);
-        assert_eq!(m.inventory[L], 0.0);
+        set(&mut m, L, 1e6, 1.0, 1.1);
+        // a stock far from the target, with the inventory term on: only the first term applies
+        assert!(p.kappa2 > 0.0 && p.coverage[L] == 0.0);
         m.reprice(&p, 0.0);
         assert!((m.price[L] - libm::exp(0.2 * 0.1)).abs() < 1e-12);
     }

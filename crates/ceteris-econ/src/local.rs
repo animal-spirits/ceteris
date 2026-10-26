@@ -296,7 +296,7 @@ mod tests {
         let users = [(6.0, 6.0), (6.0, 0.0)];
         let x = fill(4.0, &users);
         assert!((x - 2.0 / 3.0).abs() < 1e-15);
-        // the brief's f = min(1, (rest + sum min(b, n)) / sum n) repeated converges there
+        // the fixed-point form f = min(1, (rest + sum min(b, n)) / sum n) repeated converges there
         let mut f = 1.0;
         for _ in 0..200 {
             let need: f64 = users.iter().map(|u| f * u.0).sum();
