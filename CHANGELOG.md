@@ -33,7 +33,7 @@ Goldens re-blessed:
 
 Fixed point over 120 ticks with every friction on:
 
-- Fixture: largest relative drift 1.5e-11, inside 1e-9.
+- Fixture: largest relative drift 5.7e-11 (pop money), inside 1e-9.
 - Full pack: limited by integer money (1e-4 USD) and carried through each country by national
   dividends and domestic trade (ADR 0089 As built). The test holds:
   - real quantities to 2e-6 relative;
@@ -41,8 +41,9 @@ Fixed point over 120 ticks with every friction on:
   - world aggregates to 1e-9;
   - bounded drift.
 - Full-pack maxima: price 1.9e-7, employment 5.1e-7, pop income 155 minor units (5.2e-9
-  relative), world price index 5.4e-15. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6, flow units
-5.3e-6, flow value 5.4e-6. Decay per tick is 0.99505 frictionless and 0.99564 in the default mode.
+  relative), world price index 5.4e-15. V1 maxima on the fixture: price 2.3e-6, wage 1.0e-6,
+  flow units 5.3e-6, flow value 5.4e-6. Decay per tick is 0.99505 frictionless and 0.99564 in the
+  default mode.
 
 ### BEHAVIOUR: trade elasticities follow the OECD key (ADR 0023 amendment)
 

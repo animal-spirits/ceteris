@@ -289,15 +289,15 @@ to 2005 window, takes its 2000 rate as u*). P4 matching replaces u* with matchin
 and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
 
 ```
-income_k = w_i * e_k * employed_k * L_i / sum_(k' in i) e_k' employed_k'    (wages, local)
-         + N_k / N_c * sum_(e in c) profit_e                                 (profits, national)
-         + N_k / N_c * rebate_c                                              (tariffs, national)
+income_k = w_i * e_k * employed_k                  (wages, local)
+         + N_k / N_c * sum_(e in c) profit_e       (profits, national)
+         + N_k / N_c * rebate_c                    (tariffs, national)
 ```
 
-L_i = sum_g L_ig the province's employment and sum_(k' in i) e_k' employed_k' its employed
-effective labour, the same number up to the pro-rata scaling of E1, so the wage term is the pop's
-share of the province's wage bill w_i L_i. N_k the pop's population, N_c its country's pops'
-population, profit_e = sales - wages - purchases of enterprise e
+employed_k = LF_k L_i / L^s_i is set by E1 (LF_k the pop's labour force, L_i = sum_g L_ig the
+province's employment, L^s_i its labour supply), so sum_(k in i) e_k employed_k = L_i exactly and
+the wage term is the pop's share of the province's wage bill w_i L_i. N_k the pop's population,
+N_c its country's pops' population, profit_e = sales - wages - purchases of enterprise e
 (signed) plus, in the profit pool, each province market's signed cash flow (trade SPEC), so the
 pool is sum over the country's enterprises and markets. Shares are fixed at load. At a steady
 state profit_e = (1 - s_L) VA0_e and market cash flow is 0. A province without traded output so
