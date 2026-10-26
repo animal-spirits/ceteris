@@ -590,7 +590,9 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
 /// the destination market, a ledger entry (left out when zero, as `pay` leaves it).
 fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Payments) {
     let acc = &lay.accounts;
-    (p.orders.clear(), p.order_ends.clear(), p.entries.clear());
+    p.orders.clear();
+    p.order_ends.clear();
+    p.entries.clear();
     for d in 0..acc.market.len() {
         let (cell, market) = (d * N_GOODS + g, acc.market[d]);
         buyers_of(lay, spend, d, g, &mut p.buyers);

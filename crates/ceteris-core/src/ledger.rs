@@ -200,9 +200,8 @@ impl Ledger {
             return Err(Violation::new(tick, "goods sign", detail));
         }
         let closing = self.good_totals();
-        for g in 0..self.n_goods {
+        for (g, &close) in closing.iter().enumerate() {
             let (open, made, gone) = (self.opening[g], self.created[g], self.destroyed[g]);
-            let close = closing[g];
             let gap = close - (open + made - gone);
             if gap.abs() > GOODS_TOLERANCE * (open + made + gone).max(1.0) {
                 let detail = format!(
