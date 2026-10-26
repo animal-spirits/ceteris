@@ -713,9 +713,11 @@ fn trade_legs(kernel: &Kernel, g: usize, r: &Sourced, p: &mut Payments) {
     let (np, ng) = (kernel.n_provinces, kernel.n_gateways);
     let gk = kernel.good(g);
     p.domestic.clear();
-    p.domestic.extend(r.domestic_value.iter().map(|&v| to_minor(v)));
+    p.domestic
+        .extend(r.domestic_value.iter().map(|&v| to_minor(v)));
     p.access_in.clear();
-    p.access_in.extend(r.access_in_value.iter().map(|&v| to_minor(v)));
+    p.access_in
+        .extend(r.access_in_value.iter().map(|&v| to_minor(v)));
     p.at_gateway.clear();
     p.at_gateway.resize(ng, 0);
     for d in 0..np {
