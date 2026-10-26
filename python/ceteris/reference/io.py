@@ -1,4 +1,4 @@
-"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 8)."""
+"""Inputs of the GE reference model, read from a `ceteris export` directory (export format 9)."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,23 +10,25 @@ from pyarrow import ipc
 
 from . import demand
 
-EXPORT_FORMAT = "8"
+EXPORT_FORMAT = "9"
 
 
 @dataclass(frozen=True)
 class Entries:
     """Kernel legs of all traded goods. Domestic: row origin, col destination province. Access:
     row province, col gateway (origin access read forward, destination access backward).
-    Crossing: row and col gateways; `border_tau`, `tariff` and `lag` (transit months) are set for
-    crossings only."""
+    Crossing: row and col gateways, `k` with the gateway masses (ADR 0092). `inv_tau` is the share
+    of shipped units that arrives over a domestic or access leg; crossings carry `inv_loss` (the
+    same, border loss included), `inv_duty` (1 / (1 + tariff)) and `lag` (transit months)
+    instead."""
 
     good: np.ndarray
     row: np.ndarray
     col: np.ndarray
     k: np.ndarray
-    tau: np.ndarray
-    border_tau: np.ndarray | None = None
-    tariff: np.ndarray | None = None
+    inv_tau: np.ndarray | None = None
+    inv_loss: np.ndarray | None = None
+    inv_duty: np.ndarray | None = None
     lag: np.ndarray | None = None
 
 
@@ -37,7 +39,6 @@ class Inputs:
     pigl: demand.Pigl  # P46, P47
     category: np.ndarray  # (G,) PIGL category of each good
     sigma_fl: float
-    weight_floor: float
     traded: np.ndarray  # (G,) bool
     province_country: np.ndarray  # (P,)
     gateway_country: np.ndarray  # (N,)
@@ -72,6 +73,7 @@ class Inputs:
     calibrated_coef: np.ndarray | None = None  # (E, G)
     calibrated_a_va: np.ndarray | None = None  # (E,)
     calibrated_weights: demand.Weights | None = None
+    gateway_mass: np.ndarray | None = None  # (N,) share of the country's trade throughput (ADR 0092)
 
     @property
     def n_provinces(self) -> int:
@@ -197,16 +199,15 @@ def _table(path: Path) -> dict[str, np.ndarray]:
 
 def _entries(t: dict[str, np.ndarray], row: str, col: str, crossing: bool = False) -> Entries:
     extra = (
-        {"border_tau": t["border_tau"].astype(np.float64), "tariff": t["tariff"].astype(np.float64), "lag": t["lag"].astype(np.int64)}
+        {"inv_loss": t["inv_loss"], "inv_duty": t["inv_duty"], "lag": t["lag"].astype(np.int64)}
         if crossing
-        else {}
+        else {"inv_tau": t["inv_tau"]}
     )
     return Entries(
         good=t["good"].astype(np.int64),
         row=t[row].astype(np.int64),
         col=t[col].astype(np.int64),
         k=t["k"].astype(np.float64),
-        tau=t["tau"].astype(np.float64),
         **extra,
     )
 
@@ -223,6 +224,7 @@ def load(directory: Path | str) -> Inputs:
     ent = _table(d / "enterprises.arrow")
     active = _table(d / "active.arrow")
     io = _table(d / "country_io.arrow")
+    gateways = _table(d / "gateways.arrow")
 
     n_goods = params["n_goods"]
     n_c, n_p = len(countries["country"]), len(provinces["province"])
@@ -244,10 +246,9 @@ def load(directory: Path | str) -> Inputs:
         ),
         category=goods["category"].astype(np.int64),
         sigma_fl=float(params["econ"]["sigma_fl"]),
-        weight_floor=float(params["weight_floor"]),
         traded=goods["traded"].astype(bool),
         province_country=provinces["country"].astype(np.int64),
-        gateway_country=_table(d / "gateways.arrow")["country"].astype(np.int64),
+        gateway_country=gateways["country"].astype(np.int64),
         labour_supply=np.bincount(pop_province, edu_eff[pops["edu"]] * pops["labour_force"], n_p),
         population=np.bincount(pop_province, pops["population"], n_p),
         w0=provinces["w0"].astype(np.float64),
@@ -274,6 +275,7 @@ def load(directory: Path | str) -> Inputs:
         coverage=goods["coverage"].astype(np.float64),
         pop_edu=pops["edu"].astype(np.int64),
         static_digest=params["static_digest"],
+        gateway_mass=gateways["mass"],
     )
     validate(inp)
     return inp

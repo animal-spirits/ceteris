@@ -416,6 +416,7 @@ impl EconInputs {
         let Network {
             province_country,
             gateway_country,
+            gateway_mass,
             domestic,
             access,
             crossings,
@@ -459,6 +460,7 @@ impl EconInputs {
         b"ceteris-econ-inputs-1".iter().for_each(|&b| e.u8(b));
         u16s(&mut e, province_country);
         u16s(&mut e, gateway_country);
+        e.f64s(gateway_mass);
         for legs in [domestic, access, crossings] {
             encode_legs(&mut e, legs);
         }

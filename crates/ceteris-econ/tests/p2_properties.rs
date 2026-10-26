@@ -399,7 +399,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
                 for a in 0..kernel.n_gateways() {
                     let lo = gk.crossings.offsets[a] as usize;
                     for (j, e) in gk.crossings.row(a).iter().enumerate() {
-                        tariff_due += f64::from(e.tariff) * sourced.crossing_value[lo + j];
+                        tariff_due += (1.0 / e.inv_duty - 1.0) * sourced.crossing_value[lo + j];
                     }
                 }
             }
