@@ -144,6 +144,15 @@ every tick (payments round to minor units per leg; gateway splits round cumulati
 purchase moves no money across legs: the market is both the buyer's market and the origin. The
 origin market receives p_o per unit sold.
 
+**Market cash flow (merchant rule, ADR 0112).** A province market buys all the output of its
+producers at its posted price at E2 (p Q, flow SALE), whether or not it sells it, and carries
+what it does not sell as stock without revaluing it. Buyers pay it at T2b and T3 (p_o per unit
+sold at an origin, and the buyer price for local goods), so its signed cash flow in a tick is
+revenue minus p Q: negative while it builds stock or sells below the price it paid, positive while
+it draws stock down. At E4 it passes that cash flow, whatever its sign, to its country's profit pool
+(econ SPEC, Income), so a market carries no balance between ticks and no limited liability or
+write-off applies to it. At a steady state sales equal Q and the cash flow is 0.
+
 **Transit.** A shipment dispatched at tick t is delivered at t + s, s its arrival slot: home
 purchases at once (s = 0), domestic shipments and lag-0 crossings at t + 1, crossings at
 t + 1 + lag_ab, lag_ab = round(hours_ab / 730), capped at 3. Goods in flight sit in a transit

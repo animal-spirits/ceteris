@@ -6,7 +6,7 @@ H2 distance -0.753 (s.e. 0.016), H2 per class 1.75, 3.72 and 9.52, all in their 
 violation; 1 vs 8 threads identical; tick about 34 ms and `source_dispatch` 7.9 ms against the re-budgeted
 35 ms and 8 ms. Numbers and commands: P2 gate, Measured
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0023, 0089 and 0112
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012, 0014 to 0016, 0018 to 0023, 0089 and 0112
 
 ## Purpose
 
@@ -71,6 +71,11 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
 | `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph, BACI 2000 trade by country |
+
+**Coverage.** `TradeParams::coverage` (P02, trade SPEC) is the authoritative value: the model, the
+snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The
+`econ_goods.arrow` column is the pack's copy of the default, never read by Rust; it must equal
+`TradeParams::default().coverage`, and a change to one is made to both.
 
 **Value added convention.** National VA by good is output less intermediate inputs, summed over
 all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
@@ -338,7 +343,10 @@ rest is carried to the next tick. Both sides are one exact i64 split per country
 largest remainder (floor of each exact share; the leftover units one each to the largest
 remainders, ties to the first), routed through the country's pool account; flow `WRITE_OFF`,
 which is not income. The cap is nominal, so homogeneity of degree zero holds only while nothing
-is written off. An enterprise that loses money every month becomes a perpetual levy on its
+is written off. S_e = VA0_e / a_VA_e is the steady-state sales only on a calibrated world, where A
+is solved so that output Y = A VA0 / a_VA matches it; on an uncalibrated world (the fixture without
+calibration tables, `--fixture` runs) base sales are A VA0 / a_VA, so the cap is a factor 1 / A off,
+which is harmless while A is near 1 and is not corrected. An enterprise that loses money every month becomes a perpetual levy on its
 country's pops once its cap is full.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
@@ -413,12 +421,15 @@ Spending on traded goods is sourced over origins (trade SPEC) and paid at dispat
 filled; rationed purchases leave money unspent until the next tick.
 
 **Money.** The mint issues each pop's initial money at tick 0 (Initial state: its calibrated
-balance, or one month of base dividends in the data state). Enterprises and
-markets pay out their signed cash flow every tick, so their balances return to zero; any
-account may be negative within or across ticks (clearing facility, no interest). Every payment
-is a ledger transfer rounded half to even to minor units. Prices and wages scale freely: the
-dynamics are homogeneous of degree zero in nominal values, so the price level is set by
-initial money and comparisons use a world price index.
+balance, or one month of base dividends in the data state). Markets pay out their signed cash flow
+every tick (the merchant rule, trade SPEC, Market cash flow), so their balances return to zero.
+Enterprises pay out only positive balances: under limited liability (Income) a loss stays as a
+negative balance, repaid before any payout and written off beyond M months of base sales (ADR
+0112), so enterprise balances need not return to zero. Any account may be negative within or
+across ticks (clearing facility, no interest). Every payment is a ledger transfer rounded half to
+even to minor units. Prices and wages scale freely: the dynamics are homogeneous of degree zero in
+nominal values while no write-off fires, since the cap of the write-off is nominal (ADR 0112), so
+below the cap the price level is set by initial money and comparisons use a world price index.
 
 ## Calibration (`ceteris calibrate p2`)
 
@@ -558,7 +569,12 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
 | P41 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
+| P149 | Input stock cover (COVER, `systems::COVER`): months of use an enterprise keeps beyond replacement and transit, the `cover` of the order rule and of calibration stage 5 | 1 (owner decision, 2026-10-24; not tuned) | Free |
 | P148 | Loss write-off threshold M (ADR 0112): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
+
+P149 is a constant of the order rule, not an `EconParams` field, so it is outside the static digest:
+changing it changes the calibrated stocks and needs a recalibration (calibration stage 5 uses the same
+value).
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
 populations, education and labour-force shares, Gini. Calibrated: A (inversion, not
@@ -761,7 +777,7 @@ the radius on p. 9, footnote 10 p. 7).
       `CETERIS_PACK=$PACK cargo test -p ceteris-econ --release --test p2_acceptance -- --ignored data_state_write_off_census`.
     - Benchmark medians (tick, `source_dispatch_parallel` and the per-system rows): `cargo bench -p ceteris-econ`
       (`benches/econ.rs`, `benches/trade.rs`), M4 Pro on AC power.
-- Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
+- Golden: `tests/golden/p2-econ.txt`, hashes of a generated 4-country, 25-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
 
@@ -777,7 +793,7 @@ texture fed from core columns.
 
 ## Outputs
 
-`ceteris run` writes `run_prices`, `run_wages`, `run_enterprises`, `run_flows`, `run_home` and `run.json` (the state at the final tick). With `--history [--history-every N]` it also writes `run_history_world`, `run_history_provinces` and `run_history_markets`, one row per sampled tick (tick 0, every N-th, the final tick) for charting the dynamics; recording only reads the state, so state hashes and the default output are unchanged. Columns: `crates/ceteris-econ/src/history.rs`.
+`ceteris run` writes `run_prices`, `run_wages`, `run_enterprises`, `run_flows`, `run_home` and `run.json` (the state at the final tick; flows and home purchases are means over the last 12 ticks, `ticks_averaged` in `run.json`, and fewer after a snapshot restore or `seek`, since the window is scratch and not state). `--data-state` needs `--pack`. With `--history [--history-every N]` it also writes `run_history_world`, `run_history_provinces` and `run_history_markets`, one row per sampled tick (tick 0, every N-th, the final tick) for charting the dynamics; recording only reads the state, so state hashes and the default output are unchanged. Columns: `crates/ceteris-econ/src/history.rs`.
 
 ## Test plan
 
@@ -896,8 +912,8 @@ texture fed from core columns.
 - Money headroom: the i64 ledger (1 minor unit = 1e-4) holds the full pack with about 300 times one
   month of world income to spare, and about 800 times the money the mint issues: the mint holds minus
   the world's money (-1.15e16 minor units), so it overflows first, at a uniform scale of about 802 on
-  prices, wages and balances (a scale of 1,000 overflowed, ADR 0089, Evidence); the largest country
-  pool (the United States) reaches 2.7e18 against the i64 maximum of 9.2e18. The overflows seen at the
+  prices, wages and balances (a scale of 1,000 overflowed, ADR 0089, Evidence); at a scale of 1,000 the largest
+  country pool (the United States) reaches 2.7e18 (2.7e15 at scale 1) against the i64 maximum of 9.2e18. The overflows seen at the
   loss write-off came from a hyperinflation of the trial that ADR 0112 (second decision) did not
   adopt, not from this limit. The currency scale is a P5 decision (core SPEC, Money scale).
 
@@ -917,7 +933,8 @@ rev 226 (Task 21); re-grep again before editing.
     parameters") changes.
   - P03 splits into P03a kappa1 (start 0.05), P03b kappa2 (start 0) and P03c the step clip (0.1);
     P01 takes its class values 2.62, 5.19 and 10.57 (ADR 0023; DESIGN 1061 says "centre 5").
-  - P148 loss write-off threshold M, 3 months of base sales (ADR 0112, accepted). Held or proposed, not
+  - P148 loss write-off threshold M, 3 months of base sales (ADR 0112, accepted), and P149 input stock
+    cover, 1 month (owner decision, 2026-10-24; the `cover` of the order rule). Held or proposed, not
     built in P2: P143 kappa_n of ADR 0090 (proposed; the split price rule is parked on `p2-adr0090`),
     P147 M_F of ADR 0112's second decision (reserved, held; `p2-r3-producer-stock`) and P56 storage
     cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it).
