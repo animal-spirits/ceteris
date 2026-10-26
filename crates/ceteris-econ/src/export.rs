@@ -130,7 +130,7 @@ pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Resul
         .iter()
         .map(|(n, a)| Field::new(n, a.data_type().clone(), false))
         .collect();
-    let metadata: std::collections::HashMap<String, String> =
+    let metadata: std::collections::BTreeMap<String, String> =
         [("export_format".to_owned(), EXPORT_FORMAT.to_owned())].into();
     let schema = Arc::new(Schema::new_with_metadata(fields, metadata));
     let batch = RecordBatch::try_new(

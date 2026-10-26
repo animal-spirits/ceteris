@@ -1,7 +1,12 @@
 //! Canonical state encoding, state hashes and content-addressed snapshots
 //! (Sections 4.1, 14.3; ADR 0002).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+#[expect(
+    clippy::disallowed_types,
+    reason = "keyed lookup only, never iterated (ADR 0097)"
+)]
+use std::collections::HashMap;
 use std::fmt;
 
 const MAGIC: &[u8; 4] = b"CETS";
@@ -190,6 +195,10 @@ pub fn decode_canonical<W: Decode>(bytes: &[u8]) -> Result<(u32, W), DecodeError
 #[derive(Default)]
 pub struct SnapshotStore {
     by_tick: BTreeMap<u32, Hash>,
+    #[expect(
+        clippy::disallowed_types,
+        reason = "keyed lookup only, never iterated (ADR 0097)"
+    )]
     blobs: HashMap<Hash, Vec<u8>>,
 }
 

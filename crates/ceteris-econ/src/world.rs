@@ -1327,34 +1327,30 @@ impl State for EconWorld {
 
         // pops hold the first account IDs
         let pop_of = |a: AccountId| (a.0 as usize) < inp.n_pops();
-        // integer sums, so the chunks may add up in any order
-        let credited = self
+        // one slot per chunk, combined in chunk order
+        let slots: Vec<Vec<i64>> = self
             .ledger
             .journal()
             .par_chunks(1 << 16)
-            .fold(
-                || vec![0i64; inp.n_pops()],
-                |mut credited, entries| {
-                    for entry in entries {
-                        if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
-                            if pop_of(entry.to) {
-                                credited[entry.to.0 as usize] += entry.amount;
-                            }
-                            if pop_of(entry.from) {
-                                credited[entry.from.0 as usize] -= entry.amount;
-                            }
+            .map(|entries| {
+                let mut credited = vec![0i64; inp.n_pops()];
+                for entry in entries {
+                    if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
+                        if pop_of(entry.to) {
+                            credited[entry.to.0 as usize] += entry.amount;
+                        }
+                        if pop_of(entry.from) {
+                            credited[entry.from.0 as usize] -= entry.amount;
                         }
                     }
-                    credited
-                },
-            )
-            .reduce(
-                || vec![0i64; inp.n_pops()],
-                |mut a, b| {
-                    a.iter_mut().zip(&b).for_each(|(x, y)| *x += y);
-                    a
-                },
-            );
+                }
+                credited
+            })
+            .collect();
+        let mut credited = vec![0i64; inp.n_pops()];
+        for slot in &slots {
+            credited.iter_mut().zip(slot).for_each(|(x, y)| *x += y);
+        }
         if let Some(k) = (0..inp.n_pops()).find(|&k| credited[k] != sc.income_paid[k]) {
             let detail = format!(
                 "pop {k}: journal credits {}, income paid {}",
