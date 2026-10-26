@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 5.4, 8.3, 8.5, 17.1 (P04, P05); trade SPEC Kernel; amends ADRs 0014, 0092
+Design sections: 5.4, 8.3, 8.5, 17.1 (P04, P05); trade SPEC Kernel; amends ADRs 0014, 0022, 0092
 
 ## Context
 
@@ -43,11 +43,16 @@ Option 2. Option 3 overfits the 2000 data and has no counterfactual content for 
 - **Transit wedge.** Each border crossed on a path between two other countries adds a transit
   cost: the World Bank Doing Business 2006 border-compliance time for the transit country,
   priced at lambda_g per day, plus a fee share (new register entry, prior 0 to 5% ad valorem).
+  The wedge sits on the gateway-layer transit hop a to c to b that ADR 0095 adds for ADR 0045:
+  one hop carries both this compliance cost and 0045's evasion wedge (P83).
 - **Tariffs.** Simple-average applied rates (WDI TM.TAX.MRCH.SM.AR.ZS) replace weighted ones.
   Inside an agreement, a share u (new register entry, prior 0.6 to 0.9, Keck and Lendle 2012)
   of trade gets the preference and the rest pays MFN; the routing wedge uses the mixture.
 - **P04.** Sea and road unit costs are fitted to the OECD Maritime Transport Costs database by
-  weight class for 2000-2005 before nu is fitted, so 0092 fits nu conditional on P04.
+  weight class for 2000-2005 before nu is fitted, so 0092 fits nu conditional on P04. This
+  amends the owner decision of 2026-10-24 in ADR 0022 (geo SPEC P04 values until P9), with the
+  owner's agreement (2026-10-26): the fit uses freight-rate data, not trade flows, so H2's
+  distance range stays an unfitted gate.
 
 ## Migration
 

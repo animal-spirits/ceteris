@@ -34,20 +34,16 @@ Option 2.
 - Every reported statistic in Steward mode carries the uncertainty of its measuring institution
   (statistical capacity), consistent with the dossier principle. The published series and their
   noise come from ADR 0065; this panel only displays them.
-- Chronicle: discrete events (laws, crises, wars, records) become dated entries with their
-  causes linked; text is template-based. LLM-written flavour text may be added later only as
-  cached presentation, never as input to the simulation, so determinism holds.
+- Chronicle: specified in ADR 0078.
 - Excluded: war score, mana and other abstract currencies.
 
 ## Migration
 
-- P3: background channel-shutdown jobs and the panel; P6 and P7: tooltips; chronicle from the
-  event log at any phase.
+- P3: background channel-shutdown jobs and the panel; P6 and P7: tooltips.
 
 ## Tests
 
 - Channel shares sum to the total change within the Shapley tolerance.
-- Chronicle generation is deterministic from the event log.
 
 ## Consequences
 

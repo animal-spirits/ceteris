@@ -25,7 +25,8 @@ from 2024) has nothing to act on.
 
 ## Decision
 
-Option 2, as an accounting layer. Each foreign-owned cell shifts a share of profits to haven
+Option 2, as an accounting layer, on top of the foreign share of profits that ADR 0104 pays
+abroad. Each foreign-owned cell shifts a share of profits to haven
 states that rises with the tax-rate gap (semi-elasticity P76, from the profit-shifting
 literature). Booked profits count in the haven's GDP and corporate tax revenue, and as FDI
 income in the balance of payments; real production, employment and trade stay where they are.
