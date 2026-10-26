@@ -618,15 +618,14 @@ pub fn dispatch(w: &mut EconWorld) {
             col.fill.clear();
             col.fill.extend((0..np).map(|o| fill[o * N_GOODS + g]));
             dispatch_good(kernel, g, &col.price, &col.fill, r);
-            flows.record(
-                kernel,
-                &net.province_country,
-                &net.gateway_country,
-                g,
-                &col.price,
-                r,
+            let r = &*r;
+            rayon::join(
+                || {
+                    let (pc, gc) = (&net.province_country, &net.gateway_country);
+                    flows.record(kernel, pc, gc, g, &col.price, r);
+                },
+                || trade_legs(inp, acc, kernel, g, r, legs),
             );
-            trade_legs(inp, acc, kernel, g, r, legs);
         });
     let sourced = std::mem::take(&mut w.scratch.sourced);
     let payments = std::mem::take(&mut w.scratch.payments);
