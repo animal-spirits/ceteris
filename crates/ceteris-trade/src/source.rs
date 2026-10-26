@@ -85,6 +85,12 @@ pub struct Sourced {
 struct Scratch {
     /// Good of the last `source` call.
     good: Option<usize>,
+    /// Kernel id, good, prices and active origins the weights, access and price index were
+    /// last computed for: they depend on nothing else, so a repeat call reuses them.
+    prepared: Option<(u64, usize)>,
+    price: Vec<f64>,
+    active: Vec<bool>,
+    price_index: Vec<f64>,
     weight: Vec<f64>,
     access: Access,
     /// Spending per unit of access by class, `E_d / Phi_d`; 0 where unreachable.
@@ -183,13 +189,30 @@ pub fn source(
     let gk = k.good(g);
     let s = &mut out.scratch;
     s.good = Some(g);
-    let p_min = origin_weights(k, g, price, active, &mut s.weight);
-    k.origin_access_into(g, &s.weight, &mut s.access);
+    let same_prices = s.price.len() == price.len()
+        && s.price
+            .iter()
+            .zip(price)
+            .all(|(a, b)| a.to_bits() == b.to_bits());
+    if s.prepared != Some((k.id(), g)) || s.active != active || !same_prices {
+        let p_min = origin_weights(k, g, price, active, &mut s.weight);
+        k.origin_access_into(g, &s.weight, &mut s.access);
+        s.price_index.clear();
+        s.price_index.extend(
+            s.access
+                .pi
+                .iter()
+                .map(|&f| price_index(p_min, f, k.theta[g])),
+        );
+        s.price.clear();
+        s.price.extend_from_slice(price);
+        s.active.clear();
+        s.active.extend_from_slice(active);
+        s.prepared = Some((k.id(), g));
+    }
     let (w, v, u, phi) = (&s.weight, &s.access.v, &s.access.u, &s.access.pi);
 
-    out.price_index.clear();
-    out.price_index
-        .extend(phi.iter().map(|&f| price_index(p_min, f, k.theta[g])));
+    out.price_index.clone_from(&s.price_index);
     s.reach.clear();
     s.reach.extend((0..np).map(|d| {
         if phi[d] >= WEIGHT_FLOOR {

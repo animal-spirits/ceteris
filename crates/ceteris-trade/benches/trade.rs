@@ -5,7 +5,10 @@
 //! --no-run` and CI work.
 //!
 //! Budgets per tick (M4 Pro): `source_dispatch` 5 ms, `clear_reprice` 2 ms; `kernel_build` is
-//! reported only (2 s, not per tick).
+//! reported only (2 s, not per tick). The migration carry of E3, one more `source` and
+//! `dispatch` of every traded good at unit spending for q_d and the lead time, is
+//! `unit_source_dispatch`. In the tick, E3 sources cold and T2 repeats the sourcing at the same
+//! prices warm, so a tick's trade work is `unit_source_dispatch` + `source_warm` + `dispatch`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -85,6 +88,11 @@ fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
     let (params, trade) = (EconParams::default(), TradeParams::default());
     let mut w = EconWorld::new(Arc::new(inputs), params, trade.clone());
+    // tick 1, whose prices moved at tick 0's repricing: the sourcing kept from tick 0 is stale
+    w.begin_tick();
+    systems::schedule().run_tick(&mut w, systems::SEED, 0);
+    w.end_tick(0).expect("invariants hold");
+    let stale = w.scratch.sourced.clone();
     w.begin_tick();
     for run in [
         systems::deliver,
@@ -101,25 +109,56 @@ fn bench(c: &mut Criterion) {
     let mut spoiled = w.scratch.spoiled.clone();
     systems::clear(&mut w);
     let cols = columns(&w);
+    let unit = Columns {
+        spend: cols
+            .spend
+            .iter()
+            .map(|s| vec![[1.0, 0.0]; s.len()])
+            .collect(),
+        fill: cols.fill.iter().map(|f| vec![[1.0; 2]; f.len()]).collect(),
+        price: cols.price.clone(),
+        active: cols.active.clone(),
+    };
     let kernel = w.kernel();
-    let n_traded = TRADED.iter().filter(|&&t| t).count();
-    let mut sourced: Vec<Sourced> = (0..n_traded).map(|_| Sourced::new()).collect();
+    let mut sourced = stale.clone();
     source_all(kernel, &cols, &mut sourced);
-    dispatch_all(kernel, &cols, &mut sourced);
 
     let mut g = c.benchmark_group(format!("trade_{what}"));
     g.sample_size(20);
+    // `source` keeps the origin access of the last prices: cold is the first sourcing at new
+    // prices (E3), warm a repeat at the same prices (T2)
     g.bench_function("source", |b| {
+        b.iter_batched(
+            || stale.clone(),
+            |mut s| source_all(kernel, &cols, &mut s),
+            BatchSize::LargeInput,
+        )
+    });
+    g.bench_function("source_warm", |b| {
         b.iter(|| source_all(kernel, &cols, &mut sourced))
     });
     g.bench_function("dispatch", |b| {
         b.iter(|| dispatch_all(kernel, &cols, &mut sourced))
     });
     g.bench_function("source_dispatch", |b| {
-        b.iter(|| {
-            source_all(kernel, &cols, &mut sourced);
-            dispatch_all(kernel, &cols, &mut sourced);
-        })
+        b.iter_batched(
+            || stale.clone(),
+            |mut s| {
+                source_all(kernel, &cols, &mut s);
+                dispatch_all(kernel, &cols, &mut s);
+            },
+            BatchSize::LargeInput,
+        )
+    });
+    g.bench_function("unit_source_dispatch", |b| {
+        b.iter_batched(
+            || stale.clone(),
+            |mut s| {
+                source_all(kernel, &unit, &mut s);
+                dispatch_all(kernel, &unit, &mut s);
+            },
+            BatchSize::LargeInput,
+        )
     });
     let (rationing, pi) = (w.params().rationing, w.expected_inflation);
     g.bench_function("clear_reprice", |b| {
