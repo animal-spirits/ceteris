@@ -92,7 +92,8 @@ a boom, up to L^s. Frictionless mode solves sum_g L*_ig(w) = (1 - u*_i) L^s_i.
 ## Consequences
 
 - The homotopy and its fold are removed. Static calibration is about seven Sinkhorn solves plus
-  closed forms: seconds on the full pack, with no simulation.
+  closed forms: seconds on the full pack, with no simulation (as built: 473 s on the 2000 pack, see
+  As built).
 - The reference solver becomes a residual check and the tool for counterfactual equilibria.
 - Steady-state unemployment is u*, not zero: this supersedes the full-employment owner choice
   of the econ SPEC. P4 matching replaces u* with matching frictions.

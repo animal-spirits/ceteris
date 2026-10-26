@@ -32,15 +32,15 @@ them only as quantities offered to and demanded from each market.
 
 | Component | Entity | Type | Units | Initialized from |
 |---|---|---|---|---|
-| Price p | (province, good) | `f64` | numeraire per unit | 1.0 (2000 world reference price), then the calibrated state |
-| Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x initial demand |
-| Last demand D (orders by class at origins), last supply Q, last sales | (province, good) | `f64` | units per month | zero |
+| Price p | (province, good) | `f64` | numeraire per unit | 1.0 (2000 world reference price) in the data state; the calibrated posted price in the calibrated steady state (econ SPEC, Initial state; ADR 0089) |
+| Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x initial demand; the calibrated S = s_g Q in the steady state (econ SPEC, Initial state) |
+| Last demand D (orders by class at origins), last supply Q, last sales | (province, good) | `f64` | units per month | zero; the calibrated D = Q = sales in the steady state |
 | Clip ticks: ticks at which the price step clip bound | (province, good) | `u32` | ticks | zero |
-| Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the data state's prices |
-| Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | the data state's prices |
+| Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the initial prices (the data state's, or the calibrated steady state's) |
+| Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | sourcing at the initial posted prices (the data state's, or the calibrated steady state's) |
 | Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f32` K = tau^-theta_g, CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
-| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty |
+| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 

@@ -604,19 +604,35 @@ def test_pack_econ_tables_are_consistent():
     assert (lf <= pop).all()
 
 
-def _p2_lines(tables: dict[str, str]) -> str:
+# Written by `python -m ceteris.reference calibrate` and installed into the pack (ADR 0089).
+CALIBRATION_TABLES = (
+    "econ_calib.arrow",
+    "econ_calib_cells.arrow",
+    "econ_calib_provinces.arrow",
+    "econ_calib_pops.arrow",
+    "econ_calib_pipeline.arrow",
+    "econ_calib_countries.arrow",
+)
+
+
+def _p2_lines(tables: dict[str, str], calibration: dict[str, str]) -> str:
     lines = [f"{name} {tables[name]}" for name in econ_build.TABLES]
+    # then the sha256 of the calibration tables installed in the pack
+    lines += [f"{name} {calibration[name]}" for name in CALIBRATION_TABLES if name in calibration]
     return "# P2 pack 2000: econ table sha256 from manifest.json\n" + "\n".join(lines) + "\n"
 
 
 def test_pack_econ_tables_match_golden():
-    """Regenerate deliberately with CETERIS_BLESS=1 after rebuilding, and say why in the commit."""
+    """Regenerate deliberately with CETERIS_BLESS=1 after rebuilding or recalibrating, and say why in the commit."""
     manifest = PACK / "manifest.json"
     if not manifest.exists():
         pytest.skip(f"skipping: no manifest.json in {PACK}; build the pack with `uv run python -m ceteris.packs`")
-    import json
+    import hashlib
 
-    actual = _p2_lines(json.loads(manifest.read_text())["tables"])
+    calibration = {
+        name: hashlib.sha256((PACK / name).read_bytes()).hexdigest() for name in CALIBRATION_TABLES if (PACK / name).exists()
+    }
+    actual = _p2_lines(json.loads(manifest.read_text())["tables"], calibration)
     if os.environ.get("CETERIS_BLESS"):
         GOLDEN_P2.write_text(actual)
         return

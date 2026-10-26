@@ -70,10 +70,13 @@ fn drift(base: &[f64], now: &[f64]) -> (f64, usize) {
         .fold((0.0, 0), |a, (i, d)| if d > a.0 { (d, i) } else { a })
 }
 
-/// Runs `TICKS` ticks from the steady state of `inputs` and returns, per quantity, the
-/// largest drift from the calibrated state, its tick and entry, and the world price index
-/// path; prints them and the time per tick.
-fn run(inputs: EconInputs, what: &str) -> Vec<(&'static str, f64, u32, usize)> {
+/// Per quantity: the largest drift from the calibrated state, its tick and entry, and the
+/// first tick the drift passed `TOLERANCE`.
+type Worst = (&'static str, f64, u32, usize, Option<u32>);
+
+/// Runs `TICKS` ticks from the steady state of `inputs` and returns the [`Worst`] drift of
+/// every quantity; prints them, the world price index path and the time per tick.
+fn run(inputs: EconInputs, what: &str) -> Vec<Worst> {
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
     let world = EconWorld::new(
         Arc::new(inputs),
@@ -91,8 +94,7 @@ fn run(inputs: EconInputs, what: &str) -> Vec<(&'static str, f64, u32, usize)> {
             _ => {}
         }
     }
-    let mut worst: Vec<(&'static str, f64, u32, usize)> =
-        base.iter().map(|(n, _)| (*n, 0.0, 0, 0)).collect();
+    let mut worst: Vec<Worst> = base.iter().map(|(n, _)| (*n, 0.0, 0, 0, None)).collect();
     let mut sim = Sim::new(world, schedule(), SEED);
     let mut index = Vec::new();
     let started = std::time::Instant::now();
@@ -105,12 +107,18 @@ fn run(inputs: EconInputs, what: &str) -> Vec<(&'static str, f64, u32, usize)> {
             if d > slot.1 {
                 (slot.1, slot.2, slot.3) = (d, tick, at);
             }
+            if d > TOLERANCE && slot.4.is_none() {
+                slot.4 = Some(tick);
+            }
         }
     }
     let per_tick = started.elapsed() / TICKS;
     println!("{what}: {TICKS} ticks from the calibrated state, {per_tick:?} per tick");
-    for (name, d, tick, at) in &worst {
-        println!("  {name:>16}: max relative drift {d:.3e} (tick {tick}, entry {at})");
+    for (name, d, tick, at, first) in &worst {
+        println!(
+            "  {name:>16}: max relative drift {d:.3e} (tick {tick}, entry {at}), first over \
+             {TOLERANCE:e} at tick {first:?}"
+        );
     }
     let (lo, hi) = index
         .iter()
@@ -123,11 +131,12 @@ fn run(inputs: EconInputs, what: &str) -> Vec<(&'static str, f64, u32, usize)> {
     worst
 }
 
-fn assert_fixed(worst: &[(&'static str, f64, u32, usize)], what: &str) {
-    for &(name, d, tick, at) in worst {
+fn assert_fixed(worst: &[Worst], what: &str) {
+    for &(name, d, tick, at, first) in worst {
         assert!(
             d <= TOLERANCE,
-            "{what}: {name} drifts by {d:.3e} relative at tick {tick} (entry {at})"
+            "{what}: {name} drifts by {d:.3e} relative at tick {tick} (entry {at}), first over \
+             {TOLERANCE:e} at tick {first:?}"
         );
     }
 }

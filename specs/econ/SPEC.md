@@ -118,7 +118,9 @@ rate takes its sovereign's, else its donor's (same region, nearest log income), 
 **Loading (`EconInputs::from_pack`).** The economy's provinces are the pack provinces with value
 added and a labour force; the others (below the working-age floor, or uninhabited) stay in the
 transport graph only, and `ProvinceData::pack` maps each economy province to its pack province.
-Enterprises are the (province, good) cells with VA > 0, VA0 the pack VA per month (USD). Leg costs
+Enterprises are the (province, good) cells with VA > 0, VA0 the pack VA per month (USD); a pack
+province with VA but no labour force, or a country with enterprises but no pops, stops the load
+(`PackError`). Leg costs
 are least-cost paths on the graph, run in parallel from every province and gateway, each keeping
 only its own country's provinces and gateways (from a province) or other countries' gateways
 (from a gateway): domestic, access and crossing legs, all gateway pairs of different countries.
@@ -133,25 +135,42 @@ input stock per good; the summary in its `calibration` metadata), `econ_calib_ce
 `econ_calib_provinces.arrow` (w0, employment, income), `econ_calib_pops.arrow` per (province,
 education) (money at the start of a tick, income, wage), `econ_calib_pipeline.arrow` (goods in
 flight by buyer, good and ticks ahead) and `econ_calib_countries.arrow` (u*, rebate, PIGL
-weights). Every table carries `calibration_format` in its schema metadata.
+weights). Every table carries `calibration_format` in its schema metadata. Installed into the
+pack (copied next to the econ tables; their sha256 then joins `tests/golden/p2-pack.txt`), they are
+read by `EconInputs::from_pack` (`EconInputs::calibrate`, `calibration.rs`) into A, VA0, L0,
+a_VA, the coefficients (both S09 settings), w0, the PIGL weights and the initial state (State
+components): only at `calibration_format` 3 and only when the `static_digest` in the
+`calibration` metadata is that of the uncalibrated inputs under default parameters
+(`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack build,
+another format or other coefficients stop the load with a `PackError`.
 
 ## State components
 
 | Component | Entity | Type | Units | Initialized from |
 |---|---|---|---|---|
 | Population, working-age, labour force | pop (province, education) | `f64` | persons | econ pack; static in P2 |
-| Employed | pop | `f64` | persons | (1 - unemployment rate) x labour force |
-| Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership; Rust in Task 18e-2) |
+| Employed | pop | `f64` | persons | (1 - u*) x labour force (natural rate, ADR 0089) |
+| Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership) |
 | Income last tick | pop | `f64` | numeraire | |
 | Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
 | Output, sales, profit last tick | enterprise | `f64` | | |
-| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage: the country's 2000 ICIO column over base delivered prices, a_kg / q_k(base) |
-| Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | one month of base input use |
-| Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u_2000) L^s_i) |
+| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage, the 2000 column `EntData::column`: calibrated a_kg p_o / q_ik (calibration tables), else the country's ICIO column over base delivered prices, a_kg / q_k(base) |
+| VA coefficient a_VA | enterprise | `f64` | real VA per unit of output | calibrated 1 - sum_k a_kg, else 1 - sum_k coef_k q_k(base) |
+| Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | calibrated (1 + COVER) months of use, else one month of base input use |
+| Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u*_i) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
-| Accounts | pops, enterprises, rebate (one per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
+| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
+
+**Initial state.** A world whose inputs carry the calibration tables (`EconInputs::calibrate`,
+`EconInputs::from_pack` when the pack holds them) starts from the calibrated steady state of ADR
+0089 (Calibration, stage 5): its posted prices, last D, Q and sales, merchant and input stocks,
+the pipeline, each pop's money (dividends and rebates; wages come at E2) and last income, each
+enterprise's last output, sales and profit; wages w0, employment L0, unemployment u*, pi^e = 0
+and buyer prices refreshed at the posted prices. Otherwise it starts from the data state: prices
+1, the same base point, input stocks at one month of base use, merchant stocks at coverage times
+initial demand, nothing in flight and one month of base dividends minted to each pop.
 
 Enterprises exist for every (province, traded good) with VA > 0 and every (province, local
 good). About 4,796 x 10 rows at most, sorted by province (CSR offsets, 19.4). Every pop and
@@ -160,8 +179,9 @@ enterprise belongs to one province; per-province work is a contiguous slice.
 ## Equations
 
 **Production.** For enterprise e = (i, g) with input coefficients coef_k (`Layout.coef`: its
-putty-clay coefficients, one vintage in P2, or its base column a_kg / q_k(base) under S09 fixed Leontief) and
-VA coefficient a_VA = 1 - sum_k coef_k q_k(base) (at base prices, = 1 - sum_k a_kg for the base column):
+putty-clay coefficients, one vintage in P2, or its 2000 column under S09 fixed Leontief; both the
+same numbers in P2) and VA coefficient a_VA (`EntData::a_va`: 1 - sum_k a_kg, the cost shares at
+the calibrated prices, for a calibrated world; 1 - sum_k coef_k q_k(base) for the base column):
 
 ```
 Y  = min( VA / a_VA,  min_k M_k / coef_k )                       (Leontief)
@@ -232,11 +252,11 @@ checks the closed form against numerical maximization. Employment moves toward t
 L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t exceeds L^s_i, all are scaled down pro
 rata.
 
-**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, expected inflation pi^e
-(trade SPEC, Origin market; ADR 0019):
+**Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, read against the natural
+rate u*_i (below), expected inflation pi^e (trade SPEC, Origin market; ADR 0019):
 
 ```
-dlnw = clip( pi^e + kappa_w x_i, -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
+dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
 ```
 
 Unit pass-through of pi^e is a homogeneity restriction, not a parameter; downward rigidity
@@ -246,9 +266,9 @@ infinite (no reachable origin) are left out of the index (owner ruling, MIGRATIO
 change in reachability moves its weights. c_max is P03c; every tick the clip binds is counted
 per province (`clip_ticks` in `run_wages`).
 
-Frictionless mode (V1): w_i solves sum_g L*_ig(w) = L^s_i exactly (monotone in w; safeguarded
-Newton in ln w), and eta = 1. The unemployment rate u_i = 1 - sum_g L_ig / L^s_i applies equally
-to each education level.
+Frictionless mode (V1): w_i solves sum_g L*_ig(w) = (1 - u*_i) L^s_i exactly (monotone in w;
+safeguarded Newton in ln w), and eta = 1, so frictionless unemployment is u*. The unemployment
+rate u_i = 1 - sum_g L_ig / L^s_i applies equally to each education level.
 
 **Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
 effective labour force, and the wage rule reads excess demand against the country's natural rate
@@ -262,26 +282,40 @@ dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) 
 At the calibrated state x_i = -u*_i and the wage step is pi^e = 0, so steady-state unemployment
 is u*, not zero; employment may exceed (1 - u*) L^s in a boom, up to L^s. Frictionless mode
 solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_L VA0_ig / ((1 -
-u*_i) L^s_i). P4 matching replaces u* with matching frictions. The Rust wage rule and loader take
-the wedge in Task 18e Part 2; until then they run the rule above without u*.
+u*_i) L^s_i), and the data state starts at unemployment u* (a generated world, which has no 1995
+to 2005 window, takes its 2000 rate as u*). P4 matching replaces u* with matching frictions.
 
 **Income (national profit ownership, owner 2026-10-25).** Labour income stays local; profits
 and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
 
 ```
-income_k = w_i L_i e_k employed_k / sum_(k' in i) e_k' employed_k'          (wages, local)
+income_k = w_i * e_k * employed_k * L_i / sum_(k' in i) e_k' employed_k'    (wages, local)
          + N_k / N_c * sum_(e in c) profit_e                                 (profits, national)
          + N_k / N_c * rebate_c                                              (tariffs, national)
 ```
 
-N_k the pop's population, N_c its country's, profit_e = sales - wages - purchases of enterprise e
+L_i = sum_g L_ig the province's employment and sum_(k' in i) e_k' employed_k' its employed
+effective labour, the same number up to the pro-rata scaling of E1, so the wage term is the pop's
+share of the province's wage bill w_i L_i. N_k the pop's population, N_c its country's pops'
+population, profit_e = sales - wages - purchases of enterprise e
 (signed) plus, in the profit pool, each province market's signed cash flow (trade SPEC), so the
 pool is sum over the country's enterprises and markets. Shares are fixed at load. At a steady
 state profit_e = (1 - s_L) VA0_e and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
-`io.Inputs.base_income`), is w0 (1 - u) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e. The Rust
-world takes this rule in Task 18e-2.
+`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
+population of its pops. A pack country with enterprises but no pops stops the load (`PackError`):
+nobody would own its profits.
+
+*Rounding (E4).* Every enterprise and province market pays its signed cash flow, in minor units,
+into its country's profit pool account; each country then pays its pool, one i64 sum per tick,
+and its rebate account to its pops in pop ID order by cumulative population shares rounded half
+to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
+pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
+pool, the rebate account and every enterprise and market end the tick at zero and money is
+conserved exactly; each part is within one minor unit of N_k / N_c of the pool
+(`national_profit_pool_conserves_money_exactly`). Wages use the same rule over the province's
+pops by employed effective labour.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
@@ -354,7 +388,8 @@ or a negative omega_c stops the load (never clipped). On the fixture z = 0.284, 
 Spending on traded goods is sourced over origins (trade SPEC) and paid at dispatch for what is
 filled; rationed purchases leave money unspent until the next tick.
 
-**Money.** The mint issues one month of base income to each pop at tick 0. Enterprises and
+**Money.** The mint issues each pop's initial money at tick 0 (Initial state: its calibrated
+balance, or one month of base dividends in the data state). Enterprises and
 markets pay out their signed cash flow every tick, so their balances return to zero; any
 account may be negative within or across ticks (clearing facility, no interest). Every payment
 is a ledger transfer rounded half to even to minor units. Prices and wages scale freely: the
@@ -434,9 +469,10 @@ Static equilibrium of the same economy with all frictions off: unknowns are ln p
 active (province, good) cell (origin markets of traded goods, province markets of local goods)
 and ln w for every province. Conditions: every origin sells its output, output = sum_d X_od /
 (p_o (1 + t)) with X_od = E_d K_od w_o / Phi_d, destination spending E_d of households (PIGL at
-q_d) and enterprises (a Y q_d); local goods clear locally; labour clears with p_VA at q; each pop
+q_d) and enterprises (a Y q_d); local goods clear locally; labour clears at the natural rate,
+sum_g L*_ig = (1 - u*_i) L^s_i (`io.Inputs.employed_supply`), with p_VA at q; each pop
 spends its income by PIGL (`reference/demand.py`, the mirror of `demand.rs`): its effective
-labour share e_k LF_k / L^s of its province's wages, and its population share of its country's
+labour share e_k LF_k / L^s of its province's wages w (1 - u*) L^s, and its population share of its country's
 profits (national ownership, Income) and rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
 spending, so income is iterated to a fixed point (relative 1e-15) inside each evaluation; the
 world price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals
@@ -457,7 +493,7 @@ optional, 19.1).
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
-| E4 | distribute | enterprise and market cash flow, rebates | pop money for next tick | finance (P2 stand-in) |
+| E4 | distribute | enterprise and market cash flow, rebates | profit pools, pop money for next tick | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
 System IDs 201 to 210 in this order.
