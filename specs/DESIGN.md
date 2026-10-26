@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; it moves to a fully native Rust app, a wgpu map under Slint panels (ADRs 0011, 0088). Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -254,7 +254,7 @@ c_{od,g} = \min_{\text{paths}} \sum_{e} \left( f_{e,m} \, w_g \, \ell_e + h_{e} 
 
 where f is the per-ton-km mode cost, w the good's weight per unit of value, l edge length, h transshipment and port cost, r the interest rate times transit time T (inventory carrying cost), rho the loss and disruption risk, t tariffs and other policy wedges (applied tariffs initialized from WTO and World Bank tariff data), and nu non-policy frictions (language, legal system, currency, sanctions compliance). For comparison with the GE reference model the cost maps to an iceberg factor tau = 1 + c / p. Per-unit components matter: Hummels and Skiba (2004) show per-unit shipping costs change the composition of trade, which pure iceberg models miss.
 
-**Route choice (ADR 0017).** The hard minimum over paths above is replaced by a soft minimum. Following Allen and Arkolakis (2022), each shipment draws Frechet route-specific shocks with the trade elasticity as shape parameter, so the cost averaged over all routes has a closed form:
+**Route choice (ADR 0017, deferred past P2).** P2 keeps the least-cost path above (S05) with the gateway kernel of 8.3. Route choice, built in ceteris-geo and ceteris-trade, tested and off, replaces the hard minimum with a soft minimum; it is revisited with the P8 corridor network. Following Allen and Arkolakis (2022), each shipment draws Frechet route-specific shocks with the trade elasticity as shape parameter, so the cost averaged over all routes has a closed form:
 
 ```latex
 \tau_{od}^{-\theta} = \left[ (I - A)^{-1} \right]_{od}, \qquad A_{kl} = t_{kl}^{-\theta}
@@ -262,7 +262,7 @@ where f is the per-ton-km mode cost, w the good's weight per unit of value, l ed
 
 where t(k,l) = 1 + c(k,l) / p is the iceberg equivalent of edge (k,l)'s per-unit, time and risk costs from the formula above, evaluated at the good's reference price (updated annually) so that A changes only when edges or reference prices change. Tariffs and non-policy frictions apply once per border crossing, on the gateway link. The inverse is never formed: kernels come from sparse solves (I - A)x = b from each gateway and province, run only when A changes, and the spectral radius of A is checked to be below 1 at pack build. A is built per (theta class, weight class). Expected transit time for the shipment pipeline (8.4) is the route-probability-weighted time and needs one more pair of sparse solves.
 
-Route choice makes costs differentiable in edge parameters (gradient-based calibration needs this; minima are not differentiable), makes the gateway factorization of 8.3 exact, reroutes trade smoothly when a chokepoint closes, and gives the welfare effect of an infrastructure change in closed form for 5.5. As theta grows the soft minimum converges to the least-cost path, which stays available as switch S05 and still drives the freight-cost map mode.
+Route choice makes costs differentiable in edge parameters (gradient-based calibration needs this; minima are not differentiable), makes the gateway factorization of 8.3 exact, reroutes trade smoothly when a chokepoint closes, and gives the welfare effect of an infrastructure change in closed form for 5.5. As theta grows the soft minimum converges to the least-cost path, which is switch S05, the P2 default, and still drives the freight-cost map mode.
 
 ### 5.5 Endogenous infrastructure
 
@@ -438,7 +438,7 @@ E(d,g) is province d's expenditure on good g at posted prices (households, inter
 
 Per-unit costs make tau depend on the origin price (tau = 1 + c / p\_o); the kernel uses last tick's prices, which adds no iteration. Supply that cannot be sold at the posted price stays in inventory, which replaces the unbalanced-transport relaxation. The full within-tick Sinkhorn solve (balanced, or unbalanced as in Chizat et al. 2018) stays available as structural switch S02 for nesting tests.
 
-**Computation.** The kernel factorizes exactly through about 600 gateways (ports, border crossings, airports), because route-choice costs (5.4) sum over routes and every international route passes through a gateway pair:
+**Computation.** The kernel factorizes through about 600 gateways (ports, border crossings, airports), because every international route passes through a gateway pair. Under the least-cost legs P2 keeps (S05) the factorization approximates the path minimum; under route choice (5.4, deferred) it is exact, because route-choice costs sum over routes:
 
 ```latex
 K_{od} = \mathbb{1}[o, d \text{ same country}] \, K^{\text{dom}}_{od} + \sum_{a,b} K^{\text{dom}}_{oa} \, K^{\text{int}}_{ab} \, K^{\text{dom}}_{bd}
@@ -456,15 +456,15 @@ Policy wedges enter c(o,d,g): MFN and preferential tariffs (free trade agreement
 
 ### 8.6 Demand system
 
-Households allocate spending across consumption categories (food, energy, housing, manufactures, services) with PIGL preferences in the multi-sector form of Alder, Boppart and Muller (2022) (ADR 0021). PIGL generates Engel's law and the rising services share and, unlike non-homothetic CES, aggregates exactly: a pop's category shares depend on its income distribution only through the moment E\[y^(1-epsilon)\], which for the lognormal income of A3 has a closed form:
+Households allocate spending across three consumption categories, agriculture A (goods 0 and 3), manufacturing M (goods 1, 2, 4, 5 and 6) and services S (goods 7, 8 and 9), the ones Alder, Boppart and Muller (2022) estimate, with PIGL preferences in their multi-sector form (ADR 0021). PIGL generates Engel's law and the rising services share and, unlike non-homothetic CES, aggregates exactly: a pop's category shares depend on its income distribution only through the moment E\[y^(1-epsilon)\], which for the lognormal income of A3 has a closed form:
 
 ```latex
 \mathbb{E}\left[ y^{1-\varepsilon} \right] = \exp\left( (1-\varepsilon)\,\mu + \tfrac{1}{2}(1-\varepsilon)^2 \sigma^2 \right)
 ```
 
-Category demand per pop is therefore closed form, with no root-finding or quadrature. Non-homothetic CES (Comin, Lashkari and Mestieri 2021) stays as switch S03; under it each pop needs a Newton solve for its utility index and a 5-node Gauss-Hermite quadrature over its income distribution, warm-started from the last tick.
+Category demand per pop is therefore closed form, with no root-finding or quadrature. Non-homothetic CES (Comin, Lashkari and Mestieri 2021) stays as switch S03; under it each pop needs a Newton solve for its utility index and a 5-node Gauss-Hermite quadrature over its income distribution, warm-started from the last tick. The sigma of a pop's lognormal income comes from its country's 2000 Gini, WDI's where it exists, else SWIID's (ADR 0021).
 
-Within each category a CES aggregates goods and origins. A subsistence floor for food and energy enters through rationing priority, not preferences. Governments, armies and investment add their own demand.
+Within each category a CES at P06 aggregates goods and origins. A subsistence floor for food and energy enters through rationing priority, not preferences. Governments, armies and investment add their own demand.
 
 **Consumption and saving (ADR 0021).** Total spending follows a buffer-stock rule: pops consume out of expected permanent income and correct toward a target ratio of wealth to income,
 
@@ -1058,12 +1058,14 @@ The register lists every parameter that is not pinned by data, with its prior an
 
 | ID | Parameter | Module | Starting prior | Identification / source | Class |
 | --- | --- | --- | --- | --- | --- |
-| P01 | Trade elasticity theta\_g by sector | Trade | By sector, grouped into 3 to 5 classes; centre 5 | Caliendo and Parro (2015); estimated directly by PPML structural gravity on 2000 BACI flows (ADR 0022); sets the gravity kernel | Literature |
+| P01 | Trade elasticity theta\_g by sector | Trade | 3 classes: 2.62, 5.19 and 10.57 (ADR 0023) | Caliendo and Parro (2015); estimated directly by PPML structural gravity on 2000 BACI flows (ADR 0022); sets the gravity kernel | Literature |
 | P02 | Merchant inventory target coverage | Markets | 1 to 6 months by good | Storage and perishability; price volatility | Free |
-| P03 | Price adjustment speeds kappa1, kappa2 | Markets | 0.05 to 0.5 per month | Price volatility and autocorrelation | Free |
+| P03a | Price adjustment speed kappa1 | Markets | 0.05 to 0.5 per month, start 0.05 | Price volatility and autocorrelation | Free |
+| P03b | Inventory term kappa2 of the price rule | Markets | 0.05 to 0.5 per month when on; start 0 (off) | Price volatility and autocorrelation; stability region (ADR 0019) | Free |
+| P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move; binding ticks counted per province | Free |
 | P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
 | P05 | Non-tariff border frictions | Trade | Log-uniform | Gravity border effects | Calibrated |
-| P06 | Category substitution sigma | Demand | 0.3 to 0.9 | Comin-Lashkari-Mestieri (2021) | Literature |
+| P06 | Goods substitution sigma within a PIGL category | Demand | 0.3 to 0.9, start 0.6 | Comin-Lashkari-Mestieri (2021) | Literature |
 | P07 | Income elasticities by category | Demand | Food below 1, services above 1 | Comin-Lashkari-Mestieri; budget surveys | Literature |
 | P08 | Capital-labour substitution | Production | 0.5 to 1.2 | Oberfield and Raval (2021) and related | Literature |
 | P09 | Agglomeration elasticity | Production | 0.02 to 0.10 | Rosenthal and Strange (2004) | Literature |
@@ -1106,9 +1108,17 @@ Added for the modern scenario:
 | P41 | Employment adjustment speed eta | Labour | 0.1 to 1 per month, start 0.3 | Job creation and destruction rates | Free |
 | P42 | Education efficiency e\_k | Labour | Below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 | Mincer returns of about 8 to 12% per year | Literature |
 | P43 | Time cost of transit lambda\_g, ad valorem per day | Trade | Manufactures 0.006 to 0.021; food 0.003 to 0.010; primary 0 to 0.006 | Hummels and Schaur (2013); ADR 0013 | Literature + free |
+| P44 | Route-choice dispersion theta\_r | Trade | 41 to 182, value 111.5; unused in P2 (route choice deferred, ADR 0017) | Fan, Lu and Luo (2021), routing elasticity from exporters' port choice | Literature |
+| P45 | Expectation gain g of pi^e | Markets | 0.004 to 0.65 per month, start 0.006 | Learning gain of Poledna et al. (2023) to the adaptive heuristic of Anufriev and Hommes (2012); ADR 0019 | Literature |
+| P46 | PIGL price parameters sigma\_B, phi, gamma, with the Dt weights theta | Demand | Start sigma\_B 0.26, phi 0, gamma 0.71, theta 0.634, 0.082, 0.284 | Alder, Boppart and Muller (2022), pooled PIGL; ADR 0021 | Literature |
+| P47 | PIGL Engel parameter epsilon | Demand | Start 0.71; country estimates 0.34 to 0.90 | Alder, Boppart and Muller (2022); ADR 0021 | Literature |
 | P50 | Within-cell elasticity of substitution sigma\_g | Production | 3 to 8, below theta\_g + 1 | Markup estimates; Broda and Weinstein (2006) | Literature |
 | P51 | Fixed export costs by border crossing | Trade | Log-uniform | Exporter shares by sector and country | Calibrated |
 | P52 | Entry costs by sector | Production | Log-uniform | Firm counts by size class; entry and exit rates | Calibrated |
+| P148 | Loss write-off threshold M | Production | 3 months of base sales | Limited liability of enterprises (ADR 0112) | Free |
+| P149 | Input stock cover | Production | 1 month | The cover of the input order rule (owner decision, 24 Oct 2026) | Free |
+
+Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it), P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090`) and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 
 ### 17.2 Structural switches (model uncertainty)
 
@@ -1150,7 +1160,7 @@ The simulator is built to adjudicate between explanations, so each hypothesis na
 
 ## 19. Technology Stack, Performance and Repository
 
-A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust (wgpu map, Slint panels) later; the three meet on Apache Arrow.
+A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust (wgpu map, Slint panels; ADR 0088) later; the three meet on Apache Arrow.
 
 ### 19.1 Stack
 
@@ -1160,7 +1170,7 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
 | App shell | Today Tauri 2: Rust core in-process, raw buffers to the UI over IPC, pack files through pack://. Target: one native Rust process, winit window, Slint panels, core columns read directly (ADR 0088) | One native macOS app, no server |
-| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADRs 0011, 0088) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
+| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADR 0088; stage 1 of ADR 0011 becomes a native spike instead of the hybrid) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
 | Bindings | PyO3 + maturin | Python drives headless runs and reads Arrow tables with zero copy |
 | Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
@@ -1178,7 +1188,7 @@ Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of
 | Demand and consumption | 100k pops x 8 categories x goods | 10 ms |
 | Production and labour | 150k enterprises | 12 ms |
 | Province markets | 4,000 provinces x 50 goods | 2 ms |
-| Trade (one gravity normalization per tick, gateway-factorized kernel) | 45 goods in 3 to 5 theta classes, 600 gateways + 4,796 provinces x k gateways | 5 ms |
+| Trade (one gravity normalization per tick, gateway-factorized kernel) | 45 goods in 3 to 5 theta classes, 600 gateways + 4,796 provinces x k gateways | 30 ms, of which source\_dispatch 8 ms (P2, full pack) |
 | Finance, fiscal, monetary | 1M claims, mostly passive | 8 ms |
 | Politics, migration, diplomacy | Pops, parties, states | 8 ms |
 | Climate (annual) | Emulator + pattern scaling | under 1 ms amortized |
@@ -1239,10 +1249,10 @@ These are binding rules for the coding agent: the speed comes from layout and al
 
 **Linear algebra**
 
-- The trade kernel factorizes through about 600 gateways: O(P x k + G^2) per tick instead of O(P^2), exact under route choice because route sums decompose through gateways (5.4, 8.3).
+- The trade kernel factorizes through about 600 gateways: O(P x k + G^2) per tick instead of O(P^2), exact under route choice because route sums decompose through gateways (5.4, 8.3), and an approximation of the path minimum under the least-cost legs P2 keeps (S05).
 - Goods sharing a (theta class, weight class) pair share a kernel, so kernel products are matrix-matrix (provinces x goods), not one matrix-vector product per good; 3 to 5 theta classes (register P01).
 - Tariffs are constant within a country pair: apply them as blockwise scaling of per-block products; never materialize per-good kernels.
-- The gravity kernel tau^(-theta) is bounded and dimensionless, so no log-domain stabilization is needed. Route-choice solves (I - A)x = b use sparse iterative methods warm-started from the previous solve and run only when A changes. Anderson acceleration on every remaining fixed-point loop (Walrasian mode, full within-tick Sinkhorn test mode, GE reference model, Koijen-Yogo clearing).
+- The gravity kernel tau^(-theta) is bounded and dimensionless, so no log-domain stabilization is needed. Route-choice solves (I - A)x = b, off in P2 (5.4), use sparse iterative methods warm-started from the previous solve and run only when A changes. Anderson acceleration on every remaining fixed-point loop (Walrasian mode, full within-tick Sinkhorn test mode, GE reference model, Koijen-Yogo clearing).
 - Never invert the Leontief matrix in the agent model: shortages propagate one sparse matrix-vector product per tick. The GE reference model applies the global IO system matrix-free and solves with Krylov methods.
 - Exponential distributed lags (climate boxes, adaptive expectations, depreciation) are O(1) state updates; cohort aging is an array shift.
 - Correlated weather from k spatial principal components (O(P x k) per draw); route-choice solves from gateways (5.4), updated only when edges change; contagion by fictitious-default rounds on sparse exposures; bounded-confidence neighbours by sort-and-sweep.
@@ -1326,7 +1336,7 @@ Eleven phases take the project from an empty repository to a calibrated, playabl
 
 Each phase starts only when the previous gate passes; the highlighted workbench phase is where the project first becomes useful for experiments.
 
-**Development slice.** P1 to P3 run on a European slice (about 600 provinces, the rest of the world reduced to trade gateways) for fast debugging; P4 switches to the full globe. **First release** is the end of P9: a calibrated, validated world, not an earlier partial build.
+**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is the end of P9: a calibrated, validated world, not an earlier partial build.
 
 ### 21.1 Phases and acceptance criteria
 
@@ -1334,8 +1344,15 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
    - Accept: a toy world of 10 provinces runs 1,200 ticks; identical hashes across two runs and across 1 vs 8 threads; restore-and-replay from any snapshot matches.
 2. **P1 World and map.** Geography pipeline (H3 raster, provinces, sea zones), transport graph with mode costs, least-cost-path cache, 2000 borders, web map with political, terrain and resource modes.
    - Accept: about 4,000 provinces render at 60 fps; clicking a province shows attributes; cost-from-node map mode looks plausible to a reviewer.
-3. **P2 Economic core (minimal).** 10 goods, static pops, one enterprise per (province, sector), labour market, province markets with the stock-flow rule, structural-gravity trade over route-choice costs, cleared across ticks, with transit, a single numeraire money, accounting assertions, and the GE reference model in Python.
-   - Accept: V0 and V1 pass (frictionless convergence to the GE reference within 1% where the uniqueness condition holds; long-run neutrality); simulated gravity elasticities in range by theta class (H2); no invariant violations over 100 years; ADRs 0015 to 0022 implemented (Section 25).
+3. **P2 Economic core (minimal).** 10 goods, static pops, one enterprise per (province, sector), labour market, province markets with the stock-flow rule, structural-gravity trade over least-cost legs through gateways (route choice deferred, ADR 0017), cleared across ticks, with transit, a single numeraire money, accounting assertions, and the GE reference model in Python.
+   - Accept: V0 and V1 pass (frictionless convergence to the GE reference within 1% where the uniqueness condition holds; long-run neutrality); simulated gravity elasticities in range by theta class (H2); no invariant violations over 100 years; ADRs 0015 to 0023, 0089 and 0112 implemented (Section 25); V1 is the run from the perturbed steady state (gate decision below).
+   - As built (26 Oct 2026):
+     - Trade elasticity in 3 classes (2.62, 5.19, 10.57), drawn from the OECD key's thetas by ADR 0023's rule, with a per-class H2 prior band of two standard errors (1.40 to 3.84, 3.36 to 7.02, 8.15 to 12.99).
+     - Calibration to a data state that is the steady state, and a natural rate u\* in the wage rule (ADR 0089), replacing full employment; the productivity A is calibrated, not estimated.
+     - National profit ownership (owner, 25 Oct 2026; ADR 0089): enterprises' profits go to the pops of their country by population; wages stay local.
+     - Limited liability of enterprises and a loss write-off beyond M = 3 months of base sales (ADR 0112, P148); markets keep the signed rule.
+     - Budgets on the full pack (owner, 26 Oct 2026): a whole tick 35 ms, trade 30 ms with source\_dispatch 8 ms (19.2); the gateway count and rule move to the ADR 0092 rework.
+     - Gate decision (owner, 26 Oct 2026): V1 is the run from the perturbed steady state; the run from the shocked data state is a stress test (xfail(strict)), and ADR 0090's price rule is redesigned after the gate.
 4. **P3 Counterfactual workbench.** Branches, interventions (all types in 14.2), common random numbers, ensembles, difference maps, fan charts, Python experiment API.
    - Accept: null intervention reproduces parent; a tariff intervention yields paired effects with tighter intervals under CRN than with independent seeds.
 5. **P4 Population.** Demography with Brass mortality and fertility, education, occupational mobility, culture and religion dynamics, migration with dynamic discrete choice.
@@ -1391,11 +1408,11 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Scenario | Modern start, 1 Jan 2000 (supersedes 1836) | Data replaces judgment; 2011-2024 is the out-of-sample window |
 | Start-year flexibility | Pipeline builds packs for any year 1995-2022 | Rolling-origin validation (2000, 2005, 2010, 2015) |
 | Horizon | Open-ended | Climate, demography and long-run stability are first-class requirements |
-| Map scope | Global, developed on a European slice in P1-P3 | Full globe from P4 |
+| Map scope | Global, full globe from P2 (ADR 0012) | dev\_slice kept in the pack for ad hoc fast runs; no gate depends on it |
 | Provinces | Natural Earth first-level regions at 2000 borders, oversized ones split along county borders, 4,796 | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
-| App | Tauri desktop app today; moving to a fully native Rust app, wgpu map and Slint panels (ADRs 0011, 0088) | Rust core in-process, no server |
+| App | Tauri desktop app today; moving to a fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
 | Core language | Rust from the start | Python only for pipeline, reference model, calibration |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |
@@ -1785,7 +1802,7 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 | --- | --- | --- | --- |
 | 0015 | Trade flows in value, kernel tau^(-theta) | trade | Yes |
 | 0016 | Origin markets clear across ticks; full Sinkhorn becomes switch S02 | trade, markets | Yes |
-| 0017 | Route-choice trade costs (Allen-Arkolakis) | geo, trade | Yes |
+| 0017 | Route-choice trade costs (Allen-Arkolakis); deferred past P2 | geo, trade | No (deferred; least-cost legs in P2) |
 | 0018 | Sector trade elasticities in 3 to 5 classes | trade, register | Yes |
 | 0019 | Expected inflation in price and wage rules | markets, labour | Yes (small in P2) |
 | 0020 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
@@ -1842,7 +1859,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.2, 8.3, 17.2 (S02), 19.2,
 
 - Small worlds (5 to 20 provinces, 3 goods): with kappa large and transit zero, the fixed point matches the S02 full solve to 1e-6.
 - Common-random-numbers steady-state comparison of the default and S02 on the European slice.
-- Criterion benchmark: the trade system within its 19.2 budget of 5 ms on the full globe.
+- Criterion benchmark: the trade system within its 19.2 budget of 30 ms on the full globe, with source\_dispatch within 8 ms.
 
 **Consequences.** Trade responds to shocks over months rather than within the month, the intended disequilibrium. Tariff impulse responses are checked against the timing in Amiti, Redding and Weinstein (2019).
 
@@ -1855,6 +1872,8 @@ Status: proposed. Date: 2026-10-24. Design sections: 5.3, 5.4, 5.5, 8.3, 8.4, 17
 **Options.** (1) Keep least-cost paths. (2) k shortest paths with logit weights. (3) Route choice with Frechet route shocks (Allen and Arkolakis 2022): tau^(-theta) = (I - A)^(-1), with A = t^(-theta) edge by edge.
 
 **Decision.** Option 3. It sums over all routes in closed form, makes the gateway factorization exact, is differentiable, and gives closed-form welfare effects for infrastructure (5.5). Option 2 is heuristic and still jumps when the set of k paths changes. Least-cost paths remain as S05 and drive the freight-cost map mode.
+
+**Deferral (owner, 24 Oct 2026).** Route choice is deferred past P2: P2 keeps least-cost legs (S05) with the gateway kernel, and the route-choice module stays in ceteris-geo and ceteris-trade, tested and off (Network.route\_taus = None; P44 unused). On the P1 graph no route dispersion in P44's prior brings the spectral radius of A below 1. The revisit trigger is the P8 corridor network.
 
 **Migration.**
 
@@ -1872,7 +1891,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 5.3, 5.4, 5.5, 8.3, 8.4, 17
 - Scaling one edge's cost up to closure changes tau continuously.
 - Spectral-radius assertion in the pack property tests.
 
-**Consequences.** ceteris-geo golden hashes change. The trade kernel (0016) uses route-choice factors directly, and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare formula.
+**Consequences.** Deferred past P2, so no golden hash changes in P2. When route choice is revisited, ceteris-geo golden hashes change, the trade kernel (0016) uses route-choice factors directly, and 5.5's infrastructure planner can score links with the Allen-Arkolakis welfare formula.
 
 ### 0018. Sector-specific trade elasticities
 
@@ -1955,7 +1974,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 8.6, 17.1 (P06, P07, P37), 
 **Migration.**
 
 - Replace the category-demand kernel with PIGL shares computed from each pop's income moments (mu, sigma^2).
-- At initialization, back out the PIGL category weights from 2000 budget shares by exact inversion, so they are data-determined. P06 and P07 become the PIGL price and Engel parameters, with the same literature anchors.
+- At initialization, back out the PIGL category weights from 2000 budget shares by exact inversion, so they are data-determined. The PIGL price and Engel parameters take P46 and P47; P06 stays the goods substitution within a PIGL category and P07 the S03 row.
 - Add the consumption rule with m = 1 and lambda = 0 in P2 (spend current income); its parameters switch on in P5.
 
 **Tests.**
@@ -2130,7 +2149,7 @@ A review of the design against current literature and the most complete existing
 | 0053 | Robust inference and model selection | P9 | 7 |
 | 0054 | Explicit exclusions | All | 7 |
 
-**Register and switches.** These ADRs take register IDs P53 to P92 and switches S12 to S18; P44 to P49 stay free for P2 work in progress, and P50 to P52 belong to 0026. Most new entries are data or literature priors. Free behavioural parameters still count against the cap of 60: a mechanism that fails the ablation rule (15.7) moves to the extended profile (23.1) instead of growing the lab register.
+**Register and switches.** These ADRs take register IDs P53 to P92 and switches S12 to S18; P44 to P47 went to P2 (17.1), P48 and P49 stay free, and P50 to P52 belong to 0026. Most new entries are data or literature priors. Free behavioural parameters still count against the cap of 60: a mechanism that fails the ablation rule (15.7) moves to the extended profile (23.1) instead of growing the lab register.
 
 **Highest leverage, in order.** Cohort education demography (0032); the power sector and oil market (0034, 0028); technology diffusion (0035); climate damage lanes (0036); sourcing inertia (0027); the scorecard with vintages (0052); pack profiles (0050); the food system (0029); sovereign restructuring (0043); housing underwriting (0040); trade agreements (0047); political economy channels (0046); the hazard library (0051); and robust inference (0053).
 
