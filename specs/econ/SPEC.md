@@ -643,19 +643,21 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
-  - Measured (Task 19, M4 Pro on AC power, full pack from its calibrated steady state, tick 1,
-    criterion medians of `cargo bench -p ceteris-trade -p ceteris-econ`; Task 19 budgets in
-    brackets): consume (E3) 6.75 ms [10], of which the price refresh, E3's unit `source` and
-    `dispatch` of each traded good (migration carry), 5.39; labour 0.77 + produce 3.56 =
-    4.33 ms [12], of which the same-tick chain of local goods (migration carry, now parallel
-    by province) 0.60; clear_reprice 0.23 ms [2] (econ clear 1.90, reprice 0.21);
-    source_dispatch 8.90 ms [5] with the seven traded goods in parallel as the tick runs them,
-    43.9 ms one good after another: missed, each good's dispatch (about 5.5 ms, divisions on
-    356,080 crossings per class) is the critical path; kernel_build 120 ms. A whole tick
-    33.8 ms (deliver 1.05, source 1.42, dispatch 20.6, distribute 0.28, end_tick 2.40); a run
-    35 to 36 ms per tick with snapshots, 150 ms before Task 19; peak memory of 120 ticks with
-    history 1.89 GB (1.80 GB before). State hashes, run files and goldens are unchanged, and
-    identical at 1 thread and at all threads.
+  - Measured (Task 19 after its fix round, M4 Pro on AC power, full pack from its calibrated
+    steady state, tick 1, criterion medians of `cargo bench -p ceteris-econ`; Task 19 budgets
+    in brackets): consume (E3) 6.74 ms [10], of which the price refresh, E3's unit `source`
+    and `dispatch` of each traded good (migration carry), 5.51; labour 0.74 + produce 3.47 =
+    4.22 ms [12], of which the same-tick chain of local goods (migration carry, parallel by
+    province) 0.52; clear_reprice 0.25 ms [2] (econ clear 1.90, reprice 0.22);
+    source_dispatch_parallel, T2's warm sourcing and T2b's dispatch of the seven traded goods
+    in parallel as the tick runs them, 7.95 to 8.35 ms [5] (41.4 ms one good after another):
+    missed, each good's dispatch (about 5.5 ms over 356,080 crossings per class) is the
+    critical path, and two-lane SIMD division (`wide`) made it slower; the E3 carry in
+    parallel 5.62; kernel_build 120 ms. A whole tick 34.1 ms (deliver 1.04, source 1.43,
+    dispatch 20.9, distribute 0.57, end_tick 2.41); a run 35 to 37 ms per tick with snapshots,
+    150 ms before Task 19; peak memory of 120 ticks with history 1.88 GB (1.80 GB before).
+    State hashes, run files and goldens are unchanged, and identical at 1 thread and at all
+    threads.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
