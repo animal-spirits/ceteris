@@ -52,7 +52,7 @@ proptest! {
         for a in &acc.enterprise {
             prop_assert!(w.ledger.money(*a) <= 0);
         }
-        for a in acc.market.iter().chain(&acc.rebate) {
+        for a in acc.market.iter().chain(&acc.rebate).chain(&acc.dividend) {
             prop_assert_eq!(w.ledger.money(*a), 0);
         }
     }
@@ -513,7 +513,7 @@ fn national_profit_pool_conserves_money_exactly() {
                 let written = written(&w, start, *a);
                 assert_eq!(w.ledger.money(*a), before.min(0) + written, "tick {tick}");
             }
-            for a in acc.market.iter().chain(&acc.rebate) {
+            for a in acc.market.iter().chain(&acc.rebate).chain(&acc.dividend) {
                 assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
             }
             w.end_tick(tick).unwrap();
@@ -1287,6 +1287,27 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
         "the rest is carried"
     );
     w.end_tick(0).unwrap();
+
+    // next tick the pops hold enough again, and the carried rest is written off down to the caps
+    w.begin_tick();
+    for &a in acc.market.iter().chain(&acc.rebate) {
+        set_balance(&mut w, a, 0);
+    }
+    for &a in acc.enterprise.iter().filter(|&&a| a != a1 && a != a2) {
+        set_balance(&mut w, a, 0);
+    }
+    for &k in &pops[1..] {
+        set_balance(&mut w, acc.pop[k], 10 * room);
+    }
+    let start = w.ledger.journal().len();
+    systems::distribute(&mut w);
+    assert_eq!(
+        written(&w, start, a1) + written(&w, start, a2),
+        x1 + x2 - room
+    );
+    assert_eq!((w.ledger.money(a1), w.ledger.money(a2)), (-cap1, -cap2));
+    assert!(acc.pop.iter().all(|&a| written(&w, start, a) <= 0));
+    w.end_tick(1).unwrap();
 }
 
 /// A run with write-offs is identical at 1 and 4 threads.

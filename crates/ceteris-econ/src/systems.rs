@@ -793,11 +793,12 @@ pub fn reprice(w: &mut EconWorld) {
 /// 2026-10-26; loss write-off, ADR 0098): every enterprise pays its balance into its country's
 /// profit pool when the balance is positive and otherwise keeps it, so a loss stays with the
 /// enterprise as retained losses, which later cash flow repays before anything is paid out;
-/// every province market pays its signed cash flow (ADR 0098, Markets). Each country pays its pool and its rebate account (tariffs) to its pops by population
-/// share N_k / N_c, so both end the tick at zero. Each pool is one i64 sum, split once per tick
-/// by [`split`]: the cumulative population shares of the country's pops in ID order rounded
-/// half to even, so the parts add up to the pool exactly. Then [`write_off`]. Records each
-/// pop's income of the tick, and as each enterprise's profit its balance before the payout
+/// every province market pays its signed cash flow (ADR 0098, Markets). Each country pays its
+/// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
+/// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
+/// cumulative population shares of the country's pops in ID order rounded half to even, so the
+/// parts add up to the pool exactly. Then [`write_off`]. Records each pop's income of the
+/// tick, and as each enterprise's profit its balance before the payout
 /// (this tick's cash flow less any loss it carries).
 pub fn distribute(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
@@ -836,8 +837,8 @@ pub fn distribute(w: &mut EconWorld) {
 }
 
 /// The loss write-off of E4 (ADR 0098): per country, the excess of every enterprise's retained
-/// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in proportion to their positive money, never
-/// taking a pop below zero. Where the pops hold less than the excess, what they hold is
+/// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in
+/// proportion to their positive money, never taking a pop below zero. Where the pops hold less than the excess, what they hold is
 /// written off, shared over the holders by their excess, and the rest stays with them. Both
 /// sides are exact [`largest_remainder`] splits of one i64 per country, moved through the
 /// country's profit pool account, which ends at zero.
@@ -919,6 +920,27 @@ pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn largest_remainder_is_exact_and_bounded_by_the_weights() {
+        let mut out = Vec::new();
+        largest_remainder(7, &[0, 3, 0, 5], &mut out);
+        assert_eq!(out.iter().sum::<i64>(), 7);
+        assert_eq!((out[0], out[2]), (0, 0), "zero weights get nothing");
+        assert!(out[1] <= 3 && out[3] <= 5);
+        // 5 over equal weights: 1 each and the two leftover units to the first two (ties)
+        largest_remainder(5, &[4, 4, 4], &mut out);
+        assert_eq!(out, [2, 2, 1]);
+        // the whole weight: every part is its weight
+        largest_remainder(9, &[2, 7], &mut out);
+        assert_eq!(out, [2, 7]);
+        let weights = [1, 2, 3, 1_000_000_007, i64::MAX / 4];
+        for total in [0, 1, 17, 999, 1_000_000_000] {
+            largest_remainder(total, &weights, &mut out);
+            assert_eq!(out.iter().sum::<i64>(), total);
+            assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
+        }
+    }
 
     #[test]
     fn split_adds_up_exactly() {
