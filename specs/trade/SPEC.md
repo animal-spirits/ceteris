@@ -79,8 +79,9 @@ produces g with positive capacity (A VA0 > 0); a local cell (d, g) has a provinc
 anyone at d buys g (its country's final demand share Omega_g > 0 or a local enterprise uses g
 as an input). Only active cells carry a price state; destinations are every province with
 spending. Origin weights are relative to the good's lowest active price, w_o = (p_o /
-p_min)^-theta, and floored at WEIGHT_FLOOR = 1e-100: an origin below the floor is not a source,
-and a destination whose Phi_d (in the same relative units) is below it reaches no origin, buys
+p_min)^-theta, and floored at WEIGHT_FLOOR = 1e-100 (subnormal weights broke the gateways' mass balance, Task 2): an
+origin below the floor is not a source, and a destination whose Phi_d (in the same relative units) is
+below it reaches no origin, buys
 nothing and has an infinite buyer price. A price spread above about 1e20 at theta 5, or 3e9 at
 the largest class value 10.57, can make a destination unreachable. Since every weight is relative to one global p_min, a single cheap
 origin anywhere sets the scale for all destinations.
@@ -405,15 +406,26 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 - Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at
   the equilibrium (S02).
 - Golden: covered by `tests/golden/p2-econ.txt` (econ SPEC).
-- Benchmarks (criterion): `source` and `dispatch` on the full pack (10 goods, budget 5 ms per tick
-  on the M4 Pro, 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
+- Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7 traded
+  goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the owner on
+  2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
 
 ## Open questions
 
-- Gateway count and selection rule are an agent default (22.2), set by benchmark; starting
-  rule in the econ SPEC pack section. As built (Task 17): 600 gateways, land crossing points
-  among the k-medoid candidates rather than one gateway pair per crossing, and every gateway
-  pair of different countries a crossing leg (econ SPEC, Open questions).
+- Gateway count and selection rule are an agent default (22.2); the rule is in the econ SPEC
+  pack section. As built (Task 17, controller ruling): 600 gateways (287 ports, 168 airports,
+  145 land crossings). Each country's land crossing points, the merged endpoints of its
+  cross-border road and rail edges, join its ports and airports as candidates of the k-medoids,
+  one count rule for all; a crossing is not a gateway pair of its own, which would have made
+  about 2,700 gateways. Every pair of gateways of different countries is a crossing leg: 356,080
+  per traded good, beside 265,558 domestic and 20,705 access legs. That count sets the cost of
+  `source` and `dispatch` (Benchmarks above). Task 19b tried to prune crossings by contribution
+  and kept nothing: within a country pair every crossing's tau is within about 1.3 times the
+  best and each live one carries at least 1% of its pair's largest flow, only the 10,710
+  crossings to countries without an economy province are exactly negligible (about 0.25 ms), and
+  the 5 ms budget needs about 190,000 crossings, which moves Phi_d by 50% to 95%. Owner decision
+  (2026-10-26): the budget moves to 8 ms and the gateway count and rule move to the ADR 0092
+  rework after the P2 gate.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.
