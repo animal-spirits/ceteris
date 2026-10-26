@@ -724,6 +724,13 @@ the radius on p. 9, footnote 10 p. 7).
     until repaid. Before the write-off: price 0.83 and 0.33 outside at 1,200, 0.21 and 5.9e-2 at
     4,800, with 5.0e12 of retained losses repaid over about 33,000 ticks and an index of 7.1 at
     1,200; before limited liability 0.88 and 4.0e-2 at 1,200, 0.82 and 8.1e-3 at 4,800.
+  - Gate decision (owner, 2026-10-26): P2's V1 is the run from the perturbed steady state, now
+    that the data state is the steady state (ADR 0089). The run from the shocked data state is a
+    stress test, `xfail(strict=True)` in `test_p2_gate.py`. Two pre-gate trials did not cure it
+    and are parked on local branches: producers holding inventory and planning output (ADR 0098,
+    second decision, `p2-r3-producer-stock`; frictionless mode pins employment at the natural
+    rate), and ADR 0090's split price rule (`p2-adr0090`; its nominal anchor turns a local real
+    shortage into world inflation). The anchor is redesigned after the gate.
   - H2: distance elasticity -0.753 (s.e. 0.016, pseudo-R2 0.982, 47,306 pairs): passes. Per
     class, on what the importer pays (FOB value times 1 + t; the FOB value gives 2.78, 4.70 and
     10.55): food 1.75 (s.e. 0.15), machinery 3.72 (0.47), the five-good class 9.52 (0.33), all in

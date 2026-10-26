@@ -135,7 +135,16 @@ def _gaps(out: Path, ref: io.Inputs, eq: model.Equilibrium) -> dict:
     }
 
 
-@pytest.mark.parametrize("start", ["perturbed", "data_state"])
+DATA_STATE_OPEN = pytest.mark.xfail(
+    strict=True,
+    reason="V1 from the shocked data state is a stress test, not the gate's V1 (owner, 2026-10-26): after the "
+    "coal-led shock output stays at full employment while demand collapses, merchant losses become pop debts "
+    "(Mali, Albania) and the price level returns slowly; see the Task 20c debug report, ADRs 0090 and 0098, "
+    "and the econ SPEC open questions",
+)
+
+
+@pytest.mark.parametrize("start", ["perturbed", pytest.param("data_state", marks=DATA_STATE_OPEN)])
 def test_v1_full_pack(reference, tmp_path, start):
     """V1 (SPEC, P2 gate): the uniqueness bound at the pack's thetas and value-added shares picks the mode;
     the frictionless run of 1,200 ticks from `start` is then compared with the reference: in tolerance mode
