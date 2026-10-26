@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### BEHAVIOUR: loss write-off beyond three months of base sales (ADR 0097, Task 20b)
+### BEHAVIOUR: loss write-off beyond three months of base sales (ADR 0098, Task 20b)
 
 - After E4's distribution, an enterprise's retained loss beyond M = 3 months of its base sales
   (P143; VA0 / a_VA, the calibrated steady-state sales value) is written off against its
