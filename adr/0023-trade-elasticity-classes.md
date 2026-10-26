@@ -106,6 +106,25 @@ Class 2 spans 9.11 to 13.53, a factor 1.485. On the original WITS and UNSD theta
 implementation. On that route the full-sample column and the replication vector gave the same classes
 except that Agriculture moved to class 1 (class values 2.55, 5.64, 13.33 and 2.62, 7.39, 12.91).
 
+### Prior band (H2 per class, PLAN Task 20)
+
+ADR 0018 asks that PPML on simulated flows recover each class's theta "within its prior band" and
+defines none. The band, fixed before the gate ran (controller ruling, 2026-10-26): theta_c plus or
+minus 2 standard errors of the class's estimate. A class's theta is the mean of the Caliendo-Parro
+sector estimates weighted by the class's 2000 BACI trade value per sector (the weights of the rule
+above, `theta.sector_values`); its standard error is that of the same weighted mean of independent
+sector estimates, sqrt(sum_s w_s^2 se_s^2), with the robust standard errors of the table above
+(`theta.class_bands`). The sectors are estimated in separate regressions, hence independence; with
+perfectly correlated errors the band would be wider.
+
+| Class | theta | s.e. | Band (theta +/- 2 s.e.) |
+|---|---|---|---|
+| 0 Food | 2.62 | 0.610 | 1.40 to 3.84 |
+| 1 Machinery, electronics and vehicles | 5.19 | 0.917 | 3.36 to 7.02 |
+| 2 Agriculture, mining, light manufacturing, chemicals and metals | 10.57 | 1.211 | 8.15 to 12.99 |
+
+The band is not widened after a result (Task 20 stop rule): a miss goes to the owner.
+
 ## Consequences
 
 - The P01 prior widens from 4 to 8 to the range of the class values, 2.62 to 10.57 (12.55 on

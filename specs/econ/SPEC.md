@@ -639,7 +639,10 @@ tolerance mode. Re-evaluate on the pack's coefficients in Task 20.
   moves; any change then goes through the register.
 - H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade on ln(1 +
   tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity`) recovers
-  the class's theta (ADR 0023) within its prior band.
+  the class's theta (ADR 0023) within its prior band: theta_c plus or minus 2 standard errors of
+  the trade-weighted mean of the Caliendo-Parro sector estimates (ADR 0023, Prior band), 1.40 to
+  3.84 (food), 3.36 to 7.02 (machinery, electronics and vehicles) and 8.15 to 12.99 (the other
+  five goods). If a class misses, work stops and the estimates go to the owner, as for H2.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
