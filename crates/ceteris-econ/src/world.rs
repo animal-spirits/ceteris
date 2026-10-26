@@ -41,6 +41,7 @@ pub const TARIFF: Flow = Flow(5);
 pub const DIVIDEND: Flow = Flow(6);
 pub const REBATE: Flow = Flow(7);
 pub const MINT: Flow = Flow(8);
+pub const WRITE_OFF: Flow = Flow(9);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -109,6 +110,9 @@ pub struct Layout {
     pub pigl: Vec<PiglWeights>,
     /// Log income dispersion sigma of every pop of a country, from the country's Gini.
     pub sigma_income: Vec<f64>,
+    /// Retained loss each enterprise keeps before the write-off (ADR 0097), minor units: M
+    /// months of its base sales VA0 / a_VA (the calibrated steady-state sales value).
+    pub ent_loss_cap: Vec<i64>,
 }
 
 impl Layout {
@@ -361,6 +365,9 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         frictionless,
         rationing,
         technology,
+        // fires only on retained losses, which the steady states that calibration and the
+        // reference solutions describe do not have
+        write_off_months: _,
     } = params;
     let TradeParams {
         theta,
@@ -724,7 +731,19 @@ impl EconWorld {
                 inp.pops.population[k] / country_people[c]
             })
             .collect();
+        // an infinite M turns the write-off off
+        let cap = |v: f64| {
+            let months = params.write_off_months;
+            if months.is_finite() {
+                to_minor(months * v)
+            } else {
+                i64::MAX
+            }
+        };
         let layout = Layout {
+            ent_loss_cap: (0..n_ent)
+                .map(|e| cap(inp.enterprises.va0[e] / inp.enterprises.a_va[e]))
+                .collect(),
             index_weights: price_index_weights(inp, &params),
             pigl,
             sigma_income,

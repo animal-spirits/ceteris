@@ -302,9 +302,10 @@ plus the losses it carries, paid only when positive (limited liability, owner 20
 loss stays with the enterprise as retained losses and later cash flow repays it before any
 payout, so enterprises pay no negative dividend), and in the profit pool each province market's
 signed cash flow (trade SPEC), so the pool is sum over the country's enterprises and markets.
-Markets keep the signed rule while the owner decides (Open questions, Debt overhang). Shares
-are fixed at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, and
-market cash flow is 0. A province without traded output so
+Markets keep the signed rule (ADR 0097, Markets). Retained losses beyond M months of base sales
+are written off against the country's pops (loss write-off, ADR 0097, below). Shares are fixed
+at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, nothing is
+written off, and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
 `io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
@@ -320,7 +321,19 @@ pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool
 pool, the rebate account and every market end the tick at zero, every enterprise at its
 retained losses or zero, and money is conserved exactly; each part is within one minor unit of
 N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
-`limited_liability_keeps_losses_and_repays_them_first`). Wages use the same rule over the province's
+`limited_liability_keeps_losses_and_repays_them_first`).
+
+*Loss write-off (E4, ADR 0097).* After the distribution, enterprise e's retained loss beyond
+T_e = M S_e (M P143, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
+steady-state sales value) is written off: per country the excesses E_e = max(0, -balance_e -
+T_e) are credited to their enterprises and debited from the country's pops in proportion to
+their positive money, never taking a pop below zero. If the pops hold less than the sum of the
+excesses, what they hold is written off, shared over the enterprises by their excess, and the
+rest is carried to the next tick. Both sides are one exact i64 split per country per tick by the
+largest remainder (floor of each exact share; the leftover units one each to the largest
+remainders, ties to the first), routed through the country's pool account; flow `WRITE_OFF`,
+which is not income. The cap is nominal, so homogeneity of degree zero holds only while nothing
+is written off. Wages use the same rule over the province's
 pops by employed effective labour.
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
@@ -503,7 +516,7 @@ optional, 19.1).
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
-| E4 | distribute | enterprise and market cash flow, rebates | profit pools, pop money for next tick | finance (P2 stand-in) |
+| E4 | distribute | enterprise and market cash flow, rebates, pop money | profit pools (positive enterprise balances, signed market cash flow), pop money for next tick, then the loss write-off (ADR 0097) | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
 System IDs 201 to 210 in this order.
@@ -540,6 +553,7 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P40 | Downward wage rigidity delta_w | 0 to 1, start 0.5 | Free |
 | P41 | Employment adjustment speed eta | 0.1 to 1 per month, start 0.3 | Free |
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
+| P143 | Loss write-off threshold M (ADR 0097): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
 
 Data, not parameters: IO coefficients, final demand shares, labour shares, VA targets,
 populations, education and labour-force shares, Gini. Calibrated: A (inversion, not
@@ -758,7 +772,8 @@ texture fed from core columns.
   and x 1e3), homogeneity, unreachable goods and categories, Gini to sigma.
 - Property (proptest): money and goods conservation through a full tick on random small
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
-  identical; pi^e is a log difference and stays); pi^e follows the world price index
+  identical; pi^e is a log difference and stays; run with the loss write-off off, whose cap is
+  nominal, ADR 0097); pi^e follows the world price index
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
 - Unreachable destination at world level (Review Focus 1, `fixture::unreachable_island`:
   machinery has no route to or from the island, and of the island's sectors only light
