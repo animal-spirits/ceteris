@@ -259,6 +259,7 @@ pub fn labour(w: &mut EconWorld) {
 /// the province market, paid at its price, and the rest of its use from the enterprise's
 /// stock. Wages are paid to the pops of the province by effective employed labour.
 pub fn produce(w: &mut EconWorld) {
+    cap_output(w);
     let (inp, lay) = (
         std::sync::Arc::clone(&w.inputs),
         std::sync::Arc::clone(&w.layout),
@@ -266,25 +267,6 @@ pub fn produce(w: &mut EconWorld) {
     let (inp, lay) = (&*inp, &*lay);
     let acc = &lay.accounts;
     let edu_eff = w.params.edu_eff;
-    let r = rho(w.params.sigma_fl);
-    let (ledger, employment) = (&w.ledger, &w.employment);
-    let capped: Vec<f64> = (0..inp.n_enterprises())
-        .into_par_iter()
-        .map(|e| {
-            let ent = &inp.enterprises;
-            let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
-            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
-            let mut y = va / lay.a_va[e];
-            for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
-                let a = lay.coef[e][k];
-                if a > 0.0 {
-                    y = y.min(ledger.goods(acc.enterprise[e], k) / a);
-                }
-            }
-            y
-        })
-        .collect();
-    w.scratch.produced.copy_from_slice(&capped);
 
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
@@ -348,6 +330,32 @@ pub fn produce(w: &mut EconWorld) {
             }
         }
     }
+}
+
+/// E2's first step: each enterprise's output capped by capacity and its traded input stocks,
+/// into `Scratch::produced`, the start of the same-tick chain.
+pub fn cap_output(w: &mut EconWorld) {
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let acc = &lay.accounts;
+    let r = rho(w.params.sigma_fl);
+    let (ledger, employment) = (&w.ledger, &w.employment);
+    let capped: Vec<f64> = (0..inp.n_enterprises())
+        .into_par_iter()
+        .map(|e| {
+            let ent = &inp.enterprises;
+            let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
+            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
+            let mut y = va / lay.a_va[e];
+            for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
+                let a = lay.coef[e][k];
+                if a > 0.0 {
+                    y = y.min(ledger.goods(acc.enterprise[e], k) / a);
+                }
+            }
+            y
+        })
+        .collect();
+    w.scratch.produced.copy_from_slice(&capped);
 }
 
 /// E3: refreshes the buyer prices at the current prices, then posts demand on top of the

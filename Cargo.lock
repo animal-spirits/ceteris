@@ -270,6 +270,7 @@ dependencies = [
  "ceteris-core",
  "ceteris-geo",
  "ceteris-trade",
+ "criterion",
  "libm",
  "proptest",
  "rayon",
@@ -294,6 +295,9 @@ name = "ceteris-trade"
 version = "0.0.1"
 dependencies = [
  "ceteris-core",
+ "ceteris-econ",
+ "ceteris-geo",
+ "criterion",
  "libm",
  "proptest",
 ]
