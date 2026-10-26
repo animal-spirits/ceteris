@@ -360,6 +360,10 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
 
     let (w, reach) = (&s.weight, &s.reach);
     for c in 0..2 {
+        // a class that spends nothing anywhere ships nothing: its pass would add only zeros
+        if reach.iter().all(|r| r[c] == 0.0) {
+            continue;
+        }
         // destination-side access sums on the spending weights of this class
         zeroed(&mut s.y, ng);
         for d in (0..np).filter(|&d| reach[d][c] > 0.0) {
