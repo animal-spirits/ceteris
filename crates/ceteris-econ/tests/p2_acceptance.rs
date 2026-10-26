@@ -12,7 +12,7 @@ use std::sync::Arc;
 use ceteris_core::sim::{SNAPSHOT_EVERY, Sim};
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
-use ceteris_econ::world::{DIVIDEND, to_numeraire};
+use ceteris_econ::world::{DIVIDEND, WRITE_OFF, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
@@ -667,4 +667,73 @@ fn full_pack_one_vs_eight_threads() {
     );
     assert_eq!(one.len() as u32, PACK_TICKS / SNAPSHOT_EVERY + 1);
     assert_eq!(one, eight);
+}
+
+/// Measurement for the P2 gate's V1 from the data state (ADR 0098): the frictionless run of
+/// the calibrated pack from the data state of its inputs, `TICKS_CENSUS` ticks (default
+/// 4,800), printing at checkpoints the world price index, the enterprises carrying retained
+/// losses and their total, pops with negative money, and the write-offs so far by country.
+#[test]
+#[ignore = "measurement, about 3 minutes"]
+fn data_state_write_off_census() {
+    let Some(inputs) = calibrated_pack() else {
+        return;
+    };
+    let mut inputs = (*inputs).clone();
+    inputs.steady = None;
+    let ticks: u32 = std::env::var("TICKS_CENSUS").map_or(4800, |v| v.parse().unwrap());
+    let mut sim = EconWorld::sim(
+        Arc::new(inputs),
+        EconParams::frictionless(),
+        TradeParams::default(),
+    );
+    let mut by_country: BTreeMap<usize, i128> = BTreeMap::new();
+    let mut most_negative = (0usize, 0u32);
+    let checkpoints = [
+        12, 24, 36, 48, 60, 120, 240, 360, 480, 600, 840, 1200, 1800, 2400, 3600,
+    ];
+    for t in 1..=ticks {
+        sim.step().unwrap_or_else(|v| panic!("tick {t}: {v}"));
+        let w = sim.world();
+        let acc = &w.layout().accounts;
+        for x in w.ledger.journal().iter().filter(|x| x.flow == WRITE_OFF) {
+            if let Some(c) = acc.dividend.iter().position(|&a| a == x.from) {
+                *by_country.entry(c).or_default() += i128::from(x.amount);
+            }
+        }
+        let negative = acc.pop.iter().filter(|&&a| w.ledger.money(a) < 0).count();
+        if negative > most_negative.0 {
+            most_negative = (negative, t);
+        }
+        if checkpoints.contains(&t) || t == ticks {
+            let retained: Vec<i64> = acc
+                .enterprise
+                .iter()
+                .map(|&a| w.ledger.money(a))
+                .filter(|&x| x < 0)
+                .collect();
+            let mut top: Vec<(usize, i128)> = by_country.iter().map(|(&c, &v)| (c, v)).collect();
+            top.sort_by_key(|x| -x.1);
+            let numeraire = |minor: i128| minor as f64 / ceteris_econ::world::MINOR_PER_UNIT;
+            let top: Vec<String> = top
+                .iter()
+                .take(8)
+                .map(|&(c, v)| format!("{c}:{:.3e}", numeraire(v)))
+                .collect();
+            println!(
+                "tick {t}: index {:.4}; {} enterprises with retained losses, total {:.4e}; {negative} \
+                 pops with negative money; written off {:.4e} in {} countries, largest {}",
+                w.world_price_index(),
+                retained.len(),
+                to_numeraire(retained.iter().sum()),
+                numeraire(by_country.values().sum()),
+                by_country.len(),
+                top.join(" ")
+            );
+        }
+    }
+    println!(
+        "most pops with negative money {} at tick {}",
+        most_negative.0, most_negative.1
+    );
 }
