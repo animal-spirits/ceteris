@@ -701,7 +701,7 @@ pub fn dispatch(w: &mut EconWorld) {
         }
 
         // the buyers' payments, then the legs
-        w.ledger.post(&legs.entries);
+        w.ledger.post(&legs.entries, &mut w.scratch.post);
     }
     // the losses take what each transit account holds beyond the goods now in flight
     let in_flight = w.pipeline.in_flight_all();
