@@ -10,7 +10,8 @@ Four numerical shortcuts in P2 fail at the edges:
 
 - **Global weight scale.** Origin weights are w_o = (p_o / p_min)^-theta with one world p_min
   and a floor of 1e-100. At theta 10.57 a price spread of about 3e9 (1e8 at the first thetas'
-  12.55) makes a destination unreachable, through scaling alone. DESIGN 19.4's "no log-domain needed" does not hold.
+  12.55) makes a destination unreachable, through scaling alone. DESIGN 19.4's
+  "no log-domain needed" does not hold.
 - **Local chain bound.** The same-tick chain runs up to 32 passes, then clears what is left by
   ad hoc cuts that change which users are rationed.
 - **Frictionless wage search.** Capping each labour target at L^s makes the wage indeterminate
