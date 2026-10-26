@@ -8,6 +8,8 @@
 //! importer's rebate account `t p_o` per unit, and d receives the shipped units over the
 //! physical loss factor of the route. Domestic and home routes have t = 0.
 
+use rayon::prelude::*;
+
 use crate::kernel::{Access, Kernel};
 
 /// Origins whose weight `(p_o / p_min)^-theta` is below this are not sourcing targets, and a
@@ -17,6 +19,9 @@ use crate::kernel::{Access, Kernel};
 /// It keeps every product of a weight with up to three f32 kernel factors a normal f64, so
 /// the Markov shares stay accurate when prices span orders of magnitude.
 pub const WEIGHT_FLOOR: f64 = 1e-100;
+
+/// Provinces per parallel task at least, in loops over provinces.
+const ROWS: usize = 64;
 
 /// Buyer classes, the index into every `[f64; 2]` of this module and of `Markets::clear`.
 pub const INTERMEDIATE: usize = 0;
@@ -225,20 +230,26 @@ pub fn source(
 
     // Orders are accumulated as value net of tariff and turned into units at the end. Both
     // classes go through each loop together; every accumulator is per class, so each sees
-    // the additions of a pass of its own.
+    // the additions of a pass of its own. Loops over origins and over origin gateways write
+    // only their own entries and run in parallel.
     let orders = &mut out.orders;
     zeroed2(orders, np);
     // home and domestic routes
-    for o in (0..np).filter(|&o| w[o] > 0.0) {
-        let mut x = [w[o] * reach[o][0], w[o] * reach[o][1]];
-        for e in gk.domestic.row(o) {
-            let (kw, r) = (f64::from(e.k) * w[o], reach[e.col as usize]);
-            x[0] += kw * r[0];
-            x[1] += kw * r[1];
-        }
-        orders[o][0] += x[0];
-        orders[o][1] += x[1];
-    }
+    orders
+        .par_iter_mut()
+        .enumerate()
+        .with_min_len(ROWS)
+        .filter(|(o, _)| w[*o] > 0.0)
+        .for_each(|(o, order)| {
+            let mut x = [w[o] * reach[o][0], w[o] * reach[o][1]];
+            for e in gk.domestic.row(o) {
+                let (kw, r) = (f64::from(e.k) * w[o], reach[e.col as usize]);
+                x[0] += kw * r[0];
+                x[1] += kw * r[1];
+            }
+            order[0] += x[0];
+            order[1] += x[1];
+        });
     // destinations to their gateways
     let to_b = &mut s.to_dest_gateway;
     zeroed2(to_b, ng);
@@ -254,41 +265,49 @@ pub fn source(
             }
         }
     }
+    let to_b = &s.to_dest_gateway;
     // across the border, net of tariff
-    let at_a = &mut s.at_origin_gateway;
-    zeroed2(at_a, ng);
-    for a in (0..ng).filter(|&a| v[a] > 0.0) {
-        for e in gk.crossings.row(a) {
-            let b = e.col as usize;
-            let t = to_b[b];
-            if t == [0.0; 2] {
-                continue;
+    zeroed2(&mut s.at_origin_gateway, ng);
+    s.at_origin_gateway
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(a, _)| v[*a] > 0.0)
+        .for_each(|(a, at_a)| {
+            for e in gk.crossings.row(a) {
+                let b = e.col as usize;
+                let t = to_b[b];
+                if t == [0.0; 2] {
+                    continue;
+                }
+                let share = f64::from(e.k) * v[a] / u[b];
+                for c in (0..2).filter(|&c| t[c] != 0.0) {
+                    at_a[c] += t[c] * share / (1.0 + f64::from(e.tariff));
+                }
             }
-            let share = f64::from(e.k) * v[a] / u[b];
-            for c in (0..2).filter(|&c| t[c] != 0.0) {
-                at_a[a][c] += t[c] * share / (1.0 + f64::from(e.tariff));
+        });
+    let at_a = &s.at_origin_gateway;
+    // origin gateways to origins, then value to units
+    orders
+        .par_iter_mut()
+        .enumerate()
+        .with_min_len(ROWS)
+        .filter(|(o, _)| w[*o] > 0.0)
+        .for_each(|(o, order)| {
+            for e in gk.access.row(o) {
+                let a = e.col as usize;
+                let t = at_a[a];
+                if t == [0.0; 2] {
+                    continue;
+                }
+                let factor = f64::from(e.k) * w[o] / v[a];
+                for c in (0..2).filter(|&c| t[c] != 0.0) {
+                    order[c] += t[c] * factor;
+                }
             }
-        }
-    }
-    // origin gateways to origins
-    for o in (0..np).filter(|&o| w[o] > 0.0) {
-        for e in gk.access.row(o) {
-            let a = e.col as usize;
-            let t = at_a[a];
-            if t == [0.0; 2] {
-                continue;
+            for x in order {
+                *x /= price[o];
             }
-            let factor = f64::from(e.k) * w[o] / v[a];
-            for c in (0..2).filter(|&c| t[c] != 0.0) {
-                orders[o][c] += t[c] * factor;
-            }
-        }
-    }
-    for o in (0..np).filter(|&o| w[o] > 0.0) {
-        for x in &mut orders[o] {
-            *x /= price[o];
-        }
-    }
+        });
 }
 
 /// Dispatches the filled orders of the preceding [`source`] call for the same good: origin o
