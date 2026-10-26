@@ -3,12 +3,13 @@
 Status: proposed
 Date: 2026-10-26
 Design sections: 4.5, 4.6, 8.2, 17.1 (P03c); trade and econ SPEC price and wage rules; amends
-ADR 0089 as-built notes
+ADRs 0089 (as-built notes) and 0090
 
 ## Context
 
-- **Clip.** Price and wage rules are dlnp = clip(pi^e + kappa1 (D - Q)/Q - ..., +-c_max) and
-  dlnw = clip(pi^e + kappa_w (...), +-c_max), c_max = 0.1 log points per month. The clip
+- **Clip.** The price rule of ADR 0090 and the wage rule of ADR 0089 clip the whole step:
+  dlnp = clip(pi^e + relative + aggregate - stock terms, +-c_max) and
+  dlnw = clip(pi^e + kappa_w (x + u*), +-c_max), c_max = 0.1 log points per month. The clip
   includes expected inflation, so monthly inflation above about 10.5% is impossible however
   long it is expected, and so are faster falls. Both happen in the data: hyperinflations
   (Zimbabwe 2007-08, and in P5 any monetary collapse) and commodity crashes (oil fell about 30%
@@ -30,7 +31,11 @@ Width: (a) keep i64; (b) i128 for accounts that aggregate; (c) redenomination ev
 
 Clip (b); width (b).
 
-- dlnp = pi^e + clip(kappa1 (D - Q)/Q - kappa2 (...), +-c_max), and the same for wages.
+- Price rule (ADR 0090):
+  dlnp_o = pi^e + clip((kappa_r / E_o)(l_o - lbar) + (kappa_n / h) lbar
+                       - (kappa2 / E_o)(S'_o - S*_o)/S*_o, +-c_max).
+  Wage rule (ADR 0089): dlnw = pi^e + clip(kappa_w (x_i + u*_i), +-c_max), times (1 - delta_w)
+  when the step is negative.
   pi^e itself stays bounded by its own adaptive rule, so the stability region of the trade
   SPEC is unchanged at pi^e = 0. Storable commodities (goods 0, 1, 2, 5 under ADR 0091) take
   c_max = 0.3.

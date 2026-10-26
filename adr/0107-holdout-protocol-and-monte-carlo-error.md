@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-10-26
-Design sections: 14.4, 15.4, 15.6, 15.7, 19.2; amends ADRs 0024, 0052, 0053
+Design sections: 14.4, 15.4, 15.6, 15.7, 19.2; amends ADRs 0024, 0052, 0053, 0063, 0066, 0071
 
 ## Context
 
@@ -31,6 +31,9 @@ Option 2.
   sealed: the scoring script and target data are committed with their hash; the sealed score
   is computed once per phase gate and recorded in the changelog, never used to choose.
   Selection within 2000-2010 adds leave-one-region-out validation (seven regions).
+  Targets dated in the sealed period are sealed-gate targets only: the 2024 US overdose decline
+  (ADRs 0052, 0063), the Sahel coup cluster (0052, 0066), and the 2019-2024 years of the
+  internet-adoption and leader-exit tests (0066, 0071). Module tests use 2011-2018.
 - **Monte Carlo error.** Every reported probability or quantile carries its Monte Carlo
   standard error (binomial for probabilities, batch means for quantiles). Scenario comparisons
   use common random numbers across lanes (0024, already free with the counter RNG) and report

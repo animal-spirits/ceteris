@@ -25,7 +25,8 @@ young society, and why post-crisis generations stay cautious.
 
 Option 2, as one more heuristic in the Brock-Hommes set (12.2), per age band:
 
-- Experienced inflation and asset returns are tracked per age band as exponentially weighted
+- Experienced inflation and asset returns are tracked per age band (the same age-band state
+  layout as ADR 0055's formative-years value scores) as exponentially weighted
   averages over the band's lifetime, with the decay estimated by Malmendier and Nagel (P135).
 - Household inflation expectations and stock-market participation in the demand system (9.9)
   use the band's experience weight; the population average aggregates them by wealth.

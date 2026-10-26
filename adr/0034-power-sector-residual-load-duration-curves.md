@@ -1,6 +1,6 @@
 # 0034. Power sector via residual load duration curves
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 7.1, 7.5, 7.7, 13.2, 15.7 (excluded: power-grid dispatch), 17.2
 Phase: stub in P2; full in P8
@@ -44,6 +44,8 @@ Option 2.
 ## Migration
 
 - P2: carry generation capacity by class per state (data only) and the S15 switch.
+- Before P8: a state grid market for electricity (or trade in good 7 within a state), since
+  electricity is a province-local good in P2 and load duration curves are per state (ADR 0095).
 - P8: the RLDC system in ceteris-econ (energy), microseconds per state per month.
 - Data: Global Energy Monitor plant trackers (in the manifest; confirm commercial terms, ADR
   0050); Ember or IEA generation statistics (licences to audit); load profiles from public

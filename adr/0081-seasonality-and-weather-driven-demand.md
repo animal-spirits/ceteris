@@ -31,8 +31,8 @@ Option 2.
   from the climate emulator (P134 holds the demand elasticities by region); the power sector
   (0034) sees seasonal load.
 - Hydro inflow by month from precipitation and snowmelt (and glacier melt, 0076).
-- Seasonal factors for construction, tourism and agricultural labour demand; Arctic routes open
-  seasonally (0073).
+- Seasonal factors for construction, tourism and agricultural labour demand; Arctic route
+  seasonality is ADR 0073's.
 
 ## Migration
 

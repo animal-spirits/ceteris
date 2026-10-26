@@ -12,7 +12,7 @@ response of trade shares to a cost change run through 1/theta (Arkolakis, Costin
 Rodriguez-Clare 2012), so the class value that preserves those aggregates is closer to the
 harmonic mean. Mixing large and small values makes the two diverge: in good 6, office
 equipment (about 13) sits with motor vehicles (about 1.8), and the harmonic mean is roughly 3
-against the arithmetic 5.19. Class 3 at 10.57 is above the range most of the literature
+against the arithmetic 5.19. Class 2 at 10.57 is above the range most of the literature
 reports for broad aggregates (about 4 to 6; Head and Mayer 2014, Simonovska and Waugh 2014).
 
 Direction: gains from trade are understated and trade diversion after tariffs is overstated,
@@ -27,13 +27,17 @@ the latter being the headline output of P3 policy experiments.
 
 ## Decision
 
-Option 2 now, option 4 when 0022 runs. Option 3 is not available at 10 goods.
+Option 2 now, option 4 when 0022 runs. Option 3 is what ADR 0023's rule already does; this ADR
+changes only the mean inside it, as an amendment to 0023 (owner, 2026-10-26). Owner decision D3
+(ADR 0092) chose the Caliendo-Parro source, not the mean type, and stands.
 
 - theta_class = (sum_l w_l / theta_l)^-1, w_l the 2000 BACI trade weight of HS line l in the
   class.
 - A lane over theta scale {0.6, 1, 1.4} (applied to all classes) is reported with every tariff
   experiment until 0022 estimates replace the literature values.
 - The P01 prior widens to cover the harmonic values.
+- Order: the harmonic values and the 0023 class rule are computed after ADR 0092 moves refined
+  petroleum (C19) into good 1; ADR 0092's nu_c fit then runs at the new class values.
 
 ## Migration
 

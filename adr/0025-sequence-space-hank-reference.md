@@ -36,8 +36,9 @@ matter most for fiscal counterfactuals.
 
 ## Tests
 
-The harness reproduces the closed-form case: with m = 1 and lambda = 0 the intertemporal MPC
-matrix is the identity.
+The harness reproduces the closed-form case: with m = 1 and lambda = 0 the households'
+intertemporal MPC matrix is (1 - s_c - g_c) times the identity (tax and saving shares of ADR
+0099), and aggregate spending out of income is 1.
 
 ## Consequences
 

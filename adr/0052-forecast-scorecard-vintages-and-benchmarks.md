@@ -54,7 +54,7 @@ Option 2.
   migration surge; the rise of Chinese development finance; the 2016 populist wave; Pentecostal
   growth; African urbanization; the US overdose epidemic and its 2024 decline; the Sahel coup
   cluster; monthly conflict fatalities scored against ViEWS. Each names the ADR whose module it
-  tests (0055 to 0087).
+  tests (0055 to 0087). Targets after 2018 are scored only at the sealed gate (ADR 0107).
 - Subnational track: synthetic satellite observables scored against VIIRS, Sentinel-5P, GHSL
   and shipping density (ADR 0087).
 

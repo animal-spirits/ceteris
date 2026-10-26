@@ -1,6 +1,6 @@
 # 0042. Public capital and fiscal dynamics
 
-Status: proposed
+Status: proposed; amended per ADR 0095 (2026-10-26)
 Date: 2026-10-24
 Design sections: 5.5, 7.2, 9.4, 9.6, 15.4
 Phase: P5
@@ -26,7 +26,8 @@ minus g. These drive the fiscal counterfactuals that a Steward or lab user will 
 
 Option 2.
 
-- Public capital enters A in 7.2 with elasticity P77 (prior centred on 0.08, by type: core
+- Public capital enters A in 7.2 as A = A_cal (K_g / K_g0)^P77, with A_cal the calibrated value
+  of ADR 0089 (ADR 0095) and elasticity P77 (prior centred on 0.08, by type: core
   infrastructure, other). Public investment adds to the stock times an efficiency factor from
   PIMA scores and governance (P78); the rest is lost (corruption leakage from 0046 adds to the
   loss).
