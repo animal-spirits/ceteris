@@ -541,6 +541,14 @@ fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
     (0..n).map(|_| ledger.open()).collect()
 }
 
+fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
+    if change >= 0.0 {
+        ledger.create(account, good, change);
+    } else {
+        ledger.destroy(account, good, -change);
+    }
+}
+
 fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
     let mut off = vec![0u32; n + 1];
     for &r in rows {
@@ -866,6 +874,59 @@ impl EconWorld {
         self.profit.copy_from_slice(&s.profit);
         self.refresh_price_index();
         self.price_level = self.world_price_index();
+    }
+
+    /// Moves a world at the start of a tick off its state, for V1 from a perturbed steady
+    /// state (ADR 0089, Tests): every active posted price, every wage, and every positive
+    /// input stock and merchant stock times its own factor 1 + size (2u - 1), u uniform from
+    /// one Philox stream of `seed`, drawn in that order (cells, provinces, enterprise by
+    /// good, cells). Stocks are created or destroyed in the ledger; buyer prices and the price
+    /// level follow the new prices, pi^e is kept. Returns the factors in drawing order.
+    pub fn perturb(&mut self, seed: u64, size: f64) -> Vec<f64> {
+        use ceteris_core::entity::{EntityId, Kind};
+        use ceteris_core::rng::Seed;
+        use ceteris_core::schedule::SystemId;
+        let mut stream = Seed(seed).stream(0, SystemId(0), Kind(0), EntityId(0));
+        let mut factors = Vec::new();
+        let mut draw = || {
+            let f = 1.0 + size * (2.0 * stream.uniform() - 1.0);
+            factors.push(f);
+            f
+        };
+        let lay = Arc::clone(&self.layout);
+        let acc = &lay.accounts;
+        for c in 0..self.markets.price.len() {
+            if self.markets.active[c] {
+                self.markets.price[c] *= draw();
+            }
+        }
+        for w in &mut self.wage {
+            *w *= draw();
+        }
+        for &account in &acc.enterprise {
+            for k in 0..N_GOODS {
+                let held = self.ledger.goods(account, k);
+                if held > 0.0 {
+                    adjust_stock(&mut self.ledger, account, k, held * (draw() - 1.0));
+                }
+            }
+        }
+        for c in 0..self.markets.inventory.len() {
+            let held = self.markets.inventory[c];
+            if held > 0.0 {
+                let change = held * (draw() - 1.0);
+                self.markets.inventory[c] += change;
+                adjust_stock(
+                    &mut self.ledger,
+                    acc.market[c / N_GOODS],
+                    c % N_GOODS,
+                    change,
+                );
+            }
+        }
+        self.refresh_price_index();
+        self.price_level = self.world_price_index();
+        factors
     }
 
     /// The world price index I over buyer prices ([`EconWorld::price_index`]) with the base

@@ -3,15 +3,19 @@
 //! ```text
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
-//!     [--history [--history-every N]] --out DIR
+//!     [--data-state] [--perturb SEED] [--history [--history-every N]] --out DIR
 //! ```
 //!
 //! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
 //! generated fixture: `run` starts from its calibrated steady state when the pack holds the
 //! calibration tables (ADR 0089), `export` writes its uncalibrated data state, which the
 //! calibration starts from. `--from-equilibrium` starts the run from a GE reference solution
-//! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--history` also
-//! writes the per-tick series of `ceteris_econ::history`, every N ticks (default 1).
+//! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--data-state`
+//! starts a calibrated pack from the data state of its calibrated inputs (prices 1, base
+//! wages and employment, one month of base use in stock, nothing in flight) instead of the
+//! steady state. `--perturb SEED` moves the start by `EconWorld::perturb` (10%, ADR 0089) and
+//! prints the factors' range. `--history` also writes the per-tick series of
+//! `ceteris_econ::history`, every N ticks (default 1).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -31,7 +35,10 @@ use ceteris_trade::{Kernel, TradeParams};
 const USAGE: &str = "usage:
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
-    [--history [--history-every N]] --out DIR";
+    [--data-state] [--perturb SEED] [--history [--history-every N]] --out DIR";
+
+/// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
+const PERTURBATION: f64 = 0.1;
 
 /// Where the inputs of a world come from.
 enum Source {
@@ -65,6 +72,8 @@ struct Args {
     ticks: Option<u32>,
     frictionless: bool,
     equilibrium: Option<PathBuf>,
+    data_state: bool,
+    perturb: Option<u64>,
     history: bool,
     history_every: Option<u32>,
 }
@@ -73,6 +82,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut args = args;
     let (mut source, mut out, mut ticks, mut frictionless) = (None, None, None, false);
     let mut equilibrium = None;
+    let (mut data_state, mut perturb) = (false, None);
     let (mut history, mut history_every) = (false, None);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -85,6 +95,11 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--from-equilibrium" => {
                 let dir = args.next().ok_or("--from-equilibrium needs a directory")?;
                 equilibrium = Some(PathBuf::from(dir));
+            }
+            "--data-state" => data_state = true,
+            "--perturb" => {
+                let n = args.next().ok_or("--perturb needs a seed")?;
+                perturb = Some(n.parse().map_err(|_| format!("bad seed '{n}'"))?);
             }
             "--history" => history = true,
             "--history-every" => {
@@ -108,6 +123,8 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         ticks,
         frictionless,
         equilibrium,
+        data_state,
+        perturb,
         history,
         history_every,
     })
@@ -117,11 +134,14 @@ fn export(args: &Args) -> Result<(), String> {
     if args.ticks.is_some()
         || args.frictionless
         || args.equilibrium.is_some()
+        || args.data_state
+        || args.perturb.is_some()
         || args.history
         || args.history_every.is_some()
     {
         return Err(
-            "--ticks, --frictionless, --from-equilibrium, --history and --history-every belong to run"
+            "--ticks, --frictionless, --from-equilibrium, --data-state, --perturb, --history and \
+             --history-every belong to run"
                 .into(),
         );
     }
@@ -141,14 +161,32 @@ fn run(args: &Args) -> Result<(), String> {
     } else {
         EconParams::default()
     };
-    let (inputs, trade) = (Arc::new(args.source.load(true)?), TradeParams::default());
-    let world = match &args.equilibrium {
+    if args.data_state && args.equilibrium.is_some() {
+        return Err("--data-state and --from-equilibrium choose different starts".into());
+    }
+    let mut inputs = args.source.load(true)?;
+    if args.data_state {
+        inputs.steady = None;
+    }
+    let (inputs, trade) = (Arc::new(inputs), TradeParams::default());
+    let mut world = match &args.equilibrium {
         Some(dir) => {
             let solution = Equilibrium::read(dir).map_err(|e| e.to_string())?;
             EconWorld::from_equilibrium(inputs, params, trade, &solution)
         }
         None => EconWorld::new(inputs, params, trade),
     };
+    if let Some(seed) = args.perturb {
+        let f = world.perturb(seed, PERTURBATION);
+        let (lo, hi) = f.iter().fold((f64::INFINITY, 0.0f64), |(lo, hi), &x| {
+            (lo.min(x), hi.max(x))
+        });
+        let mean = f.iter().sum::<f64>() / f.len() as f64;
+        println!(
+            "perturbed {} values (seed {seed}, size {PERTURBATION}): factors {lo} to {hi}, mean {mean}",
+            f.len()
+        );
+    }
     let mut sim = Sim::new(world, schedule(), SEED);
     if args.history {
         let history = run_recorded(&mut sim, ticks, args.history_every.unwrap_or(1))
