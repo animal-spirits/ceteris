@@ -1,8 +1,12 @@
 # Econ SPEC
 
-Status: approved (owner, 2026-10-23)
+Status: approved (owner, 2026-10-23); P2 gate passed (owner, 2026-10-26, p2-econ c9b6e11). V1 from the
+perturbed steady state 9.085e-3 (the run from the shocked data state is an `xfail(strict)` stress test);
+H2 distance -0.753 (s.e. 0.016), H2 per class 1.75, 3.72 and 9.52, all in their bands; 100 years without
+violation; 1 vs 8 threads identical; tick about 34 ms and `source_dispatch` 7.9 ms against the re-budgeted
+35 ms and 8 ms. Numbers and commands: P2 gate, Measured
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016 and 0018 to 0023
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012 to 0016, 0018 to 0023, 0089 and 0098
 
 ## Purpose
 
@@ -709,7 +713,7 @@ the radius on p. 9, footnote 10 p. 7).
   loss write-off of ADR 0098; `p2_acceptance.rs` and `test_p2_gate.py`; owner review pending):
   - V1, tolerance mode (bound 0.967), against the calibrated root. From the steady state
     perturbed by 10% (seed 20; prices, wages and stocks, though frictionless mode re-solves wages
-    every tick, so this start tests prices and stocks): price 9.1e-3 (São Tomé and Príncipe light
+    every tick, so this start tests prices and stocks): price 9.085e-3 (São Tomé and Príncipe light
     manufacturing, the period-2 cycle of the trade SPEC, Stability region), wage 9.1e-4, flow
     units 4.6e-5, value 5.0e-5 at 1,200 ticks: passes (7.8e-3, 8.4e-4, 3.2e-5, 3.5e-5 before
     limited liability).
@@ -742,6 +746,21 @@ the radius on p. 9, footnote 10 p. 7).
     steady state (no pop with negative money, no negative pool, no retained loss, no stockout),
     and is byte-identical with and without limited liability and the write-off.
   - 1 vs 8 threads, 120 ticks: identical hashes.
+  - Commands (M4 Pro, `data/packs/2000` built and calibrated, `PACK=$PWD/data/packs/2000`,
+    `EXPORT` a scratch directory):
+    - `cargo run --release --bin ceteris -- export --pack $PACK --out $EXPORT`, the export the
+      Python gate reads.
+    - V1 (both starts), H2 distance and H2 per class, about 205 s:
+      `CETERIS_PACK=$PACK CETERIS_PACK_EXPORT=$EXPORT uv run --project python pytest python/tests/test_p2_gate.py -s`;
+      `-k "v1 and perturbed"` gives the 9.085e-3 line, `-k "v1 and data_state"` the stress test
+      (xfail), `-k h2_distance` the -0.753 line, `-k h2_theta` one line per class.
+    - 100 years and 1 vs 8 threads (`hundred_years_without_violation`,
+      `full_pack_one_vs_eight_threads`, with V0's determinism and replay):
+      `CETERIS_PACK=$PACK cargo test -p ceteris-econ --release --test p2_acceptance`.
+    - The data-state census behind the write-off figures:
+      `CETERIS_PACK=$PACK cargo test -p ceteris-econ --release --test p2_acceptance -- --ignored data_state_write_off_census`.
+    - Benchmark medians (tick, `source_dispatch_parallel` and the per-system rows): `cargo bench -p ceteris-econ`
+      (`benches/econ.rs`, `benches/trade.rs`), M4 Pro on AC power.
 - Golden: `tests/golden/p2-econ.txt`, hashes of a generated 3-country, 24-province world over
   1,200 ticks (runs in CI); `tests/golden/p2-pack.txt` for the pack tables and calibration.
 - UI: below.
@@ -881,3 +900,61 @@ texture fed from core columns.
   pool (the United States) reaches 2.7e18 against the i64 maximum of 9.2e18. The overflows seen at the
   loss write-off came from a hyperinflation of the trial that ADR 0098 (second decision) did not
   adopt, not from this limit. The currency scale is a P5 decision (core SPEC, Money scale).
+
+## Changes for the next design-doc snapshot
+
+Records for the refresh of `specs/DESIGN.md` and the Claude Docs design doc, which is done on the
+owner's request in its own commit. Neither is edited here. DESIGN line numbers are from a re-grep at
+rev 226 (Task 21); re-grep again before editing.
+
+- Register (17.1): P39 to P43 are in DESIGN already (lines 1104 to 1108, with ADR 0019's renumbering of
+  the old P37 to P41). Add:
+  - P44 route-choice dispersion theta_r (ADR 0017; 41 to 182, value 111.5; unused in P2, deferred) and
+    P45 expectation gain g of pi^e (ADR 0019; 0.004 to 0.65 per month, start 0.006), from the trade SPEC.
+  - P46 PIGL price parameters (sigma_B, phi, gamma, with the Dt weights theta) and P47 PIGL Engel
+    parameter eps (ADR 0021), from this SPEC. P06 stays the goods substitution within a PIGL category
+    and P07 stays the S03 row, so DESIGN 1955 ("P06 and P07 become the PIGL price and Engel
+    parameters") changes.
+  - P03 splits into P03a kappa1 (start 0.05), P03b kappa2 (start 0) and P03c the step clip (0.1);
+    P01 takes its class values 2.62, 5.19 and 10.57 (ADR 0023; DESIGN 1061 says "centre 5").
+  - P148 loss write-off threshold M, 3 months of base sales (ADR 0098, accepted). Held or proposed, not
+    built in P2: P143 kappa_n of ADR 0090 (proposed; the split price rule is parked on `p2-adr0090`),
+    P147 M_F of ADR 0098's second decision (reserved, held; `p2-r3-producer-stock`) and P56 storage
+    cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it).
+  - DESIGN 2133 says P44 to P49 stay free for P2 work in progress; P44 to P47 are now taken.
+- Section 21 and 22.1 (ADR 0012): the development-slice paragraph (DESIGN 1329) and the Map scope row
+  (1394, "Full globe from P4") become the full globe from P2, with `dev_slice` kept in the pack for
+  ad hoc fast runs and no gate depending on it. The P1 and P4 acceptance texts follow.
+- Section 19.1 app stack (ADR 0088, accepted 2026-10-24; the earlier plan text named ADR 0011 option 3):
+  fully native Rust, Slint panels over a wgpu map, no React, webview or Tauri; stage 1 of ADR 0011
+  becomes a native spike instead of the hybrid. DESIGN 33, 1153, 1162, 1163, 1208 and 1398 carry
+  "today Tauri, native later" with ADRs 0011 and 0088 together; they should name 0088 as the decision.
+- Route choice deferred past P2 (ADR 0017, Deferral, owner 2026-10-24): P2 keeps least-cost legs (S05)
+  with the gateway kernel, and the route-choice module stays in `ceteris-geo` and `ceteris-trade`,
+  tested and off (`Network.route_taus = None`; P44 unused). DESIGN still describes route choice as the
+  P2 cost model at 257 and 265 (5.4), 441 (8.3), 1242 and 1245 (19.4, "exact under route choice"),
+  1337 (P2 in 21.1, "over route-choice costs"), 1788 (the ADR index, "changes P2 output: Yes"), 1856 and
+  1875 (ADR 0017 Decision and Consequences). The line 1324 named by the earlier audit is the opening
+  of Section 21 and mentions none. The revisit trigger is the P8 corridor network.
+- Demand (8.6, ADR 0021 as built): PIGL over three categories, A (goods 0, 3), M (goods 1, 2, 4, 5, 6)
+  and S (goods 7, 8, 9), the ones Alder, Boppart and Mueller (2022) estimate, with a CES over the goods of
+  each at P06; DESIGN 459 names five (food, energy, housing, manufactures, services). The Gini feeding
+  PIGL is WDI, else SWIID (ADR 0021).
+- P2 acceptance (DESIGN 1338, "ADRs 0015 to 0022 implemented"): 0015 to 0023, 0089 and 0098, plus the
+  gate decision below.
+- What P2 as built adds, one line each:
+  - Trade elasticity in 3 classes (2.62, 5.19, 10.57), drawn from the OECD key's thetas by ADR 0023's
+    rule, with a per-class H2 prior band of two standard errors (1.40 to 3.84, 3.36 to 7.02, 8.15 to
+    12.99).
+  - Calibration to a data state that is the steady state, and a natural rate u* in the wage rule
+    (ADR 0089), replacing full employment; the productivity A is calibrated, not estimated.
+  - National profit ownership (owner, 2026-10-25; ADR 0089): the enterprises' profits go to the pops of
+    their country by population, wages stay local.
+  - Limited liability of enterprises and the loss write-off beyond M = 3 months of base sales
+    (ADR 0098, P148); markets keep the signed rule.
+  - The `source_dispatch` budget re-set to 8 ms and the whole tick to 35 ms on the full pack (owner,
+    2026-10-26); DESIGN 1181 and 1845 state 5 ms for the trade system, where this SPEC budgets trade
+    at 30 ms with `source_dispatch` at 8 ms. The gateway count and rule move to the ADR 0092 rework.
+  - The gate decision on V1 (owner, 2026-10-26): V1 is the run from the perturbed steady state; the run
+    from the shocked data state is a stress test (`xfail(strict)`), and ADR 0090's price rule is
+    redesigned after the gate.
