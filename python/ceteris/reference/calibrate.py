@@ -470,6 +470,53 @@ def reference_point(inp: Inputs, s: Steady) -> np.ndarray:
     return np.concatenate([np.log(s.price.ravel()[inp.active_cells]), np.log(s.w0)])
 
 
+def read_reference(pack: Path | str, inp: Inputs, pack_province: np.ndarray) -> tuple[Inputs, np.ndarray]:
+    """`reference_inputs` and `reference_point` from the calibration tables installed in `pack`, for the
+    export `inp` of that pack's data state (`pack_province` its `pack_provinces` column), without calibrating
+    again; raises ValueError for tables of other inputs."""
+    pack = Path(pack)
+
+    def read(name):
+        t = ipc.open_file(str(pack / name)).read_all()
+        if t.schema.metadata.get(b"calibration_format") != FORMAT.encode():
+            raise ValueError(f"{name}: calibration format is not {FORMAT}")
+        return t
+
+    ent = read("econ_calib.arrow")
+    meta = json.loads(ent.schema.metadata[b"calibration"])
+    if meta["static_digest"] != inp.static_digest:
+        raise ValueError("the calibration tables belong to other inputs")
+    row = {k: r for r, k in enumerate(zip(ent["province"].to_pylist(), ent["good"].to_pylist()))}
+    e = np.array([row[(int(pack_province[p]), int(g))] for p, g in zip(inp.ent_province, inp.ent_good)])
+    col = {name: ent[name].to_numpy()[e] for name in ("a", "va0", "l0", "a_va")}
+    coef = np.stack([ent[f"coef_{k}"].to_numpy()[e] for k in range(inp.n_goods)], axis=1)
+    provinces = read("econ_calib_provinces.arrow")
+    at = {p: r for r, p in enumerate(provinces["province"].to_pylist())}
+    w0 = provinces["w0"].to_numpy()[[at[int(p)] for p in pack_province]]
+    countries = read("econ_calib_countries.arrow")
+    weights = demand.Weights(
+        scale=countries["pigl_scale"].to_numpy(),
+        omega=np.stack([countries[f"pigl_omega_{c}"].to_numpy() for c in range(demand.N_CATEGORIES)], axis=1),
+        within=np.stack([countries[f"pigl_within_{g}"].to_numpy() for g in range(inp.n_goods)], axis=1),
+    )
+    cells = read("econ_calib_cells.arrow")
+    at = {k: r for r, k in enumerate(zip(cells["province"].to_pylist(), cells["good"].to_pylist()))}
+    n_p, n_g = inp.n_provinces, inp.n_goods
+    price = cells["price"].to_numpy()[[at[(int(pack_province[p]), g)] for p in range(n_p) for g in range(n_g)]]
+    ref = replace(
+        inp,
+        ent_a=col["a"],
+        ent_va0=col["va0"],
+        ent_l0=col["l0"],
+        w0=w0,
+        u_star=countries["u_star"].to_numpy(),
+        calibrated_coef=coef,
+        calibrated_a_va=col["a_va"],
+        calibrated_weights=weights,
+    )
+    return ref, np.concatenate([np.log(price[inp.active_cells]), np.log(w0)])
+
+
 def summary(inp: Inputs, s: Steady) -> dict:
     """Full-pack report numbers: r, passes, Sinkhorn, local VA's national gap to ICIO, ln A."""
     local = ~inp.traded[inp.ent_good]

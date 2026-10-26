@@ -24,6 +24,7 @@ class Elasticity:
     n_separated_rows: int  # estimable pairs removed because their exporter or importer has no positive flow
     n_separated_exporters: int  # countries that lost all their exporter rows (zero exports)
     n_separated_importers: int  # countries that lost all their importer rows (zero imports)
+    pseudo_r2: float  # squared correlation of flows and fitted means
 
 
 def _deviance(y: np.ndarray, mu: np.ndarray) -> float:
@@ -92,6 +93,7 @@ class TradeElasticity:
     se_distance: float
     n_pairs: int  # observations actually estimated
     n_separated_rows: int  # observations removed because their exporter or importer has no positive flow
+    pseudo_r2: float  # squared correlation of flows and fitted means
 
 
 @dataclass(frozen=True)
@@ -103,7 +105,7 @@ class Separation:
 
 def _fit(
     flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, regressors: Mapping[str, np.ndarray]
-) -> tuple[dict[str, float], dict[str, float], Separation]:
+) -> tuple[dict[str, float], dict[str, float], Separation, float]:
     y = np.asarray(flows, dtype=np.float64)
     exporter, importer = np.asarray(exporter), np.asarray(importer)
     names = list(regressors)
@@ -129,7 +131,8 @@ def _fit(
     meat = x.T @ (x * ((y - mu) ** 2)[:, None])
     se = np.sqrt(np.diag(bread @ meat @ bread))
     k = len(names)
-    return dict(zip(names, beta[:k].tolist())), dict(zip(names, se[:k].tolist())), separation
+    r2 = float(np.corrcoef(y, mu)[0, 1] ** 2)
+    return dict(zip(names, beta[:k].tolist())), dict(zip(names, se[:k].tolist())), separation, r2
 
 
 def fit(flows: np.ndarray, exporter: np.ndarray, importer: np.ndarray, regressors: Mapping[str, np.ndarray]) -> dict[str, float]:
@@ -184,7 +187,7 @@ def distance_elasticity(run_flows, gravity_table, iso3: Sequence[str]) -> Elasti
         dist[i], contig[i] = lookup.get((iso3[o], iso3[d]), (np.nan, np.nan))
     ok = np.isfinite(dist) & (dist > 0) & np.isfinite(contig)
 
-    coef, se, sep = _fit(
+    coef, se, sep, r2 = _fit(
         pair_value[o_idx[ok] * n + d_idx[ok]],
         o_idx[ok],
         d_idx[ok],
@@ -200,6 +203,7 @@ def distance_elasticity(run_flows, gravity_table, iso3: Sequence[str]) -> Elasti
         n_separated_rows=sep.n_rows,
         n_separated_exporters=sep.n_exporters,
         n_separated_importers=sep.n_importers,
+        pseudo_r2=r2,
     )
 
 
@@ -209,7 +213,7 @@ def trade_elasticity(
     """H2 per theta class (ADR 0018): PPML of `flows` on ln(1 + `tariff`) and ln `distance` with
     exporter and importer fixed effects; the coefficient on ln(1 + t) is -theta. One observation per
     pair (zero flows kept), all arrays aligned; domestic pairs are the caller's to leave out."""
-    coef, se, sep = _fit(
+    coef, se, sep, r2 = _fit(
         flows,
         exporter,
         importer,
@@ -222,6 +226,7 @@ def trade_elasticity(
         se_distance=se["ln_dist"],
         n_pairs=len(np.asarray(flows)) - sep.n_rows,
         n_separated_rows=sep.n_rows,
+        pseudo_r2=r2,
     )
 
 
