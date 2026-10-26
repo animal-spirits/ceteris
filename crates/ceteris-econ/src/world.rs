@@ -567,6 +567,14 @@ fn delivered_prices(
     lead: &mut [f64],
 ) {
     let np = price.len() / N_GOODS;
+    // `sourced[g]` and `columns[g]` belong to good g, so the traded goods must come first
+    let n_traded = sourced.len();
+    assert!(
+        columns.len() == n_traded
+            && TRADED[..n_traded].iter().all(|&t| t)
+            && !TRADED[n_traded..].contains(&true),
+        "traded goods must be goods 0 to {n_traded}"
+    );
     let (spend, fill) = (vec![[1.0, 0.0]; np], vec![[1.0; 2]; np]);
     sourced
         .par_iter_mut()
