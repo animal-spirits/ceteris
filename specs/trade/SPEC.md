@@ -159,7 +159,9 @@ z_a and the destination access y_b are by reciprocals hoisted per origin, per or
 per destination gateway (by division where y_b or z_a is subnormal and its reciprocal
 overflows). x (1 / d) rounds differently from x / d, so these bits differ from the divisions of
 the first build. A gather by target, bit-identical to this pass, was built and measured slower
-inside the tick (ADR 0097, As built), and removed.
+inside the tick (ADR 0097, As built), and removed. So was a fused pass of the seven goods, goods
+innermost and bit-identical: it does a quarter less arithmetic than seven passes but as one task
+it takes 27 ms against the stage's 7.7 ms (ADR 0097, As built).
 
 **Payments.** Buyers pay at dispatch for what is filled: p_o (1 + t) per shipped unit, so a
 fully filled destination pays E_d. Each buyer pays its share of its class's filled spending to
@@ -453,7 +455,9 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   8 ms budget; `unit_source_dispatch_parallel` 6.1 to 6.5 ms; a whole tick 35.1 to 35.2 ms in three
   runs and 38.4 ms in a noisy fourth, just over the 35 ms budget; one good's dispatch 4.8 to 6.1 ms (bimodal by the core it lands on). The
   gather dispatch by target measured 10.3 to 10.4 ms and 44.4 to 44.7 ms in the same alternating
-  rounds and was removed (ADR 0097, As built).
+  rounds and was removed (ADR 0097, As built). Re-measured 2026-10-27 in alternating rounds against
+  the fused multi-good pass: `source_dispatch_parallel` 7.70 to 7.78 ms with the scatter, 28.3 to
+  28.7 ms with the fused pass, which was not kept.
 
 ## Open questions
 
@@ -472,6 +476,10 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   (2026-10-26): the budget moves to 8 ms and the gateway count and rule move to the ADR 0092
   rework after the P2 gate. Once the gateway masses (ADR 0092) land with the border friction fit,
   access no longer grows with the number of gateway pairs and the count can be set for speed.
+  Measured without the masses (ADR 0097, As built, 2026-10-27): 300 gateways by the same rule
+  halve parallel source and dispatch (4.7 against 9.7 ms, cold, unit spending) but move ln Phi_d
+  by medians of 0.03 to 2.0 by good, and the 300 pack does not calibrate (100 passes), so H2 was
+  not run there; at 600 H2 distance is -0.753. No count is proposed before the masses land.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.
