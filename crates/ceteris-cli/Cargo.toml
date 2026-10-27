@@ -1,0 +1,21 @@
+[package]
+name = "ceteris-cli"
+description = "The ceteris command line: export, run and pack tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ceteris-core = { path = "../ceteris-core" }
+ceteris-econ = { path = "../ceteris-econ" }
+ceteris-geo = { path = "../ceteris-geo" }
+ceteris-pack = { path = "../ceteris-pack" }
+ceteris-trade = { path = "../ceteris-trade" }
+
+[[bin]]
+name = "ceteris"
+path = "src/main.rs"

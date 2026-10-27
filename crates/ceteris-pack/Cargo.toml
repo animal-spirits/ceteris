@@ -1,0 +1,21 @@
+[package]
+name = "ceteris-pack"
+description = "Pack tables, Arrow output and the parity comparison for Ceteris Paribus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-array = "60.0.0"
+arrow-cast = "60.0.0"
+arrow-ipc = { version = "60.0.0", features = ["zstd"] }
+arrow-schema = "60.0.0"
+arrow-select = "60.0.0"
+sha2 = "0.10.9"
+
+[dev-dependencies]
+tempfile = "3.27.0"
