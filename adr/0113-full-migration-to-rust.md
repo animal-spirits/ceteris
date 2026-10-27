@@ -31,12 +31,13 @@ pyogrio), a Newton-Krylov solver (scipy's `KrylovJacobian`), and exploratory ana
 2. Port only what must run on users' machines: fetching, verification and the tabular builders
    for sources that cannot be redistributed. Everything else stays in Python and ships prebuilt.
 3. Full migration. Pipeline, reference model and calibration move to Rust, and Python leaves the
-   build, release and test path. Analysis from Python is decided separately (open point below).
+   build, release and test path. Analysis from Python is decided separately (scripting interface below).
 4. Option 3, and also drop any Python interface for analysts.
 
 ## Decision
 
-Option 3.
+Option 3, with no Python bindings for now (scripting interface below). This leaves the door open
+to a later client, so it is not option 4.
 
 Crates:
 
@@ -104,19 +105,23 @@ with fixed chunking, there are no parallel float reductions with dynamic splits,
 different machines from the same pinned inputs give identical bytes. A CI test builds the
 fixture pack twice and compares digests.
 
-Open point for the owner: the P3 Python experiment API (DESIGN 14.8, 21.1). Either a thin PyO3
-client (`ceteris-py`, DESIGN 19.1 and 19.3) that only drives runs and reads Arrow, or no bindings, with the
-CLI writing Arrow IPC and Parquet that any language reads. This ADR adds neither, and option 4 is
-not chosen until that decision.
+Scripting interface (DESIGN 14.8, the P3 experiment API in 21.1), decided by the owner on
+2026-10-27: no Python bindings for now. P3's experiment API is the `ceteris` CLI driven by a
+scenario file (baseline, branch tick, edits, ensemble size and seeds) that writes run outputs as
+Arrow IPC and Parquet, which Polars, DuckDB or any other language reads without glue code. A thin
+PyO3 client (`ceteris-py`, DESIGN 19.1 and 19.3) that only drives runs and reads Arrow is added
+later only if notebook-driven runs prove necessary; it would get its own ADR.
 
 ## Migration
 
 - DESIGN 22.1: "Python only for pipeline, reference model, calibration" becomes Rust. DESIGN
-  19.1: the Python tooling row leaves the stack table, except as an optional analysis client.
+  19.1: the Python tooling and the PyO3 + maturin bindings rows leave the stack table; 19.3 drops
+  `ceteris-py/` and `python/ceteris/`. DESIGN 14.8: scripting goes through the CLI and scenario
+  files, with outputs in Arrow and Parquet.
   DESIGN 16.1: "A Python package builds the pack" becomes the `ceteris-pack` crate.
 - ADR 0050: `check_sources.py --profile` becomes `ceteris pack check-sources --profile`, with the
   same rules.
-- ADR 0003 (PyPI name) matters only if bindings are built.
+- ADR 0003 (PyPI name) is dormant until bindings are built.
 - ADR 0096: the JAX relaxations are gone. The finite-difference test of the dual numbers uses
   `ceteris-reference`.
 
@@ -140,5 +145,6 @@ not chosen until that decision.
 - The reference model loses some independence by sharing a language with the core. The
   dependency test and the rule of writing it from the spec are the guard.
 - Exploratory analysis loses numpy and scipy inside the repo. Analysts read the Arrow and Parquet
-  outputs from outside.
+  outputs from outside, and drive runs through the CLI rather than from a notebook.
+- No wheels, maturin builds or PyPI releases to maintain.
 - One re-pin of golden hashes, at the end of step 4.
