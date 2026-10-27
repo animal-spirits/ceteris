@@ -85,15 +85,24 @@ home and domestic routes, in B's origin scale s_B) and an abroad part (through i
 B's destination scale s'_B, the largest shift among the foreign countries with a gateway that has
 access and a crossing with K > 0 into B), and combines the two in log space. A crossing's terms
 move from A's origin scale into B's destination scale by exp(s_A - s'_B) <= 1, computed once per
-good and price vector for linked pairs only. No term overflows. A term is lost to underflow only
-when it is below about 1e-308 of the largest term of its part, kernel factors aside, so a price
-spread between countries alone makes no destination unreachable. There is no weight floor: a
-destination is unreachable (buys nothing, infinite buyer price) only when neither part is at least
-the smallest normal f64, that is when no path with K > 0 leads to it from an active origin or
-every such path's product of weight and kernel factors underflows (for example legs near tau
-1e4 at theta 64.85, each K about 4e-260). Where a source is so dear (about 1e57 against its
-buyers' best at theta 5) that the units it ships, value / p_o, fall below the smallest normal
-f64, those units lose their precision.
+good and price vector for linked pairs only, and cannot overflow. Spending per unit of access
+E_d / Phi_d is taken per part, in that part's scale: where the two scales differ by more than
+709.78, so that the exponential of their difference overflows, the other part is moved into this
+part's scale in log space, and it overflows only when its true value does, leaving this part a
+share below part / f64::MAX, taken as 0. Where E_d / Phi_d itself is beyond f64 (a part near the
+smallest normal f64 times large spending), every destination's E_d / Phi_d is carried as 2^-k of
+its value and the orders and dispatched flows built on it are scaled back by 2^k, so flows stay
+finite and spending is conserved; k is 0 otherwise, which leaves every bit unchanged. The Python
+reference keeps one global scale and divides E_d by Phi_d directly, so it matches only where
+neither underflows nor overflows, as on every pack and fixture price vector. A term is lost to
+underflow only when it is below about 1e-308 of the largest term of its part, kernel factors
+aside, so a price spread between countries alone makes no destination unreachable. There is no
+weight floor: a destination is unreachable (buys nothing, infinite buyer price) only when
+neither part is at least the smallest normal f64, that is when no path with K > 0 leads to it
+from an active origin or every such path's product of weight and kernel factors underflows (for
+example legs near tau 1e4 at theta 64.85, each K about 4e-260). Where a source is so dear (about
+1e57 against its buyers' best at theta 5) that the units it ships, value / p_o, fall below the
+smallest normal f64, those units lose their precision.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
 K_od = tau_od^-theta, dense within each country. A cross-border pair is reached only through
