@@ -203,7 +203,7 @@ fn source_problems(source: &Table, ids: &BTreeSet<&str>) -> Vec<String> {
     found
 }
 
-fn read_table(path: &Path) -> Result<Table, String> {
+pub(crate) fn read_table(path: &Path) -> Result<Table, String> {
     let body = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     body.parse().map_err(|e| format!("{}: {e}", path.display()))
 }

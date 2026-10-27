@@ -4,6 +4,7 @@
 //! ```text
 //! ceteris pack compare A B [--iterative] [--table NAME]
 //! ceteris pack check-sources --profile research|release
+//! ceteris pack fetch [--record]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -35,12 +36,14 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_pack::compare::{self, Tolerance};
+use ceteris_pack::fetch;
 use ceteris_pack::sources::{self, Profile};
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
   ceteris pack check-sources [--profile research|release]
+  ceteris pack fetch [--record]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -249,12 +252,33 @@ fn check_sources(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Str
     })
 }
 
+/// `pack fetch [--record]`: exit 1 when a file is unpinned or does not match its pin.
+fn fetch_sources(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut record = false;
+    for a in args {
+        match a.as_str() {
+            "--record" => record = true,
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    // Failures carry the message Python printed; no usage text follows them.
+    match fetch::run(&sources::workspace_root(), record) {
+        Ok(true) => Ok(ExitCode::SUCCESS),
+        Ok(false) => Ok(ExitCode::FAILURE),
+        Err(message) => {
+            eprintln!("{message}");
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
 /// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
 fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     match args.next().as_deref() {
         Some("compare") => {}
         Some("check-sources") => return check_sources(args),
-        _ => return Err("expected a pack command, compare or check-sources".into()),
+        Some("fetch") => return fetch_sources(args),
+        _ => return Err("expected a pack command, compare, check-sources or fetch".into()),
     }
     let (mut dirs, mut tolerance, mut only) = (Vec::new(), Tolerance::DEFAULT, None);
     while let Some(a) = args.next() {
