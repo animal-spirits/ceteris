@@ -152,12 +152,12 @@ every good, `lost` included, equal to `dispatch` by `to_bits()`. Fusing cut the 
 seven goods by about a quarter (one pass about 27.0 ms against 37.6 ms for seven `dispatch` calls in
 sequence; a first build that read each good's own `Csr` entries took 103.8 ms), but as one task it
 replaces seven tasks that already run in parallel, so the stage became 28.5 ms against the
-scatter's about 7.7 ms. Shared index loads and interleaved dependent chains cannot recover a factor of
-seven: each good's sums, products and stores remain its own. A single-good pass on the same
-layout (`[f64; 1]`, run once per good in parallel) was within noise of the scatter (8.20 against
-8.15 ms in one run). Alternating criterion rounds (full pack, M4 Pro, AC, 98 W, 2026-10-27;
-the fused build against the scatter at a31f129, each with its own target directory). `source_dispatch_fused` and
-`dispatch_fused` were prototype benches and are removed with the code:
+scatter's about 7.7 ms. Shared index loads and interleaved dependent chains cannot recover a
+factor of seven: each good's sums, products and stores remain its own. A single-good pass on the
+same layout (`[f64; 1]`, run once per good in parallel) was within noise of the scatter (8.20
+against 8.15 ms in one run). Alternating criterion rounds (full pack, M4 Pro, AC, 98 W,
+2026-10-27; the fused build against the scatter at a31f129, each with its own target directory).
+`source_dispatch_fused` and `dispatch_fused` were prototype benches and are removed with the code:
 
 | bench | fused r1 | fused r2 | scatter r1 | scatter r2 |
 |---|---|---|---|---|
@@ -205,17 +205,18 @@ needs no new dependency. A byte-stream-split transform has the same reader probl
 left out. Full pack, 120 ticks with history: peak 1.58 GB (Arrow) and 1.51 GB (CSV) against
 1.88 GB before, and 1.15 GB without history; the markets file is 65 MB (610 MB as CSV).
 
-Re-measured on the branch head after the records were written (M4 Pro, AC, 98 W, no other
-job, 2026-10-27; two separate criterion runs, medians): `source_dispatch_parallel` 8.54 and
-8.41 ms, a whole tick 37.3 and 35.5 ms, `unit_source_dispatch_parallel` 6.55 and 6.56 ms. The
-stage is about 5% over its 8 ms budget and the tick is at or over its 35 ms budget; the runs
-earlier in the branch gave 7.7 to 7.8 ms and 35.1 to 35.2 ms on the same code, so the spread
-between sessions is as large as the gap to the budgets.
+Re-measured on the branch head (M4 Pro, AC, 98 W, no other job, 2026-10-27; two separate criterion
+runs, medians): `source_dispatch_parallel` 8.54 and 8.41 ms, a whole tick 37.3 and 35.5 ms,
+`unit_source_dispatch_parallel` 6.55 and 6.56 ms. The stage missed its 8 ms budget in both runs (5
+to 7% over) and the tick missed its 35 ms budget in both runs (37.3 and 35.5 ms); the runs earlier
+in the branch gave 7.7 to 7.8 ms and 35.1 to 35.2 ms on the same code, so the spread between
+sessions is as large as the gap to the budgets.
 
 ## Tests
 
-- A clippy fixture calling each banned method and naming each banned type fails
-  `cargo clippy -D warnings`.
+- A clippy fixture calling each banned method and naming each banned type is checked by
+  `scripts/check_clippy_bans.sh`, which counts one diagnostic per banned item (20 methods, 6
+  type uses) and fails on any other count.
 - State hashes match at 1 thread, 3 threads and all threads, before and after step 2.
 - Property test: while the gather existed, every field it wrote equalled the scatter's bit for
   bit. The gather is removed; `parallel_splits_do_not_depend_on_the_thread_count` covers the
