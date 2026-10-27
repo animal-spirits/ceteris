@@ -15,7 +15,8 @@ arrow-cast = "60.0.0"
 arrow-ipc = { version = "60.0.0", features = ["zstd"] }
 arrow-schema = "60.0.0"
 arrow-select = "60.0.0"
-sha2 = "0.10.9"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
+sha2 = { version = "0.10.9", features = ["asm"] }
 toml = "1.1.8"
 
 [dev-dependencies]
