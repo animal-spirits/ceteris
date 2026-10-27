@@ -7,9 +7,9 @@
 #   policy  what a public release may do: bundle | bundle-aggregates | fetch | exclude
 #   closed_source_only = true marks sources usable only while nothing is distributed
 #   (non-commercial, no licence stated, or permission needed). They must be replaced or
-#   cleared before `distribution` becomes "open"; check_sources.py enforces this.
+#   cleared before `distribution` becomes "open"; `ceteris pack check-sources` enforces this.
 #
-# Validate: python3 -I python/ceteris/packs/check_sources.py
+# Validate: cargo run --release --bin ceteris -- pack check-sources [--profile research|release]
 
 [project]
 distribution = "closed"
