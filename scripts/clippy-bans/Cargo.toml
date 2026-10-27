@@ -1,0 +1,11 @@
+[package]
+name = "clippy-bans"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Not a member of the repository workspace.
+[workspace]
+
+[dependencies]
+rayon = "1.12.0"

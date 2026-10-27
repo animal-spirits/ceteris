@@ -11,65 +11,84 @@
 //! Effective labour units, numeraire values; pop money is the ledger balance of the pops in
 //! numeraire (minor units summed exactly, then converted). Tick 0 has no sales, supply or
 //! income yet.
+//!
+//! In memory only the values are kept, at native width (f64, u32, bool); the tick, province
+//! and good keys follow from the sampled ticks and the row order and are materialised when
+//! written, so a market row is 49 bytes. Files are Arrow IPC with zstd buffer compression, or
+//! CSV with the same tables and column names. Both are lossless: f64 values round-trip by bits.
 
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::sync::Arc;
+
+use arrow_array::{ArrayRef, BooleanArray, Float64Array, UInt8Array, UInt32Array};
 
 use ceteris_core::invariant::Violation;
 use ceteris_core::sim::Sim;
 use ceteris_trade::N_GOODS;
 
-use crate::export::{Column, ExportError, bools, f64s, u8s, u32s, write_table};
+use crate::export::{Column, ExportError, write_table_zstd};
 use crate::world::{EconWorld, to_numeraire};
 
-#[derive(Clone, Copy)]
-enum Kind {
-    Bool,
-    U8,
-    U32,
-    F64,
+/// File format of [`History::write`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Arrow,
+    Csv,
 }
 
-/// A table under construction: columns of f64, converted to their type when written (u8 and
-/// u32 values are exact in f64).
-struct Table {
-    cols: Vec<(&'static str, Kind, Vec<f64>)>,
+/// A column at write time: keys are built from the row layout, values are moved out of the
+/// history so that no table is held twice.
+enum Col {
+    Bool(Vec<bool>),
+    U8(Vec<u8>),
+    U32(Vec<u32>),
+    F64(Vec<f64>),
 }
 
-impl Table {
-    fn new(spec: &[(&'static str, Kind)]) -> Self {
-        Table {
-            cols: spec.iter().map(|&(n, k)| (n, k, Vec::new())).collect(),
+/// `N` named f64 columns filled a row at a time.
+#[derive(Clone)]
+struct F64Cols<const N: usize> {
+    names: [&'static str; N],
+    data: [Vec<f64>; N],
+}
+
+impl<const N: usize> F64Cols<N> {
+    fn new(names: [&'static str; N]) -> Self {
+        Self {
+            names,
+            data: std::array::from_fn(|_| Vec::new()),
         }
     }
 
-    fn push(&mut self, row: &[f64]) {
-        debug_assert_eq!(row.len(), self.cols.len());
-        for (col, &x) in self.cols.iter_mut().zip(row) {
-            col.2.push(x);
+    fn push(&mut self, row: [f64; N]) {
+        for (col, x) in self.data.iter_mut().zip(row) {
+            col.push(x);
         }
     }
 
-    fn write(&self, dir: &Path, name: &str) -> Result<(), ExportError> {
-        let columns: Vec<Column> = self
-            .cols
-            .iter()
-            .map(|(n, kind, v)| match kind {
-                Kind::Bool => bools(n, v.iter().map(|&x| x != 0.0)),
-                Kind::U8 => u8s(n, v.iter().map(|&x| x as u8)),
-                Kind::U32 => u32s(n, v.iter().map(|&x| x as u32)),
-                Kind::F64 => f64s(n, v.iter().copied()),
-            })
-            .collect();
-        write_table(dir, name, columns)
+    fn into_cols(self) -> impl Iterator<Item = (&'static str, Col)> {
+        self.names
+            .into_iter()
+            .zip(self.data.into_iter().map(Col::F64))
+    }
+
+    fn bytes(&self) -> usize {
+        self.data.iter().map(|v| v.len() * size_of::<f64>()).sum()
     }
 }
 
 /// The sampled series of a run.
+#[derive(Clone)]
 pub struct History {
-    world: Table,
-    provinces: Table,
-    markets: Table,
     sampled: Vec<u32>,
+    n_provinces: usize,
+    world: F64Cols<7>,
+    pops_negative_money: Vec<u32>,
+    provinces: F64Cols<6>,
+    markets: F64Cols<6>,
+    active: Vec<bool>,
 }
 
 impl Default for History {
@@ -80,42 +99,36 @@ impl Default for History {
 
 impl History {
     pub fn new() -> Self {
-        use Kind::{Bool, F64, U8, U32};
         Self {
-            world: Table::new(&[
-                ("tick", U32),
-                ("world_price_index", F64),
-                ("expected_inflation", F64),
-                ("output_value", F64),
-                ("employment", F64),
-                ("labour_supply", F64),
-                ("unemployment", F64),
-                ("pop_money", F64),
-                ("pops_negative_money", U32),
-            ]),
-            provinces: Table::new(&[
-                ("tick", U32),
-                ("province", U32),
-                ("wage", F64),
-                ("employment", F64),
-                ("labour_supply", F64),
-                ("unemployment", F64),
-                ("pop_money", F64),
-                ("income", F64),
-            ]),
-            markets: Table::new(&[
-                ("tick", U32),
-                ("province", U32),
-                ("good", U8),
-                ("price", F64),
-                ("price_index", F64),
-                ("supply", F64),
-                ("demand", F64),
-                ("inventory", F64),
-                ("sales", F64),
-                ("active", Bool),
-            ]),
             sampled: Vec::new(),
+            n_provinces: 0,
+            world: F64Cols::new([
+                "world_price_index",
+                "expected_inflation",
+                "output_value",
+                "employment",
+                "labour_supply",
+                "unemployment",
+                "pop_money",
+            ]),
+            pops_negative_money: Vec::new(),
+            provinces: F64Cols::new([
+                "wage",
+                "employment",
+                "labour_supply",
+                "unemployment",
+                "pop_money",
+                "income",
+            ]),
+            markets: F64Cols::new([
+                "price",
+                "price_index",
+                "supply",
+                "demand",
+                "inventory",
+                "sales",
+            ]),
+            active: Vec::new(),
         }
     }
 
@@ -124,10 +137,20 @@ impl History {
         &self.sampled
     }
 
+    /// Bytes held for the market table.
+    pub fn market_bytes(&self) -> usize {
+        self.markets.bytes() + self.active.len() * size_of::<bool>()
+    }
+
+    /// Rows of the market table.
+    pub fn market_rows(&self) -> usize {
+        self.active.len()
+    }
+
     /// Appends the state of `world` at `tick`.
     pub fn record(&mut self, tick: u32, world: &EconWorld) {
         let (inp, lay, m) = (world.inputs(), world.layout(), &world.markets);
-        let t = f64::from(tick);
+        self.n_provinces = inp.n_provinces();
 
         let (mut employment, mut supply) = (0.0, 0.0);
         let (mut money, mut negative) = (0_i64, 0_u32);
@@ -141,9 +164,7 @@ impl History {
                 income += world.income[k];
             }
             let ls = lay.labour_supply[i];
-            self.provinces.push(&[
-                t,
-                i as f64,
+            self.provinces.push([
                 world.wage[i],
                 emp,
                 ls,
@@ -157,18 +178,15 @@ impl History {
 
             for g in 0..N_GOODS {
                 let c = i * N_GOODS + g;
-                self.markets.push(&[
-                    t,
-                    i as f64,
-                    g as f64,
+                self.markets.push([
                     m.price[c],
                     world.price_index[c],
                     m.supply[c],
                     m.demand[c],
                     m.inventory[c],
                     m.sales[c],
-                    f64::from(u8::from(m.active[c])),
                 ]);
+                self.active.push(m.active[c]);
             }
         }
 
@@ -178,8 +196,7 @@ impl History {
                 world.output[k] * m.price[e.province[k] as usize * N_GOODS + usize::from(e.good[k])]
             })
             .sum();
-        self.world.push(&[
-            t,
+        self.world.push([
             world.world_price_index(),
             world.expected_inflation,
             output_value,
@@ -187,18 +204,117 @@ impl History {
             supply,
             1.0 - employment / supply,
             to_numeraire(money),
-            f64::from(negative),
         ]);
+        self.pops_negative_money.push(negative);
         self.sampled.push(tick);
     }
 
-    /// Writes the three history files into `dir`.
-    pub fn write(&self, dir: &Path) -> Result<(), ExportError> {
-        std::fs::create_dir_all(dir)?;
-        self.world.write(dir, "run_history_world")?;
-        self.provinces.write(dir, "run_history_provinces")?;
-        self.markets.write(dir, "run_history_markets")
+    /// Tick of every row, `per_tick` rows per sampled tick.
+    fn tick_keys(&self, per_tick: usize) -> Vec<u32> {
+        self.sampled
+            .iter()
+            .flat_map(|&t| std::iter::repeat_n(t, per_tick))
+            .collect()
     }
+
+    fn province_keys(&self, per_province: usize) -> Vec<u32> {
+        let rows = self.sampled.len() * self.n_provinces;
+        (0..rows)
+            .flat_map(|r| std::iter::repeat_n((r % self.n_provinces) as u32, per_province))
+            .collect()
+    }
+
+    fn tables(self) -> [(&'static str, Vec<(&'static str, Col)>); 3] {
+        let np = self.n_provinces;
+        let (province_ticks, market_ticks) = (self.tick_keys(np), self.tick_keys(np * N_GOODS));
+        let (province_ids, market_ids) = (self.province_keys(1), self.province_keys(N_GOODS));
+        let mut world = vec![("tick", Col::U32(self.sampled))];
+        world.extend(self.world.into_cols());
+        world.push(("pops_negative_money", Col::U32(self.pops_negative_money)));
+
+        let mut provinces = vec![
+            ("tick", Col::U32(province_ticks)),
+            ("province", Col::U32(province_ids)),
+        ];
+        provinces.extend(self.provinces.into_cols());
+
+        let mut markets = vec![
+            ("tick", Col::U32(market_ticks)),
+            ("province", Col::U32(market_ids)),
+            (
+                "good",
+                Col::U8(
+                    (0..self.active.len())
+                        .map(|r| (r % N_GOODS) as u8)
+                        .collect(),
+                ),
+            ),
+        ];
+        markets.extend(self.markets.into_cols());
+        markets.push(("active", Col::Bool(self.active)));
+
+        [
+            ("run_history_world", world),
+            ("run_history_provinces", provinces),
+            ("run_history_markets", markets),
+        ]
+    }
+
+    /// Writes the three history files into `dir`.
+    pub fn write(self, dir: &Path, format: Format) -> Result<(), ExportError> {
+        std::fs::create_dir_all(dir)?;
+        for (name, cols) in self.tables() {
+            match format {
+                Format::Arrow => write_table_zstd(dir, name, arrow_columns(cols))?,
+                Format::Csv => write_csv(&dir.join(format!("{name}.csv")), &cols)?,
+            }
+        }
+        Ok(())
+    }
+}
+
+fn arrow_columns(cols: Vec<(&str, Col)>) -> Vec<Column> {
+    cols.into_iter()
+        .map(|(n, c)| {
+            let array: ArrayRef = match c {
+                Col::Bool(v) => Arc::new(BooleanArray::from(v)),
+                Col::U8(v) => Arc::new(UInt8Array::from(v)),
+                Col::U32(v) => Arc::new(UInt32Array::from(v)),
+                Col::F64(v) => Arc::new(Float64Array::from(v)),
+            };
+            (n.to_owned(), array)
+        })
+        .collect()
+}
+
+/// Header and one line per row; f64 as the shortest text that parses back to the same bits.
+fn write_csv(path: &Path, cols: &[(&str, Col)]) -> Result<(), ExportError> {
+    let len = |c: &Col| match c {
+        Col::Bool(v) => v.len(),
+        Col::U8(v) => v.len(),
+        Col::U32(v) => v.len(),
+        Col::F64(v) => v.len(),
+    };
+    let rows = len(&cols[0].1);
+    let mut out = BufWriter::new(File::create(path)?);
+    let header: Vec<&str> = cols.iter().map(|(n, _)| *n).collect();
+    writeln!(out, "{}", header.join(","))?;
+    for r in 0..rows {
+        for (k, (_, c)) in cols.iter().enumerate() {
+            if k > 0 {
+                out.write_all(b",")?;
+            }
+            match c {
+                Col::Bool(v) => write!(out, "{}", v[r])?,
+                Col::U8(v) => write!(out, "{}", v[r])?,
+                Col::U32(v) => write!(out, "{}", v[r])?,
+                Col::F64(v) => write!(out, "{}", v[r])?,
+            }
+        }
+        out.write_all(b"\n")?;
+    }
+    out.flush()?;
+    Ok(())
 }
 
 /// Runs `sim` to `ticks`, recording tick 0, every `every`-th tick and the final tick.
@@ -262,7 +378,7 @@ mod tests {
         for (every, ticks) in [(1, 25), (5, 6)] {
             let history = run_recorded(&mut sim(), 24, every).unwrap();
             let dir = scratch_dir(&format!("counts-{every}"));
-            history.write(&dir).unwrap();
+            history.clone().write(&dir, Format::Arrow).unwrap();
             assert_eq!(rows(&dir, "run_history_world"), ticks);
             assert_eq!(rows(&dir, "run_history_provinces"), ticks * NP);
             assert_eq!(rows(&dir, "run_history_markets"), ticks * NP * N_GOODS);
@@ -289,7 +405,7 @@ mod tests {
         let history = run_recorded(&mut s, 24, 5).unwrap();
         let dir = scratch_dir("last");
         write_run(&dir, s.world()).unwrap();
-        history.write(&dir).unwrap();
+        history.clone().write(&dir, Format::Arrow).unwrap();
         let table = |name: &str| read_table(&dir.join(format!("{name}.arrow"))).unwrap();
         let w = s.world();
 
@@ -344,13 +460,101 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
+    fn bits(v: &[f64]) -> Vec<u64> {
+        v.iter().map(|x| x.to_bits()).collect()
+    }
+
+    #[test]
+    fn history_round_trips_losslessly() {
+        let history = run_recorded(&mut sim(), 24, 1).unwrap();
+        let dir = scratch_dir("round-trip");
+        history.clone().write(&dir, Format::Arrow).unwrap();
+        let markets = read_table(&dir.join("run_history_markets.arrow")).unwrap();
+        for (name, kept) in history.markets.names.iter().zip(&history.markets.data) {
+            assert_eq!(bits(&f64s(&markets, name).unwrap()), bits(kept), "{name}");
+        }
+        let provinces = read_table(&dir.join("run_history_provinces.arrow")).unwrap();
+        for (name, kept) in history.provinces.names.iter().zip(&history.provinces.data) {
+            assert_eq!(bits(&f64s(&provinces, name).unwrap()), bits(kept), "{name}");
+        }
+        let world = read_table(&dir.join("run_history_world.arrow")).unwrap();
+        for (name, kept) in history.world.names.iter().zip(&history.world.data) {
+            assert_eq!(bits(&f64s(&world, name).unwrap()), bits(kept), "{name}");
+        }
+        let keys = u32s(&markets, "province").unwrap();
+        assert_eq!(keys[N_GOODS], 1);
+        assert_eq!(keys[NP * N_GOODS], 0);
+        assert_eq!(keys[N_GOODS * 3], 3);
+        assert_eq!(u8s(&markets, "good").unwrap()[N_GOODS + 2], 2);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn history_memory_per_market_row_at_most_49_bytes() {
+        let history = run_recorded(&mut sim(), 24, 1).unwrap();
+        assert_eq!(history.market_rows(), 25 * NP * N_GOODS);
+        assert!(history.market_bytes() <= 49 * history.market_rows());
+    }
+
+    #[test]
+    fn history_csv_matches_arrow() {
+        let history = run_recorded(&mut sim(), 24, 5).unwrap();
+        let dir = scratch_dir("csv");
+        history.clone().write(&dir, Format::Arrow).unwrap();
+        history.clone().write(&dir, Format::Csv).unwrap();
+        for name in [
+            "run_history_world",
+            "run_history_provinces",
+            "run_history_markets",
+        ] {
+            let table = read_table(&dir.join(format!("{name}.arrow"))).unwrap();
+            let text = fs::read_to_string(dir.join(format!("{name}.csv"))).unwrap();
+            let mut lines = text.lines();
+            let header: Vec<&str> = lines.next().unwrap().split(',').collect();
+            let rows: Vec<Vec<&str>> = lines.map(|l| l.split(',').collect()).collect();
+            assert_eq!(rows.len(), table.num_rows(), "{name}");
+            assert_eq!(header.len(), table.num_columns(), "{name}");
+            for (k, col) in header.iter().enumerate() {
+                let field = table.schema().field_with_name(col).unwrap().clone();
+                assert_eq!(table.schema().index_of(col).unwrap(), k, "{name} {col}");
+                let cells = rows.iter().map(|r| r[k]);
+                match field.data_type() {
+                    arrow_schema::DataType::Float64 => {
+                        let kept = f64s(&table, col).unwrap();
+                        let parsed: Vec<u64> =
+                            cells.map(|c| c.parse::<f64>().unwrap().to_bits()).collect();
+                        assert_eq!(parsed, bits(&kept), "{name} {col}");
+                    }
+                    arrow_schema::DataType::UInt32 => {
+                        let kept: Vec<String> = u32s(&table, col)
+                            .unwrap()
+                            .iter()
+                            .map(u32::to_string)
+                            .collect();
+                        assert_eq!(cells.map(str::to_owned).collect::<Vec<_>>(), kept);
+                    }
+                    arrow_schema::DataType::UInt8 => {
+                        let kept: Vec<String> = u8s(&table, col)
+                            .unwrap()
+                            .iter()
+                            .map(u8::to_string)
+                            .collect();
+                        assert_eq!(cells.map(str::to_owned).collect::<Vec<_>>(), kept);
+                    }
+                    _ => assert_eq!(*col, "active"),
+                }
+            }
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn history_is_deterministic() {
         let write = |name: &str| {
             let dir = scratch_dir(name);
             run_recorded(&mut sim(), 24, 1)
                 .unwrap()
-                .write(&dir)
+                .write(&dir, Format::Arrow)
                 .unwrap();
             let files: Vec<_> = ["world", "provinces", "markets"]
                 .map(|t| fs::read(dir.join(format!("run_history_{t}.arrow"))).unwrap())

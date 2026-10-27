@@ -287,7 +287,7 @@ impl EconInputs {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     use arrow_array::Float64Array;
@@ -297,7 +297,7 @@ mod tests {
     use super::*;
 
     fn batch(metadata: &[(&str, &str)]) -> RecordBatch {
-        let meta: HashMap<String, String> = metadata
+        let meta: BTreeMap<String, String> = metadata
             .iter()
             .map(|&(k, v)| (k.to_owned(), v.to_owned()))
             .collect();

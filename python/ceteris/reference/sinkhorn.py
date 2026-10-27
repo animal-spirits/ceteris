@@ -25,7 +25,7 @@ def dense_kernel(inp: Inputs, g: int, net_of_tariff: bool = False) -> np.ndarray
     access[acc.row[m], acc.col[m]] = acc.k[m]
     crossing = np.zeros((n_n, n_n))
     m = cro.good == g
-    crossing[cro.row[m], cro.col[m]] = cro.k[m] / (1.0 + cro.tariff[m]) if net_of_tariff else cro.k[m]
+    crossing[cro.row[m], cro.col[m]] = cro.k[m] * cro.inv_duty[m] if net_of_tariff else cro.k[m]
     return k + access @ crossing @ access.T
 
 

@@ -1,6 +1,6 @@
 # 0097. Determinism lints and the post-gate dispatch speed plan
 
-Status: proposed
+Status: accepted (owner, 2026-10-26; as built on pre-p3/speed)
 Date: 2026-10-26
 Design sections: 4.5, 14.3, 19.2, 19.4; trade SPEC Dispatch; econ SPEC Task 19
 
@@ -53,7 +53,8 @@ Option 2, and option (b).
   - types `std::collections::HashMap` and `std::collections::HashSet`;
   - methods `f64::algebraic_{add, sub, mul, div, rem}` and the `f32` equivalents.
 - CI runs `cargo clippy --workspace --all-targets -- -D warnings`, so a banned call fails the
-  build, as does a config path clippy cannot resolve.
+  build. Clippy ignores a config path it cannot resolve without a diagnostic, so a fixture
+  counts the diagnostics of every banned path and fails on any other count (As built).
 - Parallel float reductions go through `ceteris_core::reduce::fixed_sum`, or write to fixed
   slots and combine the slots in index order. Ordered maps are `BTreeMap`, or a `Vec` indexed
   by id.
@@ -108,20 +109,131 @@ widen the data. Option (c) stays rejected: the hot loops are sparse, latency-bou
 need f64 `powf` and `exp`, Apple GPUs have no f64, and the M4 matrix unit needs nightly
 intrinsics or unsafe code, which the workspace forbids.
 
+### As built
+
+Clippy 0.1.93 neither errors nor warns on a `clippy.toml` path it cannot resolve; the ban
+silently never fires. The algebraic paths do resolve. The fixture
+(`scripts/check_clippy_bans.sh`, crate in `scripts/clippy-bans/`, outside the workspace)
+therefore counts the diagnostics: one per banned method (20) and one per use of each banned
+type (6), and fails on any other count, so a path that stops resolving fails CI.
+
+Step 2's gather was built bit-identical to the scatter (a proptest held every written field
+equal by `to_bits()`, `lost` included), and the stored reciprocals landed on top of it. It
+halved one good's dispatch run alone (5.0 to 2.7 ms), but lost inside the tick, which already
+runs the seven goods in parallel. Alternating criterion rounds on the full pack (M4 Pro, AC,
+98 W, no thermal warnings, 2026-10-26), gather with coarse task sizes against the serial
+scatter promoted to `dispatch`:
+
+| bench | gather r1 | gather r2 | scatter r1 | scatter r2 |
+|---|---|---|---|---|
+| `source_dispatch_parallel` | 10.34 | 10.39 | 8.24 | 7.80 |
+| `unit_source_dispatch_parallel` | 7.63 | 7.65 | 6.52 | 6.23 |
+| `dispatch_one_good` | 2.69 | 2.72 | 5.03 | 6.05 |
+| econ `tick` | 44.75 | 44.43 | 35.19 | 38.44 |
+| `source_dispatch_parallel`, 1 thread | 51.15 | | 47.21 | |
+
+Two more scatter runs gave 7.79 and 7.73 ms and ticks of 35.13 and 35.17 ms. Tuning did not
+close the gap: coarse task sizes (at least 50 gateways and 512 provinces per task) left the
+gather at 10.34 ms; serial targets inside a good, 10.84 ms; recomputing each crossing at its
+target instead of storing it, 10.87 ms; dropping the serial `lost` chain altogether (not
+bit-identical, a bound only), 9.78 ms. Under the tick each gather pass waits on its barrier
+while every core serves other goods, and the gather moves about twice the scatter's memory per
+good (the per-leg terms are written and read back), so per-good wall time rose to about 9 ms.
+By the decision rule (keep the gather only below both the scatter and 8 ms), `dispatch` is the
+serial scatter again, bit-identical, so no re-bless; the gather and its oracle tests are
+removed and the reciprocals stay. The scatter's per-call buffers moved into `Sourced`'s
+scratch. Step 4's fused multi-good pass was then built and measured; see below.
+
+Step 4 was built and measured, and not kept. The fused pass ran the seven goods' dispatch as one
+serial pass over the legs, goods innermost: per-leg factors stored as `[f64; 7]` per entry
+(`k`, the reciprocals and the lag), per-gateway and per-province accumulators goods innermost,
+outputs transposed back into each good's columns at the end. A test held every written field of
+every good, `lost` included, equal to `dispatch` by `to_bits()`. Fusing cut the arithmetic of the
+seven goods by about a quarter (one pass about 27.0 ms against 37.6 ms for seven `dispatch` calls in
+sequence; a first build that read each good's own `Csr` entries took 103.8 ms), but as one task it
+replaces seven tasks that already run in parallel, so the stage became 28.5 ms against the
+scatter's about 7.7 ms. Shared index loads and interleaved dependent chains cannot recover a
+factor of seven: each good's sums, products and stores remain its own. A single-good pass on the
+same layout (`[f64; 1]`, run once per good in parallel) was within noise of the scatter (8.20
+against 8.15 ms in one run). Alternating criterion rounds (full pack, M4 Pro, AC, 98 W,
+2026-10-27; the fused build against the scatter at a31f129, each with its own target directory).
+`source_dispatch_fused` and `dispatch_fused` were prototype benches and are removed with the code:
+
+| bench | fused r1 | fused r2 | scatter r1 | scatter r2 |
+|---|---|---|---|---|
+| `source_dispatch_parallel`, scatter in the same binary | 7.70 | 7.75 | 7.76 | 7.78 |
+| `source_dispatch_fused` (parallel sourcing, then one fused pass) | 28.30 | 28.65 | | |
+| `dispatch_fused` (seven goods, one pass) | 26.95 | 27.03 | | |
+| `dispatch` (seven goods in sequence) | 37.65 | 37.57 | 37.75 | 37.32 |
+| `dispatch_one_good` | 4.98 | 4.96 | 4.96 | 4.93 |
+
+The fused pass was not wired into the tick: its stage alone is about 20 ms over the scatter's.
+`dispatch` stays the serial scatter per good. A serial fusion cannot win against the stage, which
+runs the goods in parallel. A fused pass that is also parallel inside, with its barriers paid
+once for all seven goods rather than once per good, was not tried and its outcome is unknown.
+
+Gateway count (measured with this step; a proposal only, nothing changed). ADR 0092's gateway
+masses are deferred (border friction fit), so access still sums over gateway pairs, and the
+moves in Phi_d below are consistent with a smaller count removing access instead of only
+redistributing it (the masses were not run). With the pack's own rule at a total of
+300 (k-medoids per country, the 600 rule reproduces the pack's `gateways.arrow` byte for byte),
+on a scratch pack copy: parallel source and dispatch of the seven goods at the 600 pack's
+calibrated prices, unit spending, full fills and a cold sourcing each run, takes 4.70 ms against
+9.70 ms at 600 (median of 60, two rounds each). These figures come from a cold harness outside
+criterion, so their absolute values differ from the criterion rows above; the ratio is the useful
+number.
+But |d ln Phi_d| at the same prices has medians of 0.03 to 2.0 by good (maxima 2.9 to 11.3), far
+above the 1e-3 bound, and the calibration of the 300 pack does not settle (100 passes, last change
+3.2e-2, 842 s), so H2 has no steady state to run on at 300. At 600 H2 distance is -0.7531
+(s.e. 0.0161), unchanged. No count is proposed: the count can be set for speed only once the
+masses make access independent of it, and then both measurements are to be repeated. Whether
+the 300 pack's calibration failure comes from the gateway change or from a limit of the
+calibrator was not investigated.
+
+Step 3 (typed, compressed history) is bit-identical: the history only reads state, and the
+state hashes and run files are unchanged. In memory the history keeps values only, at native
+width (f64, u32, bool); the tick, province and good keys follow from the sampled ticks and the
+row order and are built when written, so a market row is 49 bytes instead of 80. Files are
+Arrow IPC with zstd buffer compression (the `zstd` feature of `arrow-ipc`, already a
+dependency of the workspace through `ceteris-core`), with the columns unchanged;
+`ceteris run --history-format csv` writes the same tables as CSV, f64 as the shortest text
+that parses back to the same bits. The `alp` crate was not taken: its licence (Apache-2.0)
+fits the workspace, but it is version 0.0.4 from a single vendor, and its encoding would need
+a custom column encoding that Arrow readers (`read_table`, pyarrow) cannot open, which breaks
+the unchanged-columns rule. zstd over the repetitive key columns and the smooth price series
+needs no new dependency. A byte-stream-split transform has the same reader problem and was
+left out. Full pack, 120 ticks with history: peak 1.58 GB (Arrow) and 1.51 GB (CSV) against
+1.88 GB before, and 1.15 GB without history; the markets file is 65 MB (610 MB as CSV).
+
+Re-measured on the branch head (M4 Pro, AC, 98 W, no other job, 2026-10-27; two separate criterion
+runs, medians): `source_dispatch_parallel` 8.54 and 8.41 ms, a whole tick 37.3 and 35.5 ms,
+`unit_source_dispatch_parallel` 6.55 and 6.56 ms. The stage missed its 8 ms budget in both runs (5
+to 7% over) and the tick missed its 35 ms budget in both runs (37.3 and 35.5 ms); the runs earlier
+in the branch gave 7.7 to 7.8 ms and 35.1 to 35.2 ms on the same code, so the spread between
+sessions is as large as the gap to the budgets.
+
 ## Tests
 
-- A clippy fixture calling each banned method and naming each banned type fails
-  `cargo clippy -D warnings`.
+- A clippy fixture calling each banned method and naming each banned type is checked by
+  `scripts/check_clippy_bans.sh`, which counts one diagnostic per banned item (20 methods, 6
+  type uses) and fails on any other count.
 - State hashes match at 1 thread, 3 threads and all threads, before and after step 2.
-- Property test: gathered per-target columns equal a scatter reference bit for bit, before the
-  reciprocals change.
+- Property test: while the gather existed, every field it wrote equalled the scatter's bit for
+  bit. The gather is removed; `parallel_splits_do_not_depend_on_the_thread_count` covers the
+  parallel loops and the scatter.
 - Null-fork test across a route-choice edge change: a child that loads the snapshot taken just
-  after the change reproduces its parent's hashes.
-- Steps 1, 3 and 4 leave the goldens unchanged; step 2 re-blesses them once, in its own commit.
+  after the change reproduces its parent's hashes. Not built in this branch; the pre-p3 plan's
+  Tasks D1 and D2 cover it with seeks across `set_network` and across a parameter edit.
+- Steps 1 and 3 leave the goldens unchanged. As built the goldens were re-blessed three times,
+  each in a commit of its own for its own reason: e81207a for the reciprocals of step 2,
+  ADR 0093's log-domain weights and the gateway masses; 1408acf after the gateway masses were
+  removed; 59fadbc for the split home and abroad access of ADR 0093.
 
 ## Consequences
 
-The determinism conventions become build failures instead of review items. Most P2 dispatch
-time moves off the critical path, at the cost of one re-bless and 8 bytes per `Crossing`.
+The determinism conventions become build failures instead of review items. As built the gather
+is removed, so dispatch stays on the critical path; the reciprocals cost three re-blesses (with
+ADR 0093's changes, Tests above), leave `Crossing` at 32 bytes and grow `Entry` from 16 to 24
+bytes.
 History memory falls without touching state. Any later warm-started solver has to declare its
 warm-start vector as snapshot state or pay for a cold start.

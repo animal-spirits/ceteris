@@ -1,0 +1,27 @@
+disallowed-methods = [
+    { path = "rayon::iter::ParallelIterator::sum", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::product", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::reduce", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::reduce_with", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::fold", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::fold_with", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::try_fold", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::try_fold_with", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::try_reduce", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "rayon::iter::ParallelIterator::try_reduce_with", reason = "splits work by thread count; use ceteris_core::reduce::fixed_sum or fixed slots combined in index order (ADR 0097)" },
+    { path = "f64::algebraic_add", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f64::algebraic_sub", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f64::algebraic_mul", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f64::algebraic_div", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f64::algebraic_rem", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f32::algebraic_add", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f32::algebraic_sub", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f32::algebraic_mul", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f32::algebraic_div", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+    { path = "f32::algebraic_rem", reason = "lets the compiler reassociate, so results depend on the optimizer (ADR 0097)" },
+]
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iterates in per-process random order; use BTreeMap/BTreeSet or a Vec indexed by id (ADR 0097)" },
+    { path = "std::collections::HashSet", reason = "iterates in per-process random order; use BTreeMap/BTreeSet or a Vec indexed by id (ADR 0097)" },
+]
