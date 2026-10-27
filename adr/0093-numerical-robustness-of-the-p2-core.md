@@ -55,14 +55,19 @@ Fix them now. None changes a result away from the edge cases.
 
 ## As built
 
-Built in the pre-p3/speed branch: the log-domain weights and the kernel range. Weights are
-ln w_o = -theta ln(p_o / p_A), relative to the cheapest active price of the origin's own country,
-with a shift per country. Each destination country takes the largest shift among itself and the
-countries that export to it, and a table of exp(shift difference) per country pair, at most 1,
-carries the shift through the gateway sums in place of a log-sum-exp per term. Each destination
-keeps its home and abroad access in their own scales. `WEIGHT_FLOOR` is gone; a destination is
-reached when its access is at least `f64::MIN_POSITIVE`. The kernel stores K in f64, which makes
-the f32 row scaling unnecessary. The price spread of 1e12 between two countries, a wide-spread
-reachability test and the kernel round trip at extreme tau are tests.
+Built in the pre-p3/speed branch: the log-domain weights and the kernel range. Weights are ln
+w_o = -theta ln(p_o / p_A), relative to the cheapest active price of the origin's own country,
+with a shift per country. The abroad part of each destination's access takes its country's
+destination shift, the largest shift among the foreign countries linked to it (a gateway with
+access and a crossing with K > 0 into it), and a table of exp(shift difference) per country
+pair, at most 1, carries the shift through the gateway sums in place of a log-sum-exp per term.
+The home part keeps the country's own origin shift. Each destination combines the two parts in
+log space. Where the two scales are more than 709.78 apart the cross term is formed in log
+space, and where spending per unit of access is beyond f64 it is carried with a binary scale
+(trade SPEC, Active markets). `WEIGHT_FLOOR` is gone; a destination is reached when its access
+is at least `f64::MIN_POSITIVE`. The kernel stores K in f64, which makes the f32 row scaling
+unnecessary. The price spread of 1e12 between two countries, a wide-spread reachability test,
+the kernel round trip at extreme tau, a scale gap beyond 709.78 and spending per unit of access
+beyond f64 are tests.
 
 Not built, and still open: the exact local fill and the uncapped wage search.
