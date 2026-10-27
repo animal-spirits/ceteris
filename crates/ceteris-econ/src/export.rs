@@ -19,9 +19,9 @@
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
 //! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them: origin markets of traded goods, province markets of local goods) |
 //! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64 |
-//! | `kernel_domestic` | good u8, o u32, d u32, k f32, tau f64 |
-//! | `kernel_access` | good u8, province u32, gateway u32, k f32, tau f64 |
-//! | `kernel_crossing` | good u8, a u32, b u32, k f32, tau f64, border_tau f64, lag u8, tariff f32 |
+//! | `kernel_domestic` | good u8, o u32, d u32, k f64, inv_tau f64 |
+//! | `kernel_access` | good u8, province u32, gateway u32, k f64, inv_tau f64 |
+//! | `kernel_crossing` | good u8, a u32, b u32, k f64, inv_duty f64, inv_loss f64, lag u8 |
 //! | `pigl_check` | draw u32, country u32, money f64 (mean spending per person), sigma f64, price_0 to price_9 f64 (some infinite), x_0 to x_9 f64: `demand::pigl` with the country's weights on [`PIGL_CHECK_DRAWS`] random draws, which the reference reproduces |
 //! | `params.json` | both parameter sets by field name, the register IDs, constants |
 //!
@@ -32,7 +32,8 @@
 //! [`crate::history`] next to the run files: `run_history_world` (one row per sampled tick),
 //! `run_history_provinces` (per tick and province) and `run_history_markets` (per tick,
 //! province and good), with the conventions of `run_prices` and `run_wages`. They are not part
-//! of [`write_run`], so the default output is unchanged.
+//! of [`write_run`], so the default output is unchanged. History files are zstd-compressed Arrow
+//! IPC, or CSV with `--history-format csv`.
 
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
@@ -43,10 +44,10 @@ use arrow_array::{
     ArrayRef, BooleanArray, Float32Array, Float64Array, Int8Array, RecordBatch, StringArray,
     UInt8Array, UInt32Array,
 };
-use arrow_ipc::writer::FileWriter;
+use arrow_ipc::CompressionType;
+use arrow_ipc::writer::{FileWriter, IpcWriteOptions};
 use arrow_schema::{Field, Schema};
 use ceteris_trade::goods::{NAME, TRADED, tariff_group};
-use ceteris_trade::source::WEIGHT_FLOOR;
 use ceteris_trade::{Kernel, N_GOODS, Rationing, TradeParams};
 
 use ceteris_core::entity::{EntityId, Kind};
@@ -70,8 +71,10 @@ use crate::world::{
 /// `params.json`, the `pigl_check` table. 6: `params.json` has `technology` (S09) and
 /// `rationing` may be `mixed` (ADR 0020). 7: `provinces` has the base delivered prices from which
 /// enterprise coefficients follow as cost shares (owner decision, 2026-10-25). 8: `countries`
-/// has the natural rate `u_star` (ADR 0089).
-pub const EXPORT_FORMAT: &str = "8";
+/// has the natural rate `u_star` (ADR 0089). 9: kernel factors are f64 (ADR 0093), the kernel
+/// tables carry the reciprocal loss and duty factors in place of tau, border tau and tariff
+/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093).
+pub const EXPORT_FORMAT: &str = "9";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -126,11 +129,30 @@ pub(crate) fn bools(name: &str, v: impl IntoIterator<Item = bool>) -> Column {
 }
 
 pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Result<(), ExportError> {
+    write_table_with(dir, name, columns, IpcWriteOptions::default())
+}
+
+/// As [`write_table`] with every buffer compressed by zstd (Arrow IPC buffer compression).
+pub(crate) fn write_table_zstd(
+    dir: &Path,
+    name: &str,
+    columns: Vec<Column>,
+) -> Result<(), ExportError> {
+    let options = IpcWriteOptions::default().try_with_compression(Some(CompressionType::ZSTD))?;
+    write_table_with(dir, name, columns, options)
+}
+
+fn write_table_with(
+    dir: &Path,
+    name: &str,
+    columns: Vec<Column>,
+    options: IpcWriteOptions,
+) -> Result<(), ExportError> {
     let fields: Vec<Field> = columns
         .iter()
         .map(|(n, a)| Field::new(n, a.data_type().clone(), false))
         .collect();
-    let metadata: std::collections::HashMap<String, String> =
+    let metadata: std::collections::BTreeMap<String, String> =
         [("export_format".to_owned(), EXPORT_FORMAT.to_owned())].into();
     let schema = Arc::new(Schema::new_with_metadata(fields, metadata));
     let batch = RecordBatch::try_new(
@@ -138,7 +160,7 @@ pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Resul
         columns.into_iter().map(|(_, a)| a).collect(),
     )?;
     let file = BufWriter::new(File::create(dir.join(format!("{name}.arrow")))?);
-    let mut writer = FileWriter::try_new(file, &schema)?;
+    let mut writer = FileWriter::try_new_with_options(file, &schema, options)?;
     writer.write(&batch)?;
     writer.finish()?;
     writer.into_inner()?.flush()?;
@@ -334,7 +356,7 @@ fn active_columns(active: &[bool]) -> Vec<Column> {
 fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
     let traded = || (0..N_GOODS).filter(|&g| TRADED[g]);
 
-    // (good, row, entry col, k, tau) for the two plain legs
+    // (good, row, entry col, k, inv_tau) for the two plain legs
     let plain = |pick: fn(
         &ceteris_trade::kernel::GoodKernel,
     ) -> &ceteris_trade::kernel::Csr<ceteris_trade::kernel::Entry>| {
@@ -345,19 +367,19 @@ fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
                 rows.extend(
                     csr.row(r)
                         .iter()
-                        .map(|e| (g as u8, r as u32, e.col, e.k, e.tau)),
+                        .map(|e| (g as u8, r as u32, e.col, e.k, e.inv_tau)),
                 );
             }
         }
         rows
     };
-    let columns = |names: [&str; 2], rows: &[(u8, u32, u32, f32, f64)]| {
+    let columns = |names: [&str; 2], rows: &[(u8, u32, u32, f64, f64)]| {
         vec![
             u8s("good", rows.iter().map(|r| r.0)),
             u32s(names[0], rows.iter().map(|r| r.1)),
             u32s(names[1], rows.iter().map(|r| r.2)),
-            f32s("k", rows.iter().map(|r| r.3)),
-            f64s("tau", rows.iter().map(|r| r.4)),
+            f64s("k", rows.iter().map(|r| r.3)),
+            f64s("inv_tau", rows.iter().map(|r| r.4)),
         ]
     };
     write_table(
@@ -385,11 +407,10 @@ fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
             u8s("good", rows.iter().map(|r| r.0)),
             u32s("a", rows.iter().map(|r| r.1)),
             u32s("b", rows.iter().map(|r| r.2.col)),
-            f32s("k", rows.iter().map(|r| r.2.k)),
-            f64s("tau", rows.iter().map(|r| r.2.tau)),
-            f64s("border_tau", rows.iter().map(|r| r.2.border_tau)),
+            f64s("k", rows.iter().map(|r| r.2.k)),
+            f64s("inv_duty", rows.iter().map(|r| r.2.inv_duty)),
+            f64s("inv_loss", rows.iter().map(|r| r.2.inv_loss)),
             u8s("lag", rows.iter().map(|r| r.2.lag)),
-            f32s("tariff", rows.iter().map(|r| r.2.tariff)),
         ],
     )
 }
@@ -511,10 +532,9 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         format!("{{\n{}\n  }}", lines.join(",\n"))
     };
     format!(
-        "{{\n  \"format\": \"{EXPORT_FORMAT}\",\n  \"static_digest\": \"{}\",\n  \"n_goods\": {N_GOODS},\n  \"minor_per_unit\": {},\n  \"weight_floor\": {},\n  \"register\": {{\n{}\n  }},\n  \"econ\": {},\n  \"trade\": {}\n}}\n",
+        "{{\n  \"format\": \"{EXPORT_FORMAT}\",\n  \"static_digest\": \"{}\",\n  \"n_goods\": {N_GOODS},\n  \"minor_per_unit\": {},\n  \"register\": {{\n{}\n  }},\n  \"econ\": {},\n  \"trade\": {}\n}}\n",
         hex(&digest),
         num(MINOR_PER_UNIT),
-        num(WEIGHT_FLOOR),
         register.join(",\n"),
         object(&econ),
         object(&trade),
@@ -798,8 +818,8 @@ mod tests {
         let (o, d) = (u32s(&domestic, "o").unwrap(), u32s(&domestic, "d").unwrap());
         assert_eq!(d[3], first.col);
         assert_eq!(o[3], 0);
-        assert_eq!(f32s(&domestic, "k")[3], first.k);
-        assert_eq!(f64s(&domestic, "tau").unwrap()[3], first.tau);
+        assert_eq!(f64s(&domestic, "k").unwrap()[3], first.k);
+        assert_eq!(f64s(&domestic, "inv_tau").unwrap()[3], first.inv_tau);
 
         let access = table("kernel_access");
         let n: usize = traded
@@ -818,9 +838,9 @@ mod tests {
         let at = crossing.num_rows() - 1;
         assert_eq!(u8s(&crossing, "good").unwrap()[at], 6);
         assert_eq!(u32s(&crossing, "b").unwrap()[at], last.col);
-        assert_eq!(f32s(&crossing, "k")[at], last.k);
-        assert_eq!(f64s(&crossing, "border_tau").unwrap()[at], last.border_tau);
-        assert_eq!(f32s(&crossing, "tariff")[at], last.tariff);
+        assert_eq!(f64s(&crossing, "k").unwrap()[at], last.k);
+        assert_eq!(f64s(&crossing, "inv_loss").unwrap()[at], last.inv_loss);
+        assert_eq!(f64s(&crossing, "inv_duty").unwrap()[at], last.inv_duty);
         assert_eq!(u8s(&crossing, "lag").unwrap()[at], last.lag);
 
         let active = table("active");
@@ -881,7 +901,7 @@ mod tests {
         assert!(json.contains("\"pigl_eps\": 0.71"), "{json}");
         assert!(json.contains("\"rationing\": \"priority\""), "{json}");
         assert!(json.contains("\"technology\": \"putty_clay\""), "{json}");
-        assert!(json.contains("\"weight_floor\": 1e-100"), "{json}");
+        assert!(!json.contains("weight_floor"), "{json}");
         assert!(
             json.contains(&format!("\"minor_per_unit\": {MINOR_PER_UNIT:?}")),
             "{json}"

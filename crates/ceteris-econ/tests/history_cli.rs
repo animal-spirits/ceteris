@@ -75,3 +75,46 @@ fn sampling_interval_needs_history() {
         .unwrap();
     assert!(!status.success());
 }
+
+#[test]
+fn history_format_csv_writes_csv_tables() {
+    let dir = run("csv", &["--history", "--history-format", "csv"]);
+    let mut csv: Vec<_> = names(&dir)
+        .into_iter()
+        .filter(|n| n.ends_with(".csv"))
+        .collect();
+    csv.sort();
+    assert_eq!(
+        csv,
+        [
+            "run_history_markets.csv",
+            "run_history_provinces.csv",
+            "run_history_world.csv"
+        ]
+    );
+    assert!(
+        names(&dir)
+            .iter()
+            .all(|n| !n.contains("history") || n.ends_with(".csv"))
+    );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn history_format_needs_history() {
+    let dir = std::env::temp_dir().join(format!("ceteris-cli-{}-fmt", std::process::id()));
+    let status = Command::new(env!("CARGO_BIN_EXE_ceteris"))
+        .args([
+            "run",
+            "--fixture",
+            "--ticks",
+            "5",
+            "--history-format",
+            "csv",
+            "--out",
+        ])
+        .arg(&dir)
+        .status()
+        .unwrap();
+    assert!(!status.success());
+}

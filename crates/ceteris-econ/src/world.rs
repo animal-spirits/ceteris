@@ -1327,34 +1327,30 @@ impl State for EconWorld {
 
         // pops hold the first account IDs
         let pop_of = |a: AccountId| (a.0 as usize) < inp.n_pops();
-        // integer sums, so the chunks may add up in any order
-        let credited = self
+        // one slot per chunk, combined in chunk order
+        let slots: Vec<Vec<i64>> = self
             .ledger
             .journal()
             .par_chunks(1 << 16)
-            .fold(
-                || vec![0i64; inp.n_pops()],
-                |mut credited, entries| {
-                    for entry in entries {
-                        if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
-                            if pop_of(entry.to) {
-                                credited[entry.to.0 as usize] += entry.amount;
-                            }
-                            if pop_of(entry.from) {
-                                credited[entry.from.0 as usize] -= entry.amount;
-                            }
+            .map(|entries| {
+                let mut credited = vec![0i64; inp.n_pops()];
+                for entry in entries {
+                    if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
+                        if pop_of(entry.to) {
+                            credited[entry.to.0 as usize] += entry.amount;
+                        }
+                        if pop_of(entry.from) {
+                            credited[entry.from.0 as usize] -= entry.amount;
                         }
                     }
-                    credited
-                },
-            )
-            .reduce(
-                || vec![0i64; inp.n_pops()],
-                |mut a, b| {
-                    a.iter_mut().zip(&b).for_each(|(x, y)| *x += y);
-                    a
-                },
-            );
+                }
+                credited
+            })
+            .collect();
+        let mut credited = vec![0i64; inp.n_pops()];
+        for slot in &slots {
+            credited.iter_mut().zip(slot).for_each(|(x, y)| *x += y);
+        }
         if let Some(k) = (0..inp.n_pops()).find(|&k| credited[k] != sc.income_paid[k]) {
             let detail = format!(
                 "pop {k}: journal credits {}, income paid {}",
@@ -1814,9 +1810,9 @@ mod tests {
         w.set_network(net.clone());
         assert_ne!(w.digest(), digest);
         assert_eq!(w.inputs().network.crossings, net.crossings);
-        let tau = w.kernel().good(6).crossings.row(6)[0].tau;
+        let loss = w.kernel().good(6).crossings.row(6)[0].inv_loss;
         let base = Kernel::build(&net, &w.inputs().weight, &w.inputs().wedges, w.trade());
-        assert_eq!(tau, base.good(6).crossings.row(6)[0].tau);
+        assert_eq!(loss, base.good(6).crossings.row(6)[0].inv_loss);
         // the buyer prices of the last E3 stand; at the next refresh the island's machinery,
         // all imported, costs more
         assert_eq!(w.price_index[island], before);

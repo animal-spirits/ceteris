@@ -335,7 +335,8 @@ mod tests {
         let k = Kernel::build(&w.network, &w.weight, &w.wedges, &p);
         let coal = 2;
         for c in k.good(coal).crossings.row(island_port) {
-            assert!(c.tau < 2.5, "island coal crossing tau {}", c.tau);
+            let tau = 1.0 / (c.inv_loss * (1.0 + p.border_nu));
+            assert!(tau < 2.5, "island coal crossing tau {tau}");
         }
     }
 
@@ -372,7 +373,7 @@ mod tests {
             assert_eq!(a.access.entries, b.access.entries);
             for (x, y) in a.crossings.entries.iter().zip(&b.crossings.entries) {
                 if x != y {
-                    assert_eq!((g, y.k, y.tau), (UNREACHABLE, 0.0, f64::INFINITY));
+                    assert_eq!((g, y.k, y.inv_loss), (UNREACHABLE, 0.0, 0.0));
                     changed += 1;
                 }
             }

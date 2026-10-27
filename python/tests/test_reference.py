@@ -43,13 +43,13 @@ UNREACHABLE, ISLAND_USER = 6, 4  # as `fixture::UNREACHABLE` and `fixture::ISLAN
 
 def unreachable_island(inp: io.Inputs) -> io.Inputs:
     """The fixture as `fixture::unreachable_island` exports it: machinery without a route to or
-    from the island port (kernel factor 0, tau infinite), and of the island's sectors only light
-    manufacturing using machinery."""
+    from the island port (kernel factor 0, tau infinite so nothing arrives), and of the island's
+    sectors only light manufacturing using machinery."""
     island = inp.n_countries - 1
     port = np.flatnonzero(inp.gateway_country == island)
     cro = inp.crossing
     cut = (cro.good == UNREACHABLE) & (np.isin(cro.row, port) | np.isin(cro.col, port))
-    crossing = dataclasses.replace(cro, k=np.where(cut, 0.0, cro.k), tau=np.where(cut, np.inf, cro.tau))
+    crossing = dataclasses.replace(cro, k=np.where(cut, 0.0, cro.k), inv_loss=np.where(cut, 0.0, cro.inv_loss))
     a = inp.io.copy()
     a[island, UNREACHABLE, np.arange(inp.n_goods) != ISLAND_USER] = 0.0
     return dataclasses.replace(inp, io=a, crossing=crossing)
@@ -94,11 +94,9 @@ def test_scale_invariance(inputs):
 
 
 def _weights(inp: io.Inputs, g: int, p: np.ndarray, act: np.ndarray) -> np.ndarray:
-    """Floored origin weights (p / p_min)^-theta_g of the active origins, as `source::origin_weights`."""
+    """Origin weights (p / p_min)^-theta_g of the active origins, one p_min per good."""
     with np.errstate(divide="ignore"):
-        w = np.where(act, (p / p[act].min()) ** -inp.theta[g], 0.0)
-    w[w < inp.weight_floor] = 0.0
-    return w
+        return np.where(act, (p / p[act].min()) ** -inp.theta[g], 0.0)
 
 
 def test_sinkhorn_and_dense_kernel_reproduce_equilibrium_gravity(fixture):
@@ -138,7 +136,8 @@ def dense_route_oracle(inp: io.Inputs, price: np.ndarray, spend: np.ndarray) -> 
     """Every route enumerated from the exported legs: home, o -> d inside a country, and
     o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination d
     spends E_d over routes by K w_o / Phi_d; the buyer pays p_o (1 + t) per shipped unit, t / (1 + t)
-    of it is tariff, the origin receives p_o per unit; d receives the units over the route's tau."""
+    of it is tariff, the origin receives p_o per unit; d receives the units over the route's tau.
+    Routes carry 1 / tau and 1 / (1 + t), as the export does."""
     n_p, n_g = price.shape
     keys = ("orders", "home", "arrive", "paid", "received", "tariff", "index")
     out = {key: np.zeros((n_p, n_g)) for key in keys}
@@ -148,38 +147,38 @@ def dense_route_oracle(inp: io.Inputs, price: np.ndarray, spend: np.ndarray) -> 
     for g in np.flatnonzero(inp.traded):
         p = price[:, g]
         w = _weights(inp, g, p, inp.active[:, g])
-        routes = [(o, o, 1.0, 1.0, 0.0) for o in range(n_p)]  # (o, d, k, tau, tariff)
+        routes = [(o, o, 1.0, 1.0, 1.0) for o in range(n_p)]  # (o, d, k, 1 / tau, 1 / (1 + t))
         for j in np.flatnonzero(dom.good == g):
-            routes.append((dom.row[j], dom.col[j], dom.k[j], dom.tau[j], 0.0))
-        gate_in = [[] for _ in range(inp.n_gateways)]  # b -> d: (d, k, tau)
+            routes.append((dom.row[j], dom.col[j], dom.k[j], dom.inv_tau[j], 1.0))
+        gate_in = [[] for _ in range(inp.n_gateways)]  # b -> d: (d, k, 1 / tau)
         for j in np.flatnonzero(acc.good == g):
-            gate_in[acc.col[j]].append((acc.row[j], acc.k[j], acc.tau[j]))
+            gate_in[acc.col[j]].append((acc.row[j], acc.k[j], acc.inv_tau[j]))
         for ja in np.flatnonzero(acc.good == g):
             o, a = acc.row[ja], acc.col[ja]
             for jc in np.flatnonzero((cro.good == g) & (cro.row == a)):
-                for d, k_bd, tau_bd in gate_in[cro.col[jc]]:
+                for d, k_bd, inv_bd in gate_in[cro.col[jc]]:
                     k = acc.k[ja] * cro.k[jc] * k_bd
-                    tau = acc.tau[ja] * cro.tau[jc] * cro.border_tau[jc] * tau_bd
-                    routes.append((o, d, k, tau, cro.tariff[jc]))
+                    arrives = acc.inv_tau[ja] * cro.inv_loss[jc] * inv_bd
+                    routes.append((o, d, k, arrives, cro.inv_duty[jc]))
         phi = np.zeros(n_p)
         for o, d, k, _, _ in routes:
             phi[d] += k * w[o]
         alpha = np.zeros(n_p)
-        for o, d, k, tau, t in routes:
+        for o, d, k, arrives, net in routes:
             if w[o] == 0.0:
                 continue
             x = spend[d, g] * k * w[o] / phi[d]
-            units = x / (p[o] * (1.0 + t))
-            alpha[d] += k * w[o] / phi[d] / (p[o] * (1.0 + t) * tau)
+            units = x * net / p[o]
+            alpha[d] += k * w[o] / phi[d] * net / p[o] * arrives
             out["orders"][o, g] += units
-            out["arrive"][d, g] += units / tau
+            out["arrive"][d, g] += units * arrives
             out["paid"][d, g] += x
-            out["tariff"][d, g] += x * t / (1.0 + t)
-            out["received"][o, g] += x / (1.0 + t)
+            out["tariff"][d, g] += x * (1.0 - net)
+            out["received"][o, g] += x * net
             if o == d:
                 out["home"][d, g] += units
             else:
-                out["pair_value"][country[o], country[d], g] += x / (1.0 + t)
+                out["pair_value"][country[o], country[d], g] += x * net
                 out["pair_units"][country[o], country[d], g] += units
         out["index"][:, g] = 1.0 / alpha
     return out
@@ -201,7 +200,7 @@ def test_inputs_carry_theta_per_good(inputs):
 
 def test_trade_money_matches_dense_route_oracle(inputs):
     inp = inputs
-    assert np.any(inp.crossing.tariff > 0)
+    assert np.any(inp.crossing.inv_duty < 1)
     rng = np.random.default_rng(11)
     price = np.exp(rng.uniform(-2.3, 2.3, (inp.n_provinces, inp.n_goods)))
     spend = np.where(inp.traded[None, :], rng.uniform(0.0, 1e6, price.shape), 0.0)
@@ -212,6 +211,51 @@ def test_trade_money_matches_dense_route_oracle(inputs):
     traded = inp.traded
     for key, w in want.items():
         np.testing.assert_allclose(got[key][..., traded], w[..., traded], rtol=1e-10, atol=1e-13 * np.abs(w).max(), err_msg=key)
+
+
+def _assert_routing_matches_rust(inp: io.Inputs, export: Path) -> None:
+    """The reference routes on the kernel Rust exports, and that kernel is the spec's: every crossing
+    factor rebuilt from the legs and tariffs as K_ab = (tau (1 + nu) (1 + t))^-theta, with
+    1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12; and the reference's delivered prices at prices 1
+    are Rust's base prices to 1e-12."""
+
+    def table(name):
+        return pa_ipc.open_file(str(export / f"{name}.arrow")).read_all()
+
+    legs, goods, tariffs = table("legs"), table("goods"), table("tariffs")
+    nu = json.loads((export / "params.json").read_text())["trade"]["border_nu"]
+    gc = inp.gateway_country
+    rate = np.zeros((inp.n_countries, inp.n_countries, 2))
+    rate[tariffs["importer"].to_numpy(), tariffs["exporter"].to_numpy(), tariffs["group"].to_numpy()] = tariffs["rate"].to_numpy()
+    crossing = legs["kind"].to_numpy() == 2
+    a, b = (legs[c].to_numpy()[crossing].astype(np.int64) for c in ("from", "to"))
+    cost, hours = legs["cost_per_t"].to_numpy()[crossing], legs["hours"].to_numpy()[crossing]
+    weight, time_cost, group = goods["weight"].to_numpy(), goods["time_cost"].to_numpy(), goods["tariff_group"].to_numpy()
+    cro = inp.crossing
+    for g in np.flatnonzero(inp.traded):
+        tau = 1.0 + cost * weight[g] + time_cost[g] * hours / 24.0
+        duty = 1.0 + rate[gc[b], gc[a], group[g]]
+        want = {(x, y): i for i, (x, y) in enumerate(zip(a, b))}
+        sel = np.flatnonzero(cro.good == g)
+        at = np.array([want[(x, y)] for x, y in zip(cro.row[sel], cro.col[sel])])
+        k = (tau * (1.0 + nu) * duty) ** -inp.theta[g]
+        np.testing.assert_allclose(cro.k[sel], k[at], rtol=1e-12, atol=0)
+        np.testing.assert_allclose(cro.inv_loss[sel], 1.0 / (tau * (1.0 + nu))[at], rtol=1e-12, atol=0)
+        np.testing.assert_allclose(cro.inv_duty[sel], 1.0 / duty[at], rtol=1e-12, atol=0)
+    q = model._sourcing(inp, np.ones((inp.n_provinces, inp.n_goods)))["index"]
+    np.testing.assert_allclose(inp.base_price[:, inp.traded], q[:, inp.traded], rtol=1e-12)
+
+
+def test_routing_matches_rust(inputs):
+    _assert_routing_matches_rust(inputs, FIXTURE)
+
+
+def test_routing_matches_rust_on_the_pack():
+    """`_assert_routing_matches_rust` on `CETERIS_PACK_EXPORT`, a `ceteris export --pack` directory."""
+    export = os.environ.get("CETERIS_PACK_EXPORT")
+    if not export:
+        pytest.skip("skipping: CETERIS_PACK_EXPORT unset (a `ceteris export --pack` directory)")
+    _assert_routing_matches_rust(io.load(export), Path(export))
 
 
 def test_pigl_matches_rust(inputs):
@@ -252,7 +296,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
     supply for every low wage, so no wage clears uniquely. The good is the only one of PIGL
     category S, so the inversion gives z = 0 (no category A demand) and demand is homothetic: the
     province spends its whole income on it, whatever the pops' incomes."""
-    k = np.float32(tau**-theta).astype(np.float64)
+    k = tau**-theta
     one = np.ones(2)
     l0 = (1.0 - u) * labour / 2.0
     empty = io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, np.zeros(0), np.zeros(0))
@@ -262,7 +306,6 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         pigl=demand.Pigl(sigma_b=0.26, phi=0.0, gamma=0.71, theta=np.array([0.634, 0.082, 0.284]), eps=0.71),
         category=np.array([2]),
         sigma_fl=sigma_fl,
-        weight_floor=1e-100,
         traded=np.array([True]),
         province_country=np.zeros(2, dtype=np.int64),
         gateway_country=np.zeros(0, dtype=np.int64),
@@ -285,7 +328,7 @@ def two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u) -> io.I
         pop_province=np.array([0, 0, 1, 1]),
         pop_effective=np.array([0.3, 0.7, 0.3, 0.7]) * labour,
         pop_population=np.array([4e5, 6e5, 4e5, 6e5]),
-        domestic=io.Entries(np.zeros(2, dtype=np.int64), np.array([0, 1]), np.array([1, 0]), k * one, tau * one),
+        domestic=io.Entries(np.zeros(2, dtype=np.int64), np.array([0, 1]), np.array([1, 0]), k * one, one / tau),
         access=empty,
         crossing=io.Entries(*(np.zeros(0, dtype=np.int64),) * 3, *(np.zeros(0),) * 4, lag=np.zeros(0, dtype=np.int64)),
     )
@@ -308,7 +351,7 @@ def test_two_province_closed_form(theta, tau, sigma_demand, sigma_fl, s_l, a, la
     # Buyers pay the delivered unit price q = 1 / alpha: a unit of spending buys home at p and the
     # other province's good at p tau, with sourcing shares 1 / (1 + k) and k / (1 + k); the world
     # index is q, normalized to 1.
-    k = float(np.float32(tau**-theta))
+    k = tau**-theta
     p = (1.0 + k / tau) / (1.0 + k)
     np.testing.assert_allclose(eq.price[:, 0], [p, p], rtol=1e-9)
     np.testing.assert_allclose(eq.consumer_price[:, 0], [1.0, 1.0], rtol=1e-9)

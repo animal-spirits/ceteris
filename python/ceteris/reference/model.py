@@ -10,9 +10,13 @@ solution unchanged.
 Destination d spends E_d on traded good g, households (each pop by PIGL across categories and CES
 within them, ADR 0021) at the delivered unit price q_d = 1 / alpha_d, alpha_d the units arriving
 per unit of spending (owner decision, 2026-10-24), and enterprises a Y q_d, so arrivals replace
-use; X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (floored; theta per good, ADR
-0018), K carrying the tariff on crossings. Origin o ships X_od / (p_o (1 + t)) units and receives
-p_o per unit, the importer's rebate account t p_o.
+use; X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (theta per good, ADR 0018), K
+carrying the tariff on crossings. Origin o ships X_od / (p_o (1 +
+t)) units and receives p_o per unit, the importer's rebate account t p_o. Weights are relative to
+one p_min per good: Rust holds them per country in log scale (ADR 0093), which gives the same
+shares wherever the global scale does not underflow and E_d / Phi_d does not overflow, as on every
+pack and fixture price vector. A
+destination is reachable where Phi_d > 0. Losses and duties multiply by the kernel's reciprocals.
 
 Unknowns x: ln p of every active (province, good) cell in row-major order (origin markets of
 traded goods, province markets of local goods), then ln w per province. Equations: excess demand
@@ -121,7 +125,7 @@ def _to_destinations(inp: Inputs, r: np.ndarray, dom_k, acc_k, cro_k) -> np.ndar
 
 
 def _sourcing(inp: Inputs, price: np.ndarray) -> dict:
-    """Floored origin weights w = (p / p_min)^-theta_g of active traded origins, Phi, alpha (units
+    """Origin weights w = (p / p_min)^-theta_g of active traded origins, Phi, alpha (units
     arriving per unit of spending) and the delivered unit price q = 1 / alpha (infinite where no
     active origin is reachable), as `EconWorld::refresh_price_index`. Weights good-major flat
     (G * P); index and alpha (P, G)."""
@@ -132,13 +136,11 @@ def _sourcing(inp: Inputs, price: np.ndarray) -> dict:
     p_min = np.where(act, p, np.inf).min(axis=1, keepdims=True)  # weights relative to it
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         w = np.where(act, (p / p_min) ** -inp.theta[:, None], 0.0)
-    w[w < inp.weight_floor] = 0.0
     wf = w.ravel()
     phi = _from_origins(inp, wf, dom.k, acc.k, cro.k)
     per_price = np.divide(wf, p.ravel(), out=np.zeros_like(wf), where=wf > 0)
-    loss = cro.tau * cro.border_tau * (1.0 + cro.tariff)
-    arrive = _from_origins(inp, per_price, dom.k / dom.tau, acc.k / acc.tau, cro.k / loss)
-    reachable = phi >= inp.weight_floor
+    arrive = _from_origins(inp, per_price, dom.k * dom.inv_tau, acc.k * acc.inv_tau, cro.k * cro.inv_duty * cro.inv_loss)
+    reachable = phi > 0
     with np.errstate(divide="ignore", invalid="ignore"):
         alpha = np.where(reachable, arrive / phi, 0.0)
         index = np.where(alpha > 0, 1.0 / alpha, np.inf)
@@ -161,16 +163,15 @@ def _flows(inp: Inputs, price: np.ndarray, spend: np.ndarray, src: dict) -> dict
     d_from, d_to, a_prov, a_gate, c_from, c_to = _legs(inp)
     pf, wf, phi = price.T.ravel(), src["w"], src["phi"]
     ef = np.where(inp.traded[:, None], spend.T, 0.0).ravel()
-    reach = np.divide(ef, phi, out=np.zeros_like(ef), where=phi >= inp.weight_floor)
+    reach = np.divide(ef, phi, out=np.zeros_like(ef), where=phi > 0)
     per_price = np.divide(wf, pf, out=np.zeros_like(wf), where=wf > 0)
-    net = cro.k / (1.0 + cro.tariff)
+    net = cro.k * cro.inv_duty
 
     orders = per_price * _to_destinations(inp, reach, dom.k, acc.k, net)
     home = per_price * reach
-    loss = cro.tau * cro.border_tau * (1.0 + cro.tariff)
-    arrive = reach * _from_origins(inp, per_price, dom.k / dom.tau, acc.k / acc.tau, cro.k / loss)
-    duty = reach * (_from_origins(inp, wf, 0.0 * dom.k, acc.k, cro.k * cro.tariff / (1.0 + cro.tariff)) - wf)
-    paid = np.where(phi >= inp.weight_floor, ef, 0.0)
+    arrive = reach * _from_origins(inp, per_price, dom.k * dom.inv_tau, acc.k * acc.inv_tau, net * cro.inv_loss)
+    duty = reach * (_from_origins(inp, wf, 0.0 * dom.k, acc.k, cro.k - net) - wf)
+    paid = np.where(phi > 0, ef, 0.0)
 
     # country pairs: domestic legs by province countries, crossings by gateway countries
     pc, gc = inp.province_country, inp.gateway_country

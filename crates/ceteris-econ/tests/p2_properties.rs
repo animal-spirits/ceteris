@@ -399,7 +399,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
                 for a in 0..kernel.n_gateways() {
                     let lo = gk.crossings.offsets[a] as usize;
                     for (j, e) in gk.crossings.row(a).iter().enumerate() {
-                        tariff_due += f64::from(e.tariff) * sourced.crossing_value[lo + j];
+                        tariff_due += (1.0 / e.inv_duty - 1.0) * sourced.crossing_value[lo + j];
                     }
                 }
             }
@@ -675,6 +675,7 @@ fn input_orders_count_goods_on_order() {
     let acc = &lay.accounts;
     let (full, half) = (0, 1);
     let mut checked = 0;
+    let mut position = [0.0; N_GOODS];
     // the lead E3 will use: the prices do not move between here and E3
     w.refresh_price_index();
     for (e, months) in [(full, None), (half, Some(0.5))] {
@@ -682,6 +683,9 @@ fn input_orders_count_goods_on_order() {
         for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
             let target = 1.0 + systems::COVER + w.scratch.lead[i * N_GOODS + k];
             let units = months.unwrap_or(target) * lay.coef[e][k] * capacity(&w, e);
+            if e == full {
+                position[k] = units;
+            }
             // in flight over three slots; the goods sit in the transit account
             for slot in 2..=4 {
                 w.pipeline.push(slot, inp.n_pops() + e, k, units / 3.0);
@@ -696,9 +700,12 @@ fn input_orders_count_goods_on_order() {
         assert_order_rule(&w) > 0,
         "no order held back by goods on order"
     );
+    // nothing beyond the rounding of the three slots that hold the target position
+    let i = inp.enterprises.province[full] as usize;
     for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[full][k] > 0.0) {
-        assert_eq!(w.scratch.ent_order[full * N_GOODS + k], 0.0);
-        assert_eq!(w.scratch.ent_spend[full * N_GOODS + k], 0.0);
+        let q = w.price_index[i * N_GOODS + k];
+        assert!(w.scratch.ent_order[full * N_GOODS + k] <= 1e-12 * position[k]);
+        assert!(w.scratch.ent_spend[full * N_GOODS + k] <= 1e-12 * position[k] * q);
     }
 }
 

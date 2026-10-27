@@ -1,6 +1,6 @@
 # 0092. Trade frictions consistent with theta
 
-Status: proposed (owner chose the options, 2026-10-25)
+Status: proposed (owner chose the options, 2026-10-25); partly built, see As built
 Date: 2026-10-25
 Design sections: 5.4, 8.3, 15.2, 18 (H2), 17 (P01, P05); trade SPEC Two-level kernel, Parameters; econ SPEC Goods; ADRs 0018, 0022, 0023
 
@@ -73,3 +73,14 @@ Petroleum: (i) keep in good 5; (ii) move into good 1; (iii) a new good.
   k sigma/(sigma - 1) under Melitz-Chaney; ADR 0027 must keep theta_c as its long run (ADR 0095).
 - The econ SPEC goods table, BACI weights per value w_g of goods 1 and 5, P01 values and the pack
   pipeline change.
+
+## As built
+
+Only the gateway mass weights were built, in the pre-p3/speed branch, and they were deferred. They
+entered the crossing factor as `k = m_a m_b (tau (1 + nu) (1 + t))^-theta` with m_a = 1 / k_A (the
+pack has no throughput data), and the stored reciprocals, ADR 0093's log-domain weights and a
+re-bless carried them. With them, H2 distance moved from -0.7531 (s.e. 0.0161) to -0.536 (s.e.
+0.013), outside the -1.1 to -0.7 band. By owner decision (2026-10-26) the masses were removed and
+are deferred to the per-class nu fit, with which they land; the band holds at -0.7531 without
+them. Everything else in this ADR (per-class nu, the border friction fit, H2 per class, the pack
+changes) remains to be built.

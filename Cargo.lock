@@ -127,6 +127,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "flatbuffers",
+ "zstd",
 ]
 
 [[package]]

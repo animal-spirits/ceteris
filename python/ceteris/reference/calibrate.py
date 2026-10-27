@@ -148,7 +148,7 @@ def sinkhorn(inp: Inputs, spend: np.ndarray, supply: np.ndarray, start: np.ndarr
     origin = _flat(inp.active & inp.traded[None, :])
     v = _flat(supply)
     e = _flat(np.where(inp.traded[None, :], spend, 0.0))
-    net = cro.k / (1.0 + cro.tariff)
+    net = cro.k * cro.inv_duty
     total = np.bincount(good, np.where(origin, v, 0.0), n_g)
     lw = np.where(origin, 0.0 if start is None else _flat(start), 0.0)
 
@@ -196,14 +196,14 @@ def arrivals(inp: Inputs, price: np.ndarray, src: dict) -> np.ndarray:
     dom, acc, cro = inp.domestic, inp.access, inp.crossing
     wf, phi = src["w"], src["phi"]
     per_price = np.divide(wf, _flat(price), out=np.zeros_like(wf), where=wf > 0)
-    loss = cro.tau * cro.border_tau * (1.0 + cro.tariff)
+    arriving = cro.k * cro.inv_duty * cro.inv_loss
     out = np.zeros((SLOTS + 1, len(wf)))
     out[0] = per_price
-    out[1] = model._from_origins(inp, per_price, dom.k / dom.tau, 0.0 * acc.k, 0.0 * cro.k) - per_price
+    out[1] = model._from_origins(inp, per_price, dom.k * dom.inv_tau, 0.0 * acc.k, 0.0 * cro.k) - per_price
     for lag in range(SLOTS):
-        k = np.where(cro.lag == lag, cro.k / loss, 0.0)
-        out[1 + lag] += model._from_origins(inp, per_price, 0.0 * dom.k, acc.k / acc.tau, k) - per_price
-    reach = phi >= inp.weight_floor
+        k = np.where(cro.lag == lag, arriving, 0.0)
+        out[1 + lag] += model._from_origins(inp, per_price, 0.0 * dom.k, acc.k * acc.inv_tau, k) - per_price
+    reach = phi > 0
     out = np.divide(out, phi, out=np.zeros_like(out), where=reach[None, :])
     return out.reshape(SLOTS + 1, inp.n_goods, inp.n_provinces).transpose(0, 2, 1)
 
