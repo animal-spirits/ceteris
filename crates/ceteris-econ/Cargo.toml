@@ -11,7 +11,7 @@ workspace = true
 
 [dependencies]
 arrow-array = "60.0.0"
-arrow-ipc = "60.0.0"
+arrow-ipc = { version = "60.0.0", features = ["zstd"] }
 arrow-schema = "60.0.0"
 ceteris-core = { path = "../ceteris-core" }
 ceteris-geo = { path = "../ceteris-geo" }

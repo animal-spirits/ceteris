@@ -143,6 +143,21 @@ serial scatter again, bit-identical, so no re-bless; the gather and its oracle t
 removed and the reciprocals stay. The scatter's per-call buffers moved into `Sourced`'s
 scratch. Step 4's fused multi-good pass is the remaining lever on the critical path.
 
+Step 3 (typed, compressed history) is bit-identical: the history only reads state, and the
+state hashes and run files are unchanged. In memory the history keeps values only, at native
+width (f64, u32, bool); the tick, province and good keys follow from the sampled ticks and the
+row order and are built when written, so a market row is 49 bytes instead of 80. Files are
+Arrow IPC with zstd buffer compression (the `zstd` feature of `arrow-ipc`, already a
+dependency of the workspace through `ceteris-core`), with the columns unchanged;
+`ceteris run --history-format csv` writes the same tables as CSV, f64 as the shortest text
+that parses back to the same bits. The `alp` crate was not taken: its licence (Apache-2.0)
+fits the workspace, but it is version 0.0.4 from a single vendor, and its encoding would need
+a custom column encoding that Arrow readers (`read_table`, pyarrow) cannot open, which breaks
+the unchanged-columns rule. zstd over the repetitive key columns and the smooth price series
+needs no new dependency. A byte-stream-split transform has the same reader problem and was
+left out. Full pack, 120 ticks with history: peak 1.58 GB (Arrow) and 1.51 GB (CSV) against
+1.88 GB before, and 1.15 GB without history; the markets file is 65 MB (610 MB as CSV).
+
 ## Tests
 
 - A clippy fixture calling each banned method and naming each banned type fails

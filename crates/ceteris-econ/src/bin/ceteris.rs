@@ -3,7 +3,7 @@
 //! ```text
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
-//!     [--data-state] [--perturb SEED] [--history [--history-every N]] --out DIR
+//!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
 //! ```
 //!
 //! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
@@ -15,7 +15,8 @@
 //! wages and employment, one month of base use in stock, nothing in flight) instead of the
 //! steady state. `--perturb SEED` moves the start by `EconWorld::perturb` (10%, ADR 0089) and
 //! prints the factors' range. `--history` also writes the per-tick series of
-//! `ceteris_econ::history`, every N ticks (default 1).
+//! `ceteris_econ::history`, every N ticks (default 1), as Arrow with zstd compression or, with
+//! `--history-format csv`, as CSV.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -25,7 +26,7 @@ use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
-use ceteris_econ::history::run_recorded;
+use ceteris_econ::history::{Format, run_recorded};
 use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
@@ -35,7 +36,7 @@ use ceteris_trade::{Kernel, TradeParams};
 const USAGE: &str = "usage:
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
-    [--data-state] [--perturb SEED] [--history [--history-every N]] --out DIR";
+    [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
 
 /// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
 const PERTURBATION: f64 = 0.1;
@@ -76,6 +77,7 @@ struct Args {
     perturb: Option<u64>,
     history: bool,
     history_every: Option<u32>,
+    history_format: Option<Format>,
 }
 
 fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -83,7 +85,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let (mut source, mut out, mut ticks, mut frictionless) = (None, None, None, false);
     let mut equilibrium = None;
     let (mut data_state, mut perturb) = (false, None);
-    let (mut history, mut history_every) = (false, None);
+    let (mut history, mut history_every, mut history_format) = (false, None, None);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fixture" => source = Some(Source::Fixture),
@@ -109,6 +111,13 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
                     _ => return Err(format!("bad sampling interval '{n}'")),
                 }
             }
+            "--history-format" => {
+                history_format = Some(match args.next().as_deref() {
+                    Some("arrow") => Format::Arrow,
+                    Some("csv") => Format::Csv,
+                    _ => return Err("--history-format needs arrow or csv".into()),
+                });
+            }
             "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
             "--ticks" => {
                 let n = args.next().ok_or("--ticks needs a count")?;
@@ -127,6 +136,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         perturb,
         history,
         history_every,
+        history_format,
     })
 }
 
@@ -138,10 +148,11 @@ fn export(args: &Args) -> Result<(), String> {
         || args.perturb.is_some()
         || args.history
         || args.history_every.is_some()
+        || args.history_format.is_some()
     {
         return Err(
-            "--ticks, --frictionless, --from-equilibrium, --data-state, --perturb, --history and \
-             --history-every belong to run"
+            "--ticks, --frictionless, --from-equilibrium, --data-state, --perturb, --history, \
+             --history-every and --history-format belong to run"
                 .into(),
         );
     }
@@ -155,6 +166,9 @@ fn run(args: &Args) -> Result<(), String> {
     let ticks = args.ticks.ok_or("--ticks is required")?;
     if args.history_every.is_some() && !args.history {
         return Err("--history-every needs --history".into());
+    }
+    if args.history_format.is_some() && !args.history {
+        return Err("--history-format needs --history".into());
     }
     let params = if args.frictionless {
         EconParams::frictionless()
@@ -195,7 +209,9 @@ fn run(args: &Args) -> Result<(), String> {
         let history = run_recorded(&mut sim, ticks, args.history_every.unwrap_or(1))
             .map_err(|v| v.to_string())?;
         write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
-        return history.write(&args.out).map_err(|e| e.to_string());
+        return history
+            .write(&args.out, args.history_format.unwrap_or(Format::Arrow))
+            .map_err(|e| e.to_string());
     }
     sim.run_until(ticks).map_err(|v| v.to_string())?;
     write_run(&args.out, sim.world()).map_err(|e| e.to_string())
