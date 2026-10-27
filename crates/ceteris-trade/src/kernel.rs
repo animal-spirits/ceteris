@@ -213,21 +213,33 @@ impl Access {
 
     /// Spending per unit of access of destination d of country c, `E / Phi_d` for E = 1, in
     /// the scale of its home part and of its abroad part; 0 for a part that is not present.
+    /// Each is finite, at most `1 / f64::MIN_POSITIVE`; times a spending it can overflow, which
+    /// [`crate::source::source`] handles with a binary scale.
     pub fn reach(&self, d: usize, c: usize) -> (f64, f64) {
         let (home, abroad) = (self.home[d], self.abroad[d]);
         let (s, t) = (self.shift[c], self.dest_shift[c]);
         let (on_home, on_abroad) = (present(home), present(abroad));
-        // a total that overflows leaves its part a share that rounds to 0
+        // the other part in this part's scale; when exp(gap) alone overflows, a part near
+        // the smallest normal f64 can still bring the product back into range
+        let cross = |x: f64, gap: f64| {
+            let e = libm::exp(gap);
+            if e.is_finite() {
+                x * e
+            } else {
+                libm::exp(libm::log(x) + gap)
+            }
+        };
+        // only a total beyond f64 overflows: its part's share is below part / f64::MAX
         let inv = |total: f64| if total.is_finite() { 1.0 / total } else { 0.0 };
         let at_home = match (on_home, on_abroad) {
             (false, _) => 0.0,
             (true, false) => inv(home),
-            (true, true) => inv(home + abroad * libm::exp(t - s)),
+            (true, true) => inv(home + cross(abroad, t - s)),
         };
         let at_abroad = match (on_abroad, on_home) {
             (false, _) => 0.0,
             (true, false) => inv(abroad),
-            (true, true) => inv(abroad + home * libm::exp(s - t)),
+            (true, true) => inv(abroad + cross(home, s - t)),
         };
         (at_home, at_abroad)
     }

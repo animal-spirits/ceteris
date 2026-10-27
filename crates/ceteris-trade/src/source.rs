@@ -100,9 +100,11 @@ struct Scratch {
     access: Access,
     /// Spending per unit of access by class, `E_d / Phi_d`, in the scale of d's home part
     /// (home and domestic routes) and of its abroad part (through its gateways); 0 where the
-    /// part is absent.
+    /// part is absent. Both hold `2^-up` of these values: `up` is 0 unless some `E_d / Phi_d`
+    /// is beyond f64, though every flow built on it is at most `E_d`.
     reach: Vec<[f64; 2]>,
     reach_abroad: Vec<[f64; 2]>,
+    up: i32,
     /// Backward pass, per gateway: value sent to destination gateway b, and value net of
     /// tariff arriving back at origin gateway a.
     to_dest_gateway: Vec<[f64; 2]>,
@@ -258,15 +260,18 @@ pub fn source(
     let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &s.access.carry);
 
     out.price_index.clone_from(&s.price_index);
-    s.reach.clear();
-    s.reach_abroad.clear();
-    for (d, &c) in k.province_country().iter().enumerate() {
-        let (home, abroad) = s.access.reach(d, usize::from(c));
-        s.reach.push([spend[d][0] * home, spend[d][1] * home]);
-        s.reach_abroad
-            .push([spend[d][0] * abroad, spend[d][1] * abroad]);
+    s.up = 0;
+    fill_reach(k, spend, &s.access, 0, &mut s.reach, &mut s.reach_abroad);
+    if s.reach
+        .iter()
+        .chain(&s.reach_abroad)
+        .flatten()
+        .any(|x| !x.is_finite())
+    {
+        s.up = reach_exponent(k, spend, &s.access);
+        fill_reach(k, spend, &s.access, s.up, &mut s.reach, &mut s.reach_abroad);
     }
-    let (reach, reach_abroad) = (&s.reach, &s.reach_abroad);
+    let (reach, reach_abroad, up) = (&s.reach, &s.reach_abroad, s.up);
 
     // Orders are accumulated as value net of tariff and turned into units at the end. Both
     // classes go through each loop together; every accumulator is per class, so each sees
@@ -346,9 +351,48 @@ pub fn source(
                 }
             }
             for x in order {
-                *x /= price[o];
+                *x = times_two_to(*x / price[o], up);
             }
         });
+}
+
+/// `x 2^n`, exact unless it leaves the normal range.
+fn times_two_to(x: f64, n: i32) -> f64 {
+    if n == 0 { x } else { libm::scalbn(x, n) }
+}
+
+/// Writes `2^-up E_d / Phi_d` per class for the home and abroad part of every destination.
+fn fill_reach(
+    k: &Kernel,
+    spend: &[[f64; 2]],
+    access: &Access,
+    up: i32,
+    reach: &mut Vec<[f64; 2]>,
+    reach_abroad: &mut Vec<[f64; 2]>,
+) {
+    reach.clear();
+    reach_abroad.clear();
+    for (d, &c) in k.province_country().iter().enumerate() {
+        let (home, abroad) = access.reach(d, usize::from(c));
+        let e = spend[d].map(|e| times_two_to(e, -up));
+        reach.push([e[0] * home, e[1] * home]);
+        reach_abroad.push([e[0] * abroad, e[1] * abroad]);
+    }
+}
+
+/// The binary exponent that brings every `E_d / Phi_d` to at most about 2^961, leaving
+/// headroom for the sums over destinations and gateways built on them.
+fn reach_exponent(k: &Kernel, spend: &[[f64; 2]], access: &Access) -> i32 {
+    let mut top = i32::MIN;
+    for (d, &c) in k.province_country().iter().enumerate() {
+        let (home, abroad) = access.reach(d, usize::from(c));
+        for at in [home, abroad].into_iter().filter(|&at| at > 0.0) {
+            for &e in spend[d].iter().filter(|&&e| e > 0.0) {
+                top = top.max(libm::ilogb(e) + libm::ilogb(at) + 1);
+            }
+        }
+    }
+    top - 960
 }
 
 /// Dispatches the filled orders of the preceding [`source`] call for the same good: origin o
@@ -444,7 +488,8 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
             if w[o] == 0.0 || f == 0.0 {
                 continue;
             }
-            let (m, inv_p) = (f * w[o], 1.0 / price[o]);
+            // reach is 2^-up of E_d / Phi_d; every flow below is linear in m
+            let (m, inv_p) = (times_two_to(f * w[o], s.up), 1.0 / price[o]);
             let x = m * reach[o][c];
             if x > 0.0 {
                 let units = x * inv_p;
@@ -1609,5 +1654,126 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Asserts that each present part of every destination's spending per unit of access
+    /// is `exp(-(ln Phi_d - shift))` of its scale.
+    fn assert_reach_matches_ln_phi(k: &Kernel, out: &Sourced) {
+        let acc = &out.scratch.access;
+        for (d, &c) in k.province_country().iter().enumerate() {
+            let c = usize::from(c);
+            let ln_phi = acc.ln_phi(d, c);
+            let (at_home, at_abroad) = acc.reach(d, c);
+            for (at, shift) in [(at_home, acc.shift[c]), (at_abroad, acc.dest_shift[c])] {
+                if at > 0.0 {
+                    let got = shift - at.ln();
+                    assert!(close(got, ln_phi, 1e-12), "d {d}: {got} vs {ln_phi}");
+                }
+            }
+        }
+    }
+
+    /// With full fills each destination pays exactly its spending.
+    fn assert_spends_all(out: &Sourced, spend: &[[f64; 2]]) {
+        for (d, (paid, want)) in out.paid_by_class.iter().zip(spend).enumerate() {
+            for (&paid, &want) in paid.iter().zip(want) {
+                assert!(close(paid, want, 1e-12), "d {d}: {paid} vs {want}");
+            }
+        }
+    }
+
+    fn assert_flows_finite(out: &Sourced) {
+        let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
+        let finite2 = |v: &[[f64; 2]]| v.iter().flatten().all(|x| x.is_finite());
+        assert!(finite2(&out.orders) && finite2(&out.paid_by_class));
+        assert!(finite(&out.shipped) && finite(&out.paid) && finite(&out.received));
+        assert!(finite(&out.tariff) && finite(&out.domestic_value));
+        assert!(finite(&out.access_in_value) && finite(&out.access_out_value));
+        assert!(finite(&out.crossing_value) && finite(&out.crossing_units));
+        assert!(out.arrive.iter().all(|a| finite2(a)));
+        assert!(out.lost.is_finite());
+    }
+
+    #[test]
+    fn home_part_keeps_its_share_across_a_scale_gap_beyond_exp() {
+        // province 0 of country 0 is e^gap times dearer than province 1 of country 1, gap
+        // above 709.78, so exp(gap) overflows; its only import route crosses a costly border,
+        // so its abroad part is near the smallest normal f64 and the abroad part in the home
+        // scale is e^4: the home part keeps 1 / (1 + e^4) of the spending
+        let g = 0;
+        let leg = |from, to, cost_per_t| Leg {
+            from,
+            to,
+            cost_per_t,
+            hours: 0.0,
+        };
+        let net = Network {
+            province_country: vec![0, 1],
+            gateway_country: vec![0, 1],
+            access: vec![leg(0, 0, 1.0), leg(1, 1, 1.0)],
+            crossings: vec![leg(1, 0, 2.0 * 140.4f64.exp() / 1.3), leg(0, 1, 1.0)],
+            ..Network::default()
+        };
+        let wedges = Wedges::none(2);
+        let k = kernel(&net, &wedges);
+        let nu = 1.0 + TradeParams::default().border_nu;
+        let abroad =
+            k_leg(g, &net.access[0], 1.0, THETA).powi(2) * k_leg(g, &net.crossings[0], nu, THETA);
+        let gap = 4.0 - abroad.ln();
+        assert!(
+            gap > 709.79 && abroad >= f64::MIN_POSITIVE,
+            "{gap} {abroad}"
+        );
+        let price = [(gap / THETA).exp(), 1.0];
+        let spend = [[10.0, 5.0], [10.0, 20.0]];
+        let fill = [[1.0; 2]; 2];
+        let out = run(&k, g, &price, &[true; 2], &spend, &fill);
+
+        assert_flows_finite(&out);
+        assert_reach_matches_ln_phi(&k, &out);
+        let home_share = 1.0 / (1.0 + 4f64.exp());
+        assert!(close(out.orders[0][0] * price[0], 10.0 * home_share, 1e-9));
+        assert_spends_all(&out, &spend);
+        let want = dense(&net, &wedges, g, &price, &[true; 2], &spend, &fill, THETA);
+        assert_matches_dense("scale gap", &out, &want, 1e-9);
+    }
+
+    #[test]
+    fn spending_beyond_f64_per_unit_of_access_stays_finite() {
+        // province 1 reaches only province 0, over a domestic leg with K about 1e-307, and
+        // province 2 only through a crossing whose route K is about 1e-306: their spending
+        // per unit of access, E / Phi, is beyond f64, though every flow is at most E
+        let g = 0;
+        let leg = |from, to, cost_per_t| Leg {
+            from,
+            to,
+            cost_per_t,
+            hours: 0.0,
+        };
+        let net = Network {
+            province_country: vec![0, 0, 1],
+            gateway_country: vec![0, 1],
+            domestic: vec![leg(0, 1, 2.0 * 141.38f64.exp()), leg(1, 0, 1.0)],
+            access: vec![leg(0, 0, 1.0), leg(1, 0, 1.0), leg(2, 1, 1.0)],
+            crossings: vec![leg(0, 1, 2.0 * 140.04f64.exp() / 1.3), leg(1, 0, 1.0)],
+            ..Network::default()
+        };
+        let wedges = Wedges::none(2);
+        let k = kernel(&net, &wedges);
+        let price = [1.0, f64::NAN, f64::NAN];
+        let active = [true, false, false];
+        let spend = [[3.0, 4.0], [100.0, 1e6], [1e6, 100.0]];
+        let fill = [[1.0; 2]; 3];
+        let out = run(&k, g, &price, &active, &spend, &fill);
+
+        let acc = &out.scratch.access;
+        for (part, e) in [(acc.home[1], 100.0), (acc.abroad[2], 1e6)] {
+            assert!(f64::MIN_POSITIVE <= part && part < e / f64::MAX, "{part}");
+        }
+        assert_flows_finite(&out);
+        assert_reach_matches_ln_phi(&k, &out);
+        assert_spends_all(&out, &spend);
+        let want = dense(&net, &wedges, g, &[1.0; 3], &active, &spend, &fill, THETA);
+        assert_matches_dense("tiny access", &out, &want, 1e-9);
     }
 }

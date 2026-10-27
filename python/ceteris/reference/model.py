@@ -14,7 +14,8 @@ use; X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (theta per go
 carrying the tariff on crossings. Origin o ships X_od / (p_o (1 +
 t)) units and receives p_o per unit, the importer's rebate account t p_o. Weights are relative to
 one p_min per good: Rust holds them per country in log scale (ADR 0093), which gives the same
-shares wherever the global scale does not underflow, as on every pack and fixture price vector. A
+shares wherever the global scale does not underflow and E_d / Phi_d does not overflow, as on every
+pack and fixture price vector. A
 destination is reachable where Phi_d > 0. Losses and duties multiply by the kernel's reciprocals.
 
 Unknowns x: ln p of every active (province, good) cell in row-major order (origin markets of
