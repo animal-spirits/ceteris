@@ -143,6 +143,46 @@ serial scatter again, bit-identical, so no re-bless; the gather and its oracle t
 removed and the reciprocals stay. The scatter's per-call buffers moved into `Sourced`'s
 scratch. Step 4's fused multi-good pass is the remaining lever on the critical path.
 
+Step 4 was built and measured, and not kept. The fused pass ran the seven goods' dispatch as one
+serial pass over the legs, goods innermost: per-leg factors stored as `[f64; 7]` per entry
+(`k`, the reciprocals and the lag), per-gateway and per-province accumulators goods innermost,
+outputs transposed back into each good's columns at the end. A test held every written field of
+every good, `lost` included, equal to `dispatch` by `to_bits()`. Fusing cut the arithmetic of the
+seven goods by about a quarter (one pass 27.1 ms against 37.5 ms for seven `dispatch` calls in
+sequence; a first build that read each good's own `Csr` entries took 103.8 ms), but as one task it
+replaces seven tasks that already run in parallel, so the stage became 28.5 ms against the
+scatter's 7.5 ms. Shared index loads and interleaved dependent chains cannot recover a factor of
+seven: each good's sums, products and stores remain its own. A single-good pass on the same
+layout (`[f64; 1]`, run once per good in parallel) was within noise of the scatter (8.20 against
+8.15 ms in one run). Alternating criterion rounds (full pack, M4 Pro, AC, 98 W, 2026-10-27; the fused build against the
+scatter at a31f129, each with its own target directory):
+
+| bench | fused r1 | fused r2 | scatter r1 | scatter r2 |
+|---|---|---|---|---|
+| `source_dispatch_parallel`, scatter in the same binary | 7.70 | 7.75 | 7.76 | 7.78 |
+| `source_dispatch_fused` (parallel sourcing, then one fused pass) | 28.30 | 28.65 | | |
+| `dispatch_fused` (seven goods, one pass) | 26.95 | 27.03 | | |
+| `dispatch` (seven goods in sequence) | 37.65 | 37.57 | 37.75 | 37.32 |
+| `dispatch_one_good` | 4.98 | 4.96 | 4.96 | 4.93 |
+
+The fused pass was not wired into the tick: its stage alone is 20 ms over the scatter's. `dispatch` stays the serial
+scatter per good. A fused pass pays only if it is also parallel inside, which is the gather that
+lost above; with all seven goods in one parallel pass the barriers are paid once rather than per
+good, which is the remaining untried combination.
+
+Gateway count (measured with this step; a proposal only, nothing changed). ADR 0092's gateway
+masses are deferred (border friction fit), so access still sums over gateway pairs, and a smaller
+count removes access instead of only redistributing it. With the pack's own rule at a total of
+300 (k-medoids per country, the 600 rule reproduces the pack's `gateways.arrow` byte for byte),
+on a scratch pack copy: parallel source and dispatch of the seven goods at the 600 pack's
+calibrated prices, unit spending, full fills and a cold sourcing each run, takes 4.70 ms against
+9.70 ms at 600 (median of 60, two rounds each, a harness outside criterion), about 5 ms saved.
+But |d ln Phi_d| at the same prices has medians of 0.03 to 2.0 by good (maxima 2.9 to 11.3), far
+above the 1e-3 bound, and the calibration of the 300 pack does not settle (100 passes, last change
+3.2e-2, 842 s), so H2 has no steady state to run on at 300. At 600 H2 distance is -0.7531
+(s.e. 0.0161), unchanged. No count is proposed: the count can be set for speed only once the
+masses make access independent of it, and then both measurements are to be repeated.
+
 Step 3 (typed, compressed history) is bit-identical: the history only reads state, and the
 state hashes and run files are unchanged. In memory the history keeps values only, at native
 width (f64, u32, bool); the tick, province and good keys follow from the sampled ticks and the
