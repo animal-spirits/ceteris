@@ -1,6 +1,8 @@
 //! Comparison of two directories of Arrow tables with the tolerances of ADR 0113: integer,
 //! string, boolean and categorical columns must be equal, float columns agree to a relative
-//! difference per element.
+//! difference per element. The measure is purely relative, with no absolute floor; +0 equals -0
+//! and NaN equals NaN. Schemas must agree too: column names and order, types, nullability and
+//! the `pack_format` metadata value.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -158,10 +160,14 @@ fn column(name: &str, a: &ArrayRef, b: &ArrayRef, tol: Tolerance) -> ColumnDiff 
     }
     // Dictionary keys are not part of the value, so compare categoricals by their labels.
     let decode = |x: &ArrayRef| match x.data_type() {
-        DataType::Dictionary(_, value) => cast(x, value).unwrap_or_else(|_| x.clone()),
-        _ => x.clone(),
+        DataType::Dictionary(_, value) => cast(x, value).map_err(|e| e.to_string()),
+        _ => Ok(x.clone()),
     };
-    let equal = decode(a) == decode(b);
+    let (da, db) = match (decode(a), decode(b)) {
+        (Ok(x), Ok(y)) => (x, y),
+        (Err(e), _) | (_, Err(e)) => return fail(format!("cannot decode categorical: {e}")),
+    };
+    let equal = da == db;
     ColumnDiff {
         name: name.to_owned(),
         max_rel: if equal { 0.0 } else { f64::INFINITY },
@@ -174,26 +180,62 @@ fn column(name: &str, a: &ArrayRef, b: &ArrayRef, tol: Tolerance) -> ColumnDiff 
     }
 }
 
-fn table(name: &str, a: &RecordBatch, b: &RecordBatch, tol: Tolerance) -> TableDiff {
+fn duplicate(batch: &RecordBatch) -> Option<String> {
+    let names: Vec<&String> = batch
+        .schema_ref()
+        .fields()
+        .iter()
+        .map(|f| f.name())
+        .collect();
+    let mut seen = std::collections::BTreeSet::new();
+    names.into_iter().find(|n| !seen.insert(*n)).cloned()
+}
+
+fn table(
+    name: &str,
+    a: &RecordBatch,
+    b: &RecordBatch,
+    tol: Tolerance,
+) -> Result<TableDiff, String> {
+    for (side, batch) in [("A", a), ("B", b)] {
+        if let Some(dup) = duplicate(batch) {
+            return Err(format!("{name}: duplicate column {dup} in {side}"));
+        }
+    }
     let mut diff = TableDiff {
         name: name.to_owned(),
         columns: Vec::new(),
         issues: Vec::new(),
     };
+    let (sa, sb) = (a.schema(), b.schema());
+    let format = |s: &arrow_schema::Schema| s.metadata().get("pack_format").cloned();
+    if format(&sa) != format(&sb) {
+        diff.issues.push(format!(
+            "pack_format {:?} vs {:?}",
+            format(&sa),
+            format(&sb)
+        ));
+    }
     if a.num_rows() != b.num_rows() {
         diff.issues
             .push(format!("rows {} vs {}", a.num_rows(), b.num_rows()));
-        return diff;
+        return Ok(diff);
     }
-    let (sa, sb) = (a.schema(), b.schema());
     for field in sa.fields() {
         match sb.index_of(field.name()) {
-            Ok(j) => diff.columns.push(column(
-                field.name(),
-                a.column_by_name(field.name()).unwrap(),
-                b.column(j),
-                tol,
-            )),
+            Ok(j) => {
+                let mut col = column(
+                    field.name(),
+                    a.column_by_name(field.name()).unwrap(),
+                    b.column(j),
+                    tol,
+                );
+                if field.is_nullable() != sb.field(j).is_nullable() {
+                    col.ok = false;
+                    col.note = "nullability differs".into();
+                }
+                diff.columns.push(col);
+            }
             Err(_) => diff
                 .issues
                 .push(format!("column {} missing in B", field.name())),
@@ -205,7 +247,13 @@ fn table(name: &str, a: &RecordBatch, b: &RecordBatch, tol: Tolerance) -> TableD
                 .push(format!("column {} missing in A", field.name()));
         }
     }
-    diff
+    let order = |s: &arrow_schema::Schema| -> Vec<String> {
+        s.fields().iter().map(|f| f.name().clone()).collect()
+    };
+    if diff.issues.iter().all(|i| !i.starts_with("column ")) && order(&sa) != order(&sb) {
+        diff.issues.push("column order differs".into());
+    }
+    Ok(diff)
 }
 
 /// Compares the tables of `a` against those of `b`, row by row in file order.
@@ -221,6 +269,11 @@ pub fn tables_named(
     only: Option<&str>,
 ) -> Result<Report, String> {
     let (ta, tb) = (read_dir(a)?, read_dir(b)?);
+    for (dir, tables) in [(a, &ta), (b, &tb)] {
+        if tables.is_empty() {
+            return Err(format!("{}: no .arrow tables found", dir.display()));
+        }
+    }
     let mut names: Vec<&String> = ta.keys().chain(tb.keys()).collect();
     names.sort();
     names.dedup();
@@ -230,7 +283,7 @@ pub fn tables_named(
         .filter(|n| only.is_none_or(|o| o == n.as_str()))
     {
         out.push(match (ta.get(name), tb.get(name)) {
-            (Some(x), Some(y)) => table(name, x, y, tol),
+            (Some(x), Some(y)) => table(name, x, y, tol)?,
             (Some(_), None) => missing(name, "B"),
             _ => missing(name, "A"),
         });
@@ -310,6 +363,33 @@ mod tests {
             vec![("n", ints(vec![1, 2])), ("s", strs(vec!["a", "b"]))],
         );
         assert!(tables(a.path(), b.path(), Tolerance::DEFAULT).unwrap().ok);
+    }
+
+    #[test]
+    fn compare_errors_without_tables() {
+        let (a, b) = pair();
+        put(a.path(), "t", vec![("x", f(&[1.0]))]);
+        assert!(tables(a.path(), b.path(), Tolerance::DEFAULT).is_err());
+        assert!(tables(b.path(), a.path(), Tolerance::DEFAULT).is_err());
+    }
+
+    #[test]
+    fn compare_flags_column_order_and_zero_signs_equal() {
+        let (a, b) = pair();
+        put(
+            a.path(),
+            "t",
+            vec![("x", f(&[0.0, f64::NAN])), ("y", f(&[1.0, 1.0]))],
+        );
+        put(
+            b.path(),
+            "t",
+            vec![("y", f(&[1.0, 1.0])), ("x", f(&[-0.0, f64::NAN]))],
+        );
+        let r = tables(a.path(), b.path(), Tolerance::DEFAULT).unwrap();
+        assert!(!r.ok);
+        assert_eq!(r.tables[0].issues, ["column order differs"]);
+        assert!(r.tables[0].columns.iter().all(|c| c.ok));
     }
 
     #[test]
