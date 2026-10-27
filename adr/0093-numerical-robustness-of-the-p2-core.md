@@ -1,6 +1,6 @@
 # 0093. Numerical robustness of the P2 core
 
-Status: proposed
+Status: proposed (partly built, see As built)
 Date: 2026-10-25
 Design sections: 19.4; trade SPEC Active markets; econ SPEC Production, Labour
 
@@ -52,3 +52,17 @@ Fix them now. None changes a result away from the edge cases.
 - DESIGN 19.4 is corrected. Sourcing cost rises by one log-sum-exp per gateway per good per
   tick, negligible against the budget.
 - State hashes change only where the old code hit a floor or the chain bound.
+
+## As built
+
+Built in the pre-p3/speed branch: the log-domain weights and the kernel range. Weights are
+ln w_o = -theta ln(p_o / p_A), relative to the cheapest active price of the origin's own country,
+with a shift per country. Each destination country takes the largest shift among itself and the
+countries that export to it, and a table of exp(shift difference) per country pair, at most 1,
+carries the shift through the gateway sums in place of a log-sum-exp per term. Each destination
+keeps its home and abroad access in their own scales. `WEIGHT_FLOOR` is gone; a destination is
+reached when its access is at least `f64::MIN_POSITIVE`. The kernel stores K in f64, which makes
+the f32 row scaling unnecessary. The price spread of 1e12 between two countries, a wide-spread
+reachability test and the kernel round trip at extreme tau are tests.
+
+Not built, and still open: the exact local fill and the uncapped wage search.

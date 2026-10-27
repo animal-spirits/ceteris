@@ -160,8 +160,9 @@ per destination gateway (by division where y_b or z_a is subnormal and its recip
 overflows). x (1 / d) rounds differently from x / d, so these bits differ from the divisions of
 the first build. A gather by target, bit-identical to this pass, was built and measured slower
 inside the tick (ADR 0097, As built), and removed. So was a fused pass of the seven goods, goods
-innermost and bit-identical: it does a quarter less arithmetic than seven passes but as one task
-it takes 27 ms against the stage's 7.7 ms (ADR 0097, As built).
+innermost and bit-identical: it does a quarter less arithmetic than seven passes, but as one task
+the parallel source and dispatch stage with it took 28.5 ms against about 7.7 ms for the stage
+with the per-good scatter (ADR 0097, As built).
 
 **Payments.** Buyers pay at dispatch for what is filled: p_o (1 + t) per shipped unit, so a
 fully filled destination pays E_d. Each buyer pays its share of its class's filled spending to
@@ -446,18 +447,24 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 - Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at
   the equilibrium (S02).
 - Golden: covered by `tests/golden/p2-econ.txt` (econ SPEC).
-- Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7 traded
-  goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the owner on
-  2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
+- Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7
+  traded goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the
+  owner on 2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms),
+  `kernel_build` (not per tick; budget 2 s).
   After the stored reciprocals and the log-domain weights (ADRs 0093, 0097; M4 Pro, AC, 98 W, full
   pack from its calibrated steady state, criterion medians, 2026-10-26), with the serial dispatch
   per good: `source_dispatch_parallel` 7.73 to 7.80 ms in three runs and 8.24 ms in one, at the
-  8 ms budget; `unit_source_dispatch_parallel` 6.1 to 6.5 ms; a whole tick 35.1 to 35.2 ms in three
-  runs and 38.4 ms in a noisy fourth, just over the 35 ms budget; one good's dispatch 4.8 to 6.1 ms (bimodal by the core it lands on). The
-  gather dispatch by target measured 10.3 to 10.4 ms and 44.4 to 44.7 ms in the same alternating
-  rounds and was removed (ADR 0097, As built). Re-measured 2026-10-27 in alternating rounds against
-  the fused multi-good pass: `source_dispatch_parallel` 7.70 to 7.78 ms with the scatter, 28.3 to
-  28.7 ms with the fused pass, which was not kept.
+  8 ms budget; `unit_source_dispatch_parallel` 6.1 to 6.5 ms; a whole tick 35.1 to 35.2 ms in
+  three runs and 38.4 ms in a noisy fourth, just over the 35 ms budget; one good's dispatch 4.8
+  to 6.1 ms (bimodal by the core it lands on). The gather dispatch by target measured 10.3 to
+  10.4 ms and 44.4 to 44.7 ms in the same alternating rounds and was removed (ADR 0097, As
+  built). Measured 2026-10-27 in alternating rounds against the fused multi-good pass:
+  `source_dispatch_parallel` 7.70 to 7.78 ms with the scatter, 28.3 to 28.7 ms with the fused
+  pass, which was not kept.
+  Re-measured on the branch head (2026-10-27, AC, 98 W, no other job; two rounds, each a
+  separate criterion run): `source_dispatch_parallel` 8.54 and 8.41 ms (over the 8 ms budget
+  by about 5%; the earlier runs on 2026-10-26 and 2026-10-27 gave 7.7 to 7.8 ms); a whole tick
+  37.3 and 35.5 ms (35 ms budget); `unit_source_dispatch_parallel` 6.55 and 6.56 ms.
 
 ## Open questions
 
