@@ -143,6 +143,10 @@ Reads the P1 tables (provinces, cells, nodes, edges, countries) from the existin
 **Files:** `crates/ceteris-pack/src/build.rs`; CLI `ceteris pack build --out DIR` (runs fetch, P1, tiles via `tippecanoe` with the same flags, fills, JSON, then the econ build).
 - [ ] Parity: every Arrow table, `provinces.json`, `counties.json`, manifest `tables` (GeoJSON layer hashes for the tiles); fixture-pack determinism test (two builds, equal digests). Delete `python/ceteris/packs/*.py` (all but `__init__`) and `test_packs.py` after parity. Commit.
 
+### Task 3f: Province merges (if their ADR is accepted by then)
+
+- [ ] A separate thread is drafting an ADR that merges Natural Earth units up to first-level divisions from a per-country list (UK 12, Italy 20, France 22, and a few more), built in the Rust pack. It lands here, after 3e's parity against the current Python (so parity compares like with like) and before 4f, so the province IDs, the pack and the goldens move in the one re-pin. Step 4's parity runs on exports of the pre-merge pack. If the ADR is not accepted by the end of step 3, this task is skipped and the merge later re-pins on its own.
+
 ---
 
 ## Step 4: `migrate/reference`
