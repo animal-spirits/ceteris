@@ -1,6 +1,6 @@
 # 0113. Full migration of the Python code to Rust
 
-Status: proposed
+Status: accepted (owner, 2026-10-27)
 Date: 2026-10-27
 Design sections: 14.8 (scripting API), 15.2, 16, 16.1, 19.1 (stack), 19.3 (repository layout), 21.1, 22.1 (core language); amends ADRs 0003, 0050, 0096
 
@@ -148,3 +148,16 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   outputs from outside, and drive runs through the CLI rather than from a notebook.
 - No wheels, maturin builds or PyPI releases to maintain.
 - One re-pin of golden hashes, at the end of step 4.
+
+## As built
+
+- Step 0 (foundation): crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate` and
+  `ceteris-cli` added. The `ceteris` binary moved from `ceteris-econ` to `ceteris-cli` (name
+  unchanged, so `cargo run --bin ceteris` is unaffected); `ceteris-calibrate` depends on
+  `ceteris-econ`, so the binary could not stay there. `ceteris pack compare A B [--iterative]
+  [--table NAME]` compares two directories of Arrow tables at 1e-12 (1e-9 with `--iterative`).
+  `ceteris_pack::table::write` writes a table with `pack_format = "3"` and returns its SHA-256;
+  it refuses extra schema metadata, because Arrow serialises metadata in hash-map order and the
+  bytes would stop being deterministic. `deny.toml` carries the licence allowlist and CI runs
+  `cargo deny check licenses`. `tiny-keccak` 2.0.2 (CC0-1.0, via `arrow-array` -> `ahash` ->
+  `const-random`) is outside the allowlist and awaits a ruling.

@@ -1,0 +1,87 @@
+//! Writing one pack table as an Arrow IPC file.
+
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{self, BufWriter, Write};
+use std::path::Path;
+use std::sync::Arc;
+
+use arrow_array::RecordBatch;
+use arrow_ipc::writer::FileWriter;
+use arrow_schema::{ArrowError, Schema};
+use sha2::{Digest, Sha256};
+
+pub const PACK_FORMAT: &str = "3";
+
+fn io_error(e: ArrowError) -> io::Error {
+    io::Error::other(e)
+}
+
+/// Writes `batch` to `path` with `pack_format` in the schema metadata and returns the SHA-256
+/// of the file's bytes.
+///
+/// Arrow serialises schema metadata in hash-map order, which differs between runs, so any
+/// entry beyond `pack_format` would make the bytes non-deterministic and is refused.
+pub fn write(
+    path: &Path,
+    batch: &RecordBatch,
+    metadata: &BTreeMap<String, String>,
+) -> io::Result<[u8; 32]> {
+    if !metadata.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "schema metadata beyond pack_format is not byte-deterministic",
+        ));
+    }
+    let schema = Arc::new(
+        Schema::new(batch.schema().fields().clone())
+            .with_metadata([("pack_format".to_owned(), PACK_FORMAT.to_owned())]),
+    );
+    let batch = batch
+        .clone()
+        .with_schema(Arc::clone(&schema))
+        .map_err(io_error)?;
+    let mut writer =
+        FileWriter::try_new(BufWriter::new(File::create(path)?), &schema).map_err(io_error)?;
+    writer.write(&batch).map_err(io_error)?;
+    writer.finish().map_err(io_error)?;
+    writer.into_inner().map_err(io_error)?.flush()?;
+    Ok(Sha256::digest(std::fs::read(path)?).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow_array::{ArrayRef, Float64Array, Int64Array};
+
+    fn batch() -> RecordBatch {
+        let cols: Vec<(&str, ArrayRef)> = vec![
+            ("id", Arc::new(Int64Array::from(vec![1, 2, 3]))),
+            ("x", Arc::new(Float64Array::from(vec![0.5, 1.5, 2.5]))),
+        ];
+        RecordBatch::try_from_iter(cols).unwrap()
+    }
+
+    #[test]
+    fn table_write_is_byte_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let none = BTreeMap::new();
+        let (p, q) = (dir.path().join("p.arrow"), dir.path().join("q.arrow"));
+        let (hp, hq) = (
+            write(&p, &batch(), &none).unwrap(),
+            write(&q, &batch(), &none).unwrap(),
+        );
+        assert_eq!(hp, hq);
+        assert_eq!(std::fs::read(&p).unwrap(), std::fs::read(&q).unwrap());
+        let back = arrow_ipc::reader::FileReader::try_new(File::open(&p).unwrap(), None).unwrap();
+        assert_eq!(back.schema().metadata()["pack_format"], "3");
+    }
+
+    #[test]
+    fn extra_metadata_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let extra: BTreeMap<String, String> = [("a".to_owned(), "1".to_owned())].into();
+        let err = write(&dir.path().join("p.arrow"), &batch(), &extra).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+}

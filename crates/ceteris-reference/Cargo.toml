@@ -1,0 +1,18 @@
+[package]
+name = "ceteris-reference"
+description = "Independent reference model of the Ceteris Paribus economy, written from the spec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-array = "60.0.0"
+arrow-ipc = { version = "60.0.0", features = ["zstd"] }
+arrow-schema = "60.0.0"
+
+[dev-dependencies]
+serde_json = "1.0.154"

@@ -30,6 +30,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Determinism bans still fire (ADR 0097)
         run: scripts/check_clippy_bans.sh
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
       - run: cargo test --workspace
       - name: Determinism gate in optimized builds
         run: |
