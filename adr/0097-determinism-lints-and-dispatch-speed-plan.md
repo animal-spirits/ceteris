@@ -222,13 +222,18 @@ sessions is as large as the gap to the budgets.
   bit. The gather is removed; `parallel_splits_do_not_depend_on_the_thread_count` covers the
   parallel loops and the scatter.
 - Null-fork test across a route-choice edge change: a child that loads the snapshot taken just
-  after the change reproduces its parent's hashes.
-- Steps 1 and 3 leave the goldens unchanged; the reciprocals of step 2 re-bless them once,
-  together with ADR 0093's weights, in their own commit.
+  after the change reproduces its parent's hashes. Not built in this branch; the pre-p3 plan's
+  Tasks D1 and D2 cover it with seeks across `set_network` and across a parameter edit.
+- Steps 1 and 3 leave the goldens unchanged. As built the goldens were re-blessed three times,
+  each in a commit of its own for its own reason: e81207a for the reciprocals of step 2,
+  ADR 0093's log-domain weights and the gateway masses; 1408acf after the gateway masses were
+  removed; 59fadbc for the split home and abroad access of ADR 0093.
 
 ## Consequences
 
-The determinism conventions become build failures instead of review items. Most P2 dispatch
-time moves off the critical path, at the cost of one re-bless and 8 bytes per `Crossing`.
+The determinism conventions become build failures instead of review items. As built the gather
+is removed, so dispatch stays on the critical path; the reciprocals cost three re-blesses (with
+ADR 0093's changes, Tests above), leave `Crossing` at 32 bytes and grow `Entry` from 16 to 24
+bytes.
 History memory falls without touching state. Any later warm-started solver has to declare its
 warm-start vector as snapshot state or pay for a cold start.
