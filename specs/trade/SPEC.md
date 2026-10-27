@@ -462,9 +462,10 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   `source_dispatch_parallel` 7.70 to 7.78 ms with the scatter, 28.3 to 28.7 ms with the fused
   pass, which was not kept.
   Re-measured on the branch head (2026-10-27, AC, 98 W, no other job; two rounds, each a
-  separate criterion run): `source_dispatch_parallel` 8.54 and 8.41 ms (over the 8 ms budget
-  by about 5%; the earlier runs on 2026-10-26 and 2026-10-27 gave 7.7 to 7.8 ms); a whole tick
-  37.3 and 35.5 ms (35 ms budget); `unit_source_dispatch_parallel` 6.55 and 6.56 ms.
+  separate criterion run): `source_dispatch_parallel` 8.54 and 8.41 ms, which missed the 8 ms
+  budget in both runs (5 to 7% over; the earlier runs on 2026-10-26 and 2026-10-27 gave 7.7 to
+  7.8 ms); a whole tick 37.3 and 35.5 ms, which missed the 35 ms budget in both runs;
+  `unit_source_dispatch_parallel` 6.55 and 6.56 ms.
 
 ## Open questions
 
