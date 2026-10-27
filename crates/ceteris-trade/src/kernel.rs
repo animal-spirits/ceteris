@@ -129,8 +129,8 @@ pub struct GoodKernel {
     pub access: Csr<Entry>,
     /// Rows over gateways, columns are gateways of other countries.
     pub crossings: Csr<Crossing>,
-    /// Whether some crossing with `k > 0` leads from a gateway of country A to one of B, at
-    /// `A * n_countries + B`.
+    /// Whether gateway a has a crossing with `k > 0` into a gateway of country B, at
+    /// `a * n_countries + B`.
     pub links: Vec<bool>,
 }
 
@@ -157,31 +157,80 @@ pub struct Kernel {
 }
 
 /// Results of the origin-side low-rank evaluation for one good, written by
-/// [`Kernel::origin_access_into`], each in a log scale of its country (ADR 0093): a value x
-/// of country A here stands for `x e^s` with a shift s of A. Origins and their gateways use
-/// A's origin shift, the log weight of its best origin; destinations, their gateways and the
-/// home and domestic routes use A's destination shift, the largest origin shift among A and
-/// the countries with a crossing into A that carries access. Every term moves into a scale at
-/// least as large as its own, so none overflows, and a term lost to underflow is below 1e-308
-/// of the destination's best supplier, kernel factors aside.
+/// [`Kernel::origin_access_into`], in log scales per country (ADR 0093): a value x here stands
+/// for `x e^s` with a shift s of its country. Origins, their gateways and each destination's
+/// home part (its home and domestic routes) use the origin shift of their country, the log
+/// weight of its best origin. Destination gateways and each destination's abroad part use the
+/// destination shift of their country, the largest origin shift among the foreign countries
+/// with a gateway that has access and a crossing with `k > 0` into it. Each destination
+/// combines its two parts in log space, so neither part is measured in the other's scale, and
+/// a term lost to underflow is below about 1e-308 of its part's scale, kernel factors aside.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Access {
     /// Origin access at each gateway, `v'_a = sum_{o in A} K_oa w_o`, in A's origin scale.
     pub v: Vec<f64>,
-    /// Destination shift per country, 0 for a country that nothing supplies.
+    /// Origin shift per country, as passed in.
+    pub shift: Vec<f64>,
+    /// Destination shift per country, 0 for a country that no foreign country supplies.
     pub dest_shift: Vec<f64>,
-    /// Each origin's weight in its country's destination scale, for home and domestic routes.
-    pub local: Vec<f64>,
     /// `exp(shift_A - dest_shift_B)` at `A * n_countries + B`, at most 1: moves a crossing's
-    /// terms from the origin scale of A into the destination scale of B; 0 unless A has access
-    /// at a gateway and a crossing with `k > 0` into B.
+    /// terms from the origin scale of A into the destination scale of B; 0 unless a gateway of
+    /// A has access and a crossing with `k > 0` into B.
     pub carry: Vec<f64>,
     /// Access of each destination gateway to every foreign origin,
-    /// `u'_b = sum_a v'_a K_ab carry(A, B)`.
+    /// `u'_b = sum_a v'_a K_ab carry(A, B)`, in B's destination scale.
     pub u: Vec<f64>,
-    /// Sourcing normalizer per destination province, `Phi_d = sum_o K_od w_o`, home term
-    /// `w_d` included.
-    pub pi: Vec<f64>,
+    /// Home part of each destination's access, `w_d + sum_{o in B} K_od w_o`, in B's origin
+    /// scale.
+    pub home: Vec<f64>,
+    /// Abroad part of each destination's access, `sum_b K_bd u'_b`, in B's destination scale.
+    pub abroad: Vec<f64>,
+    /// Whether some gateway of A with access links to B, at `A * n_countries + B`.
+    linked: Vec<bool>,
+}
+
+/// A part of a destination's access below the smallest normal f64 is underflow of kernel
+/// factors, not a path.
+fn present(x: f64) -> bool {
+    x >= f64::MIN_POSITIVE
+}
+
+impl Access {
+    /// `ln Phi_d` of destination d of country c, relative to the scale of weight 1 at the
+    /// shift 0 (`p_min^-theta` for [`crate::source::origin_weights`]); minus infinity when d
+    /// reaches no active origin.
+    pub fn ln_phi(&self, d: usize, c: usize) -> f64 {
+        let (home, abroad) = (self.home[d], self.abroad[d]);
+        let (s, t) = (self.shift[c], self.dest_shift[c]);
+        match (present(home), present(abroad)) {
+            (false, false) => f64::NEG_INFINITY,
+            (true, false) => s + libm::log(home),
+            (false, true) => t + libm::log(abroad),
+            (true, true) if t >= s => t + libm::log(abroad + home * libm::exp(s - t)),
+            (true, true) => s + libm::log(home + abroad * libm::exp(t - s)),
+        }
+    }
+
+    /// Spending per unit of access of destination d of country c, `E / Phi_d` for E = 1, in
+    /// the scale of its home part and of its abroad part; 0 for a part that is not present.
+    pub fn reach(&self, d: usize, c: usize) -> (f64, f64) {
+        let (home, abroad) = (self.home[d], self.abroad[d]);
+        let (s, t) = (self.shift[c], self.dest_shift[c]);
+        let (on_home, on_abroad) = (present(home), present(abroad));
+        // a total that overflows leaves its part a share that rounds to 0
+        let inv = |total: f64| if total.is_finite() { 1.0 / total } else { 0.0 };
+        let at_home = match (on_home, on_abroad) {
+            (false, _) => 0.0,
+            (true, false) => inv(home),
+            (true, true) => inv(home + abroad * libm::exp(t - s)),
+        };
+        let at_abroad = match (on_abroad, on_home) {
+            (false, _) => 0.0,
+            (true, false) => inv(abroad),
+            (true, true) => inv(abroad + home * libm::exp(s - t)),
+        };
+        (at_home, at_abroad)
+    }
 }
 
 impl Kernel {
@@ -304,8 +353,9 @@ impl Kernel {
     /// `w_o = exp(ln_w_o)` as [`crate::source::origin_weights`] writes `ln_w_o`, 0 for an
     /// inactive origin; `shift` the origin shift per country, minus infinity for a country
     /// without an active origin. Writes `v'_a = sum_{o in A} K_oa w_o`,
-    /// `u'_b = sum_a v'_a K_ab carry(A, B)` and
-    /// `Phi_d = sum_{o in B} K_od local_o + sum_b K_bd u'_b`, home term `local_d` included.
+    /// `u'_b = sum_a v'_a K_ab carry(A, B)` and the two parts of
+    /// `Phi_d = w_d + sum_{o in B} K_od w_o + sum_b K_bd u'_b`, home term `K_dd w_d = w_d`
+    /// included.
     pub fn origin_access_into(&self, g: usize, weight: &[f64], shift: &[f64], out: &mut Access) {
         assert_eq!(weight.len(), self.n_provinces);
         assert_eq!(shift.len(), self.n_countries);
@@ -321,45 +371,37 @@ impl Kernel {
         }
         let v = &out.v;
 
-        let mut exports = vec![false; nc];
-        for (a, &c) in gc.iter().enumerate() {
-            exports[usize::from(c)] |= v[a] > 0.0;
-        }
+        out.shift.clear();
+        out.shift.extend_from_slice(shift);
+        out.linked.clear();
+        out.linked.resize(nc * nc, false);
         let dest = &mut out.dest_shift;
         dest.clear();
-        dest.extend((0..nc).map(|cb| {
-            let mut s = shift[cb];
-            for ca in (0..nc).filter(|&ca| exports[ca] && gk.links[ca * nc + cb]) {
-                s = s.max(shift[ca]);
+        dest.resize(nc, f64::NEG_INFINITY);
+        for (a, &ca) in gc.iter().enumerate().filter(|&(a, _)| v[a] > 0.0) {
+            let ca = usize::from(ca);
+            let links = &gk.links[a * nc..][..nc];
+            for (cb, _) in links.iter().enumerate().filter(|(_, l)| **l) {
+                out.linked[ca * nc + cb] = true;
+                dest[cb] = dest[cb].max(shift[ca]);
             }
-            if s > f64::NEG_INFINITY { s } else { 0.0 }
-        }));
-        let dest = &out.dest_shift;
-        out.local.clear();
-        out.local
-            .extend(weight.iter().zip(&self.province_country).map(|(&w, &c)| {
-                let c = usize::from(c);
-                if w > 0.0 {
-                    w * libm::exp(shift[c] - dest[c])
-                } else {
-                    0.0
-                }
-            }));
-        // only linked pairs from exporting countries carry, so every carry is at most 1 and
-        // none meets a zero factor as an infinity
+        }
+        for s in dest.iter_mut().filter(|s| **s == f64::NEG_INFINITY) {
+            *s = 0.0;
+        }
+        let (dest, linked) = (&out.dest_shift, &out.linked);
         out.carry.clear();
         out.carry.resize(nc * nc, 0.0);
         out.carry
             .par_chunks_mut(nc.max(1))
+            .zip(linked.par_chunks(nc.max(1)))
             .enumerate()
-            .filter(|&(ca, _)| exports[ca])
-            .for_each(|(ca, row)| {
-                let links = &gk.links[ca * nc..][..nc];
-                for ((x, &d), _) in row.iter_mut().zip(dest).zip(links).filter(|(_, l)| **l) {
+            .for_each(|(ca, (row, linked))| {
+                for ((x, &d), _) in row.iter_mut().zip(dest).zip(linked).filter(|(_, l)| **l) {
                     *x = libm::exp(shift[ca] - d);
                 }
             });
-        let (carry, local) = (&out.carry, &out.local);
+        let carry = &out.carry;
 
         // u and Phi gather what flows into each gateway and province, in the order of the
         // rows feeding them, and run in parallel
@@ -374,23 +416,25 @@ impl Kernel {
             }
         });
         let u = &out.u;
-        out.pi.clear();
-        out.pi.extend_from_slice(local);
-        out.pi
+        out.home.clear();
+        out.home.extend_from_slice(weight);
+        out.abroad.clear();
+        out.abroad.resize(self.n_provinces, 0.0);
+        out.home
             .par_iter_mut()
+            .zip(out.abroad.par_iter_mut())
             .enumerate()
             .with_min_len(64)
-            .for_each(|(d, phi)| {
+            .for_each(|(d, (home, abroad))| {
                 for &(o, j) in self.domestic_by_destination.column(d) {
-                    *phi += gk.domestic.entries[j as usize].k * local[o as usize];
+                    *home += gk.domestic.entries[j as usize].k * weight[o as usize];
                 }
-                let abroad: f64 = gk
+                *abroad = gk
                     .access
                     .row(d)
                     .iter()
                     .map(|e| e.k * u[e.col as usize])
                     .sum();
-                *phi += abroad;
             });
     }
 }
@@ -524,11 +568,10 @@ fn good_kernel(
         }
     };
     let crossings = Csr::from_legs(ng, &net.crossings, crossing);
-    let mut links = vec![false; nc * nc];
+    let mut links = vec![false; ng * nc];
     for a in 0..ng {
-        let ca = usize::from(net.gateway_country[a]);
         for e in crossings.row(a).iter().filter(|e| e.k > 0.0) {
-            links[ca * nc + usize::from(net.gateway_country[e.col as usize])] = true;
+            links[a * nc + usize::from(net.gateway_country[e.col as usize])] = true;
         }
     }
     GoodKernel {
@@ -888,7 +931,8 @@ mod tests {
             for d in 0..10 {
                 let mut w = vec![0.0; 10];
                 w[d] = 2.5;
-                assert_eq!(origin_access(&k, g, &w).pi[d], 2.5);
+                let acc = origin_access(&k, g, &w);
+                assert_eq!((acc.home[d], acc.abroad[d]), (2.5, 0.0));
             }
         }
     }
@@ -963,21 +1007,21 @@ mod tests {
                 .collect();
 
             // weights relative to each country's own scale, the scales far apart for some
-            // goods: what the kernel returns in each country's scale is the dense access
+            // goods: the kernel's log access is that of the dense access
             for shift in [[0.0, 0.0], [-250.0, 0.0], [0.0, -250.0]] {
                 let mut acc = Access::default();
                 kernel.origin_access_into(g, &pt, &shift, &mut acc);
-                assert_eq!(acc.pi.len(), 10);
+                assert_eq!((acc.home.len(), acc.abroad.len()), (10, 10));
                 assert_eq!(acc.v.len(), 3);
                 assert_eq!(acc.u.len(), 3);
-                // both countries supply each other, so both measure access in the larger scale
-                assert_eq!(acc.dest_shift, [0.0, 0.0]);
-                let scale = |s: &[f64], c: u16| f64::exp(s[usize::from(c)]);
-                for (d, &phi) in acc.pi.iter().enumerate() {
+                // each country measures what it imports in its supplier's scale
+                assert_eq!(acc.dest_shift, [shift[1], shift[0]]);
+                let country = &net.province_country;
+                for (d, &cd) in country.iter().enumerate() {
                     let want: f64 = (0..10)
-                        .map(|o| dense[o][d] * pt[o] * scale(&shift, net.province_country[o]))
+                        .map(|o| dense[o][d] * pt[o] * f64::exp(shift[usize::from(country[o])]))
                         .sum();
-                    let got = phi * scale(&acc.dest_shift, net.province_country[d]);
+                    let got = f64::exp(acc.ln_phi(d, usize::from(cd)));
                     let rel = (got - want).abs() / want;
                     assert!(rel < 1e-12, "g {g} d {d}: {got} vs {want}");
                 }
@@ -1049,11 +1093,12 @@ mod tests {
         let k = Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
         let mut acc = Access::default();
         k.origin_access_into(0, &[1.0; 10], &[0.0, -800.0], &mut acc);
-        assert_eq!(acc.dest_shift, [0.0, -800.0]);
-        assert!(
-            acc.pi.iter().all(|p| p.is_finite() && *p >= 1.0),
-            "{:?}",
-            acc.pi
-        );
+        // country 0 imports from country 1 in country 1's scale; nothing reaches country 1
+        assert_eq!(acc.dest_shift, [-800.0, 0.0]);
+        assert!(acc.abroad[5..].iter().all(|&a| a == 0.0));
+        for d in 0..10 {
+            let ln_phi = acc.ln_phi(d, usize::from(net.province_country[d]));
+            assert!(ln_phi.is_finite() && ln_phi >= if d < 5 { 0.0 } else { -800.0 });
+        }
     }
 }

@@ -213,18 +213,17 @@ def test_trade_money_matches_dense_route_oracle(inputs):
         np.testing.assert_allclose(got[key][..., traded], w[..., traded], rtol=1e-10, atol=1e-13 * np.abs(w).max(), err_msg=key)
 
 
-def test_routing_matches_rust(inputs):
+def _assert_routing_matches_rust(inp: io.Inputs, export: Path) -> None:
     """The reference routes on the kernel Rust exports, and that kernel is the spec's: every crossing
     factor rebuilt from the legs and tariffs as K_ab = (tau (1 + nu) (1 + t))^-theta, with
     1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12; and the reference's delivered prices at prices 1
     are Rust's base prices to 1e-12."""
-    inp = inputs
 
     def table(name):
-        return pa_ipc.open_file(str(FIXTURE / f"{name}.arrow")).read_all()
+        return pa_ipc.open_file(str(export / f"{name}.arrow")).read_all()
 
     legs, goods, tariffs = table("legs"), table("goods"), table("tariffs")
-    nu = json.loads((FIXTURE / "params.json").read_text())["trade"]["border_nu"]
+    nu = json.loads((export / "params.json").read_text())["trade"]["border_nu"]
     gc = inp.gateway_country
     rate = np.zeros((inp.n_countries, inp.n_countries, 2))
     rate[tariffs["importer"].to_numpy(), tariffs["exporter"].to_numpy(), tariffs["group"].to_numpy()] = tariffs["rate"].to_numpy()
@@ -245,6 +244,18 @@ def test_routing_matches_rust(inputs):
         np.testing.assert_allclose(cro.inv_duty[sel], 1.0 / duty[at], rtol=1e-12, atol=0)
     q = model._sourcing(inp, np.ones((inp.n_provinces, inp.n_goods)))["index"]
     np.testing.assert_allclose(inp.base_price[:, inp.traded], q[:, inp.traded], rtol=1e-12)
+
+
+def test_routing_matches_rust(inputs):
+    _assert_routing_matches_rust(inputs, FIXTURE)
+
+
+def test_routing_matches_rust_on_the_pack():
+    """`_assert_routing_matches_rust` on `CETERIS_PACK_EXPORT`, a `ceteris export --pack` directory."""
+    export = os.environ.get("CETERIS_PACK_EXPORT")
+    if not export:
+        pytest.skip("skipping: CETERIS_PACK_EXPORT unset (a `ceteris export --pack` directory)")
+    _assert_routing_matches_rust(io.load(export), Path(export))
 
 
 def test_pigl_matches_rust(inputs):

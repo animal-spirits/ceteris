@@ -29,9 +29,9 @@ use ceteris_trade::TradeParams;
 const TICKS: u32 = 120;
 const SETTLE: u32 = 4;
 const SPLIT: u32 = 60;
-/// Drift, as a fraction of its tolerance, below which it is rounding: it wanders rather than
-/// grows, so the boundedness check does not apply.
-const ROUNDING: f64 = 1e-3;
+/// Relative drift below which a quantity is at f64 rounding (about 450 ulps): it wanders
+/// rather than grows, so the boundedness check does not apply.
+const ROUNDING: f64 = 1e-13;
 /// The relative tolerance of ADR 0089, and of world aggregates on the pack.
 const EXACT: f64 = 1e-9;
 /// The pack's relative tolerance of prices, flows and money.
@@ -162,6 +162,8 @@ struct Record {
     over: f64,
     early: f64,
     late: f64,
+    /// Largest relative drift over ticks SPLIT + 1 to TICKS.
+    late_relative: f64,
 }
 
 /// Runs `TICKS` ticks from the steady state of `inputs` and returns the record of every
@@ -200,6 +202,7 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
             over: 0.0,
             early: 0.0,
             late: 0.0,
+            late_relative: 0.0,
         })
         .collect();
     let mut sim = Sim::new(world, schedule(), SEED);
@@ -233,6 +236,7 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                     r.early = r.early.max(scaled);
                 } else if tick > SPLIT {
                     r.late = r.late.max(scaled);
+                    r.late_relative = r.late_relative.max(relative);
                 }
             }
         }
@@ -284,7 +288,7 @@ fn assert_fixed(records: &[Record], what: &str) {
             r.minor_tick
         );
         assert!(
-            r.late <= 2.0 * r.early || r.late <= ROUNDING,
+            r.late <= 2.0 * r.early || r.late_relative <= ROUNDING,
             "{what}: {} is not bounded: ticks {}-{TICKS} reach {:.3e} of the tolerance, ticks \
              {}-{SPLIT} {:.3e}",
             r.name,

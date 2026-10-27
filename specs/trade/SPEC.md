@@ -80,18 +80,20 @@ anyone at d buys g (its country's final demand share Omega_g > 0 or a local ente
 as an input). Only active cells carry a price state; destinations are every province with
 spending. Origin weights are held in log scale, per country (ADR 0093): ln w_o = -theta ln(p_o /
 p_A) with p_A the lowest active price of o's country A, and the country's shift s_A = -theta
-ln(p_A / p_min). Gateway sums carry the shifts as in a log-sum-exp whose maximum is fixed per
-country: each destination country B measures access in its destination scale s'_B, the largest
-shift among B and the countries with a crossing into B that carries access, and a crossing's terms move
-from A's scale into B's by exp(s_A - s'_B) <= 1, computed once per good and price vector; home and
-domestic routes by exp(s_A - s'_A). No term overflows, and a term is lost to underflow only when it
-is below 1e-308 of the destination's best supplier, kernel factors aside. There is no weight floor:
-a destination is unreachable (buys nothing, infinite buyer price) only when no path with K > 0
-leads to it from an active origin, tested on ln Phi_d (Phi_d in its scale below the smallest
-normal f64 counts as underflow, not a path). A price spread between countries makes no
-destination unreachable. Where a source is so dear (about 1e57 against its buyers' best at theta
-5) that the units it ships, value / p_o, fall below the smallest normal f64, those units lose
-their precision.
+ln(p_A / p_min). Each destination d of country B splits its access Phi_d into a home part (its
+home and domestic routes, in B's origin scale s_B) and an abroad part (through its gateways, in
+B's destination scale s'_B, the largest shift among the foreign countries with a gateway that has
+access and a crossing with K > 0 into B), and combines the two in log space. A crossing's terms
+move from A's origin scale into B's destination scale by exp(s_A - s'_B) <= 1, computed once per
+good and price vector for linked pairs only. No term overflows. A term is lost to underflow only
+when it is below about 1e-308 of the largest term of its part, kernel factors aside, so a price
+spread between countries alone makes no destination unreachable. There is no weight floor: a
+destination is unreachable (buys nothing, infinite buyer price) only when neither part is at least
+the smallest normal f64, that is when no path with K > 0 leads to it from an active origin or
+every such path's product of weight and kernel factors underflows (for example legs near tau
+1e4 at theta 64.85, each K about 4e-260). Where a source is so dear (about 1e57 against its
+buyers' best at theta 5) that the units it ships, value / p_o, fall below the smallest normal
+f64, those units lose their precision.
 
 **Two-level kernel.** Domestic pairs (o and d in the same country) use the direct path:
 K_od = tau_od^-theta, dense within each country. A cross-border pair is reached only through
