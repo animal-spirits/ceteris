@@ -19,3 +19,7 @@ ceteris-trade = { path = "../ceteris-trade" }
 [[bin]]
 name = "ceteris"
 path = "src/main.rs"
+
+[dev-dependencies]
+arrow-array = "60.0.0"
+tempfile = "3.27.0"

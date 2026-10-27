@@ -320,11 +320,13 @@ dependencies = [
 name = "ceteris-cli"
 version = "0.0.1"
 dependencies = [
+ "arrow-array",
  "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",
  "ceteris-pack",
  "ceteris-trade",
+ "tempfile",
 ]
 
 [[package]]
