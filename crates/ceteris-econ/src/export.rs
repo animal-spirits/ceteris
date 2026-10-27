@@ -32,7 +32,8 @@
 //! [`crate::history`] next to the run files: `run_history_world` (one row per sampled tick),
 //! `run_history_provinces` (per tick and province) and `run_history_markets` (per tick,
 //! province and good), with the conventions of `run_prices` and `run_wages`. They are not part
-//! of [`write_run`], so the default output is unchanged.
+//! of [`write_run`], so the default output is unchanged. History files are zstd-compressed Arrow
+//! IPC, or CSV with `--history-format csv`.
 
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
@@ -43,7 +44,8 @@ use arrow_array::{
     ArrayRef, BooleanArray, Float32Array, Float64Array, Int8Array, RecordBatch, StringArray,
     UInt8Array, UInt32Array,
 };
-use arrow_ipc::writer::FileWriter;
+use arrow_ipc::CompressionType;
+use arrow_ipc::writer::{FileWriter, IpcWriteOptions};
 use arrow_schema::{Field, Schema};
 use ceteris_trade::goods::{NAME, TRADED, tariff_group};
 use ceteris_trade::{Kernel, N_GOODS, Rationing, TradeParams};
@@ -127,6 +129,25 @@ pub(crate) fn bools(name: &str, v: impl IntoIterator<Item = bool>) -> Column {
 }
 
 pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Result<(), ExportError> {
+    write_table_with(dir, name, columns, IpcWriteOptions::default())
+}
+
+/// As [`write_table`] with every buffer compressed by zstd (Arrow IPC buffer compression).
+pub(crate) fn write_table_zstd(
+    dir: &Path,
+    name: &str,
+    columns: Vec<Column>,
+) -> Result<(), ExportError> {
+    let options = IpcWriteOptions::default().try_with_compression(Some(CompressionType::ZSTD))?;
+    write_table_with(dir, name, columns, options)
+}
+
+fn write_table_with(
+    dir: &Path,
+    name: &str,
+    columns: Vec<Column>,
+    options: IpcWriteOptions,
+) -> Result<(), ExportError> {
     let fields: Vec<Field> = columns
         .iter()
         .map(|(n, a)| Field::new(n, a.data_type().clone(), false))
@@ -139,7 +160,7 @@ pub(crate) fn write_table(dir: &Path, name: &str, columns: Vec<Column>) -> Resul
         columns.into_iter().map(|(_, a)| a).collect(),
     )?;
     let file = BufWriter::new(File::create(dir.join(format!("{name}.arrow")))?);
-    let mut writer = FileWriter::try_new(file, &schema)?;
+    let mut writer = FileWriter::try_new_with_options(file, &schema, options)?;
     writer.write(&batch)?;
     writer.finish()?;
     writer.into_inner()?.flush()?;
