@@ -1,6 +1,6 @@
 # Files that only tests and diagnostics read, never a pack build (ADR 0050, amendment of 2026-10-25). Same schema
 # as fetch.toml; `python -m ceteris.packs.fetch` downloads and verifies them with the pack's files, but they are
-# not pack sources: the build neither fetches nor lists them, and check_sources.py profiles only fetch.toml. Each
+# not pack sources: the build neither fetches nor lists them, and `ceteris pack check-sources` profiles only fetch.toml. Each
 # names a manifest source with use = "validation".
 
 # Gravity estimator check (ADR 0022): the published sample of Yotov et al. (2016), read only by python/tests/test_calibrate.py.
