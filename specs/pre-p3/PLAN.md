@@ -12,7 +12,7 @@
 
 ## Owner decisions (2026-10-26)
 
-1. Re-bless order: 0097 lints (no hash change), then gather dispatch proven bit-identical to the scatter (no re-bless), then one `Crossing` rewrite carrying the stored reciprocals, ADR 0093's kernel range and log-domain weights and ADR 0092's gateway mass weights, with one re-bless. The economics re-bless again at each recalibration.
+1. Re-bless order: 0097 lints (no hash change), then gather dispatch proven bit-identical to the scatter (no re-bless), then one `Crossing` rewrite carrying the stored reciprocals, ADR 0093's kernel range and log-domain weights and ADR 0092's gateway mass weights, with one re-bless (as built: the masses moved to Task B2 by owner decision, 2026-10-26, and A re-blessed three times, ADR 0097). The economics re-bless again at each recalibration.
 2. ADR 0090's anchor is redesigned as lbar_T = ln(sum_T p (D + delta S*) / sum_T p Q) over traded markets only; kappa_r starts traded 0.25, local 0.05.
 3. ADR 0091 storage lives at origin markets; producer stock (`origin/p2-r3-producer-stock`) stays parked, revisited only if the V1 stress test still fails after B.
 4. All of 0106, 0100, 0098, 0103 (drift switch off in the P2 steady-state test and V1), 0099 and 0104 land before P3.
@@ -151,17 +151,26 @@ Starts from main after A merges.
 - [ ] **Step 1: Failing tests:** `test_c19_in_good_1` (good 1 and good 5 totals equal the ICIO aggregation with C19 moved, 1e-9); `test_class_theta_is_harmonic` (theta_class = (sum w_l / theta_l)^-1 on a two-line toy class); `test_welfare_first_order_at_harmonic_theta` (ADR 0101's toy test); Rust `theta_scale_multiplies_every_class`.
 - [ ] **Step 2:** run, expect failures. **Step 3:** implement; widen the P01 prior to cover the harmonic values. **Step 4:** rebuild the pack econ tables, run the pack tests, re-run the ADR 0022 gravity diagnostics on the new flows (`python -m ceteris.reference` diagnostics as in Task 18a) and record them in ADR 0022. **Step 5:** commit `feat(econ): move refined fuels into good 1 and use harmonic class theta (adrs 0092, 0101)`.
 
-### Task B2: nu per theta class, fitted to the cross-border share (ADR 0092)
+### Task B2: Gateway masses and nu per theta class, fitted to the cross-border share (ADR 0092)
+
+Carries ADR 0092's gateway mass weights, moved here from Task A3 by owner decision (2026-10-26) after H2 distance missed at -0.536 with masses alone. The mass code was built in af90fa4 and removed in 1662fab; recover the mass parts from af90fa4 (`git show 1662fab` lists them) rather than rewriting them, onto the kernel as it stands after Branch A (f64 K, reciprocals, per-country log weights).
 
 **Files:**
-- Modify: `python/ceteris/reference/calibrate.py` (new stage before stage 1), `crates/ceteris-trade/src/params.rs` (`border_nu: [f64; N_CLASSES]`), `crates/ceteris-trade/src/kernel.rs` (per-class nu), `python/tests/test_p2_gate.py` (H2 per class bands)
-- Test: `python/tests/test_calibrate.py`, `test_p2_gate.py`
+- Modify: `crates/ceteris-trade/src/network.rs` (`gateway_mass`), `crates/ceteris-trade/src/kernel.rs` (masses folded into access and crossing legs, per-class nu), `crates/ceteris-trade/src/params.rs` (`border_nu: [f64; N_CLASSES]`), `crates/ceteris-econ/src/pack.rs`, `inputs.rs`, `fixture.rs` and `export.rs` (read the mass column, export it), `python/ceteris/packs/econ/gateways.py` (mass column), `python/ceteris/reference/io.py`, `model.py`, `sinkhorn.py` (mirror the masses), `python/ceteris/reference/calibrate.py` (new stage before stage 1), `python/tests/test_p2_gate.py` (H2 per class bands), `specs/trade/SPEC.md`, `specs/econ/SPEC.md`, `tests/golden/*`
+- Test: `crates/ceteris-trade/src/source.rs` tests, `python/tests/test_econ_pack.py`, `test_reference.py`, `test_calibrate.py`, `test_p2_gate.py`
 
 **Interfaces:**
-- Produces: `calibrate.fit_border_nu(model, theta_c) -> np.ndarray` (one nu per class, monotone 1-D root on the absorption-weighted cross-border share of the class in ICIO 2000); written into the calibration tables and read into `TradeParams.border_nu` (P05 becomes three calibrated values).
-- H2 per class gate: each class's PPML estimate within 2 s.e. of theta_c (ADR 0092), replacing the P01-wide band. The kernel-control regression (model's own kernel instead of ln distance) is reported beside it.
+- Produces:
+  - `Network.gateway_mass: Vec<f64>`, summing to 1 over each country's gateways; pack column `gateways.arrow: mass` = the gateway's share of its country's 2000 trade throughput (port and airport tonnage or value where the pack has it, else 1/k_A). Masses are folded into the access and crossing legs (K_oa m_a K_ab m_b K_bd), so the low-rank evaluation and the stored reciprocals are unchanged, and access no longer grows with the number of gateway pairs.
+  - `calibrate.fit_border_nu(model, theta_c) -> np.ndarray` (one nu per class, monotone 1-D root on the absorption-weighted cross-border share of the class in ICIO 2000, on the mass-weighted kernel); written into the calibration tables and read into `TradeParams.border_nu` (P05 becomes three calibrated values).
+- H2 per class gate: each class's PPML estimate within 2 s.e. of theta_c (ADR 0092), replacing the P01-wide band. The kernel-control regression (model's own kernel instead of ln distance) is reported beside it. The H2 distance check is re-run after the nu fit: masses alone moved it from -0.753 to -0.536 (band -1.1 to -0.7).
 
-- [ ] Steps: failing `test_nu_fit_matches_cross_border_share` (1e-6 per class on the fixture); implement; run; commit `feat(calib): fit border friction per theta class (adr 0092)`.
+- [ ] **Step 1: Failing tests:** `duplicating_a_gateway_with_half_mass_changes_no_flow` (1e-12) and Python `test_gateway_mass_sums_to_one` (pack), both dropped from A3 with the masses; Python `test_routing_matches_rust` updated to the mass-weighted kernel; `test_nu_fit_matches_cross_border_share` (1e-6 per class on the fixture).
+- [ ] **Step 2: Run, expect failures.**
+- [ ] **Step 3: Implement** the masses (recovered from af90fa4) and their Python mirror, then the per-class nu fit.
+- [ ] **Step 4: Rebuild the pack econ tables** (mass column), re-export the fixture goldens, recalibrate and install the tables; run `cargo test --release --workspace` with `CETERIS_PACK`, `pytest python/tests` with `CETERIS_PACK_EXPORT`; run the H2 distance check and the per-class gate after the nu fit and record both in the trade SPEC.
+- [ ] **Step 5: Repeat the gateway-count measurement** of Task A5 (ADR 0097, As built) with the masses in: 300 against 600 gateways by the pack's rule, parallel source and dispatch time, |d ln Phi_d| at the same prices, whether the 300 pack calibrates and H2 there. Record it in ADR 0097 and the trade SPEC (Open questions); propose a count only if Phi_d moves less than 1e-3.
+- [ ] **Step 6: Commit** `feat(trade): weigh gateways by mass (adr 0092)`, `feat(calib): fit border friction per theta class (adr 0092)`, then the re-bless alone.
 
 ### Task B3: Exact local fill and uncapped wage search (ADR 0093)
 
