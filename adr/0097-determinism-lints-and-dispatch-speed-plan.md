@@ -116,6 +116,33 @@ silently never fires. The algebraic paths do resolve. The fixture
 therefore counts the diagnostics: one per banned method (20) and one per use of each banned
 type (6), and fails on any other count, so a path that stops resolving fails CI.
 
+Step 2's gather was built bit-identical to the scatter (a proptest held every written field
+equal by `to_bits()`, `lost` included), and the stored reciprocals landed on top of it. It
+halved one good's dispatch run alone (5.0 to 2.7 ms), but lost inside the tick, which already
+runs the seven goods in parallel. Alternating criterion rounds on the full pack (M4 Pro, AC,
+98 W, no thermal warnings, 2026-10-26), gather with coarse task sizes against the serial
+scatter promoted to `dispatch`:
+
+| bench | gather r1 | gather r2 | scatter r1 | scatter r2 |
+|---|---|---|---|---|
+| `source_dispatch_parallel` | 10.34 | 10.39 | 8.24 | 7.80 |
+| `unit_source_dispatch_parallel` | 7.63 | 7.65 | 6.52 | 6.23 |
+| `dispatch_one_good` | 2.69 | 2.72 | 5.03 | 6.05 |
+| econ `tick` | 44.75 | 44.43 | 35.19 | 38.44 |
+| `source_dispatch_parallel`, 1 thread | 51.15 | | 47.21 | |
+
+Two more scatter runs gave 7.79 and 7.73 ms and ticks of 35.13 and 35.17 ms. Tuning did not
+close the gap: coarse task sizes (at least 50 gateways and 512 provinces per task) left the
+gather at 10.34 ms; serial targets inside a good, 10.84 ms; recomputing each crossing at its
+target instead of storing it, 10.87 ms; dropping the serial `lost` chain altogether (not
+bit-identical, a bound only), 9.78 ms. Under the tick each gather pass waits on its barrier
+while every core serves other goods, and the gather moves about twice the scatter's memory per
+good (the per-leg terms are written and read back), so per-good wall time rose to about 9 ms.
+By the decision rule (keep the gather only below both the scatter and 8 ms), `dispatch` is the
+serial scatter again, bit-identical, so no re-bless; the gather and its oracle tests are
+removed and the reciprocals stay. The scatter's per-call buffers moved into `Sourced`'s
+scratch. Step 4's fused multi-good pass is the remaining lever on the critical path.
+
 ## Tests
 
 - A clippy fixture calling each banned method and naming each banned type fails

@@ -121,15 +121,6 @@ struct Scratch {
     origin_units_a: Vec<f64>,
     /// What enters each destination gateway.
     at_b: Vec<Inflow>,
-    /// Per leg, what the leg adds to the sums at its target: aligned with the kernel entries
-    /// of each pass, the home purchase per province.
-    home: Vec<f64>,
-    domestic_legs: Vec<DomesticLeg>,
-    origin_legs: Vec<OriginLeg>,
-    crossing_legs: Vec<CrossingLeg>,
-    /// Loss on every leg in the order of a serial pass over the legs: per origin its
-    /// domestic then its access legs, every crossing, every arrival leg by lag.
-    loss: Vec<f64>,
 }
 
 /// Value entering a destination gateway, the same net of tariff, and units by lag.
@@ -138,28 +129,6 @@ struct Inflow {
     gross: f64,
     net: f64,
     units: [f64; 4],
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct DomesticLeg {
-    value: f64,
-    got: f64,
-}
-
-/// Origin to origin gateway: value, the same in units at the gateway and in origin units.
-#[derive(Clone, Copy, Debug, Default)]
-struct OriginLeg {
-    gross: f64,
-    units: f64,
-    origin_units: f64,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct CrossingLeg {
-    gross: f64,
-    net: f64,
-    got: f64,
-    lag: u8,
 }
 
 impl Sourced {
@@ -390,432 +359,9 @@ pub fn source(
 /// stored reciprocal physical factor (iceberg, and the border loss on crossings), and a
 /// crossing the value by its `1 / (1 + t)`, so arrivals are the sum over routes of
 /// `X / (p_o (1 + t) tau_route)`. Divisions are by reciprocals hoisted per origin, per
-/// origin gateway and per destination gateway.
+/// origin gateway and per destination gateway. Each good is one serial pass: the tick runs the
+/// goods in parallel.
 pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mut Sourced) {
-    let (np, ng) = (k.n_provinces(), k.n_gateways());
-    assert_eq!(
-        out.scratch.good,
-        Some(g),
-        "dispatch must follow source for good {g}"
-    );
-    assert!(
-        price.len() == np && fill.len() == np,
-        "dispatch inputs must have one entry per province"
-    );
-    let gk = k.good(g);
-    let (dom, acc, cross) = (&gk.domestic, &gk.access, &gk.crossings);
-    let Sourced {
-        shipped,
-        arrive,
-        paid,
-        paid_by_class,
-        received,
-        tariff,
-        domestic_value,
-        access_in_value,
-        crossing_value,
-        crossing_units,
-        access_out_value,
-        lost,
-        scratch: s,
-        ..
-    } = out;
-    zeroed(shipped, np);
-    arrive.iter_mut().for_each(|a| zeroed2(a, np));
-    zeroed(paid, np);
-    zeroed2(paid_by_class, np);
-    zeroed(received, np);
-    zeroed(tariff, np);
-    zeroed(domestic_value, dom.entries.len());
-    zeroed(access_in_value, acc.entries.len());
-    zeroed(crossing_value, cross.entries.len());
-    zeroed(crossing_units, cross.entries.len());
-    zeroed(access_out_value, acc.entries.len());
-    *lost = 0.0;
-    let Scratch {
-        weight: w,
-        access,
-        reach,
-        reach_abroad,
-        y,
-        inv_y,
-        z,
-        net_ratio,
-        gross_a,
-        units_a,
-        origin_units_a,
-        at_b,
-        home,
-        domestic_legs,
-        origin_legs,
-        crossing_legs,
-        loss,
-        ..
-    } = s;
-    // every pass writes all of its entries, so these need no zeroing
-    for v in [
-        &mut *y,
-        &mut *inv_y,
-        &mut *z,
-        &mut *net_ratio,
-        &mut *gross_a,
-        &mut *units_a,
-        &mut *origin_units_a,
-    ] {
-        v.resize(ng, 0.0);
-    }
-    at_b.resize(ng, Inflow::default());
-    home.resize(np, 0.0);
-    domestic_legs.resize(dom.entries.len(), DomesticLeg::default());
-    origin_legs.resize(acc.entries.len(), OriginLeg::default());
-    crossing_legs.resize(cross.entries.len(), CrossingLeg::default());
-    let n_origin = dom.entries.len() + acc.entries.len();
-    loss.resize(n_origin + cross.entries.len() + 4 * acc.entries.len(), 0.0);
-    let [arrive_home, arrive_1, arrive_2, arrive_3, arrive_4] = arrive;
-    let (w, reach, reach_abroad) = (&*w, &*reach, &*reach_abroad);
-    let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &access.carry);
-
-    for c in 0..2 {
-        // a class that spends nothing anywhere ships nothing: its pass would add only zeros
-        if reach.iter().chain(reach_abroad).all(|r| r[c] == 0.0) {
-            continue;
-        }
-        let (origin_loss, rest) = loss.split_at_mut(n_origin);
-        let (crossing_loss, arrival_loss) = rest.split_at_mut(cross.entries.len());
-
-        // Every sum below at a gateway or province gathers its terms in the order a serial
-        // pass over the legs would add them, so its bits do not depend on the thread count.
-        // A leg that carries nothing adds 0, which leaves these sums of non-negative terms
-        // unchanged.
-
-        // destination-side access sums on the spending weights of this class
-        y.par_iter_mut()
-            .zip(inv_y.par_iter_mut())
-            .enumerate()
-            .for_each(|(b, (y, inv))| {
-                let mut sum = 0.0;
-                for &(d, j) in k.access_by_gateway().column(b) {
-                    let r = reach_abroad[d as usize][c];
-                    if r > 0.0 {
-                        sum += acc.entries[j as usize].k * r;
-                    }
-                }
-                (*y, *inv) = (sum, 1.0 / sum);
-            });
-        let (y, inv_y) = (&*y, &*inv_y);
-        z.par_iter_mut()
-            .zip(net_ratio.par_iter_mut())
-            .enumerate()
-            .for_each(|(a, (z, ratio))| {
-                let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
-                let (mut gross, mut net) = (0.0, 0.0);
-                for e in cross.row(a) {
-                    let b = e.col as usize;
-                    let x = e.k * carry_a[usize::from(gc[b])] * y[b];
-                    gross += x;
-                    net += x * e.inv_duty;
-                }
-                *z = gross;
-                *ratio = if gross > 0.0 { net / gross } else { 0.0 };
-            });
-        let (z, net_ratio) = (&*z, &*net_ratio);
-
-        // Origins: home, domestic and into the first gateway.
-        let origin_bound = |o: usize| (dom.offsets[o] + acc.offsets[o]) as usize;
-        let rows: Vec<_> = shipped
-            .chunks_mut(ROWS)
-            .zip(received.chunks_mut(ROWS))
-            .zip(arrive_home.chunks_mut(ROWS))
-            .zip(home.chunks_mut(ROWS))
-            .zip(split_rows(ROWS, domestic_value, np, |o| {
-                dom.offsets[o] as usize
-            }))
-            .zip(split_rows(ROWS, domestic_legs, np, |o| {
-                dom.offsets[o] as usize
-            }))
-            .zip(split_rows(ROWS, access_out_value, np, |o| {
-                acc.offsets[o] as usize
-            }))
-            .zip(split_rows(ROWS, origin_legs, np, |o| {
-                acc.offsets[o] as usize
-            }))
-            .zip(split_rows(ROWS, origin_loss, np, origin_bound))
-            .collect();
-        rows.into_par_iter().enumerate().for_each(
-            |(i, ((((((((shipped, received), arrive), home), dv), dl), av), ol), loss))| {
-                let first = i * ROWS;
-                let base = (
-                    dom.offsets[first] as usize,
-                    acc.offsets[first] as usize,
-                    origin_bound(first),
-                );
-                for r in 0..shipped.len() {
-                    let o = first + r;
-                    let (dom_row, acc_row) = (dom.row(o), acc.row(o));
-                    let d0 = dom.offsets[o] as usize - base.0;
-                    let a0 = acc.offsets[o] as usize - base.1;
-                    let l0 = origin_bound(o) - base.2;
-                    let (dv, dl) = (
-                        &mut dv[d0..][..dom_row.len()],
-                        &mut dl[d0..][..dom_row.len()],
-                    );
-                    let (av, ol) = (
-                        &mut av[a0..][..acc_row.len()],
-                        &mut ol[a0..][..acc_row.len()],
-                    );
-                    let (dom_loss, acc_loss) =
-                        loss[l0..][..dom_row.len() + acc_row.len()].split_at_mut(dom_row.len());
-                    home[r] = 0.0;
-                    let f = fill[o][c];
-                    if w[o] == 0.0 || f == 0.0 {
-                        dl.fill(DomesticLeg::default());
-                        ol.fill(OriginLeg::default());
-                        dom_loss.fill(0.0);
-                        acc_loss.fill(0.0);
-                        continue;
-                    }
-                    let (m, inv_p) = (f * w[o], 1.0 / price[o]);
-                    let (mut sent, mut got_paid) = (shipped[r], received[r]);
-                    let x = m * reach[o][c];
-                    if x > 0.0 {
-                        let units = x * inv_p;
-                        arrive[r][c] += units;
-                        sent += units;
-                        got_paid += x;
-                        home[r] = x;
-                    }
-                    for (((e, value), leg), loss) in dom_row.iter().zip(dv).zip(dl).zip(dom_loss) {
-                        let x = m * e.k * reach[e.col as usize][c];
-                        if x == 0.0 {
-                            (*leg, *loss) = (DomesticLeg::default(), 0.0);
-                            continue;
-                        }
-                        let units = x * inv_p;
-                        let got = units * e.inv_tau;
-                        sent += units;
-                        *value += x;
-                        got_paid += x;
-                        (*leg, *loss) = (DomesticLeg { value: x, got }, units - got);
-                    }
-                    for (((e, value), leg), loss) in acc_row.iter().zip(av).zip(ol).zip(acc_loss) {
-                        let a = e.col as usize;
-                        let x = m * e.k * z[a];
-                        if x == 0.0 {
-                            (*leg, *loss) = (OriginLeg::default(), 0.0);
-                            continue;
-                        }
-                        let net = x * net_ratio[a];
-                        let units = net * inv_p;
-                        *value += net;
-                        got_paid += net;
-                        sent += units;
-                        let origin_units = x * inv_p;
-                        *leg = OriginLeg {
-                            gross: x,
-                            units: origin_units * e.inv_tau,
-                            origin_units,
-                        };
-                        *loss = units - units * e.inv_tau;
-                    }
-                    (shipped[r], received[r]) = (sent, got_paid);
-                }
-            },
-        );
-        let (home, domestic_legs, origin_legs) = (&*home, &*domestic_legs, &*origin_legs);
-        gross_a
-            .par_iter_mut()
-            .zip(units_a.par_iter_mut())
-            .zip(origin_units_a.par_iter_mut())
-            .enumerate()
-            .for_each(|(a, ((gross, units), origin_units))| {
-                let mut sum = OriginLeg::default();
-                for &(_, j) in k.access_by_gateway().column(a) {
-                    let leg = origin_legs[j as usize];
-                    sum.gross += leg.gross;
-                    sum.units += leg.units;
-                    sum.origin_units += leg.origin_units;
-                }
-                (*gross, *units, *origin_units) = (sum.gross, sum.units, sum.origin_units);
-            });
-        let (gross_a, units_a, origin_units_a) = (&*gross_a, &*units_a, &*origin_units_a);
-
-        // Origin gateways onto crossings; units are kept by transit lag from here on.
-        let rows: Vec<_> = split_rows(1, crossing_value, ng, |a| cross.offsets[a] as usize)
-            .into_iter()
-            .zip(split_rows(1, crossing_units, ng, |a| {
-                cross.offsets[a] as usize
-            }))
-            .zip(split_rows(1, crossing_legs, ng, |a| {
-                cross.offsets[a] as usize
-            }))
-            .zip(split_rows(1, crossing_loss, ng, |a| {
-                cross.offsets[a] as usize
-            }))
-            .collect();
-        rows.into_par_iter()
-            .enumerate()
-            .for_each(|(a, (((values, units_out), legs), loss))| {
-                // as the scatter's `gross_a > 0` filter, NaN included
-                let sends = gross_a[a] > 0.0;
-                if !sends {
-                    legs.fill(CrossingLeg::default());
-                    loss.fill(0.0);
-                    return;
-                }
-                let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
-                let inv_z = 1.0 / z[a];
-                let row = cross.row(a).iter().zip(values).zip(units_out);
-                for (((e, value), units_out), (leg, loss)) in row.zip(legs.iter_mut().zip(loss)) {
-                    let b = e.col as usize;
-                    let weight = e.k * carry_a[usize::from(gc[b])] * y[b];
-                    if weight == 0.0 {
-                        (*leg, *loss) = (CrossingLeg::default(), 0.0);
-                        continue;
-                    }
-                    let share = over(weight, inv_z, z[a]);
-                    let gross = gross_a[a] * share;
-                    let net = gross * e.inv_duty;
-                    let units = units_a[a] * share * e.inv_duty;
-                    let got = units * e.inv_loss;
-                    *value += net;
-                    *units_out += origin_units_a[a] * share * e.inv_duty;
-                    let lag = e.lag;
-                    (*leg, *loss) = (
-                        CrossingLeg {
-                            gross,
-                            net,
-                            got,
-                            lag,
-                        },
-                        units - got,
-                    );
-                }
-            });
-        let crossing_legs = &*crossing_legs;
-        at_b.par_iter_mut().enumerate().for_each(|(b, at)| {
-            let mut sum = Inflow::default();
-            for &(_, j) in k.crossings_by_target().column(b) {
-                let leg = crossing_legs[j as usize];
-                // a fixed index keeps each lag's sum in a register
-                for (l, units) in sum.units.iter_mut().enumerate() {
-                    *units += if l == usize::from(leg.lag) {
-                        leg.got
-                    } else {
-                        0.0
-                    };
-                }
-                sum.gross += leg.gross;
-                sum.net += leg.net;
-            }
-            *at = sum;
-        });
-        let at_b = &*at_b;
-
-        // Destinations: the home purchase and domestic shipments in origin order, then what
-        // arrives from their gateways.
-        let rows: Vec<_> = arrive_1
-            .chunks_mut(ROWS)
-            .zip(arrive_2.chunks_mut(ROWS))
-            .zip(arrive_3.chunks_mut(ROWS))
-            .zip(arrive_4.chunks_mut(ROWS))
-            .zip(paid.chunks_mut(ROWS))
-            .zip(paid_by_class.chunks_mut(ROWS))
-            .zip(tariff.chunks_mut(ROWS))
-            .zip(split_rows(ROWS, access_in_value, np, |d| {
-                acc.offsets[d] as usize
-            }))
-            .zip(split_rows(ROWS, arrival_loss, np, |d| {
-                4 * acc.offsets[d] as usize
-            }))
-            .collect();
-        rows.into_par_iter().enumerate().for_each(
-            |(i, ((((((((a1, a2), a3), a4), paid), by_class), tariff), av), loss))| {
-                let first = i * ROWS;
-                let base = acc.offsets[first] as usize;
-                for r in 0..paid.len() {
-                    let d = first + r;
-                    let mut slots = [a1[r][c], a2[r][c], a3[r][c], a4[r][c]];
-                    let (mut pay, mut pay_class, mut duty) = (paid[r], by_class[r][c], tariff[r]);
-                    let mut home_paid = false;
-                    for &(o, j) in k.domestic_by_destination().column(d) {
-                        if !home_paid && o as usize > d {
-                            pay += home[d];
-                            pay_class += home[d];
-                            home_paid = true;
-                        }
-                        let leg = domestic_legs[j as usize];
-                        slots[0] += leg.got;
-                        pay += leg.value;
-                        pay_class += leg.value;
-                    }
-                    if !home_paid {
-                        pay += home[d];
-                        pay_class += home[d];
-                    }
-                    let a0 = acc.offsets[d] as usize - base;
-                    let row = acc.row(d);
-                    let (av, loss) = (
-                        &mut av[a0..][..row.len()],
-                        &mut loss[4 * a0..][..4 * row.len()],
-                    );
-                    let rc = reach_abroad[d][c];
-                    for ((e, value), loss) in row.iter().zip(av).zip(loss.chunks_exact_mut(4)) {
-                        let b = e.col as usize;
-                        let weight = e.k * rc;
-                        let buys = rc > 0.0;
-                        if !buys || weight == 0.0 {
-                            loss.fill(0.0);
-                            continue;
-                        }
-                        let share = over(weight, inv_y[b], y[b]);
-                        for ((slot, loss), &at) in slots.iter_mut().zip(loss).zip(&at_b[b].units) {
-                            let units = at * share;
-                            let got = units * e.inv_tau;
-                            *slot += got;
-                            *loss = units - got;
-                        }
-                        let gross = at_b[b].gross * share;
-                        let net = at_b[b].net * share;
-                        *value += net;
-                        pay += gross;
-                        pay_class += gross;
-                        duty += gross - net;
-                    }
-                    [a1[r][c], a2[r][c], a3[r][c], a4[r][c]] = slots;
-                    (paid[r], by_class[r][c], tariff[r]) = (pay, pay_class, duty);
-                }
-            },
-        );
-
-        // one add chain over every leg, in the order of a serial pass
-        for x in &*loss {
-            *lost += x;
-        }
-    }
-}
-
-/// `v` split into the parts of consecutive groups of `rows` of its `n_rows` rows, row i
-/// starting at `start(i)`.
-fn split_rows<T>(
-    rows: usize,
-    mut v: &mut [T],
-    n_rows: usize,
-    start: impl Fn(usize) -> usize,
-) -> Vec<&mut [T]> {
-    let mut parts = Vec::with_capacity(n_rows.div_ceil(rows));
-    for first in (0..n_rows).step_by(rows) {
-        let len = start((first + rows).min(n_rows)) - start(first);
-        let (part, rest) = std::mem::take(&mut v).split_at_mut(len);
-        parts.push(part);
-        v = rest;
-    }
-    parts
-}
-
-/// The forward pass of [`dispatch`] as one serial scatter over the legs, in the order whose
-/// sums `dispatch` reproduces.
-#[cfg(test)]
-fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mut Sourced) {
     let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(
         out.scratch.good,
@@ -870,6 +416,8 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
                 s.y[e.col as usize] += e.k * reach_abroad[d][c];
             }
         }
+        s.inv_y.clear();
+        s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
         zeroed(&mut s.z, ng);
         zeroed(&mut s.net_ratio, ng);
         for a in 0..ng {
@@ -944,8 +492,8 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
         }
 
         // Origin gateways onto crossings; units are kept by transit lag from here on.
-        let (mut gross_b, mut net_b) = (vec![0.0; ng], vec![0.0; ng]);
-        let mut units_b: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ng]);
+        s.at_b.clear();
+        s.at_b.resize(ng, Inflow::default());
         for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
             let lo = gk.crossings.offsets[a] as usize;
             let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
@@ -964,9 +512,10 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
                 crossing_value[lo + i] += net;
                 crossing_units[lo + i] += s.origin_units_a[a] * share * e.inv_duty;
                 *lost += units - got;
-                units_b[usize::from(e.lag)][b] += got;
-                gross_b[b] += gross;
-                net_b[b] += net;
+                let at = &mut s.at_b[b];
+                at.units[usize::from(e.lag)] += got;
+                at.gross += gross;
+                at.net += net;
             }
         }
 
@@ -979,15 +528,16 @@ fn dispatch_scatter(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out:
                 if weight == 0.0 {
                     continue;
                 }
-                let share = over(weight, 1.0 / s.y[b], s.y[b]);
-                for (lag, at_b) in units_b.iter().enumerate() {
-                    let units = at_b[b] * share;
+                let share = over(weight, s.inv_y[b], s.y[b]);
+                let at = &s.at_b[b];
+                for (lag, &units) in at.units.iter().enumerate() {
+                    let units = units * share;
                     let got = units * e.inv_tau;
                     arrive[1 + lag][d][c] += got;
                     *lost += units - got;
                 }
-                let gross = gross_b[b] * share;
-                let net = net_b[b] * share;
+                let gross = at.gross * share;
+                let net = at.net * share;
                 access_in_value[lo + i] += net;
                 paid[d] += gross;
                 paid_by_class[d][c] += gross;
@@ -1946,130 +1496,6 @@ mod tests {
                 let slack = p * f64::MIN_POSITIVE * legs;
                 prop_assert!((r - p * q).abs() <= 1e-12 * r.max(p * q) + slack);
             }
-        }
-    }
-
-    /// Kernel, price, active, spend and fill.
-    type GatherCase = (Kernel, Vec<f64>, Vec<bool>, Vec<[f64; 2]>, Vec<[f64; 2]>);
-
-    /// 2 to 4 countries of 1 to 5 provinces and 1 to 3 gateways each, with random prices,
-    /// inactive origins, and spending and fills that are often 0 or 1.
-    fn gather_case(seed: u64) -> GatherCase {
-        let mut rng = rng(seed);
-        let n_countries = 2 + rng.below(3);
-        let (mut provinces, mut gateways) = (vec![], vec![]);
-        for c in 0..n_countries as u16 {
-            provinces.extend(std::iter::repeat_n(c, 1 + rng.below(5)));
-            gateways.extend(std::iter::repeat_n(c, 1 + rng.below(3)));
-        }
-        let (net, wedges) = complete_world(&mut rng, provinces, gateways);
-        let n = net.n_provinces();
-        let amount = |rng: &mut Rng, hi: f64| match rng.below(5) {
-            0 => 0.0,
-            1 => 1.0,
-            _ => hi * rng.next(),
-        };
-        let price = (0..n)
-            .map(|_| 10f64.powf(-2.0 + 4.0 * rng.next()))
-            .collect();
-        let active = (0..n).map(|_| rng.below(5) != 0).collect();
-        let spend = (0..n)
-            .map(|_| [amount(&mut rng, 1000.0), amount(&mut rng, 1000.0)])
-            .collect();
-        let fill = (0..n)
-            .map(|_| [amount(&mut rng, 1.0), amount(&mut rng, 1.0)])
-            .collect();
-        (kernel(&net, &wedges), price, active, spend, fill)
-    }
-
-    fn assert_same_dispatch(g: usize, gather: &Sourced, scatter: &Sourced) {
-        let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
-        let bits2 = |v: &[[f64; 2]]| v.iter().flatten().map(|x| x.to_bits()).collect::<Vec<_>>();
-        let fields: [(&str, &[f64], &[f64]); 9] = [
-            ("shipped", &gather.shipped, &scatter.shipped),
-            ("paid", &gather.paid, &scatter.paid),
-            ("received", &gather.received, &scatter.received),
-            ("tariff", &gather.tariff, &scatter.tariff),
-            (
-                "domestic_value",
-                &gather.domestic_value,
-                &scatter.domestic_value,
-            ),
-            (
-                "access_in_value",
-                &gather.access_in_value,
-                &scatter.access_in_value,
-            ),
-            (
-                "crossing_value",
-                &gather.crossing_value,
-                &scatter.crossing_value,
-            ),
-            (
-                "crossing_units",
-                &gather.crossing_units,
-                &scatter.crossing_units,
-            ),
-            (
-                "access_out_value",
-                &gather.access_out_value,
-                &scatter.access_out_value,
-            ),
-        ];
-        for (name, a, b) in fields {
-            assert_eq!(bits(a), bits(b), "good {g}: {name}");
-        }
-        for (slot, (a, b)) in gather.arrive.iter().zip(&scatter.arrive).enumerate() {
-            assert_eq!(bits2(a), bits2(b), "good {g}: arrive[{slot}]");
-        }
-        assert_eq!(
-            bits2(&gather.paid_by_class),
-            bits2(&scatter.paid_by_class),
-            "good {g}: paid_by_class"
-        );
-        assert_eq!(
-            gather.lost.to_bits(),
-            scatter.lost.to_bits(),
-            "good {g}: lost"
-        );
-    }
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(300))]
-
-        #[test]
-        fn gather_dispatch_equals_scatter_bit_for_bit(seed in any::<u64>(), g in 0..7usize) {
-            let (k, price, active, spend, fill) = gather_case(seed);
-            let mut gather = Sourced::new();
-            source(&k, g, &price, &active, &spend, &mut gather);
-            let mut scatter = gather.clone();
-            dispatch(&k, g, &price, &fill, &mut gather);
-            dispatch_scatter(&k, g, &price, &fill, &mut scatter);
-            assert_same_dispatch(g, &gather, &scatter);
-        }
-    }
-
-    #[test]
-    fn gather_dispatch_equals_scatter_across_chunks() {
-        // more provinces than one task takes, so the origin and destination passes split
-        let provinces = (0..300).map(|i| (i / 100) as u16).collect();
-        let gateways = (0..24).map(|i| (i / 8) as u16).collect();
-        let mut r = rng(5);
-        let (net, wedges) = complete_world(&mut r, provinces, gateways);
-        let k = kernel(&net, &wedges);
-        let np = net.n_provinces();
-        assert!(np > 4 * ROWS);
-        let price = draw(&mut r, np, 0.5, 2.0);
-        let active: Vec<bool> = (0..np).map(|o| o % 7 != 3).collect();
-        let spend = draw2(&mut r, np, 0.0, 10.0);
-        let fill = draw2(&mut r, np, 0.0, 1.0);
-        for g in 0..7 {
-            let mut gather = Sourced::new();
-            source(&k, g, &price, &active, &spend, &mut gather);
-            let mut scatter = gather.clone();
-            dispatch(&k, g, &price, &fill, &mut gather);
-            dispatch_scatter(&k, g, &price, &fill, &mut scatter);
-            assert_same_dispatch(g, &gather, &scatter);
         }
     }
 

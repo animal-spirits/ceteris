@@ -151,15 +151,15 @@ each origin's fill; iceberg losses apply per leg, the border loss on the crossin
 O(sum_A n_A^2 + P k + G^2 + C^2), with k gateways per country, G about 600 and C countries (the
 scale factors).
 
-**Dispatch (ADR 0097).** Every sum at a gateway or province gathers its legs by target, in the
-order a serial pass over the legs adds them, so its bits do not depend on the thread count; the
-run-wide loss is one add chain in that order. Losses and duties multiply by the reciprocals the
-kernel stores (1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t)), and the divisions by the price p_o,
-the onward access z_a and the destination access y_b are by reciprocals hoisted per origin, per
-origin gateway and per destination gateway (by division where y_b or z_a is subnormal and its
-reciprocal overflows). x (1 / d) rounds differently from x / d, so these bits differ from the
-divisions of the first build; `dispatch_scatter`, the serial oracle, uses the same arithmetic,
-and the gather matches it bit for bit.
+**Dispatch (ADR 0097).** Each good's dispatch is one serial pass per buyer class that adds every
+leg's terms to its targets in a fixed order, so its bits do not depend on the thread count; the
+tick runs the goods in parallel. Losses and duties multiply by the reciprocals the kernel stores
+(1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t)), and the divisions by the price p_o, the onward access
+z_a and the destination access y_b are by reciprocals hoisted per origin, per origin gateway and
+per destination gateway (by division where y_b or z_a is subnormal and its reciprocal
+overflows). x (1 / d) rounds differently from x / d, so these bits differ from the divisions of
+the first build. A gather by target, bit-identical to this pass, was built and measured slower
+inside the tick (ADR 0097, As built), and removed.
 
 **Payments.** Buyers pay at dispatch for what is filled: p_o (1 + t) per shipped unit, so a
 fully filled destination pays E_d. Each buyer pays its share of its class's filled spending to
@@ -447,12 +447,13 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 - Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7 traded
   goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the owner on
   2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms), `kernel_build` (not per tick; budget 2 s).
-  After the gather dispatch, the stored reciprocals and the log-domain weights (ADRs 0093,
-  0097; M4 Pro, AC, 98 W, full pack from its calibrated steady state, criterion medians):
-  `source_dispatch_parallel` 10.6 ms against the 8 ms budget, missed; a whole tick 42.9 ms
-  against 35 ms, missed; one good's dispatch 2.66 ms. The build before these changes measured
-  10.5 to 10.7 ms and 44.4 to 44.5 ms on the same machine the same day, not the 7.9 and 34 ms
-  of the earlier record, so the budget verdict needs the earlier conditions as well.
+  After the stored reciprocals and the log-domain weights (ADRs 0093, 0097; M4 Pro, AC, 98 W, full
+  pack from its calibrated steady state, criterion medians, 2026-10-26), with the serial dispatch
+  per good: `source_dispatch_parallel` 7.73 to 7.80 ms in three runs and 8.24 ms in one, at the
+  8 ms budget; `unit_source_dispatch_parallel` 6.1 to 6.5 ms; a whole tick 35.1 to 35.2 ms in three
+  runs and 38.4 ms in a noisy fourth, just over the 35 ms budget; one good's dispatch 4.8 to 6.1 ms (bimodal by the core it lands on). The
+  gather dispatch by target measured 10.3 to 10.4 ms and 44.4 to 44.7 ms in the same alternating
+  rounds and was removed (ADR 0097, As built).
 
 ## Open questions
 
