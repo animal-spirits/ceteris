@@ -160,4 +160,4 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   it refuses extra schema metadata, because Arrow serialises metadata in hash-map order and the
   bytes would stop being deterministic. `deny.toml` carries the licence allowlist and CI runs
   `cargo deny check licenses`. `tiny-keccak` 2.0.2 (CC0-1.0, via `arrow-array` -> `ahash` ->
-  `const-random`) is outside the allowlist and awaits a ruling.
+  `const-random`) is outside the allowlist and is allowed by a per-crate exception in `deny.toml`.

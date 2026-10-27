@@ -14,3 +14,6 @@ allow = [
     "MPL-2.0",
 ]
 confidence-threshold = 0.9
+
+# CC0-1.0 is a public-domain dedication. Reached through arrow-array -> ahash -> const-random.
+exceptions = [{ allow = ["CC0-1.0"], crate = "tiny-keccak" }]
