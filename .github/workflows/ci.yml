@@ -3,7 +3,9 @@ name: ci
 on:
   push:
     branches: [main]
+    paths-ignore: ["adr/**", "specs/**", "**/*.md"]
   pull_request:
+    paths-ignore: ["adr/**", "specs/**", "**/*.md"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,8 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Golden hashes must agree across architectures (Section 4.5).
-        os: [macos-14, ubuntu-latest]
+        # Golden hashes must agree across architectures (Section 4.5). macOS minutes count 10x,
+        # so pull requests run Linux only and the cross-architecture check runs on main.
+        os: ${{ github.event_name == 'push' && fromJSON('["macos-14", "ubuntu-latest"]') || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +45,7 @@ jobs:
       - run: uv run --project python --locked pytest python/tests
 
   app:
+    if: github.event_name == 'push'
     runs-on: macos-14
     defaults:
       run:
