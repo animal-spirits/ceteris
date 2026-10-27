@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! ceteris pack compare A B [--iterative] [--table NAME]
+//! ceteris pack check-sources --profile research|release
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -34,10 +35,12 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_pack::compare::{self, Tolerance};
+use ceteris_pack::sources::{self, Profile};
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
+  ceteris pack check-sources [--profile research|release]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -221,11 +224,37 @@ fn run(args: &Args) -> Result<(), String> {
     write_run(&args.out, sim.world()).map_err(|e| e.to_string())
 }
 
+/// `pack check-sources [--profile research|release]`: exit 1 when the manifest has problems.
+fn check_sources(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut profile = None;
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--profile" => {
+                let name = args.next().ok_or("--profile needs research or release")?;
+                profile =
+                    Some(Profile::parse(&name).ok_or("--profile must be research or release")?);
+            }
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let report = sources::check(&sources::workspace_root(), profile)?;
+    for problem in &report.problems {
+        eprintln!("{problem}");
+    }
+    println!("{}", report.summary());
+    Ok(if report.problems.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
 /// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
 fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     match args.next().as_deref() {
         Some("compare") => {}
-        _ => return Err("expected a pack command, compare".into()),
+        Some("check-sources") => return check_sources(args),
+        _ => return Err("expected a pack command, compare or check-sources".into()),
     }
     let (mut dirs, mut tolerance, mut only) = (Vec::new(), Tolerance::DEFAULT, None);
     while let Some(a) = args.next() {
