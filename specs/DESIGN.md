@@ -4,7 +4,7 @@
 
 ## 1. Executive Summary
 
-Ceteris Paribus (code name `ceteris`) is a deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post). It stays closed source until the restricted data sources it uses are replaced or cleared.
+Ceteris Paribus (code name `ceteris`) is a deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post). It is open source and non-commercial, and each user downloads the source data.
 
 Six design bets carry the project:
 
@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -64,6 +64,7 @@ Economy (production, consumption, input-output, trade, transport, money, banking
 - Named technologies; technology is sector productivity (decision of 23 Oct 2026).
 - LLM-driven leaders (deferred), tactical battle maps, 3D graphics, multiplayer, cloud hosting.
 - Scripted events and historical railroading: post-2000 history is a validation target, not a script.
+- Endogenous politics, borders and war (P6, P7), which are 2.0 (ADR 0136). In 1.x, institutions are 2000 data, borders are fixed, and policy comes from estimated reaction functions or the historical policy tape.
 
 ### 2.5 Design principles
 
@@ -270,7 +271,7 @@ States and enterprises propose projects (highways, rail lines, ports, pipelines)
 
 ### 5.6 Licensing note
 
-OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. While the project is closed source nothing is distributed; once it opens, the OSM-derived tables ship as a separate artifact under ODbL, attributed. Every source's licence is recorded in the pack manifest (Section 16).
+OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. OSM-derived tables are built by each user's pipeline or, where shipped, ship as a separate artifact under ODbL, attributed. Every source's licence is recorded in the pack manifest (Section 16).
 
 ## 6. Population: Pops, Demography, Identity and Migration
 
@@ -1014,7 +1015,7 @@ Named firms or individuals, sub-province geography, daily financial markets, pow
 
 ## 16. Data Sources and Pipeline
 
-The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). While the project is closed source it may use restricted sources, which must be replaced or cleared before it opens. ADR 0005 lists the substitutions made in the P0 audit.
+The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit.
 
 | Dataset | Content | Role | Licence | Bundle or fetch |
 | --- | --- | --- | --- | --- |
@@ -1175,7 +1176,7 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
-| Licence | Closed source for now; Apache-2.0 / MIT dual for code on opening; data under its source licences (ODbL and other share-alike tables shipped separately) | Restricted sources usable until the project opens |
+| Licence | Open source, non-commercial: Apache-2.0 / MIT dual for code; data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
 
 An alternative worth noting: the Julia ecosystem now hosts a data-driven macro ABM framework (BeforeIT.jl, associated with the Bank of Italy), useful as a reference implementation for the economic core even though Ceteris Paribus uses Rust.
 
@@ -1334,9 +1335,9 @@ Eleven phases take the project from an empty repository to a calibrated, playabl
 
 &#91;embedded content: roadmap · 11 phases, each with its gate\]
 
-Each phase starts only when the previous gate passes; the highlighted workbench phase is where the project first becomes useful for experiments.
+Each phase starts only when the previous gate passes; the highlighted workbench phase is where the project first becomes useful for experiments. Phases run in the order P0-P5, P8, P9, then P6, P7, P10; numbers are kept, and the order follows the major-version rule of ADR 0136.
 
-**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is the end of P9: a calibrated, validated world, not an earlier partial build.
+**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is 1.0 at the end of P9: a calibrated, validated economic world (P0-P5, P8, P9), not an earlier partial build. P6 is 2.0-alpha, P7 2.0-beta, and P10 lands as 1.3 (Steward mode for economic levers) and 2.x (full Steward mode and Tier 1b).
 
 ### 21.1 Phases and acceptance criteria
 
@@ -1421,9 +1422,9 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Parties | Explicit parties over interest groups | Elections, coalitions, party entry |
 | Naming | Real states and provinces, generic party labels by family | Recognizable map, less curation and sensitivity |
 | IO and trade data | OECD ICIO 2025 edition (1995-2022, 80+ economies) + BACI | About 115 economies imputed |
-| Licence | Closed source for now (supersedes open source; ADR 0005) | Restricted data allowed until it is replaced or cleared; Apache-2.0 / MIT on opening |
+| Licence | Open source and non-commercial (owner, 28 Oct 2026; supersedes the closed-source fallback of ADR 0005) | Apache-2.0 / MIT code; each user downloads the data, so non-commercial sources are acceptable; nothing restricted is bundled |
 | LLM leaders | Out of v1 | Tier 2 deferred |
-| First release | End of P9 (calibrated, validated world) | No public partial builds |
+| First release | 1.0 at the end of P9 (calibrated, validated economic world; P6 and P7 are 2.0, ADR 0136) | No public partial builds |
 | Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-\*, Python package ceteris, CLI ceteris; check crates.io, PyPI and GitHub before P0 |
 
 ### 22.2 Defaults the coding agent may take (recorded as ADRs)
@@ -1436,7 +1437,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 
 ## 23. Beyond v1: World Builder and Strategy-Game Depth
 
-Version 1 is a calibrated economic laboratory; this section specifies what turns it into a world builder and a Paradox-depth strategy game without weakening that laboratory. Nothing here is scheduled before 1.0, and every item lands behind a feature flag (roadmap, release process).
+Version 1 is a calibrated economic laboratory; this section specifies what turns it into a world builder and a Paradox-depth strategy game without weakening that laboratory. Nothing here is scheduled before 1.0, and every item lands behind a feature flag (roadmap, release process). Version numbers follow ADR 0136: a major relaxes one ceteris paribus, and everything else is a minor.
 
 The gaps fall in three groups: building worlds other than the real 2000 start (23.2-23.3), giving the player something to do and be judged on (23.4), and adding the discrete texture of characters, commands, actions and stories that aggregate mechanisms lack (23.5-23.8).
 
@@ -1453,7 +1454,7 @@ Most additions here add free parameters faster than they add out-of-sample skill
 | UI label | None | "Exploratory" banner, as for 2.0 politics in lab mode |
 | Determinism and invariants | Required | Required |
 
-Rules: an extended mechanism must reduce to its lab counterpart when switched off (equilibrium nesting applied to profiles), and a mechanism that later passes ablation moves into the lab profile with a minor release. Branches record their profile in the run manifest, and lab and extended runs are never compared as parent and child.
+Rules: an extended mechanism must reduce to its lab counterpart when switched off (equilibrium nesting applied to profiles), and a mechanism that later passes ablation may join the lab profile as opt-in in a minor release; it becomes the lab default only at the next major (ADR 0136). Branches record their profile in the run manifest, and lab and extended runs are never compared as parent and child.
 
 ### 23.2 World authoring and the consistency solver
 
@@ -1632,7 +1633,7 @@ The rollout budget is set so the strategic layer stays within 10% of the tick bu
 
 ### 23.9 Placement in the roadmap
 
-The first additions ride on 1.3 Steward mode, the consistency solver follows in 1.4, and most game depth arrives with 2.0 politics and war; pre-1995 eras come last. Releases follow the roadmap's After 1.0 table and its versioning rules.
+The first additions ride on 1.3 Steward mode, the consistency solver follows in 1.4, and most game depth arrives with 2.0 politics and war; pre-1995 eras enter the lab at 3.0. Releases follow the roadmap's After 1.0 table, its versioning rules and ADR 0136; a 2.x or 3.x label below on an extended-profile item means its dependencies land then, and the item ships as a minor.
 
 | Item | Section | Release | Depends on | Profile |
 | --- | --- | --- | --- | --- |
@@ -1646,17 +1647,17 @@ The first additions ride on 1.3 Steward mode, the consistency solver follows in 
 | Neural surrogate (pulled forward from P10) and strategic AI | 23.8 | 2.0-beta | P5 policy gate | Extended until the gate |
 | Diplomatic actions and intelligence | 23.6 | 2.0-beta | P7 | Lab if H7-H9 hold |
 | Command layer | 23.5 | 2.0-beta | P7, characters | Extended |
-| Capability milestones | 23.7 | 2.0 | P7, P8 | Extended |
+| Capability milestones | 23.7 | 2.0 | P7, P8 | Extended; lab at 3.0 |
 | Covert action, non-state actors | 23.6, 23.7 | 2.x | Intelligence, P6, P7 | Extended |
-| Emerging sectors | 23.7 | 2.x | P8 | Extended |
+| Emerging sectors | 23.7 | 2.x | P8 | Extended; lab at 3.0 |
 | Synthetic worlds, module ABI | 23.3 | 2.x | Solver; Rust crates published | Extended |
-| Pre-1995 packs | 23.3 | 3.x | Capabilities, historical hindcast | Extended |
+| Pre-1995 packs | 23.3 | 2.x (extended), 3.0 (lab) | Capabilities; reanalysis hindcast (ADR 0131) for lab | Extended until 3.0 |
 
 Open decisions for this section:
 
 - [ ] Size of the X-register, and whether it gets its own table in Section 17.
 - [ ] Whether a lost mandate ends the run or hands control to the AI by default (23.4).
-- [ ] Whether the roadmap's After 1.0 table is updated to the releases above.
+- [x] Whether the roadmap's After 1.0 table is updated to the releases above: yes, under ADR 0136 (28 Oct 2026).
 
 ## 24. References
 

@@ -3,7 +3,7 @@
 Status: proposed
 Date: 2026-10-28
 Design sections: 10.5, 10.7, 11.2, 11.6 to 11.8, 12.6, 23.4, 23.5; ADRs 0067, 0115
-Phase: P6 (idea, coalition), P7 (founder, mediator, quartermaster), 3.x (citizen)
+Phase: P6, 2.0-alpha (idea, coalition); P7, 2.0-beta (founder, mediator, quartermaster); citizen as a minor once its dependencies land (ADR 0136)
 
 ## Context
 
@@ -41,7 +41,7 @@ Option 2. Each seat is scored against its AI baseline under CRN (23.4).
 
 ## Migration
 
-- P6: idea and coalition seats. P7: founder, mediator and quartermaster. 3.x: citizen.
+- P6 (2.0-alpha): idea and coalition seats. P7 (2.0-beta): founder, mediator and quartermaster. Citizen: a minor once its dependencies land (ADR 0136).
 
 ## Tests
 
