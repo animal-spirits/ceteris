@@ -44,7 +44,15 @@ those of `gravity.yotov`. The `ppml_parity` test (`CETERIS_PPML_PARITY`) fits ea
 the Rust fits beside Python's and fails above 1e-9 relative, in the mixed form
 |a - b| <= 1e-9 max(1, |a|, |b|) for the absorbed design and the Gauss-Newton step coefficients
 of `mode_costs`, which are rounding noise around 0; `pack compare --iterative` compares the Yotov
-fits.
+fits. For the calibration, `python -m ceteris.reference calibrate` and `ceteris calibrate`
+calibrate the fixture (`--inputs`) and the pack (`--pack`), each timed, into
+`WORK_DIR/calibration-<name>/{python,rust}` with their printed output beside them;
+`pack compare --iterative` compares the six tables in file row order, and the `parity` test of
+`ceteris-calibrate` (`CETERIS_CALIBRATION_PARITY`) the schema metadata (format, static digest and
+passes equal, r within 1e-9) and the printed summary (within 1e-9; timings, Sinkhorn sweeps and
+the per-pass changes, which are iteration noise, left out). The `steady_state` tests of
+`ceteris-calibrate` then run on the pack export, including `EconInputs::from_pack` on a linked
+copy of the pack holding the Rust tables.
 
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
