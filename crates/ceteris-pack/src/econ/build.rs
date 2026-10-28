@@ -16,6 +16,8 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::{goods, icio, people, tariffs};
+use crate::json::Json;
+use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
@@ -27,6 +29,16 @@ use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use crate::read::wdi::read_rates;
 use crate::table;
 
+/// The written tables, in writing order.
+pub const TABLES: [&str; 7] = [
+    "econ_goods.arrow",
+    "econ_countries.arrow",
+    "econ_io.arrow",
+    "econ_provinces.arrow",
+    "econ_pops.arrow",
+    "econ_tariffs.arrow",
+    "gateways.arrow",
+];
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
 pub const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
 pub const BACI: &str = "BACI_HS92_V202601.zip";
@@ -39,8 +51,90 @@ pub const COVERAGE: [f64; goods::NAMES.len()] = [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2
 #[derive(Debug)]
 pub struct BuildReport {
     pub tables: Vec<(String, [u8; 32])>,
+    pub stats: BuildStats,
     /// Human-readable summaries of the built tables.
     pub summary: Vec<String>,
+}
+
+/// Counts and shares of the built tables, the `econ` stats of the pack manifest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BuildStats {
+    pub gateways: usize,
+    /// Gateways by kind, in `gateways::KINDS` order.
+    pub gateway_kinds: [usize; gateways::KINDS.len()],
+    pub tariff_importers_own: usize,
+    pub tariff_agreement_pairs: usize,
+    /// Rounded to 4 decimals, as are the shares below.
+    pub dose_match_rate: f64,
+    pub provinces_with_va: usize,
+    pub va_imputed_share: f64,
+}
+
+impl BuildStats {
+    fn new(
+        gw: &[gateways::Gateway],
+        rates: &tariffs::Tariffs,
+        matched: &downscale::DoseMatch,
+        placed: &Downscaled,
+    ) -> Self {
+        let mut gateway_kinds = [0; gateways::KINDS.len()];
+        for g in gw {
+            gateway_kinds[usize::from(g.kind)] += 1;
+        }
+        let pairs: usize = rates
+            .agreement
+            .iter()
+            .map(|row| row.iter().filter(|&&a| a).count())
+            .sum();
+        let va: Vec<f64> = placed.va.iter().flatten().copied().collect();
+        let imputed: Vec<f64> = placed
+            .va
+            .iter()
+            .flatten()
+            .zip(placed.imputed.iter().flatten())
+            .filter_map(|(&v, &i)| i.then_some(v))
+            .collect();
+        BuildStats {
+            gateways: gw.len(),
+            gateway_kinds,
+            tariff_importers_own: rates.imputed.iter().filter(|&&i| !i).count(),
+            tariff_agreement_pairs: pairs / 2,
+            dose_match_rate: round4(matched.rate()),
+            provinces_with_va: placed
+                .va
+                .iter()
+                .filter(|v| pairwise_sum(&v[..]) > 0.0)
+                .count(),
+            va_imputed_share: round4(pairwise_sum(&imputed) / pairwise_sum(&va)),
+        }
+    }
+
+    /// The stats as the manifest writes them.
+    pub fn json(&self) -> Json {
+        let count = |n: usize| Json::Int(i64::try_from(n).expect("count fits i64"));
+        Json::object([
+            ("gateways", count(self.gateways)),
+            (
+                "gateway_kinds",
+                Json::object(
+                    gateways::KINDS
+                        .iter()
+                        .zip(self.gateway_kinds)
+                        .map(|(k, n)| (k, count(n))),
+                ),
+            ),
+            ("tariff_importers_own", count(self.tariff_importers_own)),
+            ("tariff_agreement_pairs", count(self.tariff_agreement_pairs)),
+            ("dose_match_rate", Json::Float(self.dose_match_rate)),
+            ("provinces_with_va", count(self.provinces_with_va)),
+            ("va_imputed_share", Json::Float(self.va_imputed_share)),
+        ])
+    }
+}
+
+/// Python's `round(x, 4)`: the decimal nearest the exact binary value.
+fn round4(x: f64) -> f64 {
+    format!("{x:.4}").parse().expect("formatted float parses")
 }
 
 /// String columns of a pack table, every batch in order.
@@ -326,25 +420,31 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
     countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
+    let [
+        goods_t,
+        countries_t,
+        io_t,
+        provinces_t,
+        pops_t,
+        tariffs_t,
+        gateways_t,
+    ] = TABLES;
     let tables = vec![
-        write(out, "econ_goods.arrow", goods_columns(weight))?,
-        write(out, "econ_countries.arrow", countries_columns)?,
-        write(out, "econ_io.arrow", icio::io_columns(&codes, &world)?)?,
-        write(out, "econ_provinces.arrow", {
+        write(out, goods_t, goods_columns(weight))?,
+        write(out, countries_t, countries_columns)?,
+        write(out, io_t, icio::io_columns(&codes, &world)?)?,
+        write(out, provinces_t, {
             let mut cols = people::province_columns(&country, &population, &labour)?;
             cols.extend(va_columns(&placed));
             cols
         })?,
-        write_batch(
-            out,
-            "econ_pops.arrow",
-            &people::pops(&country, &population, &labour)?,
-        )?,
-        write(out, "econ_tariffs.arrow", tariffs::columns(&rates)?)?,
-        write(out, "gateways.arrow", gateways::columns(&gw))?,
+        write_batch(out, pops_t, &people::pops(&country, &population, &labour)?)?,
+        write(out, tariffs_t, tariffs::columns(&rates)?)?,
+        write(out, gateways_t, gateways::columns(&gw))?,
     ];
     Ok(BuildReport {
         tables,
+        stats: BuildStats::new(&gw, &rates, &matched, &placed),
         summary: vec![
             downscale::report(&placed, &matched),
             tariffs::report(&rates, &codes, &trade),

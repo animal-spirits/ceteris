@@ -291,7 +291,8 @@ fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Strin
 }
 
 /// `pack build --econ-only --pack DIR --out DIR`: the econ tables of a pack's P1 tables, from
-/// the fetch cache; prints each table's SHA-256.
+/// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
+/// stats as JSON.
 fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let (mut econ_only, mut pack, mut out) = (false, None, None);
     while let Some(a) = args.next() {
@@ -325,7 +326,10 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     for line in &report.summary {
         eprintln!("{line}");
     }
-    println!("{}", Json::object([("tables", tables)]).text());
+    println!(
+        "{}",
+        Json::object([("tables", tables), ("stats", report.stats.json())]).text()
+    );
     Ok(ExitCode::SUCCESS)
 }
 
