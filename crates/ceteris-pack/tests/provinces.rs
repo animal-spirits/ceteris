@@ -26,7 +26,7 @@ fn loading_gives_the_regions_of_the_pack() {
     ) else {
         return;
     };
-    let base = provinces::load(&admin1, &admin0).unwrap();
+    let base = provinces::regions(&admin1, &admin0).unwrap();
     let ids = strings(&pack, "id");
     let mut regions: Vec<&str> = ids.iter().map(|id| region(id)).collect();
     regions.dedup();

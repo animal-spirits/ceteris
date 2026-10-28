@@ -19,8 +19,8 @@ calamine = "0.37.0"
 csv = "1.4.0"
 earcut = "0.4.11"
 flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }
-# Without default features: they would turn on rayon in i_overlay. spade: MakeValid.
-geo = { version = "0.33.1", default-features = false, features = ["spade"] }
+# Without default features: they would turn on rayon in i_overlay.
+geo = { version = "0.33.1", default-features = false }
 # Owner-side only: links the LGPL GEOS C library dynamically.
 geos = { version = "11.3.1", optional = true, features = ["v3_15_0"] }
 h3o = { version = "=0.11.0", features = ["geo"] }

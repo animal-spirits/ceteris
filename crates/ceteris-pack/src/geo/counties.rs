@@ -236,8 +236,10 @@ mod clip {
     use rstar::{AABB, RTree, RTreeObject};
 
     use super::entries;
-    use crate::geo::overlay::{area, from_geo, intersection, is_empty, polygonal, to_multipolygon};
-    use crate::geo::provinces::{Province, make_valid};
+    use crate::geo::overlay::{
+        area, from_geo, intersection, is_empty, make_valid, polygonal, to_multipolygon,
+    };
+    use crate::geo::provinces::Province;
     use crate::geo::sphere::{anchor, area_km2};
     use crate::read::geojson;
 
@@ -260,7 +262,7 @@ mod clip {
                 let Some(g) = g else {
                     continue;
                 };
-                let g = polygonal(&from_geo(&make_valid(g)?)?)?;
+                let g = polygonal(&make_valid(&from_geo(&g)?)?)?;
                 if !is_empty(&g)? {
                     out.push(County {
                         iso: e.iso.clone(),

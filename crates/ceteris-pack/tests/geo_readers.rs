@@ -87,3 +87,23 @@ fn geoboundaries_read_as_pyogrio_reads_them() {
         )
     );
 }
+
+#[cfg(feature = "geos")]
+#[test]
+fn goias_is_repaired_as_shapely_on_geos_3_15_repairs_it() {
+    use ceteris_pack::geo::provinces;
+    let (Some(admin1), Some(admin0)) = (
+        cached("ne_10m_admin_1_states_provinces.zip"),
+        cached("ne_10m_admin_0_countries.zip"),
+    ) else {
+        return;
+    };
+    let repaired = provinces::load(&admin1, &admin0).unwrap();
+    let goias = repaired.iter().find(|p| p.id == "BRA-1294").unwrap();
+    let mut h = Sha256::new();
+    feed(&mut h, Some(&goias.geom));
+    assert_eq!(
+        format!("{:x}", h.finalize()),
+        "121530c223e0383469f00aedaa9e84819de85744a3131dc1c33b11359a8179c2"
+    );
+}

@@ -113,6 +113,15 @@ pub fn is_empty(g: &impl Geom) -> Result<bool, String> {
     g.is_empty().map_err(fail)
 }
 
+pub fn is_valid(g: &impl Geom) -> Result<bool, String> {
+    g.is_valid().map_err(fail)
+}
+
+/// `shapely.make_valid`: GEOS's repair, linework method, collapsed parts kept.
+pub fn make_valid(g: &impl Geom) -> Result<Geometry, String> {
+    g.make_valid().map_err(fail)
+}
+
 pub fn area(g: &impl Geom) -> Result<f64, String> {
     g.area().map_err(fail)
 }
@@ -229,6 +238,36 @@ mod tests {
         let joined = polygonal(&both).unwrap();
         assert_eq!(kind(&joined).unwrap(), GeometryTypes::Polygon);
         assert_eq!(joined.area().unwrap(), 2.0);
+    }
+
+    #[test]
+    fn make_valid_repairs_a_bowtie_as_shapely_on_geos_3_15_does() {
+        let bowtie = from_polygon(&Polygon::new(
+            LineString::from(vec![
+                (0.0, 0.0),
+                (2.0, 2.0),
+                (2.0, 0.0),
+                (0.0, 2.0),
+                (0.0, 0.0),
+            ]),
+            vec![],
+        ))
+        .unwrap();
+        assert!(!is_valid(&bowtie).unwrap());
+        let expected = MultiPolygon(vec![
+            Polygon::new(
+                LineString::from(vec![(1.0, 1.0), (0.0, 0.0), (0.0, 2.0), (1.0, 1.0)]),
+                vec![],
+            ),
+            Polygon::new(
+                LineString::from(vec![(1.0, 1.0), (2.0, 2.0), (2.0, 0.0), (1.0, 1.0)]),
+                vec![],
+            ),
+        ]);
+        for _ in 0..2 {
+            let repaired = make_valid(&bowtie).unwrap();
+            assert_eq!(to_multipolygon(&repaired).unwrap(), expected);
+        }
     }
 
     #[test]

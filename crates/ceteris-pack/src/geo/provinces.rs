@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use geo::{Geometry, MakeValid, MultiPolygon, Validation};
+use geo::{Geometry, MultiPolygon};
 use toml::Value;
 
 use crate::read::natural_earth::{Dbf, shapes_from_zip};
@@ -162,27 +162,9 @@ fn sovereign_codes(admin0: &Path) -> Result<BTreeMap<Option<String>, Option<Stri
         .collect())
 }
 
-/// shapely's `make_valid` where a geometry is invalid: geo's repair, which matches GEOS on the
-/// admin-1 polygons; a single part stays a Polygon.
-pub fn make_valid(g: Geometry) -> Result<Geometry, String> {
-    if g.is_valid() {
-        return Ok(g);
-    }
-    let mut repaired = match &g {
-        Geometry::Polygon(p) => p.make_valid(),
-        Geometry::MultiPolygon(m) => m.make_valid(),
-        g => return Err(format!("not polygonal: {g:?}")),
-    }
-    .map_err(|e| format!("{e:?}"))?;
-    Ok(if repaired.0.len() == 1 {
-        Geometry::Polygon(repaired.0.remove(0))
-    } else {
-        Geometry::MultiPolygon(repaired)
-    })
-}
-
-/// The admin-1 regions at 2000 borders, ordered by (country, id).
-pub fn load(admin1: &Path, admin0: &Path) -> Result<Vec<Province>, String> {
+/// The admin-1 regions at 2000 borders, ordered by (country, id), their geometry as read (the
+/// geo build repairs it).
+pub fn regions(admin1: &Path, admin0: &Path) -> Result<Vec<Province>, String> {
     let b = borders()?;
     let sov = sovereign_codes(admin0)?;
     let dbf = Dbf::from_zip(admin1)?;
@@ -223,7 +205,7 @@ pub fn load(admin1: &Path, admin0: &Path) -> Result<Vec<Province>, String> {
             country,
             sovereign,
             country_now: now.to_owned(),
-            geom: make_valid(geom)?,
+            geom,
             area_km2: 0.0,
             lon: 0.0,
             lat: 0.0,
@@ -235,7 +217,7 @@ pub fn load(admin1: &Path, admin0: &Path) -> Result<Vec<Province>, String> {
 }
 
 #[cfg(feature = "geos")]
-pub use split::{build, split, split_by_counties};
+pub use split::{build, load, split, split_by_counties};
 
 #[cfg(feature = "geos")]
 mod split {
@@ -258,6 +240,22 @@ mod split {
 
     fn area(g: &Geos) -> Result<f64, String> {
         Ok(area_km2(&overlay::to_multipolygon(g)?))
+    }
+
+    /// The admin-1 regions at 2000 borders, an invalid geometry repaired as shapely's
+    /// `make_valid` repairs it.
+    pub fn load(
+        admin1: &std::path::Path,
+        admin0: &std::path::Path,
+    ) -> Result<Vec<Province>, String> {
+        let mut out = super::regions(admin1, admin0)?;
+        for p in &mut out {
+            let g = from_geo(&p.geom)?;
+            if !overlay::is_valid(&g)? {
+                p.geom = to_geo(&overlay::make_valid(&g)?)?;
+            }
+        }
+        Ok(out)
     }
 
     /// GEOS's Voronoi diagram of the seeds with `extend_to` of envelope `extend`, its cells in
@@ -519,7 +517,7 @@ mod split {
         res: Resolution,
         counties: &[County],
     ) -> Result<Vec<Province>, String> {
-        let mut base = super::load(admin1, admin0)?;
+        let mut base = load(admin1, admin0)?;
         for p in &mut base {
             p.area_km2 = area_km2(&parts(&p.geom));
         }
