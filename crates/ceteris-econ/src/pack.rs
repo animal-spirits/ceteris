@@ -137,10 +137,7 @@ impl EconInputs {
         expect_rows("econ_io", a.len(), nc * N_GOODS * N_GOODS)?;
         let countries = Countries {
             omega: per_good(&c, "fd_")?,
-            io: a
-                .chunks_exact(N_GOODS * N_GOODS)
-                .map(|x| x.try_into().expect("one country of coefficients"))
-                .collect(),
+            io: a.as_chunks::<{ N_GOODS * N_GOODS }>().0.to_vec(),
             s_l: f64s(&c, "labour_share")?,
             unemployment: f64s(&c, "unemployment")?,
             u_star: f64s(&c, "u_star")?,
