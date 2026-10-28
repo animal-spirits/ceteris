@@ -3,7 +3,7 @@
     python -I econ_tables.py MODULE PYTHON_DIR RUST_DIR OUT_DIR
 
 Every Rust table must have exactly the columns of `RUST` (the tables built in Rust so far), so a
-column the port leaves out or adds fails here. The MODULE's columns of each table are written from
+column the port leaves out or adds fails here; the Python tables of `COMPLETE` must have them too. The MODULE's columns of each table are written from
 both builds into OUT_DIR/python and OUT_DIR/rust.
 """
 
@@ -53,13 +53,17 @@ ICIO = {
     ],
     "econ_io.arrow": ["country", "input", "good", "a"],
 }
-MODULES = {"people": PEOPLE, "icio": ICIO}
+GOODS_TABLE = {"econ_goods.arrow": ["name", "traded", "weight", "coverage"]}
+MODULES = {"people": PEOPLE, "icio": ICIO, "goods": GOODS_TABLE}
 RUST = {
+    **GOODS_TABLE,
     "econ_countries.arrow": ICIO["econ_countries.arrow"] + PEOPLE["econ_countries.arrow"][1:],
     "econ_io.arrow": ICIO["econ_io.arrow"],
     "econ_provinces.arrow": PEOPLE["econ_provinces.arrow"],
     "econ_pops.arrow": PEOPLE["econ_pops.arrow"],
 }
+# Tables whose Python columns are all ported: the Python schema must be the same list.
+COMPLETE = ["econ_goods.arrow", "econ_countries.arrow", "econ_io.arrow", "econ_pops.arrow"]
 
 
 def main() -> None:
@@ -71,6 +75,10 @@ def main() -> None:
         got = ipc.open_file(str(rust / name)).schema.names
         if got != names:
             sys.exit(f"{name}: Rust columns {got}, expected {names}")
+    for name in COMPLETE:
+        got = ipc.open_file(str(python / name)).schema.names
+        if got != RUST[name]:
+            sys.exit(f"{name}: Python columns {got}, expected {RUST[name]}")
     for side, source in (("python", python), ("rust", rust)):
         (out / side).mkdir(parents=True)
         for name, names in MODULES[module].items():

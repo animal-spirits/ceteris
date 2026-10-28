@@ -6,10 +6,10 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::{Array, ArrayRef, RecordBatch, StringArray};
+use arrow_array::{Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
 
-use super::{icio, people};
+use super::{goods, icio, people};
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
@@ -20,6 +20,11 @@ use crate::table;
 
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
 pub const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
+pub const BACI: &str = "BACI_HS92_V202601.zip";
+pub const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
+/// P02 inventory target coverage s_g in months, the prior's start (trade SPEC, Parameters;
+/// TradeParams::coverage).
+pub const COVERAGE: [f64; goods::NAMES.len()] = [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0];
 
 /// The written tables: file name and SHA-256 of its bytes, in writing order.
 #[derive(Debug)]
@@ -67,6 +72,29 @@ fn write_batch(out: &Path, name: &str, batch: &RecordBatch) -> Result<(String, [
     Ok((name.to_owned(), digest))
 }
 
+/// `econ_goods.arrow`: name, whether the good is traded, tonnes per USD and inventory coverage.
+fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
+    let n = goods::NAMES.len();
+    vec![
+        (
+            "name".into(),
+            Arc::new(StringArray::from_iter_values(goods::NAMES)),
+        ),
+        (
+            "traded".into(),
+            Arc::new((0..n).map(|g| g < goods::TRADED).collect::<BooleanArray>()),
+        ),
+        (
+            "weight".into(),
+            Arc::new(weight.into_iter().collect::<Float64Array>()),
+        ),
+        (
+            "coverage".into(),
+            Arc::new(COVERAGE.into_iter().collect::<Float64Array>()),
+        ),
+    ]
+}
+
 /// Writes the econ tables of `pack` (its P1 tables) into `out`, reading the sources from `cache`.
 pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, String> {
     let [codes, sovereign] = strings(&pack.join("countries.arrow"), ["code", "sovereign"])?;
@@ -107,12 +135,15 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &worldpop,
     )?;
 
+    let weight = goods::weights_from_baci(&cache.join(BACI), &cache.join(HS_KEY))?;
+
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut countries_columns: Vec<(String, ArrayRef)> =
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
     countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
     let tables = vec![
+        write(out, "econ_goods.arrow", goods_columns(weight))?,
         write(out, "econ_countries.arrow", countries_columns)?,
         write(out, "econ_io.arrow", icio::io_columns(&codes, &world)?)?,
         write(
