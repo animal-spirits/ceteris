@@ -35,4 +35,28 @@ site counts, fills of the unsimplified geometry), and its cells table must equal
 through `pack compare`; fills through `fills.py`, which compares bytes, then each feature's
 triangle set and area.
 
+`step3-provinces.sh` compares the ports of `provinces.py`, `counties.py` and the county
+clipping of `build.build`. Both sides build the provinces and counties from the cache:
+`geo_inputs.py` in Python, `ceteris pack dump-geo DIR --build` in Rust, which needs the
+owner-side `geos` feature. The Python must run shapely on the GEOS that the Rust links, 3.15,
+or overlay results differ for reasons that are not the port's:
+
+```sh
+brew install geos                       # 3.15.0; the geos crate finds it through geos-config
+uv venv --python 3.14.2 "$VENV"         # outside the project, so python/uv.lock is untouched
+GEOS_CONFIG=/opt/homebrew/bin/geos-config uv pip install --python "$VENV/bin/python" \
+    h3==4.5.0 mapbox-earcut==2.1.0 numpy==2.5.4 pyarrow==26.0.0 pyogrio==0.13.0 \
+    rasterio==1.5.2 scipy==1.18.1
+GEOS_CONFIG=/opt/homebrew/bin/geos-config uv pip install --python "$VENV/bin/python" \
+    --no-binary shapely --no-cache shapely==2.2.0
+"$VENV/bin/python" -c 'import shapely; print(shapely.geos_version_string)'   # 3.15.0
+GEOS_PYTHON="$VENV/bin/python" scripts/parity/step3-provinces.sh
+```
+
+The package versions are those of `python/uv.lock`; only shapely is built from source. The
+script imports `ceteris` from `python/` through `PYTHONPATH`.
+
+`geo_readers.py` prints digests of the polygons pyogrio reads from the admin-1 shapefile and the
+geoBoundaries files; `tests/geo_readers.rs` checks the Rust readers against them.
+
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
