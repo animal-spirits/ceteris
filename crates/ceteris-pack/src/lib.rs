@@ -5,6 +5,7 @@ pub mod compare;
 pub mod fetch;
 pub mod json;
 pub mod numeric;
+pub mod raster;
 pub mod read;
 pub mod sources;
 pub mod table;

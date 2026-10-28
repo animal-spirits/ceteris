@@ -57,6 +57,17 @@ def xlsx_rows(name, sheet):
     return [{decode(k): decode(v) for k, v in r.items()} for r in people._xlsx_sheet(CACHE / name, sheet)]
 
 
+def province_population(raster):
+    cells = ipc.open_file(PACK / "cells.arrow").read_all()
+    if raster == "worldpop":
+        return people.province_population(CACHE / "ppp_2000_1km_Aggregated.tif", cells)
+    if raster == "mapspam":
+        return downscale.cropland(CACHE / downscale.SPAM, cells)
+    if raster == "kummu":
+        return downscale.gridded_gdp(CACHE / downscale.KUMMU, cells)
+    raise ValueError(raster)
+
+
 def population_2000():
     return {k: v[2000] for k, v in people.read_wdi(CACHE / "wdi_SP.POP.TOTL.zip").items() if 2000 in v}
 
@@ -108,6 +119,7 @@ READERS = {
     "gem-coal": lambda: downscale.read_gem_coal(CACHE / "Global Coal Mine Tracker, August 2026.xlsx"),
     "gem-oil-gas": lambda: downscale.read_gem_oil_gas(CACHE / "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx"),
     "seds": lambda: downscale.read_seds(CACHE / downscale.SEDS),
+    "population": province_population,
 }
 
 
