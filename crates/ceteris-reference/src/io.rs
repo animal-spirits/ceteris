@@ -110,9 +110,39 @@ impl Mat {
             .collect()
     }
 
-    /// Sum of each row, in column order.
+    /// Sum of each row, in numpy's `sum(axis=1)` order.
     pub fn row_sums(&self) -> Vec<f64> {
-        (0..self.rows).map(|r| self.row(r).iter().sum()).collect()
+        (0..self.rows).map(|r| pairwise_sum(self.row(r))).collect()
+    }
+}
+
+/// numpy's pairwise summation of a contiguous run: sequential below 8 values, eight running
+/// sums combined as a tree up to 128, halves split at a multiple of 8 beyond.
+pub fn pairwise_sum(a: &[f64]) -> f64 {
+    let n = a.len();
+    if n < 8 {
+        let mut res = 0.0;
+        for v in a {
+            res += v;
+        }
+        res
+    } else if n <= 128 {
+        let (blocks, rest) = a.as_chunks::<8>();
+        let mut r = blocks[0];
+        for chunk in &blocks[1..] {
+            for (acc, v) in r.iter_mut().zip(chunk) {
+                *acc += v;
+            }
+        }
+        let mut res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for v in rest {
+            res += v;
+        }
+        res
+    } else {
+        let half = n / 2;
+        let half = half - half % 8;
+        pairwise_sum(&a[..half]) + pairwise_sum(&a[half..])
     }
 }
 
@@ -674,6 +704,31 @@ mod tests {
         Table {
             name: "t".into(),
             batches: vec![RecordBatch::try_from_iter([("index", column)]).unwrap()],
+        }
+    }
+
+    /// `numpy.sum` of `[1.0] + [1.1e-16] * (n - 1)` (order-sensitive: a sequential sum stays 1)
+    /// and of `[1 / (i + 1) for i in range(n)]`, printed with `repr`.
+    const NUMPY_SUMS: [(usize, f64, f64); 9] = [
+        (3, 1.0, 1.8333333333333333),
+        (8, 1.0000000000000007, 2.7178571428571425),
+        (9, 1.0000000000000007, 2.8289682539682537),
+        (10, 1.0000000000000007, 2.9289682539682538),
+        (16, 1.0000000000000016, 3.3807289932289937),
+        (17, 1.0000000000000016, 3.439552522640758),
+        (128, 1.0000000000000124, 5.433147092589173),
+        (129, 1.0000000000000133, 5.440899030573669),
+        (300, 1.000000000000032, 6.282663880299504),
+    ];
+
+    #[test]
+    fn pairwise_sum_matches_numpy() {
+        for (n, tiny, harmonic) in NUMPY_SUMS {
+            let mut a = vec![1.1e-16; n];
+            a[0] = 1.0;
+            assert_eq!(super::pairwise_sum(&a), tiny, "n = {n}");
+            let h: Vec<f64> = (0..n).map(|i| 1.0 / (i + 1) as f64).collect();
+            assert_eq!(super::pairwise_sum(&h), harmonic, "n = {n}");
         }
     }
 
