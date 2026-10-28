@@ -52,6 +52,21 @@ zoom, where the map hands off to the city companion.
   by a continuous data series. v1 uses CC0 recordings (licence checked per track) and a
   player music folder tagged in a text file; an original score may be commissioned before
   release. Mixer: `kira`.
+- Generative synth (owner request, 2026-10-28): a procedural modular synth, a patch graph on
+  `fundsp` on the audio thread, as an alternative to the recorded score (player setting:
+  Score, Synth or Mixed). One energy axis runs from ambient minimal through minimal techno and
+  progressive to trance (118-138 bpm); mood state, a tension level raised by named events and
+  decaying over months, the decade and a regional flavour are its only inputs, updated
+  monthly. Named events shape form (breakdown on a crisis, build and drop on recovery) at 16-
+  or 32-bar boundaries. Patterns are seeded from the run hash and date on a stream separate
+  from the sim's.
+- Regional music (owner request, 2026-10-28): open-licence recordings chosen by the seat's
+  country, then culture region, then a world pool. Tracks are listed in a moddable manifest
+  (URL, checksum, licence, attribution, country, culture region, mood, decade), fetched on
+  the player's machine like the data packs, with credits generated from it. Sources:
+  Wikimedia Commons, Musopen, Free Music Archive, Jamendo, ccMixter, Freesound, public-domain
+  national archives; not the Internet Archive 78 rpm collections. Religion is not a selector,
+  and liturgical recitation is excluded from background play by default.
 - UI sounds: short, dry paper-and-mechanism sounds (click, month tick off by default, year
   bell, edit stamp, fork, crisis call) from home foley and CC0 packs.
 - Icons: Lucide (ISC) plus custom glyphs; flags as valid in 2000 from public-domain SVGs.
