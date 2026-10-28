@@ -151,7 +151,15 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
     };
     let root = workspace_root();
     let units = counties::load(&root).unwrap();
-    let provs = provinces::build(&admin1, &admin0, 250_000.0, Resolution::Four, &units).unwrap();
+    let provs = provinces::build(
+        &admin1,
+        &admin0,
+        250_000.0,
+        Resolution::Four,
+        &units,
+        &provinces::Centres::H3o,
+    )
+    .unwrap();
     let ids: Vec<&str> = provs.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, strings(&pack, "id"));
     let names: Vec<&str> = provs.iter().map(|p| p.name.as_str()).collect();

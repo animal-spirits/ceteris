@@ -3,7 +3,7 @@
 //! geom, part, ring, x, y), written to `DIR/rust` as the tables and fills of
 //! `scripts/parity/geo_inputs.py`. With `--build`, the provinces and clipped counties are built
 //! here instead, and their vertex tables, attributes and clipping misfit are written to
-//! `DIR/rust` too.
+//! `DIR/rust` too; `--centres FILE` seeds the Voronoi splits from a table of cell centres.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -157,10 +157,11 @@ pub fn dump(dir: &Path) -> Result<(), String> {
     dump_into(&dir.join("rust"), &provinces, &counties)
 }
 
-/// Builds the provinces and clipped counties from the fetch cache as the pack build does, and
-/// writes them with what the geo modules compute from them to `DIR/rust`.
+/// Builds the provinces and clipped counties from the fetch cache as the pack build does, the
+/// Voronoi splits seeded from `centres`, and writes them with what the geo modules compute from
+/// them to `DIR/rust`.
 #[cfg(feature = "geos")]
-pub fn build(dir: &Path) -> Result<(), String> {
+pub fn build(dir: &Path, centres: &super::provinces::Centres) -> Result<(), String> {
     use arrow_array::StringArray;
 
     use super::{counties, overlay, provinces};
@@ -180,6 +181,7 @@ pub fn build(dir: &Path) -> Result<(), String> {
         split_area,
         resolution(&config, "land_res")?,
         &units,
+        centres,
     )?;
     let clipped = counties::clip(&units, &provs, split_area)?;
     let out = dir.join("rust");
