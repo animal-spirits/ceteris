@@ -9,6 +9,7 @@ use arrow_array::StringArray;
 use arrow_ipc::reader::FileReader;
 
 use super::baci::{baci_by_product, baci_values, read_hs_cpa, trade_by_country};
+use super::downscale::{Asset, DOSE, SEDS, read_dose, read_gem_coal, read_gem_oil_gas, read_seds};
 use super::icio::{
     ADB_INCOME, CountryIo, MADDISON, Wdi, aggregate, exports, load_wdi, read_adb_income,
     read_maddison,
@@ -21,7 +22,7 @@ use super::people::{
 use super::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use super::wdi::{read_rates, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
-use super::{ByYear, YEAR};
+use super::{ByYear, WINDOW, YEAR};
 use crate::json::Json;
 use crate::{fetch, sources};
 
@@ -51,9 +52,15 @@ pub const NAMES: &[&str] = &[
     "rates",
     "cepii",
     "dta",
+    "dose",
+    "seds",
+    "gem-coal",
+    "gem-oil-gas",
 ];
 
 const ICIO: &str = "1995-2000_SML.zip";
+const GEM_COAL: &str = "Global Coal Mine Tracker, August 2026.xlsx";
+const GEM_OIL_GAS: &str = "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx";
 const BACI: &str = "BACI_HS92_V202601.zip";
 const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
 
@@ -118,6 +125,23 @@ fn wdi(w: Wdi) -> Json {
         ("manufacturing", w.manufacturing.into()),
         ("services", w.services.into()),
     ])
+}
+
+fn assets(a: Vec<Asset>) -> Json {
+    Json::List(
+        a.into_iter()
+            .map(|a| {
+                Json::List(vec![
+                    a.lat.into(),
+                    a.lon.into(),
+                    a.weight.into(),
+                    a.dated.into(),
+                    a.offshore.into(),
+                    a.country.into(),
+                ])
+            })
+            .collect(),
+    )
 }
 
 /// Codes of the pack's countries table, in its order.
@@ -213,6 +237,28 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
         "rates" => Json::list(read_rates(&cache_dir)?),
         "cepii" => read_cepii(&cache(GRAVITY))?.into(),
         "dta" => read_dta(&cache(DTA))?.into(),
+        "dose" => {
+            let population = read_wdi(&cache("wdi_SP.POP.TOTL.zip"))?
+                .into_iter()
+                .filter_map(|(k, v)| Some((k, *v.get(&YEAR)?)))
+                .collect();
+            Json::object(
+                read_dose(&cache(DOSE), &population, YEAR, WINDOW)?
+                    .into_iter()
+                    .map(|(k, d)| {
+                        (
+                            k,
+                            Json::object([
+                                ("values", Json::from(d.values)),
+                                ("coverage", d.coverage.into()),
+                            ]),
+                        )
+                    }),
+            )
+        }
+        "seds" => read_seds(&cache(SEDS), YEAR)?.into(),
+        "gem-coal" => assets(read_gem_coal(&cache(GEM_COAL))?),
+        "gem-oil-gas" => assets(read_gem_oil_gas(&cache(GEM_OIL_GAS))?),
         _ => {
             return Err(format!(
                 "unknown reader '{name}'; readers: {}",
