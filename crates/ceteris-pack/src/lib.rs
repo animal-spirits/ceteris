@@ -4,6 +4,7 @@
 pub mod compare;
 pub mod econ;
 pub mod fetch;
+pub mod geo;
 pub mod json;
 pub mod numeric;
 pub mod raster;
