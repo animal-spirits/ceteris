@@ -104,6 +104,16 @@ def main(export: str, out: str, dense: bool) -> None:
         n = int(rng.integers(1, 7))
         m = rng.normal(size=(n, n)) * (rng.uniform(size=(n, n)) < 0.6)
         mats.append(m)
+    # Small integers and permutation-like patterns: tied rows and ratios, cycles.
+    for _ in range(300):
+        n = int(rng.integers(1, 7))
+        m = rng.integers(-2, 3, size=(n, n)).astype(np.float64) * (rng.uniform(size=(n, n)) < 0.4)
+        mats.append(m)
+    for n in range(2, 7):
+        for c in (0.1, 0.25, 0.5, 0.9, 1.0, 2.0):
+            m = np.roll(np.eye(n), 1, axis=1)
+            m[-1, 0] = c
+            mats.append(m)
     d["random_radius"] = {"matrix": [enc(m) for m in mats], "radius": enc([uniqueness.spectral_radius(m) for m in mats])}
 
     if dense:
