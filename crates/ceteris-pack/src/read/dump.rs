@@ -24,6 +24,8 @@ use super::wdi::{read_rates, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, WINDOW, YEAR};
 use crate::json::Json;
+use crate::raster::geotiff;
+use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population, spam_physical_area};
 use crate::{fetch, sources};
 
 pub const NAMES: &[&str] = &[
@@ -56,12 +58,16 @@ pub const NAMES: &[&str] = &[
     "seds",
     "gem-coal",
     "gem-oil-gas",
+    "population worldpop|mapspam|kummu",
 ];
 
 const ICIO: &str = "1995-2000_SML.zip";
 const GEM_COAL: &str = "Global Coal Mine Tracker, August 2026.xlsx";
 const GEM_OIL_GAS: &str = "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx";
 const BACI: &str = "BACI_HS92_V202601.zip";
+const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
+const SPAM: &str = "spam2000v3.0.7_global_physical-area.geotiff.zip";
+const KUMMU: &str = "kummu_gdp_ppp_2000_5arcmin.tif";
 const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
 
 fn cache(name: &str) -> PathBuf {
@@ -259,6 +265,31 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
         "seds" => read_seds(&cache(SEDS), YEAR)?.into(),
         "gem-coal" => assets(read_gem_coal(&cache(GEM_COAL))?),
         "gem-oil-gas" => assets(read_gem_oil_gas(&cache(GEM_OIL_GAS))?),
+        "population" => {
+            let mut owner =
+                CellOwner::read(&sources::workspace_root().join("data/packs/2000/cells.arrow"))?;
+            let total = match arg(0)? {
+                "worldpop" => province_population(
+                    &mut geotiff::open(&cache(WORLDPOP))?,
+                    &mut owner,
+                    BLOCK_ROWS,
+                )?,
+                "kummu" => {
+                    province_population(&mut geotiff::open(&cache(KUMMU))?, &mut owner, BLOCK_ROWS)?
+                }
+                "mapspam" => province_population(
+                    &mut spam_physical_area(&cache(SPAM))?,
+                    &mut owner,
+                    BLOCK_ROWS,
+                )?,
+                other => {
+                    return Err(format!(
+                        "unknown raster '{other}': worldpop, mapspam or kummu"
+                    ));
+                }
+            };
+            Json::list(total)
+        }
         _ => {
             return Err(format!(
                 "unknown reader '{name}'; readers: {}",

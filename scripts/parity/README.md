@@ -18,4 +18,9 @@ Rows are compared in file order, so a port must reproduce the row order of the P
 `ceteris pack dump-reader NAME` print one reader's output on the real cache as canonical JSON
 (sorted keys, floats as Python's `repr`), and the two texts must be identical.
 
+`step2-rasters.sh` compares the per-province raster totals the same way (`dump-reader population
+worldpop|mapspam|kummu`), then rewrites the pixel to H3 cell fixture of the Rust test
+`pixel_cells_match_python_on_border_windows` with `pixel_cells.py` and checks it equals the
+committed one.
+
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
