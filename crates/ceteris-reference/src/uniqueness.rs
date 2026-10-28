@@ -15,8 +15,9 @@ const STALL: usize = 50;
 
 /// rho of the elasticity-bound matrix |a| (Theorem 1 bounds absolute elasticities): its Perron
 /// root, the largest over the irreducible diagonal blocks of |a| (its strongly connected
-/// components), each by [`perron_root`].
-pub fn spectral_radius(a: &Mat) -> f64 {
+/// components), each by [`perron_root`]. Errs where a power iteration neither closes nor stalls
+/// within [`MAX_POWER_ITER`] iterations.
+pub fn spectral_radius(a: &Mat) -> Result<f64, String> {
     assert_eq!(a.rows, a.cols, "spectral radius of a non-square matrix");
     let n = a.rows;
     let a = Mat::from_fn(n, n, |r, c| a[(r, c)].abs());
@@ -44,20 +45,20 @@ pub fn spectral_radius(a: &Mat) -> f64 {
             seen[j] = true;
         }
         let sub = Mat::from_fn(block.len(), block.len(), |r, c| a[(block[r], block[c])]);
-        rho = rho.max(perron_root(&sub));
+        rho = rho.max(perron_root(&sub)?);
     }
-    rho
+    Ok(rho)
 }
 
 /// Perron root of an irreducible nonnegative matrix by power iteration on a + s I, s its largest
 /// row sum: the shift makes the matrix primitive and keeps every iterate positive, so the
 /// smallest and largest of (a x)_i / x_i bracket the root (Collatz-Wielandt). Stops when the
 /// bracket closes or neither end has improved for [`STALL`] iterations, and returns the smallest
-/// upper end seen.
-fn perron_root(a: &Mat) -> f64 {
+/// upper end seen; errs at [`MAX_POWER_ITER`] iterations.
+fn perron_root(a: &Mat) -> Result<f64, String> {
     let shift = a.row_sums().into_iter().fold(0.0, f64::max);
     if shift == 0.0 {
-        return 0.0;
+        return Ok(0.0);
     }
     let mut x = vec![1.0; a.rows];
     let (mut upper, mut lower, mut stalled) = (f64::INFINITY, 0.0_f64, 0);
@@ -78,7 +79,7 @@ fn perron_root(a: &Mat) -> f64 {
         upper = upper.min(hi);
         lower = lower.max(lo);
         if upper - lower <= 4.0 * f64::EPSILON * upper || stalled >= STALL {
-            return upper;
+            return Ok(upper);
         }
         for (xi, v) in x.iter_mut().zip(&ax) {
             *xi = v + shift * *xi;
@@ -88,7 +89,9 @@ fn perron_root(a: &Mat) -> f64 {
             *xi /= top;
         }
     }
-    upper
+    Err(format!(
+        "power iteration did not converge in {MAX_POWER_ITER} iterations: Perron root in [{lower}, {upper}]"
+    ))
 }
 
 /// `m` X = `rhs` by Gaussian elimination with partial pivoting; errs on a singular `m`, as
@@ -192,7 +195,7 @@ pub fn spectral_bound(
     }
     let mut bound = None::<f64>;
     for g in (0..theta.len()).filter(|&g| theta[g] > 0.0) {
-        let rho = spectral_radius(&trade_with_intermediates(theta[g], value_added_share[g])?);
+        let rho = spectral_radius(&trade_with_intermediates(theta[g], value_added_share[g])?)?;
         bound = Some(bound.map_or(rho, |b| b.max(rho)));
     }
     bound.ok_or_else(|| "uniqueness bound without a traded good".into())

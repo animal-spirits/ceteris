@@ -117,8 +117,13 @@ impl Mat {
 }
 
 /// numpy's pairwise summation of a contiguous run: sequential below 8 values, eight running
-/// sums combined as a tree up to 128, halves split at a multiple of 8 beyond.
+/// sums combined as a tree up to 128, halves split at a multiple of 8 beyond. numpy starts the
+/// reduction from +0, so a run of -0 sums to +0.
 pub fn pairwise_sum(a: &[f64]) -> f64 {
+    0.0 + pairwise(a)
+}
+
+fn pairwise(a: &[f64]) -> f64 {
     let n = a.len();
     if n < 8 {
         let mut res = 0.0;
@@ -142,7 +147,7 @@ pub fn pairwise_sum(a: &[f64]) -> f64 {
     } else {
         let half = n / 2;
         let half = half - half % 8;
-        pairwise_sum(&a[..half]) + pairwise_sum(&a[half..])
+        pairwise(&a[..half]) + pairwise(&a[half..])
     }
 }
 
@@ -736,6 +741,8 @@ mod tests {
             assert_eq!(super::pairwise_sum(&a), tiny, "n = {n}");
             let h: Vec<f64> = (0..n).map(|i| 1.0 / (i + 1) as f64).collect();
             assert_eq!(super::pairwise_sum(&h), harmonic, "n = {n}");
+            let zero = super::pairwise_sum(&vec![-0.0; n]);
+            assert!(zero == 0.0 && zero.is_sign_positive(), "n = {n}");
         }
     }
 
