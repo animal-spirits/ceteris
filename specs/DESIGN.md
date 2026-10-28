@@ -1525,7 +1525,7 @@ The player is scored by how much better their state does than the AI would have 
 
 ### 23.5 Characters and the military command layer
 
-**Characters** replace the stochastic leader attributes of 2.4 in the extended profile. They are generated people with generic names, never real ones, consistent with generic party names in v1.
+**Characters** replace the stochastic leader attributes of 2.4 in the extended profile. People in office and in public life on 1 January 2000 carry their real names and public facts; everyone who enters later is generated from the population (ADRs 0183-0186, decision of 28 Oct 2026). The lab shows role labels, and a run-level switch replaces real people with generated stand-ins.
 
 | Role | Latent traits | What the player sees | Main effect |
 | --- | --- | --- | --- |
