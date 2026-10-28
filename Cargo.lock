@@ -421,6 +421,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceteris-geos-coverage"
+version = "0.0.1"
+dependencies = [
+ "geos-sys",
+]
+
+[[package]]
 name = "ceteris-pack"
 version = "0.0.1"
 dependencies = [
@@ -430,6 +437,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "calamine",
+ "ceteris-geos-coverage",
  "csv",
  "earcut",
  "flate2",
