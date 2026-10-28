@@ -127,7 +127,7 @@ pub fn deliver(w: &mut EconWorld) {
     let n_traded = acc.transit.len();
     // the first largest delivery of each good, as `largest` finds it
     let mut last: [Option<(usize, f64)>; N_GOODS] = [None; N_GOODS];
-    for (b, row) in due.chunks_exact(N_GOODS).enumerate() {
+    for (b, row) in due.as_chunks::<N_GOODS>().0.iter().enumerate() {
         for (best, &x) in last.iter_mut().zip(&row[..n_traded]) {
             if x > 0.0 && best.is_none_or(|(_, v)| x > v) {
                 *best = Some((b, x));
@@ -141,7 +141,13 @@ pub fn deliver(w: &mut EconWorld) {
         }
     };
     // buyer by buyer; each good's account sees its deliveries in buyer order
-    for (b, row) in due.chunks_exact(N_GOODS).enumerate().take(n_buyers) {
+    for (b, row) in due
+        .as_chunks::<N_GOODS>()
+        .0
+        .iter()
+        .enumerate()
+        .take(n_buyers)
+    {
         for g in 0..n_traded {
             if row[g] > 0.0 && last[g].is_some_and(|(l, _)| l != b) {
                 let x = row[g].min(w.ledger.goods(acc.transit[g], g));
