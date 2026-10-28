@@ -434,6 +434,7 @@ dependencies = [
  "earcut",
  "flate2",
  "geo",
+ "geos",
  "h3o",
  "icu_casemap",
  "icu_normalizer",
@@ -990,6 +991,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5a7f08910fd98737a6eda7568e7c5e645093e073328eeef49758cfe8b0489c7"
 dependencies = [
  "libm",
+]
+
+[[package]]
+name = "geos"
+version = "11.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b131d80ad838c8e5b9e0d31482f893961267fbd29903ea1b6a1565d814b07e5"
+dependencies = [
+ "geos-sys",
+ "libc",
+]
+
+[[package]]
+name = "geos-sys"
+version = "2.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd0fc1bcdc69e16138f10ea038a3ef9f83931eb0d75a903543ca683e8b75d56"
+dependencies = [
+ "libc",
+ "pkg-config",
+ "semver",
 ]
 
 [[package]]
