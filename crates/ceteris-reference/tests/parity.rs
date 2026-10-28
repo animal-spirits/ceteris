@@ -198,7 +198,7 @@ fn reference_matches_python_dump() {
             &floats(&u["matrix"][i]),
             TOL,
         );
-        radius.push(uniqueness::spectral_radius(&m));
+        radius.push(uniqueness::spectral_radius(&m).unwrap());
     }
     r.check("spectral_radius", &radius, &floats(&u["radius"]), TOL);
     let bound = uniqueness::spectral_bound(&inp.theta, 0.0, None, &va).unwrap();
@@ -217,7 +217,7 @@ fn reference_matches_python_dump() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|m| uniqueness::spectral_radius(&mat(m)))
+        .map(|m| uniqueness::spectral_radius(&mat(m)).unwrap())
         .collect();
     r.check("random_radius", &radius, &floats(&random["radius"]), TOL);
 

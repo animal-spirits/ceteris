@@ -229,7 +229,7 @@ fn bound_reproduces_paper_examples() {
     // Footnote 3 (p. 4): the stacked contraction bound is 2, the spectral radius sqrt(2/3).
     let a = Mat::from_rows(&[vec![0.0, 2.0], vec![1.0 / 3.0, 0.0]]);
     assert!(close(
-        uniqueness::spectral_radius(&a),
+        uniqueness::spectral_radius(&a).unwrap(),
         (2.0_f64 / 3.0).sqrt(),
         1e-14
     ));
@@ -242,7 +242,11 @@ fn bound_reproduces_paper_examples() {
         Some(&Mat::from_rows(&[vec![-0.5]])),
     )
     .unwrap();
-    assert!(close(uniqueness::spectral_radius(&fn6), 2.0 / 3.0, 1e-14));
+    assert!(close(
+        uniqueness::spectral_radius(&fn6).unwrap(),
+        2.0 / 3.0,
+        1e-14
+    ));
     // Section 3 (pp. 14-15, Figure 1 p. 21): theta 1, alpha = beta. The off-diagonal blocks are
     // theta alpha / (1 - theta alpha); at 0.5 the radius is 1 (unique up to scale, part ii.b: one
     // equilibrium in panels a, d, g); at 0.55 and 0.6 it exceeds 1 and panels f, h, i show three.
@@ -256,7 +260,7 @@ fn bound_reproduces_paper_examples() {
         for (got, want) in a.data.iter().zip([0.0, off, off, 0.0]) {
             assert!(close(*got, want, 1e-14));
         }
-        let rho = uniqueness::spectral_radius(&a);
+        let rho = uniqueness::spectral_radius(&a).unwrap();
         assert!(close(rho, radius, 1e-12));
         assert_eq!(uniqueness::v1_mode(rho), mode);
     }
@@ -268,7 +272,8 @@ fn bound_reproduces_paper_examples() {
             let t = 1.0 / elasticity;
             let rho = uniqueness::spectral_radius(
                 &uniqueness::trade_with_intermediates(elasticity, beta).unwrap(),
-            );
+            )
+            .unwrap();
             assert!(close(rho, (beta + t - beta * t) / (beta + t), 1e-12));
             assert!(rho < 1.0);
         }
@@ -334,12 +339,21 @@ fn spectral_radius_matches_numpy_eigvals() {
         ),
     ];
     for (rows, want) in cases {
-        let got = uniqueness::spectral_radius(&Mat::from_rows(&rows));
+        let got = uniqueness::spectral_radius(&Mat::from_rows(&rows)).unwrap();
         assert!(
             close(got, want, 1e-14) || (want == 0.0 && got == 0.0),
             "{rows:?}: {got} vs {want}"
         );
     }
+}
+
+/// Eigenvalues 1 +- 3.2e-8: the power iteration closes the bracket by a factor of about 1 + 3e-8
+/// per step, far beyond the iteration cap, and the radius is an error rather than a bound.
+#[test]
+fn nearly_decoupled_radius_is_an_error() {
+    let a = Mat::from_rows(&[vec![1.0, 1e-6], vec![1e-9, 1.0]]);
+    let err = uniqueness::spectral_radius(&a).unwrap_err();
+    assert!(err.starts_with("power iteration did not converge"), "{err}");
 }
 
 /// P2 defaults (theta per good of the fixture export, no agglomeration, no migration): the bound
@@ -356,6 +370,7 @@ fn trade_only_is_unique() {
             uniqueness::spectral_radius(
                 &uniqueness::trade_with_intermediates(inp.theta[g], va[g]).unwrap(),
             )
+            .unwrap()
         })
         .fold(f64::NEG_INFINITY, f64::max);
     assert!(close(bound, want, 1e-14));
