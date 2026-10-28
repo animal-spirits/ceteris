@@ -56,6 +56,11 @@ GEOS_PYTHON="$VENV/bin/python" scripts/parity/step3-provinces.sh
 The package versions are those of `python/uv.lock`; only shapely is built from source. The
 script imports `ceteris` from `python/` through `PYTHONPATH`.
 
+`split_rows.py` moves the areas and vertices of split provinces, and of the counties clipped to
+them, into tables of their own, so that only those rows take the split tolerance. A second Rust
+build seeds the Voronoi splits from h3's cell centres (`h3_centres.py`, `dump-geo --build
+--centres FILE`) and must match Python exactly but for the H3 cell areas.
+
 `geo_readers.py` prints digests of the polygons pyogrio reads from the admin-1 shapefile and the
 geoBoundaries files; `tests/geo_readers.rs` checks the Rust readers against them.
 

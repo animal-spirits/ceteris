@@ -32,9 +32,17 @@ trap 'rm -rf "$work"' EXIT
 }
 echo "ok   the Python inputs reproduce the pack's cells.arrow"
 "$bin" pack dump-geo "$work"
-"$bin" pack compare "$work/python" "$work/rust" >"$work/compare" || true
-cat "$work/compare"
 status=0
+code=0
+"$bin" pack compare "$work/python" "$work/rust" >"$work/compare" || code=$?
+cat "$work/compare"
+if [[ ! -s "$work/compare" ]]; then
+    echo "FAIL pack compare printed nothing (exit $code)"
+    status=1
+elif ((code != 0)) && ! grep -qv ': ok ' "$work/compare"; then
+    echo "FAIL pack compare exited $code with every line ok"
+    status=1
+fi
 while read -r line; do
     column="${line%%:*}"
     rel="${line##*max_rel=}"
