@@ -164,7 +164,8 @@ The map client sends edits straight into the systems pipeline and reads results 
 
 | Frequency | Processes |
 | --- | --- |
-| Daily (sub-tick, only while any war is active) | Army movement, battles, sieges, naval engagements, blockade status |
+| Hourly (phase inside the daily sub-tick, sparse; ADR 0209) | Order arrival, movement and contact, combat rounds on engaged segments, sorties and strikes, naval search and interception |
+| Daily (sub-tick, only while any war is active) | Supply, planners, intelligence, air and naval tasking, encirclement, morale, blockade status |
 | Monthly (main tick) | Production, labour markets, consumption, price updates, trade flows, payments and credit, taxes, migration decisions, unrest, law-change progress, diplomacy |
 | Quarterly | Enterprise investment and entry/exit, bond issuance |
 | Annual | Cohort aging, fertility and mortality rate updates, productivity catch-up step, climate emulator step, elections calendar, census outputs, harvest realization for annual crops |
@@ -1329,7 +1330,7 @@ The interface is a Paradox-style map with time controls, plus two things Paradox
 
 ### 20.3 Time controls
 
-Pause, five speeds, step one tick, run to date, and 'run ensemble from here' which forks K seeds in the background and streams summary statistics back to the map.
+Pause, five speeds, step one tick, run to date, and 'run ensemble from here' which forks K seeds in the background and streams summary statistics back to the map. A speed is simulated time per wall second (one day, week, month, quarter, then maximum); the simulation runs ahead of the presented time on its own threads, also while paused, and the map interpolates between ticks (ADR 0208).
 
 ## 21. Phased Roadmap and Agent Execution Protocol
 
