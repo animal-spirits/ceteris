@@ -36,6 +36,15 @@ from the same start and prints its largest relative difference; it fails above 1
 the equilibria and 1e-15 for erfinv. Both `reference solve` entry points then solve the fixture
 into WORK_DIR, compared with `pack compare --iterative`, and the `routing` tests of
 `ceteris-cli` check the kernel of the fixture and of a pack export against its legs and tariffs.
+For PPML, `step4_ppml_dump.py` dumps designs and the Python fits as Arrow: seeded synthetic
+designs covering every path of `fit_robust` and `hdfe` (one to three fixed effects, clusters,
+zero flows, separated rows, a repeated and an absorbed regressor, two fixed effects too large for
+the direct solve), every `ppml.hdfe` call of `gravity.estimate` on 2000 BACI and the pack, and
+those of `gravity.yotov`. The `ppml_parity` test (`CETERIS_PPML_PARITY`) fits each design, writes
+the Rust fits beside Python's and fails above 1e-9 relative, in the mixed form
+|a - b| <= 1e-9 max(1, |a|, |b|) for the absorbed design and the Gauss-Newton step coefficients
+of `mode_costs`, which are rounding noise around 0; `pack compare --iterative` compares the Yotov
+fits.
 
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
