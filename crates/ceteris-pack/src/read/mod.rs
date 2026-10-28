@@ -2,6 +2,7 @@
 //! Python readers of `packs/econ` do, value for value.
 
 pub mod baci;
+pub mod downscale;
 pub mod dump;
 pub mod icio;
 pub mod natural_earth;

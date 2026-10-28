@@ -151,7 +151,16 @@ pub fn repr_f64(x: f64) -> String {
     if x.is_infinite() {
         return if x > 0.0 { "inf" } else { "-inf" }.into();
     }
-    let sci = format!("{:e}", x.abs());
+    // The shortest digit count that round-trips, then the digits of that count nearest the exact
+    // value (ties to even), as Python picks among equally short candidates.
+    let shortest = format!("{:e}", x.abs());
+    let n = shortest
+        .split_once('e')
+        .expect("exponent notation")
+        .0
+        .replace('.', "")
+        .len();
+    let sci = format!("{:.*e}", n - 1, x.abs());
     let (mantissa, exp) = sci.split_once('e').expect("exponent notation");
     let exp: i32 = exp.parse().expect("exponent");
     let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
@@ -199,6 +208,7 @@ mod tests {
             (-2.5e300, "-2.5e+300"),
             (36526.0, "36526.0"),
             (0.30000000000000004, "0.30000000000000004"),
+            (22394438973027.0 + 0.3125, "22394438973027.312"), // a tie: the even digit
         ];
         for (x, want) in cases {
             assert_eq!(repr_f64(x), want, "{x:e}");
