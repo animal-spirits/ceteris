@@ -16,7 +16,7 @@ reader verifies it. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WM
 
 1. Status quo.
 2. Report every experiment's effect across the switch set as a specification curve, and give
-manifests a verifiable registration step.
+   manifests a verifiable registration step.
 
 ## Decision
 

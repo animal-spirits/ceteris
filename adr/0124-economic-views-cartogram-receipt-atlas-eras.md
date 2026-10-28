@@ -15,7 +15,7 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 14, 15, 17 and 18).
 
 1. Status quo.
 2. Four views, all read-only: a trade-cost cartogram, a household receipt, a printable atlas
-and era-dependent UI chrome.
+   and era-dependent UI chrome.
 
 ## Decision
 

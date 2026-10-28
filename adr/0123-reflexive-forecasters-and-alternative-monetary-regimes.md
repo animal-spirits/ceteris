@@ -16,7 +16,7 @@ unit. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 12 an
 
 1. Status quo.
 2. Reflexive forecasters: in-world forecasters run a frozen surrogate of the model, and some
-agents act on their forecasts.
+   agents act on their forecasts.
 3. Alternative regimes as switchable monetary modules.
 
 ## Decision

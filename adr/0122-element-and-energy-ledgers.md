@@ -15,7 +15,7 @@ material supply. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (
 
 1. Status quo.
 2. Coefficient ledgers: each good carries per-unit content of a few elements and carriers, and
-the ledgers follow production and trade.
+   the ledgers follow production and trade.
 
 ## Decision
 

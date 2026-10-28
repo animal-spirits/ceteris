@@ -16,7 +16,7 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 4 and 6).
 
 1. Status quo: fan charts and event-probability tables (20.2).
 2. Contrastive "why not" queries across lanes, and a strip showing where observed history falls
-in the ensemble.
+   in the ensemble.
 
 ## Decision
 

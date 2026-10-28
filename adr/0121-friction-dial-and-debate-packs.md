@@ -17,7 +17,7 @@ run. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 9, 10 
 
 1. Status quo: users build these as ordinary branches.
 2. A friction dial in the app, and curated experiment packs for debates, each with predictions
-stated before the run.
+   stated before the run.
 
 ## Decision
 
