@@ -174,7 +174,7 @@ pub fn read(path: &Path) -> Result<Fill, String> {
         return Err(fail(&format!("format version {version}")));
     }
     let (v, i) = (v as usize, i as usize);
-    if words.len() != 4 + 3 * v + i {
+    if data.len() != 20 + 12 * v + 4 * i {
         return Err(fail("length does not match the header"));
     }
     let body = &words[4..];
@@ -271,6 +271,30 @@ mod tests {
                 .sum();
             let got = tri_area(&xy, &mine);
             assert!((got / expected - 1.0).abs() < 1e-4, "{got} vs {expected}");
+        }
+    }
+
+    #[test]
+    fn read_rejects_a_file_longer_or_shorter_than_its_header_says() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.fill");
+        let square = MultiPolygon(vec![
+            Rect::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 1.0 }).to_polygon(),
+        ]);
+        write(&path, &[square]).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(read(&path).is_ok());
+        for bad in [
+            &bytes[..bytes.len() - 1],
+            &[&bytes[..], &[0][..]].concat(),
+            &[&bytes[..], &[0; 4][..]].concat(),
+        ] {
+            std::fs::write(&path, bad).unwrap();
+            assert!(
+                read(&path).unwrap_err().contains("length does not match"),
+                "{}",
+                bad.len()
+            );
         }
     }
 
