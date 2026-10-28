@@ -4,6 +4,7 @@ Status: proposed
 Date: 2026-10-28
 Design sections: 11.5, 17.2, 23.5; ADRs 0048, 0110, 0115, 0132, 0145, 0146
 Phase: P7 (2.0-beta)
+Amended by: 0209 (engaged segments resolve hourly)
 
 ## Context
 
