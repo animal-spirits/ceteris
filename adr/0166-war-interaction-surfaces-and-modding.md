@@ -1,4 +1,4 @@
-# 0156. War interaction surfaces and modding
+# 0166. War interaction surfaces and modding
 
 Status: proposed
 Date: 2026-10-28
