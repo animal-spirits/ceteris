@@ -119,7 +119,9 @@ def main(export: str, out: str, dense: bool, solve_: bool, reference: str | None
     money = inp.base_spend[country] * np.exp(rng.uniform(-3.0, 3.0, k))
     money[:5] = 0.0
     sigma = rng.uniform(0.0, 1.5, k)
-    share = demand.shares(inp.pigl_weights, country, draw_price, money, sigma, inp.category, inp.sigma_demand, inp.pigl)
+    # Draws without money divide 0 by 0, by design.
+    with np.errstate(invalid="ignore"):
+        share = demand.shares(inp.pigl_weights, country, draw_price, money, sigma, inp.category, inp.sigma_demand, inp.pigl)
     d["draws"] = {
         "country": enc(country),
         "price": enc(draw_price),

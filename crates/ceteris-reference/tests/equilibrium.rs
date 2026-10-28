@@ -151,7 +151,7 @@ fn unreachable_island(inp: &Inputs) -> Inputs {
     out
 }
 
-/// Review Focus 1 at world level: with machinery unreachable at the island its delivered price
+/// At world level, with machinery unreachable at the island its delivered price
 /// there is infinite, the world price index leaves that cell out, the island spends nothing on
 /// machinery, the island's light manufacturing (its one user) employs and produces nothing, and
 /// the reference solves with a finite residual.
@@ -573,7 +573,7 @@ fn fixture_reference_is_current() {
     assert!((meta["price_index"].as_f64().unwrap() - eq.price_index).abs() <= 1e-8);
 }
 
-/// Review Focus 5: Newton-Krylov that hits its step cap falls back to tatonnement, then
+/// Newton-Krylov that hits its step cap falls back to tatonnement, then
 /// Newton-Krylov from there, and the solution reports it. At a wage of e^-800 (0) the residual is
 /// not finite: Newton-Krylov falls back at once, tatonnement does not settle within its cap, and
 /// the solve errs instead of panicking.
