@@ -5,6 +5,7 @@ pub mod demand;
 pub mod io;
 pub mod model;
 pub mod output;
+pub mod ppml;
 pub mod sinkhorn;
 pub mod solve;
 pub mod uniqueness;
