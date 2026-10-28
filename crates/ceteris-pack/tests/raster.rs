@@ -1,5 +1,5 @@
 //! Pixel to H3 cell to province mapping at raster edges, against the mapping rasterio and h3
-//! give (`tests/data/pixel_cells.txt`, written by `scripts/parity/pixel_cells.py`).
+//! give (`tests/data/pixel_cells.txt`, recorded from the Python pipeline).
 
 mod common;
 

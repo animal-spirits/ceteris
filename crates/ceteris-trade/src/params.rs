@@ -6,7 +6,7 @@ use crate::goods::N_GOODS;
 pub struct TradeParams {
     /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.62 to 10.57, the
     /// range of the class values (ADR 0018). Each traded good carries its class's theta, derived
-    /// by the ADR 0023 rule from the OECD concordance (`ceteris.packs.econ.theta`): Caliendo and
+    /// by the ADR 0023 rule from the OECD concordance (`ceteris_pack::econ::theta`): Caliendo and
     /// Parro (2015, Table 1, 99% sample) sector estimates averaged over the HS lines of the good
     /// with BACI 2000 trade weights: agriculture 9.11, crude oil and gas 13.53, coal and other
     /// mining 13.53, food 2.62, light manufacturing 9.15, chemicals, refined fuels and metals

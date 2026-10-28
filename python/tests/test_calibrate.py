@@ -1,6 +1,8 @@
 """Direct estimation of trade costs (ADR 0022, PLAN Task 18 Step 1): the PPML estimator reproduces
 Yotov et al. (2016) on their sample, and each estimator recovers known values on synthetic gravity."""
 
+import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,8 @@ from ceteris.packs import fetch
 from ceteris.reference import ppml
 
 YOTOV_ZIP = fetch.CACHE / gravity.YOTOV
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = Path(os.environ.get("CETERIS_FIXTURE_DIR", ROOT / "tests" / "golden" / "p2-fixture"))
 
 
 @pytest.fixture(scope="module")
@@ -172,7 +176,6 @@ def test_edge_prices_follow_the_geo_spec():
     assert q[:, gravity.Q_HOURS] == pytest.approx([130 / 40, 130 / 25, 100 / 25, 105 / 500, 13 / 40 + 48, 7 / 25])
 
 
-ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "data" / "packs" / "2000"
 CETERIS = ROOT / "target" / "release" / "ceteris"
 
@@ -204,3 +207,15 @@ def test_s05_costs_match_the_rust_crossing_legs(tmp_path):
     assert dist[a, gnode[b]] == pytest.approx(legs["cost_per_t"].to_numpy()[x], rel=1e-12)
     assert gravity.edge_cost(acc[a, gnode[b]]) == pytest.approx(legs["cost_per_t"].to_numpy()[x], rel=1e-12)
     assert acc[a, gnode[b], gravity.Q_HOURS] == pytest.approx(legs["hours"].to_numpy()[x], rel=1e-12)
+
+
+def test_fixture_defaults_match_the_calibration_constants():
+    """The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by p2_acceptance),
+    against `gravity.CLASSES` and `THETA_DEFAULT`. The Rust test `fixture_theta_defaults_follow_the_estimator`
+    links the literals to the ADR 0023 rule on the pack."""
+    trade = json.loads((FIXTURE / "params.json").read_text())["trade"]
+    assert trade["theta_class"] == [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]
+    assert trade["theta"] == [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]
+    of = trade["theta_class"][:7]
+    assert gravity.CLASSES == tuple(tuple(g for g in range(7) if of[g] == c) for c in range(max(of) + 1))
+    assert gravity.THETA_DEFAULT == tuple(trade["theta"][members[0]] for members in gravity.CLASSES)
