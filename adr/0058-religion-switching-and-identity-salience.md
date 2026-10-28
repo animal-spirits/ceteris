@@ -1,6 +1,6 @@
 # 0058. Religion switching and identity salience
 
-Status: proposed
+Status: proposed; amended by ADR 0224 (2026-10-28)
 Date: 2026-10-24
 Design sections: 6.4, 10.5, 10.7, 11.2, 11.6
 Phase: P4 (switching), P6 (salience)
