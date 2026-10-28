@@ -7,11 +7,15 @@ use statrs::function::erf::erf_inv;
 
 use ceteris_reference::demand::{self, Weights};
 use ceteris_reference::io::{self, Mat};
+use ceteris_reference::model::{self, Model};
 use ceteris_reference::sinkhorn;
+use ceteris_reference::solve;
 use ceteris_reference::uniqueness;
 
-/// ADR 0113: floats agree to a relative difference of 1e-12 per element.
+/// ADR 0113: floats agree to a relative difference of 1e-12 per element, 1e-9 where an iterative
+/// solve sets the value.
 const TOL: f64 = 1e-12;
+const ITERATIVE: f64 = 1e-9;
 
 fn relative(a: f64, b: f64) -> f64 {
     if a == b || (a.is_nan() && b.is_nan()) {
@@ -82,6 +86,112 @@ impl Report {
             self.failures.push(format!("{name}: {max:e} > {tol:e}"));
         }
         self.worst = self.worst.max(max);
+    }
+
+    /// Largest absolute difference, for values that are rounding noise around 0 (a residual at a
+    /// root) or logs of values compared relatively (ln p, ln w).
+    fn check_abs(&mut self, name: &str, got: &[f64], want: &[f64], tol: f64) {
+        assert_eq!(got.len(), want.len(), "{name}: length");
+        let max = got
+            .iter()
+            .zip(want)
+            .map(|(&a, &b)| if a == b { 0.0 } else { (a - b).abs() })
+            .fold(0.0, f64::max);
+        println!("{name}: max_abs={max:e}");
+        if max.is_nan() || max > tol {
+            self.failures
+                .push(format!("{name}: {max:e} > {tol:e} absolute"));
+        }
+    }
+
+    /// Every quantity of `model.evaluate` at the point's x, to 1e-12; at a `root` the residual
+    /// and the excess demand are rounding noise and are compared absolutely.
+    fn point(&mut self, prefix: &str, m: &Model, point: &Value, root: bool) {
+        let x = floats(&point["x"]);
+        let s = model::evaluate(&x, m, &m.inp.ent_a);
+        let f = &s.flows;
+        let got: [(&str, &[f64]); 23] = [
+            ("residual", &m.market_residual(&s)),
+            ("excess", &m.excess_of(&s)),
+            ("price", &s.price.data),
+            ("wage", &s.wage),
+            ("employment", &s.employment),
+            ("output", &s.output),
+            ("value_added", &s.value_added),
+            ("supply", &s.supply.data),
+            ("consumer_price", &s.consumer_price.data),
+            ("spend", &s.spend.data),
+            ("demand", &s.demand.data),
+            ("q", &s.q.data),
+            ("labour_demand", &s.labour_demand),
+            ("income", &s.income),
+            ("index", &[s.index]),
+            ("flows.orders", &f.orders.data),
+            ("flows.home", &f.home.data),
+            ("flows.arrive", &f.arrive.data),
+            ("flows.paid", &f.paid.data),
+            ("flows.received", &f.received.data),
+            ("flows.tariff", &f.tariff.data),
+            ("flows.pair_value", &f.pair_value),
+            ("flows.pair_units", &f.pair_units),
+        ];
+        for (key, values) in got {
+            let name = format!("{prefix}.{key}");
+            if root && (key == "residual" || key == "excess") {
+                self.check_abs(&name, values, &floats(&point[key]), TOL);
+            } else {
+                self.check(&name, values, &floats(&point[key]), TOL);
+            }
+        }
+    }
+
+    /// The equilibrium from the Python solve's start (default the data state) against its
+    /// solution, to the 1e-9 of an iterative solve.
+    fn solution(&mut self, prefix: &str, m: &Model, want: &Value) {
+        let start = (!want["start"].is_null()).then(|| floats(&want["start"]));
+        let eq = solve::equilibrium(m, start.as_deref(), solve::TOL, None).unwrap();
+        let info = &want["info"];
+        println!(
+            "{prefix}: rust {} in {} steps, {:.2}s, residual {:e}; python {} in {} steps, {:.2}s, residual {:e}",
+            eq.info.method,
+            eq.info.iterations,
+            eq.info.seconds,
+            eq.info.residual,
+            info["method"].as_str().unwrap(),
+            info["iterations"],
+            info["seconds"].as_f64().unwrap(),
+            info["residual"].as_f64().unwrap(),
+        );
+        // ln p and ln w: an absolute difference is the relative one of p and w.
+        self.check_abs(
+            &format!("{prefix}.x"),
+            &eq.x,
+            &floats(&want["x"]),
+            ITERATIVE,
+        );
+        let got: [(&str, &[f64]); 13] = [
+            ("price", &eq.price.data),
+            ("wage", &eq.wage),
+            ("employment", &eq.employment),
+            ("output", &eq.output),
+            ("supply", &eq.supply.data),
+            ("consumer_price", &eq.consumer_price.data),
+            ("expenditure", &eq.expenditure.data),
+            ("home_value", &eq.home_value.data),
+            ("home_units", &eq.home_units.data),
+            ("flows_by_country_pair_good", &eq.flows_by_country_pair_good),
+            ("units_by_country_pair_good", &eq.units_by_country_pair_good),
+            ("income", &eq.income),
+            ("price_index", &[eq.price_index]),
+        ];
+        for (key, values) in got {
+            self.check(
+                &format!("{prefix}.{key}"),
+                values,
+                &floats(&want[key]),
+                ITERATIVE,
+            );
+        }
     }
 
     fn weights(&mut self, name: &str, got: &Weights, want: &Value) {
@@ -220,6 +330,43 @@ fn reference_matches_python_dump() {
         .map(|m| uniqueness::spectral_radius(&mat(m)).unwrap())
         .collect();
     r.check("random_radius", &radius, &floats(&random["radius"]), TOL);
+
+    let m = Model::new(&inp).unwrap();
+    // The first point is the data state, the second the data state plus a draw.
+    r.check(
+        "data_state",
+        &m.data_state(),
+        &floats(&d["model"][0]["x"]),
+        TOL,
+    );
+    for (i, point) in d["model"].as_array().unwrap().iter().enumerate() {
+        r.point(&format!("model[{i}]"), &m, point, false);
+    }
+    if !d["solution"].is_null() {
+        r.solution("solution", &m, &d["solution"]);
+    }
+    let rf = &d["reference"];
+    if !rf.is_null() {
+        let mut calibrated = inp.clone();
+        calibrated.ent_a = floats(&rf["ent_a"]);
+        calibrated.ent_va0 = floats(&rf["ent_va0"]);
+        calibrated.ent_l0 = floats(&rf["ent_l0"]);
+        calibrated.w0 = floats(&rf["w0"]);
+        calibrated.u_star = floats(&rf["u_star"]);
+        calibrated.calibrated_coef = Some(mat(&rf["coef"]));
+        calibrated.calibrated_a_va = Some(floats(&rf["a_va"]));
+        let w = &rf["weights"];
+        calibrated.calibrated_weights = Some(Weights {
+            scale: floats(&w["scale"]),
+            omega: mat(&w["omega"]),
+            within: mat(&w["within"]),
+        });
+        let m = Model::new(&calibrated).unwrap();
+        r.point("reference.point", &m, &rf["point"], true);
+        let at_point = model::max_abs(&model::residual(&floats(&rf["point"]["x"]), &m));
+        println!("reference.point: residual {at_point:e}");
+        r.solution("reference.solution", &m, &rf["solution"]);
+    }
 
     if let Some(kernels) = d["kernels"].as_array() {
         for k in kernels {

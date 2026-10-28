@@ -1,19 +1,25 @@
 """Dumps what the Python reference derives from an export directory as JSON, for the Rust
 reference's `parity` test: the derived inputs, PIGL weights, `invert_at`, PIGL shares and
-quantities on random draws, erfinv on a grid, the A.3 bound, the spectral radius of random matrices and, with `--dense`, the dense
-kernels and a balanced Sinkhorn of each traded good. Non-finite floats are written as strings.
+quantities on random draws, erfinv on a grid, the A.3 bound, the spectral radius of random matrices, every quantity of
+`model.evaluate` with the residual at the data state and at a perturbed state and, with `--dense`, the dense
+kernels and a balanced Sinkhorn of each traded good. With `--solve`, the equilibrium from the data
+state. With `--reference PACK`, the calibrated inputs installed in PACK (of this export), the evaluation
+at their reference point and the equilibrium from that point perturbed by REFERENCE_SPREAD in every
+ln p and ln w. Non-finite floats are written as
+strings.
 
-    python step4_dump.py EXPORT_DIR OUT.json [--dense]
+    python step4_dump.py EXPORT_DIR OUT.json [--dense] [--solve] [--reference PACK]
 """
 
+import argparse
 import json
-import sys
+import time
 from pathlib import Path
 
 import numpy as np
 from scipy.special import erfinv
 
-from ceteris.reference import demand, io, sinkhorn, uniqueness
+from ceteris.reference import calibrate, demand, io, model, sinkhorn, solve, uniqueness
 
 
 def enc(x):
@@ -30,7 +36,52 @@ def weights(w: demand.Weights) -> dict:
     return {"scale": enc(w.scale), "omega": enc(w.omega), "within": enc(w.within)}
 
 
-def main(export: str, out: str, dense: bool) -> None:
+def evaluation(inp: io.Inputs, x: np.ndarray) -> dict:
+    """Every quantity of `model.evaluate` at x, with the residual and the excess demand."""
+    s = model.evaluate(x, inp)
+    f = s["flows"]
+    point = {"x": enc(x), "residual": enc(model.market_residual(s, inp)), "excess": enc(model._excess(s, inp))}
+    for key in ("price", "wage", "employment", "output", "value_added", "supply", "consumer_price", "spend", "demand", "q"):
+        point[key] = enc(s[key])
+    for key in ("labour_demand", "income", "index"):
+        point[key] = enc(s[key])
+    for key in ("orders", "home", "arrive", "paid", "received", "tariff", "pair_value", "pair_units"):
+        point[f"flows.{key}"] = enc(f[key])
+    return point
+
+
+REFERENCE_SPREAD = 0.05
+
+
+def solution(inp: io.Inputs, x0: np.ndarray | None = None) -> dict:
+    """The equilibrium from x0 (default the data state), its fields and the solve's summary with
+    its time."""
+    start = time.perf_counter()
+    eq = solve.equilibrium(inp, x0)
+    seconds = time.perf_counter() - start
+    fields = (
+        "x",
+        "price",
+        "wage",
+        "employment",
+        "output",
+        "supply",
+        "consumer_price",
+        "expenditure",
+        "home_value",
+        "home_units",
+        "flows_by_country_pair_good",
+        "units_by_country_pair_good",
+        "income",
+        "price_index",
+    )
+    out = {k: enc(getattr(eq, k)) for k in fields}
+    if x0 is not None:
+        out["start"] = enc(x0)
+    return {**out, "info": {**eq.info, "seconds": seconds}}
+
+
+def main(export: str, out: str, dense: bool, solve_: bool, reference: str | None) -> None:
     inp = io.load(export)
     rng = np.random.default_rng(7)
     n_c, n_g = inp.n_countries, inp.n_goods
@@ -136,8 +187,39 @@ def main(export: str, out: str, dense: bool) -> None:
             )
         d["kernels"] = kernels
 
+    # A separate generator, so the draws above stay as they were.
+    model_rng = np.random.default_rng(11)
+    x0 = model.data_state(inp)
+    points = [evaluation(inp, x) for x in (x0, x0 + model_rng.normal(0.0, 0.2, len(x0)))]
+    d["model"] = points
+    if solve_:
+        d["solution"] = solution(inp)
+    if reference:
+        pack_province = io._table(Path(export) / "pack_provinces.arrow")["pack"].astype(np.int64)
+        ref, x = calibrate.read_reference(reference, inp, pack_province)
+        w = ref.calibrated_weights
+        d["reference"] = {
+            "ent_a": enc(ref.ent_a),
+            "ent_va0": enc(ref.ent_va0),
+            "ent_l0": enc(ref.ent_l0),
+            "w0": enc(ref.w0),
+            "u_star": enc(ref.u_star),
+            "coef": enc(ref.calibrated_coef),
+            "a_va": enc(ref.calibrated_a_va),
+            "weights": weights(w),
+            "point": evaluation(ref, x),
+            "solution": solution(ref, x + np.random.default_rng(13).normal(0.0, REFERENCE_SPREAD, len(x))),
+        }
+
     Path(out).write_text(json.dumps(d))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], "--dense" in sys.argv[3:])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("export")
+    parser.add_argument("out")
+    parser.add_argument("--dense", action="store_true")
+    parser.add_argument("--solve", action="store_true")
+    parser.add_argument("--reference", help="a pack with calibration tables of this export")
+    args = parser.parse_args()
+    main(args.export, args.out, args.dense, args.solve, args.reference)
