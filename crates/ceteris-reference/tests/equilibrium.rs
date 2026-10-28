@@ -456,9 +456,7 @@ fn base_prices_are_the_reference_sourcing_at_prices_one() {
     assert!(inp.base_price.data.iter().any(|&p| p > 1.0));
     let country = inp.ent_country();
     for (e, &c) in country.iter().enumerate() {
-        let a: Vec<f64> = (0..n_g)
-            .map(|k| inp.io[c][(k, inp.ent_good[e])])
-            .collect();
+        let a: Vec<f64> = (0..n_g).map(|k| inp.io[c][(k, inp.ent_good[e])]).collect();
         let cost: Vec<f64> = (0..n_g)
             .map(|k| m.ent_inputs[(e, k)] * inp.base_price[(inp.ent_province[e], k)])
             .collect();

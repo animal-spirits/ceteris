@@ -195,11 +195,7 @@ type Operator<'o> = dyn FnMut(&[f64]) -> Result<Vec<f64>, String> + 'o;
 /// Restarted GMRES from 0 for `a x = b`, to `||b - a x|| <= rtol ||b||` or [`MAX_CYCLES`] cycles
 /// of [`RESTART`] Arnoldi vectors (modified Gram-Schmidt, Givens rotations); sums in a fixed
 /// order.
-fn gmres(
-    a: &mut Operator,
-    b: &[f64],
-    rtol: f64,
-) -> Result<Vec<f64>, String> {
+fn gmres(a: &mut Operator, b: &[f64], rtol: f64) -> Result<Vec<f64>, String> {
     let n = b.len();
     let mut x = vec![0.0; n];
     let target = rtol * norm(b);
