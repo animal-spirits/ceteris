@@ -9,9 +9,11 @@ use std::sync::Arc;
 use arrow_array::{Array, ArrayRef, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
 
-use super::people;
+use super::{icio, people};
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
+use crate::read::YEAR;
+use crate::read::icio::{aggregate, load_wdi};
 use crate::read::natural_earth::read_codes;
 use crate::read::people::load_observed;
 use crate::table;
@@ -88,15 +90,31 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             country.len()
         ));
     }
+    let mut worldpop: BTreeMap<String, f64> = BTreeMap::new();
+    for (c, p) in country.iter().zip(&raw) {
+        *worldpop.entry(c.clone()).or_insert(0.0) += p;
+    }
     let totals = people::national_population(&codes, &obs, &iso);
     let population = people::scale_to_national(&raw, &country, &totals);
+
+    let wdi = load_wdi(cache)?;
+    let world = icio::impute_pack(
+        &countries,
+        &aggregate(&cache.join(icio::ICIO), YEAR)?,
+        &wdi,
+        &obs,
+        &iso,
+        &worldpop,
+    )?;
 
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut countries_columns: Vec<(String, ArrayRef)> =
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
+    countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
     let tables = vec![
         write(out, "econ_countries.arrow", countries_columns)?,
+        write(out, "econ_io.arrow", icio::io_columns(&codes, &world)?)?,
         write(
             out,
             "econ_provinces.arrow",
