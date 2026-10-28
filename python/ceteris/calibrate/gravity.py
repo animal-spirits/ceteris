@@ -12,12 +12,14 @@ P2, ADR 0017):
   exports), as an ad valorem equivalent at the class thetas of the same fit;
 - mode cost ratios (P04a-d): coefficients on tonne-km by mode along the S05 paths, relative to road.
 
-Outputs carry provenance "data". `--write` puts them in `packs/econ/gravity_2000.toml` only when no stop
+Outputs carry provenance "data". `--write` puts them in `packs/gravity_2000.toml` only when no stop
 rule of the task fires (`stop_rules`); the econ pack build does not read that file yet, since whether the
 model switches to the estimates is the owner's decision (PLAN Task 18).
 """
 
+import json
 import struct
+import subprocess
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +27,9 @@ from pathlib import Path
 import numpy as np
 
 from ..reference import ppml
+
+ROOT = Path(__file__).resolve().parents[3]
+BACI = "BACI_HS92_V202601.zip"
 
 # ---------------------------------------------------------------- Stata files
 
@@ -461,12 +466,17 @@ def tau(q: np.ndarray, weight: np.ndarray, time_cost: np.ndarray, p: Transport =
 # ---------------------------------------------------------------- flows
 
 
-def _pack_index(codes, iso) -> dict[str, int]:
-    from ..packs.econ import people
+def dump_reader(name: str):
+    """One econ source reader's output on the fetch cache, from `ceteris pack dump-reader NAME`."""
+    cmd = ["cargo", "run", "--release", "--quiet", "--bin", "ceteris", "--", "pack", "dump-reader", name]
+    return json.loads(subprocess.run(cmd, check=True, cwd=ROOT, stdout=subprocess.PIPE, text=True).stdout)
 
+
+def _pack_index(codes, iso) -> dict[str, int]:
+    parts = dump_reader("parts")
     index: dict[str, int] = {}
     for i, c in enumerate(codes):
-        for s in (*people.PARTS.get(c, (iso.get(c, c),)), c):
+        for s in (*parts.get(c, (iso.get(c, c),)), c):
             index.setdefault(s, i)
     for s, c in {"S19": "TWN", "SCG": "YUG"}.items():
         if c in index:
@@ -474,21 +484,18 @@ def _pack_index(codes, iso) -> dict[str, int]:
     return index
 
 
-def baci_flows(baci_2000, hs_key, codes, iso) -> np.ndarray:
+def baci_flows(baci_2000, codes, iso) -> np.ndarray:
     """2000 BACI trade by (exporter, importer, traded good) of the pack countries, USD; HS lines assigned to
-    goods by the OECD HS to CPA key (`goods.hs_goods_shares`)."""
+    goods by the OECD HS to CPA key, which puts each line wholly in one good (`hs-goods`)."""
     import pyarrow as pa
     import pyarrow.csv as pacsv
 
-    from ..packs.econ import goods
-
-    shares = goods.hs_goods_shares(goods.read_hs_cpa(hs_key))
-    hs = np.array(sorted(int(k) for k in shares))
+    good_of = dump_reader("hs-goods")
+    hs = np.array(sorted(int(k) for k in good_of))
     share = np.zeros((len(hs) + 1, N_TRADED))  # last row: lines outside the concordance
     for i, k in enumerate(hs):
-        for g, s in shares[f"{k:06d}"].items():
-            if g < N_TRADED:
-                share[i, g] = s
+        if (g := good_of[f"{k:06d}"]) < N_TRADED:
+            share[i, g] = 1.0
     index = _pack_index(codes, iso)
     nc = len(codes)
     flows = np.zeros((nc * nc, N_TRADED))
@@ -516,18 +523,16 @@ def baci_flows(baci_2000, hs_key, codes, iso) -> np.ndarray:
     return flows.reshape(nc, nc, N_TRADED)
 
 
-def icio_domestic(icio_zip, codes, iso, va_basis) -> np.ndarray:
+def icio_domestic(codes, iso, va_basis) -> np.ndarray:
     """Domestic flows by (pack country, traded good), USD: 2000 ICIO output less exports, for the countries
     that are ICIO economies (`va_basis` icio); NaN elsewhere and where exports exceed output."""
-    from ..packs.econ import icio
-
-    output = icio.aggregate(icio_zip)
-    sold = icio.exports(icio_zip)
+    output = dump_reader("icio-aggregate")
+    sold = dump_reader("icio-exports")
     out = np.full((len(codes), N_TRADED), np.nan)
     for i, (c, basis) in enumerate(zip(codes, va_basis, strict=True)):
         code = iso.get(c, c)
         if basis == "icio" and code in output and code != "ROW":
-            d = (output[code].output - sold[code])[:N_TRADED] * 1e6
+            d = (np.array(output[code]["output"]) - np.array(sold[code]))[:N_TRADED] * 1e6
             out[i] = np.where(d >= 0, d, np.nan)
     return out
 
@@ -719,17 +724,14 @@ def samples(pack, cache) -> tuple[Sample, Sample, dict]:
     the sample with domestic flows (ICIO economies only, both ends), and counts for the report."""
     from pyarrow import ipc
 
-    from ..packs.econ import build as econ_build
-    from ..packs.econ import downscale, people
-
     def read(name):
         return ipc.open_file(str(pack / name)).read_all()
 
     codes = read("countries.arrow").column("code").to_pylist()
-    iso, _ = people.read_codes(cache / downscale.ADMIN0)
+    iso, _ = dump_reader("codes")
     nc = len(codes)
-    flows = baci_flows(cache / econ_build.BACI, cache / econ_build.HS_KEY, codes, iso)
-    domestic = icio_domestic(cache / econ_build.ICIO, codes, iso, read("econ_countries.arrow").column("va_basis").to_pylist())
+    flows = baci_flows(cache / BACI, codes, iso)
+    domestic = icio_domestic(codes, iso, read("econ_countries.arrow").column("va_basis").to_pylist())
     t = read("econ_tariffs.arrow")
     rate = np.zeros((nc, nc, 2))
     rate[t["importer"].to_numpy(), t["exporter"].to_numpy(), t["group"].to_numpy()] = t["rate"].to_numpy()
@@ -781,7 +783,7 @@ def estimate(pack, cache) -> Estimates:
 
 # ---------------------------------------------------------------- outputs
 
-OUT = Path(__file__).resolve().parents[1] / "packs" / "econ" / "gravity_2000.toml"
+OUT = Path(__file__).resolve().parents[1] / "packs" / "gravity_2000.toml"
 # The P04 rows are ratios to road (P04a), the numeraire of `mode_costs`.
 P04_IDS = ("P04b/P04a", "P04c/P04a", "P04d/P04a")
 

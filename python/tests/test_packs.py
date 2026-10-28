@@ -158,10 +158,8 @@ def test_every_link_endpoint_is_named_and_ordered():
 
 
 def _pack_lines() -> str:
-    from ceteris.packs.econ import build as econ_build
-
     manifest = json.loads((PACK / "manifest.json").read_text())
-    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items() if name not in econ_build.TABLES]
+    lines = [f"{name} {digest}" for name, digest in manifest["tables"].items() if name not in build.ECON_TABLES]
     return "# P1 pack 2000: table sha256 from manifest.json\n" + "\n".join(lines) + "\n"
 
 
@@ -196,6 +194,27 @@ def test_pack_invariants():
     stats = json.loads((PACK / "manifest.json").read_text())["stats"]
     assert stats["county_area_outside_province"] < 0.05
     assert stats["split_by_counties"] > stats["split_by_voronoi"]
+
+
+P1_TABLES = ("countries.arrow", "provinces.arrow", "cells.arrow", "nodes.arrow", "edges.arrow")
+
+
+@pytest.mark.skipif(not all((PACK / t).exists() for t in P1_TABLES), reason="pack not built")
+def test_econ_build_writes_the_econ_tables_through_the_cli(tmp_path):
+    """The pack build's econ step (`ceteris pack build --econ-only`) on a copy of the pack's P1 tables: every econ
+    table, digests that match the files, and the stats the manifest records."""
+    import hashlib
+    import shutil
+
+    if not fetch.path_of("ppp_2000_1km_Aggregated.tif").exists():
+        pytest.skip("skipping: no ppp_2000_1km_Aggregated.tif in data/cache; fetch it with `ceteris pack fetch`")
+    for t in P1_TABLES:
+        shutil.copy(PACK / t, tmp_path / t)
+    econ = build.econ_build(tmp_path)
+    assert list(econ["tables"]) == sorted(build.ECON_TABLES)
+    for name, digest in econ["tables"].items():
+        assert hashlib.sha256((tmp_path / name).read_bytes()).hexdigest() == digest
+    assert econ["stats"]["gateways"] == 600 and set(econ["stats"]["gateway_kinds"]) == {"port", "airport", "land crossing"}
 
 
 def test_fetch_does_not_download_manual_files(tmp_path, monkeypatch):

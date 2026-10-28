@@ -167,3 +167,29 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   CDLA-Permissive-2.0, reached through a wasm32-only dependency of `rustls-platform-verifier`.
   SHA-256 is the pure-Rust `sha2`: verifying the 5.9 GB cache takes about 11 s (2.7 s with the
   `asm` feature, which needs a C compiler and was declined).
+- Step 2 (econ tables): `ceteris pack build --econ-only --pack DIR --out DIR` writes the seven
+  tables of the Python econ build (`ceteris_pack::econ`, over the source readers of
+  `ceteris_pack::read`) with the same columns, row order and schema metadata. It prints the three
+  summaries to stderr and the table digests and build stats as JSON to stdout. `downscale`, listed
+  under step 3 above, moved here, because the econ build reads it. Parity on the full cache and
+  pack (`scripts/parity/step2.sh`): all 101 columns equal (largest relative difference 0, rows in
+  file order, no sort), and the schemas, summaries and stats are equal. The same holds with each
+  optional source the build reads left out of the cache (the two GEM trackers, the Kummu
+  GeoTIFF). Every source reader matched byte for byte as canonical JSON, except the theta class
+  bands, which agree within 1e-12 (numpy's BLAS matrix product, about one ulp). The P1 `build.py`
+  and `calibrate/gravity.py` call the binary (`pack build --econ-only`, `pack dump-reader`) until
+  steps 3 and 4. `python/ceteris/packs/econ/` and its four test files are deleted. Deviations:
+  - DOSE region sums run in the order the source lists the regions (a `Vec` in first-row
+    order, not a sorted map), as Python's dict iteration does.
+  - DOSE and admin-1 names are matched after NFC normalisation and full Unicode case folding
+    (`icu_normalizer`, `icu_casemap`, Unicode-3.0), as Python's `normalize` and `casefold` do.
+  - calamine decodes the OOXML escape `_x0008_` in one GEM coal mine name, which the Python
+    reader kept as raw text. No reader reads that column.
+  - BACI sums are taken per batch, the rows ending in one 1 MiB block of the decompressed
+    member, then across batches, as pyarrow's streaming CSV reader and `group_by` add them.
+  - Kummu gridded GDP is read from a GeoTIFF of the year-2000 band, converted once from the
+    NetCDF (`fetch.toml` `derived_from`, `scripts/convert_kummu.py`), so the user-side build
+    reads no HDF5.
+  - GeoTIFF predictors 2 and 3 are not read yet: no econ raster uses one. ETOPO needs
+    predictor 3 in step 3.
+  - The manifest's econ stats come back from the binary with their keys sorted.

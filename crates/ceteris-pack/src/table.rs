@@ -6,9 +6,9 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::RecordBatch;
+use arrow_array::{ArrayRef, RecordBatch};
 use arrow_ipc::writer::FileWriter;
-use arrow_schema::{ArrowError, Schema};
+use arrow_schema::{ArrowError, Field, Schema};
 use sha2::{Digest, Sha256};
 
 pub const PACK_FORMAT: &str = "3";
@@ -49,10 +49,23 @@ pub fn write(
     Ok(Sha256::digest(std::fs::read(path)?).into())
 }
 
+/// A record batch of `columns`, every field nullable as pyarrow writes them.
+pub fn batch(columns: Vec<(String, ArrayRef)>) -> Result<RecordBatch, String> {
+    let fields: Vec<Field> = columns
+        .iter()
+        .map(|(name, a)| Field::new(name, a.data_type().clone(), true))
+        .collect();
+    RecordBatch::try_new(
+        Arc::new(Schema::new(fields)),
+        columns.into_iter().map(|(_, a)| a).collect(),
+    )
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrow_array::{ArrayRef, Float64Array, Int64Array};
+    use arrow_array::{Float64Array, Int64Array};
 
     fn batch() -> RecordBatch {
         let cols: Vec<(&str, ArrayRef)> = vec![
