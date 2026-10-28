@@ -1,6 +1,6 @@
 # 0068. Subnational governance, land tenure, clientelism and electoral integrity
 
-Status: proposed
+Status: proposed; amended by 0195 (two-tier split becomes a preset over bodies and competences)
 Date: 2026-10-24
 Design sections: 10.3, 10.4, 10.5, 7.4, 8.7, 11.6
 Phase: P6
