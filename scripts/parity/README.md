@@ -14,4 +14,8 @@ one line with its largest relative difference, and the exit status is 1 when any
 
 Rows are compared in file order, so a port must reproduce the row order of the Python table.
 
+`step2-readers.sh` compares the econ source readers instead of tables: `readers.py NAME` and
+`ceteris pack dump-reader NAME` print one reader's output on the real cache as canonical JSON
+(sorted keys, floats as Python's `repr`), and the two texts must be identical.
+
 The scripts are deleted with the Python they drive (ADR 0113, step 5).

@@ -5,6 +5,7 @@
 //! ceteris pack compare A B [--iterative] [--table NAME]
 //! ceteris pack check-sources --profile research|release
 //! ceteris pack fetch [--record]
+//! ceteris pack dump-reader NAME [ARGS]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -37,6 +38,7 @@ use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_pack::compare::{self, Tolerance};
 use ceteris_pack::fetch;
+use ceteris_pack::read::dump;
 use ceteris_pack::sources::{self, Profile};
 use ceteris_trade::{Kernel, TradeParams};
 
@@ -44,6 +46,7 @@ const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
   ceteris pack check-sources [--profile research|release]
   ceteris pack fetch [--record]
+  ceteris pack dump-reader NAME [ARGS]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -272,13 +275,29 @@ fn fetch_sources(args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     }
 }
 
+/// `pack dump-reader NAME [ARGS]`: one econ source reader's output on the fetch cache, as
+/// canonical JSON.
+fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let name = args
+        .next()
+        .ok_or_else(|| format!("dump-reader needs a reader: {}", dump::NAMES.join(", ")))?;
+    let rest: Vec<String> = args.collect();
+    println!("{}", dump::dump(&name, &rest)?.text());
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
 fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     match args.next().as_deref() {
         Some("compare") => {}
         Some("check-sources") => return check_sources(args),
         Some("fetch") => return fetch_sources(args),
-        _ => return Err("expected a pack command, compare, check-sources or fetch".into()),
+        Some("dump-reader") => return dump_reader(args),
+        _ => {
+            return Err(
+                "expected a pack command, compare, check-sources, fetch or dump-reader".into(),
+            );
+        }
     }
     let (mut dirs, mut tolerance, mut only) = (Vec::new(), Tolerance::DEFAULT, None);
     while let Some(a) = args.next() {
