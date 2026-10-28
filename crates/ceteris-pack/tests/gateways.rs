@@ -118,7 +118,8 @@ fn kmedoids_ties_follow_numpy() {
 
 /// Distances bit for bit those of the Python `great_circle_km` (numpy) on the same points: two
 /// pairs across the antimeridian, and an antipodal pair whose haversine term rounds to
-/// 1.0000000000000002 and is clamped to 1.
+/// 1.0000000000000002 and reaches the `min(1.0)` clamp. No f64 input makes the clamp change the
+/// result: the square root of a term above 1 (at most 1 + 2^-52) rounds to 1.
 #[test]
 fn great_circle_km_matches_numpy_bitwise() {
     let cases = [
