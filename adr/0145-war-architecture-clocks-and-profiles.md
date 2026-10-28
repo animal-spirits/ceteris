@@ -16,7 +16,7 @@ The design has the pieces spread out: aggregate capability and Lanchester combat
 command layer in the extended profile (23.5), a daily sub-tick while at war (4.3, 19.2), a
 reduced-form hazard as the lab default (0110), and territory as cell partitions (0115). It has no
 single statement of how the war systems fit together, in what order they run, or what each costs.
-ADRs 0146 to 0156 fill in the parts.
+ADRs 0146 to 0154, 0165 and 0166 fill in the parts.
 
 ## Options
 
@@ -50,7 +50,7 @@ Option 3.
   order (0147) is an action in the Tier 1a action space (12.6); AI planners write the same order
   objects.
 - **Profiles.** Lab: hazard onset and termination (0110), aggregate capability stocks and an
-  aggregate exchange per dyad and theatre at the monthly tick, and the war economy (0155).
+  aggregate exchange per dyad and theatre at the monthly tick, and the war economy (0165).
   Extended: the operational model of 0146 to 0154. The command layer may enter the lab only by
   beating the lab model on the 0107 hold-outs.
 - **Nesting test.** A theatre delegated to an average general with default doctrine reproduces

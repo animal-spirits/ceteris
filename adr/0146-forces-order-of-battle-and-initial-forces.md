@@ -30,7 +30,7 @@ priors only, with no IISS importer (owner, 2026-10-28).
   unit cost and input vector into the IO sectors; vintage band and producer. Counts are held per
   formation by class and vintage band, not per item.
 - **People.** Five tiers (conscript, contract, NCO, officer, specialist) with training times and
-  pop sources (0155). Specialists such as pilots and air-defence crews bind before equipment does.
+  pop sources (0165). Specialists such as pilots and air-defence crews bind before equipment does.
 - **Echelons.** Battalion (small actors only), brigade, division, corps, army, front or theatre.
 - **Templates.** Authorized counts per class and tier plus enablers. Fill rate against the
   template drives effectiveness. Restructuring costs readiness for months.
