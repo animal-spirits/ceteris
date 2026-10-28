@@ -22,7 +22,7 @@ Kummu GeoTIFF) left out of the cache; the Rust side reads that cache through a c
 tree of links. The Python econ package is deleted, so the script takes the Python package from
 the commit before the deletion (`git archive`).
 
-`step4.sh` compares the reference model with the Python reference on the fixture export and on an
+`step4.sh WORK_DIR` compares the reference model with the Python reference on the fixture export and on an
 export of the pack. The Python side dumps what it derives from the export as JSON
 (`step4_dump.py`): the derived inputs, PIGL weights at base and at given prices, PIGL shares and
 quantities on random draws (some prices unreachable, some pops without money), erfinv on a grid,
