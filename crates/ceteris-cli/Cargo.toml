@@ -16,6 +16,10 @@ ceteris-geo = { path = "../ceteris-geo" }
 ceteris-pack = { path = "../ceteris-pack" }
 ceteris-trade = { path = "../ceteris-trade" }
 
+[features]
+# The owner-side geo build: province splitting and county clipping through GEOS.
+geos = ["ceteris-pack/geos"]
+
 [[bin]]
 name = "ceteris"
 path = "src/main.rs"

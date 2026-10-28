@@ -1,7 +1,9 @@
-//! `ceteris pack dump-geo DIR`: what the geo modules compute from the provinces and counties of
-//! `DIR/provinces.geom.arrow` and `DIR/counties.geom.arrow` (one row per vertex: geom, part,
-//! ring, x, y), written to `DIR/rust` as the tables and fills of
-//! `scripts/parity/geo_inputs.py`.
+//! `ceteris pack dump-geo DIR [--build]`: what the geo modules compute from the provinces and
+//! counties of `DIR/provinces.geom.arrow` and `DIR/counties.geom.arrow` (one row per vertex:
+//! geom, part, ring, x, y), written to `DIR/rust` as the tables and fills of
+//! `scripts/parity/geo_inputs.py`. With `--build`, the provinces and clipped counties are built
+//! here instead, and their vertex tables, attributes and clipping misfit are written to
+//! `DIR/rust` too.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -117,12 +119,141 @@ fn means(owner: &[u32], area: &[f64], t: &Terrain, n: usize) -> Terrain {
     }
 }
 
+/// A vertex table of the geometries: one row per vertex, rings closed, in their stored order.
+pub fn write_geoms(path: &Path, geoms: &[MultiPolygon]) -> Result<(), String> {
+    let (mut g, mut p, mut r, mut x, mut y) = (vec![], vec![], vec![], vec![], vec![]);
+    let index = |i: usize| u32::try_from(i).map_err(|e| e.to_string());
+    for (i, geom) in geoms.iter().enumerate() {
+        for (j, part) in geom.iter().enumerate() {
+            for (k, ring) in std::iter::once(part.exterior())
+                .chain(part.interiors())
+                .enumerate()
+            {
+                for c in &ring.0 {
+                    g.push(index(i)?);
+                    p.push(index(j)?);
+                    r.push(index(k)?);
+                    x.push(c.x);
+                    y.push(c.y);
+                }
+            }
+        }
+    }
+    write(
+        path,
+        named(vec![
+            ("geom", Arc::new(UInt32Array::from(g))),
+            ("part", Arc::new(UInt32Array::from(p))),
+            ("ring", Arc::new(UInt32Array::from(r))),
+            ("x", f64s(x)),
+            ("y", f64s(y)),
+        ]),
+    )
+}
+
 pub fn dump(dir: &Path) -> Result<(), String> {
-    let config = read_table(&workspace_root().join(CONFIG_DIR).join("pack.toml"))?;
     let provinces = read_geoms(&dir.join("provinces.geom.arrow"))?;
     let counties = read_geoms(&dir.join("counties.geom.arrow"))?;
+    dump_into(&dir.join("rust"), &provinces, &counties)
+}
+
+/// Builds the provinces and clipped counties from the fetch cache as the pack build does, and
+/// writes them with what the geo modules compute from them to `DIR/rust`.
+#[cfg(feature = "geos")]
+pub fn build(dir: &Path) -> Result<(), String> {
+    use arrow_array::StringArray;
+
+    use super::{counties, overlay, provinces};
+
+    let root = workspace_root();
+    let config = read_table(&root.join(CONFIG_DIR).join("pack.toml"))?;
+    let split_area = config
+        .get("split_area_km2")
+        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+        .ok_or("pack.toml: no split_area_km2")?;
+    let admin1 = fetch::path_of("ne_10m_admin_1_states_provinces.zip");
+    let admin0 = fetch::path_of("ne_10m_admin_0_countries.zip");
+    let units = counties::load(&root)?;
+    let provs = provinces::build(
+        &admin1,
+        &admin0,
+        split_area,
+        resolution(&config, "land_res")?,
+        &units,
+    )?;
+    let clipped = counties::clip(&units, &provs, split_area)?;
     let out = dir.join("rust");
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let text = |v: Vec<&str>| -> ArrayRef { Arc::new(StringArray::from(v)) };
+    write(
+        &out.join("province_ids.arrow"),
+        named(vec![
+            ("id", text(provs.iter().map(|p| p.id.as_str()).collect())),
+            (
+                "name",
+                text(provs.iter().map(|p| p.name.as_str()).collect()),
+            ),
+            (
+                "country",
+                text(provs.iter().map(|p| p.country.as_str()).collect()),
+            ),
+            (
+                "sovereign",
+                text(provs.iter().map(|p| p.sovereign.as_str()).collect()),
+            ),
+            (
+                "country_now",
+                text(provs.iter().map(|p| p.country_now.as_str()).collect()),
+            ),
+            (
+                "split_rule",
+                text(provs.iter().map(|p| p.split_rule.as_str()).collect()),
+            ),
+        ]),
+    )?;
+    let cty = &clipped.counties;
+    write(
+        &out.join("county_ids.arrow"),
+        named(vec![
+            ("name", text(cty.iter().map(|c| c.name.as_str()).collect())),
+            (
+                "country",
+                text(cty.iter().map(|c| c.iso.as_str()).collect()),
+            ),
+            (
+                "level",
+                text(cty.iter().map(|c| c.level.as_str()).collect()),
+            ),
+            (
+                "province",
+                Arc::new(UInt32Array::from(clipped.province.clone())),
+            ),
+        ]),
+    )?;
+    write(
+        &out.join("clip_stats.arrow"),
+        named(vec![
+            ("fits", f64s(vec![clipped.fits])),
+            ("fits_inside", f64s(vec![clipped.fits_inside])),
+        ]),
+    )?;
+    let provinces: Vec<MultiPolygon> = provs.iter().map(|p| provinces::parts(&p.geom)).collect();
+    let counties = cty
+        .iter()
+        .map(|c| overlay::to_multipolygon(&c.geom))
+        .collect::<Result<Vec<_>, _>>()?;
+    write_geoms(&out.join("provinces.geom.arrow"), &provinces)?;
+    write_geoms(&out.join("counties.geom.arrow"), &counties)?;
+    dump_into(&out, &provinces, &counties)
+}
+
+fn dump_into(
+    out: &Path,
+    provinces: &[MultiPolygon],
+    counties: &[MultiPolygon],
+) -> Result<(), String> {
+    let config = read_table(&workspace_root().join(CONFIG_DIR).join("pack.toml"))?;
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let z = Elevation::open(&fetch::path_of(ETOPO))?;
     let anchors = |geoms: &[MultiPolygon]| -> Result<Vec<(f64, f64)>, String> {
         geoms
@@ -131,8 +262,8 @@ pub fn dump(dir: &Path) -> Result<(), String> {
             .collect()
     };
 
-    let canchor = anchors(&counties)?;
-    let (ccells, cowner) = assign_cells(&counties, &canchor, resolution(&config, "county_res")?)?;
+    let canchor = anchors(counties)?;
+    let (ccells, cowner) = assign_cells(counties, &canchor, resolution(&config, "county_res")?)?;
     let cterr = terrain(&ccells, &z, 0)?;
     let carea = cell_area_km2(&ccells);
     let mut cstat = means(&cowner, &carea, &cterr, counties.len());
@@ -174,8 +305,8 @@ pub fn dump(dir: &Path) -> Result<(), String> {
     )?;
 
     let n = provinces.len();
-    let anchor = anchors(&provinces)?;
-    let (cells, owner) = assign_cells(&provinces, &anchor, resolution(&config, "land_res")?)?;
+    let anchor = anchors(provinces)?;
+    let (cells, owner) = assign_cells(provinces, &anchor, resolution(&config, "land_res")?)?;
     let terr = terrain(&cells, &z, SAMPLE_DEPTH)?;
     let area = cell_area_km2(&cells);
     let stat = means(&owner, &area, &terr, n);
@@ -183,7 +314,7 @@ pub fn dump(dir: &Path) -> Result<(), String> {
     for &o in &owner {
         count[o as usize] += 1;
     }
-    let res = resources::counts(&fetch::path_of(resources::MRDS), &provinces)?;
+    let res = resources::counts(&fetch::path_of(resources::MRDS), provinces)?;
     write(
         &out.join("cells.arrow"),
         cell_columns(&cells, ("province", owner), area, terr),
@@ -204,7 +335,7 @@ pub fn dump(dir: &Path) -> Result<(), String> {
         columns.push((format!("res_{group}"), Arc::new(UInt32Array::from(v))));
     }
     write(&out.join("provinces.arrow"), columns)?;
-    fills::write(&out.join("provinces.fill"), &provinces)?;
-    fills::write(&out.join("counties.fill"), &counties)?;
+    fills::write(&out.join("provinces.fill"), provinces)?;
+    fills::write(&out.join("counties.fill"), counties)?;
     Ok(())
 }

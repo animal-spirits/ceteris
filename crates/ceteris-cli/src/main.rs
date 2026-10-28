@@ -6,7 +6,8 @@
 //! ceteris pack check-sources --profile research|release
 //! ceteris pack fetch [--record]
 //! ceteris pack dump-reader NAME [ARGS]
-//! ceteris pack dump-geo DIR
+//! ceteris pack record-counties
+//! ceteris pack dump-geo DIR [--build]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -51,7 +52,8 @@ const USAGE: &str = "usage:
   ceteris pack check-sources [--profile research|release]
   ceteris pack fetch [--record]
   ceteris pack dump-reader NAME [ARGS]
-  ceteris pack dump-geo DIR
+  ceteris pack record-counties
+  ceteris pack dump-geo DIR [--build]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -292,15 +294,44 @@ fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Strin
     Ok(ExitCode::SUCCESS)
 }
 
-/// `pack dump-geo DIR`: the geo modules' tables and fills of the provinces and counties in DIR,
-/// written to DIR/rust.
-fn dump_geo(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
-    let dir = args.next().ok_or("dump-geo needs a directory")?;
+/// `pack record-counties`: rewrites `counties.lock.toml` from the geoBoundaries API, downloading
+/// the chosen files into the cache.
+fn record_counties(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if let Some(a) = args.next() {
         return Err(format!("unknown argument '{a}'"));
     }
-    ceteris_pack::geo::dump::dump(Path::new(&dir))?;
+    ceteris_pack::geo::counties::record(&sources::workspace_root())?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// `pack dump-geo DIR [--build]`: the geo modules' tables and fills of the provinces and
+/// counties in DIR, or with `--build` of those built from the cache, written to DIR/rust.
+fn dump_geo(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let dir = args.next().ok_or("dump-geo needs a directory")?;
+    let build = match args.next().as_deref() {
+        None => false,
+        Some("--build") => true,
+        Some(a) => return Err(format!("unknown argument '{a}'")),
+    };
+    if let Some(a) = args.next() {
+        return Err(format!("unknown argument '{a}'"));
+    }
+    if build {
+        build_geo(Path::new(&dir))?;
+    } else {
+        ceteris_pack::geo::dump::dump(Path::new(&dir))?;
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(feature = "geos")]
+fn build_geo(dir: &Path) -> Result<(), String> {
+    ceteris_pack::geo::dump::build(dir)
+}
+
+#[cfg(not(feature = "geos"))]
+fn build_geo(_: &Path) -> Result<(), String> {
+    Err("dump-geo --build needs the owner-side `geos` feature".into())
 }
 
 /// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
@@ -351,12 +382,13 @@ fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Some("check-sources") => return check_sources(args),
         Some("fetch") => return fetch_sources(args),
         Some("dump-reader") => return dump_reader(args),
+        Some("record-counties") => return record_counties(args),
         Some("dump-geo") => return dump_geo(args),
         Some("build") => return build(args),
         _ => {
             return Err(
-                "expected a pack command, compare, check-sources, fetch, dump-reader, dump-geo or \
-                 build"
+                "expected a pack command, compare, check-sources, fetch, record-counties, \
+                 dump-reader, dump-geo or build"
                     .into(),
             );
         }
