@@ -55,6 +55,8 @@ Options 2 and 3, by speed of change.
 - Control (option 2): battles and occupation write the controller label at any tick. Per
   province, the economy reads the weight each side holds and scales taxation, output,
   conscription and grievance by it (11.5). Markets never change on control.
+- Front lines cut transport: an edge whose ends are controlled by sides at war is closed, and
+  inside a province the share held by the enemy is cut off from that province's market.
 - Sovereignty (option 3): only political events write the owner label: treaty terms (11.8),
   secession and breakaway states declaring (10.8, 11.6), annexation, and interventions (14).
   There is no timer: occupation never splits a market however long it lasts.
@@ -63,9 +65,11 @@ Options 2 and 3, by speed of change.
   edges. Weights per kind of stock: pops by population, and by GeoEPR ethnic area for the
   ethnic dimension; capital by gridded GDP; farms by crop area. Night lights and built-up area
   replace or join these when fetched.
-- Slivers: an overlay unit under a few percent of its province's population (a register
-  parameter) folds into the province's largest unit of the same country for the economy, and
-  keeps its labels for politics and the map.
+- Slivers: an overlay unit with fewer than 50,000 people and under 2% of its province's output
+  (gridded GDP) folds, for the economy only, into the adjacent unit of the same country it
+  shares the most border with, usually in a neighbouring province. It keeps its labels for
+  politics and the map. An exclave with no such neighbour stays a unit. The people cap keeps
+  cities from folding and the output test keeps mines and ports; both are register parameters.
 - Unit IDs: an overlay unit is `<province ID>/<country code>`; the unit holding most of the
   province keeps the bare province ID.
 - Transfer units: peace terms and map lines use counties where they exist and clusters of
@@ -91,5 +95,3 @@ Options 2 and 3, by speed of change.
   only the map.
 - Validation of partial control rests on UCDP GED event locations and hand-coded cases; no
   open global dataset of territorial control is known.
-- Open: whether control should also cut transport edges at the front, and the sliver
-  threshold's value.
