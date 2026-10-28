@@ -84,10 +84,12 @@ pub fn entries(root: &Path) -> Result<Vec<LockEntry>, String> {
 /// What the metadata API says of one country at one level.
 pub type Meta = BTreeMap<String, Value>;
 
-fn text(v: &Value) -> String {
+/// A string or an integer as text; anything else is an error.
+fn text(v: &Value) -> Result<String, String> {
     match v {
-        Value::String(s) => s.clone(),
-        v => v.to_string(),
+        Value::String(s) => Ok(s.clone()),
+        Value::Number(n) if n.is_i64() || n.is_u64() => Ok(n.to_string()),
+        v => Err(format!("expected a string or an integer, got {v}")),
     }
 }
 
@@ -128,12 +130,14 @@ pub fn lock_text(
         "# file per country at the level choose_level picks; licences are per file.".into(),
         String::new(),
     ];
-    let field = |r: &Meta, k: &str| r.get(k).map(text).ok_or(format!("no {k}"));
+    let field = |r: &Meta, k: &str| -> Result<String, String> {
+        text(r.get(k).ok_or(format!("no {k}"))?).map_err(|e| format!("{k}: {e}"))
+    };
     for (iso, &n) in per_country {
         let mut units = BTreeMap::new();
         for level in LEVELS {
             if let Some(r) = meta.get(level).and_then(|m| m.get(iso)) {
-                let count = field(r, "admUnitCount")?;
+                let count = field(r, "admUnitCount").map_err(|e| format!("{iso} {level} {e}"))?;
                 let count = count
                     .parse::<u64>()
                     .map_err(|e| format!("{iso} {level} admUnitCount {count}: {e}"))?;
@@ -420,6 +424,76 @@ mod tests {
             choose_level(&u(&[("ADM2", 76), ("ADM3", 5162)]), 13, Some("ADM2")),
             Some("ADM2")
         );
+    }
+
+    fn meta_of(level: &'static str, iso: &str, units: Value) -> (&'static str, String, Meta) {
+        let record: Meta = [
+            ("admUnitCount", units),
+            (
+                "simplifiedGeometryGeoJSON",
+                Value::from(format!("https://x/{iso}-{level}")),
+            ),
+            ("boundaryLicense", Value::from("Public Domain")),
+            ("boundaryYearRepresented", Value::from(2014)),
+            ("boundaryID", Value::from(format!("{iso}-{level}-1"))),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v))
+        .collect();
+        (level, iso.to_owned(), record)
+    }
+
+    fn lock(
+        rows: Vec<(&'static str, String, Meta)>,
+        per_country: &[(&str, u64)],
+    ) -> Result<String, String> {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f.geojson");
+        std::fs::write(&file, "{}").unwrap();
+        let mut meta: BTreeMap<&str, BTreeMap<String, Meta>> = BTreeMap::new();
+        for (level, iso, r) in rows {
+            meta.entry(level).or_default().insert(iso, r);
+        }
+        let per: BTreeMap<String, u64> = per_country
+            .iter()
+            .map(|(c, n)| ((*c).to_owned(), *n))
+            .collect();
+        lock_text(&meta, &per, |_| Ok(file.clone()))
+    }
+
+    #[test]
+    fn the_lock_takes_the_level_choose_level_picks_and_skips_countries_without_one() {
+        let text = lock(
+            vec![
+                meta_of("ADM2", "AAA", Value::from("96")),
+                meta_of("ADM3", "AAA", Value::from(320)),
+                meta_of("ADM2", "BBB", Value::from(52)),
+                meta_of("ADM3", "BBB", Value::from("8205")),
+            ],
+            &[("AAA", 101), ("BBB", 52), ("CCC", 7)],
+        )
+        .unwrap();
+        let body: Vec<&str> = text.lines().skip(3).collect();
+        assert_eq!(
+            body[..5],
+            [
+                "[[country]]",
+                "iso = \"AAA\"",
+                "level = \"ADM3\"",
+                "units = 320",
+                "year = \"2014\""
+            ]
+        );
+        assert!(!text.contains("BBB") && !text.contains("CCC"));
+        assert_eq!(text.matches("[[country]]").count(), 1);
+    }
+
+    #[test]
+    fn unit_counts_must_be_integers() {
+        for bad in [Value::from(96.0), Value::Null] {
+            let err = lock(vec![meta_of("ADM2", "AAA", bad)], &[("AAA", 10)]).unwrap_err();
+            assert!(err.contains("admUnitCount"), "{err}");
+        }
     }
 
     #[test]

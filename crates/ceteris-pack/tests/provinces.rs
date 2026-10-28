@@ -58,6 +58,8 @@ fn loading_gives_the_regions_of_the_pack() {
     }
 }
 
+/// The lock's formatting and digests: the API answers here carry only the level each country
+/// was recorded at, so the level choice is the unit tests' (`counties::tests`).
 #[test]
 fn recording_the_cached_files_reproduces_the_lock() {
     let Some(admin1) = cached(ADMIN1) else {
