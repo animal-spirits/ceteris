@@ -285,21 +285,33 @@ mod split {
         .and_then(|m| geos::Geom::voronoi(&m, Some(&bounds), 0.0, false))
         .map_err(fail)?;
         let cells = overlay::parts(&diagram)?;
-        points
-            .iter()
-            .map(|p| {
-                for c in &cells {
-                    if geos::Geom::contains(c, p).map_err(fail)? {
-                        return geos::Geom::clone(c).map_err(fail);
-                    }
+        let mut taken = vec![false; cells.len()];
+        let mut out = Vec::with_capacity(points.len());
+        for p in &points {
+            let mut home = None;
+            for (i, c) in cells.iter().enumerate() {
+                if geos::Geom::contains(c, p).map_err(fail)? {
+                    home = Some(i);
+                    break;
                 }
-                Err("a Voronoi seed outside every cell".to_owned())
-            })
-            .collect()
+            }
+            let i = home.ok_or("a Voronoi seed outside every cell")?;
+            // shapely's ordered diagram fails the same way on coincident seeds.
+            if std::mem::replace(&mut taken[i], true) {
+                return Err("Multiple input coordinates in cell".into());
+            }
+            out.push(geos::Geom::clone(&cells[i]).map_err(fail)?);
+        }
+        Ok(out)
     }
 
     /// Voronoi split for regions without county data (ADR 0006).
-    pub fn split(p: &Province, k: usize, res: Resolution) -> Result<Vec<Province>, String> {
+    pub fn split(
+        p: &Province,
+        k: usize,
+        res: Resolution,
+        centres: &Centres,
+    ) -> Result<Vec<Province>, String> {
         let wrapped = crosses_antimeridian(&parts(&p.geom));
         let g = from_geo(&p.geom)?;
         let g = if wrapped { overlay::unwrap(&g)? } else { g };
@@ -622,16 +634,28 @@ mod split {
             ];
             let refs: Vec<&Geos> = halves.iter().collect();
             assert!(
-                split_by_counties(&p, 4, &refs, 1e9, Resolution::Four)
+                split_by_counties(&p, 4, &refs, 1e9, Resolution::Four, &Centres::H3o)
                     .unwrap()
                     .is_none()
             );
         }
 
         #[test]
+        fn coincident_voronoi_seeds_are_an_error() {
+            let c = |x: f64, y: f64| Coord { x, y };
+            let extend = Rect::new(c(-5.0, -5.0), c(5.0, 5.0));
+            assert_eq!(
+                voronoi(&[c(0.0, 0.0), c(1.0, 0.0)], extend).unwrap().len(),
+                2
+            );
+            let err = voronoi(&[c(0.0, 0.0), c(1.0, 0.0), c(0.0, 0.0)], extend).err();
+            assert_eq!(err.as_deref(), Some("Multiple input coordinates in cell"));
+        }
+
+        #[test]
         fn voronoi_split_covers_the_province_with_k_parts() {
             let p = province(to_geo(&rectangle(10.0, 40.0, 16.0, 44.0).unwrap()).unwrap());
-            let parts = split(&p, 3, Resolution::Four).unwrap();
+            let parts = split(&p, 3, Resolution::Four, &Centres::H3o).unwrap();
             assert_eq!(parts.len(), 3);
             let ids: Vec<&str> = parts.iter().map(|q| q.id.as_str()).collect();
             assert_eq!(ids, ["X-1.1", "X-1.2", "X-1.3"]);
