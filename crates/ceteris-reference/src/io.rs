@@ -685,6 +685,13 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
             "inactive local cells with an enterprise: {stuck:?}"
         ));
     }
+    // statrs' erf_inv gives an infinite income dispersion outside [0, 1) where scipy's gives NaN.
+    let gini: Vec<usize> = (0..inp.gini.len())
+        .filter(|&c| !(0.0..1.0).contains(&inp.gini[c]))
+        .collect();
+    if !gini.is_empty() {
+        return Err(format!("Gini outside [0, 1) in countries {gini:?}"));
+    }
     if inp.ent_a_va().iter().any(|&a| a <= 0.0) {
         return Err("an enterprise has a nonpositive value-added coefficient".into());
     }

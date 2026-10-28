@@ -162,6 +162,20 @@ fn country_without_people_spends_nothing() {
 }
 
 #[test]
+fn validate_rejects_a_gini_outside_the_unit_interval() {
+    let mut inp = inputs();
+    for g in [1.0, 1.5, -0.1, f64::NAN] {
+        inp.gini[1] = g;
+        assert_eq!(
+            io::validate(&inp).unwrap_err(),
+            "Gini outside [0, 1) in countries [1]"
+        );
+    }
+    inp.gini[1] = 0.0;
+    io::validate(&inp).unwrap();
+}
+
+#[test]
 fn load_rejects_another_export_format() {
     let dir = std::env::temp_dir().join(format!("ceteris-reference-format-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

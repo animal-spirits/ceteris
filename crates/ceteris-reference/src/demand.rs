@@ -26,7 +26,7 @@ pub struct Weights {
     pub within: Mat,
 }
 
-/// sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G).
+/// sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G). Infinite for |G| >= 1 (`io::validate` keeps G in [0, 1)).
 pub fn lognormal_sigma(gini: &[f64]) -> Vec<f64> {
     gini.iter().map(|&g| 2.0 * erf_inv(g)).collect()
 }
