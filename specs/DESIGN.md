@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is closed source for now; it opens under Apache-2.0 / MIT once every bundled dataset permits redistribution. Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -271,7 +271,7 @@ States and enterprises propose projects (highways, rail lines, ports, pipelines)
 
 ### 5.6 Licensing note
 
-OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. While the project is closed source nothing is distributed; once it opens, the OSM-derived tables ship as a separate artifact under ODbL, attributed. Every source's licence is recorded in the pack manifest (Section 16).
+OpenStreetMap is licensed under ODbL, whose share-alike terms attach to derived databases. OSM-derived tables are built by each user's pipeline or, where shipped, ship as a separate artifact under ODbL, attributed. Every source's licence is recorded in the pack manifest (Section 16).
 
 ## 6. Population: Pops, Demography, Identity and Migration
 
@@ -1015,7 +1015,7 @@ Named firms or individuals, sub-province geography, daily financial markets, pow
 
 ## 16. Data Sources and Pipeline
 
-The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). While the project is closed source it may use restricted sources, which must be replaced or cleared before it opens. ADR 0005 lists the substitutions made in the P0 audit.
+The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit.
 
 | Dataset | Content | Role | Licence | Bundle or fetch |
 | --- | --- | --- | --- | --- |
@@ -1176,7 +1176,7 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
-| Licence | Closed source for now; Apache-2.0 / MIT dual for code on opening; data under its source licences (ODbL and other share-alike tables shipped separately) | Restricted sources usable until the project opens |
+| Licence | Open source, non-commercial: Apache-2.0 / MIT dual for code; data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
 
 An alternative worth noting: the Julia ecosystem now hosts a data-driven macro ABM framework (BeforeIT.jl, associated with the Bank of Italy), useful as a reference implementation for the economic core even though Ceteris Paribus uses Rust.
 
@@ -1422,7 +1422,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Parties | Explicit parties over interest groups | Elections, coalitions, party entry |
 | Naming | Real states and provinces, generic party labels by family | Recognizable map, less curation and sensitivity |
 | IO and trade data | OECD ICIO 2025 edition (1995-2022, 80+ economies) + BACI | About 115 economies imputed |
-| Licence | Closed source for now (supersedes open source; ADR 0005) | Restricted data allowed until it is replaced or cleared; Apache-2.0 / MIT on opening |
+| Licence | Open source and non-commercial (owner, 28 Oct 2026; supersedes the closed-source fallback of ADR 0005) | Apache-2.0 / MIT code; each user downloads the data, so non-commercial sources are acceptable; nothing restricted is bundled |
 | LLM leaders | Out of v1 | Tier 2 deferred |
 | First release | 1.0 at the end of P9 (calibrated, validated economic world; P6 and P7 are 2.0, ADR 0136) | No public partial builds |
 | Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-\*, Python package ceteris, CLI ceteris; check crates.io, PyPI and GitHub before P0 |
