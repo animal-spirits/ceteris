@@ -2,4 +2,5 @@
 //! mineral sites, and the map's fill buffers.
 
 pub mod raster_terrain;
+pub mod resources;
 pub mod sphere;
