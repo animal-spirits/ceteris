@@ -40,6 +40,29 @@ Option 3. All are views; none touch state.
 - Party colours: real colours per party and country (red is the left in Europe, the right in the
   United States), from ParlGov and Wikidata, curated for large countries first.
 - Music: regional open-licence music and the synth's regional flavour (ADR 0137).
+- Local standards (owner, 2026-10-28), all following the seat and the game date:
+  - Numbers, money and dates from CLDR via ICU4X: grouping (lakh and crore, 万 and 亿),
+    optional native digits, currency position, percent spacing, accounting negatives in
+    parentheses where conventional, long and short scale in words (billón, Milliarde).
+  - Clock and week: 12- or 24-hour time, the capital's UTC offset (India +5:30, Nepal +5:45,
+    one zone for China), first day of the week, weekend days by date (Saudi Arabia Thursday-
+    Friday until June 2013), national holidays marked on the date bar.
+  - Units and accounts: imperial units where used, local land units beside hectares (acres, mu,
+    bigha, tsubo, sotka), the fiscal year start in budget panels.
+  - Finance charts: rises in red where that is the convention (China, Japan, Korea, Taiwan),
+    with a setting to override.
+  - Map: disputed boundaries from the seat's point of view (Natural Earth worldview sets), a
+    Pacific-centred world view for East Asian and Oceanian seats, route shields in local
+    signage style (checked against each sign manual), traffic and trade particles on the local
+    driving side, local names for administrative levels.
+  - Documents: A4 or US Letter proportions; a signature, a personal seal (Japan), a red office
+    seal (China) or a round blue seal (Russia); right-to-left layout for Arabic, Persian and
+    Hebrew; local quotation marks; optional vertical setting for Chinese and Japanese place
+    names; ministry names as they stood on the date.
+  - People: name order and customs (family name first, patronymics, two surnames, nasab,
+    academic titles) for generated and real names.
+  - Ballots: the local voting mark on results cards (cross, stamp, filled oval, handwritten
+    name, indelible ink), or an honest note where no competitive national ballot exists.
 - Excluded: ethnicity or religion as a visual skin, costume portraits, faith symbols as themes,
   exoticizing ornament. Religion may appear only where the data already carries it (an emblem,
   a calendar in civil use).
