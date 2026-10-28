@@ -237,3 +237,23 @@ fn unknown_source_is_named() {
         "fetch.toml names sources missing from sources.toml: ['x']"
     );
 }
+
+#[test]
+fn derived_manual_entry_is_never_downloaded() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join(ceteris_pack::sources::CONFIG_DIR);
+    fs::create_dir_all(&config).unwrap();
+    fs::write(config.join("sources.toml"), "[[source]]\nid = \"a\"\n").unwrap();
+    fs::write(
+        config.join("fetch.toml"),
+        "[[file]]\nsource = \"a\"\nname = \"band.tif\"\nmanual = true\nderived_from = \"all.nc\"\ncommand = \"convert\"\nsha256 = \"s\"\nbytes = 3\nurl = \"http://127.0.0.1:1/band.tif\"\n",
+    )
+    .unwrap();
+    let found = fetch::entries(root.path()).unwrap();
+    assert!(found[0].manual);
+    let cache = tempfile::tempdir().unwrap();
+    let error = fetch::fetch(&found[0], cache.path()).unwrap_err();
+    assert!(matches!(error, FetchError::Manual { .. }));
+    assert!(!cache.path().join("band.tif").exists());
+    assert!(!cache.path().join("band.tif.part").exists());
+}

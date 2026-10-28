@@ -49,7 +49,7 @@ MIN_WORKING_AGE = 1000.0
 M3_PER_BOE = 5800 * 0.0283168466
 
 SPAM = "spam2000v3.0.7_global_physical-area.geotiff.zip"
-KUMMU = "GDP_PPP_1990_2015_5arcmin_v2.nc"
+KUMMU = "kummu_gdp_ppp_2000_5arcmin.tif"
 SEDS = "Complete_SEDS.csv"
 # SEDS series: crude oil production and marketed natural gas production, billion Btu.
 SEDS_SERIES = ("PAPRB", "NGMPB")
@@ -547,10 +547,8 @@ def eia_oil_gas(
 
 
 def gridded_gdp(path: Path, cells: pa.Table) -> np.ndarray:
-    """Kummu et al. gridded GDP (PPP, constant 2011 international dollars) of `YEAR` per province."""
-    with rasterio.open(path) as ds:
-        band = next(b for b in range(1, ds.count + 1) if ds.tags(b).get("NETCDF_DIM_time") == str(YEAR))
-    return people.province_population(path, cells, band=band)
+    """Kummu et al. gridded GDP (PPP, constant 2011 international dollars) of 2000 per province."""
+    return people.province_population(path, cells)
 
 
 def mineral_sites(provinces: pa.Table) -> np.ndarray:
