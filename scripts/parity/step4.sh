@@ -4,13 +4,18 @@
 # Python side dumps what it derives (step4_dump.py); the Rust `parity` test of ceteris-reference
 # reads the dump, recomputes everything from the same export and prints each quantity's largest
 # relative difference. The dense kernels (P x P per good) are compared on the fixture only.
+# The export and the dumps stay in WORK_DIR.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+work="${1:?usage: step4.sh WORK_DIR (created; must not exist)}"
+if [ -e "$work" ]; then
+    echo "step4.sh: $work exists" >&2
+    exit 1
+fi
+mkdir -p "$work"
 cargo build --release --bin ceteris
 "$root/target/release/ceteris" export --pack "$pack" --out "$work/pack-export"
 
