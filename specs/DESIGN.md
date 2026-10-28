@@ -4,7 +4,7 @@
 
 ## 1. Executive Summary
 
-Ceteris Paribus (code name `ceteris`) is a deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post). It stays closed source until the restricted data sources it uses are replaced or cleared.
+Ceteris Paribus (code name `ceteris`) is a deterministic, forkable, agent-based world simulator that starts on 1 January 2000 and runs open-ended. Its economic core is a province-level production-and-trade model disciplined by quantitative trade theory, presented through a Paradox-style map in a native desktop app. Any state variable or parameter can be edited before a run (ex ante) or at any tick during it (ex post). It is open source and non-commercial, and each user downloads the source data.
 
 Six design bets carry the project:
 
