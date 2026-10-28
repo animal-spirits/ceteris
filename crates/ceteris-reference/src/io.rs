@@ -7,7 +7,7 @@ use std::path::Path;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt64Type};
 use arrow_array::{Array, RecordBatch};
-use arrow_cast::cast;
+use arrow_cast::{CastOptions, cast_with_options};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
 
@@ -452,7 +452,12 @@ impl Table {
                 if a.null_count() > 0 {
                     return Err(format!("{}.{col}: nulls", self.name));
                 }
-                cast(a, to).map_err(|e| format!("{}.{col}: {e}", self.name))
+                // A safe cast turns a value out of the target's range into a null.
+                let options = CastOptions {
+                    safe: false,
+                    ..CastOptions::default()
+                };
+                cast_with_options(a, to, &options).map_err(|e| format!("{}.{col}: {e}", self.name))
             })
             .collect()
     }
@@ -654,4 +659,28 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
         return Err("an enterprise has a nonpositive value-added coefficient".into());
     }
     inp.pigl_weights().map(|_| ())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Int32Array, RecordBatch};
+
+    use super::Table;
+
+    fn table(values: Vec<i32>) -> Table {
+        let column: ArrayRef = Arc::new(Int32Array::from(values));
+        Table {
+            name: "t".into(),
+            batches: vec![RecordBatch::try_from_iter([("index", column)]).unwrap()],
+        }
+    }
+
+    #[test]
+    fn negative_index_is_an_error() {
+        assert_eq!(table(vec![0, 3]).usize("index").unwrap(), [0, 3]);
+        let err = table(vec![2, -1]).usize("index").unwrap_err();
+        assert!(err.starts_with("t.index: "), "{err}");
+    }
 }
