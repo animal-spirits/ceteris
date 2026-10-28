@@ -55,12 +55,13 @@ struct LegIndex {
     c_to: Vec<usize>,
 }
 
-/// Per-leg factors of one routing pass.
+/// Per-leg factors of one routing pass: domestic, access and crossing legs, in the order of the
+/// kernel tables.
 #[derive(Clone, Copy)]
-struct Factors<'f> {
-    dom: &'f [f64],
-    acc: &'f [f64],
-    cro: &'f [f64],
+pub struct Factors<'f> {
+    pub dom: &'f [f64],
+    pub acc: &'f [f64],
+    pub cro: &'f [f64],
 }
 
 /// The inputs with every derived quantity an evaluation uses, computed once.
@@ -166,7 +167,7 @@ fn bincount(index: &[usize], weights: impl IntoIterator<Item = f64>, n: usize) -
 }
 
 /// (P, G) to flat good-major.
-fn good_major(m: &Mat) -> Vec<f64> {
+pub fn good_major(m: &Mat) -> Vec<f64> {
     let mut out = Vec::with_capacity(m.data.len());
     for g in 0..m.cols {
         out.extend((0..m.rows).map(|p| m[(p, g)]));
@@ -175,7 +176,7 @@ fn good_major(m: &Mat) -> Vec<f64> {
 }
 
 /// Flat good-major to (P, G).
-fn cells(v: &[f64], n_p: usize, n_g: usize) -> Mat {
+pub fn cells(v: &[f64], n_p: usize, n_g: usize) -> Mat {
     Mat::from_fn(n_p, n_g, |p, g| v[g * n_p + p])
 }
 
@@ -317,7 +318,7 @@ impl<'a> Model<'a> {
 
     /// sum over routes o -> d of the route's leg factors times w_o, for every destination d, home
     /// route (factor 1) included: the origin-side access sums of `Kernel::origin_access_into`.
-    fn origin_sums(&self, w: &[f64], f: Factors) -> Vec<f64> {
+    pub fn origin_sums(&self, w: &[f64], f: Factors) -> Vec<f64> {
         let inp = self.inp;
         let l = &self.legs;
         let (n_pg, n_ng) = (w.len(), inp.n_goods() * inp.n_gateways());
@@ -346,7 +347,7 @@ impl<'a> Model<'a> {
 
     /// sum over routes o -> d of the route's leg factors times r_d, for every origin o, home
     /// route included: the forward pass of `dispatch`.
-    fn destination_sums(&self, r: &[f64], f: Factors) -> Vec<f64> {
+    pub fn destination_sums(&self, r: &[f64], f: Factors) -> Vec<f64> {
         let inp = self.inp;
         let l = &self.legs;
         let (n_pg, n_ng) = (r.len(), inp.n_goods() * inp.n_gateways());
