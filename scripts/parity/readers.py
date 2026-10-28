@@ -76,6 +76,38 @@ def pack_codes():
     return ipc.open_file(PACK / "countries.arrow").read_all().column("code").to_pylist()
 
 
+KEY = CACHE / "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"
+FIXTURE_GOODS = Path(__file__).resolve().parents[2] / "tests" / "golden" / "p2-fixture" / "goods.arrow"
+
+
+def theta_dump(bands=False):
+    hs_cpa = goods.read_hs_cpa(KEY)
+    shares = goods.hs_goods_shares(hs_cpa)
+    value = theta.baci_values(BACI)
+    theta_raw, value_raw = theta.by_good(hs_cpa, shares, value)
+    sectors = theta.sector_values(hs_cpa, shares, value)
+    t, v = theta.caliendo_parro_with_value(BACI, KEY)
+    of, class_theta = theta.classes(t[:7], v[:7])
+    if bands:
+        centre, se = theta.class_bands(sectors[:7], of)
+        return {"centre": centre, "se": se}
+    return {
+        "theta_raw": theta_raw,
+        "value_raw": value_raw,
+        "sector_values": sectors,
+        "theta": t,
+        "value": v,
+        "class_of": of,
+        "class_theta": class_theta,
+    }
+
+
+def theta_fixture():
+    g = ipc.open_file(FIXTURE_GOODS).read_all()
+    of, class_theta = theta.classes(g["theta"].to_numpy()[:7], g["weight"].to_numpy()[:7])
+    return {"class_of": of, "class_theta": class_theta}
+
+
 def io_fields(by_code):
     keep = ("output", "va", "io", "final_demand_shares", "coal_share")
     return {k: {f: getattr(c, f) for f in keep} for k, c in by_code.items()}
@@ -109,6 +141,9 @@ READERS = {
     "hs-cpa": lambda: goods.read_hs_cpa(CACHE / "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx"),
     "baci-by-product": lambda: goods.baci_by_product(BACI),
     "baci-values": lambda: theta.baci_values(BACI),
+    "theta": theta_dump,
+    "theta-bands": lambda: theta_dump(bands=True),
+    "theta-fixture": theta_fixture,
     "trade-by-country": lambda: gateways.trade_by_country(BACI, people.read_codes(ADMIN0)[0], pack_codes()),
     "rates": lambda: tariffs.read_rates(CACHE),
     "cepii": lambda: tariffs.read_cepii(CACHE / tariffs.GRAVITY),

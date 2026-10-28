@@ -122,8 +122,11 @@ pub fn py_sum(values: impl IntoIterator<Item = f64>) -> f64 {
 }
 
 /// `np.median` and `statistics.median`: the middle value, or the mean of the two middle values of
-/// an even count; None for no values.
+/// an even count; None for no values, NaN when any value is NaN (as numpy's).
 pub fn median(mut values: Vec<f64>) -> Option<f64> {
+    if values.iter().any(|x| x.is_nan()) {
+        return Some(f64::NAN);
+    }
     values.sort_by(f64::total_cmp);
     let n = values.len();
     match n {
@@ -260,6 +263,7 @@ mod tests {
         assert_eq!(median(vec![3.0, 1.0, 2.0]), Some(2.0));
         assert_eq!(median(vec![4.0, 1.0, 2.0, 3.0]), Some(2.5));
         assert_eq!(median(vec![]), None);
+        assert!(median(vec![1.0, f64::NAN, 2.0]).unwrap().is_nan());
     }
 
     #[test]

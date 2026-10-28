@@ -3,8 +3,9 @@
     python -I econ_tables.py MODULE PYTHON_DIR RUST_DIR OUT_DIR
 
 Every Rust table must have exactly the columns of `RUST` (the tables built in Rust so far), so a
-column the port leaves out or adds fails here; the Python tables of `COMPLETE` must have them too. The MODULE's columns of each table are written from
-both builds into OUT_DIR/python and OUT_DIR/rust.
+column the port leaves out or adds fails here; the Python tables of `COMPLETE` must have them
+too. The MODULE's columns of each table are written from both builds into OUT_DIR/python and
+OUT_DIR/rust.
 """
 
 import sys

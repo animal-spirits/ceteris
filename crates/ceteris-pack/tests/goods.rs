@@ -288,9 +288,9 @@ fn caliendo_parro_values_are_transcribed() {
         .collect();
     assert_eq!(rows.len(), 20);
     for (row, sector) in rows.iter().zip(CALIENDO_PARRO) {
-        assert_eq!(row.0, sector.0);
-        assert_eq!(row.1, sector.1, "{}", sector.0);
-        assert_eq!((row.2, row.3), (sector.2, sector.3), "{}", sector.0);
+        assert_eq!(row.0, sector.name);
+        assert_eq!(row.1, sector.divisions, "{}", sector.name);
+        assert_eq!((row.2, row.3), (sector.theta, sector.se), "{}", sector.name);
     }
     let thetas: Vec<f64> = rows.iter().map(|r| r.2).collect();
     assert_eq!(thetas.iter().copied().fold(f64::INFINITY, f64::min), 0.39);
@@ -380,7 +380,7 @@ fn every_traded_activity_of_the_key_has_a_sector_estimate() {
     assert!(traded.iter().all(|c| known.contains(c.as_str())));
     let divisions: std::collections::BTreeSet<&str> = CALIENDO_PARRO
         .iter()
-        .flat_map(|s| s.1.iter().copied())
+        .flat_map(|s| s.divisions.iter().copied())
         .collect();
     assert!(REV3_OF_CPA.iter().all(|(_, d)| divisions.contains(d)));
     // Coal, crude oil and natural gas sit wholly in their goods.
@@ -406,6 +406,19 @@ fn weights() -> Option<[f64; N_GOODS]> {
 fn cp() -> Option<([f64; N_GOODS], [f64; N_GOODS])> {
     static CP: OnceLock<Option<([f64; N_GOODS], [f64; N_GOODS])>> = OnceLock::new();
     *CP.get_or_init(|| Some(caliendo_parro_with_value(&cached(BACI)?, &cached(HS_KEY)?).unwrap()))
+}
+
+#[test]
+fn key_lines_ascend_so_sums_run_in_the_python_order() {
+    let Some(path) = cached(HS_KEY) else { return };
+    let mut lines = Vec::new();
+    for r in ceteris_pack::read::xlsx::sheet(&path, ceteris_pack::read::baci::KEY_SHEET).unwrap() {
+        if r["HS-version"].number() == Some(0.0) {
+            lines.push(r["HS-code"].to_text());
+        }
+    }
+    assert!(lines.len() > 5000);
+    assert!(lines.windows(2).all(|w| w[0] < w[1]));
 }
 
 #[test]
