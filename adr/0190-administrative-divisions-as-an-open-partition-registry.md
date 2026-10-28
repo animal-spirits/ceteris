@@ -1,6 +1,6 @@
 # 0190. Administrative divisions as an open partition registry
 
-Status: proposed
+Status: proposed; government side (bodies, competences, status effects, appointments, bills) in 0195
 Date: 2026-10-28
 Design sections: 5.1, 5.2, 10.3, 14.2, 20.1, 23.2; amends ADR 0115
 
