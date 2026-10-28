@@ -55,7 +55,7 @@ for spec in "${readers[@]}"; do
     if cmp -s "$work/py.json" "$work/rs.json"; then
         echo "ok   $spec ($(wc -c <"$work/py.json" | tr -d ' ') bytes)"
     else
-        if python3 -I - "$work/py.json" "$work/rs.json" "$tol" <<'PY'
+        if [ "$tol" != 0 ] && python3 -I - "$work/py.json" "$work/rs.json" "$tol" <<'PY'
 import json, sys
 
 py, rs = (json.load(open(p)) for p in sys.argv[1:3])
@@ -65,8 +65,8 @@ worst = [0.0, None]
 
 def walk(a, b, path):
     if isinstance(a, float) and isinstance(b, float):
-        if a != b:
-            rel = abs(a - b) / max(abs(a), abs(b))
+        if a != b and not (a != a and b != b):
+            rel = float("inf") if a != a or b != b else abs(a - b) / max(abs(a), abs(b))
             if rel > worst[0]:
                 worst[:] = [rel, path]
         return None
