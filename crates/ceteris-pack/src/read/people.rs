@@ -7,7 +7,7 @@ use std::path::Path;
 use csv::StringRecord;
 
 use super::natural_earth::{country_names, read_codes};
-use super::wdi::{read_wdi, read_wdi_regions};
+use super::wdi::{Names, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, Csv, YEAR, cell, float, int, nearest, open_csv, with_member};
 use crate::numeric::{fsum, pairwise_sum};
@@ -26,11 +26,26 @@ pub const SWIID_NAMES: [(&str, &str); 7] = [
     ("St. Vincent and Grenadines", "VCT"),
     ("São Tomé and Príncipe", "STP"),
 ];
+/// Countries of 1 January 2000 that the sources split or rename: the source economies they combine.
+pub const PARTS: [(&str, &[&str]); 3] = [
+    ("YUG", &["SRB", "MNE"]),
+    ("SDN", &["SDN", "SSD"]),
+    ("ANT", &["CUW", "SXM"]),
+];
 /// Barro-Lee uses older World Bank codes.
 pub const BARRO_LEE_CODES: [(&str, &str); 3] = [("ROM", "ROU"), ("ZAR", "COD"), ("TMP", "TLS")];
 
 /// Education shares by economy: below secondary, secondary, tertiary.
 pub type EduShares = BTreeMap<String, [f64; N_EDU]>;
+
+/// The source economies of pack country `code`: its `PARTS`, else its ISO code (`iso`, by Natural
+/// Earth code), else the code itself.
+pub fn parts(code: &str, iso: &Names) -> Vec<String> {
+    match PARTS.iter().find(|(c, _)| *c == code) {
+        Some((_, ps)) => ps.iter().map(|p| (*p).to_owned()).collect(),
+        None => vec![iso.get(code).map_or(code, String::as_str).to_owned()],
+    }
+}
 
 /// WIC education level of each WIC code.
 fn wic_level(edu: &str) -> Option<usize> {
