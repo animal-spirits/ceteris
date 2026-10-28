@@ -20,6 +20,7 @@
 6. Tables: arrow-rs arrays and typed Rust structs with `BTreeMap`/`Vec` groupings; no Polars (determinism, size).
 7. Geometry verdicts (2026-10-28, after the 3a spike): polygon overlay (intersection, difference, multi-input union, line intersection lengths) and `coverage_simplify` run through GEOS, pinned to 3.15 (owner choice; parity is checked against shapely built on the same GEOS 3.15, and any change from today's pack is absorbed by the 4f re-pin). GEOS is owner-side: the pack's geo layer and the web outputs are built by the owner and shipped prebuilt; players never need GEOS. Operations the spike found exact in pure Rust stay pure Rust. The `coverage_simplify` call lives in a small owner-side crate exempt from `unsafe_code = "forbid"`.
 8. Toolchain: move to the latest stable Rust (1.99.1) and the latest h3o (0.11) and geo (0.33), re-checking every parity gate already passed.
+9. Parity after 3b (2026-10-28): H3 cell `area_km2` and area-weighted terrain means hold to 1e-8 relative (h3o and H3 C cell boundaries differ in the last bits; the area formula is identical). Fills compare per feature by triangle area against polygon area within 1e-4, not by bytes (mapbox_earcut overlaps up to 4% on some holed polygons; the earcut crate does not). Recorded in ADR 0113's step 3 As built entry.
 
 ## Controller rulings (cost if wrong in brackets)
 
