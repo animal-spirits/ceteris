@@ -29,10 +29,10 @@ committed one.
 
 `step2-people.sh`, `step2-icio.sh`, `step2-goods.sh` and `step2-downscale.sh` run `step2-econ.sh
 MODULE` (the tariffs and gateways run it directly: `step2-econ.sh tariffs`, `step2-econ.sh
-gateways`): it builds the econ tables with Python and with `ceteris pack build --econ-only`, checks with `econ_tables.py`
-that every Rust table has exactly the columns listed there, selects the module's columns from
-both builds, compares them, and runs the module's tests in release mode (their WorldPop tests
-skip in debug builds).
+gateways`): it builds the econ tables with Python and with `ceteris pack build --econ-only`,
+checks with `econ_tables.py` that every Rust table has exactly the columns listed there, selects
+the module's columns from both builds, compares them, and runs the module's tests in release mode
+(their WorldPop tests skip in debug builds).
 
 `step2-downscale.sh` also compares, as readers, the base H3 cell and owning province of every GEM
 coal mine and oil and gas field (`point-owners coal|oil-gas`: the points `point_sums` places) and

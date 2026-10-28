@@ -4,7 +4,8 @@
 
 Prints the first structural difference and the largest relative float difference. Exits 0 when the
 files are byte-identical, or when TOLERANCE is above 0, the structures match and every float pair
-lies within it (NaN matches only NaN, an infinity only the same infinity); otherwise 1. At tolerance 0 only identical bytes pass.
+lies within it (NaN matches only NaN, an infinity only the same infinity); otherwise 1. At
+tolerance 0 only identical bytes pass.
 """
 
 import json
