@@ -39,14 +39,14 @@ fn read_dose_takes_manufacturing_gva_of_the_nearest_year_and_its_coverage() {
         (
             "AAA".to_owned(),
             Dose {
-                values: regions(&[("R1", 20.0), ("R2", 30.0)]),
+                values: vec![("R1".to_owned(), 20.0), ("R2".to_owned(), 30.0)],
                 coverage: 0.5,
             },
         ),
         (
             "CCC".to_owned(),
             Dose {
-                values: regions(&[("S1", 20.0)]),
+                values: vec![("S1".to_owned(), 20.0)],
                 coverage: 1.0,
             },
         ),

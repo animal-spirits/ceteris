@@ -11,10 +11,12 @@ import re
 import sys
 from pathlib import Path
 
+import h3.api.basic_int as h3
 import numpy as np
 import pyarrow.ipc as ipc
 
 from ceteris.packs import fetch
+from ceteris.packs.econ import build as econ_build
 from ceteris.packs.econ import downscale, gateways, goods, icio, people, tariffs, theta
 
 CACHE = fetch.CACHE
@@ -66,6 +68,29 @@ def province_population(raster):
     if raster == "kummu":
         return downscale.gridded_gdp(CACHE / downscale.KUMMU, cells)
     raise ValueError(raster)
+
+
+def point_owners(kind):
+    owner = people.CellOwner(ipc.open_file(PACK / "cells.arrow").read_all())
+    path = CACHE / econ_build.GEM[0 if kind == "coal" else 1]
+    assets = downscale.read_gem_coal(path) if kind == "coal" else downscale.read_gem_oil_gas(path)
+    return [[h3.latlng_to_cell(a.lat, a.lon, owner.base), owner.of_point(a.lat, a.lon)] for a in assets]
+
+
+def proxies():
+    """`downscale.load_proxies` with the inputs `econ.build.build` gives it."""
+    provinces = ipc.open_file(PACK / "provinces.arrow").read_all()
+    cells = ipc.open_file(PACK / "cells.arrow").read_all()
+    country = provinces.column("country").to_pylist()
+    iso, _ = people.read_codes(ADMIN0)
+    obs = people.load_observed(CACHE, ADMIN0)
+    raw = people.province_population(CACHE / econ_build.WORLDPOP, cells)
+    population = people.scale_to_national(raw, country, people.national_population(pack_codes(), obs, iso))
+    gem = tuple(CACHE / n for n in econ_build.GEM)
+    p, match = downscale.load_proxies(
+        CACHE, provinces, cells, population, dict(obs.population), gem if all(g.exists() for g in gem) else None
+    )
+    return {"proxies": p, "match": match}
 
 
 def population_2000():
@@ -155,6 +180,8 @@ READERS = {
     "gem-oil-gas": lambda: downscale.read_gem_oil_gas(CACHE / "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx"),
     "seds": lambda: downscale.read_seds(CACHE / downscale.SEDS),
     "population": province_population,
+    "point-owners": point_owners,
+    "proxies": proxies,
 }
 
 

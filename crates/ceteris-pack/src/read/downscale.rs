@@ -26,8 +26,8 @@ pub const FIELD_PRODUCED: [&str; 4] = ["operating", "mothballed", "abandoned", "
 /// One country's DOSE regions in the year nearest 2000.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dose {
-    /// Manufacturing GVA (local currency) by region name.
-    pub values: BTreeMap<String, f64>,
+    /// Manufacturing GVA (local currency) by region name, in the order of the regions' first rows.
+    pub values: Vec<(String, f64)>,
     /// Population of these regions over the country's, at most 1.
     pub coverage: f64,
 }
@@ -50,7 +50,7 @@ pub fn read_dose(
         csv.col("pop")?,
     );
     let origin = path.display().to_string();
-    type Regions = BTreeMap<String, f64>;
+    type Regions = Vec<(String, f64)>;
     let mut values: BTreeMap<String, BTreeMap<i64, Regions>> = BTreeMap::new();
     let mut people: BTreeMap<String, ByYear> = BTreeMap::new();
     let mut row = StringRecord::new();
@@ -63,13 +63,16 @@ pub fn read_dose(
                 int(cell(&row, yr), &origin)?,
             );
             let code = cell(&row, gid);
-            *values
+            let regions = values
                 .entry(code.to_owned())
                 .or_default()
                 .entry(y)
-                .or_default()
-                .entry(cell(&row, region).to_owned())
-                .or_insert(0.0) += m * p;
+                .or_default();
+            let name = cell(&row, region);
+            match regions.iter_mut().find(|(r, _)| r == name) {
+                Some((_, v)) => *v += m * p,
+                None => regions.push((name.to_owned(), 0.0 + m * p)),
+            }
             *people
                 .entry(code.to_owned())
                 .or_default()

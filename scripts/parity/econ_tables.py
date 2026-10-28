@@ -57,14 +57,28 @@ ICIO = {
 GOODS_TABLE = {"econ_goods.arrow": ["name", "traded", "weight", "coverage"]}
 TARIFFS = {"econ_tariffs.arrow": ["importer", "exporter", "group", "rate", "agreement", "imputed"]}
 GATEWAYS = {"gateways.arrow": ["node", "country", "kind"]}
-MODULES = {"people": PEOPLE, "icio": ICIO, "goods": GOODS_TABLE, "tariffs": TARIFFS, "gateways": GATEWAYS}
+DOWNSCALE = {
+    "econ_provinces.arrow": [
+        *(f"va_{g}" for g in GOODS),
+        *(f"va_imputed_{g}" for g in GOODS),
+        *(f"va_level_{g}" for g in GOODS),
+    ]
+}
+MODULES = {
+    "people": PEOPLE,
+    "icio": ICIO,
+    "goods": GOODS_TABLE,
+    "tariffs": TARIFFS,
+    "gateways": GATEWAYS,
+    "downscale": DOWNSCALE,
+}
 RUST = {
     **GOODS_TABLE,
     **TARIFFS,
     **GATEWAYS,
     "econ_countries.arrow": ICIO["econ_countries.arrow"] + PEOPLE["econ_countries.arrow"][1:],
     "econ_io.arrow": ICIO["econ_io.arrow"],
-    "econ_provinces.arrow": PEOPLE["econ_provinces.arrow"],
+    "econ_provinces.arrow": PEOPLE["econ_provinces.arrow"] + DOWNSCALE["econ_provinces.arrow"],
     "econ_pops.arrow": PEOPLE["econ_pops.arrow"],
 }
 # Tables whose Python columns are all ported: the Python schema must be the same list.
@@ -72,6 +86,7 @@ COMPLETE = [
     "econ_goods.arrow",
     "econ_countries.arrow",
     "econ_io.arrow",
+    "econ_provinces.arrow",
     "econ_pops.arrow",
     "econ_tariffs.arrow",
     "gateways.arrow",

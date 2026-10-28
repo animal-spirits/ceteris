@@ -8,9 +8,12 @@ use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{ArrowPrimitiveType, Float64Type, UInt8Type, UInt32Type};
-use arrow_array::{Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray};
+use arrow_array::{
+    Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray, UInt8Array,
+};
 use arrow_ipc::reader::FileReader;
 
+use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::{goods, icio, people, tariffs};
 use crate::raster::geotiff;
@@ -87,6 +90,84 @@ fn values<T: ArrowPrimitiveType>(path: &Path, column: &str) -> Result<Vec<T::Nat
     Ok(out)
 }
 
+/// One boolean column of a pack table, every batch in order.
+fn flags(path: &Path, column: &str) -> Result<Vec<bool>, String> {
+    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
+    let reader =
+        FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch.map_err(|e| fail(&e))?;
+        let a = batch
+            .column_by_name(column)
+            .ok_or_else(|| fail(&format!("no column {column}")))?;
+        let a = a
+            .as_boolean_opt()
+            .ok_or_else(|| fail(&format!("{column} is not boolean")))?;
+        if a.null_count() > 0 {
+            return Err(fail(&format!("null in {column}")));
+        }
+        out.extend(a.values().iter());
+    }
+    Ok(out)
+}
+
+/// The provinces table columns the downscaling proxies read.
+pub fn read_geography(pack: &Path) -> Result<Geography, String> {
+    let path = pack.join("provinces.arrow");
+    let [id, country] = strings(&path, ["id", "country"])?;
+    let mut res: [Vec<u32>; RESOURCES.len()] = Default::default();
+    for (r, name) in res.iter_mut().zip(RESOURCES) {
+        *r = values::<UInt32Type>(&path, &format!("res_{name}"))?;
+    }
+    Ok(Geography {
+        id,
+        country,
+        coastal: flags(&path, "coastal")?,
+        lon: values::<Float64Type>(&path, "lon")?,
+        lat: values::<Float64Type>(&path, "lat")?,
+        res,
+    })
+}
+
+/// `econ_provinces.arrow` columns of the downscaled VA (million USD per year), its imputed flag
+/// and proxy level by good.
+fn va_columns(placed: &Downscaled) -> Vec<(String, ArrayRef)> {
+    let n = goods::NAMES.len();
+    let mut cols: Vec<(String, ArrayRef)> = Vec::new();
+    for g in 0..n {
+        cols.push((
+            format!("va_{g}"),
+            Arc::new(placed.va.iter().map(|v| v[g]).collect::<Float64Array>()),
+        ));
+    }
+    for g in 0..n {
+        cols.push((
+            format!("va_imputed_{g}"),
+            Arc::new(
+                placed
+                    .imputed
+                    .iter()
+                    .map(|v| Some(v[g]))
+                    .collect::<BooleanArray>(),
+            ),
+        ));
+    }
+    for g in 0..n {
+        cols.push((
+            format!("va_level_{g}"),
+            Arc::new(
+                placed
+                    .level
+                    .iter()
+                    .map(|v| v[g] as u8)
+                    .collect::<UInt8Array>(),
+            ),
+        ));
+    }
+    cols
+}
+
 fn read_graph(pack: &Path) -> Result<(Nodes, Edges), String> {
     let (nodes, edges) = (pack.join("nodes.arrow"), pack.join("edges.arrow"));
     Ok((
@@ -145,7 +226,8 @@ fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
 /// Writes the econ tables of `pack` (its P1 tables) into `out`, reading the sources from `cache`.
 pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, String> {
     let [codes, sovereign] = strings(&pack.join("countries.arrow"), ["code", "sovereign"])?;
-    let [country] = strings(&pack.join("provinces.arrow"), ["country"])?;
+    let geo = read_geography(pack)?;
+    let country = geo.country.clone();
     let admin0 = cache.join(ADMIN0);
 
     let (iso, _) = read_codes(&admin0)?;
@@ -182,6 +264,40 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &worldpop,
     )?;
 
+    let working_age = population
+        .iter()
+        .zip(&country)
+        .map(|(p, c)| {
+            labour
+                .get(c)
+                .map(|l| p * l.working_age_share)
+                .ok_or_else(|| format!("no labour inputs for {c}"))
+        })
+        .collect::<Result<Vec<f64>, String>>()?;
+    let gem = GEM.map(|n| cache.join(n));
+    let gem = gem
+        .iter()
+        .all(|p| p.exists())
+        .then(|| (gem[0].clone(), gem[1].clone()));
+    let (proxies, matched) = downscale::load_proxies(
+        cache,
+        &geo,
+        &mut owner,
+        &population,
+        &obs.population,
+        &iso,
+        gem,
+    )?;
+    let placed = downscale::allocate(
+        &world,
+        &Provinces {
+            country: country.clone(),
+            population: population.clone(),
+            working_age,
+        },
+        &proxies,
+    )?;
+
     let weight = goods::weights_from_baci(&cache.join(BACI), &cache.join(HS_KEY))?;
 
     let trade = trade_by_country(&cache.join(BACI), &iso, &codes)?;
@@ -214,11 +330,11 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         write(out, "econ_goods.arrow", goods_columns(weight))?,
         write(out, "econ_countries.arrow", countries_columns)?,
         write(out, "econ_io.arrow", icio::io_columns(&codes, &world)?)?,
-        write(
-            out,
-            "econ_provinces.arrow",
-            people::province_columns(&country, &population, &labour)?,
-        )?,
+        write(out, "econ_provinces.arrow", {
+            let mut cols = people::province_columns(&country, &population, &labour)?;
+            cols.extend(va_columns(&placed));
+            cols
+        })?,
         write_batch(
             out,
             "econ_pops.arrow",
@@ -230,6 +346,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     Ok(BuildReport {
         tables,
         summary: vec![
+            downscale::report(&placed, &matched),
             tariffs::report(&rates, &codes, &trade),
             gateways::report(&gw, &codes),
         ],
