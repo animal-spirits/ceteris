@@ -1,10 +1,12 @@
 //! Readers of the econ sources in the fetch cache: each turns one file into typed rows, as the
 //! Python readers of `packs/econ` do, value for value.
 
+pub mod baci;
 pub mod dump;
 pub mod icio;
 pub mod natural_earth;
 pub mod people;
+pub mod tariffs;
 pub mod wdi;
 pub mod xlsx;
 
@@ -122,6 +124,11 @@ impl<R: Read> Csv<R> {
             .get(name)
             .copied()
             .ok_or_else(|| format!("{}: no column {name}", self.origin))
+    }
+
+    /// Byte offset just past the row read last.
+    pub fn offset(&self) -> u64 {
+        self.reader.position().byte()
     }
 
     /// Reads the next row into `row`; false at the end.

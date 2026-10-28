@@ -2,8 +2,13 @@
 //! JSON, for comparison with the Python reader (`scripts/parity/readers.py`).
 
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::PathBuf;
 
+use arrow_array::StringArray;
+use arrow_ipc::reader::FileReader;
+
+use super::baci::{baci_by_product, baci_values, read_hs_cpa, trade_by_country};
 use super::icio::{
     ADB_INCOME, CountryIo, MADDISON, Wdi, aggregate, exports, load_wdi, read_adb_income,
     read_maddison,
@@ -13,11 +18,12 @@ use super::people::{
     Observed, U_STAR_YEARS, load_observed, read_barro_lee, read_ilostat, read_ilostat_mean,
     read_pwt, read_wic,
 };
-use super::wdi::{read_wdi, read_wdi_regions};
+use super::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
+use super::wdi::{read_rates, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, YEAR};
-use crate::fetch;
 use crate::json::Json;
+use crate::{fetch, sources};
 
 pub const NAMES: &[&str] = &[
     "xlsx FILE SHEET",
@@ -38,9 +44,18 @@ pub const NAMES: &[&str] = &[
     "load-wdi",
     "icio-aggregate",
     "icio-exports",
+    "hs-cpa",
+    "baci-by-product",
+    "baci-values",
+    "trade-by-country",
+    "rates",
+    "cepii",
+    "dta",
 ];
 
 const ICIO: &str = "1995-2000_SML.zip";
+const BACI: &str = "BACI_HS92_V202601.zip";
+const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
 
 fn cache(name: &str) -> PathBuf {
     fetch::path_of(name)
@@ -103,6 +118,26 @@ fn wdi(w: Wdi) -> Json {
         ("manufacturing", w.manufacturing.into()),
         ("services", w.services.into()),
     ])
+}
+
+/// Codes of the pack's countries table, in its order.
+fn pack_codes() -> Result<Vec<String>, String> {
+    let path = sources::workspace_root().join("data/packs/2000/countries.arrow");
+    let file = File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let reader = FileReader::try_new(file, None).map_err(|e| e.to_string())?;
+    let mut codes = Vec::new();
+    for batch in reader {
+        let batch = batch.map_err(|e| e.to_string())?;
+        let column = batch
+            .column_by_name("code")
+            .ok_or("countries.arrow has no code column")?;
+        let column = column
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or("code is not a string column")?;
+        codes.extend(column.iter().map(|c| c.unwrap_or_default().to_owned()));
+    }
+    Ok(codes)
 }
 
 /// The output of reader `name` with its `args`.
@@ -168,6 +203,16 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
                 .map(|(k, c)| (k, country_io(c))),
         ),
         "icio-exports" => exports(&cache(ICIO), YEAR)?.into(),
+        "hs-cpa" => read_hs_cpa(&cache(HS_KEY))?.into(),
+        "baci-by-product" => baci_by_product(&cache(BACI))?.into(),
+        "baci-values" => baci_values(&cache(BACI))?.into(),
+        "trade-by-country" => {
+            let (iso, _) = read_codes(&admin0())?;
+            trade_by_country(&cache(BACI), &iso, &pack_codes()?)?.into()
+        }
+        "rates" => Json::list(read_rates(&cache_dir)?),
+        "cepii" => read_cepii(&cache(GRAVITY))?.into(),
+        "dta" => read_dta(&cache(DTA))?.into(),
         _ => {
             return Err(format!(
                 "unknown reader '{name}'; readers: {}",

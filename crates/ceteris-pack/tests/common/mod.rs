@@ -124,3 +124,71 @@ impl Uniform {
 pub fn approx(a: f64, b: f64, rel: f64) -> bool {
     (a - b).abs() <= rel * a.abs().max(b.abs()) || a == b
 }
+
+/// A cell value of `write_rows`.
+#[derive(Clone, Copy)]
+pub enum V<'a> {
+    T(&'a str),
+    N(f64),
+}
+
+/// A worksheet row of `write_rows`: header name and value.
+pub type Row<'a> = Vec<(&'a str, V<'a>)>;
+
+/// Writes an xlsx whose sheets hold `rows` under a header of every key, in order of first use;
+/// text as formula strings, numbers as plain cells.
+pub fn write_rows(path: &Path, sheets: &[(&str, Vec<Row>)]) -> PathBuf {
+    let column = |i: usize| {
+        if i < 26 {
+            char::from(b'A' + i as u8).to_string()
+        } else {
+            format!("A{}", char::from(b'A' + (i - 26) as u8))
+        }
+    };
+    let cell = |r: String, v: V| match v {
+        V::T(s) => format!(
+            r#"<c r="{r}" t="str"><v>{}</v></c>"#,
+            s.replace('&', "&amp;").replace('<', "&lt;")
+        ),
+        V::N(x) => format!(r#"<c r="{r}"><v>{x:?}</v></c>"#),
+    };
+    let data: Vec<(&str, String)> = sheets
+        .iter()
+        .map(|(name, rows)| {
+            let mut header: Vec<&str> = Vec::new();
+            for (k, _) in rows.iter().flatten() {
+                if !header.contains(k) {
+                    header.push(k);
+                }
+            }
+            let mut lines = vec![
+                header
+                    .iter()
+                    .enumerate()
+                    .map(|(j, h)| cell(format!("{}1", column(j)), V::T(h)))
+                    .collect::<String>(),
+            ];
+            for (n, row) in rows.iter().enumerate() {
+                lines.push(
+                    header
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(j, h)| {
+                            row.iter()
+                                .find(|(k, _)| k == h)
+                                .map(|(_, v)| cell(format!("{}{}", column(j), n + 2), *v))
+                        })
+                        .collect(),
+                );
+            }
+            let xml = lines
+                .iter()
+                .enumerate()
+                .map(|(n, x)| format!(r#"<row r="{}">{x}</row>"#, n + 1))
+                .collect();
+            (*name, xml)
+        })
+        .collect();
+    let refs: Vec<(&str, &str)> = data.iter().map(|(n, x)| (*n, x.as_str())).collect();
+    write_xlsx(path, &[], &refs)
+}
