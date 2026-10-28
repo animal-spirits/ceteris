@@ -3,10 +3,11 @@
 //! `CETERIS_PPML_PARITY`, the dump directory: it reads DIR/designs and DIR/python, writes the
 //! Rust fits to DIR/rust in the same layout (for `ceteris pack compare`) and checks every column
 //! to the 1e-9 of an iterative solve, relative, except where a value is rounding noise around 0.
-//! There the mixed form |a - b| <= 1e-9 max(1, |a|, |b|) applies: to every column of a design
-//! whose regressor the fixed effects absorb (its coefficient, standard error and covariances are
-//! noise), and to the coefficients of the `d_` regressors of `mode_costs`, the Gauss-Newton steps
-//! of the mode cost ratios, which tend to 0 as the ratios converge.
+//! There the mixed form |a - b| <= 1e-9 max(1, |a|, |b|) applies: to the coefficient, standard
+//! error, covariance row and covariance column of a regressor the fixed effects absorb, and to the
+//! coefficients of the `d_` regressors of `mode_costs`, the Gauss-Newton steps of the mode cost
+//! ratios, which tend to 0 as the ratios converge. Column names, rows, separation counts and the
+//! estimated rows must be equal.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -26,13 +27,21 @@ use arrow_schema::{Field, Schema};
 use ceteris_reference::ppml;
 
 const ITERATIVE: f64 = 1e-9;
-/// Designs with a regressor the fixed effects absorb.
-const ABSORBED: [&str; 1] = ["hdfe_absorbed"];
+/// Designs and the regressor in each that the fixed effects absorb.
+const ABSORBED: [(&str, &str); 1] = [("hdfe_absorbed", "exporter_year")];
 
-/// Whether the value of `design`'s column `col` at regressor `row` is compared in the mixed form.
-fn mixed(design: &str, col: &str, row: &str) -> bool {
-    ABSORBED.contains(&design)
-        || (design.ends_with("_mode_costs") && col == "coef" && row.starts_with("d_"))
+/// Whether the value of `design`'s column `col` at regressor `row` is compared in the mixed form;
+/// `names` are the design's regressors, whose order numbers the `cov_` columns.
+fn mixed(design: &str, col: &str, row: &str, names: &[String]) -> bool {
+    let absorbed = ABSORBED.iter().any(|&(d, r)| {
+        d == design
+            && (row == r
+                || names
+                    .iter()
+                    .position(|n| n == r)
+                    .is_some_and(|i| col == format!("cov_{i}")))
+    });
+    absorbed || (design.ends_with("_mode_costs") && col == "coef" && row.starts_with("d_"))
 }
 
 fn read(path: &Path) -> (Arc<Schema>, Vec<RecordBatch>) {
@@ -229,7 +238,20 @@ fn ppml_matches_python_dump() {
             fitted.seconds,
             python_seconds[name].as_f64().unwrap()
         );
-        let (_, want) = read(&dir.join("python").join(format!("{name}.arrow")));
+        let (want_schema, want) = read(&dir.join("python").join(format!("{name}.arrow")));
+        let want_columns: Vec<String> = want_schema
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+        let got_columns: Vec<String> = std::iter::once("name".to_owned())
+            .chain(fitted.columns.iter().map(|(c, _)| c.clone()))
+            .collect();
+        if got_columns != want_columns {
+            failures.push(format!(
+                "{name}: columns {got_columns:?} vs python {want_columns:?}"
+            ));
+        }
         let want_names: Vec<String> = want
             .iter()
             .flat_map(|b| {
@@ -241,10 +263,13 @@ fn ppml_matches_python_dump() {
             .collect();
         assert_eq!(fitted.names, want_names, "{name}: names");
         for (col, got) in &fitted.columns {
+            if !want_columns.contains(col) {
+                continue;
+            }
             let want = f64s(&want, col);
             let (mut rel, mut mix) = (0.0f64, None::<f64>);
             for ((&a, &b), row) in got.iter().zip(&want).zip(&fitted.names) {
-                if mixed(name, col, row) {
+                if mixed(name, col, row, &fitted.names) {
                     mix = Some(mix.unwrap_or(0.0).max(gap(a, b, true)));
                 } else {
                     rel = rel.max(gap(a, b, false));
@@ -291,11 +316,43 @@ fn ppml_matches_python_dump() {
     }
 
     let (_, want) = read(&dir.join("python/summary.arrow"));
-    let (n, sep) = (i64s(&want, "n"), i64s(&want, "n_separated"));
+    let designs: Vec<String> = want
+        .iter()
+        .flat_map(|b| {
+            let a = b.column_by_name("design").unwrap().as_string::<i32>();
+            (0..a.len())
+                .map(|i| a.value(i).to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let got_designs: Vec<String> = summaries.iter().map(|s| s.design.clone()).collect();
+    assert_eq!(got_designs, designs, "summary designs");
+    let counts = |col: &str| -> Vec<Option<i64>> {
+        want.iter()
+            .flat_map(|b| {
+                let a = b.column_by_name(col).unwrap().as_primitive::<Int64Type>();
+                (0..a.len())
+                    .map(|i| a.is_valid(i).then(|| a.value(i)))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    let (n, sep) = (counts("n"), counts("n_separated"));
+    let (exporters, importers) = (
+        counts("n_separated_exporters"),
+        counts("n_separated_importers"),
+    );
     let r2 = f64s(&want, "pseudo_r2");
+    let int = |v: Option<usize>| v.map(|v| v as i64);
     for (i, s) in summaries.iter().enumerate() {
-        if (s.n as i64, s.n_separated as i64) != (n[i], sep[i]) {
-            failures.push(format!("{}: n, n_separated differ", s.design));
+        let got = [
+            int(Some(s.n)),
+            int(Some(s.n_separated)),
+            int(s.exporters),
+            int(s.importers),
+        ];
+        if got != [n[i], sep[i], exporters[i], importers[i]] {
+            failures.push(format!("{}: separation counts differ", s.design));
         }
         let g = gap(s.pseudo_r2, r2[i], false);
         println!("{}.pseudo_r2: max_rel={g:e}", s.design);
