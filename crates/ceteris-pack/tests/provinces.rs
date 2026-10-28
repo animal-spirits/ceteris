@@ -156,7 +156,10 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
         .unwrap()
         .parse()
         .unwrap();
-    let split_area = config["split_area_km2"].as_integer().unwrap() as f64;
+    let split_area = config["split_area_km2"]
+        .as_float()
+        .or_else(|| config["split_area_km2"].as_integer().map(|i| i as f64))
+        .unwrap();
     let res = Resolution::try_from(u8::try_from(config["land_res"].as_integer().unwrap()).unwrap())
         .unwrap();
     let units = counties::load(&root).unwrap();

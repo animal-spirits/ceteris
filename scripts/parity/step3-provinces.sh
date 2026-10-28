@@ -80,7 +80,10 @@ cat "$work/compare"
 while read -r line; do
     column="${line%%:*}"
     rel="${line##*max_rel=}"
-    if listed "$column" "$ruling_columns" && within "$rel" "$RULING_TOL"; then
+    if [[ $line == *"table missing"* ]]; then
+        echo "FAIL $line"
+        status=1
+    elif listed "$column" "$ruling_columns" && within "$rel" "$RULING_TOL"; then
         echo "pending ruling: $column max_rel=$rel within $RULING_TOL"
     elif listed "$column" "$split_columns" && within "$rel" "$SPLIT_TOL"; then
         echo "pending ruling: $column max_rel=$rel within $SPLIT_TOL"
