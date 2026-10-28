@@ -4,6 +4,7 @@ Status: proposed
 Date: 2026-10-28
 Design sections: 4.3, 5.3, 11, 12.6, 19.2, 23.5, 23.8; ADRs 0048, 0110, 0115, 0136
 Phase: P7 (2.0-beta)
+Amended by: 0209 (sparse hourly phase inside the daily sub-tick)
 
 ## Context
 
