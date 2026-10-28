@@ -16,14 +16,18 @@ Rows are compared in file order, so a port must reproduce the row order of the P
 
 `step2-readers.sh` compares the econ source readers instead of tables: `readers.py NAME` and
 `ceteris pack dump-reader NAME` print one reader's output on the real cache as canonical JSON
-(sorted keys, floats as Python's `repr`), and the two texts must be identical.
+(sorted keys, floats as Python's `repr`), and the two texts must be identical. A reader given a
+tolerance there is checked by `floatdiff.py` instead, which prints the first structural difference
+and the largest relative float difference; `scripts/parity/test_floatdiff.sh` checks its exit
+status on hand-made JSON pairs (run it after changing `floatdiff.py`).
 
 `step2-rasters.sh` compares the per-province raster totals the same way (`dump-reader population
 worldpop|mapspam|kummu`), then rewrites the pixel to H3 cell fixture of the Rust test
 `pixel_cells_match_python_on_border_windows` with `pixel_cells.py` and checks it equals the
 committed one.
 
-`step2-people.sh`, `step2-icio.sh` and `step2-goods.sh` run `step2-econ.sh MODULE`: it builds the
+`step2-people.sh`, `step2-icio.sh` and `step2-goods.sh` run `step2-econ.sh MODULE` (the tariffs
+and gateways run it directly: `step2-econ.sh tariffs`, `step2-econ.sh gateways`): it builds the
 econ tables with Python and with `ceteris pack build --econ-only`, checks with `econ_tables.py`
 that every Rust table has exactly the columns listed there, selects the module's columns from
 both builds, compares them, and runs the module's tests in release mode (their WorldPop tests

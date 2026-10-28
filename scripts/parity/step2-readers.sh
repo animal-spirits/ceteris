@@ -54,46 +54,11 @@ for spec in "${readers[@]}"; do
     tol="$(tolerance "${args[0]}")"
     if cmp -s "$work/py.json" "$work/rs.json"; then
         echo "ok   $spec ($(wc -c <"$work/py.json" | tr -d ' ') bytes)"
+    elif python3 -I "$root/scripts/parity/floatdiff.py" "$work/py.json" "$work/rs.json" "$tol"; then
+        echo "ok   $spec within $tol"
     else
-        if [ "$tol" != 0 ] && python3 -I - "$work/py.json" "$work/rs.json" "$tol" <<'PY'
-import json, sys
-
-py, rs = (json.load(open(p)) for p in sys.argv[1:3])
-tol = float(sys.argv[3])
-worst = [0.0, None]
-
-
-def walk(a, b, path):
-    if isinstance(a, float) and isinstance(b, float):
-        if a != b and not (a != a and b != b):
-            rel = float("inf") if a != a or b != b else abs(a - b) / max(abs(a), abs(b))
-            if rel > worst[0]:
-                worst[:] = [rel, path]
-        return None
-    if type(a) is not type(b):
-        return f"{path}: {a!r:.80} vs {b!r:.80}"
-    if isinstance(a, dict):
-        if a.keys() != b.keys():
-            return f"{path}: keys only in python {sorted(a.keys() - b.keys())[:5]}, only in rust {sorted(b.keys() - a.keys())[:5]}"
-        return next((d for k in a if (d := walk(a[k], b[k], f"{path}/{k}"))), None)
-    if isinstance(a, list):
-        if len(a) != len(b):
-            return f"{path}: {len(a)} items in python, {len(b)} in rust"
-        return next((d for i, (x, y) in enumerate(zip(a, b)) if (d := walk(x, y, f"{path}/{i}"))), None)
-    return None if a == b else f"{path}: {a!r:.80} vs {b!r:.80}"
-
-
-first = walk(py, rs, "")
-print(f"     first structural difference: {first}" if first else "     same structure")
-print(f"     largest relative float difference: {worst[0]:.3e} at {worst[1]}")
-sys.exit(0 if not first and worst[0] <= tol else 1)
-PY
-        then
-            echo "ok   $spec within $tol"
-        else
-            echo "FAIL $spec"
-            failed=1
-        fi
+        echo "FAIL $spec"
+        failed=1
     fi
 done
 exit "$failed"
