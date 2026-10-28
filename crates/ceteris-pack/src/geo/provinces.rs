@@ -97,6 +97,50 @@ pub fn borders() -> Result<Borders, String> {
     })
 }
 
+/// Where a Voronoi split takes the centres of H3 cells from: h3o, or a table of (lng, lat) by
+/// cell, such as `scripts/parity/h3_centres.py` writes from h3 to show that the split's
+/// geometry follows the centres exactly.
+#[derive(Debug, Default)]
+pub enum Centres {
+    #[default]
+    H3o,
+    Table(BTreeMap<u64, [f64; 2]>),
+}
+
+impl Centres {
+    /// A table file: per cell, its index as u64 then latitude and longitude as f64, little-endian.
+    pub fn read(path: &Path) -> Result<Centres, String> {
+        let b = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let (rows, rest) = b.as_chunks::<24>();
+        if !rest.is_empty() {
+            return Err(format!("{}: not whole rows", path.display()));
+        }
+        let f = |r: &[u8]| f64::from_le_bytes(r.try_into().expect("8 bytes"));
+        Ok(Centres::Table(
+            rows.iter()
+                .map(|r| {
+                    let cell = u64::from_le_bytes(r[..8].try_into().expect("8 bytes"));
+                    (cell, [f(&r[16..24]), f(&r[8..16])])
+                })
+                .collect(),
+        ))
+    }
+
+    /// The (lng, lat) centre of a cell, in degrees.
+    pub fn lng_lat(&self, cell: h3o::CellIndex) -> Result<[f64; 2], String> {
+        match self {
+            Centres::H3o => {
+                let c = h3o::LatLng::from(cell);
+                Ok([c.lng(), c.lat()])
+            }
+            Centres::Table(t) => t
+                .get(&u64::from(cell))
+                .copied()
+                .ok_or_else(|| format!("no centre for cell {cell}")),
+        }
+    }
+}
+
 /// Number of parts an oversized province is split into.
 pub fn split_count(area_km2: f64, max_area_km2: f64) -> usize {
     // A float to integer cast saturates; areas are finite and far below usize::MAX.
@@ -223,9 +267,11 @@ pub use split::{build, load, split, split_by_counties};
 mod split {
     use geo::{BoundingRect, Coord, Geometry, Rect};
     use geos::Geometry as Geos;
-    use h3o::{LatLng, Resolution};
+    use h3o::Resolution;
 
-    use super::{MAX_PART_FACTOR, MIN_COUNTIES_PER_PART, Province, bisect, parts, split_count};
+    use super::{
+        Centres, MAX_PART_FACTOR, MIN_COUNTIES_PER_PART, Province, bisect, parts, split_count,
+    };
     use crate::geo::counties::{County, assign};
     use crate::geo::overlay::{
         self, difference, from_geo, intersection, is_empty, polygonal, to_geo, transform, union_all,
@@ -319,13 +365,10 @@ mod split {
         if cells.len() < k {
             return Ok(vec![p.clone()]);
         }
-        let mut ll: Vec<[f64; 2]> = cells
+        let mut ll = cells
             .iter()
-            .map(|&c| {
-                let c = LatLng::from(c);
-                [c.lng(), c.lat()]
-            })
-            .collect();
+            .map(|&c| centres.lng_lat(c))
+            .collect::<Result<Vec<_>, _>>()?;
         if wrapped {
             for c in &mut ll {
                 if c[0] < 0.0 {
@@ -396,6 +439,7 @@ mod split {
         members: &[&Geos],
         max_area_km2: f64,
         res: Resolution,
+        centres: &Centres,
     ) -> Result<Option<Vec<Province>>, String> {
         let geom = from_geo(&p.geom)?;
         let mut clipped = Vec::new();
@@ -413,7 +457,7 @@ mod split {
             let n = split_count(area(&x)?, max_area_km2 / 2.0);
             if n > 1 {
                 let whole = p.part(String::new(), String::new(), to_geo(&x)?);
-                for q in split(&whole, n, res)? {
+                for q in split(&whole, n, res, centres)? {
                     pieces.push(from_geo(&q.geom)?);
                 }
             } else {
@@ -528,6 +572,7 @@ mod split {
         max_area_km2: f64,
         res: Resolution,
         counties: &[County],
+        centres: &Centres,
     ) -> Result<Vec<Province>, String> {
         let mut base = load(admin1, admin0)?;
         for p in &mut base {
@@ -556,10 +601,11 @@ mod split {
                 .filter(|(_, o)| **o == Some(i))
                 .map(|(c, _)| &c.geom)
                 .collect();
-            let (rule, split_parts) = match split_by_counties(&p, k, &members, max_area_km2, res)? {
-                Some(parts) => ("counties", parts),
-                None => ("voronoi", split(&p, k, res)?),
-            };
+            let (rule, split_parts) =
+                match split_by_counties(&p, k, &members, max_area_km2, res, centres)? {
+                    Some(parts) => ("counties", parts),
+                    None => ("voronoi", split(&p, k, res, centres)?),
+                };
             for mut q in split_parts {
                 q.split_rule = rule.to_owned();
                 out.push(q);
@@ -606,7 +652,7 @@ mod split {
                 .map(|(x, y)| rectangle(x, y, x + 1.0, y + 1.0).unwrap())
                 .collect();
             let refs: Vec<&Geos> = grid.iter().collect();
-            let parts = split_by_counties(&p, 4, &refs, 1e9, Resolution::Four)
+            let parts = split_by_counties(&p, 4, &refs, 1e9, Resolution::Four, &Centres::H3o)
                 .unwrap()
                 .unwrap();
             assert_eq!(parts.len(), 4);
@@ -678,6 +724,32 @@ mod tests {
         assert_eq!(b.country["SDS"], "SDN");
         assert_eq!(b.country["MNE"], "YUG");
         assert_eq!(b.province["RUS-283"], "UKR");
+    }
+
+    #[test]
+    fn centres_come_from_h3o_or_a_table_file() {
+        let cell = h3o::LatLng::new(45.0, 7.0)
+            .unwrap()
+            .to_cell(h3o::Resolution::Four);
+        let h = h3o::LatLng::from(cell);
+        assert_eq!(Centres::H3o.lng_lat(cell).unwrap(), [h.lng(), h.lat()]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("centres.bin");
+        let row = [
+            u64::from(cell).to_le_bytes(),
+            45.5f64.to_le_bytes(),
+            7.25f64.to_le_bytes(),
+        ];
+        std::fs::write(&path, row.concat()).unwrap();
+        let table = Centres::read(&path).unwrap();
+        assert_eq!(table.lng_lat(cell).unwrap(), [7.25, 45.5]);
+        assert!(
+            table
+                .lng_lat(cell.parent(h3o::Resolution::Three).unwrap())
+                .is_err()
+        );
+        std::fs::write(&path, &row.concat()[..20]).unwrap();
+        assert!(Centres::read(&path).is_err());
     }
 
     fn points() -> impl Strategy<Value = Vec<[f64; 2]>> {
