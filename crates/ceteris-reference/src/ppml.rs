@@ -4,14 +4,13 @@
 //! theta class, ln(1 + tariff) and ln distance (ADR 0018). [`hdfe`] absorbs any number of fixed
 //! effects and clusters standard errors, for direct estimation on BACI (ADR 0022).
 //!
-//! Least squares follow numpy's `lstsq` (minimum norm, singular values at or below
-//! eps max(n, k) of the largest dropped) and the pseudo-inverse numpy's `pinv` (1e-15 relative),
-//! by Householder QR and one-sided Jacobi SVD with every sum in a fixed order.
+//! Least squares and the pseudo-inverse follow numpy's `lstsq` and `pinv` ([`crate::linalg`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::io::{Mat, pairwise_sum};
+use crate::linalg::{cholesky_solve, dot, lstsq, pinv, sandwich, weighted_gram};
 
 /// Relative change of the deviance.
 pub const TOL: f64 = 1e-10;
@@ -161,14 +160,6 @@ fn mean(a: &[f64]) -> f64 {
     pairwise_sum(a) / a.len() as f64
 }
 
-fn dot(a: &[f64], b: &[f64]) -> f64 {
-    let mut s = 0.0;
-    for (x, y) in a.iter().zip(b) {
-        s += x * y;
-    }
-    s
-}
-
 fn bincount(index: &[usize], weights: impl IntoIterator<Item = f64>, n: usize) -> Vec<f64> {
     let mut out = vec![0.0; n];
     for (&i, w) in index.iter().zip(weights) {
@@ -268,184 +259,6 @@ fn validate(y: &[f64], regressors: &Regressors) -> Result<(), PpmlError> {
     Ok(())
 }
 
-// ---------------------------------------------------------------- dense linear algebra
-
-/// Householder QR of the columns `a` (each of length n) applied to `b` too: `a` becomes R in
-/// its first min(n, k) rows and `b` becomes Q^T b. Returns the number of reflections.
-fn householder(a: &mut [Vec<f64>], b: &mut [f64]) -> usize {
-    let n = b.len();
-    let steps = n.min(a.len());
-    for j in 0..steps {
-        let mut v = a[j][j..].to_vec();
-        let norm = dot(&v, &v).sqrt();
-        if norm == 0.0 {
-            continue;
-        }
-        let alpha = if v[0] > 0.0 { -norm } else { norm };
-        v[0] -= alpha;
-        let vv = dot(&v, &v);
-        if vv == 0.0 {
-            continue;
-        }
-        for col in a.iter_mut().skip(j) {
-            let t = 2.0 * dot(&v, &col[j..]) / vv;
-            for (c, vi) in col[j..].iter_mut().zip(&v) {
-                *c -= t * vi;
-            }
-        }
-        let t = 2.0 * dot(&v, &b[j..]) / vv;
-        for (c, vi) in b[j..].iter_mut().zip(&v) {
-            *c -= t * vi;
-        }
-    }
-    steps
-}
-
-/// One-sided Jacobi on the columns `u`: rotates them until orthogonal, applying each rotation to
-/// the columns of `v` (the identity to start). The column norms of `u` are then the singular
-/// values, `u` holds U times them and `v` the right singular vectors.
-fn jacobi(u: &mut [Vec<f64>]) -> Vec<Vec<f64>> {
-    let k = u.len();
-    let mut v: Vec<Vec<f64>> = (0..k)
-        .map(|i| (0..k).map(|j| f64::from(u8::from(i == j))).collect())
-        .collect();
-    for _ in 0..100 {
-        let mut rotated = false;
-        for p in 0..k {
-            for q in p + 1..k {
-                let (alpha, beta, gamma) =
-                    (dot(&u[p], &u[p]), dot(&u[q], &u[q]), dot(&u[p], &u[q]));
-                if gamma == 0.0 || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt() {
-                    continue;
-                }
-                rotated = true;
-                let zeta = (beta - alpha) / (2.0 * gamma);
-                let t = zeta.signum() / (zeta.abs() + (1.0 + zeta * zeta).sqrt());
-                let c = 1.0 / (1.0 + t * t).sqrt();
-                let s = c * t;
-                for cols in [&mut *u, &mut v] {
-                    let (lo, hi) = cols.split_at_mut(q);
-                    for (a, b) in lo[p].iter_mut().zip(hi[0].iter_mut()) {
-                        let (x, y) = (*a, *b);
-                        *a = c * x - s * y;
-                        *b = s * x + c * y;
-                    }
-                }
-            }
-        }
-        if !rotated {
-            break;
-        }
-    }
-    v
-}
-
-/// numpy's `lstsq(a, b, rcond=None)[0]` for `a` given by its k columns of length n: the
-/// minimum-norm least-squares solution, singular values at or below eps max(n, k) of the largest
-/// treated as zero.
-fn lstsq(columns: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
-    let (n, k) = (b.len(), columns.len());
-    let mut r = columns.to_vec();
-    let mut qtb = b.to_vec();
-    let rows = householder(&mut r, &mut qtb);
-    for col in &mut r {
-        col.truncate(rows);
-    }
-    qtb.truncate(rows);
-    let v = jacobi(&mut r);
-    let sigma: Vec<f64> = r.iter().map(|c| dot(c, c).sqrt()).collect();
-    let cutoff = f64::EPSILON * n.max(k) as f64 * sigma.iter().copied().fold(0.0, f64::max);
-    let mut x = vec![0.0; k];
-    for i in (0..k).filter(|&i| sigma[i] > cutoff) {
-        let coef = dot(&r[i], &qtb) / (sigma[i] * sigma[i]);
-        for (xk, vk) in x.iter_mut().zip(&v[i]) {
-            *xk += coef * vk;
-        }
-    }
-    x
-}
-
-/// numpy's `pinv(a)` of a square matrix: singular values at or below 1e-15 of the largest
-/// treated as zero.
-fn pinv(a: &Mat) -> Mat {
-    let k = a.rows;
-    let mut u: Vec<Vec<f64>> = (0..k)
-        .map(|j| (0..k).map(|i| a[(i, j)]).collect())
-        .collect();
-    let v = jacobi(&mut u);
-    let sigma: Vec<f64> = u.iter().map(|c| dot(c, c).sqrt()).collect();
-    let cutoff = 1e-15 * sigma.iter().copied().fold(0.0, f64::max);
-    let mut out = Mat::zeros(k, k);
-    for s in (0..k).filter(|&s| sigma[s] > cutoff) {
-        let scale = 1.0 / (sigma[s] * sigma[s]);
-        for i in 0..k {
-            let vi = v[s][i] * scale;
-            for j in 0..k {
-                out[(i, j)] += vi * u[s][j];
-            }
-        }
-    }
-    out
-}
-
-/// `x.T @ (x * w[:, None])` of the columns `x`.
-fn weighted_gram(x: &[Vec<f64>], w: &[f64]) -> Mat {
-    let k = x.len();
-    let mut out = Mat::zeros(k, k);
-    for j in 0..k {
-        let xw: Vec<f64> = x[j].iter().zip(w).map(|(x, w)| x * w).collect();
-        for i in 0..k {
-            out[(i, j)] = dot(&x[i], &xw);
-        }
-    }
-    out
-}
-
-/// `bread @ meat @ bread`.
-fn sandwich(bread: &Mat, meat: &Mat) -> Mat {
-    bread.matmul(meat).matmul(bread)
-}
-
-/// Cholesky solve of the symmetric positive definite `a` (row-major, n x n) for the columns of
-/// `b`, in place; `None` if a pivot is not positive.
-fn cholesky_solve(a: &mut [f64], n: usize, b: &mut [Vec<f64>]) -> Option<()> {
-    for j in 0..n {
-        let mut d = a[j * n + j];
-        for k in 0..j {
-            d -= a[j * n + k] * a[j * n + k];
-        }
-        if d.is_nan() || d <= 0.0 {
-            return None;
-        }
-        let d = d.sqrt();
-        a[j * n + j] = d;
-        for i in j + 1..n {
-            let mut s = a[i * n + j];
-            for k in 0..j {
-                s -= a[i * n + k] * a[j * n + k];
-            }
-            a[i * n + j] = s / d;
-        }
-    }
-    for col in b {
-        for i in 0..n {
-            let mut s = col[i];
-            for k in 0..i {
-                s -= a[i * n + k] * col[k];
-            }
-            col[i] = s / a[i * n + i];
-        }
-        for i in (0..n).rev() {
-            let mut s = col[i];
-            for k in i + 1..n {
-                s -= a[k * n + i] * col[k];
-            }
-            col[i] = s / a[i * n + i];
-        }
-    }
-    Some(())
-}
-
 // ---------------------------------------------------------------- dummy-variable fit
 
 /// Observations kept: those whose exporter and importer have some positive flow. A country with
@@ -515,7 +328,7 @@ fn irls(y: &[f64], x: &[Vec<f64>]) -> Result<(Vec<f64>, Vec<f64>), PpmlError> {
         let rhs: Vec<f64> = (0..n)
             .map(|i| sw[i] * (eta[i] + (y[i] - mu[i]) / mu[i]))
             .collect();
-        let step = lstsq(&cols, &rhs);
+        let step = lstsq(&cols, &rhs).map_err(PpmlError::NoConvergence)?;
         let mut t = 1.0;
         let (cand, eta_c, mu_c, dev_c) = loop {
             let cand: Vec<f64> = beta
@@ -576,7 +389,7 @@ pub fn fit_robust(
     let r: Vec<Vec<f64>> = regressors.iter().map(|(_, r)| select(r, &keep)).collect();
     let x = design(&select(exporter, &keep), &select(importer, &keep), r);
     let (beta, mu) = irls(&y, &x)?;
-    let bread = pinv(&weighted_gram(&x, &mu));
+    let bread = pinv(&weighted_gram(&x, &mu)).map_err(PpmlError::NoConvergence)?;
     let sq: Vec<f64> = y.iter().zip(&mu).map(|(y, m)| (y - m) * (y - m)).collect();
     let cov = sandwich(&bread, &weighted_gram(&x, &sq));
     let k = regressors.len();
@@ -991,7 +804,7 @@ pub fn hdfe(
             .map(|c| c.iter().zip(&sw).map(|(c, s)| c * s).collect())
             .collect();
         let rhs: Vec<f64> = zt.iter().zip(&sw).map(|(z, s)| z * s).collect();
-        beta = lstsq(&cols, &rhs);
+        beta = lstsq(&cols, &rhs).map_err(PpmlError::NoConvergence)?;
         let fitted = matvec(&xt, &beta, n);
         eta = (0..n)
             .map(|i| (z[i] - (zt[i] - fitted[i])).clamp(-700.0, 700.0))
@@ -1011,7 +824,7 @@ pub fn hdfe(
     }
 
     let xt = demean(&x, &mu, &groups)?;
-    let bread = pinv(&weighted_gram(&xt, &mu));
+    let bread = pinv(&weighted_gram(&xt, &mu)).map_err(PpmlError::NoConvergence)?;
     let resid: Vec<f64> = y.iter().zip(&mu).map(|(y, m)| y - m).collect();
     let score: Vec<Vec<f64>> = xt
         .iter()
@@ -1021,6 +834,9 @@ pub fn hdfe(
         None => weighted_gram(&score, &vec![1.0; n]),
         Some(c) => {
             let (c, g) = codes(&select(c, &keep));
+            if g < 2 {
+                return Err(invalid("one cluster: no cluster-robust covariance"));
+            }
             let sums: Vec<Vec<f64>> = score
                 .iter()
                 .map(|s| bincount(&c, s.iter().copied(), g))

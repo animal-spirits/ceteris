@@ -476,6 +476,13 @@ fn hdfe_rejects_bad_input() {
     y[0] = -1.0;
     let err = ppml::hdfe(&y, &[&o, &d], &t.reg(), None).unwrap_err();
     assert!(matches!(&err, PpmlError::Invalid(s) if s.starts_with("flows must be finite")));
+    // One cluster: G / (G - 1) has no value (Python divides by zero).
+    let one = vec![7; t.y.len()];
+    let err = ppml::hdfe(&t.y, &[&o, &d], &t.reg(), Some(&one)).unwrap_err();
+    assert_eq!(
+        err,
+        PpmlError::Invalid("one cluster: no cluster-robust covariance".into())
+    );
     let zeros = vec![0.0; t.y.len()];
     let err = ppml::hdfe(&zeros, &[&o, &d], &t.reg(), None).unwrap_err();
     assert!(

@@ -6,6 +6,7 @@ use std::fmt;
 use std::time::Instant;
 
 use crate::io::Mat;
+use crate::linalg::{dot, lstsq_small, norm};
 use crate::model::{self, Model, max_abs};
 
 /// Max-norm residual of the reference solve.
@@ -140,18 +141,6 @@ fn check(deadline: Option<Instant>, what: impl FnOnce() -> String) -> Result<(),
         ))),
         _ => Ok(()),
     }
-}
-
-fn dot(a: &[f64], b: &[f64]) -> f64 {
-    let mut s = 0.0;
-    for (x, y) in a.iter().zip(b) {
-        s += x * y;
-    }
-    s
-}
-
-fn norm(a: &[f64]) -> f64 {
-    dot(a, a).sqrt()
 }
 
 /// Jacobian of the residual at `x0` by forward differences along each direction, the step
@@ -318,56 +307,6 @@ pub fn newton(
     )))
 }
 
-/// `a x = b` in the least-squares sense with the minimum norm (as numpy's `lstsq` with the
-/// default cutoff, singular values below eps max(n, m) of the largest dropped): `a` given by its
-/// m columns of length n, decomposed by one-sided Jacobi.
-fn lstsq(columns: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
-    let m = columns.len();
-    let n = b.len();
-    let mut u = columns.to_vec();
-    let mut v: Vec<Vec<f64>> = (0..m)
-        .map(|i| (0..m).map(|j| f64::from(u8::from(i == j))).collect())
-        .collect();
-    for _ in 0..100 {
-        let mut rotated = false;
-        for p in 0..m {
-            for q in p + 1..m {
-                let (alpha, beta, gamma) =
-                    (dot(&u[p], &u[p]), dot(&u[q], &u[q]), dot(&u[p], &u[q]));
-                if gamma == 0.0 || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt() {
-                    continue;
-                }
-                rotated = true;
-                let zeta = (beta - alpha) / (2.0 * gamma);
-                let t = zeta.signum() / (zeta.abs() + (1.0 + zeta * zeta).sqrt());
-                let c = 1.0 / (1.0 + t * t).sqrt();
-                let s = c * t;
-                for cols in [&mut u, &mut v] {
-                    let (lo, hi) = cols.split_at_mut(q);
-                    for (a, b) in lo[p].iter_mut().zip(hi[0].iter_mut()) {
-                        let (x, y) = (*a, *b);
-                        *a = c * x - s * y;
-                        *b = s * x + c * y;
-                    }
-                }
-            }
-        }
-        if !rotated {
-            break;
-        }
-    }
-    let sigma: Vec<f64> = u.iter().map(|c| norm(c)).collect();
-    let cutoff = f64::EPSILON * n.max(m) as f64 * sigma.iter().copied().fold(0.0, f64::max);
-    let mut x = vec![0.0; m];
-    for i in (0..m).filter(|&i| sigma[i] > cutoff) {
-        let coef = dot(&u[i], b) / (sigma[i] * sigma[i]);
-        for (xk, vk) in x.iter_mut().zip(&v[i]) {
-            *xk += coef * vk;
-        }
-    }
-    x
-}
-
 /// ln p and ln w move with their market's scaled excess demand (step clipped like the price
 /// rule), shifted together after each step so the world price index is 1. The fixed point of
 /// that map is accelerated by Anderson mixing, restarted from the best iterate whenever the
@@ -426,7 +365,7 @@ pub fn tatonnement(
                     .collect()
             };
             let (dx, dr) = (diff(&xs), diff(&rs));
-            let gamma = lstsq(&dr, &r);
+            let gamma = lstsq_small(&dr, &r).map_err(no_convergence)?;
             for (k, xk) in x.iter_mut().enumerate() {
                 let mut mix = 0.0;
                 for (j, g) in gamma.iter().enumerate() {
@@ -631,27 +570,5 @@ mod tests {
         );
         let err = gmres(&mut |v| jac.apply(v), &down, 0.1, RESTART, MAX_CYCLES);
         assert_eq!(err, Err("Jacobian product not finite".to_owned()));
-    }
-
-    #[test]
-    fn lstsq_gives_the_minimum_norm_solution() {
-        let c0 = vec![1.0, 2.0, 0.5, -1.0, 3.0, 0.25];
-        let c1 = vec![0.3, -1.0, 2.0, 1.0, 0.0, 1.5];
-        let b = vec![1.0, 0.0, -2.0, 0.5, 1.0, 2.0];
-        // Full rank: the normal equations' solution.
-        let x = lstsq(&[c0.clone(), c1.clone()], &b);
-        let (g00, g01, g11) = (dot(&c0, &c0), dot(&c0, &c1), dot(&c1, &c1));
-        let (r0, r1) = (dot(&c0, &b), dot(&c1, &b));
-        let det = g00 * g11 - g01 * g01;
-        let want = [(g11 * r0 - g01 * r1) / det, (g00 * r1 - g01 * r0) / det];
-        for (got, want) in x.iter().zip(want) {
-            assert!((got - want).abs() <= 1e-13 * want.abs(), "{got} vs {want}");
-        }
-        // A repeated column: the projection split evenly, the smallest-norm of the solutions.
-        let x = lstsq(&[c0.clone(), c0.clone()], &b);
-        let half = dot(&c0, &b) / dot(&c0, &c0) / 2.0;
-        for got in x {
-            assert!((got - half).abs() <= 1e-13 * half.abs(), "{got} vs {half}");
-        }
     }
 }
