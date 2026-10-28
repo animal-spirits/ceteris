@@ -61,6 +61,18 @@ them, into tables of their own, so that only those rows take the split tolerance
 build seeds the Voronoi splits from h3's cell centres (`h3_centres.py`, `dump-geo --build
 --centres FILE`) and must match Python exactly but for the H3 cell areas.
 
+`step3-web.sh` compares the port of the map outputs of `build.build` (`simplify`, the countries
+layer, `write_geojson`, `write_tiles`, the fills of the simplified geometry) with
+`ceteris_pack::web`, on GEOS 3.15 as above (`GEOS_PYTHON`). `web_inputs.py` builds the provinces
+and clipped counties and writes their vertices, countries and Polygon or MultiPolygon type;
+`web_outputs.py` and `ceteris pack dump-web DIR` rebuild the geometries from those files and
+write the outputs. Each layer's GeoJSON must match byte for byte, the simplified vertices
+exactly, and the fills by `fills.py`'s rule; the PMTiles archives are compared for information.
+`step3-web.sh WORK` keeps its outputs in WORK.
+
+`py_round4.py` writes the fixture of `tests/py_round.rs`: CPython's `round(x, 4)` and `repr`,
+with which the GeoJSON writes coordinates.
+
 `geo_readers.py` prints digests of the polygons pyogrio reads from the admin-1 shapefile and the
 geoBoundaries files; `tests/geo_readers.rs` checks the Rust readers against them.
 
