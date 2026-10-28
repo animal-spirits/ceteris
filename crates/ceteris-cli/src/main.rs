@@ -6,7 +6,7 @@
 //! ceteris pack check-sources --profile research|release
 //! ceteris pack fetch [--record]
 //! ceteris pack dump-reader NAME [ARGS]
-//! ceteris pack build --econ-only --pack DIR --out DIR
+//! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -50,7 +50,7 @@ const USAGE: &str = "usage:
   ceteris pack check-sources [--profile research|release]
   ceteris pack fetch [--record]
   ceteris pack dump-reader NAME [ARGS]
-  ceteris pack build --econ-only --pack DIR --out DIR
+  ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -290,7 +290,7 @@ fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Strin
     Ok(ExitCode::SUCCESS)
 }
 
-/// `pack build --econ-only --pack DIR --out DIR`: the econ tables of a pack's P1 tables, from
+/// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
 /// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
 /// stats as JSON.
 fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
@@ -310,10 +310,8 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if !econ_only {
         return Err("pack build supports --econ-only only".into());
     }
-    let (pack, out) = (
-        pack.ok_or("pack build needs --pack")?,
-        out.ok_or("pack build needs --out")?,
-    );
+    let pack = pack.unwrap_or_else(|| sources::workspace_root().join("data/packs/2000"));
+    let out = out.unwrap_or_else(|| pack.clone());
     let cache = sources::workspace_root().join(fetch::CACHE_DIR);
     let report = econ::build::build(&pack, &out, &cache)?;
     let hex = |d: &[u8; 32]| d.iter().map(|b| format!("{b:02x}")).collect::<String>();

@@ -11,9 +11,9 @@ pub struct TradeParams {
     /// with BACI 2000 trade weights: agriculture 9.11, crude oil and gas 13.53, coal and other
     /// mining 13.53, food 2.62, light manufacturing 9.15, chemicals, refined fuels and metals
     /// 10.57, machinery, electronics and vehicles 5.19; grouped into 3 classes within a factor
-    /// 1.5, each at the trade-weighted mean of its goods, to two decimals. The Python test
-    /// `test_rust_theta_defaults_follow_the_estimator` keeps these and `theta_class` equal to the
-    /// estimator's output.
+    /// 1.5, each at the trade-weighted mean of its goods, to two decimals. The test
+    /// `fixture_theta_defaults_follow_the_estimator` (ceteris-pack) keeps these and `theta_class`
+    /// equal to the estimator's output.
     pub theta: [f64; N_GOODS],
     /// P01 theta class of each good (ADR 0023), 0 for the lowest theta; local goods 0
     /// (unused). Kernels stay per good, since weight classes are goods in P2 (ADR 0018); the

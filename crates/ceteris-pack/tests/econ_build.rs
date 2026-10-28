@@ -71,7 +71,7 @@ fn inputs() -> Option<(PathBuf, PathBuf)> {
         return None;
     }
     let pack = pack_table("cells.arrow")?.parent()?.to_owned();
-    for name in [WORLDPOP, ICIO, GRAVITY, DTA] {
+    for name in [WORLDPOP, ICIO, GRAVITY, DTA, GEM[0], GEM[1], KUMMU] {
         cached(name)?;
     }
     let cache = cached(WORLDPOP)?.parent()?.to_owned();
