@@ -8,6 +8,7 @@ use arrow_ipc::reader::FileReader;
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
 use ceteris_reference::sinkhorn;
+use ceteris_reference::uniqueness::{self, V1Mode};
 
 fn fixture() -> PathBuf {
     std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(
@@ -192,4 +193,152 @@ fn balanced_recovers_scaled_kernel() {
             (got - want).abs() <= 1e-12 * want.abs().max(1e-300) || *want == 0.0 && *got == 0.0
         );
     }
+}
+
+/// Section 3 urban model, one type, constant elasticity spillovers (system 13) in the form of
+/// equation (8): types (workers, residents), own-location exponents theta alpha and theta beta.
+fn urban(theta: f64, alpha: f64, beta: f64) -> Mat {
+    uniqueness::change_of_variables(
+        &Mat::identity(2),
+        &Mat::from_rows(&[vec![0.0, theta * beta], vec![theta * alpha, 0.0]]),
+        Some(&Mat::from_rows(&[
+            vec![theta * alpha, 0.0],
+            vec![0.0, theta * beta],
+        ])),
+    )
+}
+
+/// Allen, Arkolakis and Li (2024), January 2024 version: worked examples of Theorem 1.
+#[test]
+fn bound_reproduces_paper_examples() {
+    // Footnote 3 (p. 4): the stacked contraction bound is 2, the spectral radius sqrt(2/3).
+    let a = Mat::from_rows(&[vec![0.0, 2.0], vec![1.0 / 3.0, 0.0]]);
+    assert!(close(
+        uniqueness::spectral_radius(&a),
+        (2.0_f64 / 3.0).sqrt(),
+        1e-14
+    ));
+    assert_eq!(a.row_sums().into_iter().fold(0.0, f64::max), 2.0);
+    // Footnote 6 (p. 11): x_i = sum_j K_ij x_i^beta x_j^alpha, alpha 1, beta -1/2: the change of
+    // variables (Remark 5) gives |alpha / (1 - beta)| = 2/3 where the direct bound is 1.5.
+    let fn6 = uniqueness::change_of_variables(
+        &Mat::identity(1),
+        &Mat::from_rows(&[vec![1.0]]),
+        Some(&Mat::from_rows(&[vec![-0.5]])),
+    );
+    assert!(close(uniqueness::spectral_radius(&fn6), 2.0 / 3.0, 1e-14));
+    // Section 3 (pp. 14-15, Figure 1 p. 21): theta 1, alpha = beta. The off-diagonal blocks are
+    // theta alpha / (1 - theta alpha); at 0.5 the radius is 1 (unique up to scale, part ii.b: one
+    // equilibrium in panels a, d, g); at 0.55 and 0.6 it exceeds 1 and panels f, h, i show three.
+    for (alpha, radius, mode) in [
+        (0.5, 1.0, V1Mode::Tolerance),
+        (0.55, 0.55 / 0.45, V1Mode::Report),
+        (0.6, 1.5, V1Mode::Report),
+    ] {
+        let a = urban(1.0, alpha, alpha);
+        let off = alpha / (1.0 - alpha);
+        for (got, want) in a.data.iter().zip([0.0, off, off, 0.0]) {
+            assert!(close(*got, want, 1e-14));
+        }
+        let rho = uniqueness::spectral_radius(&a);
+        assert!(close(rho, radius, 1e-12));
+        assert_eq!(uniqueness::v1_mode(rho), mode);
+    }
+    // Online Appendix A.3 (pp. 8-9): Eaton-Kortum with intermediates and quasi-symmetric costs,
+    // rho(B Gamma^-1) = (beta + theta - beta theta) / (beta + theta) < 1, theta = 1 / trade
+    // elasticity.
+    for elasticity in [0.5, 2.62, 5.88, 12.55, 100.0] {
+        for beta in [0.05, 0.46, 0.73, 1.0] {
+            let t = 1.0 / elasticity;
+            let rho = uniqueness::spectral_radius(&uniqueness::trade_with_intermediates(
+                elasticity, beta,
+            ));
+            assert!(close(rho, (beta + t - beta * t) / (beta + t), 1e-12));
+            assert!(rho < 1.0);
+        }
+    }
+}
+
+/// `numpy.abs(numpy.linalg.eigvals(abs(a))).max()` of matrices the A.3 bound does not produce:
+/// periodic, reducible, defective, nilpotent, signed.
+#[test]
+fn spectral_radius_matches_numpy_eigvals() {
+    let dense4: Vec<Vec<f64>> = (0..4)
+        .map(|i| (0..4).map(|j| ((i * 7 + j * 3) % 5) as f64 / 3.0).collect())
+        .collect();
+    let cases: [(Vec<Vec<f64>>, f64); 8] = [
+        (
+            vec![vec![0.0, 2.0], vec![1.0 / 3.0, 0.0]],
+            0.816496580927726,
+        ),
+        (vec![vec![0.5, 0.3], vec![0.0, 0.2]], 0.5),
+        (vec![vec![0.5, 0.0], vec![0.0, 0.2]], 0.5),
+        (vec![vec![0.0, 100.0], vec![0.0, 0.0]], 0.0),
+        (vec![vec![0.7, 1.0], vec![0.0, 0.7]], 0.7),
+        (
+            vec![
+                vec![-0.4, 0.9, 0.1],
+                vec![0.2, -0.3, 0.5],
+                vec![0.6, 0.1, -0.8],
+            ],
+            1.3107198535269964,
+        ),
+        (
+            vec![
+                vec![0.0, 1.0, 0.0, 0.0],
+                vec![0.0, 0.0, 2.0, 0.0],
+                vec![0.0, 0.0, 0.0, 3.0],
+                vec![0.25, 0.0, 0.0, 0.0],
+            ],
+            1.1066819197003221,
+        ),
+        (dense4, 2.4598558530124772),
+    ];
+    for (rows, want) in cases {
+        let got = uniqueness::spectral_radius(&Mat::from_rows(&rows));
+        assert!(
+            close(got, want, 1e-14) || (want == 0.0 && got == 0.0),
+            "{rows:?}: {got} vs {want}"
+        );
+    }
+}
+
+/// P2 defaults (theta per good of the fixture export, no agglomeration, no migration): the bound
+/// is below 1, so V1 runs in tolerance mode.
+#[test]
+fn trade_only_is_unique() {
+    let inp = inputs();
+    let va = uniqueness::value_added_share(&inp);
+    assert!(va.len() == inp.n_goods() && va.iter().all(|&v| v > 0.0 && v <= 1.0));
+    let bound = uniqueness::spectral_bound(&inp.theta, 0.0, None, &va).unwrap();
+    let want = (0..inp.n_goods())
+        .filter(|&g| inp.traded[g])
+        .map(|g| {
+            uniqueness::spectral_radius(&uniqueness::trade_with_intermediates(inp.theta[g], va[g]))
+        })
+        .fold(f64::NEG_INFINITY, f64::max);
+    assert!(close(bound, want, 1e-14));
+    assert!(bound < 1.0 && uniqueness::v1_mode(bound) == V1Mode::Tolerance);
+    // Labour the only input (value-added share 1) gives the smaller bound theta / (1 + theta).
+    let ones = vec![1.0; inp.n_goods()];
+    let labour_only = uniqueness::spectral_bound(&inp.theta, 0.0, None, &ones).unwrap();
+    let theta_max = (0..inp.n_goods())
+        .filter(|&g| inp.traded[g])
+        .map(|g| inp.theta[g])
+        .fold(f64::NEG_INFINITY, f64::max);
+    assert!(close(labour_only, theta_max / (1.0 + theta_max), 1e-12));
+    assert!(labour_only <= bound);
+    assert!(uniqueness::spectral_bound(&inp.theta, 0.05, None, &va).is_err());
+    assert!(uniqueness::spectral_bound(&inp.theta, 0.0, Some(2.0), &va).is_err());
+}
+
+#[test]
+fn v1_mode() {
+    use V1Mode::{Report, Tolerance};
+    assert_eq!(uniqueness::v1_mode(0.0), Tolerance);
+    assert_eq!(uniqueness::v1_mode(0.93), Tolerance);
+    assert_eq!(uniqueness::v1_mode(1.0), Tolerance);
+    assert_eq!(uniqueness::v1_mode(1.0_f64.next_up()), Report);
+    assert_eq!(uniqueness::v1_mode(1.5), Report);
+    assert_eq!(uniqueness::v1_mode(f64::INFINITY), Report);
 }
