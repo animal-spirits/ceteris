@@ -192,16 +192,21 @@ impl<'m, 'a> Jacobian<'m, 'a> {
 /// A linear map applied to a vector, or why it could not be.
 type Operator<'o> = dyn FnMut(&[f64]) -> Result<Vec<f64>, String> + 'o;
 
-/// Restarted GMRES from 0 for `a x = b`, to `||b - a x|| <= rtol ||b||` or [`MAX_CYCLES`] cycles
-/// of [`RESTART`] Arnoldi vectors (modified Gram-Schmidt, Givens rotations); sums in a fixed
-/// order.
-fn gmres(a: &mut Operator, b: &[f64], rtol: f64) -> Result<Vec<f64>, String> {
+/// Restarted GMRES from 0 for `a x = b`, to `||b - a x|| <= rtol ||b||` or `cycles` cycles of
+/// `restart` Arnoldi vectors (modified Gram-Schmidt, Givens rotations); sums in a fixed order.
+fn gmres(
+    a: &mut Operator,
+    b: &[f64],
+    rtol: f64,
+    restart: usize,
+    cycles: usize,
+) -> Result<Vec<f64>, String> {
     let n = b.len();
     let mut x = vec![0.0; n];
     let target = rtol * norm(b);
     let mut r = b.to_vec();
     let mut beta = norm(&r);
-    for cycle in 0..MAX_CYCLES {
+    for cycle in 0..cycles {
         if beta == 0.0 || beta <= target {
             break;
         }
@@ -209,7 +214,7 @@ fn gmres(a: &mut Operator, b: &[f64], rtol: f64) -> Result<Vec<f64>, String> {
         let mut hess: Vec<Vec<f64>> = Vec::new();
         let (mut cs, mut sn): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
         let mut g = vec![beta];
-        for j in 0..RESTART {
+        for j in 0..restart {
             let mut w = a(&basis[j])?;
             let mut h = vec![0.0; j + 2];
             for (i, v) in basis.iter().enumerate() {
@@ -257,7 +262,7 @@ fn gmres(a: &mut Operator, b: &[f64], rtol: f64) -> Result<Vec<f64>, String> {
                 *xk += yi * vk;
             }
         }
-        if g[k].abs() <= target || cycle + 1 == MAX_CYCLES {
+        if g[k].abs() <= target || cycle + 1 == cycles {
             break;
         }
         r = b.iter().zip(a(&x)?).map(|(b, ax)| b - ax).collect();
@@ -291,8 +296,14 @@ pub fn newton(
         }
         check(deadline, || format!("newton at residual {norm:.3e}"))?;
         let jac = Jacobian::new(m, x.clone(), fx.clone());
-        let mut dx = gmres(&mut |v| jac.apply(v), &fx, norm.min(0.1))
-            .map_err(|e| no_convergence(format!("{e} at Newton step {steps}")))?;
+        let mut dx = gmres(
+            &mut |v| jac.apply(v),
+            &fx,
+            norm.min(0.1),
+            RESTART,
+            MAX_CYCLES,
+        )
+        .map_err(|e| no_convergence(format!("{e} at Newton step {steps}")))?;
         let scale = (STEP_CAP / max_abs(&dx)).min(1.0);
         for (xi, d) in x.iter_mut().zip(&mut dx) {
             *d *= -scale;
@@ -436,9 +447,9 @@ pub fn tatonnement(
 }
 
 /// Solves `model::residual(x) = 0` to `tol` in the max norm, from the data state unless `x0` is
-/// given: Newton-Krylov, and where it fails (step cap, non-finite residual), tatonnement and
-/// Newton-Krylov from there. Errs without convergence (also past `deadline`), or for a root that
-/// is not a Rust steady state.
+/// given: Newton-Krylov, and where it fails (step cap, non-finite residual or a non-finite
+/// Jacobian product), tatonnement and Newton-Krylov from there. Errs without convergence (also
+/// past `deadline`), or for a root that is not a Rust steady state.
 pub fn equilibrium(
     m: &Model,
     x0: Option<&[f64]>,
@@ -503,10 +514,8 @@ mod tests {
             .fold(0.0, f64::max)
     }
 
-    /// A linear system that needs more than 30 Krylov vectors converges within one cycle of
-    /// RESTART.
-    #[test]
-    fn gmres_uses_the_restart_size() {
+    /// An 80 x 80 system with a spread of eigenvalues, and its right-hand side.
+    fn spread_system() -> (Vec<Vec<f64>>, Vec<f64>) {
         let n = 80;
         let mut seed = 5_u64;
         let mut noise = || {
@@ -530,6 +539,35 @@ mod tests {
             })
             .collect();
         let b: Vec<f64> = (0..n).map(|_| noise()).collect();
+        (a, b)
+    }
+
+    fn solve_counting(
+        a: &[Vec<f64>],
+        b: &[f64],
+        restart: usize,
+        cycles: usize,
+    ) -> (Vec<f64>, usize) {
+        let mut calls = 0;
+        let x = gmres(
+            &mut |v| {
+                calls += 1;
+                Ok(a.iter().map(|row| dot(row, v)).collect())
+            },
+            b,
+            1e-14,
+            restart,
+            cycles,
+        )
+        .unwrap();
+        (x, calls)
+    }
+
+    /// A linear system that needs more than 30 Krylov vectors converges within one cycle of
+    /// RESTART.
+    #[test]
+    fn gmres_uses_the_restart_size() {
+        let (a, b) = spread_system();
         let mut calls = 0;
         let x = gmres(
             &mut |v| {
@@ -538,6 +576,8 @@ mod tests {
             },
             &b,
             1e-10,
+            RESTART,
+            MAX_CYCLES,
         )
         .unwrap();
         assert!(
@@ -545,6 +585,52 @@ mod tests {
             "{calls} products"
         );
         assert!(residual_norm(&a, &x, &b) <= 1e-6 * max_abs(&b));
+    }
+
+    /// The second cycle restarts from the first cycle's solution: it adds GMRES on the residual
+    /// b - a x1, after one product for that residual.
+    #[test]
+    fn gmres_restarts_from_the_residual() {
+        let (a, b) = spread_system();
+        let restart = 10;
+        let (x1, calls1) = solve_counting(&a, &b, restart, 1);
+        let (x2, calls2) = solve_counting(&a, &b, restart, 2);
+        assert_eq!((calls1, calls2), (restart, 2 * restart + 1));
+        let r: Vec<f64> = b.iter().zip(&a).map(|(b, row)| b - dot(row, &x1)).collect();
+        let (dx, _) = solve_counting(&a, &r, restart, 1);
+        for ((got, x), d) in x2.iter().zip(&x1).zip(&dx) {
+            let want = x + d;
+            assert!(
+                (got - want).abs() <= 1e-12 * want.abs().max(1.0),
+                "{got} vs {want}"
+            );
+        }
+        assert!(residual_norm(&a, &x2, &b) < residual_norm(&a, &x1, &b));
+    }
+
+    /// A Jacobian product that leaves the finite range errs, and GMRES passes the error on, so
+    /// Newton-Krylov stops with `NoConvergence` and the solve falls back to tatonnement
+    /// (solve.py lets scipy's error escape instead).
+    #[test]
+    fn nonfinite_jacobian_product_errs() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture");
+        let inp = crate::io::load(dir).unwrap();
+        let m = Model::new(&inp).unwrap();
+        let x0 = m.data_state();
+        let f0 = model::residual(&x0, &m);
+        let mut jac = Jacobian::new(&m, x0.clone(), f0.clone());
+        let mut down = vec![0.0; x0.len()];
+        *down.last_mut().unwrap() = -1.0;
+        assert!(jac.apply(&down).is_ok());
+        // A step that takes the last wage to e^-800, which underflows to 0.
+        jac.omega = 800.0;
+        assert_eq!(
+            jac.apply(&down),
+            Err("Jacobian product not finite".to_owned())
+        );
+        let err = gmres(&mut |v| jac.apply(v), &down, 0.1, RESTART, MAX_CYCLES);
+        assert_eq!(err, Err("Jacobian product not finite".to_owned()));
     }
 
     #[test]

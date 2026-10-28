@@ -70,6 +70,7 @@ fn ints(v: &Value) -> Vec<usize> {
 
 struct Report {
     worst: f64,
+    worst_abs: f64,
     failures: Vec<String>,
 }
 
@@ -102,6 +103,7 @@ impl Report {
             self.failures
                 .push(format!("{name}: {max:e} > {tol:e} absolute"));
         }
+        self.worst_abs = self.worst_abs.max(max);
     }
 
     /// Every quantity of `model.evaluate` at the point's x, to 1e-12; at a `root` the residual
@@ -226,6 +228,7 @@ fn reference_matches_python_dump() {
     let inp = io::load(d["inputs"].as_str().unwrap()).unwrap();
     let mut r = Report {
         worst: 0.0,
+        worst_abs: 0.0,
         failures: Vec::new(),
     };
 
@@ -395,6 +398,6 @@ fn reference_matches_python_dump() {
             );
         }
     }
-    println!("worst max_rel={:e}", r.worst);
+    println!("worst max_rel={:e} max_abs={:e}", r.worst, r.worst_abs);
     assert!(r.failures.is_empty(), "{:#?}", r.failures);
 }
