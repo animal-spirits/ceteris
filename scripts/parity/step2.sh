@@ -4,7 +4,8 @@
 # files with the same schemas (columns, types, nullability, metadata), print the same summaries
 # and return the same stats, and runs `ceteris pack compare` on every table in file row order.
 # Then the same with each optional source the build reads left out of the cache (GEM coal, GEM
-# oil and gas, gridded GDP).
+# oil and gas, gridded GDP). The Python econ package is deleted from the tree, so the Python
+# package is taken from the commit before the deletion.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -15,7 +16,8 @@ pack="${CETERIS_PACK:-$root/data/packs/2000}"
 cache="$root/data/cache"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-python_src="$root/python"
+git archive 07a015f python/ceteris | tar -x -C "$work"
+python_src="$work/python"
 
 python_build() {
     PYTHONPATH="$python_src" uv run --project "$root/python" --locked python -c '

@@ -12,7 +12,7 @@ P2, ADR 0017):
   exports), as an ad valorem equivalent at the class thetas of the same fit;
 - mode cost ratios (P04a-d): coefficients on tonne-km by mode along the S05 paths, relative to road.
 
-Outputs carry provenance "data". `--write` puts them in `packs/econ/gravity_2000.toml` only when no stop
+Outputs carry provenance "data". `--write` puts them in `packs/gravity_2000.toml` only when no stop
 rule of the task fires (`stop_rules`); the econ pack build does not read that file yet, since whether the
 model switches to the estimates is the owner's decision (PLAN Task 18).
 """
@@ -783,7 +783,7 @@ def estimate(pack, cache) -> Estimates:
 
 # ---------------------------------------------------------------- outputs
 
-OUT = Path(__file__).resolve().parents[1] / "packs" / "econ" / "gravity_2000.toml"
+OUT = Path(__file__).resolve().parents[1] / "packs" / "gravity_2000.toml"
 # The P04 rows are ratios to road (P04a), the numeraire of `mode_costs`.
 P04_IDS = ("P04b/P04a", "P04c/P04a", "P04d/P04a")
 
