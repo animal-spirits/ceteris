@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Step 2 econ table parity for one module (people, icio, goods, tariffs): builds the econ tables with Python and
-# with `ceteris pack build --econ-only`, checks the Rust schemas and selects the module's columns
-# from both (econ_tables.py), runs `ceteris pack compare` on them, then the module's tests on the
-# real data (optimised: the WorldPop tests skip in debug builds).
+# Step 2 econ table parity for one module (people, icio, goods, tariffs, gateways): builds the
+# econ tables with Python and with `ceteris pack build --econ-only`, checks the Rust schemas and
+# selects the module's columns from both (econ_tables.py), runs `ceteris pack compare` on them,
+# then the module's tests on the real data (optimised: the WorldPop tests skip in debug builds).
 set -euo pipefail
 
 module="$1"

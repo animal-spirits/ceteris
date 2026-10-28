@@ -56,17 +56,26 @@ ICIO = {
 }
 GOODS_TABLE = {"econ_goods.arrow": ["name", "traded", "weight", "coverage"]}
 TARIFFS = {"econ_tariffs.arrow": ["importer", "exporter", "group", "rate", "agreement", "imputed"]}
-MODULES = {"people": PEOPLE, "icio": ICIO, "goods": GOODS_TABLE, "tariffs": TARIFFS}
+GATEWAYS = {"gateways.arrow": ["node", "country", "kind"]}
+MODULES = {"people": PEOPLE, "icio": ICIO, "goods": GOODS_TABLE, "tariffs": TARIFFS, "gateways": GATEWAYS}
 RUST = {
     **GOODS_TABLE,
     **TARIFFS,
+    **GATEWAYS,
     "econ_countries.arrow": ICIO["econ_countries.arrow"] + PEOPLE["econ_countries.arrow"][1:],
     "econ_io.arrow": ICIO["econ_io.arrow"],
     "econ_provinces.arrow": PEOPLE["econ_provinces.arrow"],
     "econ_pops.arrow": PEOPLE["econ_pops.arrow"],
 }
 # Tables whose Python columns are all ported: the Python schema must be the same list.
-COMPLETE = ["econ_goods.arrow", "econ_countries.arrow", "econ_io.arrow", "econ_pops.arrow", "econ_tariffs.arrow"]
+COMPLETE = [
+    "econ_goods.arrow",
+    "econ_countries.arrow",
+    "econ_io.arrow",
+    "econ_pops.arrow",
+    "econ_tariffs.arrow",
+    "gateways.arrow",
+]
 
 
 def main() -> None:
