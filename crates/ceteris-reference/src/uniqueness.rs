@@ -91,8 +91,9 @@ fn perron_root(a: &Mat) -> f64 {
     upper
 }
 
-/// `m` X = `rhs` by Gaussian elimination with partial pivoting.
-fn solve(m: &Mat, rhs: &Mat) -> Mat {
+/// `m` X = `rhs` by Gaussian elimination with partial pivoting; errs on a singular `m`, as
+/// numpy's `solve` raises.
+fn solve(m: &Mat, rhs: &Mat) -> Result<Mat, String> {
     assert!(m.rows == m.cols && rhs.rows == m.rows, "solve shapes");
     let n = m.rows;
     let (mut m, mut x) = (m.clone(), rhs.clone());
@@ -100,6 +101,9 @@ fn solve(m: &Mat, rhs: &Mat) -> Mat {
         let pivot = (col..n)
             .max_by(|&i, &j| m[(i, col)].abs().total_cmp(&m[(j, col)].abs()))
             .unwrap_or(col);
+        if m[(pivot, col)] == 0.0 {
+            return Err("singular matrix".into());
+        }
         if pivot != col {
             for c in 0..n {
                 m.data.swap(col * n + c, pivot * n + c);
@@ -127,25 +131,26 @@ fn solve(m: &Mat, rhs: &Mat) -> Mat {
             x[(col, c)] = v / m[(col, col)];
         }
     }
-    x
+    Ok(x)
 }
 
 /// Remark 5: the constant-elasticity system prod x_ih'^gamma_hh' = sum_j K_ijh prod
-/// x_ih'^r_hh' x_jh'^b_hh' (equation 8) has elasticity bounds |B (Gamma - R)^-1|.
-pub fn change_of_variables(gamma: &Mat, b: &Mat, r: Option<&Mat>) -> Mat {
+/// x_ih'^r_hh' x_jh'^b_hh' (equation 8) has elasticity bounds |B (Gamma - R)^-1|. Errs where
+/// Gamma - R is singular.
+pub fn change_of_variables(gamma: &Mat, b: &Mat, r: Option<&Mat>) -> Result<Mat, String> {
     let m = match r {
         Some(r) => Mat::from_fn(gamma.rows, gamma.cols, |i, j| gamma[(i, j)] - r[(i, j)]),
         None => gamma.clone(),
     };
-    let x = solve(&m.transpose(), &b.transpose()).transpose();
-    Mat::from_fn(x.rows, x.cols, |i, j| x[(i, j)].abs())
+    let x = solve(&m.transpose(), &b.transpose())?.transpose();
+    Ok(Mat::from_fn(x.rows, x.cols, |i, j| x[(i, j)].abs()))
 }
 
 /// Online Appendix A.3 (pp. 8-9): equations (29) and (30) in tradeables price index and wage,
 /// labour share beta of tradeables production, the rest the tradeables aggregate. The paper's
 /// theta is the inverse of the trade elasticity (Alvarez and Lucas 2007), so its 1/theta in
-/// Gamma and B is the trade elasticity.
-pub fn trade_with_intermediates(elasticity: f64, labour_share: f64) -> Mat {
+/// Gamma and B is the trade elasticity. Errs at elasticity 0, where Gamma is singular.
+pub fn trade_with_intermediates(elasticity: f64, labour_share: f64) -> Result<Mat, String> {
     let (t, beta) = (elasticity, labour_share);
     let gamma = Mat::from_rows(&[vec![-t, 0.0], vec![(1.0 - beta) * t, 1.0 + beta * t]]);
     let b = Mat::from_rows(&[
@@ -185,11 +190,12 @@ pub fn spectral_bound(
                 .into(),
         );
     }
-    (0..theta.len())
-        .filter(|&g| theta[g] > 0.0)
-        .map(|g| spectral_radius(&trade_with_intermediates(theta[g], value_added_share[g])))
-        .reduce(f64::max)
-        .ok_or_else(|| "uniqueness bound without a traded good".into())
+    let mut bound = None::<f64>;
+    for g in (0..theta.len()).filter(|&g| theta[g] > 0.0) {
+        let rho = spectral_radius(&trade_with_intermediates(theta[g], value_added_share[g])?);
+        bound = Some(bound.map_or(rho, |b| b.max(rho)));
+    }
+    bound.ok_or_else(|| "uniqueness bound without a traded good".into())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
