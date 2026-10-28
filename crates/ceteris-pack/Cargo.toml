@@ -15,7 +15,9 @@ arrow-cast = "60.0.0"
 arrow-ipc = { version = "60.0.0", features = ["zstd"] }
 arrow-schema = "60.0.0"
 arrow-select = "60.0.0"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
 sha2 = "0.10.9"
+toml = "1.1.8"
 
 [dev-dependencies]
 tempfile = "3.27.0"

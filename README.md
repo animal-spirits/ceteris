@@ -73,7 +73,7 @@ a sleeping display stops the webview from rendering.
 
 Other entry points: `cargo run --release -p ceteris-geo --example costs -- NLD-3485 CHN-1819`
 prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo` runs the
-benchmarks; `python3 -I python/ceteris/packs/check_sources.py` validates the licence manifest.
+benchmarks; `ceteris pack check-sources --profile research|release` validates the licence manifest.
 Tests that need the pack skip when it has not been built, as in CI.
 
 Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden` or
