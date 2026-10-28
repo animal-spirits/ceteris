@@ -5,6 +5,8 @@
 //! ceteris pack compare A B [--iterative] [--table NAME]
 //! ceteris pack check-sources --profile research|release
 //! ceteris pack fetch [--record]
+//! ceteris pack dump-reader NAME [ARGS]
+//! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -36,7 +38,10 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_pack::compare::{self, Tolerance};
+use ceteris_pack::econ;
 use ceteris_pack::fetch;
+use ceteris_pack::json::Json;
+use ceteris_pack::read::dump;
 use ceteris_pack::sources::{self, Profile};
 use ceteris_trade::{Kernel, TradeParams};
 
@@ -44,6 +49,8 @@ const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
   ceteris pack check-sources [--profile research|release]
   ceteris pack fetch [--record]
+  ceteris pack dump-reader NAME [ARGS]
+  ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -272,13 +279,72 @@ fn fetch_sources(args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     }
 }
 
+/// `pack dump-reader NAME [ARGS]`: one econ source reader's output on the fetch cache, as
+/// canonical JSON.
+fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let name = args
+        .next()
+        .ok_or_else(|| format!("dump-reader needs a reader: {}", dump::NAMES.join(", ")))?;
+    let rest: Vec<String> = args.collect();
+    println!("{}", dump::dump(&name, &rest)?.text());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
+/// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
+/// stats as JSON.
+fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let (mut econ_only, mut pack, mut out) = (false, None, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--econ-only" => econ_only = true,
+            "--pack" => {
+                pack = Some(PathBuf::from(
+                    args.next().ok_or("--pack needs a directory")?,
+                ))
+            }
+            "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    if !econ_only {
+        return Err("pack build supports --econ-only only".into());
+    }
+    let pack = pack.unwrap_or_else(|| sources::workspace_root().join("data/packs/2000"));
+    let out = out.unwrap_or_else(|| pack.clone());
+    let cache = sources::workspace_root().join(fetch::CACHE_DIR);
+    let report = econ::build::build(&pack, &out, &cache)?;
+    let hex = |d: &[u8; 32]| d.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let tables = Json::object(
+        report
+            .tables
+            .iter()
+            .map(|(name, d)| (name, Json::Str(hex(d)))),
+    );
+    for line in &report.summary {
+        eprintln!("{line}");
+    }
+    println!(
+        "{}",
+        Json::object([("tables", tables), ("stats", report.stats.json())]).text()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
 fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     match args.next().as_deref() {
         Some("compare") => {}
         Some("check-sources") => return check_sources(args),
         Some("fetch") => return fetch_sources(args),
-        _ => return Err("expected a pack command, compare, check-sources or fetch".into()),
+        Some("dump-reader") => return dump_reader(args),
+        Some("build") => return build(args),
+        _ => {
+            return Err(
+                "expected a pack command, compare, check-sources, fetch, dump-reader or build"
+                    .into(),
+            );
+        }
     }
     let (mut dirs, mut tolerance, mut only) = (Vec::new(), Tolerance::DEFAULT, None);
     while let Some(a) = args.next() {

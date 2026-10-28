@@ -840,7 +840,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
-notes = "Dryad serves files only with an API bearer token (401) or a browser session (403, 2026-10-24); GDP_PPP_1990_2015_5arcmin_v2.nc is a manual, optional download."
+notes = "Dryad serves files only with an API bearer token (401) or a browser session (403, 2026-10-24); GDP_PPP_1990_2015_5arcmin_v2.nc is a manual, optional download. The pack reads kummu_gdp_ppp_2000_5arcmin.tif, its year-2000 band converted by scripts/convert_kummu.py (a derived, pinned file); the NetCDF stays pinned as the provenance."
 
 [[source]]
 id = "chen-gdp"
