@@ -8,7 +8,7 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray, UInt8Array, UInt32Array};
 
 use super::people::donor;
-use crate::numeric::{pairwise_sum, py_sum};
+use crate::numeric::{median, pairwise_sum, py_sum};
 use crate::read::icio::{CountryIo, N_GOODS, Wdi};
 use crate::read::people::{Observed, parts};
 use crate::read::wdi::Names;
@@ -118,17 +118,6 @@ impl Economy {
     }
 }
 
-/// `np.median`: the middle value, or the mean of the two middle values of an even count.
-fn median(mut values: Vec<f64>) -> f64 {
-    values.sort_by(f64::total_cmp);
-    let n = values.len();
-    if n % 2 == 1 {
-        values[n / 2]
-    } else {
-        (values[n / 2 - 1] + values[n / 2]) / 2.0
-    }
-}
-
 /// `np.mean` of a list.
 fn mean(values: &[f64]) -> f64 {
     pairwise_sum(values) / values.len() as f64
@@ -141,6 +130,7 @@ pub fn median_va_over_gdp(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 
             .filter_map(|(k, c)| Some(pairwise_sum(&c.va) * 1e6 / wdi.gdp.get(k)?))
             .collect(),
     )
+    .unwrap_or(f64::NAN)
 }
 
 /// A country's VA shares of GDP: agriculture, industry, manufacturing, services.

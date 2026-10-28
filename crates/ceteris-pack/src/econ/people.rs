@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, Float64Array, RecordBatch, UInt8Array, UInt32Array};
 
-use crate::numeric::{pairwise_sum, py_sum};
+use crate::numeric::{median, pairwise_sum, py_sum};
 use crate::read::people::{N_EDU, Observed, parts};
 use crate::read::wdi::Names;
 use crate::table;
@@ -96,17 +96,6 @@ fn weighted<T: Weighted>(values: &[T], weights: &[f64]) -> T {
         .zip(weights)
         .fold(T::ZERO, |acc, (v, w)| acc.add(v.mul(*w)));
     total.div(pairwise_sum(weights))
-}
-
-/// The median as `statistics.median` takes it: the mean of the two middle values of an even count.
-fn median(mut values: Vec<f64>) -> Option<f64> {
-    values.sort_by(f64::total_cmp);
-    let n = values.len();
-    match n {
-        0 => None,
-        _ if n % 2 == 1 => Some(values[n / 2]),
-        _ => Some((values[n / 2 - 1] + values[n / 2]) / 2.0),
-    }
 }
 
 /// Observed economy (a key of `observed`, not in `exclude`, with a GDP per person) in `region`

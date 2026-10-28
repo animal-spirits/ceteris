@@ -8,6 +8,7 @@ use csv::StringRecord;
 
 use super::xlsx::{self, Cell, Row};
 use super::{ByYear, YEAR, cell, float, int, nearest_year, open_csv};
+use crate::numeric::median;
 
 /// Cubic metres of natural gas per barrel of oil equivalent (5,800 cubic feet).
 pub const M3_PER_BOE: f64 = 5800.0 * 0.0283168466;
@@ -162,17 +163,6 @@ fn is_text(r: &Row, name: &str, among: &[&str]) -> bool {
         .is_some_and(|t| among.contains(&t))
 }
 
-/// Python's `statistics.median`.
-fn median(mut values: Vec<f64>) -> f64 {
-    values.sort_by(f64::total_cmp);
-    let n = values.len();
-    if n % 2 == 1 {
-        values[n / 2]
-    } else {
-        (values[n / 2 - 1] + values[n / 2]) / 2.0
-    }
-}
-
 /// Assets with valid coordinates. A missing weight is 0 in a country where any asset has a
 /// figure; where none has, every asset takes the median positive figure of all assets.
 fn located(rows: Vec<Located>) -> Vec<Asset> {
@@ -186,7 +176,7 @@ fn located(rows: Vec<Located>) -> Vec<Asset> {
         .filter_map(|r| r.weight)
         .filter(|w| *w > 0.0)
         .collect();
-    let fill = if known.is_empty() { 1.0 } else { median(known) };
+    let fill = median(known).unwrap_or(1.0);
     let mut out = Vec::new();
     for r in &rows {
         let (Some(mut lat), Some(mut lon)) = (r.lat, r.lon) else {
