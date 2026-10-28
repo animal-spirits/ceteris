@@ -152,12 +152,19 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
         return;
     };
     let root = workspace_root();
+    let config: toml::Table = std::fs::read_to_string(root.join(CONFIG_DIR).join("pack.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let split_area = config["split_area_km2"].as_integer().unwrap() as f64;
+    let res = Resolution::try_from(u8::try_from(config["land_res"].as_integer().unwrap()).unwrap())
+        .unwrap();
     let units = counties::load(&root).unwrap();
     let provs = provinces::build(
         &admin1,
         &admin0,
-        250_000.0,
-        Resolution::Four,
+        split_area,
+        res,
         &units,
         &provinces::Centres::H3o,
     )
@@ -184,12 +191,12 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
 
     let geoms: Vec<_> = provs.iter().map(|p| provinces::parts(&p.geom)).collect();
     let anchors: Vec<(f64, f64)> = provs.iter().map(|p| (p.lon, p.lat)).collect();
-    let (ids, owner) = assign_cells(&geoms, &anchors, Resolution::Four).unwrap();
+    let (ids, owner) = assign_cells(&geoms, &anchors, res).unwrap();
     let ids: Vec<u64> = ids.into_iter().map(u64::from).collect();
     assert_eq!(ids, column::<UInt64Type>(&cells, "cell"));
     assert_eq!(owner, column::<UInt32Type>(&cells, "province"));
 
-    let clipped = counties::clip(&units, &provs, 250_000.0).unwrap();
+    let clipped = counties::clip(&units, &provs, split_area).unwrap();
     assert_eq!(
         clipped.province,
         column::<UInt32Type>(&pack_counties, "province")
