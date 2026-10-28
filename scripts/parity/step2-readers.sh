@@ -17,7 +17,7 @@ readers=(
     adb-income maddison load-wdi icio-aggregate icio-exports
     hs-cpa baci-by-product baci-values theta theta-bands theta-fixture trade-by-country
     rates cepii dta
-    dose province-names us-states gem-coal gem-oil-gas seds
+    dose province-names us-states gem-coal gem-oil-gas seds point-owners:coal point-owners:oil-gas proxies
 )
 for f in data/cache/wdi_*.zip; do
     f="${f#data/cache/wdi_}"

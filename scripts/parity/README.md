@@ -26,12 +26,17 @@ worldpop|mapspam|kummu`), then rewrites the pixel to H3 cell fixture of the Rust
 `pixel_cells_match_python_on_border_windows` with `pixel_cells.py` and checks it equals the
 committed one.
 
-`step2-people.sh`, `step2-icio.sh` and `step2-goods.sh` run `step2-econ.sh MODULE` (the tariffs
-and gateways run it directly: `step2-econ.sh tariffs`, `step2-econ.sh gateways`): it builds the
-econ tables with Python and with `ceteris pack build --econ-only`, checks with `econ_tables.py`
+`step2-people.sh`, `step2-icio.sh`, `step2-goods.sh` and `step2-downscale.sh` run `step2-econ.sh
+MODULE` (the tariffs and gateways run it directly: `step2-econ.sh tariffs`, `step2-econ.sh
+gateways`): it builds the econ tables with Python and with `ceteris pack build --econ-only`, checks with `econ_tables.py`
 that every Rust table has exactly the columns listed there, selects the module's columns from
 both builds, compares them, and runs the module's tests in release mode (their WorldPop tests
 skip in debug builds).
+
+`step2-downscale.sh` also compares, as readers, the base H3 cell and owning province of every GEM
+coal mine and oil and gas field (`point-owners coal|oil-gas`: the points `point_sums` places) and
+every downscaling proxy with the DOSE match counts (`proxies`), so a point moved between provinces
+of one country shows even where the province totals of the VA columns would not.
 
 The theta functions write no table, so `step2-readers.sh theta theta-bands theta-fixture`
 compares their output as readers: per-good theta and value, the value by sector, the classes and

@@ -23,11 +23,16 @@ use super::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use super::wdi::{read_rates, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, WINDOW, YEAR};
+use crate::econ::build::{WORLDPOP as WORLDPOP_TIF, read_geography};
+use crate::econ::downscale::{GEM, Proxies, load_proxies};
 use crate::econ::goods::hs_goods;
+use crate::econ::people::{national_population, scale_to_national};
 use crate::econ::theta::{by_good, caliendo_parro_with_value, class_bands, classes, sector_values};
 use crate::json::Json;
 use crate::raster::geotiff;
-use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population, spam_physical_area};
+use crate::raster::population::{
+    BLOCK_ROWS, CellOwner, cell_of, province_population, spam_physical_area,
+};
 use crate::{fetch, sources};
 
 pub const NAMES: &[&str] = &[
@@ -64,6 +69,8 @@ pub const NAMES: &[&str] = &[
     "gem-coal",
     "gem-oil-gas",
     "population worldpop|mapspam|kummu",
+    "point-owners coal|oil-gas",
+    "proxies",
 ];
 
 const ICIO: &str = "1995-2000_SML.zip";
@@ -263,7 +270,10 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
                         (
                             k,
                             Json::object([
-                                ("values", Json::from(d.values)),
+                                (
+                                    "values",
+                                    Json::from(d.values.into_iter().collect::<BTreeMap<_, _>>()),
+                                ),
                                 ("coverage", d.coverage.into()),
                             ]),
                         )
@@ -298,6 +308,15 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
             };
             Json::list(total)
         }
+        "point-owners" => {
+            let assets = match arg(0)? {
+                "coal" => read_gem_coal(&cache(GEM_COAL))?,
+                "oil-gas" => read_gem_oil_gas(&cache(GEM_OIL_GAS))?,
+                other => return Err(format!("unknown assets '{other}': coal or oil-gas")),
+            };
+            point_owners(&assets)?
+        }
+        "proxies" => proxies()?,
         _ => {
             return Err(format!(
                 "unknown reader '{name}'; readers: {}",
@@ -305,6 +324,98 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
             ));
         }
     })
+}
+
+fn pack_dir() -> PathBuf {
+    sources::workspace_root().join("data/packs/2000")
+}
+
+/// Each asset's H3 cell at the pack's base resolution and the province owning its point.
+fn point_owners(assets: &[Asset]) -> Result<Json, String> {
+    let mut owner = CellOwner::read(&pack_dir().join("cells.arrow"))?;
+    let mut out = Vec::with_capacity(assets.len());
+    for a in assets {
+        let cell = u64::from(cell_of(a.lat, a.lon, owner.base)?);
+        let cell = i64::try_from(cell).map_err(|e| format!("cell {cell}: {e}"))?;
+        out.push(Json::list([cell, owner.of_point(a.lat, a.lon)?]));
+    }
+    Ok(Json::List(out))
+}
+
+/// Every downscaling proxy and the DOSE match counts, from the inputs the econ build gives them.
+fn proxies() -> Result<Json, String> {
+    let pack = pack_dir();
+    let cache_dir = cache("");
+    let (iso, _) = read_codes(&admin0())?;
+    let obs = load_observed(&cache_dir, &admin0())?;
+    let codes = pack_codes()?;
+    let geo = read_geography(&pack)?;
+    let mut owner = CellOwner::read(&pack.join("cells.arrow"))?;
+    let raw = province_population(
+        &mut geotiff::open(&cache(WORLDPOP_TIF))?,
+        &mut owner,
+        BLOCK_ROWS,
+    )?;
+    let population =
+        scale_to_national(&raw, &geo.country, &national_population(&codes, &obs, &iso));
+    let gem = GEM.map(cache);
+    let gem = gem
+        .iter()
+        .all(|p| p.exists())
+        .then(|| (gem[0].clone(), gem[1].clone()));
+    let (p, m) = load_proxies(
+        &cache_dir,
+        &geo,
+        &mut owner,
+        &population,
+        &obs.population,
+        &iso,
+        gem,
+    )?;
+    let Proxies {
+        crops,
+        oil_gas,
+        oil_gas_undated,
+        eia,
+        coal,
+        sites,
+        dose,
+        dose_rest,
+        gdp,
+    } = p;
+    let count = |n: usize| Json::Int(n as i64);
+    Ok(Json::object([
+        (
+            "proxies",
+            Json::object([
+                ("crops", Json::from(crops)),
+                ("oil_gas", oil_gas.into()),
+                ("oil_gas_undated", oil_gas_undated.into()),
+                ("eia", eia.into()),
+                ("coal", coal.into()),
+                ("sites", sites.into()),
+                ("dose", dose.into()),
+                ("dose_rest", dose_rest.into()),
+                ("gdp", gdp.into()),
+            ]),
+        ),
+        (
+            "match",
+            Json::object([
+                ("matched", count(m.matched)),
+                ("regions", count(m.regions)),
+                ("gva_share", m.gva_share.into()),
+                (
+                    "by_country",
+                    Json::object(
+                        m.by_country
+                            .into_iter()
+                            .map(|(k, (a, b))| (k, Json::list([count(a), count(b)]))),
+                    ),
+                ),
+            ]),
+        ),
+    ]))
 }
 
 /// Theta per good and trade value before and after the local goods are zeroed, the value by
