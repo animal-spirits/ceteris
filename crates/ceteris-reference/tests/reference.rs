@@ -7,6 +7,7 @@ use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
+use ceteris_reference::sinkhorn;
 
 fn fixture() -> PathBuf {
     std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(
@@ -167,4 +168,28 @@ fn load_rejects_another_export_format() {
     let err = io::load(&dir).unwrap_err();
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(err, "export format 8, expected 9");
+}
+
+/// Flows of the form a_o K_od b_d are recovered from their own marginals.
+#[test]
+fn balanced_recovers_scaled_kernel() {
+    let k = Mat::from_fn(5, 5, |o, d| {
+        if o == d {
+            1.0
+        } else {
+            (-((o as f64) - (d as f64)).abs()).exp()
+        }
+    });
+    let a = [0.3, 1.2, 0.0, 2.5, 0.7];
+    let b = [1.1, 0.4, 0.9, 0.0, 3.0];
+    let flows = Mat::from_fn(5, 5, |o, d| a[o] * k[(o, d)] * b[d]);
+    let col_sums: Vec<f64> = (0..5)
+        .map(|d| (0..5).map(|o| flows[(o, d)]).sum())
+        .collect();
+    let solved = sinkhorn::balanced(&k, &flows.row_sums(), &col_sums).unwrap();
+    for (got, want) in solved.data.iter().zip(&flows.data) {
+        assert!(
+            (got - want).abs() <= 1e-12 * want.abs().max(1e-300) || *want == 0.0 && *got == 0.0
+        );
+    }
 }

@@ -3,3 +3,4 @@
 
 pub mod demand;
 pub mod io;
+pub mod sinkhorn;
