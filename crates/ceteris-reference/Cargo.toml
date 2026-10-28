@@ -16,3 +16,6 @@ arrow-ipc = { version = "60.0.0", features = ["zstd"] }
 arrow-schema = "60.0.0"
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 statrs = { version = "0.19.1", default-features = false }
+
+[dev-dependencies]
+proptest = "1.12.0"
