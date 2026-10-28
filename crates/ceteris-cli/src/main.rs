@@ -6,6 +6,7 @@
 //! ceteris pack check-sources --profile research|release
 //! ceteris pack fetch [--record]
 //! ceteris pack dump-reader NAME [ARGS]
+//! ceteris pack dump-geo DIR
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -24,7 +25,7 @@
 //! `ceteris_econ::history`, every N ticks (default 1), as Arrow with zstd compression or, with
 //! `--history-format csv`, as CSV.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -50,6 +51,7 @@ const USAGE: &str = "usage:
   ceteris pack check-sources [--profile research|release]
   ceteris pack fetch [--record]
   ceteris pack dump-reader NAME [ARGS]
+  ceteris pack dump-geo DIR
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -290,6 +292,17 @@ fn dump_reader(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Strin
     Ok(ExitCode::SUCCESS)
 }
 
+/// `pack dump-geo DIR`: the geo modules' tables and fills of the provinces and counties in DIR,
+/// written to DIR/rust.
+fn dump_geo(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let dir = args.next().ok_or("dump-geo needs a directory")?;
+    if let Some(a) = args.next() {
+        return Err(format!("unknown argument '{a}'"));
+    }
+    ceteris_pack::geo::dump::dump(Path::new(&dir))?;
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
 /// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
 /// stats as JSON.
@@ -338,10 +351,12 @@ fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Some("check-sources") => return check_sources(args),
         Some("fetch") => return fetch_sources(args),
         Some("dump-reader") => return dump_reader(args),
+        Some("dump-geo") => return dump_geo(args),
         Some("build") => return build(args),
         _ => {
             return Err(
-                "expected a pack command, compare, check-sources, fetch, dump-reader or build"
+                "expected a pack command, compare, check-sources, fetch, dump-reader, dump-geo or \
+                 build"
                     .into(),
             );
         }

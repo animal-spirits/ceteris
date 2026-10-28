@@ -163,7 +163,10 @@ fn strings<const N: usize>(path: &Path, columns: [&str; N]) -> Result<[Vec<Strin
 }
 
 /// One primitive column of a pack table, every batch in order.
-fn values<T: ArrowPrimitiveType>(path: &Path, column: &str) -> Result<Vec<T::Native>, String> {
+pub(crate) fn values<T: ArrowPrimitiveType>(
+    path: &Path,
+    column: &str,
+) -> Result<Vec<T::Native>, String> {
     let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
     let reader =
         FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;

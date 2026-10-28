@@ -27,4 +27,12 @@ canonical JSON and the raster pixel to H3 cell mapping while the port was under 
 removed with the Python econ package; their result is recorded in ADR 0113's step 2 As built
 entry. The fixture of `pixel_cells_match_python_on_border_windows` stays as recorded.
 
+`step3-geo.sh` compares the ports of `geo.py`, `raster.py`, `resources.py` and `fills.py`.
+`geo_inputs.py` builds the provinces and clipped counties in Python, writes their vertices and
+what the Python modules compute from them (anchors, spherical areas, H3 cells, terrain, mineral
+site counts, fills of the unsimplified geometry), and its cells table must equal the pack's.
+`ceteris pack dump-geo DIR` computes the same from the same vertices into `DIR/rust`. Tables go
+through `pack compare`; fills through `fills.py`, which compares bytes, then each feature's
+triangle set and area.
+
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
