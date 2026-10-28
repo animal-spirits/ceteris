@@ -18,8 +18,9 @@ Rows are compared in file order, so a port must reproduce the row order of the P
 `ceteris pack dump-reader NAME` print one reader's output on the real cache as canonical JSON
 (sorted keys, floats as Python's `repr`), and the two texts must be identical. A reader given a
 tolerance there is checked by `floatdiff.py` instead, which prints the first structural difference
-and the largest relative float difference; `scripts/parity/test_floatdiff.sh` checks its exit
-status on hand-made JSON pairs (run it after changing `floatdiff.py`).
+and the largest relative float difference (an infinity matches only the same infinity, NaN only
+NaN); `scripts/parity/test_floatdiff.sh` checks its exit status on hand-made JSON pairs (run it
+after changing `floatdiff.py`).
 
 `step2-rasters.sh` compares the per-province raster totals the same way (`dump-reader population
 worldpop|mapspam|kummu`), then rewrites the pixel to H3 cell fixture of the Rust test

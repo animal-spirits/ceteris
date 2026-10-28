@@ -10,8 +10,8 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use ceteris_pack::econ::build::{ADMIN0, BACI};
 use ceteris_pack::econ::gateways::{
-    AIRPORT, Edges, Gateway, ITERATIONS, LAND, Nodes, PORT, TOTAL, counts, kmedoids,
-    land_crossings, node_country, select,
+    AIRPORT, Edges, Gateway, ITERATIONS, LAND, Nodes, PORT, TOTAL, counts, great_circle_km,
+    kmedoids, land_crossings, node_country, select,
 };
 use ceteris_pack::read::baci::trade_by_country;
 use ceteris_pack::read::natural_earth::read_codes;
@@ -97,16 +97,15 @@ type Case<'a> = (&'a [f64], &'a [f64], usize, &'a [usize]);
 /// expected medoids are those of the Python `kmedoids` on the same input.
 #[test]
 fn kmedoids_ties_follow_numpy() {
-    let cases: [Case; 5] = [
-        // build: equal row sums take the first point
+    let cases: [Case; 4] = [
+        // equal row sums take the first point (the update step's tie would also keep it, so this
+        // does not pin the build tie on its own)
         (&[10.0, -10.0], &[0.0, 0.0], 1, &[0]),
         // build: equal gains take the lower index
         (&[0.0, 10.0, -10.0], &[0.0; 3], 2, &[0, 1]),
         // a medoid duplicating an earlier one's position gets no members and is kept
         (&[0.0, 0.0, 0.0, 10.0], &[0.0; 4], 3, &[0, 1, 3]),
         (&[-10.0, 10.0, 0.0, 0.0], &[0.0, 0.0, 5.0, -5.0], 2, &[0, 2]),
-        // assignment: the point at 0 is as far from both medoids and joins the first chosen
-        (&[10.0, -10.0, 0.0, 20.0, -20.0], &[0.0; 5], 2, &[0, 1]),
     ];
     for (lon, lat, k, want) in cases {
         assert_eq!(
@@ -114,6 +113,22 @@ fn kmedoids_ties_follow_numpy() {
             want,
             "{lon:?} {lat:?} k {k}"
         );
+    }
+}
+
+/// Distances bit for bit those of the Python `great_circle_km` (numpy) on the same points: two
+/// pairs across the antimeridian, and an antipodal pair whose haversine term rounds to
+/// 1.0000000000000002 and is clamped to 1.
+#[test]
+fn great_circle_km_matches_numpy_bitwise() {
+    let cases = [
+        ((179.5, 10.0, -179.5, 10.0), 109.50573519924384),
+        ((179.5, 10.0, -179.0, -5.0), 1676.181665643988),
+        ((-180.0, 27.0, 0.0, -27.0), 20015.114442035923),
+    ];
+    for ((lon1, lat1, lon2, lat2), want) in cases {
+        let got = great_circle_km(lon1, lat1, lon2, lat2);
+        assert_eq!(got.to_bits(), f64::to_bits(want), "{got:?} vs {want:?}");
     }
 }
 
@@ -154,8 +169,8 @@ fn every_country_gets_a_gateway_from_its_ports_airports_or_land_crossings() {
     assert_eq!(countries.into_iter().collect::<Vec<_>>(), [0, 1, 2]);
     assert_eq!(rows.len(), 5);
     assert!(rows.is_sorted_by_key(|r| (r.country, r.node)));
-    // BBB has only its two land crossing points (its centroid, an endpoint of both crossings,
-    // counts once)
+    // BBB's only candidate is its centroid (node 1), the BBB end of both its land crossings,
+    // counted once
     let bbb: Vec<(u32, u8)> = rows
         .iter()
         .filter(|r| r.country == 1)

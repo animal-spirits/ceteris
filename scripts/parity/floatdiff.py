@@ -4,7 +4,7 @@
 
 Prints the first structural difference and the largest relative float difference. Exits 0 when the
 files are byte-identical, or when TOLERANCE is above 0, the structures match and every float pair
-lies within it (NaN matches only NaN); otherwise 1. At tolerance 0 only identical bytes pass.
+lies within it (NaN matches only NaN, an infinity only the same infinity); otherwise 1. At tolerance 0 only identical bytes pass.
 """
 
 import json
@@ -24,7 +24,8 @@ def main() -> None:
     def walk(a, b, path):
         if isinstance(a, float) and isinstance(b, float):
             if a != b and not (math.isnan(a) and math.isnan(b)):
-                rel = math.inf if math.isnan(a) or math.isnan(b) else abs(a - b) / max(abs(a), abs(b))
+                finite = math.isfinite(a) and math.isfinite(b)
+                rel = abs(a - b) / max(abs(a), abs(b)) if finite else math.inf
                 if rel > worst[0]:
                     worst[:] = [rel, path]
             return None
