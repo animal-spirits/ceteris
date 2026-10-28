@@ -3,7 +3,7 @@ name = "ceteris-app"
 description = "Ceteris Paribus desktop app: the Rust core in-process behind the map (Section 22.1)"
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.93"
+rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 
 # Its own workspace: Tauri's system dependencies stay out of the core's CI and lockfile.

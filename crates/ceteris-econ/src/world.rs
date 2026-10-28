@@ -681,10 +681,7 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
         &mut index,
         &mut lead,
     );
-    index
-        .chunks_exact(N_GOODS)
-        .map(|row| row.try_into().expect("one row of goods"))
-        .collect()
+    index.as_chunks::<N_GOODS>().0.to_vec()
 }
 
 impl EconWorld {
