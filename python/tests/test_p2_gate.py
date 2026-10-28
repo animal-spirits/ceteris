@@ -188,8 +188,6 @@ def gravity(export):
     path = fetch.path_of(GRAVITY)
     if not path.exists():
         pytest.skip(f"skipping: no {GRAVITY} in {path.parent}; fetch it with `uv run python -m ceteris.packs.fetch`")
-    from ceteris.packs.econ import downscale, people
-
     columns = {
         "year": pa.int32(),
         "iso3_o": pa.string(),
@@ -204,7 +202,8 @@ def gravity(export):
             batches.append(batch.filter(pc.fill_null(pc.equal(batch["year"], YEAR), False)))
     table = pa.Table.from_batches(batches).rename_columns(["year", "iso3_o", "iso3_d", "distw", "contig"])
     codes = ipc.open_file(str(PACK / "countries.arrow")).read_all()["code"].to_pylist()
-    iso, _ = people.read_codes(fetch.path_of(downscale.ADMIN0))
+    cmd = ["cargo", "run", "--release", "--quiet", "--bin", "ceteris", "--", "pack", "dump-reader", "codes"]
+    iso, _ = json.loads(subprocess.run(cmd, check=True, cwd=ROOT, capture_output=True, text=True).stdout)
     return table, [iso.get(c, c) for c in codes]
 
 
