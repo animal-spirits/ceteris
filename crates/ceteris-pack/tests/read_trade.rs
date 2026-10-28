@@ -274,3 +274,20 @@ fn real_key_and_baci_cover_the_traded_lines() {
     );
     assert!(tonnes.values().all(|t| *t >= 0.0));
 }
+
+#[test]
+fn baci_sums_each_1_mib_block_then_across_blocks() {
+    // Line 010121 has 1 kUSD in the first block and two flows of 1e-16 kUSD past the first MiB:
+    // summed per block they survive, summed over the whole file they round away.
+    let filler = "2000,1,2,999999,1,1";
+    let mut rows = vec!["2000,1,2,10121,1,1"];
+    rows.extend(std::iter::repeat_n(filler, (1 << 20) / filler.len() + 100));
+    rows.extend(["2000,1,2,10121,1e-16,1", "2000,1,2,10121,1e-16,1"]);
+    let dir = tempfile::tempdir().unwrap();
+    let path = baci(dir.path(), &rows, "");
+    let per_block = 1.0 * 1000.0 + (0.0 + 1e-16 + 1e-16) * 1000.0;
+    let whole_file = (1.0 + 1e-16 + 1e-16) * 1000.0;
+    assert_ne!(per_block, whole_file);
+    assert_eq!(baci_values(&path).unwrap()["010121"], per_block);
+    assert_eq!(baci_by_product(&path).unwrap().1["010121"], per_block);
+}

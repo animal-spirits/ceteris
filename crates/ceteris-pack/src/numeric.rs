@@ -1,5 +1,5 @@
-//! Floating point operations in the order and rounding of the numpy and Python functions the
-//! pack sources were first read with, so that ported readers give the same bits.
+//! Floating point operations with the summation order and rounding of named numpy and Python
+//! functions (`np.sum`, `math.fsum`, `sum`, `float`, `repr`), bit for bit.
 
 /// `np.sum` of a contiguous float64 array: pairwise summation with eight accumulators in blocks
 /// of at most 128 elements.

@@ -1,7 +1,7 @@
 //! Proxies of the province downscaling: DOSE regional manufacturing, EIA SEDS state oil and
 //! gas production, and the GEM coal mine and oil and gas field trackers.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use csv::StringRecord;
@@ -176,7 +176,7 @@ fn median(mut values: Vec<f64>) -> f64 {
 /// Assets with valid coordinates. A missing weight is 0 in a country where any asset has a
 /// figure; where none has, every asset takes the median positive figure of all assets.
 fn located(rows: Vec<Located>) -> Vec<Asset> {
-    let weighted: Vec<&str> = rows
+    let weighted: BTreeSet<&str> = rows
         .iter()
         .filter(|r| r.weight.is_some())
         .map(|r| r.country.as_str())
