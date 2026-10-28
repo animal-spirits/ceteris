@@ -6,6 +6,9 @@ Builds the provinces and the clipped counties as `build.build` does, then writes
 
 - OUT/provinces.geom.arrow, OUT/counties.geom.arrow: their polygon coordinates, one row per vertex
   (geom, part, ring, x, y), rings closed, in shapely's order;
+- OUT/province_ids.arrow, OUT/county_ids.arrow, OUT/clip_stats.arrow: their attributes, and the
+  misfit of the county clipping (summed areas of the counties that fit a province, whole and
+  clipped);
 - OUT/python/*.arrow: what geo, raster and resources compute from them, as `build.build` does;
 - OUT/python/{provinces,counties}.fill: `fills.write` of the same (unsimplified) geometry.
 
@@ -75,9 +78,14 @@ def main(out: Path) -> None:
     n = len(provs)
     home = counties.assign(units, [p.geom for p in provs], [{p.country, p.country_now} for p in provs])
     clipped = []
+    fits, fits_inside = 0.0, 0.0
     for c, h in zip(units, home):
         if h >= 0:
             piece = geo.polygonal(c.geom.intersection(provs[h].geom))
+            whole = geo.area_km2(c.geom)
+            if whole <= CONFIG["split_area_km2"] / 2:
+                fits += whole
+                fits_inside += geo.area_km2(piece)
             if not piece.is_empty:
                 clipped.append((int(h), counties.County(c.iso, c.level, c.name, piece)))
     clipped.sort(key=lambda hc: hc[0])
@@ -89,6 +97,18 @@ def main(out: Path) -> None:
     py.mkdir(parents=True, exist_ok=True)
     geom_table(out / "provinces.geom.arrow", [p.geom for p in provs])
     geom_table(out / "counties.geom.arrow", [c.geom for c in cty])
+    text = ("id", "name", "country", "sovereign", "country_now", "split_rule")
+    build.write_table(out / "province_ids.arrow", {k: pa.array([getattr(p, k) for p in provs], pa.string()) for k in text})
+    build.write_table(
+        out / "county_ids.arrow",
+        {
+            "name": pa.array([c.name for c in cty], pa.string()),
+            "country": pa.array([c.iso for c in cty], pa.string()),
+            "level": pa.array([c.level for c in cty], pa.string()),
+            "province": pa.array([h for h, _ in clipped], pa.uint32()),
+        },
+    )
+    build.write_table(out / "clip_stats.arrow", {"fits": pa.array([fits]), "fits_inside": pa.array([fits_inside])})
 
     ccells, cowner = raster.assign_cells(cty, CONFIG["county_res"])
     cterr = raster.terrain(ccells, etopo, depth=0)

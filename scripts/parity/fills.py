@@ -3,10 +3,12 @@
     python scripts/parity/fills.py A.fill B.fill [GEOM.arrow]
 
 Triangles are compared as sets of their three float32 vertices, rotated to start at the
-smallest; areas are the triangles' summed planar areas in float64. With the features' vertex
-table (as `geo_inputs.py` writes it), each feature whose areas differ is listed with both areas
-relative to its polygon's area in Mercator. Exits 1 when any feature's area differs by more than
-1e-9 relative.
+smallest; areas are the triangles' summed planar areas in float64. Without GEOM, exits 1 when any
+feature's area differs by more than 1e-9 relative. GEOM is the vertex table of B's features (as
+`geo_inputs.py` and `dump-geo` write it): each feature whose areas differ is listed with both
+areas relative to its polygon's area in Mercator, and the exit status is 1 when B's area of any
+of them is off its polygon's by more than POLYGON_TOL relative and off A's by more than that
+too (a feature both sides miss alike is the polygon's, not the port's).
 """
 
 import sys
@@ -17,6 +19,8 @@ import shapely
 from pyarrow import ipc
 
 from ceteris.packs import fills
+
+POLYGON_TOL = 1e-4
 
 
 def decoded(path: Path):
@@ -66,12 +70,18 @@ def main(a: Path, b: Path, geom: Path | None) -> int:
         f"{a.name}: bytes differ; vertices {va} vs {vb}, triangles {len(ka)} vs {len(kb)}; "
         f"{same}/{na} features with equal triangle sets; area max_rel={rel.max():.3e}"
     )
-    if geom is not None:
-        table = ipc.open_file(geom).read_all()
-        for f in np.flatnonzero(rel > 1e-9):
-            true = polygon_area(table, int(f))
-            print(f"  feature {f}: area/polygon - 1 = {area_a[f] / true - 1:.3e} vs {area_b[f] / true - 1:.3e}")
-    return 0 if rel.max() <= 1e-9 else 1
+    if geom is None:
+        return 0 if rel.max() <= 1e-9 else 1
+    table = ipc.open_file(geom).read_all()
+    worse = []
+    for f in np.flatnonzero(rel > 1e-9):
+        true = polygon_area(table, int(f))
+        off_a, off_b = area_a[f] / true - 1, area_b[f] / true - 1
+        print(f"  feature {f}: area/polygon - 1 = {off_a:.3e} vs {off_b:.3e}")
+        if abs(off_b) > POLYGON_TOL and abs(off_b - off_a) > POLYGON_TOL:
+            worse.append(int(f))
+    print(f"{a.name}: features where B is off its polygon and A by more than {POLYGON_TOL}: {worse}")
+    return 0 if not worse else 1
 
 
 if __name__ == "__main__":

@@ -8,7 +8,8 @@
 # Pending a ruling: H3 cell areas differ from h3's in the last bits (h3 and h3o sum the same edge
 # terms over boundary vertices that differ by ulps), so cell areas and the area-weighted terrain
 # means are held to RULING_TOL, not 1e-12; and the fills compare by decoded triangles and area
-# (mapbox_earcut 2.1.0 and the earcut crate triangulate some polygons with holes differently).
+# (mapbox_earcut 2.1.0 and the earcut crate triangulate some polygons with holes differently):
+# where a feature's areas differ, the Rust triangles must cover its polygon within 1e-4.
 set -euo pipefail
 
 RULING_TOL=1e-8
@@ -48,7 +49,9 @@ done < <(grep -v ': ok ' "$work/compare")
 
 for name in provinces counties; do
     (cd python && uv run --locked python -I "$root/scripts/parity/fills.py" \
-        "$work/python/$name.fill" "$work/rust/$name.fill" "$work/$name.geom.arrow") ||
-        echo "pending ruling: $name.fill areas differ"
+        "$work/python/$name.fill" "$work/rust/$name.fill" "$work/$name.geom.arrow") || {
+        echo "FAIL $name.fill"
+        status=1
+    }
 done
 exit $status
