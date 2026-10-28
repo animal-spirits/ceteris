@@ -10,34 +10,54 @@ use crate::read::baci::{ByLine, baci_values, read_hs_cpa};
 use crate::read::icio::N_GOODS;
 use crate::read::wdi::Names;
 
-/// A Caliendo and Parro sector: name, the ISIC Rev 3 divisions of Table A.1, theta and the
-/// heteroskedasticity-robust standard error of the same column.
-pub type Sector = (&'static str, &'static [&'static str], f64, f64);
+/// A Caliendo and Parro sector.
+pub struct Sector {
+    pub name: &'static str,
+    /// The ISIC Rev 3 divisions of Table A.1.
+    pub divisions: &'static [&'static str],
+    pub theta: f64,
+    /// Heteroskedasticity-robust standard error of theta.
+    pub se: f64,
+}
+
+const fn sector(
+    name: &'static str,
+    divisions: &'static [&'static str],
+    theta: f64,
+    se: f64,
+) -> Sector {
+    Sector {
+        name,
+        divisions,
+        theta,
+        se,
+    }
+}
 
 /// Caliendo and Parro (2015), Table 1, 99% sample (their benchmark, column 5). Review of
 /// Economic Studies 82(1), Advance Access version of 14 November 2014, p. 18 (Table 1) and p. 42
 /// (Table A.1). Transcribed in ADR 0023.
 pub const CALIENDO_PARRO: [Sector; 20] = [
-    ("Agriculture", &["01", "02", "05"], 9.11, 2.01),
-    ("Mining", &["10", "11", "12", "13", "14"], 13.53, 3.67),
-    ("Food", &["15", "16"], 2.62, 0.61),
-    ("Textile", &["17", "18", "19"], 8.1, 1.28),
-    ("Wood", &["20"], 11.5, 2.87),
-    ("Paper", &["21", "22"], 16.52, 2.65),
-    ("Petroleum", &["23"], 64.85, 15.61),
-    ("Chemicals", &["24"], 3.13, 1.78),
-    ("Plastic", &["25"], 1.67, 2.23),
-    ("Minerals", &["26"], 2.41, 1.6),
-    ("Basic metals", &["27"], 3.28, 2.51),
-    ("Metal products", &["28"], 6.99, 2.12),
-    ("Machinery n.e.c.", &["29"], 1.45, 2.8),
-    ("Office", &["30"], 12.95, 4.53),
-    ("Electrical", &["31"], 12.91, 1.64),
-    ("Communication", &["32"], 3.95, 1.77),
-    ("Medical", &["33"], 8.71, 1.56),
-    ("Auto", &["34"], 1.84, 0.92),
-    ("Other Transport", &["35"], 0.39, 1.08),
-    ("Other", &["36", "37"], 3.98, 1.08),
+    sector("Agriculture", &["01", "02", "05"], 9.11, 2.01),
+    sector("Mining", &["10", "11", "12", "13", "14"], 13.53, 3.67),
+    sector("Food", &["15", "16"], 2.62, 0.61),
+    sector("Textile", &["17", "18", "19"], 8.1, 1.28),
+    sector("Wood", &["20"], 11.5, 2.87),
+    sector("Paper", &["21", "22"], 16.52, 2.65),
+    sector("Petroleum", &["23"], 64.85, 15.61),
+    sector("Chemicals", &["24"], 3.13, 1.78),
+    sector("Plastic", &["25"], 1.67, 2.23),
+    sector("Minerals", &["26"], 2.41, 1.6),
+    sector("Basic metals", &["27"], 3.28, 2.51),
+    sector("Metal products", &["28"], 6.99, 2.12),
+    sector("Machinery n.e.c.", &["29"], 1.45, 2.8),
+    sector("Office", &["30"], 12.95, 4.53),
+    sector("Electrical", &["31"], 12.91, 1.64),
+    sector("Communication", &["32"], 3.95, 1.77),
+    sector("Medical", &["33"], 8.71, 1.56),
+    sector("Auto", &["34"], 1.84, 0.92),
+    sector("Other Transport", &["35"], 0.39, 1.08),
+    sector("Other", &["36", "37"], 3.98, 1.08),
 ];
 
 /// ISIC Rev 3 division of each CPA 2.1 activity of the OECD key, from the Rev 3 to Rev 4
@@ -102,7 +122,7 @@ fn sector_of_cpa(code: &str) -> Option<usize> {
     let division = REV3_OF_CPA.iter().find(|(c, _)| *c == code)?.1;
     CALIENDO_PARRO
         .iter()
-        .position(|(_, divisions, _, _)| divisions.contains(&division))
+        .position(|s| s.divisions.contains(&division))
 }
 
 /// Theta per good, the trade-value-weighted arithmetic mean of the sector estimates over the HS
@@ -123,7 +143,7 @@ pub fn by_good(
         if v == 0.0 {
             continue;
         }
-        num[good] += v * CALIENDO_PARRO[sector].2;
+        num[good] += v * CALIENDO_PARRO[sector].theta;
         den[good] += v;
     }
     let mut theta = [0.0; N_GOODS];
@@ -179,12 +199,12 @@ pub fn class_bands(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
         }
         let total = pairwise_sum(&by_class);
         let w = by_class.map(|x| x / total);
-        centre.push(dot(w.iter().zip(&CALIENDO_PARRO).map(|(w, s)| w * s.2)));
+        centre.push(dot(w.iter().zip(&CALIENDO_PARRO).map(|(w, s)| w * s.theta)));
         se.push(
             dot(w
                 .iter()
                 .zip(&CALIENDO_PARRO)
-                .map(|(w, s)| (w * w) * (s.3 * s.3)))
+                .map(|(w, s)| (w * w) * (s.se * s.se)))
             .sqrt(),
         );
     }

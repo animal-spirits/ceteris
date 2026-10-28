@@ -15,7 +15,7 @@ trap 'rm -rf "$work"' EXIT
 readers=(
     codes ilostat-participation ilostat-unemployment ilostat-natural wic barro-lee wdi-regions pwt observed
     adb-income maddison load-wdi icio-aggregate icio-exports
-    hs-cpa baci-by-product baci-values trade-by-country
+    hs-cpa baci-by-product baci-values theta theta-bands theta-fixture trade-by-country
     rates cepii dta
     dose province-names us-states gem-coal gem-oil-gas seds
 )
@@ -36,19 +36,30 @@ readers+=(
 )
 [ "$#" -gt 0 ] && readers=("$@")
 
+# Readers compared to a relative tolerance instead of exactly. theta-bands is a matrix product
+# that numpy hands to BLAS, whose summation order is not reproducible; it adds at most 20 terms
+# of one sign, so the measured gap is 1.8e-16 (about one ulp), far inside ADR 0113's 1e-12.
+tolerance() {
+    case "$1" in
+    theta-bands) echo 1e-12 ;;
+    *) echo 0 ;;
+    esac
+}
+
 failed=0
 for spec in "${readers[@]}"; do
     IFS=: read -r -a args <<<"$spec"
     (cd python && uv run python -I "$root/scripts/parity/readers.py" "${args[@]}") >"$work/py.json"
     "$bin" pack dump-reader "${args[@]}" >"$work/rs.json"
+    tol="$(tolerance "${args[0]}")"
     if cmp -s "$work/py.json" "$work/rs.json"; then
         echo "ok   $spec ($(wc -c <"$work/py.json" | tr -d ' ') bytes)"
     else
-        echo "FAIL $spec"
-        python3 -I - "$work/py.json" "$work/rs.json" <<'PY' || true
+        if python3 -I - "$work/py.json" "$work/rs.json" "$tol" <<'PY'
 import json, sys
 
-py, rs = (json.load(open(p)) for p in sys.argv[1:])
+py, rs = (json.load(open(p)) for p in sys.argv[1:3])
+tol = float(sys.argv[3])
 worst = [0.0, None]
 
 
@@ -75,8 +86,14 @@ def walk(a, b, path):
 first = walk(py, rs, "")
 print(f"     first structural difference: {first}" if first else "     same structure")
 print(f"     largest relative float difference: {worst[0]:.3e} at {worst[1]}")
+sys.exit(0 if not first and worst[0] <= tol else 1)
 PY
-        failed=1
+        then
+            echo "ok   $spec within $tol"
+        else
+            echo "FAIL $spec"
+            failed=1
+        fi
     fi
 done
 exit "$failed"

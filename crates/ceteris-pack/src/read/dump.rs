@@ -23,6 +23,8 @@ use super::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use super::wdi::{read_rates, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, WINDOW, YEAR};
+use crate::econ::goods::hs_goods;
+use crate::econ::theta::{by_good, caliendo_parro_with_value, class_bands, classes, sector_values};
 use crate::json::Json;
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population, spam_physical_area};
@@ -50,6 +52,9 @@ pub const NAMES: &[&str] = &[
     "hs-cpa",
     "baci-by-product",
     "baci-values",
+    "theta",
+    "theta-bands",
+    "theta-fixture",
     "trade-by-country",
     "rates",
     "cepii",
@@ -236,6 +241,9 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
         "hs-cpa" => read_hs_cpa(&cache(HS_KEY))?.into(),
         "baci-by-product" => baci_by_product(&cache(BACI))?.into(),
         "baci-values" => baci_values(&cache(BACI))?.into(),
+        "theta" => theta_dump(false)?,
+        "theta-bands" => theta_dump(true)?,
+        "theta-fixture" => theta_fixture()?,
         "trade-by-country" => {
             let (iso, _) = read_codes(&admin0())?;
             trade_by_country(&cache(BACI), &iso, &pack_codes()?)?.into()
@@ -297,4 +305,56 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
             ));
         }
     })
+}
+
+/// Theta per good and trade value before and after the local goods are zeroed, the value by
+/// Caliendo-Parro sector, the classes of the traded goods and their thetas; with `bands`, only
+/// the class bands, whose matmul order numpy leaves to BLAS.
+fn theta_dump(bands: bool) -> Result<Json, String> {
+    let hs_cpa = read_hs_cpa(&cache(HS_KEY))?;
+    let lines = hs_goods(&hs_cpa);
+    let value = baci_values(&cache(BACI))?;
+    let (theta_raw, value_raw) = by_good(&hs_cpa, &lines, &value);
+    let sectors = sector_values(&hs_cpa, &lines, &value);
+    let (theta, total) = caliendo_parro_with_value(&cache(BACI), &cache(HS_KEY))?;
+    let (of, class_theta) = classes(&theta[..7], &total[..7])?;
+    if bands {
+        let (centre, se) = class_bands(&sectors[..7], &of);
+        return Ok(Json::object([
+            ("centre", Json::from(centre)),
+            ("se", se.into()),
+        ]));
+    }
+    Ok(Json::object([
+        ("theta_raw", Json::from(theta_raw)),
+        ("value_raw", value_raw.into()),
+        ("sector_values", Json::list(sectors)),
+        ("theta", theta.into()),
+        ("value", total.into()),
+        ("class_of", Json::list(of.iter().map(|c| i64::from(*c)))),
+        ("class_theta", class_theta.into()),
+    ]))
+}
+
+/// Classes of the p2 fixture's traded thetas weighted by its weight column.
+fn theta_fixture() -> Result<Json, String> {
+    let path = sources::workspace_root().join("tests/golden/p2-fixture/goods.arrow");
+    let file = File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let reader = FileReader::try_new(file, None).map_err(|e| e.to_string())?;
+    let (mut theta, mut weight) = (Vec::new(), Vec::new());
+    for batch in reader {
+        let batch = batch.map_err(|e| e.to_string())?;
+        for (name, out) in [("theta", &mut theta), ("weight", &mut weight)] {
+            let column = batch
+                .column_by_name(name)
+                .and_then(|a| a.as_any().downcast_ref::<arrow_array::Float64Array>())
+                .ok_or_else(|| format!("{}: no float column {name}", path.display()))?;
+            out.extend(column.iter().flatten());
+        }
+    }
+    let (of, class_theta) = classes(&theta[..7], &weight[..7])?;
+    Ok(Json::object([
+        ("class_of", Json::list(of.iter().map(|c| i64::from(*c)))),
+        ("class_theta", class_theta.into()),
+    ]))
 }
