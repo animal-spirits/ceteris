@@ -4,7 +4,7 @@
     uv run python -m ceteris.packs [--out data/packs/2000]
 
 Same inputs give byte-identical outputs; `manifest.json` records every table's sha256. Pack format 3 adds the 2000
-economic tables (`econ.build`), written after the P1 tables from them.
+economic tables of `ECON_TABLES`, written after the P1 tables from them by `ceteris pack build --econ-only`.
 """
 
 import argparse
@@ -29,6 +29,15 @@ from . import counties, fetch, fills, geo, provinces, raster, resources, transpo
 CONFIG = tomllib.loads(Path(__file__).with_name("pack.toml").read_text())
 ROOT = Path(__file__).resolve().parents[3]
 PACK_FORMAT = 3
+ECON_TABLES = (
+    "econ_goods.arrow",
+    "econ_countries.arrow",
+    "econ_io.arrow",
+    "econ_provinces.arrow",
+    "econ_pops.arrow",
+    "econ_tariffs.arrow",
+    "gateways.arrow",
+)
 PALETTE_SIZE = 8
 # Map geometry simplification tolerance in degrees (about 1 km).
 SIMPLIFY_DEG = 0.01
@@ -105,6 +114,16 @@ def write_tiles(path: Path, layers: dict[str, tuple[list, int]]) -> dict[str, st
             args += ["-L", f"{name}:{src}"]
         subprocess.run(args, check=True)
     return inputs
+
+
+def econ_build(out: Path) -> dict:
+    """The econ tables of the P1 tables in `out`, written into `out` from the fetch cache; returns their sha256 by
+    name and the build stats. The summaries go to stderr."""
+    cmd = ["cargo", "run", "--release", "--quiet", "--bin", "ceteris", "--"]
+    cmd += ["pack", "build", "--econ-only", "--pack", str(out.resolve()), "--out", str(out.resolve())]
+    result = json.loads(subprocess.run(cmd, check=True, cwd=ROOT, stdout=subprocess.PIPE, text=True).stdout)
+    assert set(result["tables"]) == set(ECON_TABLES)
+    return result
 
 
 def sha256(path: Path) -> str:
@@ -327,9 +346,7 @@ def build(out: Path) -> dict:
     (web / "counties.json").write_text(json.dumps(county_attrs, separators=(",", ":"), ensure_ascii=False))
     hashes["web/counties.json"] = sha256(web / "counties.json")
 
-    from .econ import build as econ_build
-
-    econ = econ_build.build(out, out, cache)
+    econ = econ_build(out)
     hashes |= econ["tables"]
 
     stats = extra["stats"] | {
