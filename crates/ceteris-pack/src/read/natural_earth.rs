@@ -1,7 +1,10 @@
-//! Natural Earth admin-0 and admin-1 attributes, from the dBASE table of the zipped shapefile.
+//! Natural Earth admin-0 and admin-1 attributes, from the dBASE table of the zipped shapefile, and
+//! admin-1 polygons, from its `.shp` member.
 
 use std::collections::BTreeMap;
 use std::path::Path;
+
+use geo::{BoundingRect, Coord, Geometry, LineString, MultiPolygon, Polygon, Rect};
 
 use super::{err, int, read_member};
 
@@ -189,4 +192,157 @@ pub fn us_states(admin1: &Path) -> Result<BTreeMap<String, String>, String> {
         }
     }
     Ok(out)
+}
+
+/// The polygons of the `.shp` member of the zipped shapefile at `path`, one per record (None for
+/// a null shape), as GDAL's shapefile driver reads them.
+pub fn shapes_from_zip(path: &Path) -> Result<Vec<Option<Geometry>>, String> {
+    let bytes = read_member(path, |n| n.to_ascii_lowercase().ends_with(".shp"))?;
+    parse_shapes(&bytes).map_err(|e| err(path, e))
+}
+
+pub fn parse_shapes(b: &[u8]) -> Result<Vec<Option<Geometry>>, String> {
+    let le32 = |i: usize| i32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+    let le64 = |i: usize| f64::from_le_bytes(b[i..i + 8].try_into().expect("8 bytes"));
+    let count = |i: usize| usize::try_from(le32(i)).map_err(|_| "negative count".to_owned());
+    let mut out = Vec::new();
+    let mut at = 100;
+    while at + 8 <= b.len() {
+        let words = i32::from_be_bytes([b[at + 4], b[at + 5], b[at + 6], b[at + 7]]);
+        let len = 2 * usize::try_from(words).map_err(|_| "negative record length")?;
+        let rec = at + 8;
+        if rec + len > b.len() || len < 4 {
+            return Err("truncated shapefile record".into());
+        }
+        at = rec + len;
+        match le32(rec) {
+            0 => out.push(None),
+            5 => {
+                let (parts, points) = (count(rec + 36)?, count(rec + 40)?);
+                let xy = rec + 44 + 4 * parts;
+                if xy + 16 * points > at {
+                    return Err("truncated polygon record".into());
+                }
+                let mut starts = (0..parts)
+                    .map(|k| count(rec + 44 + 4 * k))
+                    .collect::<Result<Vec<_>, _>>()?;
+                starts.push(points);
+                let rings = starts
+                    .windows(2)
+                    .map(|w| {
+                        (w[0]..w[1])
+                            .map(|i| Coord {
+                                x: le64(xy + 16 * i),
+                                y: le64(xy + 16 * i + 8),
+                            })
+                            .collect()
+                    })
+                    .collect();
+                out.push(Some(organize(rings)));
+            }
+            t => return Err(format!("shape type {t} is not a polygon")),
+        }
+    }
+    Ok(out)
+}
+
+fn shoelace(r: &LineString) -> f64 {
+    r.0.windows(2)
+        .map(|w| w[0].x * w[1].y - w[1].x * w[0].y)
+        .sum()
+}
+
+/// Whether a ray from `p` towards +x crosses the ring an odd number of times, and whether `p`
+/// lies on one of the crossing segments: GDAL's `isPointInRing` and `isPointOnRingBoundary`.
+fn crossings(ring: &LineString, p: Coord) -> (bool, bool) {
+    let (mut odd, mut on) = (false, false);
+    let n = ring.0.len();
+    for i in 0..n {
+        let (a, b) = (ring.0[i], ring.0[if i == 0 { n - 1 } else { i - 1 }]);
+        let (x1, y1, x2, y2) = (a.x - p.x, a.y - p.y, b.x - p.x, b.y - p.y);
+        if (y1 > 0.0 && y2 <= 0.0) || (y2 > 0.0 && y1 <= 0.0) {
+            let x = (x1 * y2 - x2 * y1) / (y2 - y1);
+            odd ^= 0.0 < x;
+            on |= x == 0.0;
+        }
+    }
+    (odd, on)
+}
+
+fn envelope_contains(a: &Rect, b: &Rect) -> bool {
+    a.min().x <= b.min().x
+        && a.min().y <= b.min().y
+        && a.max().x >= b.max().x
+        && a.max().y >= b.max().y
+}
+
+/// Rings to polygons as GDAL's `organizePolygons` with `METHOD=ONLY_CCW` does for shapefiles:
+/// clockwise rings are shells; a counter-clockwise ring is a hole of the smallest larger shell
+/// that contains it, or a shell of its own. Shells and holes keep the record's order.
+fn organize(rings: Vec<LineString>) -> Geometry {
+    let n = rings.len();
+    let clockwise: Vec<bool> = rings.iter().map(|r| shoelace(r) < 0.0).collect();
+    if n == 1 || clockwise.iter().filter(|&&c| c).count() == 1 {
+        let shell = clockwise.iter().position(|&c| c).unwrap_or(0);
+        let mut rings = rings;
+        let exterior = rings.remove(shell);
+        return Geometry::Polygon(Polygon::new(exterior, rings));
+    }
+    let envelopes: Vec<Rect> = rings
+        .iter()
+        .map(|r| {
+            r.bounding_rect()
+                .unwrap_or(Rect::new(Coord::zero(), Coord::zero()))
+        })
+        .collect();
+    let mut by_area: Vec<usize> = (0..n).collect();
+    by_area.sort_by(|&i, &j| {
+        shoelace(&rings[j])
+            .abs()
+            .total_cmp(&shoelace(&rings[i]).abs())
+    });
+    let mut shell_of: Vec<Option<usize>> = vec![None; n];
+    let mut top = vec![false; n];
+    top[by_area[0]] = true;
+    for (k, &i) in by_area.iter().enumerate().skip(1) {
+        if clockwise[i] {
+            top[i] = true;
+            continue;
+        }
+        let inside = by_area[..k].iter().rev().find(|&&j| {
+            if !envelope_contains(&envelopes[j], &envelopes[i]) {
+                return false;
+            }
+            // From the first vertex of ring i not on ring j's boundary.
+            rings[i]
+                .0
+                .iter()
+                .map(|&p| crossings(&rings[j], p))
+                .find(|&(_, on)| !on)
+                .is_some_and(|(odd, _)| odd)
+        });
+        match inside {
+            Some(&j) if top[j] => shell_of[i] = Some(j),
+            _ => top[i] = true,
+        }
+    }
+    let mut polygons: Vec<Option<Polygon>> = vec![None; n];
+    let mut rings: Vec<Option<LineString>> = rings.into_iter().map(Some).collect();
+    for i in 0..n {
+        if top[i] {
+            polygons[i] = Some(Polygon::new(rings[i].take().expect("ring"), vec![]));
+        }
+    }
+    for i in 0..n {
+        if let Some(j) = shell_of[i] {
+            let hole = rings[i].take().expect("ring");
+            polygons[j].as_mut().expect("shell").interiors_push(hole);
+        }
+    }
+    let mut polygons: Vec<Polygon> = polygons.into_iter().flatten().collect();
+    if polygons.len() == 1 {
+        Geometry::Polygon(polygons.remove(0))
+    } else {
+        Geometry::MultiPolygon(MultiPolygon(polygons))
+    }
 }

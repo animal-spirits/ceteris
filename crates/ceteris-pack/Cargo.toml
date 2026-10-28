@@ -26,6 +26,8 @@ icu_casemap = "2.4.0"
 icu_normalizer = "2.4.0"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
 rstar = "0.12.2"
+# float_roundtrip: coordinates parse to the nearest double, as GDAL reads them.
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 sha2 = "0.10.9"
 tiff = { version = "0.11.3", default-features = false }
 toml = "1.1.8"
