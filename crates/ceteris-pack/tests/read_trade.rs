@@ -5,34 +5,10 @@ mod common;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ceteris_pack::read::baci::{
-    KEY_SHEET, baci_by_product, baci_values, read_hs_cpa, trade_by_country,
-};
+use ceteris_pack::read::baci::{baci_by_product, baci_values, read_hs_cpa, trade_by_country};
 use ceteris_pack::read::tariffs::{read_cepii, read_dta};
 use ceteris_pack::read::wdi::plausible_rates;
-use common::{V, approx, cached, write_rows, write_zip};
-
-/// The OECD key with one HS 1988/92 line per entry of `lines` and one line of a later HS version.
-fn key(path: &Path, lines: &[(&str, &str)]) -> PathBuf {
-    let mut rows: Vec<Vec<(&str, V)>> = lines
-        .iter()
-        .map(|(hs, cpa)| {
-            vec![
-                ("HS-version", V::N(0.0)),
-                ("HS-code", V::T(hs)),
-                ("CPA", V::T(cpa)),
-                ("ENDUSE", V::T("INT")),
-            ]
-        })
-        .collect();
-    rows.push(vec![
-        ("HS-version", V::N(1.0)),
-        ("HS-code", V::T(lines[0].0)),
-        ("CPA", V::T("_X")),
-        ("ENDUSE", V::T("INT")),
-    ]);
-    write_rows(path, &[(KEY_SHEET, rows)])
-}
+use common::{V, approx, cached, hs_key as key, write_rows, write_zip};
 
 fn names(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs

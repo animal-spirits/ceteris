@@ -6,7 +6,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use ceteris_pack::fetch;
+use arrow_array::cast::AsArray;
+use ceteris_pack::read::baci::KEY_SHEET;
+use ceteris_pack::{fetch, sources};
 use zip::write::SimpleFileOptions;
 
 /// A cache file, or None (with a note) when it has not been fetched: data tests skip without it.
@@ -191,4 +193,53 @@ pub fn write_rows(path: &Path, sheets: &[(&str, Vec<Row>)]) -> PathBuf {
         .collect();
     let refs: Vec<(&str, &str)> = data.iter().map(|(n, x)| (*n, x.as_str())).collect();
     write_xlsx(path, &[], &refs)
+}
+
+/// A table of the built 2000 pack, or None (with a note) when it has not been built: data tests
+/// skip without it.
+pub fn pack_table(name: &str) -> Option<PathBuf> {
+    let path = sources::workspace_root().join("data/packs/2000").join(name);
+    if path.exists() {
+        Some(path)
+    } else {
+        eprintln!(
+            "skipping: no {name} in {}; build the pack first",
+            path.parent().unwrap().display()
+        );
+        None
+    }
+}
+
+/// A string column of an Arrow file, every batch in order.
+pub fn strings(path: &Path, column: &str) -> Vec<String> {
+    let reader = arrow_ipc::reader::FileReader::try_new(File::open(path).unwrap(), None).unwrap();
+    reader
+        .flat_map(|b| {
+            let b = b.unwrap();
+            let a = b.column_by_name(column).unwrap().as_string::<i32>().clone();
+            a.iter().map(|x| x.unwrap().to_owned()).collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The OECD key with one HS 1988/92 line per entry of `lines` and one line of a later HS version.
+pub fn hs_key(path: &Path, lines: &[(&str, &str)]) -> PathBuf {
+    let mut rows: Vec<Vec<(&str, V)>> = lines
+        .iter()
+        .map(|(hs, cpa)| {
+            vec![
+                ("HS-version", V::N(0.0)),
+                ("HS-code", V::T(hs)),
+                ("CPA", V::T(cpa)),
+                ("ENDUSE", V::T("INT")),
+            ]
+        })
+        .collect();
+    rows.push(vec![
+        ("HS-version", V::N(1.0)),
+        ("HS-code", V::T(lines[0].0)),
+        ("CPA", V::T("_X")),
+        ("ENDUSE", V::T("INT")),
+    ]);
+    write_rows(path, &[(KEY_SHEET, rows)])
 }

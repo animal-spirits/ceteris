@@ -4,7 +4,6 @@
 mod common;
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
@@ -17,8 +16,7 @@ use ceteris_pack::read::icio::{CountryIo, N_GOODS, Wdi, aggregate, load_wdi};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{Observed, load_observed};
 use ceteris_pack::read::wdi::Names;
-use ceteris_pack::sources;
-use common::{approx, cached};
+use common::{approx, cached, pack_table, strings};
 
 const DONOR_VA: [f64; N_GOODS] = [10.0, 4.0, 1.0, 6.0, 2.0, 1.0, 1.0, 3.0, 2.0, 70.0];
 
@@ -586,32 +584,6 @@ const NAMES: [&str; 18] = [
     "mpd2023_web.xlsx",
     "ppp_2000_1km_Aggregated.tif",
 ];
-
-fn pack_table(name: &str) -> Option<PathBuf> {
-    let path = sources::workspace_root().join("data/packs/2000").join(name);
-    if path.exists() {
-        Some(path)
-    } else {
-        eprintln!(
-            "skipping: no {name} in {}; build the pack first",
-            path.parent().unwrap().display()
-        );
-        None
-    }
-}
-
-fn strings(path: &PathBuf, column: &str) -> Vec<String> {
-    use arrow_array::cast::AsArray;
-    let reader =
-        arrow_ipc::reader::FileReader::try_new(std::fs::File::open(path).unwrap(), None).unwrap();
-    reader
-        .flat_map(|b| {
-            let b = b.unwrap();
-            let a = b.column_by_name(column).unwrap().as_string::<i32>().clone();
-            a.iter().map(|x| x.unwrap().to_owned()).collect::<Vec<_>>()
-        })
-        .collect()
-}
 
 struct Data {
     real: BTreeMap<String, CountryIo>,

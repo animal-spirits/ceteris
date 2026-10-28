@@ -121,6 +121,18 @@ pub fn py_sum(values: impl IntoIterator<Item = f64>) -> f64 {
     sum
 }
 
+/// `np.median` and `statistics.median`: the middle value, or the mean of the two middle values of
+/// an even count; None for no values.
+pub fn median(mut values: Vec<f64>) -> Option<f64> {
+    values.sort_by(f64::total_cmp);
+    let n = values.len();
+    match n {
+        0 => None,
+        _ if n % 2 == 1 => Some(values[n / 2]),
+        _ => Some((values[n / 2 - 1] + values[n / 2]) / 2.0),
+    }
+}
+
 /// Python's `float(text)`: surrounding whitespace, `_` between digits, `inf` and `nan` in any case.
 pub fn parse_f64(text: &str) -> Option<f64> {
     let t = text.trim();
@@ -241,6 +253,13 @@ mod tests {
             fsum([1.0, 2f64.powi(-53), 2f64.powi(-106)]),
             1.0 + 2f64.powi(-52)
         );
+    }
+
+    #[test]
+    fn median_takes_the_middle() {
+        assert_eq!(median(vec![3.0, 1.0, 2.0]), Some(2.0));
+        assert_eq!(median(vec![4.0, 1.0, 2.0, 3.0]), Some(2.5));
+        assert_eq!(median(vec![]), None);
     }
 
     #[test]
