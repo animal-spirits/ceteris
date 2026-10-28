@@ -15,7 +15,7 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 36, 38 to 41 and 52).
 
 1. Status quo.
 2. Six seats, each a restricted action space over existing mechanisms with its own objective
-and baseline.
+   and baseline.
 
 ## Decision
 

@@ -17,7 +17,7 @@ Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 33 and 35).
 
 1. Status quo.
 2. Constitutions as composable rule modules over the P6 process, testable across ensembles of
-societies.
+   societies.
 3. Option 2 plus a veil-of-ignorance scoring mode.
 
 ## Decision

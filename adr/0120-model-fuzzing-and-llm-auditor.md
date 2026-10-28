@@ -16,9 +16,9 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 7 and 21).
 
 1. Status quo: the validation ladder (15.3) on fixed scenarios.
 2. Property-based search over seeds, shock tapes and parameter draws for violations of a
-stylized-fact library.
+   stylized-fact library.
 3. Option 2 plus an LLM auditor outside the binary that proposes scenarios likely to break the
-model.
+   model.
 
 ## Decision
 

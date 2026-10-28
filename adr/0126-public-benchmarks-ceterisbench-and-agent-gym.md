@@ -17,7 +17,7 @@ acting over long horizons. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg
 1. Status quo.
 2. CeterisBench: released corpora of planted natural experiments with known effects.
 3. Option 2 plus an agent gym: seats exposed as a benchmark environment, scored against the
-Tier 1a baseline.
+   Tier 1a baseline.
 
 ## Decision
 

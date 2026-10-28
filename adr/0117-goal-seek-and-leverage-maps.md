@@ -16,7 +16,7 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 2 and 3).
 
 1. Status quo: users search the intervention space by hand.
 2. Goal-seek: an optimizer over a declared lever set, using forward-mode tangents on the smooth
-part and a discrete search over event paths.
+   part and a discrete search over event paths.
 3. Option 2 plus a leverage map mode showing the sensitivity of one outcome to local shocks.
 
 ## Decision

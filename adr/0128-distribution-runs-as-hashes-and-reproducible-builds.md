@@ -15,7 +15,7 @@ https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 29 to 32).
 
 1. Status quo: share files.
 2. Make the run hash the unit of sharing, prove determinism across platforms, and add a yearly
-release ritual and a reusable engine crate.
+   release ritual and a reusable engine crate.
 
 ## Decision
 
