@@ -8,6 +8,7 @@
 //! ceteris pack dump-reader NAME [ARGS]
 //! ceteris pack record-counties
 //! ceteris pack dump-geo DIR [--build [--centres FILE]]
+//! ceteris pack dump-web DIR
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -54,6 +55,7 @@ const USAGE: &str = "usage:
   ceteris pack dump-reader NAME [ARGS]
   ceteris pack record-counties
   ceteris pack dump-geo DIR [--build [--centres FILE]]
+  ceteris pack dump-web DIR
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -342,6 +344,27 @@ fn build_geo(_: &Path, _: Option<&str>) -> Result<(), String> {
     Err("dump-geo --build needs the owner-side `geos` feature".into())
 }
 
+/// `pack dump-web DIR`: the map layers, tiles and fills of the provinces and counties in DIR,
+/// written to DIR/rust (`ceteris_pack::web::dump`).
+fn dump_web(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let dir = args.next().ok_or("dump-web needs a directory")?;
+    if let Some(a) = args.next() {
+        return Err(format!("unknown argument '{a}'"));
+    }
+    web_dump(Path::new(&dir))?;
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(feature = "geos")]
+fn web_dump(dir: &Path) -> Result<(), String> {
+    ceteris_pack::web::dump::dump(dir)
+}
+
+#[cfg(not(feature = "geos"))]
+fn web_dump(_: &Path) -> Result<(), String> {
+    Err("dump-web needs the owner-side `geos` feature".into())
+}
+
 /// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
 /// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
 /// stats as JSON.
@@ -392,11 +415,12 @@ fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Some("dump-reader") => return dump_reader(args),
         Some("record-counties") => return record_counties(args),
         Some("dump-geo") => return dump_geo(args),
+        Some("dump-web") => return dump_web(args),
         Some("build") => return build(args),
         _ => {
             return Err(
                 "expected a pack command, compare, check-sources, fetch, record-counties, \
-                 dump-reader, dump-geo or build"
+                 dump-reader, dump-geo, dump-web or build"
                     .into(),
             );
         }

@@ -1,0 +1,22 @@
+[package]
+name = "ceteris-geos-coverage"
+description = "GEOS coverage simplification for the owner-side map build of Ceteris Paribus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# Not the workspace lints: the one FFI call needs unsafe, which the workspace forbids. Allowed
+# only on that function.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+float_arithmetic = "allow"
+
+[dependencies]
+# Owner-side only: links the LGPL GEOS C library dynamically.
+geos-sys = { version = "2.0.10", optional = true, features = ["v3_15_0"] }
+
+[features]
+geos = ["dep:geos-sys"]
