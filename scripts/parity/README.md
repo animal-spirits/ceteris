@@ -26,10 +26,16 @@ the commit before the deletion (`git archive`).
 export of the pack. The Python side dumps what it derives from the export as JSON
 (`step4_dump.py`): the derived inputs, PIGL weights at base and at given prices, PIGL shares and
 quantities on random draws (some prices unreachable, some pops without money), erfinv on a grid,
-the A.3 bound, the spectral radius of random matrices and, on the fixture, every traded good's
-dense kernel and a balanced Sinkhorn on it. The `parity` test of `ceteris-reference` reads the
-dump (`CETERIS_REFERENCE_PARITY`), recomputes each quantity and prints its largest relative
-difference; it fails above 1e-12, or 1e-15 for erfinv.
+the A.3 bound, the spectral radius of random matrices, every quantity of `model.evaluate` with the
+residual at the data state and at a perturbed state and, on the fixture, every traded good's dense
+kernel and a balanced Sinkhorn on it and the equilibrium from the data state. On the pack it adds
+the calibrated inputs installed in the pack, the evaluation at their reference point and the
+equilibrium from that point perturbed by 0.05 in every ln p and ln w. The `parity` test of
+`ceteris-reference` reads the dump (`CETERIS_REFERENCE_PARITY`), recomputes each quantity, solves
+from the same start and prints its largest relative difference; it fails above 1e-12, 1e-9 for
+the equilibria and 1e-15 for erfinv. Both `reference solve` entry points then solve the fixture
+into WORK_DIR, compared with `pack compare --iterative`, and the `routing` tests of
+`ceteris-cli` check the kernel of the fixture and of a pack export against its legs and tariffs.
 
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
