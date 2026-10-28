@@ -515,6 +515,59 @@ mod tests {
         assert!(from_bytes(rotated, "t").err().unwrap().contains("rotated"));
     }
 
+    /// The same TIFF in big-endian (MM) byte order: header, IFD and tag values swapped. Chunks
+    /// are left as they are, which is right for floating point predicted rows only: those store
+    /// each value's bytes most significant first in either order.
+    fn big_endian(le: &[u8]) -> Vec<u8> {
+        let mut out = le.to_vec();
+        let u16_at = |b: &[u8], i: usize| u16::from_le_bytes([b[i], b[i + 1]]);
+        let u32_at = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        out[..4].copy_from_slice(b"MM\0*");
+        let ifd = u32_at(le, 4) as usize;
+        out[4..8].copy_from_slice(&(ifd as u32).to_be_bytes());
+        let n = u16_at(le, ifd) as usize;
+        out[ifd..ifd + 2].copy_from_slice(&(n as u16).to_be_bytes());
+        for e in 0..n {
+            let at = ifd + 2 + 12 * e;
+            let (kind, count) = (u16_at(le, at + 2), u32_at(le, at + 4) as usize);
+            let size = match kind {
+                3 => 2,
+                4 => 4,
+                12 => 8,
+                k => panic!("tag type {k}"),
+            };
+            for i in [at, at + 2] {
+                out[i..i + 2].reverse();
+            }
+            out[at + 4..at + 8].reverse();
+            let values = if size * count > 4 {
+                out[at + 8..at + 12].reverse();
+                u32_at(le, at + 8) as usize
+            } else {
+                at + 8
+            };
+            for k in 0..count {
+                out[values + k * size..values + (k + 1) * size].reverse();
+            }
+        }
+        let next = ifd + 2 + 12 * n;
+        out[next..next + 4].reverse();
+        out
+    }
+
+    #[test]
+    fn floating_point_predictor_rows_decode_from_a_big_endian_file() {
+        let values: Vec<f32> = (0..40).map(|v| (v as f32 - 20.0) * 0.731).collect();
+        for tile in [Some((4, 3)), None] {
+            let le = hand_built(8, 5, tile, (true, true), &values, &georef());
+            let mut r = from_bytes(big_endian(&le), "big.tif").unwrap();
+            assert_eq!(r.transform, from_bytes(le, "little.tif").unwrap().transform);
+            let got = r.window(0, 5).unwrap();
+            let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&got), bits(&values), "tile {tile:?}");
+        }
+    }
+
     #[test]
     fn floating_point_predictor_rows_decode_in_tiles_and_strips() {
         let values: Vec<f32> = (0..35)

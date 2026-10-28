@@ -87,11 +87,11 @@ fn h3o_cell_areas_match_the_pack_within_the_measured_gap() {
 }
 
 #[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "decoding all of ETOPO takes minutes unoptimised; run with --release"
+)]
 fn terrain_of_the_pack_cells_matches_the_pack() {
-    if cfg!(debug_assertions) {
-        eprintln!("skipping: decoding all of ETOPO takes minutes unoptimised; run with --release");
-        return;
-    }
     let (Some(etopo), Some(path), Some(provinces)) = (
         cached(ETOPO),
         pack_table("cells.arrow"),
