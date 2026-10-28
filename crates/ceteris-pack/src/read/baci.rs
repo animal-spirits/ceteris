@@ -1,8 +1,8 @@
 //! CEPII BACI 2000 flows (HS 1992) and the OECD HS to CPA 2.1 conversion key.
 //!
-//! The Python readers summed BACI by group within each record batch of pyarrow's streaming CSV
-//! reader and then across batches, so the sums here follow the same batches: one per 1 MiB
-//! block of the decompressed file, ending at the block's last line break.
+//! BACI sums are taken by group within each batch of rows, in row order, and then across
+//! batches: a batch is the rows ending in one 1 MiB block of the decompressed member (cut at
+//! the block's last line break), the record batches of pyarrow's streaming CSV reader.
 
 use std::collections::BTreeMap;
 use std::io::Read;

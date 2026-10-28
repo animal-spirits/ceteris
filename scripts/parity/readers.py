@@ -7,6 +7,7 @@ Keys are sorted, floats are printed by `repr`, sets become sorted lists and tupl
 
 import dataclasses
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,19 @@ def plain(x):
     return x
 
 
+# Ruled: the Rust xlsx reader decodes OOXML `_xHHHH_` escapes, as the spec says; the
+# Python reader keeps them raw. The cell dump decodes them on this side so the two compare equal; no
+# reader consumes an escaped cell (only a GEM coal "Mine Name" has one).
+OOXML_ESCAPE = re.compile(r"_x([0-9A-Fa-f]{4})_")
+
+
+def xlsx_rows(name, sheet):
+    def decode(v):
+        return OOXML_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), v) if isinstance(v, str) else v
+
+    return [{decode(k): decode(v) for k, v in r.items()} for r in people._xlsx_sheet(CACHE / name, sheet)]
+
+
 def population_2000():
     return {k: v[2000] for k, v in people.read_wdi(CACHE / "wdi_SP.POP.TOTL.zip").items() if 2000 in v}
 
@@ -57,7 +71,7 @@ def io_fields(by_code):
 
 
 READERS = {
-    "xlsx": lambda name, sheet: list(people._xlsx_sheet(CACHE / name, sheet)),
+    "xlsx": xlsx_rows,
     "codes": lambda: people.read_codes(ADMIN0),
     "ilostat-participation": lambda: people.read_ilostat(
         CACHE / "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv", "AGE_YTHADULT_Y15-64"
