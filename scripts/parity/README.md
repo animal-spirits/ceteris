@@ -22,6 +22,15 @@ Kummu GeoTIFF) left out of the cache; the Rust side reads that cache through a c
 tree of links. The Python econ package is deleted, so the script takes the Python package from
 the commit before the deletion (`git archive`).
 
+`step4.sh` compares the reference model with the Python reference on the fixture export and on an
+export of the pack. The Python side dumps what it derives from the export as JSON
+(`step4_dump.py`): the derived inputs, PIGL weights at base and at given prices, PIGL shares and
+quantities on random draws (some prices unreachable, some pops without money), erfinv on a grid,
+the A.3 bound, the spectral radius of random matrices and, on the fixture, every traded good's
+dense kernel and a balanced Sinkhorn on it. The `parity` test of `ceteris-reference` reads the
+dump (`CETERIS_REFERENCE_PARITY`), recomputes each quantity and prints its largest relative
+difference; it fails above 1e-12, or 1e-15 for erfinv.
+
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
 removed with the Python econ package; their result is recorded in ADR 0113's step 2 As built
