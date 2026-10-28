@@ -7,7 +7,12 @@
 # from the data state are compared on the fixture; on the pack the equilibrium is solved with the
 # pack's calibrated inputs from a perturbed reference point. Both entry points then solve the
 # fixture into WORK_DIR, compared table by table, and the routing test checks the pack export's
-# kernel. The export, the dumps and the solutions stay in WORK_DIR.
+# kernel. PPML: step4_ppml_dump.py dumps seeded synthetic designs, every hdfe design
+# gravity.estimate builds on 2000 BACI and the pack, and those of gravity.yotov, with the Python
+# fits; the `ppml_parity` test fits each in Rust, writes the fits next to Python's and compares
+# them (1e-9 relative; the mixed form where a value is rounding noise around 0, see the test).
+# `pack compare --iterative` then compares the Yotov fits, which have no such value. The export,
+# the dumps, the solutions and the fits stay in WORK_DIR.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -44,3 +49,19 @@ uv run --project "$root/python" --locked python -m ceteris.reference solve \
 echo "== routing on the pack"
 CETERIS_PACK="$pack" cargo test --release --quiet -p ceteris-cli --test reference_cli routing \
     -- --nocapture
+
+ppml_dump() {
+    uv run --project "$root/python" --locked python "$root/scripts/parity/step4_ppml_dump.py" "$@"
+}
+
+ppml_dump "$work/ppml-synthetic" --synthetic
+ppml_dump "$work/ppml-baci" --baci "$pack"
+ppml_dump "$work/ppml-yotov" --yotov "$root/data/cache/AdvancedGuideFiles.zip"
+for name in synthetic baci yotov; do
+    echo "== ppml $name"
+    CETERIS_PPML_PARITY="$work/ppml-$name" \
+        cargo test --release --quiet -p ceteris-reference --test ppml_parity -- --nocapture
+done
+echo "== ppml yotov: pack compare"
+"$root/target/release/ceteris" pack compare "$work/ppml-yotov/python" "$work/ppml-yotov/rust" \
+    --iterative
