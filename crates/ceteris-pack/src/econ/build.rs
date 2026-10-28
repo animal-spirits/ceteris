@@ -6,9 +6,12 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
+use arrow_array::cast::AsArray;
+use arrow_array::types::{ArrowPrimitiveType, Float64Type, UInt8Type, UInt32Type};
 use arrow_array::{Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
 
+use super::gateways::{self, Edges, Nodes};
 use super::{goods, icio, people, tariffs};
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
@@ -60,6 +63,45 @@ fn strings<const N: usize>(path: &Path, columns: [&str; N]) -> Result<[Vec<Strin
         }
     }
     Ok(out)
+}
+
+/// One primitive column of a pack table, every batch in order.
+fn values<T: ArrowPrimitiveType>(path: &Path, column: &str) -> Result<Vec<T::Native>, String> {
+    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
+    let reader =
+        FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch.map_err(|e| fail(&e))?;
+        let a = batch
+            .column_by_name(column)
+            .ok_or_else(|| fail(&format!("no column {column}")))?;
+        let a = a
+            .as_primitive_opt::<T>()
+            .ok_or_else(|| fail(&format!("{column} is not {}", T::DATA_TYPE)))?;
+        if a.null_count() > 0 {
+            return Err(fail(&format!("null in {column}")));
+        }
+        out.extend_from_slice(a.values());
+    }
+    Ok(out)
+}
+
+fn read_graph(pack: &Path) -> Result<(Nodes, Edges), String> {
+    let (nodes, edges) = (pack.join("nodes.arrow"), pack.join("edges.arrow"));
+    Ok((
+        Nodes {
+            kind: values::<UInt8Type>(&nodes, "kind")?,
+            province: values::<UInt32Type>(&nodes, "province")?,
+            lon: values::<Float64Type>(&nodes, "lon")?,
+            lat: values::<Float64Type>(&nodes, "lat")?,
+        },
+        Edges {
+            a: values::<UInt32Type>(&edges, "a")?,
+            b: values::<UInt32Type>(&edges, "b")?,
+            mode: values::<UInt8Type>(&edges, "mode")?,
+        },
+    ))
 }
 
 fn write(
@@ -160,6 +202,8 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &obs,
         &sovereigns,
     )?;
+    let (nodes, edges) = read_graph(pack)?;
+    let gw = gateways::select(&nodes, &edges, &country, &trade, gateways::TOTAL)?;
 
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut countries_columns: Vec<(String, ArrayRef)> =
@@ -181,9 +225,13 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             &people::pops(&country, &population, &labour)?,
         )?,
         write(out, "econ_tariffs.arrow", tariffs::columns(&rates)?)?,
+        write(out, "gateways.arrow", gateways::columns(&gw))?,
     ];
     Ok(BuildReport {
         tables,
-        summary: vec![tariffs::report(&rates, &codes, &trade)],
+        summary: vec![
+            tariffs::report(&rates, &codes, &trade),
+            gateways::report(&gw, &codes),
+        ],
     })
 }
