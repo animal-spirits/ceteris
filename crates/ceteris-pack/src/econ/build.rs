@@ -9,13 +9,16 @@ use std::sync::Arc;
 use arrow_array::{Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
 
-use super::{goods, icio, people};
+use super::{goods, icio, people, tariffs};
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
+use crate::read::baci::trade_by_country;
 use crate::read::icio::{aggregate, load_wdi};
 use crate::read::natural_earth::read_codes;
 use crate::read::people::load_observed;
+use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
+use crate::read::wdi::read_rates;
 use crate::table;
 
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
@@ -30,6 +33,8 @@ pub const COVERAGE: [f64; goods::NAMES.len()] = [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2
 #[derive(Debug)]
 pub struct BuildReport {
     pub tables: Vec<(String, [u8; 32])>,
+    /// Human-readable summaries of the built tables.
+    pub summary: Vec<String>,
 }
 
 /// String columns of a pack table, every batch in order.
@@ -137,6 +142,25 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
 
     let weight = goods::weights_from_baci(&cache.join(BACI), &cache.join(HS_KEY))?;
 
+    let trade = trade_by_country(&cache.join(BACI), &iso, &codes)?;
+    let agreements = tariffs::pack_pairs(
+        &read_cepii(&cache.join(GRAVITY))?
+            .union(&read_dta(&cache.join(DTA))?)
+            .cloned()
+            .collect(),
+        &codes,
+        &iso,
+    );
+    let sovereigns: BTreeMap<String, String> = countries.iter().cloned().collect();
+    let rates = tariffs::table(
+        &read_rates(cache)?,
+        &agreements,
+        &codes,
+        &iso,
+        &obs,
+        &sovereigns,
+    )?;
+
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut countries_columns: Vec<(String, ArrayRef)> =
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
@@ -156,6 +180,10 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             "econ_pops.arrow",
             &people::pops(&country, &population, &labour)?,
         )?,
+        write(out, "econ_tariffs.arrow", tariffs::columns(&rates)?)?,
     ];
-    Ok(BuildReport { tables })
+    Ok(BuildReport {
+        tables,
+        summary: vec![tariffs::report(&rates, &codes, &trade)],
+    })
 }

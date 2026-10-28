@@ -322,6 +322,9 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             .iter()
             .map(|(name, d)| (name, Json::Str(hex(d)))),
     );
+    for line in &report.summary {
+        eprintln!("{line}");
+    }
     println!("{}", Json::object([("tables", tables)]).text());
     Ok(ExitCode::SUCCESS)
 }

@@ -4,4 +4,5 @@ pub mod build;
 pub mod goods;
 pub mod icio;
 pub mod people;
+pub mod tariffs;
 pub mod theta;
