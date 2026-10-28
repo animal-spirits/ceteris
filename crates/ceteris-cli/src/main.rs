@@ -7,6 +7,7 @@
 //! ceteris pack fetch [--record]
 //! ceteris pack dump-reader NAME [ARGS]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
+//! ceteris reference solve --inputs DIR --out DIR
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -16,13 +17,17 @@
 //! generated fixture: `run` starts from its calibrated steady state when the pack holds the
 //! calibration tables (ADR 0089), `export` writes its uncalibrated data state, which the
 //! calibration starts from. `--from-equilibrium` starts the run from a GE reference solution
-//! (`python -m ceteris.reference solve --out DIR`) instead of the data state. `--data-state`
+//! (`ceteris reference solve --out DIR`) instead of the data state. `--data-state`
 //! starts a calibrated pack from the data state of its calibrated inputs (prices 1, base
 //! wages and employment, one month of base use in stock, nothing in flight) instead of the
 //! steady state. `--perturb SEED` moves the start by `EconWorld::perturb` (10%, ADR 0089) and
 //! prints the factors' range. `--history` also writes the per-tick series of
 //! `ceteris_econ::history`, every N ticks (default 1), as Arrow with zstd compression or, with
 //! `--history-format csv`, as CSV.
+//!
+//! `reference solve` solves the GE reference of a `ceteris export` directory and writes it with
+//! the column layout of the run export (`prices`, `wages`, `enterprises`, `flows`, `home`) plus
+//! `solution.json`, printing the solve's summary.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -43,6 +48,8 @@ use ceteris_pack::fetch;
 use ceteris_pack::json::Json;
 use ceteris_pack::read::dump;
 use ceteris_pack::sources::{self, Profile};
+use ceteris_reference::model::Model;
+use ceteris_reference::{io as reference_io, output, solve};
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
@@ -51,6 +58,7 @@ const USAGE: &str = "usage:
   ceteris pack fetch [--record]
   ceteris pack dump-reader NAME [ARGS]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
+  ceteris reference solve --inputs DIR --out DIR
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -369,11 +377,52 @@ fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
+/// `reference solve --inputs DIR --out DIR`: exit 1 without an equilibrium.
+fn reference(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    if args.next().as_deref() != Some("solve") {
+        return Err("expected a reference command, solve".into());
+    }
+    let (mut inputs, mut out) = (None, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--inputs" => {
+                inputs = Some(PathBuf::from(
+                    args.next().ok_or("--inputs needs a directory")?,
+                ))
+            }
+            "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let inputs = inputs.ok_or("--inputs is required")?;
+    let out = out.ok_or("--out is required")?;
+    let inp = reference_io::load(&inputs)?;
+    let model = Model::new(&inp)?;
+    let eq = match solve::equilibrium(&model, None, solve::TOL, None) {
+        Ok(eq) => eq,
+        Err(e) => {
+            eprintln!("no equilibrium: {e}");
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+    output::write(&out, &inp, &eq)?;
+    println!(
+        "{}",
+        output::json_object(&output::info_json(&eq.info, true))
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if command == "pack" {
-        return pack(argv).unwrap_or_else(|e| {
+    if command == "pack" || command == "reference" {
+        let result = if command == "pack" {
+            pack(argv)
+        } else {
+            reference(argv)
+        };
+        return result.unwrap_or_else(|e| {
             eprintln!("ceteris: {e}\n{USAGE}");
             ExitCode::FAILURE
         });
@@ -386,7 +435,7 @@ fn main() -> ExitCode {
                 run(&args)
             }
         }),
-        _ => Err("expected a command, export, run or pack".into()),
+        _ => Err("expected a command, export, run, pack or reference".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
