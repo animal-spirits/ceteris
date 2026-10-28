@@ -16,7 +16,7 @@ use super::icio::{
 };
 use super::natural_earth::{province_names, read_codes, us_states};
 use super::people::{
-    Observed, U_STAR_YEARS, load_observed, read_barro_lee, read_ilostat, read_ilostat_mean,
+    Observed, PARTS, U_STAR_YEARS, load_observed, read_barro_lee, read_ilostat, read_ilostat_mean,
     read_pwt, read_wic,
 };
 use super::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
@@ -55,6 +55,8 @@ pub const NAMES: &[&str] = &[
     "icio-aggregate",
     "icio-exports",
     "hs-cpa",
+    "hs-goods",
+    "parts",
     "baci-by-product",
     "baci-values",
     "theta",
@@ -246,6 +248,17 @@ pub fn dump(name: &str, args: &[String]) -> Result<Json, String> {
         ),
         "icio-exports" => exports(&cache(ICIO), YEAR)?.into(),
         "hs-cpa" => read_hs_cpa(&cache(HS_KEY))?.into(),
+        "hs-goods" => Json::object(hs_goods(&read_hs_cpa(&cache(HS_KEY))?).into_iter().map(
+            |(hs, g)| {
+                (
+                    hs,
+                    Json::Int(i64::try_from(g).expect("good index fits i64")),
+                )
+            },
+        )),
+        "parts" => {
+            Json::object(PARTS.map(|(code, parts)| (code, Json::list(parts.iter().copied()))))
+        }
         "baci-by-product" => baci_by_product(&cache(BACI))?.into(),
         "baci-values" => baci_values(&cache(BACI))?.into(),
         "theta" => theta_dump(false)?,
