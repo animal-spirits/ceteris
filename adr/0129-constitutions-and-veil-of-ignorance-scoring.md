@@ -3,7 +3,7 @@
 Status: proposed
 Date: 2026-10-28
 Design sections: 10.1, 10.3 to 10.6, 23.3, 23.4
-Phase: P6 (constitution modules); 1.3 (veil scoring)
+Phase: P6, 2.0-alpha (constitution modules); 1.3 (veil scoring)
 
 ## Context
 
