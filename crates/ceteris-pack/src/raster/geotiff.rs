@@ -233,18 +233,25 @@ fn geotransform<R: Read + Seek>(decoder: &mut Decoder<R>) -> Result<[f64; 6], St
             return Err("PixelIsPoint rasters are not supported".into());
         }
     }
-    if let Some(m) = tag(decoder, Tag::ModelTransformationTag)? {
-        let m = m.into_f64_vec().map_err(|e| e.to_string())?;
-        if m.len() != 16 {
-            return Err(format!("ModelTransformation has {} values", m.len()));
+    let transformation = tag(decoder, Tag::ModelTransformationTag)?;
+    let tie = tag(decoder, Tag::ModelTiepointTag)?;
+    let scale = tag(decoder, Tag::ModelPixelScaleTag)?;
+    let (tie, scale) = match (transformation, tie, scale) {
+        (Some(m), None, None) => {
+            let m = m.into_f64_vec().map_err(|e| e.to_string())?;
+            if m.len() != 16 {
+                return Err(format!("ModelTransformation has {} values", m.len()));
+            }
+            if m[1] != 0.0 || m[4] != 0.0 {
+                return Err("rotated rasters are not supported".into());
+            }
+            return Ok([m[0], m[1], m[3], m[4], m[5], m[7]]);
         }
-        return Ok([m[0], m[1], m[3], m[4], m[5], m[7]]);
-    }
-    let (Some(tie), Some(scale)) = (
-        tag(decoder, Tag::ModelTiepointTag)?,
-        tag(decoder, Tag::ModelPixelScaleTag)?,
-    ) else {
-        return Err("no ModelTransformation, ModelTiepoint or ModelPixelScale".into());
+        (None, Some(tie), Some(scale)) => (tie, scale),
+        (Some(_), _, _) => {
+            return Err("both ModelTransformation and ModelTiepoint or ModelPixelScale".into());
+        }
+        _ => return Err("no ModelTransformation, or ModelTiepoint and ModelPixelScale".into()),
     };
     let tie = tie.into_f64_vec().map_err(|e| e.to_string())?;
     let scale = scale.into_f64_vec().map_err(|e| e.to_string())?;
@@ -293,6 +300,164 @@ mod tests {
         assert_eq!(r.window(1, 3).unwrap(), values[3..12]);
         assert_eq!(r.window(4, 1).unwrap(), values[12..15]);
         assert!(r.window(4, 2).is_err());
+    }
+
+    /// A little-endian TIFF of one Float32 band; `tile` sets tiles (else one strip per row), and
+    /// `extra` adds `(tag, type, count, value bytes)` entries.
+    fn hand_built(
+        width: u32,
+        height: u32,
+        tile: Option<(u32, u32)>,
+        deflate: bool,
+        values: &[f32],
+        extra: &[(u16, u16, u32, Vec<u8>)],
+    ) -> Vec<u8> {
+        let (cw, ch) = tile.unwrap_or((width, 1));
+        let (across, down) = (width.div_ceil(cw), height.div_ceil(ch));
+        let mut chunks = Vec::new();
+        for r in 0..down {
+            for c in 0..across {
+                let mut raw = Vec::new();
+                for y in r * ch..(r + 1) * ch {
+                    for x in c * cw..(c + 1) * cw {
+                        let v = if x < width && y < height {
+                            values[(y * width + x) as usize]
+                        } else {
+                            -1.0
+                        };
+                        raw.extend(v.to_le_bytes());
+                    }
+                }
+                if deflate {
+                    let mut z =
+                        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+                    z.write_all(&raw).unwrap();
+                    raw = z.finish().unwrap();
+                }
+                chunks.push(raw);
+            }
+        }
+        let mut out = b"II*\0\0\0\0\0".to_vec();
+        let mut offsets = Vec::new();
+        for c in &chunks {
+            offsets.push(out.len() as u32);
+            out.extend(c);
+        }
+        let long = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+        let short = |v: u16| v.to_le_bytes().to_vec();
+        let (offsets_tag, counts_tag) = if tile.is_some() {
+            (324, 325)
+        } else {
+            (273, 279)
+        };
+        let counts: Vec<u32> = chunks.iter().map(|c| c.len() as u32).collect();
+        let mut entries = vec![
+            (256, 4, 1, long(&[width])),
+            (257, 4, 1, long(&[height])),
+            (258, 3, 1, short(32)),
+            (259, 3, 1, short(if deflate { 8 } else { 1 })),
+            (262, 3, 1, short(1)),
+            (277, 3, 1, short(1)),
+            (339, 3, 1, short(3)),
+            (offsets_tag, 4, offsets.len() as u32, long(&offsets)),
+            (counts_tag, 4, counts.len() as u32, long(&counts)),
+        ];
+        match tile {
+            Some((w, h)) => {
+                entries.push((322, 4, 1, long(&[w])));
+                entries.push((323, 4, 1, long(&[h])));
+            }
+            None => entries.push((278, 4, 1, long(&[1]))),
+        }
+        entries.extend(extra.iter().cloned());
+        entries.sort_by_key(|e| e.0);
+        // Values longer than four bytes go before the IFD.
+        let mut fields = Vec::new();
+        for (tag, kind, count, bytes) in entries {
+            let value = if bytes.len() > 4 {
+                let at = out.len() as u32;
+                out.extend(&bytes);
+                at.to_le_bytes().to_vec()
+            } else {
+                let mut b = bytes.clone();
+                b.resize(4, 0);
+                b
+            };
+            fields.push((tag, kind, count, value));
+        }
+        let ifd = out.len() as u32;
+        out[4..8].copy_from_slice(&ifd.to_le_bytes());
+        out.extend((fields.len() as u16).to_le_bytes());
+        for (tag, kind, count, value) in fields {
+            out.extend(tag.to_le_bytes());
+            out.extend(kind.to_le_bytes());
+            out.extend(count.to_le_bytes());
+            out.extend(value);
+        }
+        out.extend(0u32.to_le_bytes());
+        out
+    }
+
+    fn doubles(v: &[f64]) -> Vec<u8> {
+        v.iter().flat_map(|x| x.to_le_bytes()).collect()
+    }
+
+    fn georef() -> Vec<(u16, u16, u32, Vec<u8>)> {
+        vec![
+            (33550, 12, 3, doubles(&[2.0, 3.0, 0.0])),
+            (33922, 12, 6, doubles(&[0.0, 0.0, 0.0, 100.0, 50.0, 0.0])),
+        ]
+    }
+
+    #[test]
+    fn tiled_windows_copy_edge_tiles_without_their_padding() {
+        let values: Vec<f32> = (0..25).map(|v| v as f32).collect();
+        for deflate in [false, true] {
+            let bytes = hand_built(5, 5, Some((3, 3)), deflate, &values, &georef());
+            let mut r = from_bytes(bytes, "tiled.tif").unwrap();
+            assert_eq!(r.transform, [2.0, 0.0, 100.0, 0.0, -3.0, 50.0]);
+            assert_eq!(r.window(0, 5).unwrap(), values);
+            assert_eq!(r.window(2, 2).unwrap(), values[10..20]);
+            assert_eq!(r.window(4, 1).unwrap(), values[20..25]);
+        }
+    }
+
+    #[test]
+    fn model_transformation_gives_the_transform() {
+        let mut m = [0.0; 16];
+        (m[0], m[3], m[5], m[7], m[15]) = (0.5, -180.0, -0.25, 90.0, 1.0);
+        let extra = [(34264, 12, 16, doubles(&m))];
+        let r = from_bytes(hand_built(2, 2, None, false, &[0.0; 4], &extra), "t").unwrap();
+        assert_eq!(r.transform, [0.5, 0.0, -180.0, 0.0, -0.25, 90.0]);
+    }
+
+    fn rejected(extra: &[(u16, u16, u32, Vec<u8>)]) -> String {
+        let mut tags = georef();
+        tags.retain(|t| extra.iter().all(|e| e.0 != t.0));
+        tags.extend(extra.iter().cloned());
+        let bytes = hand_built(2, 2, None, false, &[0.0; 4], &tags);
+        from_bytes(bytes, "t").err().unwrap()
+    }
+
+    #[test]
+    fn unsupported_rasters_are_rejected() {
+        let point = [1u16, 1, 0, 1, 1025, 0, 1, 2];
+        let point: Vec<u8> = point.iter().flat_map(|v| v.to_le_bytes()).collect();
+        assert!(rejected(&[(34735, 3, 8, point)]).contains("PixelIsPoint"));
+        assert!(rejected(&[(317, 3, 1, 3u16.to_le_bytes().to_vec())]).contains("predictor"));
+        assert!(rejected(&[(339, 3, 1, 1u16.to_le_bytes().to_vec())]).contains("Float32"));
+        let mut m = [0.0; 16];
+        (m[0], m[1], m[5], m[15]) = (1.0, 0.1, -1.0, 1.0);
+        assert!(rejected(&[(34264, 12, 16, doubles(&m))]).contains("both"));
+        let rotated = hand_built(
+            2,
+            2,
+            None,
+            false,
+            &[0.0; 4],
+            &[(34264, 12, 16, doubles(&m))],
+        );
+        assert!(from_bytes(rotated, "t").err().unwrap().contains("rotated"));
     }
 
     #[test]

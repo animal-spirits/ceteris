@@ -18,18 +18,20 @@ pub const MAX_RING: u32 = 4;
 /// Rows read and summed at a time.
 pub const BLOCK_ROWS: usize = 512;
 
-/// A single band read by row windows, as float64.
+/// A single band read by row windows; values widen exactly to float64.
 pub trait Grid {
+    type Value: Copy + Into<f64>;
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     /// `(a, b, c, d, e, f)` in rasterio's order.
     fn transform(&self) -> [f64; 6];
     /// The nodata value as the band's float32 compares it.
     fn nodata(&self) -> Option<f32>;
-    fn rows(&mut self, row0: usize, rows: usize) -> Result<Vec<f64>, String>;
+    fn rows(&mut self, row0: usize, rows: usize) -> Result<Vec<Self::Value>, String>;
 }
 
 impl<R: Read + Seek> Grid for Raster<R> {
+    type Value = f32;
     fn width(&self) -> usize {
         self.width
     }
@@ -42,12 +44,8 @@ impl<R: Read + Seek> Grid for Raster<R> {
     fn nodata(&self) -> Option<f32> {
         self.nodata.map(|v| v as f32)
     }
-    fn rows(&mut self, row0: usize, rows: usize) -> Result<Vec<f64>, String> {
-        Ok(self
-            .window(row0, rows)?
-            .into_iter()
-            .map(f64::from)
-            .collect())
+    fn rows(&mut self, row0: usize, rows: usize) -> Result<Vec<f32>, String> {
+        self.window(row0, rows)
     }
 }
 
@@ -60,6 +58,7 @@ pub struct Band {
 }
 
 impl Grid for Band {
+    type Value = f64;
     fn width(&self) -> usize {
         self.width
     }
@@ -249,7 +248,6 @@ impl CellOwner {
                     continue;
                 }
                 let p = LatLng::from(near);
-                // `powf`, not `powi`: the libm `pow` Python's `** 2` calls.
                 let d = (p.lat() - lat).powf(2.0) + (p.lng() - lng).powf(2.0);
                 if best.is_none_or(|(bd, bc)| d < bd || (d == bd && c < bc)) {
                     best = Some((d, c));
@@ -311,6 +309,7 @@ pub fn province_population(
         let block = grid.rows(row0, rows)?;
         block_sum.fill(0.0);
         for (i, &v) in block.iter().enumerate() {
+            let v: f64 = v.into();
             let valid = v > 0.0 && nodata.is_none_or(|n| v != f64::from(n));
             if !valid {
                 continue;

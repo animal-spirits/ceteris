@@ -4,8 +4,8 @@
 
 Writes the fixture of the Rust test `pixel_cells_match_python_on_border_windows`. Each window is a
 header line `window NAME BASE ROW0 COL0 ROWS COLS A C E F` (the transform terms as `repr`), then one
-line `CELL OWNER` per pixel in row-major order: the pixel centre's cell at the base resolution and
-the province `CellOwner.of_point` gives it (-1 for none).
+line `CELL OWNER LAT LNG` per pixel in row-major order: the pixel centre's cell at the base
+resolution, the province `CellOwner.of_point` gives it (-1 for none) and the centre (`repr`).
 """
 
 import sys
@@ -65,7 +65,7 @@ def main() -> None:
         lat = (y0 + (rows + row0 + 0.5) * e).tolist()
         lng = (x0 + (cols + col0 + 0.5) * a).tolist()
         for la, lo in zip(lat, lng):
-            lines.append(f"{h3.latlng_to_cell(la, lo, owner.base)} {owner.of_point(la, lo)}")
+            lines.append(f"{h3.latlng_to_cell(la, lo, owner.base)} {owner.of_point(la, lo)} {la!r} {lo!r}")
     Path(sys.argv[1]).write_text("\n".join(lines) + "\n")
 
 
