@@ -360,8 +360,17 @@ dependencies = [
 name = "ceteris-calibrate"
 version = "0.0.1"
 dependencies = [
+ "arrow-array",
+ "arrow-cast",
+ "arrow-ipc",
+ "arrow-schema",
  "ceteris-econ",
+ "ceteris-geo",
  "ceteris-pack",
+ "ceteris-reference",
+ "ceteris-trade",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -373,6 +382,7 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
+ "ceteris-calibrate",
  "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",

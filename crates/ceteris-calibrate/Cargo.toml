@@ -10,5 +10,16 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+arrow-array = "60.0.0"
+arrow-cast = "60.0.0"
+arrow-ipc = { version = "60.0.0", features = ["zstd"] }
+arrow-schema = "60.0.0"
 ceteris-econ = { path = "../ceteris-econ" }
+ceteris-geo = { path = "../ceteris-geo" }
+ceteris-reference = { path = "../ceteris-reference" }
+ceteris-trade = { path = "../ceteris-trade" }
+serde_json = "1.0.154"
+
+[dev-dependencies]
 ceteris-pack = { path = "../ceteris-pack" }
+tempfile = "3.27.0"

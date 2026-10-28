@@ -8,6 +8,7 @@
 //! ceteris pack dump-reader NAME [ARGS]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
+//! ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -28,11 +29,21 @@
 //! `reference solve` solves the GE reference of a `ceteris export` directory and writes it with
 //! the column layout of the run export (`prices`, `wages`, `enterprises`, `flows`, `home`) plus
 //! `solution.json`, printing the solve's summary.
+//!
+//! `calibrate --pack DIR` exports the pack's data state to a temporary directory, calibrates it
+//! as the steady state (ADR 0089) at the pack's u* and writes the six calibration tables into
+//! `--out` (default `target/calibration/<pack name>`, never the pack), printing one line per
+//! pass and the summary. Copying the tables into the pack installs them: `EconInputs::from_pack`
+//! loads them at their `calibration_format` and the static digest of the export they were
+//! solved from. `--inputs DIR` calibrates an export directory at its own u*, its provinces
+//! serving as their own pack provinces, and needs `--out`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ceteris_calibrate::steady::{self, Limits};
+use ceteris_calibrate::write as calibration;
 use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::export::{write_inputs, write_run};
@@ -59,6 +70,7 @@ const USAGE: &str = "usage:
   ceteris pack dump-reader NAME [ARGS]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
+  ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -413,14 +425,81 @@ fn reference(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
+/// `calibrate --pack DIR | --inputs DIR [--out DIR]`: exit 1 without a calibration.
+fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let (mut pack, mut inputs, mut out) = (None, None, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--pack" => {
+                pack = Some(PathBuf::from(
+                    args.next().ok_or("--pack needs a directory")?,
+                ))
+            }
+            "--inputs" => {
+                inputs = Some(PathBuf::from(
+                    args.next().ok_or("--inputs needs a directory")?,
+                ))
+            }
+            "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    // The export of a pack lives until the reference has read it.
+    let mut export = None;
+    let (dir, u_star, pack_province, out) = match (pack, inputs) {
+        (Some(pack), None) => {
+            let name = std::fs::canonicalize(&pack)
+                .map_err(|e| format!("{}: {e}", pack.display()))?
+                .file_name()
+                .map(|n| n.to_owned())
+                .ok_or("--pack names no directory")?;
+            let out = out.unwrap_or_else(|| {
+                sources::workspace_root()
+                    .join("target/calibration")
+                    .join(name)
+            });
+            let tmp = tempfile::tempdir().map_err(|e| format!("temporary directory: {e}"))?;
+            ceteris_calibrate::export_pack(&pack, tmp.path())?;
+            let pack_province = calibration::read_pack_provinces(tmp.path())?;
+            let u_star = calibration::read_u_star(&pack)?;
+            let dir = export.insert(tmp).path().to_owned();
+            (dir, Some(u_star), Some(pack_province), out)
+        }
+        (None, Some(inputs)) => (inputs, None, None, out.ok_or("--inputs needs --out")?),
+        _ => return Err("choose one input with --pack or --inputs".into()),
+    };
+    let inp = reference_io::load(&dir)?;
+    drop(export);
+    let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
+    let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
+    let mut progress = |line: &str| println!("{line}");
+    let s = match ceteris_calibrate::run(
+        &inp,
+        &u_star,
+        &pack_province,
+        &out,
+        Limits::default(),
+        &mut progress,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("no calibration: {e}");
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+    println!("{}", steady::summary(&inp, &s).pretty());
+    println!("wrote {}", out.display());
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if command == "pack" || command == "reference" {
-        let result = if command == "pack" {
-            pack(argv)
-        } else {
-            reference(argv)
+    if command == "pack" || command == "reference" || command == "calibrate" {
+        let result = match command.as_str() {
+            "pack" => pack(argv),
+            "reference" => reference(argv),
+            _ => calibrate(argv),
         };
         return result.unwrap_or_else(|e| {
             eprintln!("ceteris: {e}\n{USAGE}");
@@ -435,7 +514,7 @@ fn main() -> ExitCode {
                 run(&args)
             }
         }),
-        _ => Err("expected a command, export, run, pack or reference".into()),
+        _ => Err("expected a command, export, run, pack, reference or calibrate".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

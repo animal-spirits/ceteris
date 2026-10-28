@@ -10,12 +10,14 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+ceteris-calibrate = { path = "../ceteris-calibrate" }
 ceteris-core = { path = "../ceteris-core" }
 ceteris-econ = { path = "../ceteris-econ" }
 ceteris-geo = { path = "../ceteris-geo" }
 ceteris-pack = { path = "../ceteris-pack" }
 ceteris-reference = { path = "../ceteris-reference" }
 ceteris-trade = { path = "../ceteris-trade" }
+tempfile = "3.27.0"
 
 [[bin]]
 name = "ceteris"
@@ -29,4 +31,3 @@ arrow-schema = "60.0.0"
 arrow-select = "60.0.0"
 serde_json = "1.0.154"
 sha2 = "0.10.9"
-tempfile = "3.27.0"
