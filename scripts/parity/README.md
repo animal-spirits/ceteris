@@ -24,7 +24,7 @@ the commit before the deletion (`git archive`).
 
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
-removed with the Python econ package, and their last outputs are in the migration ledger. The
-fixture of `pixel_cells_match_python_on_border_windows` stays as recorded.
+removed with the Python econ package; their result is recorded in ADR 0113's step 2 As built
+entry. The fixture of `pixel_cells_match_python_on_border_windows` stays as recorded.
 
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
