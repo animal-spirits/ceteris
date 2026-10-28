@@ -413,16 +413,14 @@ def test_eia_spreads_states_by_onshore_fields_and_offshore_over_the_nearest_coas
     np.testing.assert_allclose(without, [20.0, 20.0 + 50.0, 10.0 + 50.0, 6.0, 0.0])
 
 
-def test_gridded_gdp_reads_the_band_of_2000(tmp_path):
+def test_gridded_gdp_sums_the_derived_geotiff_and_skips_nodata(tmp_path):
     import rasterio
     from rasterio.transform import from_origin
 
     path = tmp_path / "gdp.tif"
-    with rasterio.open(path, "w", driver="GTiff", width=2, height=1, count=3, dtype="float32", crs="EPSG:4326",
-                       transform=from_origin(19.0, 11.0, 2.0, 2.0)) as ds:  # fmt: skip
-        for b, year in enumerate((1999, 2000, 2001), 1):
-            ds.write(np.array([[b * 10.0, -9.0]], np.float32), b)
-            ds.update_tags(b, NETCDF_DIM_time=str(year))
+    with rasterio.open(path, "w", driver="GTiff", width=2, height=1, count=1, dtype="float32", crs="EPSG:4326",
+                       nodata=-9.0, transform=from_origin(19.0, 11.0, 2.0, 2.0)) as ds:  # fmt: skip
+        ds.write(np.array([[20.0, -9.0]], np.float32), 1)
     got = downscale.gridded_gdp(path, _cells([(10.0, 20.0)]))
     np.testing.assert_allclose(got, [20.0])
 

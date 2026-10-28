@@ -338,6 +338,18 @@ bytes = 134025184
 url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
 manual = true
 
+# The year-2000 band of the file above, converted once by hand; the pack reads only this GeoTIFF.
+[[file]]
+source = "kummu-gdp"
+name = "kummu_gdp_ppp_2000_5arcmin.tif"
+optional = true
+manual = true
+derived_from = "GDP_PPP_1990_2015_5arcmin_v2.nc"
+command = "uv run --project python --locked python scripts/convert_kummu.py"
+sha256 = "7fa7b4be4fe7d12ecfb5000bc52728712f560f7ccc8f8d1173471294f4ad0210"
+bytes = 5087873
+url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
+
 # GEM releases sit behind a web form; the downscaling falls back to other proxies without them.
 [[file]]
 source = "gem-trackers"
