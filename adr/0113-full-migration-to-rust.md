@@ -161,3 +161,9 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   bytes would stop being deterministic. `deny.toml` carries the licence allowlist and CI runs
   `cargo deny check licenses`. `tiny-keccak` 2.0.2 (CC0-1.0, via `arrow-array` -> `ahash` ->
   `const-random`) is outside the allowlist and is allowed by a per-crate exception in `deny.toml`.
+- Step 1b (fetch): `ceteris pack fetch [--record]` uses `reqwest` (blocking) with `native-tls`, the
+  operating system's TLS stack (Security.framework, SChannel, OpenSSL); Linux builds need system
+  OpenSSL. The `rustls` features fail the licence check: `webpki-root-certs` is
+  CDLA-Permissive-2.0, reached through a wasm32-only dependency of `rustls-platform-verifier`.
+  SHA-256 is the pure-Rust `sha2`: verifying the 5.9 GB cache takes about 11 s (2.7 s with the
+  `asm` feature, which needs a C compiler and was declined).
