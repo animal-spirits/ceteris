@@ -1,6 +1,7 @@
 //! Single-band Float32 GeoTIFF read by row windows, georeferenced as GDAL reads it: the affine
 //! transform from ModelTransformation or from ModelTiepoint and ModelPixelScale, nodata from the
-//! GDAL_NODATA tag. Chunks (tiles or strips) are uncompressed, LZW or deflate, without predictor.
+//! GDAL_NODATA tag. Chunks (tiles or strips) are uncompressed, LZW or deflate, without predictor
+//! or with the floating point predictor.
 
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
@@ -14,6 +15,7 @@ use tiff::tags::{ByteOrder, Tag};
 const RASTER_TYPE_KEY: u16 = 1025;
 const PIXEL_IS_POINT: u16 = 2;
 const IEEE_FLOAT: u16 = 3;
+const FLOATING_POINT_PREDICTOR: u16 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Compression {
@@ -32,6 +34,7 @@ pub struct Raster<R: Read + Seek> {
     pub transform: [f64; 6],
     pub nodata: Option<f64>,
     compression: Compression,
+    float_predictor: bool,
     little_endian: bool,
     chunk_width: usize,
     chunk_height: usize,
@@ -69,9 +72,11 @@ impl<R: Read + Seek> Raster<R> {
         if format != (1, 32, IEEE_FLOAT) {
             return Err(format!("{origin}: not a single-band Float32 raster"));
         }
-        if number(&mut decoder, Tag::Predictor, 1)? != 1 {
-            return Err(format!("{origin}: predictors are not supported"));
-        }
+        let float_predictor = match number(&mut decoder, Tag::Predictor, 1)? {
+            1 => false,
+            FLOATING_POINT_PREDICTOR => true,
+            p => return Err(format!("{origin}: predictor {p} is not supported")),
+        };
         let compression = match number(&mut decoder, Tag::Compression, 1)? {
             1 => Compression::None,
             5 => Compression::Lzw,
@@ -113,6 +118,7 @@ impl<R: Read + Seek> Raster<R> {
             transform,
             nodata,
             compression,
+            float_predictor,
             little_endian,
             chunk_width: if tiled {
                 chunk_width as usize
@@ -176,10 +182,16 @@ impl<R: Read + Seek> Raster<R> {
             .seek(SeekFrom::Start(offset))
             .and_then(|_| reader.read_exact(&mut encoded))
             .map_err(|e| fail(&e))?;
-        let bytes = decode(self.compression, encoded).map_err(|e| fail(&e))?;
+        let mut bytes = decode(self.compression, encoded).map_err(|e| fail(&e))?;
         let n = rows * self.chunk_width;
         if bytes.len() < 4 * n {
             return Err(fail(&format!("{} bytes, {} expected", bytes.len(), 4 * n)));
+        }
+        if self.float_predictor {
+            return Ok(bytes[..4 * n]
+                .chunks_exact_mut(4 * self.chunk_width)
+                .flat_map(undo_float_predictor)
+                .collect());
         }
         Ok(bytes[..4 * n]
             .as_chunks::<4>()
@@ -218,6 +230,19 @@ fn decode(compression: Compression, encoded: Vec<u8>) -> Result<Vec<u8>, String>
             Ok(out)
         }
     }
+}
+
+/// The float32 values of one row stored with the floating point predictor (Adobe Photoshop TIFF
+/// Technical Note 3): the bytes are differenced across the row, after the values' bytes were
+/// regrouped most significant first, whatever the file's byte order.
+fn undo_float_predictor(row: &mut [u8]) -> Vec<f32> {
+    for i in 1..row.len() {
+        row[i] = row[i].wrapping_add(row[i - 1]);
+    }
+    let n = row.len() / 4;
+    (0..n)
+        .map(|i| f32::from_be_bytes([row[i], row[n + i], row[2 * n + i], row[3 * n + i]]))
+        .collect()
 }
 
 /// GDAL's geotransform of a north-up GeoTIFF, in rasterio's order.
@@ -305,13 +330,29 @@ mod tests {
         assert!(r.window(4, 2).is_err());
     }
 
-    /// A little-endian TIFF of one Float32 band; `tile` sets tiles (else one strip per row), and
-    /// `extra` adds `(tag, type, count, value bytes)` entries.
+    /// The bytes of one row of float32 values under the floating point predictor.
+    fn float_predicted(row: &[f32]) -> Vec<u8> {
+        let n = row.len();
+        let mut out = vec![0u8; 4 * n];
+        for (i, v) in row.iter().enumerate() {
+            for (k, b) in v.to_be_bytes().into_iter().enumerate() {
+                out[k * n + i] = b;
+            }
+        }
+        for i in (1..out.len()).rev() {
+            out[i] = out[i].wrapping_sub(out[i - 1]);
+        }
+        out
+    }
+
+    /// A little-endian TIFF of one Float32 band; `tile` sets tiles (else one strip per row),
+    /// `predict` stores rows with the floating point predictor, and `extra` adds
+    /// `(tag, type, count, value bytes)` entries.
     fn hand_built(
         width: u32,
         height: u32,
         tile: Option<(u32, u32)>,
-        deflate: bool,
+        (deflate, predict): (bool, bool),
         values: &[f32],
         extra: &[(u16, u16, u32, Vec<u8>)],
     ) -> Vec<u8> {
@@ -322,13 +363,19 @@ mod tests {
             for c in 0..across {
                 let mut raw = Vec::new();
                 for y in r * ch..(r + 1) * ch {
-                    for x in c * cw..(c + 1) * cw {
-                        let v = if x < width && y < height {
-                            values[(y * width + x) as usize]
-                        } else {
-                            -1.0
-                        };
-                        raw.extend(v.to_le_bytes());
+                    let row: Vec<f32> = (c * cw..(c + 1) * cw)
+                        .map(|x| {
+                            if x < width && y < height {
+                                values[(y * width + x) as usize]
+                            } else {
+                                -1.0
+                            }
+                        })
+                        .collect();
+                    if predict {
+                        raw.extend(float_predicted(&row));
+                    } else {
+                        raw.extend(row.iter().flat_map(|v| v.to_le_bytes()));
                     }
                 }
                 if deflate {
@@ -361,6 +408,7 @@ mod tests {
             (259, 3, 1, short(if deflate { 8 } else { 1 })),
             (262, 3, 1, short(1)),
             (277, 3, 1, short(1)),
+            (317, 3, 1, short(if predict { 3 } else { 1 })),
             (339, 3, 1, short(3)),
             (offsets_tag, 4, offsets.len() as u32, long(&offsets)),
             (counts_tag, 4, counts.len() as u32, long(&counts)),
@@ -416,7 +464,7 @@ mod tests {
     fn tiled_windows_copy_edge_tiles_without_their_padding() {
         let values: Vec<f32> = (0..25).map(|v| v as f32).collect();
         for deflate in [false, true] {
-            let bytes = hand_built(5, 5, Some((3, 3)), deflate, &values, &georef());
+            let bytes = hand_built(5, 5, Some((3, 3)), (deflate, false), &values, &georef());
             let mut r = from_bytes(bytes, "tiled.tif").unwrap();
             assert_eq!(r.transform, [2.0, 0.0, 100.0, 0.0, -3.0, 50.0]);
             assert_eq!(r.window(0, 5).unwrap(), values);
@@ -430,7 +478,11 @@ mod tests {
         let mut m = [0.0; 16];
         (m[0], m[3], m[5], m[7], m[15]) = (0.5, -180.0, -0.25, 90.0, 1.0);
         let extra = [(34264, 12, 16, doubles(&m))];
-        let r = from_bytes(hand_built(2, 2, None, false, &[0.0; 4], &extra), "t").unwrap();
+        let r = from_bytes(
+            hand_built(2, 2, None, (false, false), &[0.0; 4], &extra),
+            "t",
+        )
+        .unwrap();
         assert_eq!(r.transform, [0.5, 0.0, -180.0, 0.0, -0.25, 90.0]);
     }
 
@@ -438,7 +490,7 @@ mod tests {
         let mut tags = georef();
         tags.retain(|t| extra.iter().all(|e| e.0 != t.0));
         tags.extend(extra.iter().cloned());
-        let bytes = hand_built(2, 2, None, false, &[0.0; 4], &tags);
+        let bytes = hand_built(2, 2, None, (false, false), &[0.0; 4], &tags);
         from_bytes(bytes, "t").err().unwrap()
     }
 
@@ -447,7 +499,7 @@ mod tests {
         let point = [1u16, 1, 0, 1, 1025, 0, 1, 2];
         let point: Vec<u8> = point.iter().flat_map(|v| v.to_le_bytes()).collect();
         assert!(rejected(&[(34735, 3, 8, point)]).contains("PixelIsPoint"));
-        assert!(rejected(&[(317, 3, 1, 3u16.to_le_bytes().to_vec())]).contains("predictor"));
+        assert!(rejected(&[(317, 3, 1, 2u16.to_le_bytes().to_vec())]).contains("predictor 2"));
         assert!(rejected(&[(339, 3, 1, 1u16.to_le_bytes().to_vec())]).contains("Float32"));
         let mut m = [0.0; 16];
         (m[0], m[1], m[5], m[15]) = (1.0, 0.1, -1.0, 1.0);
@@ -456,11 +508,28 @@ mod tests {
             2,
             2,
             None,
-            false,
+            (false, false),
             &[0.0; 4],
             &[(34264, 12, 16, doubles(&m))],
         );
         assert!(from_bytes(rotated, "t").err().unwrap().contains("rotated"));
+    }
+
+    #[test]
+    fn floating_point_predictor_rows_decode_in_tiles_and_strips() {
+        let values: Vec<f32> = (0..35)
+            .map(|v| (v as f32 - 17.0) * 123.456 + 1e-3 * (v * v) as f32)
+            .chain([f32::MIN_POSITIVE, -0.0, f32::MAX, -99999.0, 8848.0])
+            .collect();
+        for tile in [Some((4, 3)), None] {
+            for deflate in [false, true] {
+                let bytes = hand_built(8, 5, tile, (deflate, true), &values, &georef());
+                let mut r = from_bytes(bytes, "predicted.tif").unwrap();
+                let got = r.window(0, 5).unwrap();
+                let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+                assert_eq!(bits(&got), bits(&values), "tile {tile:?} deflate {deflate}");
+            }
+        }
     }
 
     #[test]
