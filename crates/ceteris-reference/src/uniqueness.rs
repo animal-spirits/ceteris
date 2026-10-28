@@ -10,6 +10,8 @@
 use crate::io::{Inputs, Mat};
 
 pub const MAX_POWER_ITER: usize = 100_000;
+/// Iterations without progress at either end of the bracket that end a power iteration.
+const STALL: usize = 50;
 
 /// rho of the elasticity-bound matrix |a| (Theorem 1 bounds absolute elasticities): its Perron
 /// root, the largest over the irreducible diagonal blocks of |a| (its strongly connected
@@ -50,14 +52,15 @@ pub fn spectral_radius(a: &Mat) -> f64 {
 /// Perron root of an irreducible nonnegative matrix by power iteration on a + s I, s its largest
 /// row sum: the shift makes the matrix primitive and keeps every iterate positive, so the
 /// smallest and largest of (a x)_i / x_i bracket the root (Collatz-Wielandt). Stops when the
-/// bracket closes or its upper end stops falling, and returns the upper end.
+/// bracket closes or neither end has improved for [`STALL`] iterations, and returns the smallest
+/// upper end seen.
 fn perron_root(a: &Mat) -> f64 {
     let shift = a.row_sums().into_iter().fold(0.0, f64::max);
     if shift == 0.0 {
         return 0.0;
     }
     let mut x = vec![1.0; a.rows];
-    let mut upper = f64::INFINITY;
+    let (mut upper, mut lower, mut stalled) = (f64::INFINITY, 0.0_f64, 0);
     for _ in 0..MAX_POWER_ITER {
         let ax = a.matvec(&x);
         let (mut lo, mut hi) = (f64::INFINITY, 0.0_f64);
@@ -65,10 +68,18 @@ fn perron_root(a: &Mat) -> f64 {
             lo = lo.min(v / xi);
             hi = hi.max(v / xi);
         }
-        if hi - lo <= 4.0 * f64::EPSILON * hi || hi >= upper {
-            return hi.min(upper);
+        // Either end can stay flat for several exact steps (tied ratios), so only a stall of
+        // both ends over STALL iterations ends the search short of a closed bracket.
+        if hi < upper || lo > lower {
+            stalled = 0;
+        } else {
+            stalled += 1;
         }
-        upper = hi;
+        upper = upper.min(hi);
+        lower = lower.max(lo);
+        if upper - lower <= 4.0 * f64::EPSILON * upper || stalled >= STALL {
+            return upper;
+        }
         for (xi, v) in x.iter_mut().zip(&ax) {
             *xi = v + shift * *xi;
         }

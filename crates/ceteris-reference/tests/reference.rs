@@ -260,13 +260,14 @@ fn bound_reproduces_paper_examples() {
 }
 
 /// `numpy.abs(numpy.linalg.eigvals(abs(a))).max()` of matrices the A.3 bound does not produce:
-/// periodic, reducible, defective, nilpotent, signed.
+/// periodic, reducible, defective, nilpotent, signed, with tied row sums.
 #[test]
 fn spectral_radius_matches_numpy_eigvals() {
     let dense4: Vec<Vec<f64>> = (0..4)
         .map(|i| (0..4).map(|j| ((i * 7 + j * 3) % 5) as f64 / 3.0).collect())
         .collect();
-    let cases: [(Vec<Vec<f64>>, f64); 8] = [
+    let cycle = |c: f64| vec![vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0], vec![c, 0.0, 0.0]];
+    let cases: [(Vec<Vec<f64>>, f64); 13] = [
         (
             vec![vec![0.0, 2.0], vec![1.0 / 3.0, 0.0]],
             0.816496580927726,
@@ -293,6 +294,28 @@ fn spectral_radius_matches_numpy_eigvals() {
             1.1066819197003221,
         ),
         (dense4, 2.4598558530124772),
+        // Tied Collatz-Wielandt ratios: the upper end stays flat for several exact steps.
+        (cycle(0.25), 0.6299605249474369),
+        (cycle(0.5), 0.7937005259840998),
+        (cycle(0.9), 0.96548938460563),
+        (
+            vec![
+                vec![0.2, 0.6, 0.0],
+                vec![0.0, 0.2, 0.6],
+                vec![0.5, 0.1, 0.0],
+            ],
+            0.7366978957327053,
+        ),
+        (
+            vec![
+                vec![0.0, 1.0, 0.0, 0.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0, 0.0],
+                vec![0.0, 0.0, 0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 0.0, 0.0, 1.0],
+                vec![0.1, 0.0, 0.0, 0.0, 0.0],
+            ],
+            0.6309573444801935,
+        ),
     ];
     for (rows, want) in cases {
         let got = uniqueness::spectral_radius(&Mat::from_rows(&rows));
