@@ -23,8 +23,9 @@ worldpop|mapspam|kummu`), then rewrites the pixel to H3 cell fixture of the Rust
 `pixel_cells_match_python_on_border_windows` with `pixel_cells.py` and checks it equals the
 committed one.
 
-`step2-people.sh` builds the econ tables with Python and with `ceteris pack build --econ-only`,
-keeps of the Python tables the columns the Rust build writes, compares them, and runs the people
-tests in release mode (their WorldPop tests skip in debug builds).
+`step2-people.sh` and `step2-icio.sh` run `step2-econ.sh MODULE`: it builds the econ tables with
+Python and with `ceteris pack build --econ-only`, checks with `econ_tables.py` that every Rust table
+has exactly the columns listed there, selects the module's columns from both builds, compares them,
+and runs the module's tests in release mode (their WorldPop tests skip in debug builds).
 
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
