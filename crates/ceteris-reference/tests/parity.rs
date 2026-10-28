@@ -191,7 +191,7 @@ fn reference_matches_python_dump() {
     let traded: Vec<usize> = (0..inp.n_goods()).filter(|&g| inp.theta[g] > 0.0).collect();
     let mut radius = Vec::new();
     for (i, &g) in traded.iter().enumerate() {
-        let m = uniqueness::trade_with_intermediates(inp.theta[g], va[g]);
+        let m = uniqueness::trade_with_intermediates(inp.theta[g], va[g]).unwrap();
         r.check(
             &format!("trade_with_intermediates[{g}]"),
             &m.data,

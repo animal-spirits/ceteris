@@ -220,6 +220,7 @@ fn urban(theta: f64, alpha: f64, beta: f64) -> Mat {
             vec![0.0, theta * beta],
         ])),
     )
+    .unwrap()
 }
 
 /// Allen, Arkolakis and Li (2024), January 2024 version: worked examples of Theorem 1.
@@ -239,7 +240,8 @@ fn bound_reproduces_paper_examples() {
         &Mat::identity(1),
         &Mat::from_rows(&[vec![1.0]]),
         Some(&Mat::from_rows(&[vec![-0.5]])),
-    );
+    )
+    .unwrap();
     assert!(close(uniqueness::spectral_radius(&fn6), 2.0 / 3.0, 1e-14));
     // Section 3 (pp. 14-15, Figure 1 p. 21): theta 1, alpha = beta. The off-diagonal blocks are
     // theta alpha / (1 - theta alpha); at 0.5 the radius is 1 (unique up to scale, part ii.b: one
@@ -264,9 +266,9 @@ fn bound_reproduces_paper_examples() {
     for elasticity in [0.5, 2.62, 5.88, 12.55, 100.0] {
         for beta in [0.05, 0.46, 0.73, 1.0] {
             let t = 1.0 / elasticity;
-            let rho = uniqueness::spectral_radius(&uniqueness::trade_with_intermediates(
-                elasticity, beta,
-            ));
+            let rho = uniqueness::spectral_radius(
+                &uniqueness::trade_with_intermediates(elasticity, beta).unwrap(),
+            );
             assert!(close(rho, (beta + t - beta * t) / (beta + t), 1e-12));
             assert!(rho < 1.0);
         }
@@ -351,7 +353,9 @@ fn trade_only_is_unique() {
     let want = (0..inp.n_goods())
         .filter(|&g| inp.traded[g])
         .map(|g| {
-            uniqueness::spectral_radius(&uniqueness::trade_with_intermediates(inp.theta[g], va[g]))
+            uniqueness::spectral_radius(
+                &uniqueness::trade_with_intermediates(inp.theta[g], va[g]).unwrap(),
+            )
         })
         .fold(f64::NEG_INFINITY, f64::max);
     assert!(close(bound, want, 1e-14));
@@ -367,6 +371,16 @@ fn trade_only_is_unique() {
     assert!(labour_only <= bound);
     assert!(uniqueness::spectral_bound(&inp.theta, 0.05, None, &va).is_err());
     assert!(uniqueness::spectral_bound(&inp.theta, 0.0, Some(2.0), &va).is_err());
+}
+
+/// numpy's `solve` raises on a singular matrix; so does the change of variables.
+#[test]
+fn singular_change_of_variables_is_an_error() {
+    let singular = Mat::from_rows(&[vec![1.0, 2.0], vec![2.0, 4.0]]);
+    let b = Mat::identity(2);
+    assert!(uniqueness::change_of_variables(&singular, &b, None).is_err());
+    assert!(uniqueness::change_of_variables(&b, &b, Some(&b)).is_err());
+    assert!(uniqueness::trade_with_intermediates(0.0, 0.5).is_err());
 }
 
 #[test]
