@@ -369,11 +369,17 @@ name = "ceteris-cli"
 version = "0.0.1"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
+ "arrow-ipc",
+ "arrow-schema",
+ "arrow-select",
  "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",
  "ceteris-pack",
+ "ceteris-reference",
  "ceteris-trade",
+ "serde_json",
  "sha2",
  "tempfile",
 ]
@@ -452,6 +458,7 @@ dependencies = [
  "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
+ "proptest",
  "serde_json",
  "statrs",
 ]
