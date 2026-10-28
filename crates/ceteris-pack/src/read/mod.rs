@@ -4,6 +4,7 @@
 pub mod baci;
 pub mod downscale;
 pub mod dump;
+pub mod geojson;
 pub mod icio;
 pub mod natural_earth;
 pub mod people;

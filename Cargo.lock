@@ -439,6 +439,7 @@ dependencies = [
  "icu_normalizer",
  "reqwest",
  "rstar",
+ "serde_json",
  "sha2",
  "tempfile",
  "tiff",
