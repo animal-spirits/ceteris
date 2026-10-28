@@ -10,11 +10,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, Float64Array, RecordBatch, UInt8Array, UInt32Array};
-use arrow_schema::{Field, Schema};
 
 use crate::numeric::{pairwise_sum, py_sum};
 use crate::read::people::{N_EDU, Observed, parts};
 use crate::read::wdi::Names;
+use crate::table;
 
 /// Where a country's Gini comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -422,23 +422,10 @@ pub fn pops(
             })),
         ),
     ];
-    batch(
+    table::batch(
         columns
             .into_iter()
             .map(|(k, v)| (k.to_owned(), v))
             .collect(),
     )
-}
-
-/// A record batch of `columns`, every field nullable as pyarrow writes them.
-pub fn batch(columns: Vec<(String, ArrayRef)>) -> Result<RecordBatch, String> {
-    let fields: Vec<Field> = columns
-        .iter()
-        .map(|(name, a)| Field::new(name, a.data_type().clone(), true))
-        .collect();
-    RecordBatch::try_new(
-        Arc::new(Schema::new(fields)),
-        columns.into_iter().map(|(_, a)| a).collect(),
-    )
-    .map_err(|e| e.to_string())
 }

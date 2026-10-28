@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
+use std::sync::Arc;
 
 use arrow_array::{Array, ArrayRef, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
@@ -24,25 +25,27 @@ pub struct BuildReport {
     pub tables: Vec<(String, [u8; 32])>,
 }
 
-/// A string column of a pack table, every batch in order.
-fn strings(path: &Path, column: &str) -> Result<Vec<String>, String> {
+/// String columns of a pack table, every batch in order.
+fn strings<const N: usize>(path: &Path, columns: [&str; N]) -> Result<[Vec<String>; N], String> {
     let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
     let reader =
         FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
-    let mut out = Vec::new();
+    let mut out: [Vec<String>; N] = std::array::from_fn(|_| Vec::new());
     for batch in reader {
         let batch = batch.map_err(|e| fail(&e))?;
-        let a = batch
-            .column_by_name(column)
-            .ok_or_else(|| fail(&format!("no column {column}")))?;
-        let a = a
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .ok_or_else(|| fail(&format!("{column} is not a string column")))?;
-        if a.null_count() > 0 {
-            return Err(fail(&format!("null in {column}")));
+        for (column, values) in columns.iter().zip(&mut out) {
+            let a = batch
+                .column_by_name(column)
+                .ok_or_else(|| fail(&format!("no column {column}")))?;
+            let a = a
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| fail(&format!("{column} is not a string column")))?;
+            if a.null_count() > 0 {
+                return Err(fail(&format!("null in {column}")));
+            }
+            values.extend(a.iter().flatten().map(str::to_owned));
         }
-        out.extend(a.iter().flatten().map(str::to_owned));
     }
     Ok(out)
 }
@@ -52,7 +55,7 @@ fn write(
     name: &str,
     columns: Vec<(String, ArrayRef)>,
 ) -> Result<(String, [u8; 32]), String> {
-    write_batch(out, name, &people::batch(columns)?)
+    write_batch(out, name, &table::batch(columns)?)
 }
 
 fn write_batch(out: &Path, name: &str, batch: &RecordBatch) -> Result<(String, [u8; 32]), String> {
@@ -64,9 +67,8 @@ fn write_batch(out: &Path, name: &str, batch: &RecordBatch) -> Result<(String, [
 
 /// Writes the econ tables of `pack` (its P1 tables) into `out`, reading the sources from `cache`.
 pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, String> {
-    let codes = strings(&pack.join("countries.arrow"), "code")?;
-    let sovereign = strings(&pack.join("countries.arrow"), "sovereign")?;
-    let country = strings(&pack.join("provinces.arrow"), "country")?;
+    let [codes, sovereign] = strings(&pack.join("countries.arrow"), ["code", "sovereign"])?;
+    let [country] = strings(&pack.join("provinces.arrow"), ["country"])?;
     let admin0 = cache.join(ADMIN0);
 
     let (iso, _) = read_codes(&admin0)?;
@@ -90,10 +92,8 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     let population = people::scale_to_national(&raw, &country, &totals);
 
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let mut countries_columns: Vec<(String, ArrayRef)> = vec![(
-        "code".into(),
-        std::sync::Arc::new(StringArray::from(codes.clone())),
-    )];
+    let mut countries_columns: Vec<(String, ArrayRef)> =
+        vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
     countries_columns.extend(people::country_columns(&codes, &labour)?);
     let tables = vec![
         write(out, "econ_countries.arrow", countries_columns)?,

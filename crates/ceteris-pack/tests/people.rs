@@ -454,6 +454,7 @@ struct Data {
     iso: Names,
     labour: BTreeMap<String, Labour>,
     country: Vec<String>,
+    pack_countries: usize,
 }
 
 /// The observed series, labour inputs and province countries of the 2000 sources and pack.
@@ -479,6 +480,7 @@ fn data() -> Option<&'static Data> {
             obs,
             iso,
             labour,
+            pack_countries: pairs.len(),
             country: strings(&provinces, "country"),
         })
     })
@@ -506,12 +508,14 @@ fn worldpop() -> Option<&'static Vec<f64>> {
 #[test]
 fn every_pack_country_has_labour_inputs() {
     let Some(d) = data() else { return };
-    assert_eq!(d.labour.len(), 242);
+    assert_eq!(d.labour.len(), d.pack_countries);
+    assert_eq!(d.pack_countries, 242);
 }
 
 #[test]
 fn edu_shares_sum_to_one() {
     let Some(d) = data() else { return };
+    assert_eq!(d.labour.len(), 242);
     for l in d.labour.values() {
         assert!(l.edu_shares.iter().all(|x| *x >= 0.0));
         assert!((l.edu_shares.iter().sum::<f64>() - 1.0).abs() <= 1e-12);
@@ -538,7 +542,12 @@ fn labour_share_in_unit_interval() {
     }
     let mut shares: Vec<f64> = d.labour.values().map(|l| l.labour_share).collect();
     shares.sort_by(f64::total_cmp);
-    let median = (shares[120] + shares[121]) / 2.0;
+    let n = shares.len();
+    let median = if n % 2 == 1 {
+        shares[n / 2]
+    } else {
+        (shares[n / 2 - 1] + shares[n / 2]) / 2.0
+    };
     assert!(0.3 < median && median < 0.8);
 }
 
