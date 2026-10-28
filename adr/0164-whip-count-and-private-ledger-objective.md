@@ -26,6 +26,7 @@ Option 2.
   from the ensemble, and for each group what would move it (its payoff terms from the policy
   model). Promises are recorded edits that commit the government to a later action; breaking one
   lowers that group's trust (10.7). The coalition-partner seat (0130) uses the same view.
+  The projected count comes from the legislative voting model of ADR 0194 (28 Oct 2026).
 - Private ledger: an objective preset that scores the ruling coalition's offshore wealth (0041,
   10.1) next to veil-of-ignorance welfare (0129). The post-mortem shows both.
 
