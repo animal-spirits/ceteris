@@ -1,6 +1,8 @@
-//! `ceteris export|run`: Arrow export of a P2 world and of a run from its data state.
+//! `ceteris export|run|pack`: Arrow export of a P2 world and of a run from its data state, and
+//! pack tools.
 //!
 //! ```text
+//! ceteris pack compare A B [--iterative] [--table NAME]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -31,9 +33,11 @@ use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
+use ceteris_pack::compare::{self, Tolerance};
 use ceteris_trade::{Kernel, TradeParams};
 
 const USAGE: &str = "usage:
+  ceteris pack compare A B [--iterative] [--table NAME]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -217,9 +221,44 @@ fn run(args: &Args) -> Result<(), String> {
     write_run(&args.out, sim.world()).map_err(|e| e.to_string())
 }
 
+/// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
+fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    match args.next().as_deref() {
+        Some("compare") => {}
+        _ => return Err("expected a pack command, compare".into()),
+    }
+    let (mut dirs, mut tolerance, mut only) = (Vec::new(), Tolerance::DEFAULT, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--iterative" => tolerance = Tolerance::ITERATIVE,
+            "--table" => only = Some(args.next().ok_or("--table needs a name")?),
+            other if other.starts_with("--") => return Err(format!("unknown argument '{other}'")),
+            dir => dirs.push(PathBuf::from(dir)),
+        }
+    }
+    let [a, b] = dirs.as_slice() else {
+        return Err("pack compare needs two directories".into());
+    };
+    let report = compare::tables_named(a, b, tolerance, only.as_deref())?;
+    for line in report.lines() {
+        println!("{line}");
+    }
+    Ok(if report.ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
+    if command == "pack" {
+        return pack(argv).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}\n{USAGE}");
+            ExitCode::FAILURE
+        });
+    }
     let result = match command.as_str() {
         "export" | "run" => parse(argv).and_then(|args| {
             if command == "export" {
@@ -228,7 +267,7 @@ fn main() -> ExitCode {
                 run(&args)
             }
         }),
-        _ => Err("expected a command, export or run".into()),
+        _ => Err("expected a command, export, run or pack".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

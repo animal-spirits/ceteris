@@ -30,7 +30,3 @@ harness = false
 [[bench]]
 name = "trade"
 harness = false
-
-[[bin]]
-name = "ceteris"
-path = "src/bin/ceteris.rs"

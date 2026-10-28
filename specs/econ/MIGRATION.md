@@ -19,7 +19,7 @@
 - V1 must hold after every task. Tests that read the fixture export or its reference take the directory from `CETERIS_FIXTURE_DIR` (default `tests/golden/p2-fixture`, added in Task 1). Every task ends with the **WIP check**:
 
 ```bash
-cargo run -p ceteris-econ --release --bin ceteris -- export --fixture --out target/p2-wip
+cargo run -p ceteris-cli --release --bin ceteris -- export --fixture --out target/p2-wip
 uv run --project python python -m ceteris.reference solve --inputs target/p2-wip --out target/p2-wip/reference
 CETERIS_FIXTURE_DIR=$PWD/target/p2-wip cargo test -p ceteris-econ --release --test p2_acceptance --test p2_stability -- --include-ignored --skip p2_fixture_matches_golden_hashes --skip fixture_export_is_current
 CETERIS_FIXTURE_DIR=$PWD/target/p2-wip uv run --project python --locked pytest python/tests
@@ -259,7 +259,7 @@ ADR 0022.
 - Create: `CHANGELOG.md`
 - Modify: `tests/golden/p2-econ.txt`, `tests/golden/p2-fixture/**`, the three ignored or skipped tests (remove the markers), `adr/0015` to `0023` (status lines), `specs/econ/PLAN.md` (Task 19 trade budget 5 ms per tick on the full pack; `route` bench renamed `source_dispatch`; Task 21 register list: P39 to P47 instead of P37 to P41), `.superpowers/sdd/PLAN/progress.md` (migration done, resume at Task 13 review and Part D). The planned PLAN.md Task 17 amendment (`from_pack` fills `Network.route_taus` at P44) is dropped: route choice is deferred past P2 (ADR 0017, owner 2026-10-24), and Task 4 already wrote into Task 17 that `route_taus` stays `None`.
 
-- [ ] **Step 1: Re-bless** `cargo run -p ceteris-econ --release --bin ceteris -- export --fixture --out tests/golden/p2-fixture`, `uv run --project python python -m ceteris.reference solve --inputs tests/golden/p2-fixture --out tests/golden/p2-fixture/reference`, `CETERIS_BLESS=1 cargo test -p ceteris-econ --release --test golden`.
+- [ ] **Step 1: Re-bless** `cargo run -p ceteris-cli --release --bin ceteris -- export --fixture --out tests/golden/p2-fixture`, `uv run --project python python -m ceteris.reference solve --inputs tests/golden/p2-fixture --out tests/golden/p2-fixture/reference`, `CETERIS_BLESS=1 cargo test -p ceteris-econ --release --test golden`.
 - [ ] **Step 2: Remove** the ignore and skip markers; **run** `cargo test --workspace --release` and `uv run --project python --locked pytest python/tests` with no override; expected: PASS.
 - [ ] **Step 3: Write** `CHANGELOG.md` with an "Unreleased" heading and one BEHAVIOUR entry listing ADRs 0015 to 0023, the goldens re-blessed (`p2-econ.txt`, `p2-fixture/`), the V1 maxima from the run, and the stability table from Task 3.
 - [ ] **Step 4: Commit** `test(econ): re-bless the p2 goldens after the adr 0015-0022 migration` (body: why each golden changed).
