@@ -12,7 +12,7 @@
 
 ## Owner decisions (2026-10-27)
 
-1. All five ADR 0113 steps land before pre-P3 B; B and C are then built in Rust.
+1. ~~All five ADR 0113 steps land before pre-P3 B; B and C are then built in Rust.~~ Replaced by ADR 0207 (2026-10-28): pre-P3 B1-B7 start once steps 2 (econ-pack) and 4 (reference) land; the geo pack (step 3) and step 5 run alongside; B8 recalibrates after the geo pack. Step 4 therefore goes ahead of 3d and 3e.
 2. ADR 0113 is accepted now; its As built section is filled as steps land.
 3. Kummu GDP (NetCDF-4/HDF5) is converted once, owner-side, to a GeoTIFF of the year-2000 band, pinned by sha256 as a derived source with its conversion command recorded; Rust reads only the GeoTIFF.
 4. Geometry: a time-boxed pure-Rust spike first; any operation that fails parity uses the `geos` crate behind an owner-side cargo feature. The user-side build stays pure Rust.
