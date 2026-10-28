@@ -1,6 +1,6 @@
 # 0200. Selection on trade links
 
-Status: proposed
+Status: accepted (owner, 2026-10-28; built in pre-P3 branch B with ADR 0092, ADR 0207)
 Date: 2026-10-28
 Design sections: 4.6, 7.2, 8.3, 15.3, 15.5; ADRs 0015, 0016, 0026, 0089, 0095; trade SPEC (buyer price row)
 Phase: P2 fix, ahead of the P3 shock cases

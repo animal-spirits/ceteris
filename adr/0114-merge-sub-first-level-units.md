@@ -1,6 +1,6 @@
 # 0114. Merge Natural Earth units below a country's first level
 
-Status: proposed
+Status: rejected (owner, 2026-10-28; ADR 0207): the 4,796 provinces stay
 Date: 2026-10-27
 Design sections: 5.2, 22.2 (province-splitting rule); amends ADR 0006
 
