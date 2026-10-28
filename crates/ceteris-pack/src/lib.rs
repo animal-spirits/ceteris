@@ -2,6 +2,7 @@
 //! readers of the econ sources.
 
 pub mod compare;
+pub mod econ;
 pub mod fetch;
 pub mod json;
 pub mod numeric;
