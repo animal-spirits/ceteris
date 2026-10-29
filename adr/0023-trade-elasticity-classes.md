@@ -150,5 +150,90 @@ The band is not widened after a result (Task 20 stop rule): a miss goes to the o
   over the HS lines of the class, (sum_l w_l / theta_l)^-1, inside the same class rule. It is
   computed after ADR 0092 moves refined petroleum (C19) into good 1, and ADR 0092's nu_c fit then
   runs at the new values. Tariff experiments report a theta-scale lane {0.6, 1, 1.4} until the
-  ADR 0022 estimates replace the literature values. `TradeParams::default()` keeps the values
-  above until the pipeline task that recomputes them.
+  ADR 0022 estimates replace the literature values. Built on 2026-10-29 with the replication
+  vector (owner ruling); see Amendment (2026-10-29) below.
+
+## Amendment (2026-10-29): harmonic class means on the replication vector
+
+Owner ruling (2026-10-29, option B of the first attempt at the pre-P3 task). ADRs 0092 and 0101
+are applied together: refined petroleum (CPA C19, ISIC Rev 3 division 23, Caliendo-Parro
+Petroleum) moves from good 5 into good 1, and every mean becomes the trade-weighted harmonic
+mean over HS lines.
+
+**Source column.** The sector thetas are those of the authors' replication vector
+(`Equilibrium/T.txt`): the printed table above, with Auto and Other Transport set to 8.22. Basic
+metals and Machinery n.e.c. keep their printed values, as the vector does. Reason: on the printed
+column, the harmonic mean of good 6 is 1.90, and 38% of its 1/theta mass comes from Other
+Transport, theta 0.39 with a standard error of 1.08. That estimate is not distinguishable from
+zero, and the paper itself reports it as changing sign in the 97.5% sample. A harmonic mean
+weights the smallest values most, so one insignificant estimate set the class. The printed table
+stays above as transcribed; the substitution is `theta::REPLICATION` in the code.
+
+**Rule.** Theta of good g is (sum_l w_l / theta_l)^-1 over the good's HS lines l, with w_l the
+line's share of the good's 2000 BACI trade value and theta_l the replication-vector theta of the
+line's sector. The class rule above is unchanged: the fewest classes, 3 to 5, of goods adjacent
+in theta within a factor 1.5. Class theta is the harmonic mean over the class's lines, which equals
+the harmonic mean of its goods' thetas weighted by their trade value. Values are stored to two
+decimals in `TradeParams::default()`.
+
+Good thetas on this rule, goods 0 to 6: 9.11, 17.64, 13.53, 2.62, 7.46, 3.00, 4.14. Classes:
+
+| Class | Goods | 2000 trade, USD bn | theta harmonic | theta arithmetic |
+|---|---|---|---|---|
+| 0 | 3 Food, 5 Chemicals and metals | 1,741 | 2.91 | 3.23 |
+| 1 | 6 Machinery, electronics and vehicles | 2,891 | 4.14 | 7.20 |
+| 2 | 0 Agriculture, 4 Light manufacturing | 1,130 | 7.68 | 9.15 |
+| 3 | 1 Crude oil, gas and refined fuels, 2 Coal and other mining | 734 | 16.91 | 26.51 |
+
+The arithmetic column is the trade-weighted arithmetic mean over the same lines, on the same
+vector. It is recorded in `econ_goods.arrow` (`theta_arithmetic`, next to `theta_harmonic`) and
+is not used by the model. No split into 3 classes keeps the bound: food at 2.62 and machinery at
+4.14 differ by a factor 1.58. Among the splits into 4, the one above has the smallest largest
+spread, 1.30 (class 3).
+
+Outcomes against ADRs 0092 and 0101, as expected there:
+
+- Four classes, not three. P05 (ADR 0092) becomes four values, one per class.
+- Good 5 leaves the top class for class 0 at 2.91, as ADR 0092 expected ("about 3"), but class 0
+  is food and good 5 together, and machinery is class 1 on its own.
+- Good 6 is 4.14, against "roughly 3" in ADR 0101. Machinery n.e.c. (1.45, 18% of the good's
+  trade value) pulls it below the arithmetic 7.20.
+- Good 1 rises to 17.64 once refined petroleum (64.85) joins crude oil and gas (13.53), and class
+  3 is at 16.91. At that theta the sourcing weight floor (1e-100) drops origins priced about
+  8e5 times above the best.
+- Good 5 keeps its index and is renamed "Chemicals and metals", since refined fuels left it.
+
+The P01 prior becomes 2.91 to 16.91, the range of the class values.
+
+**Prior band (H2 per class).** The band stays theta_c plus or minus 2 standard errors. For a
+harmonic mean H = (sum_s w_s / theta_s)^-1 of independent sector estimates, the delta method
+gives se(H) = H^2 sqrt(sum_s w_s^2 se_s^2 / theta_s^4). The replication vector prints no standard
+errors, so Auto and Other Transport keep their printed ones (0.92 and 1.08) at theta 8.22, which
+understates their uncertainty.
+
+| Class | theta | s.e. | Band |
+|---|---|---|---|
+| 0 Food, chemicals and metals | 2.91 | 0.948 | 1.02 to 4.81 |
+| 1 Machinery, electronics and vehicles | 4.14 | 4.058 | -3.97 to 12.26 |
+| 2 Agriculture, light manufacturing | 7.68 | 0.870 | 5.94 to 9.42 |
+| 3 Crude oil, gas and refined fuels, coal and other mining | 16.91 | 4.294 | 8.33 to 25.50 |
+
+Class 1's band does not bind: Machinery n.e.c. (1.45, s.e. 2.80) enters through 1/theta^2. ADR
+0092 replaces these bands with plus or minus 2 standard errors of each class's PPML estimate once
+its nu fit lands.
+
+**ADR 0101's welfare test.** As first written (a uniform cost shock on a two-line class), the test
+holds at any class theta: d ln lambda_l = -theta_l (1 - lambda_l) d ln tau, so theta cancels from
+the line welfare -(1/theta_l) d ln lambda_l. The test used instead is a non-uniform shock: line
+costs move so that every line's domestic share falls by the same log amount, the setting in which
+the welfare change is read from an observed share change. The line-level change is
+-sum_l w_l (1/theta_l) d ln lambda and the class-level change is -(1/theta_C) d ln lambda; they
+agree only at the harmonic mean. With line thetas 2 and 8 at equal weight, the harmonic 3.2
+matches the line sum and the arithmetic 5 misses it by 36%
+(`welfare_first_order_at_harmonic_theta`). The response of the class's trade share to a uniform
+tariff runs through the weighted arithmetic mean instead, so a class model at the harmonic theta
+understates that response when lines keep their own thetas. ADR 0101's statement that the
+arithmetic mean overstates trade diversion does not hold for that response.
+
+**Theta scale (P150).** `TradeParams.theta_scale`, default 1, multiplies every good's theta where
+the kernel is built. Tariff experiments run it at {0.6, 1, 1.4} (ADR 0101).

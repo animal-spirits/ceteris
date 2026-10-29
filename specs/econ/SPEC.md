@@ -47,11 +47,11 @@ prices, per country.
 | ID | Good | ICIO industries | Traded between provinces |
 |---|---|---|---|
 | 0 | Agriculture | A01_02, A03 | yes |
-| 1 | Crude oil and gas | B06 (or share of B05_06), B09 | yes |
+| 1 | Crude oil, gas and refined fuels | B06 (or share of B05_06), B09, C19 (ADR 0092) | yes |
 | 2 | Coal and other mining | B05 (or share of B05_06), B07_08 | yes |
 | 3 | Food | C10T12 | yes |
 | 4 | Light manufacturing | C13T15, C16, C17_18, C31T33 | yes |
-| 5 | Chemicals, refined fuels and metals | C19, C20, C21, C22, C23, C24 (all splits), C25 | yes |
+| 5 | Chemicals and metals | C20, C21, C22, C23, C24 (all splits), C25 | yes |
 | 6 | Machinery, electronics and vehicles | C26, C27, C28, C29, C30 (all splits) | yes |
 | 7 | Electricity and utilities | D, E | no (P2) |
 | 8 | Construction | F | no (P2) |
@@ -711,9 +711,10 @@ the radius on p. 9, footnote 10 p. 7).
   one-good class; `ppml.hdfe` on (pair, good) rows with exporter x good and importer x good
   effects for a class of several goods) recovers
   the class's theta (ADR 0023) within its prior band: theta_c plus or minus 2 standard errors of
-  the trade-weighted mean of the Caliendo-Parro sector estimates (ADR 0023, Prior band), 1.40 to
-  3.84 (food), 3.36 to 7.02 (machinery, electronics and vehicles) and 8.15 to 12.99 (the other
-  five goods). If a class misses, work stops and the estimates go to the owner, as for H2.
+  the trade-weighted harmonic mean of the Caliendo-Parro sector estimates, by the delta method (ADR
+  0023, Amendment 2026-10-29), 1.02 to 4.81 (food; chemicals and metals), -3.97 to 12.26
+  (machinery, electronics and vehicles), 5.94 to 9.42 (agriculture; light manufacturing) and 8.33
+  to 25.50 (crude oil, gas and refined fuels; coal and other mining). If a class misses, work stops and the estimates go to the owner, as for H2.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
@@ -965,7 +966,8 @@ rev 226 (Task 21); re-grep again before editing.
     and P07 stays the S03 row, so DESIGN 1955 ("P06 and P07 become the PIGL price and Engel
     parameters") changes.
   - P03 splits into P03a kappa1 (start 0.05), P03b kappa2 (start 0) and P03c the step clip (0.1);
-    P01 takes its class values 2.62, 5.19 and 10.57 (ADR 0023; DESIGN 1061 says "centre 5").
+    P01 takes its class values 2.91, 4.14, 7.68 and 16.91 (ADRs 0023 and 0101; DESIGN 1061 says
+    "centre 5"). P150 theta scale (ADR 0101; 1, lane {0.6, 1, 1.4} in tariff experiments).
   - P148 loss write-off threshold M, 3 months of base sales (ADR 0112, accepted), and P149 input stock
     cover, 1 month (owner decision, 2026-10-24; the `cover` of the order rule). Held or proposed, not
     built in P2: P143 kappa_n of ADR 0090 (proposed; the split price rule is parked on `p2-adr0090`),
@@ -993,9 +995,10 @@ rev 226 (Task 21); re-grep again before editing.
 - P2 acceptance (DESIGN 1338, "ADRs 0015 to 0022 implemented"): 0015 to 0023, 0089 and 0112, plus the
   gate decision below.
 - What P2 as built adds, one line each:
-  - Trade elasticity in 3 classes (2.62, 5.19, 10.57), drawn from the OECD key's thetas by ADR 0023's
-    rule, with a per-class H2 prior band of two standard errors (1.40 to 3.84, 3.36 to 7.02, 8.15 to
-    12.99).
+  - Trade elasticity in 4 classes (2.91, 4.14, 7.68, 16.91), harmonic means of the OECD key's line
+    thetas on the Caliendo-Parro replication vector, drawn by ADR 0023's rule (ADR 0101), with a
+    per-class H2 prior band of two standard errors (1.02 to 4.81, -3.97 to 12.26, 5.94 to 9.42, 8.33
+    to 25.50). Refined petroleum (ICIO C19) is in good 1 (ADR 0092).
   - Calibration to a data state that is the steady state, and a natural rate u* in the wage rule
     (ADR 0089), replacing full employment; the productivity A is calibrated, not estimated.
   - National profit ownership (owner, 2026-10-25; ADR 0089): the enterprises' profits go to the pops of
