@@ -79,6 +79,18 @@ write the outputs. Each layer's GeoJSON must match byte for byte, the simplified
 exactly, and the fills by `fills.py`'s rule; the PMTiles archives are compared for information.
 `step3-web.sh WORK` keeps its outputs in WORK.
 
+`step3-build.sh` compares the P1 part of `build.build` with `ceteris pack build --out DIR`, on
+GEOS 3.15 as above (`GEOS_PYTHON`). `build_tables.py` runs `build.build` with its map and econ
+steps replaced (no tiles, empty fills and simplified geometry, no econ tables), so it writes the
+eight P1 tables and `web/provinces.json` and `web/counties.json`; the Rust build writes the whole
+pack but the map outputs. Every P1 table is compared in file row order, the two attribute files
+byte for byte (`json_diff.py` lists differing rows), and the build stats as text. Built on h3o's
+centres, split provinces' areas and their counties' (`build_split_rows.py`) take the split
+tolerance, the graph's sea positions and lengths `LISTED_TOL`, and the attribute files' differing
+rows are listed; a second Rust build takes h3's centres (`--centres`) and must match on every
+column but the H3 cell areas and the means they weight, with identical attribute files. The
+script keeps its outputs in `WORK` (default: a new temporary directory).
+
 `py_round4.py` writes the fixture of `tests/py_round.rs`: CPython's `round(x, 4)` and `repr`,
 with which the GeoJSON writes coordinates.
 
