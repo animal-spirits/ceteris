@@ -257,7 +257,7 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
     twice (release, `geos`, about 5 minutes) and requires the same SHA-256 for every file but
     `web/map.pmtiles`, and manifest digests that match the files. It reads the owner's cache and
     skips without it or without tippecanoe: no fixture cache can drive the P1 build and CI has no
-    GEOS, so CI does not run it (the plan's CI fixture test; owner ruling pending).
+    GEOS, so CI does not run it (the plan's CI fixture test; owner accepted the owner-side test, 2026-10-29).
 
   Parity on the full cache and pack, GEOS 3.15 on both sides, largest relative difference with
   h3o's centres (and with h3's where it differs):

@@ -31,7 +31,7 @@
 - Pack format stays 3: schemas and metadata are unchanged; only file bytes differ (pyarrow vs arrow-rs), so the pinned digests in `tests/golden/p1-pack.txt`, `p2-pack.txt` and `manifest.json` are re-pinned once, at step 4f, with the core goldens, as ADR 0113 says. [none]
 - `ceteris-reference` reads the `ceteris export` Arrow directory (export format 9), never core structs; a workspace test reads `cargo metadata` and fails on any edge from it to `ceteris-core`, `-geo`, `-trade` or `-econ`. [none]
 - Fill files (`web/*.fill`, read by the app) are compared by decoded triangle sets and per-province area; byte identity is required only if `earcutr` reproduces `mapbox_earcut`'s order. [app reader unchanged either way]
-- Step 3 determinism test runs owner-side (two full builds, equal digests but web/map.pmtiles); no fixture cache drives the geo build and CI has no GEOS. [owner ruling pending]
+- Step 3 determinism test runs owner-side (two full builds, equal digests but web/map.pmtiles); no fixture cache drives the geo build and CI has no GEOS. [owner ruling 2026-10-29: accepted in place of the CI fixture test]
 
 ## Global Constraints
 
