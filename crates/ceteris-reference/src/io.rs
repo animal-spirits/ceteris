@@ -394,21 +394,82 @@ impl Inputs {
             .collect()
     }
 
-    /// (C,) log income dispersion of every pop of a country, from its Gini.
-    pub fn sigma_income(&self) -> Vec<f64> {
-        demand::lognormal_sigma(&self.gini)
+    /// (K,) country of each pop.
+    pub fn pop_country(&self) -> Vec<usize> {
+        self.pop_province
+            .iter()
+            .map(|&p| self.province_country[p])
+            .collect()
     }
 
-    /// PIGL weights per country, as `world::household_preferences`.
+    /// (K,) base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times
+    /// its effective labour, plus its share of its country's pops' population times the
+    /// country's profit pool sum (1 - s_L) VA0, over its population; 0 without people.
+    pub fn pop_base_income(&self) -> Vec<f64> {
+        let n_c = self.n_countries();
+        let country = self.pop_country();
+        let ent_c: Vec<usize> = self
+            .ent_province
+            .iter()
+            .map(|&p| self.province_country[p])
+            .collect();
+        let profit: Vec<f64> = self
+            .ent_s_l()
+            .iter()
+            .zip(&self.ent_va0)
+            .map(|(s, va)| (1.0 - s) * va)
+            .collect();
+        let pool = bincount(&ent_c, &profit, n_c);
+        let people = bincount(&country, &self.pop_population, n_c);
+        (0..country.len())
+            .map(|k| {
+                let (p, c, n) = (self.pop_province[k], country[k], self.pop_population[k]);
+                if n > 0.0 {
+                    let wage = self.w0[p] * (1.0 - self.u_star[c]) * self.pop_effective[k];
+                    (wage + n / people[c] * pool[c]) / n
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+
+    /// (C,) within-pop log income dispersion s_w (ADR 0094), from the Gini and the pops' base
+    /// incomes.
+    pub fn within_sigma(&self) -> Vec<f64> {
+        demand::within_sigma(
+            &self.gini,
+            &self.pop_country(),
+            &self.pop_population,
+            &self.pop_base_income(),
+        )
+    }
+
+    /// PIGL weights per country, as `world::household_preferences`: the calibrated ones, else
+    /// inverted over the country's pops at prices 1 and their base incomes (ADR 0094).
     pub fn pigl_weights(&self) -> Result<Weights, String> {
         if let Some(w) = &self.calibrated_weights {
             return Ok(w.clone());
         }
-        demand::invert(
+        let country = self.pop_country();
+        let income = self.pop_base_income();
+        let spend: Vec<f64> = income
+            .iter()
+            .zip(&self.pop_population)
+            .map(|(m, n)| m * n)
+            .collect();
+        let ones = Mat::filled(country.len(), self.n_goods(), 1.0);
+        demand::invert_pops(
             &self.omega,
-            &self.base_spend(),
-            &self.sigma_income(),
+            &demand::Pops {
+                country: &country,
+                price: &ones,
+                income: &income,
+                spend: &spend,
+            },
+            &self.within_sigma(),
             &self.category,
+            self.sigma_demand,
             &self.pigl,
         )
     }

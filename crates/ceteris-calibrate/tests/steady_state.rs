@@ -110,70 +110,131 @@ impl Rng {
     }
 }
 
-/// Stage 4: weights inverted at buyer prices q and spending m give the final demand shares there
-/// exactly, and at prices 1 the inversion is the one of ADR 0021.
+/// Spending-weighted shares (C, G) of the pops of each country: each pop at its own buyer
+/// prices `price` (K, G) and income per person, weighted by its spending, at the dispersion the
+/// weights carry.
+fn aggregate_shares(inp: &Inputs, w: &demand::Weights, price: &Mat, spend: &[f64]) -> Mat {
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let country = inp.pop_country();
+    let per_person: Vec<f64> = spend
+        .iter()
+        .zip(&inp.pop_population)
+        .map(|(e, n)| if *n > 0.0 { e / n } else { 0.0 })
+        .collect();
+    let sigma: Vec<f64> = country.iter().map(|&c| w.sigma[c]).collect();
+    let share = demand::shares(
+        w,
+        &country,
+        price,
+        &per_person,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    );
+    let mut spent = Mat::zeros(n_c, n_g);
+    for (k, &c) in country.iter().enumerate() {
+        for g in 0..n_g {
+            if spend[k] > 0.0 {
+                spent[(c, g)] += share[(k, g)] * spend[k];
+            }
+        }
+    }
+    let total = spent.row_sums();
+    Mat::from_fn(n_c, n_g, |c, g| spent[(c, g)] / total[c])
+}
+
+fn omega_shares(inp: &Inputs) -> Mat {
+    let total = inp.omega.row_sums();
+    Mat::from_fn(inp.n_countries(), inp.n_goods(), |c, g| {
+        inp.omega[(c, g)] / total[c]
+    })
+}
+
+/// Stage 4 (ADR 0094): weights inverted jointly over a country's pops, each at its own buyer
+/// prices and spending, give the final demand shares as the pops' spending-weighted aggregate
+/// exactly; at prices 1 and the base incomes the inversion is the one the simulator loads.
 #[test]
 fn inversion_at_given_prices_reproduces_the_shares() {
     let inp = io::load(fixture()).unwrap();
-    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let n_g = inp.n_goods();
+    let country = inp.pop_country();
+    let n_k = country.len();
     let mut rng = Rng(4);
-    let draws: Vec<f64> = (0..n_c * n_g).map(|_| rng.normal(0.0, 0.3).exp()).collect();
+    let draws: Vec<f64> = (0..n_k * n_g).map(|_| rng.normal(0.0, 0.3).exp()).collect();
     let price = Mat {
-        rows: n_c,
+        rows: n_k,
         cols: n_g,
         data: draws,
     };
-    let m: Vec<f64> = inp
-        .base_spend()
-        .iter()
-        .map(|b| b * rng.normal(0.0, 0.2).exp())
+    let base = inp.pop_base_income();
+    let spend: Vec<f64> = (0..n_k)
+        .map(|k| base[k] * inp.pop_population[k] * rng.normal(0.0, 0.2).exp())
         .collect();
-    let sigma = inp.sigma_income();
-    let w = demand::invert_at(
+    let per_person: Vec<f64> = (0..n_k).map(|k| spend[k] / inp.pop_population[k]).collect();
+    let pops = demand::Pops {
+        country: &country,
+        price: &price,
+        income: &per_person,
+        spend: &spend,
+    };
+    let sigma = inp.within_sigma();
+    let w = demand::invert_pops(
         &inp.omega,
-        &price,
-        &m,
+        &pops,
         &sigma,
         &inp.category,
         inp.sigma_demand,
         &inp.pigl,
     )
     .unwrap();
-    let countries: Vec<usize> = (0..n_c).collect();
-    let share = demand::shares(
-        &w,
-        &countries,
-        &price,
-        &m,
-        &sigma,
-        &inp.category,
-        inp.sigma_demand,
-        &inp.pigl,
-    );
-    let total = inp.omega.row_sums();
-    let want = Mat::from_fn(n_c, n_g, |c, g| inp.omega[(c, g)] / total[c]);
-    allclose("shares", &share.data, &want.data, 0.0, 1e-12);
-    let ones = Mat::filled(n_c, n_g, 1.0);
-    let at_one = demand::invert_at(
+    let got = aggregate_shares(&inp, &w, &price, &spend);
+    allclose("shares", &got.data, &omega_shares(&inp).data, 0.0, 1e-12);
+
+    let ones = Mat::filled(n_k, n_g, 1.0);
+    let base_spend: Vec<f64> = (0..n_k).map(|k| base[k] * inp.pop_population[k]).collect();
+    let at_one = demand::invert_pops(
         &inp.omega,
-        &ones,
-        &inp.base_spend(),
+        &demand::Pops {
+            country: &country,
+            price: &ones,
+            income: &base,
+            spend: &base_spend,
+        },
         &sigma,
         &inp.category,
         inp.sigma_demand,
         &inp.pigl,
     )
     .unwrap();
-    let base = inp.pigl_weights().unwrap();
-    allclose("scale", &at_one.scale, &base.scale, 1e-13, 1e-15);
-    allclose("omega", &at_one.omega.data, &base.omega.data, 1e-13, 1e-15);
+    let loaded = inp.pigl_weights().unwrap();
+    allclose("scale", &at_one.scale, &loaded.scale, 1e-13, 1e-15);
     allclose(
-        "within",
-        &at_one.within.data,
-        &base.within.data,
+        "omega",
+        &at_one.omega.data,
+        &loaded.omega.data,
         1e-13,
         1e-15,
     );
+    allclose(
+        "within",
+        &at_one.within.data,
+        &loaded.within.data,
+        1e-13,
+        1e-15,
+    );
+}
+
+/// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its
+/// province's buyer prices and its income, are each country's final demand shares Omega.
+#[test]
+fn aggregate_data_state_shares_match_omega() {
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let price = s.consumer.select_rows(&inp.pop_province);
+        let got = aggregate_shares(inp, &s.weights, &price, &s.pop_income);
+        allclose(w.name, &got.data, &omega_shares(inp).data, 0.0, 1e-12);
+    }
 }
 
 /// ADR 0106: the passes reach the same fixed point from eight starts, every traded buyer price

@@ -72,7 +72,6 @@ pub struct Model<'a> {
     pub ent_a_va: Vec<f64>,
     pub ent_s_l: Vec<f64>,
     pub weights: Weights,
-    pub sigma_income: Vec<f64>,
     /// (P, G) weights of the world price index.
     pub index_weights: Mat,
     pub active_cells: Vec<usize>,
@@ -231,8 +230,8 @@ impl<'a> Model<'a> {
             .zip(&pop_country)
             .map(|(n, &k)| n / country_people[k])
             .collect();
-        let sigma_income = inp.sigma_income();
-        let pop_sigma = pop_country.iter().map(|&k| sigma_income[k]).collect();
+        let weights = inp.pigl_weights()?;
+        let pop_sigma = pop_country.iter().map(|&k| weights.sigma[k]).collect();
 
         let active_cells = inp.active_cells();
         let (base_demand, base_output) = (inp.base_demand(), inp.base_output());
@@ -244,8 +243,7 @@ impl<'a> Model<'a> {
             ent_inputs: inp.ent_inputs(),
             ent_a_va: inp.ent_a_va(),
             ent_s_l: inp.ent_s_l(),
-            weights: inp.pigl_weights()?,
-            sigma_income,
+            weights,
             index_weights: inp.index_weights(),
             employed_supply: inp.employed_supply(),
             rho: (inp.sigma_fl - 1.0) / inp.sigma_fl,

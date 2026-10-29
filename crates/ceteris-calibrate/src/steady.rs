@@ -25,10 +25,11 @@
 //! enterprise's a_kg V), and its VA, a_VA Y, is an output of calibration. w0 = sum_g s_L VA0 /
 //! ((1 - u*) L^s) and L0 = s_L VA0 / w0.
 //!
-//! Stage 4, demand. Per country, PIGL weights inverted at its buyer prices (the unit value of its
-//! households' purchases of each good) and its mean household income per person
-//! (`demand::invert_at`); households then spend by PIGL at their own province's q and income,
-//! which is the E of stage 1.
+//! Stage 4, demand. Per country, PIGL weights inverted jointly over its pops, each at its own
+//! province's buyer prices q and its income per person, weighted by its income, so that their
+//! aggregate shares are the country's final demand shares (`demand::invert_pops`, ADR 0094);
+//! every pop spends at the country's within-pop dispersion (`Inputs::within_sigma`), and
+//! households then spend by PIGL at their own province's q and income, which is the E of stage 1.
 //!
 //! Stage 5, the state at the start of a tick (Rust `systems`): input stocks (1 + COVER) months
 //! of use; the pipeline holds, j ticks ahead, one month of shipments of every arrival slot j or
@@ -58,8 +59,10 @@ pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
 pub const ANDERSON_STALL: usize = 20;
 /// Largest relative change of rebates, r, buyer prices and PIGL weights that ends the passes:
-/// the Sinkhorn tolerance leaves a floor near 1e-12 on the full pack.
-pub const PASS_TOL: f64 = 1e-11;
+/// 1e-12, so the returned state is a fixed point to the 1e-12 its checks claim (r against the
+/// scaling at its own spending, `sinkhorn_is_unique_up_to_scale`); a solver tolerance, not a
+/// model parameter. The Sinkhorn tolerance leaves a floor near 1e-12 on the full pack.
+pub const PASS_TOL: f64 = 1e-12;
 pub const MAX_PASSES: usize = 100;
 /// Largest relative change of any local output that ends the income fixed point.
 pub const LOCAL_TOL: f64 = 1e-14;
@@ -629,23 +632,6 @@ fn solve_lu(a: &mut [f64], n: usize, b: &mut [f64]) -> Option<()> {
     Some(())
 }
 
-/// (C, G) per country the unit value of its households' purchases of each good, 1 where it
-/// buys none.
-fn unit_value_prices(inp: &Inputs, spend: &Mat, q: &Mat) -> Mat {
-    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
-    let mut value = Mat::zeros(n_c, n_g);
-    let mut units = Mat::zeros(n_c, n_g);
-    for (p, &c) in inp.province_country.iter().enumerate() {
-        for g in 0..n_g {
-            value[(c, g)] += spend[(p, g)];
-            units[(c, g)] += spend[(p, g)] / q[(p, g)];
-        }
-    }
-    Mat::from_fn(n_c, n_g, |c, g| {
-        divide_where(value[(c, g)], units[(c, g)], units[(c, g)] > 0.0, 1.0)
-    })
-}
-
 fn relative(new: &[f64], old: &[f64]) -> f64 {
     let diff: Vec<f64> = new.iter().zip(old).map(|(a, b)| a - b).collect();
     max_abs(&diff) / py_max([max_abs(new), 1e-300])
@@ -806,6 +792,8 @@ struct State {
     n_p: usize,
     n_c: usize,
     traded: Vec<bool>,
+    /// The within-pop dispersion, fixed by the inputs.
+    sigma: Vec<f64>,
 }
 
 impl State {
@@ -865,6 +853,7 @@ impl State {
                 scale,
                 omega,
                 within,
+                sigma: self.sigma.clone(),
             },
         )
     }
@@ -957,7 +946,7 @@ pub fn calibrate_from(
             divide_where(inp.population[p], n, n > 0.0, 0.0)
         })
         .collect();
-    let sigma_income = inp.sigma_income();
+    let sigma_within = inp.within_sigma();
     let omega_total = inp.omega.row_sums();
     let om = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] / omega_total[k]);
     let v_data: Vec<f64> = (0..n_e)
@@ -985,7 +974,7 @@ pub fn calibrate_from(
         inp,
         a_va: a_va.clone(),
         ent_country,
-        sigma_k: kc.iter().map(|&k| sigma_income[k]).collect(),
+        sigma_k: kc.iter().map(|&k| sigma_within[k]).collect(),
         pop_country: kc.clone(),
         wage_share,
         people_share,
@@ -1000,6 +989,7 @@ pub fn calibrate_from(
         n_p,
         n_c,
         traded: traded.clone(),
+        sigma: sigma_within.clone(),
     };
 
     let mut q = start.clone();
@@ -1097,16 +1087,21 @@ pub fn calibrate_from(
         let duty = m.flows(&price, &ones, &src).tariff;
         let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
         let rebate_new = bincount(c, duty_bill, n_c);
-        let income_c = bincount(&kc, hh.income.iter().copied(), n_c);
-        let m0: Vec<f64> = (0..n_c)
-            .map(|k| divide_where(income_c[k], country_people[k], country_people[k] > 0.0, 0.0))
+        let per_person: Vec<f64> = hh
+            .income
+            .iter()
+            .zip(people)
+            .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
             .collect();
-        let prices_c = unit_value_prices(inp, &hh.spend_hh, &q);
-        let weights_new = demand::invert_at(
+        let weights_new = demand::invert_pops(
             &inp.omega,
-            &prices_c,
-            &m0,
-            &sigma_income,
+            &demand::Pops {
+                country: &kc,
+                price: &q.select_rows(kp),
+                income: &per_person,
+                spend: &hh.income,
+            },
+            &sigma_within,
             &inp.category,
             inp.sigma_demand,
             &inp.pigl,

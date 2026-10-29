@@ -53,6 +53,7 @@ fn calibrate_writes_and_reports_the_fixture_calibration() {
         "pass_history",
         "local_va_gap_quantiles",
         "ln_a_quantiles_traded",
+        "within_sigma_zero",
     ] {
         assert!(!summary[key].is_null(), "{key}");
     }

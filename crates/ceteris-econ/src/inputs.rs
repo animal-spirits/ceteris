@@ -496,6 +496,7 @@ impl EconInputs {
                 e.f64(w.scale);
                 e.f64s(&w.omega);
                 e.f64s(&w.within);
+                e.f64(w.sigma);
             }
         }
         // appended only when present, so generated worlds keep their digest

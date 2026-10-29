@@ -91,3 +91,14 @@ dispersion every pop of the country uses.
 evaluated at the prices and incomes the inversion used; with one pop per country and prices 1
 the new inversion equals the closed form; s_w^2 plus the between-pop variance equals s_nat^2
 wherever s_w > 0.
+
+## As built
+
+Built in pre-p3/econ-review as the Amendment states: `ceteris_econ::demand::invert_pigl_pops` and
+`within_sigma` (the simulator's load without a calibration), `ceteris_reference::demand::invert_pops`
+and `within_sigma` (the reference and calibration stage 4), each written independently. The
+weights carry s_w (`PiglWeights::sigma`, `Weights::sigma`, `pigl_sigma` in
+`econ_calib_countries.arrow`), so a calibrated world uses the dispersion its weights were
+inverted with. The calibration summary lists the countries with s_w = 0 (`within_sigma_zero`);
+none on the fixture. On the fixture the joint inversion settles in a few rounds per country and
+the aggregate data-state shares match Omega at 1e-12.
