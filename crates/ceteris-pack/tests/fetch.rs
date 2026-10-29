@@ -181,6 +181,12 @@ fn manual_entry_is_never_fetched() {
     );
     assert!(seen.lock().unwrap().is_empty());
     assert!(leftovers(cache.path()).is_empty());
+
+    fs::create_dir_all(cache.path().join("sub")).unwrap();
+    fs::write(cache.path().join("sub/file.bin"), BODY).unwrap();
+    let path = fetch::fetch(&manual, cache.path()).unwrap();
+    assert_eq!(path, cache.path().join("sub/file.bin"));
+    assert!(seen.lock().unwrap().is_empty());
 }
 
 #[test]
