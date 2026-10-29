@@ -136,6 +136,9 @@ pub struct Fit {
     pub n_separated: usize,
     /// Squared correlation of flows and fitted means.
     pub pseudo_r2: f64,
+    /// Poisson deviance at the fitted means, of the estimated flows scaled to mean 1 (so fits of
+    /// one sample on different regressors compare).
+    pub deviance: f64,
     /// The estimated observations of the input.
     pub keep: Vec<bool>,
 }
@@ -858,6 +861,7 @@ pub fn hdfe(
         n,
         n_separated: keep.len() - n,
         pseudo_r2: pseudo_r2(&y, &mu),
+        deviance: dev,
         keep,
     })
 }
