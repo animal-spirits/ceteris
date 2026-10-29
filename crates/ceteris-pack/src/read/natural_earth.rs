@@ -10,6 +10,9 @@ use geo::{
 
 use super::{err, int, read_member};
 
+pub const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
+pub const ADMIN1: &str = "ne_10m_admin_1_states_provinces.zip";
+
 /// Natural Earth codes that differ from the ISO 3166-1 alpha-3 code the data sources use.
 pub const EXTRA_ISO: [(&str, &str); 1] = [("KOS", "XKX")];
 /// Admin-1 name fields a DOSE region name may equal, the primary name first; `|` separates alternates.
@@ -137,7 +140,7 @@ pub fn read_codes(admin0: &Path) -> Result<(IsoCodes, BTreeMap<String, i64>), St
 }
 
 /// ISO_A3_EH by each ADMIN, NAME and NAME_LONG of admin-0, the first country to use a name keeping it.
-pub fn country_names(admin0: &Path) -> Result<BTreeMap<String, String>, String> {
+pub fn iso_by_name(admin0: &Path) -> Result<BTreeMap<String, String>, String> {
     let dbf = Dbf::from_zip(admin0)?;
     let mut out = BTreeMap::new();
     for [admin, name, long, i3] in dbf

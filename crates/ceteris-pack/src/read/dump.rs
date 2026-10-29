@@ -89,11 +89,11 @@ fn cache(name: &str) -> PathBuf {
 }
 
 fn admin0() -> PathBuf {
-    cache("ne_10m_admin_0_countries.zip")
+    cache(super::natural_earth::ADMIN0)
 }
 
 fn admin1() -> PathBuf {
-    cache("ne_10m_admin_1_states_provinces.zip")
+    cache(super::natural_earth::ADMIN1)
 }
 
 fn series(m: BTreeMap<String, ByYear>) -> Json {

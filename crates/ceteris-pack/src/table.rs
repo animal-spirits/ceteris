@@ -1,4 +1,4 @@
-//! Writing one pack table as an Arrow IPC file.
+//! Writing one pack table as an Arrow IPC file, and reading its columns back.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -6,12 +6,52 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, RecordBatch};
+use arrow_array::types::ArrowPrimitiveType;
+use arrow_array::{Array, ArrayRef, PrimitiveArray, RecordBatch};
+use arrow_ipc::reader::FileReader;
 use arrow_ipc::writer::FileWriter;
 use arrow_schema::{ArrowError, Field, Schema};
 use sha2::{Digest, Sha256};
 
 pub const PACK_FORMAT: &str = "3";
+
+/// Lowercase hex of a digest, as `hexdigest()` writes it.
+pub fn hex(digest: impl AsRef<[u8]>) -> String {
+    digest.as_ref().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// One column of a table as arrays of type `A`, one per batch in order; a null is an error.
+pub fn arrays<A: Array + Clone + 'static>(path: &Path, name: &str) -> Result<Vec<A>, String> {
+    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
+    let reader =
+        FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch.map_err(|e| fail(&e))?;
+        let a = batch
+            .column_by_name(name)
+            .ok_or_else(|| fail(&format!("no column {name}")))?;
+        let a = a.as_any().downcast_ref::<A>().ok_or_else(|| {
+            fail(&format!(
+                "{name} is {}, not the type asked for",
+                a.data_type()
+            ))
+        })?;
+        if a.null_count() > 0 {
+            return Err(fail(&format!("null in {name}")));
+        }
+        out.push(a.clone());
+    }
+    Ok(out)
+}
+
+/// One primitive column of a table, every batch in order.
+pub fn values<T: ArrowPrimitiveType>(path: &Path, name: &str) -> Result<Vec<T::Native>, String> {
+    Ok(arrays::<PrimitiveArray<T>>(path, name)?
+        .iter()
+        .flat_map(|a| a.values().iter().copied())
+        .collect())
+}
 
 fn io_error(e: ArrowError) -> io::Error {
     io::Error::other(e)

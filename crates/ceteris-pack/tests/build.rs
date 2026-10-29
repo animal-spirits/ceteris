@@ -11,9 +11,10 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_array::{ArrowPrimitiveType, RecordBatch};
 use arrow_ipc::reader::FileReader;
-use ceteris_pack::build::{ADMIN0, country_names, split_area_km2};
+use ceteris_pack::build::{country_names, split_area_km2};
 use ceteris_pack::econ::build::TABLES;
 use ceteris_pack::geo::provinces::borders;
+use ceteris_pack::read::natural_earth::ADMIN0;
 use ceteris_pack::sources::{CONFIG_DIR, workspace_root};
 use common::{cached, pack_table, strings};
 

@@ -19,9 +19,6 @@ use crate::sources::{CONFIG_DIR, read_table};
 
 /// Map colours: neighbouring countries differ where a country has fewer neighbours than this.
 pub const PALETTE_SIZE: usize = 8;
-pub const ETOPO: &str = "ETOPO_2022_v1_60s_N90W180_surface.tif";
-pub const ADMIN1: &str = "ne_10m_admin_1_states_provinces.zip";
-pub const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
 
 /// Where a build writes by default: `data/packs/<year of pack.toml>` under `root`.
 pub fn default_out(root: &Path) -> Result<PathBuf, String> {
@@ -231,21 +228,24 @@ mod full {
     use sha2::{Digest, Sha256};
 
     use super::{
-        ADMIN0, ADMIN1, ETOPO, Sampled, cell_columns, colour_countries, country_names, resolution,
-        round_int, sample, sample_counties, split_area_km2, terrain_class,
+        Sampled, cell_columns, colour_countries, country_names, resolution, round_int, sample,
+        sample_counties, split_area_km2, terrain_class,
     };
     use crate::econ::build::BuildReport;
     use crate::geo::counties::Clipped;
-    use crate::geo::dump::write_geoms;
     use crate::geo::overlay::{to_geo, to_multipolygon};
     use crate::geo::provinces::{self, Centres, Province};
+    use crate::geo::raster_terrain::ETOPO;
     use crate::geo::raster_terrain::{Elevation, SAMPLE_DEPTH};
     use crate::geo::transport::{self, Mode, NodeKind, Transport};
+    use crate::geo::vertices::write_geoms;
     use crate::geo::{counties, resources, sphere};
     use crate::json::Json;
     use crate::manifest::manifest;
     use crate::numeric::round;
+    use crate::read::natural_earth::{ADMIN0, ADMIN1};
     use crate::sources::{CONFIG_DIR, read_table, workspace_root};
+    use crate::table::hex;
     use crate::{econ, fetch, table, web};
 
     /// The name of a code, the code itself where there is none. A code admin-0 lists with a
@@ -287,10 +287,6 @@ mod full {
         ))
     }
 
-    fn hex(digest: &[u8; 32]) -> String {
-        digest.iter().map(|b| format!("{b:02x}")).collect()
-    }
-
     /// What a build wrote: each file's SHA-256 by its path in the pack (a tile layer's is that
     /// of its GeoJSON), and the build stats in the manifest's order.
     pub struct Built {
@@ -313,7 +309,7 @@ mod full {
             let path = self.out.join(name);
             let digest = table::write(&path, batch, &Default::default())
                 .map_err(|e| format!("{}: {e}", path.display()))?;
-            self.tables.insert(name.to_owned(), hex(&digest));
+            self.tables.insert(name.to_owned(), hex(digest));
             Ok(())
         }
 
@@ -331,7 +327,7 @@ mod full {
             let path = self.out.join(name);
             std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
             let digest: [u8; 32] = Sha256::digest(text).into();
-            self.tables.insert(name.to_owned(), hex(&digest));
+            self.tables.insert(name.to_owned(), hex(digest));
             Ok(())
         }
     }
