@@ -18,9 +18,8 @@ pub fn value_added(a: f64, va0: f64, l0: f64, s_l: f64, rho: f64, l: f64) -> f64
 }
 
 /// Profit-maximizing employment of one enterprise at value-added price `p_va` and wage `w`
-/// (closed form of p_VA dVA/dL = w). Corners: 0 if `p_va <= 0`; when the bracket of the
-/// closed form is not positive, 0 for rho < 0 and `l_supply` for rho > 0. Every target is
-/// capped at `l_supply`: one enterprise cannot hire more than the province has.
+/// (closed form of p_VA dVA/dL = w), [`labour_target_uncapped`] capped at `l_supply`: one
+/// enterprise cannot hire more than the province has.
 #[allow(clippy::too_many_arguments)]
 pub fn labour_target(
     p_va: f64,
@@ -32,23 +31,36 @@ pub fn labour_target(
     rho: f64,
     l_supply: f64,
 ) -> f64 {
+    labour_target_uncapped(p_va, w, a, va0, l0, s_l, rho).min(l_supply)
+}
+
+/// The closed form of [`labour_target`] without the cap. Corners: 0 if `p_va <= 0`; infinite
+/// if `w <= 0`; when the bracket of the closed form is not positive, 0 for rho < 0 and infinite
+/// for rho > 0 (no finite profit maximum).
+pub fn labour_target_uncapped(
+    p_va: f64,
+    w: f64,
+    a: f64,
+    va0: f64,
+    l0: f64,
+    s_l: f64,
+    rho: f64,
+) -> f64 {
     if p_va <= 0.0 {
         return 0.0;
     }
     if w <= 0.0 {
-        return l_supply;
+        return f64::INFINITY;
     }
     let q = w * l0 / (p_va * a * va0 * s_l);
-    let target = if rho.abs() < RHO_CD {
-        l0 * libm::pow(q, 1.0 / (s_l - 1.0))
-    } else {
-        let bracket = (libm::pow(q, rho / (1.0 - rho)) - s_l) / (1.0 - s_l);
-        if bracket <= 0.0 {
-            return if rho < 0.0 { 0.0 } else { l_supply };
-        }
-        l0 * libm::pow(bracket, -1.0 / rho)
-    };
-    target.min(l_supply)
+    if rho.abs() < RHO_CD {
+        return l0 * libm::pow(q, 1.0 / (s_l - 1.0));
+    }
+    let bracket = (libm::pow(q, rho / (1.0 - rho)) - s_l) / (1.0 - s_l);
+    if bracket <= 0.0 {
+        return if rho < 0.0 { 0.0 } else { f64::INFINITY };
+    }
+    l0 * libm::pow(bracket, -1.0 / rho)
 }
 
 #[cfg(test)]
@@ -141,5 +153,11 @@ mod tests {
         let cd = L0 * libm::pow(q, 1.0 / (S_L - 1.0));
         assert!((args(1.7, 2.1, 0.0, 1e6) - cd).abs() < 1e-9);
         assert_eq!(args(0.0, 1.0, 0.0, 1e6), 0.0);
+        // uncapped: the corners above the supply are infinite
+        let free = |p_va, w, rho| labour_target_uncapped(p_va, w, A, VA0, L0, S_L, rho);
+        assert_eq!(free(1.0, 1e-12, rho(1.2)), f64::INFINITY);
+        assert_eq!(free(1.0, 0.0, rho(0.8)), f64::INFINITY);
+        assert_eq!(free(-1.0, 0.0, rho(0.8)), 0.0);
+        assert_eq!(free(1.7, 2.1, rho(0.8)), args(1.7, 2.1, rho(0.8), 1e6));
     }
 }
