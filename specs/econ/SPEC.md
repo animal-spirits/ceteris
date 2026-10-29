@@ -221,25 +221,33 @@ solved exactly: each step is the root of a piecewise-linear U_k on its piece; a 
 smallest normal f64 is 0; on its pieces a pass, and a cycle of up to three passes, is an affine
 map of the fills, and the passes jump to its fixed point where repeating it stays on the pieces,
 or ahead to the last cycle before it leaves them; passes stop when one changes nothing
-bounded work (ADR 0093, second amendment): a jump follows at most 64 cycles one at a time (4,096
-per province and tick), then 2^k cycles at once (k <= 64), checked at those points; after 256
-passes since the last such cut, the goods the last pass's map takes to 0 (else every good it
-lowered) are set to 0
+bounded work (ADR 0093, second amendment): a jump needs a resolvable fall (above 4,096 eps f per
+cycle), follows at most 64 cycles one at a time, then 2^k cycles at once (k <= 64) checked at
+those points, the shortages strictly; all jumps share 4,096 units of work per province and tick;
+a pass whose falls are all below the margin, or the 256th pass, moves the goods resolvably to
+the fixed point of the last pass's map (or, at a stop, of the last two or three passes' cycle
+within 9.3e-10 of f), clamped to [0, f] and confirmed by the cycle's passes; else stops (after a
+rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on
+degenerate limits (U = R at the limit): the fills are placed within eps (U + R) / |slope of U - R|
+of the exact limit (about 2e-12, tests cap 1e-11), the resolution f64 gives there
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
-lowers its root by rounding units until it does), so no clearing step is needed. The draws are
+lowers its root by rounding units until it does), except where the passes stop at what f64
+resolves: there a good may be short by rounding, at most about 9e-13 of its flows, which the
+split shares pro rata within the Leontief invariant. No clearing step is needed. The draws are
 paid at the posted price at E2, count in the market's demand and sales, and come before
 household demand under every S11 setting (the chain runs before E3); at T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
 services at 0.3 and construction and services each other at 0.2 it binds in 413 of 3,000 province
 ticks over 120 ticks and settles in at most 6 passes (`local_chain_terminates_on_cycles`). On
-1,000,000 random small provinces with coefficients up to 0.6, all but 83 settle within 12
-passes, the most take 259 (the pass bound) and none takes more than 0.2 ms. Each tick the enterprise orders up to an
-inventory position (stock plus goods on order, the paid shipments in its pipeline):
+1,000,000 random small provinces with coefficients up to 0.6, all but 129 settle within 12
+passes, the most take 257 (the stall bound) and none takes more than 0.3 ms; in 200,000 provinces
+of the calibrated form (markets balanced at F = 1, one capacity cut) the fills match the
+iteration to 1.4e-10 within 2 passes. Each tick the enterprise orders up to an inventory position (stock plus goods on order, the paid shipments in its pipeline):
 
 ```
 order_k = max(0, (1 + cover + L_k) coef_k Y_cap - stock_k - on_order_k),    cover = 1
@@ -600,6 +608,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
 | Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 relative | every tick |
+| Local fit | Each local good's uncovered need at most what its producer leaves, U_k <= R_k (exact where the passes end on a pass that changes nothing; to 1e-12 of the flows where they stop at what f64 resolves, ADR 0093 bounded work, seed 7778631857305059895) | 1e-12 of U_k + R_k | `fits_up_to_rounding` in the fill tests of `p2_properties.rs` |
 | Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
 | Determinism | Same inputs, same hashes; 1 vs 8 threads; replay from snapshots | exact | P2 acceptance |

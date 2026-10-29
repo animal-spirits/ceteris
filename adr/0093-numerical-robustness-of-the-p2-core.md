@@ -150,30 +150,92 @@ the GE reference, whose local output solves the unrationed Leontief system, do n
 
 ## Amendment (2026-10-29): bounded work
 
-The exact solve above has no bound on its work. A review timed 1,000,000 random provinces: a
-handful take thousands of passes or seconds, all of them provinces whose fills fall towards 0.
-One falls on one pass map at a rate within 1e-5 of 1, so following its cycles one at a time
-replays up to 100,000 cycles after every pass (2.97 s). Another switches irregularly between two
-pass maps, which no cycle of up to three passes captures (15,678 passes). One such province in a
-tick costs about 100 times the tick's budget, so the work is bounded, by three rules.
+The exact solve above has no bound on its work, and rounding can mislead it. A review timed
+1,000,000 random provinces. A handful took thousands of passes or seconds, all of them provinces
+whose fills fall towards 0:
+- one falls on a single pass map at a rate within 1e-5 of 1, and following its cycles one at a
+  time replayed up to 100,000 cycles after every pass (2.97 s);
+- another switches irregularly between two pass maps, which no cycle of up to three passes
+  captures (15,678 passes).
 
-- **Cycles at once.** A jump follows the cycle's maps one cycle at a time for at most 64 cycles,
-  and for at most 4,096 cycles within one `fills` call, all jumps together. Then it takes 2^k
-  cycles at once, the composed map squared k times, for k up to 64. It checks the pieces, the
-  falls and the fits at those points only. A fall at a rate near 1 then reaches its fixed point
-  in about 60 steps, a collapse towards 0 included, since the composed map is linear there and
-  its fixed point is exactly 0. A piece left between two checked points and entered again before
-  the next is not seen; at the points checked, the conditions are the exact ones.
-- **Stalled falls.** After 256 passes since the last such cut, the goods that the last pass's
-  map takes to 0 are set to 0. These are the goods it lowers whose fixed point is exactly 0, as
-  in a collapse; where there are none, every good it lowered is set to 0. The passes then go on
-  until one changes nothing. Each such cut zeroes at least one good for good, since F never
-  rises, so a province takes at most about 4 x 256 passes. This can change a result only where
-  the iteration still falls after 256 passes without any cycle of up to three passes reaching
-  its limit. In the 1,000,000 random provinces this happened twice. Both provinces fall
-  irregularly towards 0, and both end where the unbounded iteration ends: [0, 0, 0] in one,
-  [0.1243, 0, 0] in the other, to 3e-17. On the fixture, no province comes near it.
-- **Zero, not subnormal.** Every fill below the smallest normal f64 is 0: at a step, after its
+A second review found that extrapolating a fall over many cycles turns rounding into fills of 0.
+Where a local market balances exactly along a ray of fills (the calibrated form, once a shock has
+used up the stocks), rounding leaves a good short by a unit in the last place. Its pass map then
+has a gain of 1 to rounding and a fixed point of 0. The rules below bound the work and keep
+rounding from being extrapolated.
+
+- **Resolvable falls.** A fill falls resolvably over a pass or a cycle when it falls by more than
+  4,096 units in its last place (4,096 eps f, relative 9.1e-13). A pass's map sums a few rounded
+  terms, and a step's descent moves its fill by a few units, so rounding alone gives a few units.
+  The margin is three orders above that and still below the 1e-12 at which the fills are compared
+  with the iteration. A jump is taken only where every good its cycle lowers falls resolvably
+  over the cycle's first application.
+- **Cycles at once.** A jump follows the cycle's maps one cycle at a time for at most 64 cycles.
+  It then takes 2^k cycles at once (the composed map squared k times, k up to 64), checked at
+  those points.
+  - At the doubled points, a good the cycle lowers must be strictly short, with no rounding
+    allowance. A good it leaves must fit up to 1e-12 of its flows, the maps' rounding.
+  - A piece left between two checked points and entered again before the next is not seen.
+  - All jumps of one `fills` call share a budget of 4,096 cycles and map applications. The
+    work of a call is at most twice that (`local::WORK_BOUND`).
+- **At the resolution of f64.** A pass whose falls are all below the margin has reached what
+  f64 resolves. The fills then move to a fixed point g, clamped to [0, f], for the goods g
+  would lower by more than the margin. The fixed point comes from the last passes, kept across
+  jumps:
+  - the last pass's map, wherever g lies;
+  - else a cycle of the last two or three passes, but only within 1,024 margins of f (relative
+    9.3e-10, the rest of a fall below the margin per pass at a gain up to 1 - 1/1024). A cycle
+    spanning pieces may have fixed points the passes never reach: unbounded, one moved a fixture
+    province from 0.043 to 0.012.
+
+  Each move is confirmed by running the cycle's passes from g, which must return it to 1e-12
+  of its largest fill.
+  - Where nothing moves, the fills are taken as they are. Two cases: the fills are at g to
+    rounding, or the map falls to 0 only by rounding (no constant, so g = 0, with no resolvable
+    fall).
+  - **Fit up to rounding.** Taken as they are, a good may be short by rounding, at most 1e-12 of
+    its flows. That is the Leontief invariant's own tolerance, and the split shares it pro rata.
+    The tests check fit to 1e-12 of the flows (`fits_up_to_rounding`, in every fill test of
+    `p2_properties.rs`).
+  - Exact fit is not required, because it is not reachable there. Passes continued past this
+    point turn rounding into whole cuts. Seed 7778631857305059895, translated to a limit at 0.1:
+    good 1, which fits in exact arithmetic, was cut from 1 to 0.1 once the other goods reached
+    0.1 to rounding.
+- **Degenerate limits.** Where supply equals need at the limit (U = R at F = t), U - R vanishes
+  linearly in F - t. Its rounding, eps times the gross flows, therefore decides whether a good
+  fits within eps times the gross flows over the slope of U - R of t: about 2e-12 on the
+  translated collapses. Neither the fill iteration nor anything else places the fills closer.
+  There the tests compare with the exact limit to that resolution, capped at 1e-11, and not with
+  the plain iteration, whose own result depends on rounding.
+  - Classification, from the province's construction: `translate` makes U - R of every good
+    homogeneous in F - t. The goods the original province's iteration takes to 0 have limit t,
+    and the goods it never cuts have limit 1. Any other good is checked for fit and for lying in
+    [t, 1].
+  - Every other province keeps the comparison with the plain iteration at 1e-12.
+- **Stalled falls.** After 256 passes, a fall that is still resolvable moves to the last pass's
+  fixed point g, clamped to [0, f], in the same way. At most 3 such moves are made.
+  - That is exact where a single map takes the fills to its limit. Since g is clamped to f and
+    F never rises, the passes that follow restore every fit.
+  - Where g is undefined, or would lower nothing, the stall is reported (`Fills::stalled`,
+    `Scratch::chain_stalled`), and the plain passes go on to the end.
+- **Zero, not subnormal.** A fill below the smallest normal f64 is 0: at a step, after its
   rounding descent, and wherever a jump lands.
+- **The role of a user at a step** follows from comparing its smallest other fill and its stock
+  threshold with the ends of the piece. A midpoint of the piece is no longer used: rounded onto
+  an end, it took a branch that does not exist and panicked.
 
-`collapsing_provinces_settle_in_bounded_passes` holds both review seeds to a pass bound.
+The regressions are:
+- `collapsing_provinces_settle_in_bounded_passes`, with pass and work bounds;
+- `balanced_markets_keep_their_fills`, the calibrated form at 1e-12 against the iteration's
+  limit;
+- `translated_collapses_stop_at_their_limit`:
+  - the seed whose midpoint rounded;
+  - five degenerate seeds at the resolution bound;
+  - 6603813906490728229, whose good 1 has exact limit 1 where the plain iteration rounds it to
+    0.3;
+- `translated_collapses_sample` (300,000 draws) and `translated_collapses_full` (3,000,000
+  draws, 1,260 translated provinces, about 34 s, `#[ignore]`);
+- `stop_takes_the_cycle_fixed_point`, seed 13018842184927700166, which stopped 1.7e-12 above its
+  limit on the last pass's map alone;
+- `near_singular_cycle_keeps_its_limit`, a loop gain of 1 - 1e-15, within the problem's
+  conditioning.
