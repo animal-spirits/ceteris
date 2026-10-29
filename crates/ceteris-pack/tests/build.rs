@@ -1,5 +1,5 @@
-//! The pack build: its configuration, the country names it writes, and the invariants of the
-//! pack's tables.
+//! The pack build: its configuration, the country names it writes, and the invariants and
+//! pinned digests of the pack's tables.
 
 mod common;
 
@@ -12,9 +12,12 @@ use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_array::{ArrowPrimitiveType, RecordBatch};
 use arrow_ipc::reader::FileReader;
 use ceteris_pack::build::{ADMIN0, country_names, split_area_km2};
+use ceteris_pack::econ::build::TABLES;
 use ceteris_pack::geo::provinces::borders;
 use ceteris_pack::sources::{CONFIG_DIR, workspace_root};
 use common::{cached, pack_table, strings};
+
+const GOLDEN_P1: &str = "tests/golden/p1-pack.txt";
 
 fn column<T: ArrowPrimitiveType>(path: &Path, name: &str) -> Vec<T::Native> {
     let reader = FileReader::try_new(File::open(path).unwrap(), None).unwrap();
@@ -86,6 +89,30 @@ fn the_pack_tables_hold_their_invariants() {
     assert!(
         stats["split_by_counties"].as_u64().unwrap() > stats["split_by_voronoi"].as_u64().unwrap()
     );
+}
+
+/// The P1 table digests the manifest records (all but the econ tables). Regenerate deliberately
+/// with `CETERIS_BLESS=1` after rebuilding, and say why in the commit.
+#[test]
+fn pack_tables_match_golden() {
+    let Some(manifest) = pack_table("manifest.json") else {
+        return;
+    };
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
+    let mut lines = vec!["# P1 pack 2000: table sha256 from manifest.json".to_owned()];
+    for (name, digest) in manifest["tables"].as_object().unwrap() {
+        if !TABLES.contains(&name.as_str()) {
+            lines.push(format!("{name} {}", digest.as_str().unwrap()));
+        }
+    }
+    let actual = lines.join("\n") + "\n";
+    let golden = workspace_root().join(GOLDEN_P1);
+    if std::env::var_os("CETERIS_BLESS").is_some() {
+        std::fs::write(&golden, actual).unwrap();
+        return;
+    }
+    assert_eq!(std::fs::read_to_string(golden).unwrap(), actual);
 }
 
 /// The SHA-256 of every file under `dir` but `web/map.pmtiles`, by path relative to `dir`.
