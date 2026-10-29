@@ -11,6 +11,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
+use ceteris_calibrate::border;
 use ceteris_calibrate::steady::{self, COVER, CalibrationError, Limits, PASS_TOL, SLOTS, Steady};
 use ceteris_calibrate::write;
 use ceteris_core::entity::{EntityId, Kind};
@@ -735,4 +736,65 @@ fn pack_world_loads_the_written_tables() {
         inputs.enterprises.a, w.s.a,
         "the enterprises' A are the calibrated ones"
     );
+}
+
+/// ADR 0092: on the fixture, the border friction fitted to cross-border shares that the model
+/// produces at known nu returns those shares per class (1e-6) and those nu.
+#[test]
+fn nu_fit_matches_cross_border_share() {
+    let inp = io::load(fixture()).unwrap();
+    let icio = vec![true; inp.n_countries()];
+    let known = [0.15, 0.6, 0.35, 1.2];
+    let target = border::data_state_shares(&inp, &known, &icio, Limits::default()).unwrap();
+    let fit = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet()).unwrap();
+    println!("fit: {fit:?}");
+    for c in 0..border::N_CLASSES {
+        assert!(
+            (fit.share[c] - target[c]).abs() <= 1e-6,
+            "class {c}: share {} vs target {}",
+            fit.share[c],
+            target[c]
+        );
+        assert!(
+            (fit.nu[c] - known[c]).abs() <= 1e-6 * known[c],
+            "class {c}: nu {} vs {}",
+            fit.nu[c],
+            known[c]
+        );
+    }
+}
+
+/// Each class's share falls as its nu rises and does not depend on the other classes' nu; a
+/// target outside the shares at nu 0 and `NU_MAX` is an error naming the class.
+#[test]
+fn nu_fit_is_monotone_and_bracketed() {
+    let inp = io::load(fixture()).unwrap();
+    let icio = vec![true; inp.n_countries()];
+    let at = |nu: [f64; border::N_CLASSES]| {
+        border::data_state_shares(&inp, &nu, &icio, Limits::default()).unwrap()
+    };
+    let steps = [0.0, 0.3, 1.0, 3.0];
+    let shares: Vec<_> = steps.iter().map(|&v| at([v; border::N_CLASSES])).collect();
+    for c in 0..border::N_CLASSES {
+        for w in shares.windows(2) {
+            assert!(w[1][c] < w[0][c], "class {c}: {shares:?}");
+        }
+    }
+    // the classes are independent: moving class 2's nu leaves the others' shares unchanged, up
+    // to the scaling's tolerance (Anderson mixing runs over all goods at once)
+    let moved = at([0.3, 0.3, 3.0, 0.3]);
+    for c in [0, 1, 3] {
+        assert!(
+            (moved[c] - shares[1][c]).abs() <= 1e-12 * shares[1][c],
+            "class {c}: {} vs {}",
+            moved[c],
+            shares[1][c]
+        );
+    }
+    let mut target = shares[1];
+    target[0] = 0.5 * (1.0 + shares[0][0]);
+    let err = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet())
+        .unwrap_err()
+        .to_string();
+    assert!(err.starts_with("class 0:"), "{err}");
 }
