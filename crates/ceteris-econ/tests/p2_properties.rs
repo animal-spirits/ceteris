@@ -7,7 +7,7 @@ use ceteris_core::ledger::AccountId;
 use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
 use ceteris_econ::inputs::EconInputs;
-use ceteris_econ::local::N_LOCAL;
+use ceteris_econ::local::{self, Province};
 use ceteris_econ::params::Technology;
 use ceteris_econ::production::{rho, value_added};
 use ceteris_econ::systems::{self, SEED};
@@ -1022,11 +1022,10 @@ fn traded_shortage_still_lags() {
 }
 
 /// Local-good chains: services feeding services, and construction and services feeding each
-/// other. From the data state the chain binds in every mainland province at tick 1 and
-/// converges there within its bound; over 120 ticks every local input used equals coef Y
-/// (the Leontief invariant, exactly, at every tick), including the province ticks where a
-/// cycle between two local goods is still converging at the bound and the chain clears the
-/// rest by cutting the users that produce no local good.
+/// other. From the data state the chain binds in every mainland province at tick 1; over 120
+/// ticks every province tick settles in at most 8 passes (6 as built; the old chain ran up to
+/// its bound of 32 and then cleared the rest), and every local input used equals coef Y (the
+/// Leontief invariant, exactly, at every tick).
 #[test]
 fn local_chain_terminates_on_cycles() {
     let coefficients = [
@@ -1036,25 +1035,19 @@ fn local_chain_terminates_on_cycles() {
     ];
     let inputs = Arc::new(fixture_with(&coefficients));
     let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
-    let (mut bound, mut at_bound) = (0, 0);
+    let mut bound = 0;
     for tick in 0..120 {
         sim.step().unwrap_or_else(|v| panic!("{v}"));
         let w = sim.world();
-        let iterations = &w.scratch.chain_iterations;
+        let passes = &w.scratch.chain_iterations;
         assert!(
-            iterations
-                .iter()
-                .all(|&n| (1..=N_LOCAL as u32).contains(&n))
+            passes.iter().all(|&n| (1..=8).contains(&n)),
+            "tick {tick}: {passes:?}"
         );
         if tick == 1 {
-            assert!(
-                iterations[..24]
-                    .iter()
-                    .all(|&n| n > 1 && n < N_LOCAL as u32)
-            );
+            assert!(passes[..24].iter().all(|&n| n > 1));
         }
-        bound += iterations.iter().filter(|&&n| n > 1).count();
-        at_bound += iterations.iter().filter(|&&n| n == N_LOCAL as u32).count();
+        bound += passes.iter().filter(|&&n| n > 1).count();
         for e in 0..w.inputs().n_enterprises() {
             for k in LOCAL {
                 let want = w.layout().coef[e][k] * w.scratch.produced[e];
@@ -1066,8 +1059,200 @@ fn local_chain_terminates_on_cycles() {
             }
         }
     }
-    println!("chain bound in {bound} province ticks, {at_bound} of them at the bound");
-    assert!(bound > 0 && at_bound < bound);
+    println!("chain bound in {bound} province ticks");
+    assert!(bound > 0);
+}
+
+/// Outputs at fills `f`, as ADR 0093's Amendment defines them, written out here independently.
+fn outputs_at(p: &Province, f: &[f64; 3]) -> Vec<f64> {
+    (0..p.cap.len())
+        .map(|u| {
+            let least = (0..3)
+                .filter(|&j| p.coef[u][j] > 0.0)
+                .fold(1.0f64, |m, j| m.min(f[j]));
+            p.cap[u] * least
+        })
+        .collect()
+}
+
+fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
+    let y = outputs_at(p, f);
+    let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
+    let uncovered: f64 = (0..y.len())
+        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
+        .sum();
+    uncovered <= rest
+}
+
+/// The fill iteration run until a pass changes nothing, each step by bisection: the reference
+/// the exact solve must reproduce. None where that takes more than a million passes (a loop
+/// gain near 1) or a fill falls towards 0 below 1e-200.
+fn converged_fills(p: &Province) -> Option<[f64; 3]> {
+    let mut f = [1.0; 3];
+    for _ in 0..1_000_000 {
+        let before = f;
+        for j in 0..3 {
+            if fits_at(p, j, &f) {
+                continue;
+            }
+            let (mut lo, mut hi) = (0.0, f[j]);
+            for _ in 0..200 {
+                let mid = 0.5 * (lo + hi);
+                if mid <= lo || mid >= hi {
+                    break;
+                }
+                let mut g = f;
+                g[j] = mid;
+                if fits_at(p, j, &g) {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            // near the bottom of f64 the iteration underflows good by good, which is no limit
+            if lo > 0.0 && lo < 1e-200 {
+                return None;
+            }
+            f[j] = lo;
+        }
+        if f == before {
+            return Some(f);
+        }
+    }
+    None
+}
+
+/// Checks that every good fits at the exact fills and, where the fill iteration converges,
+/// that they are its limit. Returns the passes of the exact solve and whether it compared.
+fn fills_match(p: &Province, what: &str) -> (usize, bool) {
+    let (exact, passes) = local::fills(p);
+    for j in 0..3 {
+        assert!(fits_at(p, j, &exact), "{what}: good {j} short at {exact:?}");
+    }
+    let Some(iterated) = converged_fills(p) else {
+        return (passes, false);
+    };
+    for j in 0..3 {
+        assert!(
+            (exact[j] - iterated[j]).abs() <= 1e-12,
+            "{what}: good {j}: exact {exact:?}, iterated {iterated:?}, {p:?}"
+        );
+    }
+    // fills agree to 1e-12, so outputs to 1e-12 of capacity
+    let (a, b) = (outputs_at(p, &exact), outputs_at(p, &iterated));
+    for (u, (x, y)) in a.iter().zip(&b).enumerate() {
+        assert!(
+            (x - y).abs() <= 1e-12 * p.cap[u],
+            "{what}: enterprise {u}: {x} vs {y}"
+        );
+    }
+    (passes, true)
+}
+
+/// A small random province from `seed` (xorshift): two to six enterprises, each local good made
+/// by at most one of them, coefficients up to 0.6, stocks often 0 and otherwise up to about
+/// the need at capacity.
+fn random_province(seed: u64) -> Province {
+    let mut s = seed | 1;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        (s >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let n = 2 + (next() * 5.0) as usize;
+    let mut producer = [None; 3];
+    for j in 0..3 {
+        let u = (next() * n as f64) as usize;
+        if next() < 0.85 && !producer.contains(&Some(u)) {
+            producer[j] = Some(u);
+        }
+    }
+    let cap: Vec<f64> = (0..n).map(|_| 0.1 + 10.0 * next()).collect();
+    let coef: Vec<[f64; 3]> = (0..n)
+        .map(|u| {
+            std::array::from_fn(|j| {
+                if producer[j] == Some(u) || next() < 0.4 {
+                    0.0
+                } else {
+                    0.6 * next()
+                }
+            })
+        })
+        .collect();
+    let stock = (0..n)
+        .map(|u| {
+            std::array::from_fn(|j| {
+                if next() < 0.5 {
+                    0.0
+                } else {
+                    1.2 * next() * coef[u][j] * cap[u]
+                }
+            })
+        })
+        .collect();
+    let own = std::array::from_fn(|_| 0.3 * next());
+    Province {
+        cap,
+        coef,
+        stock,
+        producer,
+        own,
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(4000))]
+    /// ADR 0093, Amendment: on random small provinces every good fits at the exact fills, and
+    /// they are the converged iteration's (1e-12) wherever it converges (about 98% of draws;
+    /// the rest fall towards 0 below 1e-200, where bisection underflows good by good).
+    #[test]
+    fn exact_fill_equals_converged_iteration_on_random_provinces(seed in any::<u64>()) {
+        fills_match(&random_province(seed), &format!("seed {seed}"));
+    }
+}
+
+/// ADR 0093, Amendment: at every province tick of the fixture's default run (60 ticks) and of
+/// the cycle fixture (120 ticks), every good fits at the exact fills and they equal the fill
+/// iteration run to convergence (1e-12) wherever it converges (all but 2 of the 413 province
+/// ticks where the chain binds, all in the cycle fixture).
+#[test]
+fn exact_fill_equals_converged_iteration() {
+    let cycles = [
+        (SERVICES, SERVICES, 0.3),
+        (SERVICES, CONSTRUCTION, 0.2),
+        (CONSTRUCTION, SERVICES, 0.2),
+    ];
+    let (mut bound, mut skipped) = (0, 0);
+    for (inputs, ticks) in [(small_world(), 60), (fixture_with(&cycles), 120)] {
+        let mut sim = EconWorld::sim(
+            Arc::new(inputs),
+            EconParams::default(),
+            TradeParams::default(),
+        );
+        for tick in 0..ticks {
+            let mut probe = sim.world().clone();
+            probe.begin_tick();
+            systems::deliver(&mut probe);
+            systems::labour(&mut probe);
+            systems::cap_output(&mut probe);
+            let (inp, lay) = (probe.inputs().clone(), probe.layout().clone());
+            for i in 0..inp.n_provinces() {
+                let cap = &probe.scratch.produced[lay.enterprises(i)];
+                let p = Province::new(&inp, &lay, &probe.ledger, i, cap);
+                let what = format!("tick {tick} province {i}");
+                let (passes, compared) = fills_match(&p, &what);
+                skipped += usize::from(!compared);
+                if passes > 1 {
+                    bound += 1;
+                }
+            }
+            sim.step().unwrap_or_else(|v| panic!("{v}"));
+        }
+    }
+    println!("chain bound in {bound} province ticks, {skipped} without a converged iteration");
+    assert!(skipped * 100 < bound);
+    assert!(bound > 0);
 }
 
 /// S11 Proportional: one fill ratio for both classes at every short origin market.

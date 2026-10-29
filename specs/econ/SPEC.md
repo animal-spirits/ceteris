@@ -217,24 +217,24 @@ one fill F_k in [0, 1] per local good k (ADR 0093, Amendment):
     k fits when U_k <= R_k
 F = the limit of the fill iteration: from F = 1, passes over k = 7, 8, 9, each setting
     F_k = largest x <= F_k at which k fits, the other fills as they stand
-solved exactly: each step is the root of a piecewise-linear U_k on its piece; after a pass that
-cuts goods C, the limit of the pass's regime (each user's smallest fill, the users whose need
-exceeds their stock) solves the goods of C fitting with equality, kept where it holds the
-regime and leaves no other good short; passes stop when one changes nothing
+solved exactly: each step is the root of a piecewise-linear U_k on its piece; a fill below the
+smallest normal f64 is 0; on its pieces a pass, and a cycle of up to three passes, is an affine
+map of the fills, and the passes jump to its fixed point where repeating it stays on the pieces,
+or ahead to the last cycle before it leaves them; passes stop when one changes nothing
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
-lowers its root by rounding units until it does), so no clearing step is needed. The draws are paid at the posted price at E2, count in the market's demand and
-sales, and come before household demand under every S11 setting (the chain runs before E3); at
+lowers its root by rounding units until it does), so no clearing step is needed. The draws are
+paid at the posted price at E2, count in the market's demand and sales, and come before household demand under every S11 setting (the chain runs before E3); at
 T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
-1,200 ticks, the chain binds in 6 of 30,000 province ticks in the default run (5 settle in 2
-iterations, 1 in 3; the island, ticks 27 to 33) and never in the frictionless run; with services
-feeding services at 0.3 and construction and services each other at 0.2 it binds in 287 of 3,000
-province ticks over 120 ticks, 8 of them at the bound (a utilities and construction pair with loop
-gain about 0.86; `local_chain_terminates_on_cycles`). Each tick the enterprise orders up to an
+1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
+services at 0.3 and construction and services each other at 0.2 it binds in 413 of 3,000 province
+ticks over 120 ticks and settles in at most 6 passes (`local_chain_terminates_on_cycles`). On
+random small provinces with coefficients up to 0.6 nearly all settle within 12 passes; a loop
+gain near 1 can take some 200. Each tick the enterprise orders up to an
 inventory position (stock plus goods on order, the paid shipments in its pipeline):
 
 ```
@@ -848,11 +848,11 @@ texture fed from core columns.
   good before households, and Priority fills intermediate orders first at origins
   (`local_chain_respects_intermediate_priority`); cutting coal output leaves downstream output
   unchanged in that tick and lowers it once stocks run out (`traded_shortage_still_lags`); cycles
-  among local goods settle in one solve (`local_chain_terminates_on_cycles`); the exact fills equal
+  among local goods settle in at most 8 passes (`local_chain_terminates_on_cycles`); the exact fills equal
   the fill iteration run to convergence, with its steps found by bisection, on every province tick
-  of the fixture runs and on random small provinces, at 1e-12 (`exact_fill_equals_converged_iteration`);
-  S11 Proportional gives one fill ratio (`proportional_rationing_switch`); `step` and `split` in
-  `local.rs`.
+  of the fixture runs and on random small provinces, at 1e-12, wherever it converges
+  (`exact_fill_equals_converged_iteration`, `exact_fill_equals_converged_iteration_on_random_provinces`);
+  S11 Proportional gives one fill ratio (`proportional_rationing_switch`); `split` in `local.rs`.
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
   numerical maximization, wage step and clip, rigidity on nominal cuts
   (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, income split, rounding of payments. PIGL (`demand.rs`): pop
