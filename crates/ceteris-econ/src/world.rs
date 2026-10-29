@@ -421,7 +421,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     }
     e.f64s(theta);
     e.f64(*theta_scale);
-    e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain, *border_nu]);
+    e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain]);
+    e.f64s(border_nu);
     e.f64s(coverage);
     e.f64s(time_cost);
     state_hash(&e.into_bytes())
@@ -761,7 +762,8 @@ impl EconWorld {
     /// per enterprise) minted to each pop: tick 0 wages are paid at E2, so tick 0 spending is
     /// one month of base income. Panics on invalid inputs or a base point other than base
     /// employment = (1 - u*) L^s under `params.edu_eff`, and on a calibrated start under structural
-    /// parameters other than the defaults ([`structural_digest`]).
+    /// parameters other than the defaults with the calibrated border friction
+    /// ([`structural_digest`], [`EconInputs::trade_params`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
         let inp = &*inputs;
@@ -888,9 +890,10 @@ impl EconWorld {
             Some(steady) => {
                 assert_eq!(
                     structural_digest(&w.inputs, &w.params, &w.trade),
-                    structural_digest(&w.inputs, &EconParams::default(), &TradeParams::default()),
+                    structural_digest(&w.inputs, &EconParams::default(), &w.inputs.trade_params()),
                     "the calibrated steady state was built under the default structural \
-                     parameters; start from the data state (`--data-state`) or recalibrate"
+                     parameters and the calibrated border friction (`EconInputs::trade_params`); \
+                     start from the data state (`--data-state`) or recalibrate"
                 );
                 w.start_steady(&steady)
             }

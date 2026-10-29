@@ -16,7 +16,7 @@ use arrow_array::cast::AsArray;
 use ceteris_core::snapshot::hex;
 use ceteris_geo::pack::{PackError, f64s, read_table, u8s, u32s};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{N_GOODS, TradeParams};
+use ceteris_trade::{N_CLASSES, N_GOODS, TradeParams};
 
 use crate::demand::{N_CATEGORIES, PiglWeights};
 use crate::inputs::EconInputs;
@@ -24,7 +24,7 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "3";
+pub const FORMAT: &str = "4";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -110,6 +110,40 @@ fn calibrated_digest(t: &RecordBatch) -> Result<String, PackError> {
     Ok(value.split('"').next().unwrap_or_default().to_owned())
 }
 
+/// The P05 per theta class in the JSON metadata `calibration` of `econ_calib.arrow` (ADR 0092):
+/// the border friction the steady state was solved at.
+fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_CLASSES], PackError> {
+    let json = t
+        .schema()
+        .metadata()
+        .get("calibration")
+        .cloned()
+        .ok_or_else(|| err("econ_calib.arrow has no calibration metadata"))?;
+    let key = "\"border_nu\"";
+    let bad = || {
+        err(format!(
+            "calibration metadata has no border_nu of {N_CLASSES} finite nonnegative values"
+        ))
+    };
+    let after_key = &json[json.find(key).ok_or_else(bad)? + key.len()..];
+    let list = after_key
+        .trim_start()
+        .strip_prefix(':')
+        .and_then(|v| v.trim_start().strip_prefix('['))
+        .and_then(|v| v.split(']').next())
+        .ok_or_else(bad)?;
+    let nu: Vec<f64> = list
+        .split(',')
+        .map(|v| v.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .map_err(|_| bad())?;
+    let nu: [f64; N_CLASSES] = nu.try_into().map_err(|_| bad())?;
+    if nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
+        return Err(bad());
+    }
+    Ok(nu)
+}
+
 impl EconInputs {
     /// Whether `dir` holds calibration tables.
     pub fn has_calibration(dir: &Path) -> bool {
@@ -135,6 +169,7 @@ impl EconInputs {
                 dir.display()
             )));
         }
+        let border_nu = calibrated_border_nu(&ent_table)?;
         let (np, n_pops, n_ent) = (self.n_provinces(), self.n_pops(), self.n_enterprises());
         let pack: Vec<u32> = if self.provinces.pack.is_empty() {
             (0..np as u32).collect()
@@ -267,6 +302,7 @@ impl EconInputs {
             pipeline.push((buyer as u32, good[r], ahead[r], units[r]));
         }
 
+        self.border_nu = Some(border_nu);
         self.steady = Some(std::sync::Arc::new(Steady {
             price,
             supply: f64s(&cells, "supply")?,
@@ -319,6 +355,30 @@ mod tests {
         ] {
             let t = batch(&[("calibration", json)]);
             assert_eq!(calibrated_digest(&t).unwrap(), "abc", "{json}");
+        }
+    }
+
+    #[test]
+    fn border_nu_is_read_per_class() {
+        for json in [
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05], "static_digest": "abc"}"#,
+            r#"{ "static_digest":"abc","border_nu" :[ 0.25,1.5 , 0.0625,3e-05 ] }"#,
+        ] {
+            let t = batch(&[("calibration", json)]);
+            assert_eq!(
+                calibrated_border_nu(&t).unwrap(),
+                [0.25, 1.5, 0.0625, 3e-05],
+                "{json}"
+            );
+        }
+        for json in [
+            r#"{"static_digest": "abc"}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, -1.0]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, "x"]}"#,
+        ] {
+            let t = batch(&[("calibration", json)]);
+            assert!(calibrated_border_nu(&t).is_err(), "{json}");
         }
     }
 

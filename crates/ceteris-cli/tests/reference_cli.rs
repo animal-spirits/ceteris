@@ -116,7 +116,8 @@ fn relative(got: f64, want: f64) -> f64 {
 }
 
 /// The reference routes on the kernel Rust exports, and that kernel is the spec's: every crossing
-/// factor rebuilt from the legs and tariffs as K_ab = (tau (1 + nu) (1 + t))^-theta, with
+/// factor rebuilt from the legs, tariffs and gateway masses as
+/// K_ab = m_a m_b (tau (1 + nu_c) (1 + t))^-theta, nu_c of the good's theta class (ADR 0092), with
 /// 1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12; and the reference's delivered prices at prices 1
 /// are Rust's base prices to 1e-12. Returns the largest relative difference.
 fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
@@ -128,7 +129,15 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
     let params: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(export.join("params.json")).unwrap())
             .unwrap();
-    let nu = params["trade"]["border_nu"].as_f64().unwrap();
+    let list = |key: &str| -> Vec<f64> {
+        params["trade"][key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect()
+    };
+    let (border_nu, class) = (list("border_nu"), list("theta_class"));
     let gc = &inp.gateway_country;
     let n_c = inp.n_countries();
     let mut rate = vec![0.0; n_c * n_c * 2];
@@ -172,11 +181,17 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
         worst = worst.max(r);
     };
     for g in (0..inp.n_goods()).filter(|&g| inp.traded[g]) {
+        let nu = border_nu[class[g] as usize];
         for j in (0..cro.good.len()).filter(|&j| cro.good[j] == g) {
             let i = leg_at[&(cro.row[j], cro.col[j])];
             let tau = 1.0 + cost[i] * weight[g] + time_cost[g] * hours[i] / 24.0;
             let duty = 1.0 + rate[(gc[b[i]] * n_c + gc[a[i]]) * 2 + group[g]];
-            check("k", cro.k[j], (tau * (1.0 + nu) * duty).powf(-inp.theta[g]));
+            let m = inp.gateway_mass[a[i]] * inp.gateway_mass[b[i]];
+            check(
+                "k",
+                cro.k[j],
+                m * (tau * (1.0 + nu) * duty).powf(-inp.theta[g]),
+            );
             check("inv_loss", cro.inv_loss[j], 1.0 / (tau * (1.0 + nu)));
             check("inv_duty", cro.inv_duty[j], 1.0 / duty);
         }

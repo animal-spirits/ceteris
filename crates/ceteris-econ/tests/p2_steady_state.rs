@@ -173,11 +173,8 @@ struct Record {
 fn run(inputs: EconInputs, ticks: u32, tol: Tolerance, what: &str) -> Vec<Record> {
     let split = ticks / 2;
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
-    let world = EconWorld::new(
-        Arc::new(inputs),
-        EconParams::default(),
-        TradeParams::default(),
-    );
+    let trade = inputs.trade_params();
+    let world = EconWorld::new(Arc::new(inputs), EconParams::default(), trade);
     let steady = world.inputs().steady.clone().unwrap();
     let mut base = quantities(&world);
     // the calibrated state's last tick, which the first tick must reproduce
@@ -340,6 +337,44 @@ fn calibrated_start_rejects_other_theta() {
     let mut trade = TradeParams::default();
     trade.theta[0] *= 1.1;
     EconWorld::new(calibrated_fixture(), EconParams::default(), trade);
+}
+
+/// A calibration solved at other border frictions than the defaults (ADR 0092).
+fn fixture_at_other_nu() -> Arc<EconInputs> {
+    let mut inputs = small_world();
+    inputs
+        .calibrate(&fixture_dir().join("calibration"))
+        .unwrap();
+    inputs.border_nu = Some([0.2, 0.4, 0.6, 0.8]);
+    Arc::new(inputs)
+}
+
+/// The calibrated border friction is part of the parameters the steady state holds under: the
+/// world starts under `EconInputs::trade_params`, which carries it.
+#[test]
+fn calibrated_start_takes_the_calibrated_border_nu() {
+    let inputs = fixture_at_other_nu();
+    let trade = inputs.trade_params();
+    assert_eq!(trade.border_nu, [0.2, 0.4, 0.6, 0.8]);
+    assert_eq!(
+        TradeParams {
+            border_nu: TradeParams::default().border_nu,
+            ..trade.clone()
+        },
+        TradeParams::default()
+    );
+    EconWorld::new(inputs, EconParams::default(), trade);
+}
+
+/// ... and the default border friction is then a structural change.
+#[test]
+#[should_panic(expected = "calibrated steady state")]
+fn calibrated_start_rejects_the_default_border_nu() {
+    EconWorld::new(
+        fixture_at_other_nu(),
+        EconParams::default(),
+        TradeParams::default(),
+    );
 }
 
 /// The adjustment speeds do not move the steady state, so they load.

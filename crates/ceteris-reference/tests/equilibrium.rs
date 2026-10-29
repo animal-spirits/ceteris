@@ -672,6 +672,8 @@ fn two_provinces(
     let l0 = (1.0 - u) * labour / 2.0;
     Inputs {
         theta: vec![theta],
+        theta_class: vec![0],
+        border_nu: vec![0.3],
         sigma_demand,
         pigl: Pigl {
             sigma_b: 0.26,
@@ -685,6 +687,7 @@ fn two_provinces(
         traded: vec![true],
         province_country: vec![0, 0],
         gateway_country: vec![],
+        gateway_mass: vec![],
         labour_supply: vec![labour; 2],
         population: vec![1e6; 2],
         w0: vec![s_l * 50.0 / l0; 2],

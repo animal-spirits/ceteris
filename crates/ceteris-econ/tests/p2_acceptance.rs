@@ -439,7 +439,7 @@ fn kernel_rebuilds_after_chokepoint_closure() {
         EconWorld::sim(
             Arc::clone(inputs),
             EconParams::default(),
-            TradeParams::default(),
+            inputs.trade_params(),
         )
     };
     let (mut shocked, mut control) = (sim(&inputs), sim(&inputs));
@@ -603,7 +603,8 @@ fn hundred_years_without_violation() {
         return;
     };
     let started = std::time::Instant::now();
-    let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
+    let trade = inputs.trade_params();
+    let mut sim = EconWorld::sim(inputs, EconParams::default(), trade);
     let mut census = Census::default();
     for tick in 1..=TICKS {
         sim.step().unwrap_or_else(|v| panic!("tick {tick}: {v}"));
@@ -654,7 +655,7 @@ fn full_pack_one_vs_eight_threads() {
             let mut sim = EconWorld::sim(
                 Arc::clone(&inputs),
                 EconParams::default(),
-                TradeParams::default(),
+                inputs.trade_params(),
             );
             sim.run_until(PACK_TICKS).unwrap_or_else(|v| panic!("{v}"));
             sim.snapshot_hashes()
@@ -683,11 +684,8 @@ fn data_state_write_off_census() {
     let mut inputs = (*inputs).clone();
     inputs.steady = None;
     let ticks: u32 = std::env::var("TICKS_CENSUS").map_or(4800, |v| v.parse().unwrap());
-    let mut sim = EconWorld::sim(
-        Arc::new(inputs),
-        EconParams::frictionless(),
-        TradeParams::default(),
-    );
+    let trade = inputs.trade_params();
+    let mut sim = EconWorld::sim(Arc::new(inputs), EconParams::frictionless(), trade);
     let mut by_country: BTreeMap<usize, i128> = BTreeMap::new();
     let mut most_negative = (0usize, 0u32);
     let checkpoints = [
