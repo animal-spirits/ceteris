@@ -317,6 +317,29 @@ mod tests {
         assert_eq!(m.price[G], libm::exp(-p.c_max));
     }
 
+    /// ADR 0106: at pi^e = 0 the rule is the old one, p' = p exp(clip(gap)), bit for bit.
+    #[test]
+    fn zero_expected_inflation_is_the_old_rule() {
+        for (s, q, d) in [
+            (2.3, 1.0, 1.1),
+            (0.0, 1.0, 50.0),
+            (100.0, 10.0, 0.1),
+            (1.0, 3.0, 2.9),
+        ] {
+            let (mut m, p) = one();
+            set(&mut m, G, s, q, d);
+            clear(&mut m);
+            let floor = Q_FLOOR_FRACTION * q;
+            let target = p.coverage[G] * d;
+            let gap = p.kappa1 * (d - q) / q.max(floor)
+                - p.kappa2 * (m.inventory[G] - target) / target.max(floor);
+            let c = p.price_clip(G);
+            let old = m.price[G] * libm::exp(gap.clamp(-c, c));
+            m.reprice(&p, 0.0);
+            assert_eq!(m.price[G].to_bits(), old.to_bits(), "{s} {q} {d}");
+        }
+    }
+
     #[test]
     fn reprice_adds_expected_inflation() {
         // traded: D = Q and S' = S* = 2 D; local: D = Q

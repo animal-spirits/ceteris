@@ -300,21 +300,26 @@ fn mint_survives_scale_1000() {
     assert_same("employment", &a.employment, &b.employment, &a.employment);
 }
 
+/// Pops and single payments stay i64: scaled until the richest pop's money sits just below
+/// i64::MAX, the run (not the scaling) stops loudly. On the fixture the largest payment of the
+/// tick exceeds the richest pop's money, so the payment's entry, not a balance, fails first.
 #[test]
-#[should_panic(expected = "ledger overflow")]
 fn nominal_scale_beyond_the_ledger_fails_loudly() {
     let w = world(EconParams::default());
-    let largest = w
-        .layout()
-        .accounts
-        .pop
-        .iter()
-        .map(|&a| w.ledger.money(a))
-        .max()
-        .unwrap();
-    // pops stay i64: twice the scale at which the richest pop fills it
-    let mut sim = sim_of(scaled(w, 2 * (i64::MAX / largest)));
-    sim.run_until(1).unwrap();
+    let pops = w.layout().accounts.pop.clone();
+    let richest = |w: &EconWorld| pops.iter().map(|&a| w.ledger.money(a)).max().unwrap();
+    let largest = richest(&w);
+    let w = scaled(w, i64::MAX / largest);
+    assert!(richest(&w) > i64::MAX - largest);
+    let mut sim = sim_of(w);
+    let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sim.run_until(1)))
+        .expect_err("the run overflows");
+    let message = err
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| err.downcast_ref::<&str>().copied())
+        .unwrap_or_default();
+    assert!(message.contains("does not fit the ledger"), "{message}");
 }
 
 /// Runs T1 to T3 of a tick: everything up to the dispatch of the filled orders.

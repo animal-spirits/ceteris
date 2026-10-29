@@ -178,7 +178,7 @@ fn inversion_at_given_prices_reproduces_the_shares() {
 
 /// ADR 0106: the passes reach the same fixed point from eight starts, every traded buyer price
 /// of the data state times a factor uniform in [0.5, 1.5] (Philox seeds 0 to 7, one stream per
-/// province). A failure is a finding for the owner (several steady states), not a flake.
+/// province). A failure means several steady states, not a flake.
 #[test]
 fn calibration_unique_from_eight_starts() {
     let inp = io::load(fixture()).unwrap();
@@ -212,6 +212,13 @@ fn calibration_unique_from_eight_starts() {
             1e-9 * max_abs(&base.output),
         );
         allclose(&what, &s.w0, &base.w0, 1e-9, 0.0);
+        allclose(
+            &what,
+            &s.rebate,
+            &base.rebate,
+            1e-9,
+            1e-9 * max_abs(&base.rebate),
+        );
         allclose(&what, &s.weights.scale, &base.weights.scale, 1e-9, 0.0);
         allclose(
             &what,

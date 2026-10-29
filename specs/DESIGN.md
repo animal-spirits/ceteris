@@ -1066,7 +1066,7 @@ The register lists every parameter that is not pinned by data, with its prior an
 | P02 | Merchant inventory target coverage | Markets | 1 to 6 months by good | Storage and perishability; price volatility | Free |
 | P03a | Price adjustment speed kappa1 | Markets | 0.05 to 0.5 per month, start 0.05 | Price volatility and autocorrelation | Free |
 | P03b | Inventory term kappa2 of the price rule | Markets | 0.05 to 0.5 per month when on; start 0 (off) | Price volatility and autocorrelation; stability region (ADR 0019) | Free |
-| P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move of the gap terms; expected inflation passes through (ADR 0106); binding ticks counted per province | Free |
+| P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move; binding ticks counted per province | Free |
 | P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
 | P05 | Non-tariff border frictions | Trade | Log-uniform | Gravity border effects | Calibrated |
 | P06 | Goods substitution sigma within a PIGL category | Demand | 0.3 to 0.9, start 0.6 | Comin-Lashkari-Mestieri (2021) | Literature |
@@ -1121,7 +1121,6 @@ Added for the modern scenario:
 | P52 | Entry costs by sector | Production | Log-uniform | Firm counts by size class; entry and exit rates | Calibrated |
 | P148 | Loss write-off threshold M | Production | 3 months of base sales | Limited liability of enterprises (ADR 0112) | Free |
 | P149 | Input stock cover | Production | 1 month | The cover of the input order rule (owner decision, 24 Oct 2026) | Free |
-| P151 | Step clip c\_max of the storable commodities (goods 0, 1, 2, 5) | Markets | 0.3 in log per month | Monthly commodity moves beyond 0.1 (oil fell about 30% in one month in late 2008); ADR 0106 | Free |
 
 Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it), P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090`) and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 

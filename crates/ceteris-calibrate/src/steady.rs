@@ -8,9 +8,9 @@
 //! enterprises. One scalar r_g per traded good rescales its V (and VA) so that world spending net
 //! of tariffs equals world output value. Spending scales with the r, so that fixes them only up to
 //! one common factor; each pass rescales them so that world traded value added, sum_e r_g VA_e, is
-//! the data's (ADR 0106: the fixed point is then unique, not one of a ray). Rebates depend on sourcing, local output on income and
-//! income on local output, so passes of stages 1, 2 and 4 repeat until rebates, r, buyer prices
-//! and the PIGL weights settle ([`PASS_TOL`]).
+//! the data's (ADR 0106: the fixed point is then unique, not one of a ray). Rebates depend on
+//! sourcing, local output on income and income on local output, so passes of stages 1, 2 and 4
+//! repeat until rebates, r, buyer prices and the PIGL weights settle ([`PASS_TOL`]).
 //!
 //! Stage 2, origin prices. Per traded good, the balanced scaling
 //! w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o, Phi_d = sum_o K_od w_o, on the two-level
@@ -1043,9 +1043,9 @@ pub fn calibrate_from(
             .filter(|&e| traded_e[e])
             .map(|e| scaling.r[eg[e]] * va_target[e])
             .sum();
-        let level = traded_va_data / model_va;
+        let r_level = traded_va_data / model_va;
         for g in (0..n_g).filter(|&g| traded[g]) {
-            scaling.r[g] *= level;
+            scaling.r[g] *= r_level;
         }
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
