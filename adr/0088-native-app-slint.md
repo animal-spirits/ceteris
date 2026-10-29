@@ -1,6 +1,6 @@
 # 0088. Fully native app with Slint panels
 
-Status: accepted (owner, 2026-10-24)
+Status: accepted (owner, 2026-10-24); amended by 0244 (borders and labels)
 Date: 2026-10-24
 Design sections: 19.1 (App shell, Map UI), 19.3, 22.1 (App); amends ADR 0011
 
