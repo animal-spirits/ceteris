@@ -1,5 +1,5 @@
-//! Reading the world pack built by `python -m ceteris.packs` (Section 16.1): Arrow IPC
-//! files, one record batch per table.
+//! Reading the world pack built by `ceteris pack build` (Section 16.1): Arrow IPC files, one
+//! record batch per table.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use arrow_ipc::reader::FileReader;
 
 use crate::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
 
-/// Bumped with `PACK_FORMAT` in `python/ceteris/packs/build.py`.
+/// Bumped with `PACK_FORMAT` in `ceteris_pack::table`.
 pub const PACK_FORMAT: &str = "3";
 
 #[derive(Debug)]
