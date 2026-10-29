@@ -171,7 +171,7 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
 /// (`ceteris_reference::uniqueness`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
-/// special case the SPEC states) is 0.922 at the fixture's theta and value-added shares, at most
+/// special case the SPEC states) is 0.946 at the fixture's theta and value-added shares, at most
 /// 1, so one equilibrium is presumed; `test_trade_only_is_unique` checks it on the same export.
 #[test]
 fn v1_fixture_frictionless_matches_reference() {
