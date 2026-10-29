@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The Python reference and calibration packages are deleted: run this script from a checkout of
+# the commit before their deletion (`git log --diff-filter=D -- python/ceteris/reference`), whose
+# Python side it drives.
 # Step 4 parity: the reference's inputs, PIGL demand, dense kernels, balanced Sinkhorn, A.3 bound,
 # model evaluation and equilibrium against the Python reference on the fixture export and on an
 # export of the pack. The Python side dumps what it derives (step4_dump.py); the Rust `parity`

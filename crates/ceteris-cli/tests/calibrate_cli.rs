@@ -1,5 +1,5 @@
-//! `ceteris calibrate`: the calibration of an export directory, as
-//! `python -m ceteris.reference calibrate --inputs` writes and prints it.
+//! `ceteris calibrate`: the calibration of an export directory, written and printed, and the
+//! stability table.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -105,7 +105,7 @@ fn calibrate_needs_one_input() {
     }
 }
 
-/// The stability table of the fixture, as the Python table printed it.
+/// The stability table of the fixture.
 #[test]
 fn calibrate_stability_prints_the_fixture_table() {
     let run = ceteris(&["calibrate", "stability", path(&fixture())]);

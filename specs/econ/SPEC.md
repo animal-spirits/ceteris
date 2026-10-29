@@ -141,7 +141,7 @@ only its own country's provinces and gateways (from a province) or other countri
 network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 
 **Calibration tables** (not built by the pack pipeline; written by
-`python -m ceteris.reference calibrate --pack DIR`, Calibration below), keyed by pack province:
+`ceteris calibrate --pack DIR`, Calibration below), keyed by pack province:
 `econ_calib.arrow` per enterprise (A, VA0, L0, a_VA, own price, output, sales, profit, coef and
 input stock per good; the summary in its `calibration` metadata), `econ_calib_cells.arrow` per
 (province, good) (posted and buyer prices, lead, Q, D by buyer class, sales, merchant stock),

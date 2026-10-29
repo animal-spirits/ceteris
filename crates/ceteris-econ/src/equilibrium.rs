@@ -1,4 +1,4 @@
-//! Starting a run from the GE reference equilibrium (`python -m ceteris.reference solve`):
+//! Starting a run from the GE reference equilibrium (`ceteris reference solve`):
 //! the solution's prices, wages, employment and output, with every stock and pop balance at
 //! its steady-state value, so that a frictionless run starting there stays there.
 
@@ -26,7 +26,7 @@ use crate::world::{EconWorld, MINT, structural_digest, to_minor};
 const INCOME_TOLERANCE: f64 = 1e-15;
 const INCOME_ITERATIONS: usize = 100;
 
-/// A reference solution as written by `python -m ceteris.reference solve --out DIR`.
+/// A reference solution as written by `ceteris reference solve --out DIR`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Equilibrium {
     /// `[province * N_GOODS + g]`: posted price of active cells (origin markets of traded

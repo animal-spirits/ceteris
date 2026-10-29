@@ -12,6 +12,9 @@ With --synthetic, seeded designs covering every path; with --baci PACK, every `p
 `gravity.estimate` makes on 2000 BACI and PACK; with --yotov ZIP, those of `gravity.yotov`.
 
     python step4_ppml_dump.py OUT (--synthetic | --baci PACK | --yotov ZIP)
+
+The Python reference and calibration packages are deleted: run it from a checkout of the commit
+before their deletion (`git log --diff-filter=D -- python/ceteris/reference`).
 """
 
 import argparse

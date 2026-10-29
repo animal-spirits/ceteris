@@ -476,7 +476,7 @@ fn hdfe_rejects_bad_input() {
     y[0] = -1.0;
     let err = ppml::hdfe(&y, &[&o, &d], &t.reg(), None).unwrap_err();
     assert!(matches!(&err, PpmlError::Invalid(s) if s.starts_with("flows must be finite")));
-    // One cluster: G / (G - 1) has no value (Python divides by zero).
+    // One cluster: G / (G - 1) has no value (a division by zero).
     let one = vec![7; t.y.len()];
     let err = ppml::hdfe(&t.y, &[&o, &d], &t.reg(), Some(&one)).unwrap_err();
     assert_eq!(

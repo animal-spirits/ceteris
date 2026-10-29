@@ -27,8 +27,8 @@
 //! prices (q_d for traded goods, the local price for local goods) and leaving out cells with no
 //! reachable origin (q_d infinite), as `EconWorld::world_price_index`.
 //!
-//! Sums follow numpy's order (sequential `bincount` and `add.at`, pairwise `sum`), so an
-//! evaluation reproduces the Python reference's to rounding.
+//! Sums run in a fixed order (sequential per index, pairwise over contiguous runs), so an
+//! evaluation is reproducible to the last bit.
 //!
 //! Layouts: (P, G) matrices are [`Mat`]s; routing works on flat good-major vectors, index
 //! `g * P + i` for provinces and `g * N + a` for gateways; country pairs are flat (C, C, G),

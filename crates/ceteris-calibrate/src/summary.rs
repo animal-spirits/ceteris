@@ -6,7 +6,8 @@ use crate::json::Json;
 use crate::steady::{Info, Steady};
 
 impl Info {
-    /// As the Python calibration's `info` dictionary.
+    /// The summary's entries: r, the passes and their history, the Sinkhorn sweeps and
+    /// residual, the weight spread per good and the time.
     pub fn json(&self) -> Vec<(String, Json)> {
         let floats = |v: &[f64]| Json::List(v.iter().map(|&x| Json::Float(x)).collect());
         let history = self

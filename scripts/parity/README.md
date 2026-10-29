@@ -67,4 +67,8 @@ canonical JSON and the raster pixel to H3 cell mapping while the port was under 
 removed with the Python econ package; their result is recorded in ADR 0113's step 2 As built
 entry. The fixture of `pixel_cells_match_python_on_border_windows` stays as recorded.
 
+The Python reference and calibration packages (`python/ceteris/reference`,
+`python/ceteris/calibrate`) and their tests are deleted after step 4's parity; `step4.sh` and its
+dump scripts stay and must be run from a checkout of the commit before that deletion.
+
 The scripts are deleted with the Python they drive (ADR 0113, step 5).

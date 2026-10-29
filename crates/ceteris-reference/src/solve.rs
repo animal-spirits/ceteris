@@ -548,8 +548,7 @@ mod tests {
     }
 
     /// A Jacobian product that leaves the finite range errs, and GMRES passes the error on, so
-    /// Newton-Krylov stops with `NoConvergence` and the solve falls back to tatonnement
-    /// (solve.py lets scipy's error escape instead).
+    /// Newton-Krylov stops with `NoConvergence` and the solve falls back to tatonnement.
     #[test]
     fn nonfinite_jacobian_product_errs() {
         let dir =
