@@ -72,8 +72,9 @@ pub fn anchor(geom: &MultiPolygon) -> Option<(f64, f64)> {
     Some((c.x, c.y))
 }
 
-/// GEOS's `Centroid` of a polygon, sum for sum: triangles fanned from the first shell vertex,
-/// signed by ring orientation. None for a polygon without area.
+/// GEOS's `Centroid` of a polygon with area, sum for sum: triangles fanned from the first
+/// shell vertex, signed by ring orientation. None for a polygon without area; the caller then
+/// takes geo's centroid, which need not match GEOS's line or point centroid bit for bit.
 fn centroid(poly: &Polygon) -> Option<Coord> {
     let base = *poly.exterior().0.first()?;
     let (mut cx, mut cy, mut area2) = (0.0, 0.0, 0.0);
