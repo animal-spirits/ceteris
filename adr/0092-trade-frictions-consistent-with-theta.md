@@ -91,7 +91,7 @@ not three: 2.91 (food; chemicals and metals), 4.14 (machinery, electronics and v
 mining). P05 therefore becomes four values, one per class. Good 5 is renamed "Chemicals and
 metals". The PPML diagnostics on the new goods are in ADR 0022.
 
-Side effects of the move, decided with it (B1 review, 2026-10-29): refined fuels now take the
+Side effects of the move, accepted in the B1 review (2026-10-29): refined fuels now take the
 primary tariff group (group 0, with good 1; under good 5 they took the manufactured rate), which is
 closer to WDI's primary-products rate (SITC 0 to 4 and 68, fuels included); good 5 stays a
 storable commodity (P151) without refined fuels, since metals are; good 1's P02 coverage stays 1
