@@ -33,6 +33,7 @@ Fix them now. None changes a result away from the edge cases.
 - **Exact local fill.** Per province, the fills f_k of the three local goods solve a monotone
   piecewise-linear system. Enumerate the at most 2^3 regimes of which users are stock-covered,
   solve each, and keep the largest feasible f. No iteration bound and no ad hoc clearing remain.
+  (Amended 2026-10-29: one fill per good, the limit of a stated iteration; see Amendment.)
 - **Uncapped wage search.** Find the root of sum_g L*_ig(w) = (1 - u*) L^s on uncapped targets;
   cap only the allocation.
 - **Kernel range.** Store ln K in f32 (or K in f64), and exponentiate after the per-country
@@ -44,6 +45,7 @@ Fix them now. None changes a result away from the edge cases.
   reference.
 - The exact fill equals the converged iteration on every fixture case and on random small
   provinces (1e-12); the cycle cases of `local_chain_terminates_on_cycles` settle in one solve.
+  (Amended: the iteration is the fill iteration of the Amendment, run to convergence.)
 - The frictionless wage matches the closed form where one target reaches L^s.
 - Kernel round trip at tau 1e4 and theta 64.85.
 
@@ -75,3 +77,57 @@ the uncapped targets (`production::labour_target_uncapped`, infinite at the corn
 finite profit maximum exists, as the GE reference's), and only the allocation caps at L^s.
 
 Not built, and still open: the exact local fill.
+
+## Amendment (2026-10-29): one fill per local good
+
+Owner ruling (2026-10-29, option 2A of the first attempt). The Decision's "largest feasible f"
+has no unique meaning: raising one fill raises both the output of the goods its users make and
+their demand for other local goods, so the feasible fills are not closed under the
+componentwise maximum. The rule is instead the limit of one stated iteration, solved exactly.
+
+**Rule.** In a province, enterprise e has output cap_e (capacity and traded input stocks),
+local coefficients a_ek (0 for its own good, which its own output serves first), local stocks
+b_ek, and the producer p_k of good k keeps the share a_kk of its output. Each local good k has
+one fill F_k in [0, 1], and
+
+    Y_e = cap_e min_{k : a_ek > 0} F_k        (cap_e if e uses no other local good).
+
+Good k fits at F when what its users' stocks cannot cover fits what its producer leaves:
+
+    U_k(F) = sum_e max(a_ek Y_e - b_ek, 0)  <=  R_k(F) = (1 - a_kk) Y_{p_k}     (0 without a producer).
+
+The fill iteration starts at F = 1 and runs passes over k = 7, 8, 9 in order; each step sets
+F_k to the largest x in [0, F_k] at which k fits, the other fills as they stand. F never rises,
+so the passes converge; the fills are their limit, and every good fits there. Draws from output
+are then split as before (output first; short, each user takes what its stock cannot cover and
+the rest pro rata to its usable stock).
+
+**Exact solve.** Each step is exact: U_k is continuous, nondecreasing and piecewise linear in
+F_k, with kinks where a user's stock stops covering it (a_ek cap_e x = b_ek) and where another
+of its fills becomes its smallest; the step finds the root on the right piece in closed form,
+then lowers it by rounding units until the fit holds as evaluated in floating point. Passes run
+until one changes nothing. A cycle (two local goods each feeding the other's producer) converges
+only geometrically, so after each pass that cut some goods C the limit is solved directly: for
+the regime of the pass (each user's smallest fill, lowest good on a tie, and the users whose
+need exceeds their stock), the goods of C fitting with equality are a linear system of size at
+most 3 in F_C. Its solution is taken when it lies in [0, F] and keeps the regime, and every
+good outside C still fits there; the next pass then confirms it. Otherwise the passes go on,
+and the regime changes only finitely often, since F only falls. No pass bound and no clearing
+step remain.
+
+**Ties and cycles.** A user's output depends only on the smallest of its fills, so ties among
+its fills do not change Y; the regime takes the lowest good, and the check accepts the solution
+only where that good is still smallest. A cycle settles in one solve plus the confirming pass.
+
+**Why the old chain differs.** The old chain multiplied each enterprise's output by the
+smallest fill of its local inputs in each pass, so its total cut was the product of the
+per-pass minima, not one fill per good. The two differ wherever goods bind in different passes:
+with goods A (producer pA, users pB, u1, u2) and B (producer pB, users pA, u1), A short first
+and B short after pB is cut, u1 ends at the product of both goods' cuts and u2 at A's alone, so
+u1 runs below min(F_A, F_B). The old bound of 32 passes then left cycles still converging and
+cleared them by cutting the users that make no local good, which changed who was rationed.
+
+**Consequences.** State hashes move wherever the chain binds (on the fixture's default run 6 of
+30,000 province ticks) and on every tick of the cycle fixtures. The steady state never rations,
+so the calibration and the GE reference, whose local output solves the unrationed Leontief
+system, do not change.

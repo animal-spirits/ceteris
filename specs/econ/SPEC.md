@@ -27,7 +27,7 @@ investment, finance, the state and politics are later phases.
 | Intermediates Leontief plus a CES energy nest (7.2) | All intermediates Leontief | The energy nest comes with energy and emissions (P8) |
 | Putty-clay intermediates: coefficients per capacity vintage, chosen at investment by a CES at P38, Leontief once installed (7.2, ADR 0020) | Each enterprise runs on its own coefficient vector (`EntData.coef`, `Layout.coef`), one vintage: its country's 2000 ICIO column as cost shares at base delivered prices (row above), filled at load (`EconInputs::set_coefficients`). S09 `Technology::FixedLeontief` reads that base column (`EconInputs::base_column`) instead. With one vintage both settings read the same numbers and run bit for bit alike, state hashes included: the switch enters the static digest only once some enterprise's coefficients differ from its country's (`putty_clay_one_vintage_equals_fixed_leontief`) | No investment in P2, so no vintage beyond the first; the vintage choice and P38 arrive with investment (7.4) |
 | Input-output coefficients a_kg as quantities (7.2) | ICIO coefficients are cost shares at base delivered prices: coef_e,k = a_kg / q_k(base), q_k(base) the base delivered unit price of k at the enterprise's province (`ProvinceData::base_price`: 1 for local goods, sourcing at prices 1 for traded goods, tariffs and iceberg included; coefficient 0 where unreachable), under both S09 settings (owner decision, 2026-10-25; ADR 0020 mapping) | At base prices every enterprise's input cost share equals the ICIO share, a_VA = 1 - sum_k a_kg > 0, and the national IO value structure is exact; read as quantities, delivered prices above 1 made inputs cost more than output for 11.5% of traded VA at prices 1 |
-| Within-tick rationing, inventories as the buffer (8.2, 19.4, ADR 0020) | Local goods (utilities, construction, services): a same-tick chain at E2 per province (`local.rs`, Production below): a shortage of a local good cuts its users' output in the tick it happens. Traded goods keep their stocks and transit lags. Departures from the migration brief's chain, each needed for exact Leontief use: (1) a producer's own use of its good comes out of its output first, since cutting the producer pro rata with its users leaves the ratio of output to need unchanged and with empty stocks drives the pair to zero; (2) each user covers its residue from its own stock (the ledger holds stocks per enterprise), so the stock that counts for a good is sum min(b, n), and output is split so that each user's residue fits its stock; (3) each good's common fill is solved exactly for its users (the limit of repeating the brief's f_k), so a single shortage settles in two iterations; (4) a cycle between two local goods can still converge slowly (loop gain near 1 when both are fully used): at the bound the remaining shortage is cleared by cutting the users that produce no local good, which changes no local output, and where the producers of local goods alone do not fit, by stopping the users whose stock cannot cover them, so input use always equals coef Y exactly (MIGRATION Task 8) | ADR 0020 Mapping (owner, 2026-10-24): local goods have no transit, so their production, input use and rationing run as one pass within the tick |
+| Within-tick rationing, inventories as the buffer (8.2, 19.4, ADR 0020) | Local goods (utilities, construction, services): a same-tick chain at E2 per province (`local.rs`, Production below): a shortage of a local good cuts its users' output in the tick it happens. Traded goods keep their stocks and transit lags. Departures from the migration brief's chain, each needed for exact Leontief use: (1) a producer's own use of its good comes out of its output first, since cutting the producer pro rata with its users leaves the ratio of output to need unchanged and with empty stocks drives the pair to zero; (2) each user covers its residue from its own stock (the ledger holds stocks per enterprise), so the stock that counts for a good is sum min(b, n), and output is split so that each user's residue fits its stock; (3) one fill per local good, every user of the good at the smallest fill of its local inputs, solved exactly as the limit of the fill iteration (ADR 0093, Amendment), with no pass bound and no clearing step, so input use always equals coef Y exactly | ADR 0020 Mapping (owner, 2026-10-24): local goods have no transit, so their production, input use and rationing run as one pass within the tick |
 | VA over K, effective L by education, land or resources T (7.2) | Normalized CES over one fixed factor F (capital, land and resources together) and effective labour | No investment in P2, so K and T never move separately; one fixed factor keeps the reference model small |
 | Pops keyed by province, ethnic group, education, labour status (6.1) | Province x education (3 levels); labour status as employed and unemployed counts inside each pop | Ethnicity and status transitions are P4 |
 | Wage posting and matching function (8.7) | Wage moves with excess labour demand, with downward rigidity; employment rationed pro rata | Matching and occupational mobility are P4 |
@@ -209,21 +209,24 @@ transit as the lag. Local inputs (goods 7 to 9) come from this tick's local outp
 enterprise's stock second, in the same-tick chain (ADR 0020, `local.rs`), run per province:
 
 ```
-Y_e = min(VA / a_VA, min over traded k of M_k / coef_k)        every enterprise of the province
-repeat up to N_LOCAL = 32 times, for each local good k:
+cap_e = min(VA / a_VA, min over traded k of M_k / coef_k)     every enterprise of the province
+one fill F_k in [0, 1] per local good k (ADR 0093, Amendment):
+    Y_e  = cap_e min over local k used by e (its own good left out) of F_k   (cap_e if none)
     R_k  = (1 - coef_kk) Y_p                                    p the producer of k: own use first
-    n_ek = coef_ek Y_e, b_ek = e's stock of k                   every other user e
-    f_k  = largest x <= 1 with x sum n_ek <= R_k + sum min(b_ek, x n_ek)
-         = the limit of f_k <- min(1, (R_k + sum min(b_ek, n_ek)) / sum n_ek) with every user cut alike
-  Y'_e = Y_e min over local k used by e (its own good left out) of f_k
-  stop when max_e |Y'_e - Y_e| <= 1e-12 Y_e; Y = Y'
-after the bound: a good still short is cleared by cutting the users that produce no local good
-(no local output moves); if its producers alone do not fit, the users their stock cannot cover stop
-draws: with output enough, every user draws n_ek from output; short, each draws max(n_ek - b_ek, 0)
-plus the rest of R_k pro rata to min(b_ek, n_ek), its stock covering the remainder
+    U_k  = sum_e max(coef_ek Y_e - b_ek, 0)                     b_ek = e's stock of k
+    k fits when U_k <= R_k
+F = the limit of the fill iteration: from F = 1, passes over k = 7, 8, 9, each setting
+    F_k = largest x <= F_k at which k fits, the other fills as they stand
+solved exactly: each step is the root of a piecewise-linear U_k on its piece; after a pass that
+cuts goods C, the limit of the pass's regime (each user's smallest fill, the users whose need
+exceeds their stock) solves the goods of C fitting with equality, kept where it holds the
+regime and leaves no other good short; passes stop when one changes nothing
+draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
+max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
 
-Y never rises. The draws are paid at the posted price at E2, count in the market's demand and
+Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
+lowers its root by rounding units until it does), so no clearing step is needed. The draws are paid at the posted price at E2, count in the market's demand and
 sales, and come before household demand under every S11 setting (the chain runs before E3); at
 T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
@@ -845,8 +848,11 @@ texture fed from core columns.
   good before households, and Priority fills intermediate orders first at origins
   (`local_chain_respects_intermediate_priority`); cutting coal output leaves downstream output
   unchanged in that tick and lowers it once stocks run out (`traded_shortage_still_lags`); cycles
-  among local goods (`local_chain_terminates_on_cycles`); S11 Proportional gives one fill ratio
-  (`proportional_rationing_switch`); `fill` and `split` in `local.rs`.
+  among local goods settle in one solve (`local_chain_terminates_on_cycles`); the exact fills equal
+  the fill iteration run to convergence, with its steps found by bisection, on every province tick
+  of the fixture runs and on random small provinces, at 1e-12 (`exact_fill_equals_converged_iteration`);
+  S11 Proportional gives one fill ratio (`proportional_rationing_switch`); `step` and `split` in
+  `local.rs`.
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
   numerical maximization, wage step and clip, rigidity on nominal cuts
   (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, income split, rounding of payments. PIGL (`demand.rs`): pop
@@ -941,10 +947,6 @@ texture fed from core columns.
   province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
   (food 0.118 for 0.120). Matching the aggregate exactly would need a per-country solve over
   its pops.
-- Same-tick chain in cycles: two local goods that each take most of the other's output converge
-  slowly (geometrically, at a loop gain near 1), and at the bound the chain clears the rest by
-  cutting the users that produce no local good rather than all users pro rata; on the fixture it
-  never reaches the bound. Measure on the pack (Task 19) and revisit the bound or the solve there.
 - Money headroom (ADR 0106): the mint, which holds minus the world's money (-1.15e16 minor units
   on the full pack), the pools, markets and gateways are `i128`, so the overflow the i64 ledger hit
   at a uniform scale of about 802 on prices, wages and balances (ADR 0089, Evidence) is gone
