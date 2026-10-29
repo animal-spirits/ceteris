@@ -1,6 +1,7 @@
 //! Pack tables: Arrow output with a recorded digest, the comparison used to check ports, and the
 //! readers of the econ sources.
 
+pub mod build;
 pub mod compare;
 pub mod econ;
 pub mod fetch;

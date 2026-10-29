@@ -341,13 +341,15 @@ mod clip {
     }
 
     /// Counties each clipped to the province it overlaps most, ordered by province (stable),
-    /// with their anchors; and the misfit between the sources over counties that fit a
-    /// province, as the summed areas of those counties whole and clipped.
+    /// with their anchors; the misfit between the sources over counties that fit a province,
+    /// as the summed areas of those counties whole and clipped; and how many counties overlap
+    /// no province of their country.
     pub struct Clipped {
         pub province: Vec<u32>,
         pub counties: Vec<County>,
         pub fits: f64,
         pub fits_inside: f64,
+        pub unassigned: usize,
     }
 
     pub fn clip(
@@ -361,6 +363,7 @@ mod clip {
             .map(|p| [p.country.as_str(), p.country_now.as_str()])
             .collect();
         let home = assign(units, &geoms, &countries)?;
+        let unassigned = home.iter().filter(|h| h.is_none()).count();
         let pg = geoms.iter().map(from_geo).collect::<Result<Vec<_>, _>>()?;
         let (mut fits, mut fits_inside) = (0.0, 0.0);
         let mut clipped = Vec::new();
@@ -399,6 +402,7 @@ mod clip {
             counties,
             fits,
             fits_inside,
+            unassigned,
         })
     }
 }

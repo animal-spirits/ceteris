@@ -68,6 +68,8 @@ pub struct Borders {
     pub country: BTreeMap<String, String>,
     pub province: BTreeMap<String, String>,
     pub sovereign: BTreeMap<String, String>,
+    /// Names for codes Natural Earth does not carry.
+    pub names: BTreeMap<String, String>,
 }
 
 pub fn borders() -> Result<Borders, String> {
@@ -94,6 +96,7 @@ pub fn borders() -> Result<Borders, String> {
         country: map("country"),
         province: map("province"),
         sovereign: map("sovereign"),
+        names: map("names"),
     })
 }
 

@@ -12,19 +12,15 @@ use std::path::Path;
 use std::sync::Arc;
 
 use arrow_array::types::{Float64Type, UInt32Type};
-use arrow_array::{ArrayRef, Float64Array, UInt32Array, UInt64Array};
+use arrow_array::{ArrayRef, Float64Array, UInt32Array};
 use geo::{Coord, LineString, MultiPolygon, Polygon};
-use h3o::{CellIndex, LatLng, Resolution};
 
-use super::raster_terrain::{
-    Elevation, FINEST, SAMPLE_DEPTH, Terrain, assign_cells, cell_area_km2, province_means, terrain,
-};
+use super::raster_terrain::{Elevation, SAMPLE_DEPTH};
 use super::{fills, resources, sphere};
+use crate::build::{ETOPO, cell_columns, resolution, sample, sample_counties};
 use crate::econ::build::values;
 use crate::sources::{CONFIG_DIR, read_table, workspace_root};
 use crate::{fetch, table};
-
-const ETOPO: &str = "ETOPO_2022_v1_60s_N90W180_surface.tif";
 
 /// The geometries of a vertex table, in `geom` order.
 pub fn read_geoms(path: &Path) -> Result<Vec<MultiPolygon>, String> {
@@ -67,17 +63,6 @@ pub fn read_geoms(path: &Path) -> Result<Vec<MultiPolygon>, String> {
         .collect())
 }
 
-fn resolution(config: &toml::Table, key: &str) -> Result<Resolution, String> {
-    let r = config
-        .get(key)
-        .and_then(toml::Value::as_integer)
-        .ok_or_else(|| format!("pack.toml: no {key}"))?;
-    u8::try_from(r)
-        .ok()
-        .and_then(|r| Resolution::try_from(r).ok())
-        .ok_or_else(|| format!("pack.toml: {key} = {r}"))
-}
-
 fn f64s(v: Vec<f64>) -> ArrayRef {
     Arc::new(Float64Array::from(v))
 }
@@ -94,32 +79,6 @@ fn named(columns: Vec<(&str, ArrayRef)>) -> Vec<(String, ArrayRef)> {
         .into_iter()
         .map(|(n, a)| (n.to_owned(), a))
         .collect()
-}
-
-fn cell_columns(
-    cells: &[CellIndex],
-    (owner_name, owner): (&str, Vec<u32>),
-    area: Vec<f64>,
-    t: Terrain,
-) -> Vec<(String, ArrayRef)> {
-    let cells = UInt64Array::from_iter_values(cells.iter().map(|&c| u64::from(c)));
-    named(vec![
-        ("cell", Arc::new(cells)),
-        (owner_name, Arc::new(UInt32Array::from(owner))),
-        ("area_km2", f64s(area)),
-        ("elev_mean_m", f64s(t.elev_mean_m)),
-        ("elev_std_m", f64s(t.elev_std_m)),
-        ("tri_m", f64s(t.tri_m)),
-    ])
-}
-
-/// Area-weighted terrain means per owner, as `build.build` computes them.
-fn means(owner: &[u32], area: &[f64], t: &Terrain, n: usize) -> Terrain {
-    Terrain {
-        elev_mean_m: province_means(owner, area, &t.elev_mean_m, n),
-        elev_std_m: province_means(owner, area, &t.elev_std_m, n),
-        tri_m: province_means(owner, area, &t.tri_m, n),
-    }
 }
 
 /// A vertex table of the geometries: one row per vertex, rings closed, in their stored order.
@@ -175,10 +134,7 @@ pub fn build(
 
     let root = workspace_root();
     let config = read_table(&root.join(CONFIG_DIR).join("pack.toml"))?;
-    let split_area = config
-        .get("split_area_km2")
-        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
-        .ok_or("pack.toml: no split_area_km2")?;
+    let split_area = crate::build::split_area_km2(&config)?;
     let admin1 = fetch::path_of("ne_10m_admin_1_states_provinces.zip");
     let admin0 = fetch::path_of("ne_10m_admin_0_countries.zip");
     let units = counties::load(&root)?;
@@ -319,32 +275,9 @@ fn dump_into(
     };
 
     let canchor = anchors(counties)?;
-    let (ccells, cowner) = assign_cells(counties, &canchor, resolution(&config, "county_res")?)?;
-    let cterr = terrain(&ccells, &z, 0)?;
-    let carea = cell_area_km2(&ccells);
-    let mut cstat = means(&cowner, &carea, &cterr, counties.len());
-    // Slivers whose only cell went to a neighbour are sampled at their anchor.
-    let bare: Vec<usize> = (0..counties.len())
-        .filter(|&i| cstat.elev_mean_m[i].is_nan())
-        .collect();
-    let at: Vec<CellIndex> = bare
-        .iter()
-        .map(|&i| {
-            LatLng::new(canchor[i].1, canchor[i].0)
-                .map(|ll| ll.to_cell(FINEST))
-                .map_err(|e| e.to_string())
-        })
-        .collect::<Result<_, _>>()?;
-    let point = terrain(&at, &z, 0)?;
-    for (k, &i) in bare.iter().enumerate() {
-        cstat.elev_mean_m[i] = point.elev_mean_m[k];
-        cstat.elev_std_m[i] = point.elev_std_m[k];
-        cstat.tri_m[i] = point.tri_m[k];
-    }
-    write(
-        &out.join("county_cells.arrow"),
-        cell_columns(&ccells, ("county", cowner), carea, cterr),
-    )?;
+    let cs = sample_counties(counties, &canchor, resolution(&config, "county_res")?, &z)?;
+    write(&out.join("county_cells.arrow"), cell_columns("county", &cs))?;
+    let cstat = cs.means;
     write(
         &out.join("counties.arrow"),
         named(vec![
@@ -362,20 +295,21 @@ fn dump_into(
 
     let n = provinces.len();
     let anchor = anchors(provinces)?;
-    let (cells, owner) = assign_cells(provinces, &anchor, resolution(&config, "land_res")?)?;
-    let terr = terrain(&cells, &z, SAMPLE_DEPTH)?;
-    let area = cell_area_km2(&cells);
-    let stat = means(&owner, &area, &terr, n);
-    let tri_m = stat.tri_m.clone();
+    let ps = sample(
+        provinces,
+        &anchor,
+        resolution(&config, "land_res")?,
+        &z,
+        SAMPLE_DEPTH,
+    )?;
     let mut count = vec![0u32; n];
-    for &o in &owner {
+    for &o in &ps.owner {
         count[o as usize] += 1;
     }
     let res = resources::counts(&fetch::path_of(resources::MRDS), provinces)?;
-    write(
-        &out.join("cells.arrow"),
-        cell_columns(&cells, ("province", owner), area, terr),
-    )?;
+    write(&out.join("cells.arrow"), cell_columns("province", &ps))?;
+    let stat = ps.means;
+    let tri_m = stat.tri_m.clone();
     let mut columns = named(vec![
         ("lon", f64s(anchor.iter().map(|a| a.0).collect())),
         ("lat", f64s(anchor.iter().map(|a| a.1).collect())),
