@@ -5,9 +5,9 @@ use std::rc::Rc;
 use ceteris_app::bench::Bench;
 use ceteris_app::camera::Camera;
 use ceteris_app::fill::Fill;
-use ceteris_app::map::Map;
+use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes;
-use ceteris_app::web::Provinces;
+use ceteris_app::web::{Counties, Provinces};
 
 slint::include_modules!();
 
@@ -19,8 +19,11 @@ fn pack_dir() -> PathBuf {
 }
 
 struct State {
-    fill: Option<Fill>,
+    /// Taken when the map uploads them.
+    fills: Option<(Fill, Option<Fill>)>,
     provinces: Provinces,
+    counties: Option<Counties>,
+    style: Style,
     map: Option<Map>,
     camera: Option<Camera>,
     viewport: [f64; 2],
@@ -42,20 +45,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = pack_dir().join("web");
     let fill = Fill::read(&dir.join("provinces.fill"))?;
     let provinces = Provinces::read(&dir.join("provinces.json"))?;
+    // Counties are optional: a pack built without them still opens.
+    let county_fill = Fill::read(&dir.join("counties.fill")).ok();
+    let counties = Counties::read(&dir.join("counties.json")).ok();
+    let bench = std::env::var_os("CETERIS_BENCH").map(|_| Bench::new());
 
     slint::BackendSelector::new()
         .require_wgpu_30(slint::wgpu_30::WGPUConfiguration::default())
         .select()?;
     let app = AppWindow::new()?;
     let state = Rc::new(RefCell::new(State {
-        fill: Some(fill),
+        fills: Some((fill, county_fill)),
         provinces,
+        counties,
+        // The benchmark recolours counties, so it shows them.
+        style: Style {
+            county_fill: bench.is_some(),
+            county_borders: false,
+        },
         map: None,
         camera: None,
         viewport: [1.0, 1.0],
         scale_factor: 1.0,
         pick: None,
-        bench: std::env::var_os("CETERIS_BENCH").map(|_| Bench::new()),
+        bench,
     }));
 
     let s = state.clone();
@@ -98,6 +111,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         weak.upgrade().inspect(|a| a.window().request_redraw());
     });
 
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_counties(move |on| {
+        s.borrow_mut().style.county_borders = on;
+        weak.upgrade().inspect(|a| a.window().request_redraw());
+    });
+
     let weak = app.as_weak();
     app.window().set_rendering_notifier(move |rendering, api| {
         let slint::GraphicsAPI::WGPU30 { device, queue, .. } = api else {
@@ -107,9 +127,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s = state.borrow_mut();
         match rendering {
             slint::RenderingState::RenderingSetup => {
-                let fill = s.fill.take().expect("setup runs once");
-                let map = Map::new(device, &fill);
-                map.set_colours(queue, &modes::political(&s.provinces));
+                let (fill, counties) = s.fills.take().expect("setup runs once");
+                let map = Map::new(
+                    device,
+                    queue,
+                    &fill,
+                    counties.as_ref(),
+                    &s.provinces.country,
+                );
+                map.set_colours(queue, Layer::Provinces, &modes::political(&s.provinces));
                 s.map = Some(map);
             }
             slint::RenderingState::BeforeRendering => {
@@ -125,34 +151,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     map,
                     bench,
                     provinces,
+                    counties,
+                    style,
                     ..
                 } = &mut *s;
                 let Some(map) = map.as_mut() else { return };
                 let camera = match bench.as_mut() {
-                    Some(b) => b.frame(map, queue, provinces.id.len(), viewport, camera),
+                    Some(b) => b.frame(map, queue, viewport, camera),
                     None => camera,
                 };
-                if let Some(texture) =
-                    map.render(device, queue, viewport.map(|v| v as u32), &camera, pick)
-                {
+                if let Some(texture) = map.render(
+                    device,
+                    queue,
+                    viewport.map(|v| v as u32),
+                    &camera,
+                    *style,
+                    pick,
+                ) {
                     match slint::Image::try_from(texture) {
                         Ok(image) => app.set_map_texture(image),
                         Err(e) => eprintln!("map texture: {e}"),
                     }
                 }
                 if let Some(picked) = map.poll_pick(device) {
-                    app.set_status(match picked {
-                        Some(p) => {
-                            let i = p as usize;
-                            let c = provinces.country[i] as usize;
-                            format!(
-                                "{} ({}), {}",
-                                provinces.name[i], provinces.id[i], provinces.countries.name[c]
-                            )
-                            .into()
-                        }
-                        None => "".into(),
-                    });
+                    app.set_status(describe(provinces, counties.as_ref(), picked).into());
                 } else if s.map.as_ref().is_some_and(Map::pick_pending) {
                     app.window().request_redraw();
                 }
@@ -170,4 +192,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     app.run()?;
     Ok(())
+}
+
+fn describe(provinces: &Provinces, counties: Option<&Counties>, picked: Picked) -> String {
+    let Some(p) = picked.province.map(|p| p as usize) else {
+        return String::new();
+    };
+    let country = &provinces.countries.name[provinces.country[p] as usize];
+    let place = format!("{} ({}), {country}", provinces.name[p], provinces.id[p]);
+    match (picked.county, counties) {
+        (Some(c), Some(counties)) => format!("{}, {place}", counties.name[c as usize]),
+        _ => place,
+    }
 }

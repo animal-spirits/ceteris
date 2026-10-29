@@ -1,6 +1,6 @@
 // Fills coloured per feature from a texture (ADR 0010); feature ids go to a second target for
-// picking. Flat: instance k draws the world shifted by (first + k) in x, so the map wraps.
-// Globe: an orthographic sphere seen from above the centre; the far side is discarded.
+// picking and borders. Flat: instance k draws the world shifted by (first + k) in x, so the map
+// wraps. Globe: an orthographic sphere seen from above the centre; the far side is discarded.
 
 struct View {
     centre: vec2f,
@@ -9,13 +9,14 @@ struct View {
     globe: u32,
     sea: vec4f,
     paper: vec4f,
+    ink: vec4f,
+    county_borders: u32,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
 @group(0) @binding(1) var colours: texture_2d<f32>;
 
 const TEX_WIDTH: u32 = 1024u;
-
 const PI: f32 = 3.14159265358979;
 
 struct VsOut {
@@ -57,7 +58,8 @@ fn vs(@location(0) xy: vec2f, @location(1) feature: u32, @builtin(instance_index
 
 struct FsOut {
     @location(0) colour: vec4f,
-    @location(1) id: u32,
+    // Province ids in x, county ids in y; each pipeline's write mask keeps its own channel.
+    @location(1) id: vec2u,
 }
 
 @fragment
@@ -65,25 +67,68 @@ fn fs(in: VsOut) -> FsOut {
     if in.facing < 0.0 {
         discard;
     }
-    return FsOut(in.colour, in.id);
+    return FsOut(in.colour, vec2u(in.id));
 }
 
-// Background: on the globe, sea inside the disc and paper outside; flat, all sea.
+// Full-screen passes: a triangle that covers the viewport.
 
-struct BgOut {
+struct ScreenOut {
     @builtin(position) pos: vec4f,
     @location(0) ndc: vec2f,
 }
 
 @vertex
-fn vs_bg(@builtin(vertex_index) i: u32) -> BgOut {
+fn vs_screen(@builtin(vertex_index) i: u32) -> ScreenOut {
     let ndc = vec2f(f32(i & 1u) * 4.0 - 1.0, f32(i >> 1u) * 4.0 - 1.0);
-    return BgOut(vec4f(ndc, 0.0, 1.0), ndc);
+    return ScreenOut(vec4f(ndc, 0.0, 1.0), ndc);
+}
+
+// Background: on the globe, sea inside the disc and paper outside; flat, all sea.
+@fragment
+fn fs_bg(in: ScreenOut) -> FsOut {
+    let r = in.ndc / view.k;
+    let outside = view.globe == 1u && dot(r, r) > 1.0;
+    return FsOut(select(view.sea, view.paper, outside), vec2u(0u));
+}
+
+// Borders from the id target: where neighbouring pixels differ in country (both sides, so two
+// pixels wide), province or county (one side, one pixel). Sea is country 0.
+
+@group(1) @binding(0) var ids: texture_2d<u32>;
+@group(1) @binding(1) var countries: texture_2d<u32>;
+
+fn country(province: u32) -> u32 {
+    if province == 0u {
+        return 0u;
+    }
+    let i = province - 1u;
+    return textureLoad(countries, vec2u(i % TEX_WIDTH, i / TEX_WIDTH), 0).r + 1u;
+}
+
+fn id_at(p: vec2i) -> vec2u {
+    let size = vec2i(textureDimensions(ids));
+    return textureLoad(ids, clamp(p, vec2i(0), size - 1), 0).xy;
 }
 
 @fragment
-fn fs_bg(in: BgOut) -> FsOut {
-    let r = in.ndc / view.k;
-    let outside = view.globe == 1u && dot(r, r) > 1.0;
-    return FsOut(select(view.sea, view.paper, outside), 0u);
+fn fs_borders(in: ScreenOut) -> @location(0) vec4f {
+    let p = vec2i(in.pos.xy);
+    let here = id_at(p);
+    let own = country(here.x);
+    let offsets = array(vec2i(1, 0), vec2i(0, 1), vec2i(-1, 0), vec2i(0, -1));
+    for (var k = 0; k < 4; k++) {
+        if country(id_at(p + offsets[k]).x) != own {
+            return vec4f(view.ink.rgb, 0.85);
+        }
+    }
+    for (var k = 0; k < 2; k++) {
+        let there = id_at(p + offsets[k]);
+        if there.x != here.x {
+            return vec4f(view.ink.rgb, 0.35);
+        }
+        if view.county_borders == 1u && there.y != here.y && there.y != 0u && here.y != 0u {
+            return vec4f(view.ink.rgb, 0.18);
+        }
+    }
+    discard;
 }

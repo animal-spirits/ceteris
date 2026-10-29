@@ -1,4 +1,5 @@
-//! Province attributes from the pack's `web/provinces.json` (columnar; index = province).
+//! Attributes from the pack's `web/provinces.json` and `web/counties.json` (columnar; index =
+//! feature).
 
 use std::path::Path;
 
@@ -22,6 +23,20 @@ pub struct Provinces {
 }
 
 impl Provinces {
+    pub fn read(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Counties {
+    pub name: Vec<String>,
+    /// Index into the provinces.
+    pub province: Vec<u32>,
+}
+
+impl Counties {
     pub fn read(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
         serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))

@@ -50,6 +50,7 @@ export component AppWindow inherits Window {
     callback zoom(length, length, length);
     callback select(length, length);
     callback globe(bool);
+    callback counties(bool);
 
     MenuBar {
         Menu {
@@ -115,14 +116,21 @@ export component AppWindow inherits Window {
     Rectangle {
         x: parent.width - self.width - Tokens.pad;
         y: Tokens.pad;
-        width: toggle.preferred-width + 2 * Tokens.pad;
-        height: toggle.preferred-height + Tokens.pad;
+        width: toggles.preferred-width + 2 * Tokens.pad;
+        height: toggles.preferred-height + Tokens.pad;
         background: Tokens.paper;
         border-color: Tokens.rule;
         border-width: Tokens.hairline;
-        toggle := CheckBox {
-            text: "Globe";
-            toggled => { root.globe(self.checked); }
+        toggles := HorizontalLayout {
+            spacing: Tokens.pad;
+            CheckBox {
+                text: "Counties";
+                toggled => { root.counties(self.checked); }
+            }
+            CheckBox {
+                text: "Globe";
+                toggled => { root.globe(self.checked); }
+            }
         }
     }
 
