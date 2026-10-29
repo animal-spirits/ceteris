@@ -25,6 +25,13 @@ Goldens re-blessed:
   solution.
 - `tests/golden/p0-toy.txt`, `p1-geo.txt`, `p1-pack.txt` and `p2-pack.txt` do not move.
 
+### Changed: one exact fill per local good (ADR 0093)
+
+- The same-tick chain gives each local good one fill, the limit of the fill iteration from 1,
+  solved exactly with the work bounded (ADR 0093, amendments of 2026-10-29); the 32-pass bound and
+  the clearing of what it left short are gone. It changes outputs wherever the chain binds. No
+  golden moves: the fixture's default and frictionless runs never bind it.
+
 ### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
 
 - ICIO C19 (refined petroleum) and its HS lines move from good 5 into good 1, renamed "Crude oil,

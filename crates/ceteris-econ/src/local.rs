@@ -325,6 +325,9 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
         }
         x = x.next_down().max(0.0);
     }
+    if x < f64::MIN_POSITIVE {
+        f[j] = 0.0;
+    }
     let map = if inside {
         Affine {
             c: num.c / slope,
@@ -363,6 +366,22 @@ fn pass(p: &Province, f: &mut [f64; 3], w: &mut Work) -> Pass {
 const PERIOD: usize = 3;
 /// Relative rounding of the affine maps that [`jump`] allows where a good fits with equality.
 const ROUNDING: f64 = 1e-12;
+/// How far beyond [0, f] the solve of [`jump`] may put a fixed point by rounding.
+const SOLVE_ROUNDING: f64 = 1e-14;
+/// Distance to the fixed point, relative to the distance from the start, at which the
+/// trajectory of [`jump`] has reached it.
+const REACHED: f64 = 1e-15;
+/// How close, relative to the largest fill, the cycle's passes from a fixed point must return
+/// it for [`jump`] to take it.
+const CONFIRMED: f64 = 1e-12;
+/// Passes after which [`fills`] sets the goods still falling to 0 (ADR 0093, bounded work).
+pub const STALL_PASSES: usize = 256;
+/// Cycles [`jump`] follows one at a time within one [`fills`], all jumps together.
+const CYCLE_BUDGET: usize = 4096;
+/// Cycles one [`jump`] follows one at a time before it doubles.
+const SEQUENTIAL: usize = 64;
+/// Doublings of the cycles [`jump`] takes at once: 2^64 cycles is beyond any fall.
+const DOUBLINGS: usize = 64;
 
 /// Where [`jump`] takes the passes.
 enum Jump {
@@ -372,14 +391,10 @@ enum Jump {
     Ahead([f64; 3]),
 }
 
-/// The passes repeating the cycle of the last passes `cycle` (oldest first), from the fills
-/// `f` at the end of the last, as the cycle's affine maps give them: each step on the same
-/// piece, every fill not raised, every good the cycle does not lower still fitting. Their
-/// limit is the fixed point g of the composed map on the goods the cycle lowers, the others
-/// held: taken where the passes reach it on the pieces and running the cycle from g returns g.
-/// Where they leave a piece first, the fills after the last whole cycle before that, which
-/// the passes reach in exact arithmetic. None where the first cycle already leaves.
-fn jump(p: &Province, cycle: &[Pass], f: &[f64; 3], w: &mut Work) -> Option<Jump> {
+/// The fixed point g of the cycle of passes `cycle` (oldest first) from the fills `f` at the
+/// end of its last pass: on the goods the cycle lowers, the composed map's fixed point, the
+/// others held at f. None where a step's map is undefined or the system is singular.
+fn fixed_point(cycle: &[Pass], f: &[f64; 3]) -> Option<FixedPoint> {
     let cut: Vec<usize> = (0..3)
         .filter(|&j| cycle.iter().any(|q| q.pieces[j].is_some()))
         .collect();
@@ -426,80 +441,162 @@ fn jump(p: &Province, cycle: &[Pass], f: &[f64; 3], w: &mut Work) -> Option<Jump
     let mut g = *f;
     let mut limit = true;
     for (v, &j) in cut.iter().enumerate() {
-        limit &= x[v] >= -1e-14 && x[v] <= f[j] + 1e-14;
-        g[j] = x[v].clamp(0.0, f[j]);
+        limit &= x[v] >= -SOLVE_ROUNDING && x[v] <= f[j] + SOLVE_ROUNDING;
+        // + 0.0 turns a -0.0 into 0.0
+        g[j] = x[v].clamp(0.0, f[j]) + 0.0;
     }
-    // the passes from f, as the maps give them, until they are within rounding of g
+    Some(FixedPoint { cut, map, g, limit })
+}
+
+/// What [`fixed_point`] returns.
+struct FixedPoint {
+    /// The goods the cycle lowers.
+    cut: Vec<usize>,
+    /// The cycle's composed map.
+    map: [Affine; 3],
+    g: [f64; 3],
+    /// Whether g lies in [0, f] up to the solve's rounding.
+    limit: bool,
+}
+
+/// The passes repeating the cycle of the last passes `cycle` (oldest first), from the fills
+/// `f` at the end of the last, as the cycle's affine maps give them ([`follow`]): each step on
+/// the same piece, every fill not raised, every good the cycle does not lower still fitting.
+/// Their limit is the fixed point g of the composed map on the goods the cycle lowers, the
+/// others held: taken where the passes reach it on the pieces and running the cycle from g
+/// returns g. The passes are followed one cycle at a time up to [`SEQUENTIAL`] cycles (and
+/// `budget` within the call to [`fills`]), then 2^k cycles at once, checked at those points.
+/// Where they leave a piece first, the fills after the last checked point before that, which
+/// the passes reach in exact arithmetic. None where the first cycle already leaves.
+fn jump(
+    p: &Province,
+    cycle: &[Pass],
+    f: &[f64; 3],
+    budget: &mut usize,
+    w: &mut Work,
+) -> Option<Jump> {
+    let FixedPoint { cut, map, g, limit } = fixed_point(cycle, f)?;
     let mut now = *f;
     let ahead = |now: [f64; 3]| (now != *f).then_some(Jump::Ahead(now));
     let scale = cut
         .iter()
         .fold(f64::MIN_POSITIVE, |s, &j| s.max((f[j] - g[j]).abs()));
-    for _ in 0..100_000 {
-        if limit && cut.iter().all(|&j| (now[j] - g[j]).abs() <= 1e-15 * scale) {
-            let mut h = g;
-            for _ in cycle {
-                pass(p, &mut h, w);
-            }
-            let size = g.iter().fold(0.0f64, |s, &v| s.max(v));
-            let still = (0..3).all(|k| (h[k] - g[k]).abs() <= 1e-12 * size);
-            return if still {
-                Some(Jump::Limit(h))
-            } else {
-                ahead(now)
-            };
+    let reached =
+        |s: &[f64; 3]| limit && cut.iter().all(|&j| (s[j] - g[j]).abs() <= REACHED * scale);
+    let confirm = |w: &mut Work| {
+        let mut h = g;
+        for _ in cycle {
+            pass(p, &mut h, w);
         }
-        let mut through = now;
-        for q in cycle {
-            let mut state = through;
-            for j in 0..3 {
-                // a good the pass leaves fits where its step comes, one it lowers does not, up
-                // to the rounding of the maps
-                p.outputs(&state, &mut w.y);
-                let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
-                let slack = ROUNDING * (uncovered + rest);
-                let on = match &q.pieces[j] {
-                    None => uncovered <= rest + slack,
-                    Some(piece) => {
-                        let next = q.map[j].at(&through);
-                        let on = uncovered + slack > rest
-                            && next <= state[j]
-                            && next >= 0.0
-                            && on_piece(p, j, piece, &state, next);
-                        state[j] = next;
-                        on
-                    }
-                };
-                if !on {
-                    return ahead(now);
-                }
-            }
-            through = state;
+        let size = g.iter().fold(0.0f64, |s, &v| s.max(v));
+        (0..3)
+            .all(|k| (h[k] - g[k]).abs() <= CONFIRMED * size)
+            .then_some(Jump::Limit(h))
+    };
+    // the passes the maps give, one cycle at a time, up to the shared budget
+    for _ in 0..SEQUENTIAL {
+        if reached(&now) {
+            return confirm(w).or_else(|| ahead(now));
         }
-        if through == now {
-            return ahead(now);
+        if *budget == 0 {
+            break;
         }
-        now = through;
+        *budget -= 1;
+        match follow(p, cycle, &now, w) {
+            Some(next) if next != now => now = next,
+            _ => return ahead(now),
+        }
     }
-    ahead(now)
+    // then 2^k cycles at once (the composed map squared k times), checked at those points: a
+    // fall too slow to follow cycle by cycle, typically a collapse towards 0 at a rate near 1
+    let mut power = map;
+    let mut last = now;
+    for _ in 0..DOUBLINGS {
+        let mut at = now;
+        for &j in &cut {
+            at[j] = power[j].at(&now);
+        }
+        let valid = cut.iter().all(|&j| at[j] >= 0.0 && at[j] <= last[j])
+            && follow(p, cycle, &at, w).is_some();
+        if !valid {
+            break;
+        }
+        last = at;
+        if reached(&at) {
+            return confirm(w).or_else(|| ahead(last));
+        }
+        power = power.map(|o| o.after(&power));
+    }
+    ahead(last)
+}
+
+/// One cycle of passes from fills `from` as the cycle's maps give them: the fills at its end,
+/// or None where a step leaves its piece, a fill would rise or fall below 0, a good a pass
+/// lowers fits where its step comes, or one it leaves does not (up to the maps' rounding).
+fn follow(p: &Province, cycle: &[Pass], from: &[f64; 3], w: &mut Work) -> Option<[f64; 3]> {
+    let mut through = *from;
+    for q in cycle {
+        let mut state = through;
+        for j in 0..3 {
+            p.outputs(&state, &mut w.y);
+            let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+            let slack = ROUNDING * (uncovered + rest);
+            let on = match &q.pieces[j] {
+                None => uncovered <= rest + slack,
+                Some(piece) => {
+                    let next = q.map[j].at(&through);
+                    let on = uncovered + slack > rest
+                        && next <= state[j]
+                        && next >= 0.0
+                        && on_piece(p, j, piece, &state, next);
+                    state[j] = next;
+                    on
+                }
+            };
+            if !on {
+                return None;
+            }
+        }
+        through = state;
+    }
+    Some(through)
 }
 
 /// The fill of each local good (ADR 0093, Amendment): the limit of the fill iteration from
 /// F = 1, passes over the goods in order, each setting F_k to the largest value at most F_k
 /// at which k fits ([`step`]). Where the last passes, repeated, would fall to a fixed point
 /// without leaving their pieces, the passes jump there ([`jump`], cycles of up to [`PERIOD`]
-/// passes). Returns the fills and the passes run, a jump's confirming passes included.
+/// passes). The work is bounded (ADR 0093, bounded work): after [`STALL_PASSES`] passes since
+/// the last such cut, the goods the last pass lowered are set to 0; a fill below the smallest
+/// normal f64 is 0. Returns the fills and the passes run, a jump's confirming passes included.
 pub fn fills(p: &Province) -> ([f64; 3], usize) {
     let mut w = Work::default();
     let mut f = [1.0; 3];
     let mut passes = 0;
     let mut recent: Vec<Pass> = Vec::with_capacity(PERIOD);
+    let mut budget = CYCLE_BUDGET;
+    let mut since = 0;
     loop {
         passes += 1;
+        since += 1;
         let start = f;
         let last = pass(p, &mut f, &mut w);
         if f == start {
             return (f, passes);
+        }
+        if since >= STALL_PASSES {
+            // the goods the last pass's map takes to 0, else every good it lowered
+            let lowered: Vec<usize> = (0..3).filter(|&j| f[j] != start[j]).collect();
+            let to_zero = fixed_point(std::slice::from_ref(&last), &f)
+                .map(|fp| fp.cut.into_iter().filter(|&j| fp.g[j] == 0.0).collect())
+                .filter(|v: &Vec<usize>| !v.is_empty())
+                .unwrap_or(lowered);
+            for j in to_zero {
+                f[j] = 0.0;
+            }
+            since = 0;
+            recent.clear();
+            continue;
         }
         if recent.len() == PERIOD {
             recent.remove(0);
@@ -509,7 +606,7 @@ pub fn fills(p: &Province) -> ([f64; 3], usize) {
         let mut ahead = None;
         for period in 1..=recent.len() {
             let cycle = &recent[recent.len() - period..];
-            match jump(p, cycle, &f, &mut w) {
+            match jump(p, cycle, &f, &mut budget, &mut w) {
                 Some(Jump::Limit(h)) => {
                     passes += period;
                     ahead = Some(h);
@@ -522,7 +619,7 @@ pub fn fills(p: &Province) -> ([f64; 3], usize) {
             }
         }
         if let Some(h) = ahead {
-            f = h;
+            f = h.map(|x| if x < f64::MIN_POSITIVE { 0.0 } else { x });
             recent.clear();
         }
     }

@@ -241,6 +241,8 @@ pub struct PopAt {
 
 /// Rounds of [`invert_pigl_pops`] before it panics.
 const MAX_ROUNDS: usize = 1000;
+/// Secant steps of one split in [`invert_pigl_pops`] before it panics.
+const MAX_SECANT_STEPS: usize = 400;
 
 /// A pop at the current alpha: category indexes, shares within them, sD and the factor of
 /// lambda without B, Dt^gamma m^-eps exp(-eps (1 - eps) s^2 / 2).
@@ -258,7 +260,8 @@ type Fixed = (
 /// from the food aggregate in closed form (omega_A = 0); then alpha_g times Omega_g over its
 /// aggregate share, renormalized within its category; until every aggregate share is within
 /// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
-/// out; without any, [`invert_pigl`] at spending 0. Panics where a weight would be negative.
+/// out; without any, [`invert_pigl`] at spending 0. Panics where a weight would be negative or
+/// a split takes more than [`MAX_SECANT_STEPS`] secant steps.
 pub fn invert_pigl_pops(
     omega: &[f64; N_GOODS],
     pops: &[PopAt],
@@ -356,7 +359,13 @@ pub fn invert_pigl_pops(
             }
             // Illinois: the retained end's value is halved when the same end moves twice
             let mut last = 0i8;
+            let mut steps = 0;
             while fa != 0.0 && fb != 0.0 {
+                steps += 1;
+                assert!(
+                    steps <= MAX_SECANT_STEPS,
+                    "PIGL inversion: the split did not settle in {MAX_SECANT_STEPS} steps"
+                );
                 let mut t = (a * fb - b * fa) / (fb - fa);
                 if !(t > a && t < b) {
                     t = 0.5 * (a + b);
