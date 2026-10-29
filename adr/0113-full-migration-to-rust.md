@@ -315,8 +315,16 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   - 4e gravity: estimates 2.7e-13 (the rail cost ratio), the Yotov fits 2.5e-13, the country
     costs of the least-cost trees 8.5e-16; the printed report and the stability table are equal
     byte for byte. The estimate takes 81 s against 230 s, the Yotov fits 35 s against 71 s.
-  - 4f, the regeneration of the pack and calibration tables from Rust and the re-pin of the
-    goldens, is pending.
+  - 4f: the 2000 pack is rebuilt by `ceteris pack build` (GEOS 3.15) and recalibrated by
+    `ceteris calibrate --pack`, then installed. Against the old pack every discrete column and
+    row order is equal and the econ tables are equal (0); the float gaps are those of step 3:
+    GEOS 3.15 moves `counties.area_km2` (7.8e-11, unsplit counties) and `edges.length_km`
+    (1.1e-12), exactly where a Python build on GEOS 3.15 moves them, and h3o's centres move the
+    columns step 3 holds to 1e-8 and 1e-7. The kernels move by 1.4e-12, the calibration tables
+    by at most 7.0e-11 (`--iterative`). Two builds give the same bytes but `web/map.pmtiles`.
+    `tests/golden/p1-pack.txt`, `p2-pack.txt` and `p1-geo.txt` are re-pinned; the core goldens
+    do not read the pack and stay. The P2 gate, run in Rust on the new pack, gives the numbers
+    of the Python gate (econ SPEC, P2 gate).
 
   Deviations:
   - Dense linear algebra is in-crate (`ceteris_reference::linalg`): Householder QR, one-sided

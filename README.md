@@ -59,10 +59,9 @@ into `data/cache/` once, then builds `data/packs/2000/` in about 2.5 minutes:
 cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build
 ```
 
-Until the pack is regenerated from Rust and the goldens re-pinned (ADR 0113, step 4f), a
-pack built this way fails the tests that pin digests of the pack or of runs on it
-(`tests/golden/p1-pack.txt` among them): arrow-rs writes other bytes than the Python build
-did, and GEOS 3.15 moves the edges and counties of the 2000 pack.
+The goldens pin this build together with its calibration tables, written by
+`cargo run --release --bin ceteris -- calibrate --pack data/packs/2000 --out DIR` and copied
+into the pack (ADR 0113, step 4f).
 
 Then:
 
@@ -87,8 +86,7 @@ a sleeping display stops the webview from rendering.
 Other entry points: `cargo run --release -p ceteris-geo --example costs -- NLD-3485 CHN-1819`
 prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo` runs the
 benchmarks; `ceteris pack check-sources --profile research|release` validates the licence manifest.
-Tests that need the pack skip when it has not been built, as in CI; on a pack built from
-Rust before step 4f, those that pin its digests fail (see Develop).
+Tests that need the pack skip when it has not been built, as in CI.
 
 Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden`, or
 `CETERIS_BLESS=1 cargo test -p ceteris-pack --test build --test econ_build` for the pack's
