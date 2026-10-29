@@ -1,11 +1,12 @@
 {
-  "format": "9",
-  "static_digest": "51be33945467a66c72192ff074fe2032214235d4b247a262f612093fb49098ef",
+  "format": "10",
+  "static_digest": "5da0320fbaba6f731c2a8a66186664484efdc51f9ca62f0d4134f1fb6102affb",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
     "theta": "P01",
     "theta_class": "P01",
+    "theta_scale": "P150",
     "coverage": "P02",
     "kappa1": "P03a",
     "kappa2": "P03b",
@@ -47,8 +48,9 @@
     "technology": "putty_clay"
   },
   "trade": {
-    "theta": [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0],
-    "theta_class": [2, 2, 2, 0, 2, 2, 1, 0, 0, 0],
+    "theta": [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
+    "theta_class": [2, 3, 3, 0, 2, 0, 1, 0, 0, 0],
+    "theta_scale": 1.0,
     "coverage": [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
     "kappa1": 0.05,
     "kappa2": 0.0,

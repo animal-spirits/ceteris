@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
+
+- ICIO C19 (refined petroleum) and its HS lines move from good 5 into good 1, renamed "Crude oil,
+  gas and refined fuels"; good 5 is renamed "Chemicals and metals". `read::icio::icio_good` now
+  reads `goods::icio_industry`, so the pack has one industry map.
+- Class theta is the trade-weighted harmonic mean over HS lines, on the Caliendo-Parro
+  replication vector (Auto and Other Transport 8.22; owner ruling, ADR 0023 amendment). The rule
+  draws four classes: 2.91 (food; chemicals and metals), 4.14 (machinery, electronics and
+  vehicles), 7.68 (agriculture; light manufacturing) and 16.91 (crude oil, gas and refined fuels;
+  coal and other mining). `TradeParams::default()`, `gravity::CLASSES` and `THETA_DEFAULT` follow;
+  the P01 prior is 2.91 to 16.91.
+- `TradeParams.theta_scale` (P150, default 1) multiplies every theta where the kernel is built. It
+  enters the static and structural digests and `params.json` (export format 10), and the reference
+  applies it to the exported theta.
+- `econ_goods.arrow` records each good's class with the class's harmonic and arithmetic theta.
+  The installed 2000 pack is not rebuilt here: its econ tables and calibration still have refined
+  petroleum in good 5 and the old classes until the pack is rebuilt and recalibrated.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash (the new thetas and P150 in the static digest). The
+  hashes are the same at 1, 3 and all threads.
+- `tests/golden/p2-fixture/`: every table (export format 10), `params.json` (thetas, classes,
+  P150), the reference solution and the calibration, all at the new thetas.
+- `tests/golden/p0-toy.txt`, `p1-geo.txt`, `p1-pack.txt` and `p2-pack.txt` do not move.
+
 ### BEHAVIOUR: i128 aggregate accounts, pi^e outside the clip, calibrated nominal level (ADR 0106)
 
 - The snapshot codec moves to format version 2: the ledger writes each account's kind and its
