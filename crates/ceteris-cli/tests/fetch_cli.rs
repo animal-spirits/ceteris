@@ -94,4 +94,23 @@ fn absent_optional_is_skipped_and_absent_manual_stops() {
         "m.bin: the host rejects scripted downloads; save http://127.0.0.1:9/m.bin into "
     ));
     assert!(!stderr.contains("o.bin"));
+
+    // A cached file must match its pin; the absent optional one is still not asked for.
+    let sha = format!("{:x}", Sha256::digest(b"abc"));
+    fs::write(root.path().join("data/cache/m.bin"), b"abc").unwrap();
+    let out = fetch(root.path(), &[]);
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        format!("m.bin: checksum mismatch, got {sha} (3 bytes)\n")
+    );
+
+    // Once cached, the optional file is verified too.
+    fs::write(root.path().join("data/cache/o.bin"), b"abc").unwrap();
+    let out = fetch(root.path(), &[]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains(&format!("o.bin: checksum mismatch, got {sha} (3 bytes)\n"))
+    );
 }

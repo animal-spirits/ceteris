@@ -30,31 +30,44 @@ crates/
   ceteris-core/ entity IDs, scheduler, Philox RNG, ledger, event log, snapshots,
                 deterministic reductions, and the P0 toy world
   ceteris-geo/  pack loading, transport graph, least-cost paths and their cache
+  ceteris-trade/, ceteris-econ/
+                province markets and trade kernel; production, labour, demand and
+                the monthly economic tick
+  ceteris-pack/ fetch, licence manifest check, source readers, the pack build and the
+                parity comparison
+  ceteris-geos-coverage/
+                GEOS coverage simplification for the owner-side map build
+  ceteris-reference/, ceteris-calibrate/
+                independent reference model; steady-state calibration and gravity
+  ceteris-cli/  the `ceteris` binary: export, run, pack, reference, calibrate
 app/            Tauri desktop app: TypeScript map (MapLibre, React) over the Rust core
 python/ceteris/packs/
-                pack pipeline: pinned sources, provinces, H3 raster, transport graph;
-                licence manifest and its validator
+                pack configuration: pinned sources, licence manifest, 2000 borders,
+                chokepoints (the build is the `ceteris-pack` crate)
 tests/golden/   stored hashes of golden scenarios
 ```
 
-Further crates (`ceteris-econ`, `ceteris-trade`, ...) arrive in the phases that need
-them (Section 19.3).
+Further crates arrive in the phases that need them (Section 19.3).
 
 ## Develop
 
 Build the world pack first. It needs [tippecanoe](https://github.com/felt/tippecanoe)
-(`brew install tippecanoe`), downloads about 920 MB of pinned sources into `data/cache/`
-once, then builds `data/packs/2000/` in about 2.5 minutes:
+and GEOS 3.15 (`brew install tippecanoe geos`), downloads about 920 MB of pinned sources
+into `data/cache/` once, then builds `data/packs/2000/` in about 2.5 minutes:
 
 ```
-cd python && uv run python -m ceteris.packs
+cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build
 ```
+
+Until the pack is regenerated from Rust and the goldens re-pinned (ADR 0113, step 4f), a
+pack built this way fails the tests that pin digests of the pack or of runs on it
+(`tests/golden/p1-pack.txt` among them): arrow-rs writes other bytes than the Python build
+did, and GEOS 3.15 moves the edges and counties of the 2000 pack.
 
 Then:
 
 ```
 cargo test --workspace
-cd python && uv run pytest
 cd app && npm install && npm run tauri dev
 ```
 
@@ -74,10 +87,12 @@ a sleeping display stops the webview from rendering.
 Other entry points: `cargo run --release -p ceteris-geo --example costs -- NLD-3485 CHN-1819`
 prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo` runs the
 benchmarks; `ceteris pack check-sources --profile research|release` validates the licence manifest.
-Tests that need the pack skip when it has not been built, as in CI.
+Tests that need the pack skip when it has not been built, as in CI; on a pack built from
+Rust before step 4f, those that pin its digests fail (see Develop).
 
-Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden` or
-`CETERIS_BLESS=1 uv run pytest`, then explain why in the commit.
+Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden`, or
+`CETERIS_BLESS=1 cargo test -p ceteris-pack --test build --test econ_build` for the pack's
+digests, then explain why in the commit.
 
 The rules for contributors and coding agents are in Section 21.2 of the design: spec
 first, tests before implementation, one system per task, golden runs, no silent

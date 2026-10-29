@@ -22,7 +22,7 @@ use std::path::Path;
 use ceteris_pack::econ::goods::hs_goods;
 use ceteris_pack::read::baci::{country_codes, for_each_flow, read_hs_cpa};
 use ceteris_pack::read::icio::{aggregate, exports};
-use ceteris_pack::read::natural_earth::{IsoCodes, read_codes};
+use ceteris_pack::read::natural_earth::{ADMIN0, IsoCodes, read_codes};
 use ceteris_pack::read::people::parts;
 use ceteris_reference::io::pairwise_sum;
 use ceteris_reference::ppml::Fit;
@@ -38,7 +38,6 @@ pub use crate::yotov::{GRAVITY_TERMS, Published, YOTOV, YOTOV_PUBLISHED, YOTOV_Y
 pub const BACI: &str = "BACI_HS92_V202601.zip";
 const ICIO: &str = "1995-2000_SML.zip";
 const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
-const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
 const YEAR: i64 = 2000;
 
 /// P43 time cost of transit lambda_g per day, the starts of `TradeParams::default()` (trade
