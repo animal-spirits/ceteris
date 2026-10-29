@@ -360,8 +360,18 @@ dependencies = [
 name = "ceteris-calibrate"
 version = "0.0.1"
 dependencies = [
+ "arrow-array",
+ "arrow-cast",
+ "arrow-ipc",
+ "arrow-schema",
  "ceteris-econ",
+ "ceteris-geo",
  "ceteris-pack",
+ "ceteris-reference",
+ "ceteris-trade",
+ "rayon",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -369,11 +379,18 @@ name = "ceteris-cli"
 version = "0.0.1"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
+ "arrow-ipc",
+ "arrow-schema",
+ "arrow-select",
+ "ceteris-calibrate",
  "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",
  "ceteris-pack",
+ "ceteris-reference",
  "ceteris-trade",
+ "serde_json",
  "sha2",
  "tempfile",
 ]
@@ -463,9 +480,12 @@ name = "ceteris-reference"
 version = "0.0.1"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
+ "proptest",
  "serde_json",
+ "statrs",
 ]
 
 [[package]]
@@ -2214,6 +2234,17 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "statrs"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1837f9a1bd13dabbdbb04489c39451482d3cdd35a6e1a0d0f3570dea2b8c8be"
+dependencies = [
+ "approx",
+ "num-traits",
+ "thiserror",
+]
 
 [[package]]
 name = "syn"

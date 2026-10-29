@@ -193,3 +193,52 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   - GeoTIFF predictors 2 and 3 are not read yet: no econ raster uses one. ETOPO needs
     predictor 3 in step 3.
   - The manifest's econ stats come back from the binary with their keys sorted.
+- Step 4 (reference model and calibration): `ceteris-reference` holds the reference model
+  (`io`, `demand`, `sinkhorn`, `uniqueness`, `model`, `solve`, `output`, `ppml`, `linalg`),
+  read from the `ceteris export` directory; a workspace test reads `cargo metadata` and fails on
+  any edge from it to `ceteris-core`, `-geo`, `-trade` or `-econ`. `ceteris-calibrate` holds
+  the steady-state calibration (`steady`, `summary`, `write`), the gravity estimation (`dta`,
+  `yotov`, `costs`, `gravity`) and the stability table (`stability`); it exports a pack in
+  process, with no cargo subprocess. The commands are `ceteris reference solve --inputs DIR --out DIR`, `ceteris
+  calibrate --pack DIR | --inputs DIR [--out DIR]`, `ceteris calibrate stability
+  [FIXTURE_DIR]` and `ceteris gravity [--pack DIR] [--write] [--out FILE]`, with the arguments
+  and output of the Python entry points. The HANK reference, SBI and Sobol analysis are built
+  in Rust as well, in `ceteris-reference` and `ceteris-calibrate` (ADR 0207). Parity on the
+  fixture and the full cache and pack (`scripts/parity/step4.sh`), worst relative gap and
+  timings (Python vs Rust, release, arm64):
+  - 4a inputs, demand, kernels, Sinkhorn, A.3 bound and model evaluation: 4.88e-15.
+  - 4b equilibrium: 1.47e-10 on the pack, solved in 72 s against 237 s.
+  - 4c PPML: 1.65e-10 on the BACI designs.
+  - 4d calibration tables: 7.3e-11 on the pack, 189 s against 466 s.
+  - 4e gravity: estimates 2.7e-13 (the rail cost ratio), the Yotov fits 2.5e-13, the country
+    costs of the least-cost trees 8.5e-16; the printed report and the stability table are equal
+    byte for byte. The estimate takes 81 s against 230 s, the Yotov fits 35 s against 71 s.
+  - 4f, the regeneration of the pack and calibration tables from Rust and the re-pin of the
+    goldens, is pending.
+
+  Deviations:
+  - Dense linear algebra is in-crate (`ceteris_reference::linalg`): Householder QR, one-sided
+    Jacobi SVD and Cholesky, with every sum in a fixed order. `faer` was rejected because it
+    picks its kernels by CPU feature at run time, so results would depend on the machine.
+  - GMRES is restarted GMRES without LGMRES's augmentation vectors, so the inner step counts
+    differ from scipy's; the solution agrees to 1e-9.
+  - A non-finite Jacobian product ends the Newton run and falls back to tatonnement, which
+    reports; Python raised scipy's error.
+  - The mixed tolerance |a - b| <= 1e-9 max(1, |a|, |b|) is used only where a value is rounding
+    noise around 0: every column of the absorbed-regressor PPML design, and the Gauss-Newton
+    step coefficients of the mode cost fit (`d_rail`, `d_sea`, `d_air`), which go to 0 as the
+    ratios converge.
+  - The HS to CPA key also lists EU aggregate lines (such as `12EU20`), on which Python's
+    `baci_flows` failed (`int()`); they match no BACI line and are skipped.
+  - Least-cost trees reproduce scipy's Dijkstra: a binary heap of (-distance, node), so ties
+    between equal-cost paths go to the larger node index, and path quantities summed by
+    pointer jumping.
+  - Calibration passes are not compared for equality: a pass count can move by one with the
+    tables still within 1e-9.
+  - The comment heading `gravity_2000.toml` names `ceteris gravity --write` as the command that
+    writes it; the rest of the file is the Python layout.
+  - `gravity --write` still defaults to `python/ceteris/packs/gravity_2000.toml`, beside the
+    pack configuration, until step 5 moves the configuration.
+  - `python/ceteris/reference/` (with the JAX model and `reduced.py`) and
+    `python/ceteris/calibrate/` and their tests are deleted; `scripts/parity/step4.sh` runs the
+    Python side from a checkout before that commit.

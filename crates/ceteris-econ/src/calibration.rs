@@ -1,5 +1,5 @@
 //! The calibrated steady state of ADR 0089 (`specs/econ/SPEC.md`, Calibration): the tables
-//! `python -m ceteris.reference calibrate` writes, read into the static inputs (A, VA0, L0,
+//! `ceteris calibrate` writes, read into the static inputs (A, VA0, L0,
 //! a_VA, the coefficients, w0 and the PIGL weights) and into the state a world starts from
 //! ([`Steady`]: prices, stocks, the pipeline, money and the last D, Q and sales).
 //!
@@ -23,7 +23,7 @@ use crate::inputs::EconInputs;
 use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
-/// The `calibration_format` the loader reads (`ceteris.reference.calibrate.FORMAT`).
+/// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
 pub const FORMAT: &str = "3";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
@@ -67,7 +67,7 @@ fn table(dir: &Path, name: &str) -> Result<RecordBatch, PackError> {
         Some(f) if f == FORMAT => Ok(t),
         found => Err(err(format!(
             "{name}: calibration format {found:?}, expected {FORMAT}; recalibrate with \
-             `python -m ceteris.reference calibrate`"
+             `ceteris calibrate`"
         ))),
     }
 }
@@ -131,7 +131,7 @@ impl EconInputs {
         if found != want {
             return Err(err(format!(
                 "the calibration in {} belongs to other inputs (static digest {found}, these \
-                 inputs {want}); recalibrate with `python -m ceteris.reference calibrate`",
+                 inputs {want}); recalibrate with `ceteris calibrate`",
                 dir.display()
             )));
         }
