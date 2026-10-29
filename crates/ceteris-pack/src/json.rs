@@ -1,6 +1,7 @@
-//! Canonical JSON of reader output: sorted keys, no spaces, floats as Python's `repr` writes
-//! them, the text `json.dumps(x, sort_keys=True, ensure_ascii=False, separators=(",", ":"))`
-//! gives in Python.
+//! JSON as Python's `json.dumps` writes it. Canonical text of reader output: sorted keys, no
+//! spaces, floats as Python's `repr` writes them, the text `json.dumps(x, sort_keys=True,
+//! ensure_ascii=False, separators=(",", ":"))` gives; `Fields` keeps a dict's insertion order, and
+//! `pretty` is `json.dumps(x, indent=2)`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -16,6 +17,8 @@ pub enum Json {
     Str(String),
     List(Vec<Json>),
     Object(BTreeMap<String, Json>),
+    /// An object with its keys in the order given, as Python writes a dict.
+    Fields(Vec<(String, Json)>),
 }
 
 impl Json {
@@ -32,50 +35,66 @@ impl Json {
         Json::List(items.into_iter().map(Into::into).collect())
     }
 
+    /// `ensure_ascii=False, separators=(",", ":")`.
     pub fn text(&self) -> String {
         let mut out = String::new();
-        self.write(&mut out);
+        self.write(&mut out, false, None);
         out
     }
 
-    fn write(&self, out: &mut String) {
-        match self {
-            Json::Null => out.push_str("null"),
-            Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-            Json::Int(i) => write!(out, "{i}").expect("write to String"),
-            Json::Float(x) if x.is_nan() => out.push_str("NaN"),
+    /// `indent=2`: one item per line, `": "` after keys, non-ASCII escaped.
+    pub fn pretty(&self) -> String {
+        let mut out = String::new();
+        self.write(&mut out, true, Some(0));
+        out
+    }
+
+    fn write(&self, out: &mut String, ascii: bool, depth: Option<usize>) {
+        let items: Vec<(Option<&str>, &Json)> = match self {
+            Json::Null => return out.push_str("null"),
+            Json::Bool(b) => return out.push_str(if *b { "true" } else { "false" }),
+            Json::Int(i) => return write!(out, "{i}").expect("write to String"),
+            Json::Float(x) if x.is_nan() => return out.push_str("NaN"),
             Json::Float(x) if x.is_infinite() => {
-                out.push_str(if *x > 0.0 { "Infinity" } else { "-Infinity" });
+                return out.push_str(if *x > 0.0 { "Infinity" } else { "-Infinity" });
             }
-            Json::Float(x) => out.push_str(&repr_f64(*x)),
-            Json::Str(s) => write_str(s, out),
-            Json::List(items) => {
-                out.push('[');
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    item.write(out);
-                }
-                out.push(']');
+            Json::Float(x) => return out.push_str(&repr_f64(*x)),
+            Json::Str(s) => return write_str(s, ascii, out),
+            Json::List(items) => items.iter().map(|v| (None, v)).collect(),
+            Json::Object(entries) => entries.iter().map(|(k, v)| (Some(k.as_str()), v)).collect(),
+            Json::Fields(entries) => entries.iter().map(|(k, v)| (Some(k.as_str()), v)).collect(),
+        };
+        let (open, close) = if matches!(self, Json::List(_)) {
+            ('[', ']')
+        } else {
+            ('{', '}')
+        };
+        out.push(open);
+        let newline = |out: &mut String, d: usize| {
+            out.push('\n');
+            out.push_str(&"  ".repeat(d));
+        };
+        for (i, (key, value)) in items.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
             }
-            Json::Object(entries) => {
-                out.push('{');
-                for (i, (k, v)) in entries.iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    write_str(k, out);
-                    out.push(':');
-                    v.write(out);
-                }
-                out.push('}');
+            if let Some(d) = depth {
+                newline(out, d + 1);
             }
+            if let Some(k) = key {
+                write_str(k, ascii, out);
+                out.push_str(if depth.is_some() { ": " } else { ":" });
+            }
+            value.write(out, ascii, depth.map(|d| d + 1));
         }
+        if let (Some(d), false) = (depth, items.is_empty()) {
+            newline(out, d);
+        }
+        out.push(close);
     }
 }
 
-fn write_str(s: &str, out: &mut String) {
+fn write_str(s: &str, ascii: bool, out: &mut String) {
     out.push('"');
     for c in s.chars() {
         match c {
@@ -86,7 +105,12 @@ fn write_str(s: &str, out: &mut String) {
             '\t' => out.push_str("\\t"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
-            c if u32::from(c) < 0x20 => write!(out, "\\u{:04x}", u32::from(c)).expect("write"),
+            c if u32::from(c) < 0x20 || (ascii && u32::from(c) > 0x7e) => {
+                let mut units = [0u16; 2];
+                for u in c.encode_utf16(&mut units) {
+                    write!(out, "\\u{:04x}", u).expect("write to String");
+                }
+            }
             c => out.push(c),
         }
     }
@@ -194,5 +218,45 @@ mod tests {
             j.text(),
             r#"{"a":"é\"\t\u0001","b":[1.0,1e-05,2000.0],"c":null,"d":-4}"#
         );
+    }
+
+    fn fields(entries: Vec<(&str, Json)>) -> Json {
+        Json::Fields(
+            entries
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn fields_keep_their_order() {
+        let j = fields(vec![
+            ("b", Json::Int(1)),
+            ("a", Json::list([Json::Bool(true), Json::Null])),
+        ]);
+        assert_eq!(j.text(), r#"{"b":1,"a":[true,null]}"#);
+    }
+
+    #[test]
+    fn pretty_writes_as_python_indents() {
+        let j = fields(vec![
+            (
+                "b",
+                Json::list([Json::Int(1), Json::Float(2.5), fields(vec![])]),
+            ),
+            (
+                "a",
+                fields(vec![
+                    ("x", Json::List(vec![])),
+                    ("y", Json::Str("é\u{7f}\u{1F600}".into())),
+                ]),
+            ),
+            ("c", Json::Bool(true)),
+        ]);
+        // json.dumps(..., indent=2)
+        let want = "{\n  \"b\": [\n    1,\n    2.5,\n    {}\n  ],\n  \"a\": {\n    \"x\": [],\n    \
+                    \"y\": \"\\u00e9\\u007f\\ud83d\\ude00\"\n  },\n  \"c\": true\n}";
+        assert_eq!(j.pretty(), want);
     }
 }

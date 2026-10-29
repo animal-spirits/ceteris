@@ -9,6 +9,7 @@
 //! ceteris pack record-counties
 //! ceteris pack dump-geo DIR [--build [--centres FILE] [--transport]]
 //! ceteris pack dump-web DIR
+//! ceteris pack build [--out DIR] [--centres FILE]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -56,6 +57,7 @@ const USAGE: &str = "usage:
   ceteris pack record-counties
   ceteris pack dump-geo DIR [--build [--centres FILE] [--transport]]
   ceteris pack dump-web DIR
+  ceteris pack build [--out DIR] [--centres FILE]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -369,11 +371,16 @@ fn web_dump(_: &Path) -> Result<(), String> {
     Err("dump-web needs the owner-side `geos` feature".into())
 }
 
+/// `pack build [--out DIR] [--centres FILE]`: the whole pack from the fetch cache into DIR
+/// (default `data/packs/<year>`), on the owner-side `geos` feature; prints the build stats.
+/// `--centres` seeds the Voronoi splits from, and places the sea grid at, the cell centres of
+/// FILE (`scripts/parity/h3_centres.py`) instead of h3o's.
+///
 /// `pack build --econ-only [--pack DIR] [--out DIR]`: the econ tables of a pack's P1 tables, from
 /// the fetch cache; prints the summaries to stderr, then each table's SHA-256 and the build
 /// stats as JSON.
 fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
-    let (mut econ_only, mut pack, mut out) = (false, None, None);
+    let (mut econ_only, mut pack, mut out, mut centres) = (false, None, None, None);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--econ-only" => econ_only = true,
@@ -383,11 +390,18 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                 ))
             }
             "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
+            "--centres" => centres = Some(args.next().ok_or("--centres needs a file")?),
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
     if !econ_only {
-        return Err("pack build supports --econ-only only".into());
+        if pack.is_some() {
+            return Err("--pack needs --econ-only".into());
+        }
+        return build_pack(out, centres.as_deref());
+    }
+    if centres.is_some() {
+        return Err("--centres builds the whole pack, not --econ-only".into());
     }
     let pack = pack.unwrap_or_else(|| sources::workspace_root().join("data/packs/2000"));
     let out = out.unwrap_or_else(|| pack.clone());
@@ -408,6 +422,27 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Json::object([("tables", tables), ("stats", report.stats.json())]).text()
     );
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(feature = "geos")]
+fn build_pack(out: Option<PathBuf>, centres: Option<&str>) -> Result<ExitCode, String> {
+    use ceteris_pack::geo::provinces::Centres;
+    let out = match out {
+        Some(out) => out,
+        None => ceteris_pack::build::default_out(&sources::workspace_root())?,
+    };
+    let centres = match centres {
+        Some(path) => Centres::read(Path::new(path))?,
+        None => Centres::H3o,
+    };
+    let built = ceteris_pack::build::build(&out, &centres)?;
+    println!("{}", built.stats.pretty());
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(feature = "geos"))]
+fn build_pack(_: Option<PathBuf>, _: Option<&str>) -> Result<ExitCode, String> {
+    Err("pack build needs the owner-side `geos` feature, or --econ-only".into())
 }
 
 /// `pack compare A B [--iterative] [--table NAME]`: exit 1 when the directories differ.
