@@ -1,5 +1,5 @@
 //! `ceteris pack dump-reader NAME [ARGS]`: one reader's output on the fetch cache as canonical
-//! JSON (sorted keys, floats as Python's `repr`), which `ceteris.calibrate.gravity` reads.
+//! JSON (sorted keys, floats as Python's `repr`), for comparing readers.
 
 use std::collections::BTreeMap;
 use std::fs::File;

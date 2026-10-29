@@ -74,6 +74,54 @@ pub fn read_cepii(path: &Path) -> Result<Pairs, String> {
     Ok(before.intersection(&now).cloned().collect())
 }
 
+/// One CEPII gravity row: origin and destination ISO3 codes, the population-weighted harmonic
+/// distance (km) and contiguity, NaN where empty.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Distance {
+    pub iso3_o: String,
+    pub iso3_d: String,
+    pub distw: f64,
+    pub contig: f64,
+}
+
+/// The CEPII gravity rows of `year`, in file order.
+pub fn read_distances(path: &Path, year: i64) -> Result<Vec<Distance>, String> {
+    let origin = path.display().to_string();
+    let mut out = Vec::new();
+    with_member(
+        path,
+        |n| n.starts_with("Gravity_V"),
+        |member| {
+            let mut csv = Csv::new(member, path)?;
+            let [y, o, d, dist, contig] =
+                ["year", "iso3_o", "iso3_d", "distw_harmonic", "contig"].map(|c| csv.col(c));
+            let (y, o, d, dist, contig) = (y?, o?, d?, dist?, contig?);
+            let number = |text: &str| -> Result<f64, String> {
+                if NULLS.contains(&text) {
+                    Ok(f64::NAN)
+                } else {
+                    float(text, &origin)
+                }
+            };
+            let mut row = StringRecord::new();
+            while csv.next(&mut row)? {
+                let text = cell(&row, y);
+                if NULLS.contains(&text) || int(text, &origin)? != year {
+                    continue;
+                }
+                out.push(Distance {
+                    iso3_o: cell(&row, o).to_owned(),
+                    iso3_d: cell(&row, d).to_owned(),
+                    distw: number(cell(&row, dist))?,
+                    contig: number(cell(&row, contig))?,
+                });
+            }
+            Ok(())
+        },
+    )?;
+    Ok(out)
+}
+
 /// Source code pairs in a goods FTA or customs union in force on 1 January 2000 (World Bank DTA
 /// pair list).
 ///

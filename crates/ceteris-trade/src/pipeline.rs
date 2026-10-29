@@ -87,7 +87,7 @@ impl Pipeline {
         // -0.0 is where `Iterator::sum` starts
         let mut total = [-0.0; N_GOODS];
         for s in &self.slots {
-            for row in s.chunks_exact(N_GOODS) {
+            for row in s.as_chunks::<N_GOODS>().0 {
                 for (t, &x) in total.iter_mut().zip(row) {
                     *t += x;
                 }

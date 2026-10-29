@@ -2003,11 +2003,11 @@ Status: proposed. Date: 2026-10-24. Design sections: 3.4, 15.2, 15.3 (V1), 17.1,
 
 1. Before V1, evaluate the uniqueness condition of Allen, Arkolakis and Li (2024), a spectral-radius bound on the matrix of elasticities built from theta, agglomeration and (from P4) migration dispersion, at the tested parameters. Where it fails, V1 starts both models from the same point and reports which equilibrium each reaches instead of a 1% gap.
 2. V1 compares steady states with the custom static GE. Comparisons with CDP and KLR are sign and rank only, as the roadmap already states.
-3. theta\_g (0018), border frictions (P05) and mode cost ratios (P04) are estimated by PPML structural gravity on 2000 BACI with the route-choice cost structure, in python/ceteris/calibrate, outside simulation-based inference.
+3. theta\_g (0018), border frictions (P05) and mode cost ratios (P04) are estimated by PPML structural gravity on 2000 BACI with the route-choice cost structure, in the ceteris-calibrate crate (`ceteris gravity`), outside simulation-based inference.
 
 **Migration.**
 
-- Add the spectral check to python/ceteris/reference and call it from the V1 test.
+- Add the spectral check to the ceteris-reference crate (`uniqueness`) and call it from the V1 test (`p2_gate`).
 - Add the PPML estimation; its outputs enter the pack with provenance "data", not "calibrated".
 - Update the gate text in the P2 SPEC.md.
 
@@ -2081,7 +2081,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 3.4, 8.6, 9, 15.3 (V1), 21.
 **Migration.**
 
 - P2: add a harness that computes the intertemporal MPC matrix of the consumption rule (8.6) from simulated one-off transfers to each pop group. It runs even with m = 1 and lambda = 0.
-- P5: build the reference in python/ceteris/reference with each state's income process, Taylor rule (P35), fiscal rule and trade openness from its initial data, and calibrate its household block to the same intertemporal MPC targets as P37.
+- P5: build the reference in the ceteris-reference crate with each state's income process, Taylor rule (P35), fiscal rule and trade openness from its initial data, and calibrate its household block to the same intertemporal MPC targets as P37.
 - V1 macro test: with perfect foresight in place of heuristics (S04) and frictions off, impulse responses of output, consumption and inflation to policy-rate and transfer shocks lie within tolerance of the reference for small shocks; with heuristics on, signs and peak timing only.
 
 **Tests.** The harness reproduces the closed-form case: with m = 1 and lambda = 0 the intertemporal MPC matrix is the identity.
