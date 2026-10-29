@@ -509,10 +509,15 @@ and sales their steady-state values (D = Q = sales).
 same weights up to scale (1e-10); the reference model at the calibrated point, with labour
 supply (1 - u*) L^s, has residual at most 1e-10 and reproduces VA0, L0 and Y; local output is
 positive and clears; the stage 5 state is stationary under the order rule. In Rust
-(`crates/ceteris-econ/tests/p2_steady_state.rs`), 120 ticks from the calibrated state with every
-friction on hold every quantity to 1e-9 on the fixture. On the full pack, integer money bounds
-them: real quantities to 2e-6, money to 2e-6 or 4 minor units, world aggregates to 1e-9, and the
-drift stays bounded (ADR 0089, As built). The reduced residual
+(`crates/ceteris-econ/tests/p2_steady_state.rs`), 480 ticks from the calibrated state with every
+friction on hold every quantity to 1e-9 on the fixture. On the full pack, 120 ticks, integer money
+bounds them: real quantities to 2e-6, money to 2e-6 or 4 minor units, world aggregates to 1e-9.
+On both the drift stays bounded (ADR 0089, As built): its largest value over the second half of
+the run, over its tolerance, is at most twice that over ticks 5 to the half. The fixture run was
+120 ticks until the calibrated nominal level was pinned (ADR 0106, As built): the fixture's
+rounding drift then peaks near tick 105 (market sales 8.1e-12 relative, 0.8% of the tolerance)
+and falls after, so ticks 61 to 120 read 2.01 times ticks 5 to 60; over 480 ticks every quantity's
+second half is below its first (controller ruling, 2026-10-29). The reduced residual
 of the former joint inversion (`reference/reduced.py`) and its JAX twin were deleted with the
 Python reference (ADR 0113).
 

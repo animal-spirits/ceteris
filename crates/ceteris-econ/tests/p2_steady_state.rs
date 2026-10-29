@@ -1,7 +1,7 @@
 //! ADR 0089: the calibrated data state is the model's steady state. From the calibration
-//! tables (`ceteris calibrate`), 120 ticks with every friction on stay at
-//! the calibrated state: on the fixture (`tests/golden/p2-fixture/calibration`) and, when the
-//! pack holds its calibration, on the full 2000 pack. Run with `--release`; the pack run takes
+//! tables (`ceteris calibrate`), a run with every friction on stays at the calibrated state: 480
+//! ticks on the fixture (`tests/golden/p2-fixture/calibration`) and, when the pack holds its
+//! calibration, 120 on the full 2000 pack. Run with `--release`; the pack run takes
 //! about 20 s.
 //!
 //! Acceptance (owner decision 2026-10-25, a resolution-aware test; controller ruling on its
@@ -11,9 +11,10 @@
 //! money (pop income and balances, which drift as real drift times income) to 2e-6 relative or
 //! 4 minor units per pop, whichever is larger, and world aggregates (price index, income,
 //! unemployment) to 1e-9. Every quantity's
-//! drift stays bounded: its largest value over ticks 61 to 120, scaled by its tolerance, is at
-//! most twice that over ticks 5 to 60 (ticks 1 to 4, where prices and wages settle onto the
-//! rounding lattice, left out).
+//! drift stays bounded: its largest value over the second half of the run, scaled by its
+//! tolerance, is at most twice that over ticks 5 to the half (ticks 1 to 4, where prices and
+//! wages settle onto the rounding lattice, left out). The fixture's rounding drift peaks near
+//! tick 105 and falls after, so a 120-tick window would read that peak as growth.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,9 +27,10 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_trade::TradeParams;
 
-const TICKS: u32 = 120;
+/// Ticks of the fixture's and the pack's runs; the boundedness check splits each at its half.
+const FIXTURE_TICKS: u32 = 480;
+const PACK_TICKS: u32 = 120;
 const SETTLE: u32 = 4;
-const SPLIT: u32 = 60;
 /// Relative drift below which a quantity is at f64 rounding (about 450 ulps): it wanders
 /// rather than grows, so the boundedness check does not apply.
 const ROUNDING: f64 = 1e-13;
@@ -157,18 +159,19 @@ struct Record {
     minor: f64,
     minor_tick: u32,
     minor_entry: usize,
-    /// Largest drift over its tolerance, over the run and over ticks SETTLE + 1 to SPLIT and
-    /// SPLIT + 1 to TICKS.
+    /// Largest drift over its tolerance, over the run and over ticks SETTLE + 1 to the half and
+    /// the half + 1 to the end.
     over: f64,
     early: f64,
     late: f64,
-    /// Largest relative drift over ticks SPLIT + 1 to TICKS.
+    /// Largest relative drift over the second half.
     late_relative: f64,
 }
 
-/// Runs `TICKS` ticks from the steady state of `inputs` and returns the record of every
+/// Runs `ticks` ticks from the steady state of `inputs` and returns the record of every
 /// quantity under `tol`; prints them, the world price index path and the time per tick.
-fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
+fn run(inputs: EconInputs, ticks: u32, tol: Tolerance, what: &str) -> Vec<Record> {
+    let split = ticks / 2;
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
     let world = EconWorld::new(
         Arc::new(inputs),
@@ -208,7 +211,7 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
     let mut sim = Sim::new(world, schedule(), SEED);
     let mut index = Vec::new();
     let started = std::time::Instant::now();
-    for tick in 1..=TICKS {
+    for tick in 1..=ticks {
         sim.step().unwrap_or_else(|v| panic!("{what}: {v}"));
         let w = sim.world();
         index.push(w.world_price_index());
@@ -232,22 +235,22 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                     (r.minor, r.minor_tick, r.minor_entry) = (minor, tick, entry);
                 }
                 r.over = r.over.max(scaled);
-                if tick > SETTLE && tick <= SPLIT {
+                if tick > SETTLE && tick <= split {
                     r.early = r.early.max(scaled);
-                } else if tick > SPLIT {
+                } else if tick > split {
                     r.late = r.late.max(scaled);
                     r.late_relative = r.late_relative.max(relative);
                 }
             }
         }
     }
-    let per_tick = started.elapsed() / TICKS;
-    println!("{what}: {TICKS} ticks from the calibrated state, {per_tick:?} per tick");
+    let per_tick = started.elapsed() / ticks;
+    println!("{what}: {ticks} ticks from the calibrated state, {per_tick:?} per tick");
     for r in &records {
         println!(
             "  {:>18} ({:?}): max relative drift {:.3e} (tick {}, entry {}), max absolute \
              {:.3} minor units (tick {}, entry {}); max drift / tolerance {:.3e}, ticks \
-             {}-{SPLIT} {:.3e}, {}-{TICKS} {:.3e}",
+             {}-{split} {:.3e}, {}-{ticks} {:.3e}",
             r.name,
             r.kind,
             r.relative,
@@ -259,7 +262,7 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
             r.over,
             SETTLE + 1,
             r.early,
-            SPLIT + 1,
+            split + 1,
             r.late
         );
     }
@@ -267,14 +270,15 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
         .iter()
         .fold((f64::INFINITY, 0.0f64), |a, &x| (a.0.min(x), a.1.max(x)));
     println!(
-        "  world price index: tick 1 {:.15}, tick {TICKS} {:.15}, range [{lo:.15}, {hi:.15}]",
+        "  world price index: tick 1 {:.15}, tick {ticks} {:.15}, range [{lo:.15}, {hi:.15}]",
         index[0],
-        index[TICKS as usize - 1]
+        index[ticks as usize - 1]
     );
     records
 }
 
-fn assert_fixed(records: &[Record], what: &str) {
+fn assert_fixed(records: &[Record], ticks: u32, what: &str) {
+    let split = ticks / 2;
     for r in records {
         assert!(
             r.over <= 1.0,
@@ -289,10 +293,10 @@ fn assert_fixed(records: &[Record], what: &str) {
         );
         assert!(
             r.late <= 2.0 * r.early || r.late_relative <= ROUNDING,
-            "{what}: {} is not bounded: ticks {}-{TICKS} reach {:.3e} of the tolerance, ticks \
-             {}-{SPLIT} {:.3e}",
+            "{what}: {} is not bounded: ticks {}-{ticks} reach {:.3e} of the tolerance, ticks \
+             {}-{split} {:.3e}",
             r.name,
-            SPLIT + 1,
+            split + 1,
             r.late,
             SETTLE + 1,
             r.early
@@ -306,8 +310,8 @@ fn fixture_calibrated_state_holds_to_1e_9() {
     inputs
         .calibrate(&fixture_dir().join("calibration"))
         .unwrap();
-    let records = run(inputs, FIXTURE, "fixture");
-    assert_fixed(&records, "fixture");
+    let records = run(inputs, FIXTURE_TICKS, FIXTURE, "fixture");
+    assert_fixed(&records, FIXTURE_TICKS, "fixture");
 }
 
 /// Calibration tables of other inputs do not load: the static digest guards them.
@@ -373,6 +377,6 @@ fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let pack =
         ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).expect("pack loads");
     let inputs = EconInputs::from_pack(&pack, &dir).unwrap();
-    let records = run(inputs, PACK, "full pack");
-    assert_fixed(&records, "full pack");
+    let records = run(inputs, PACK_TICKS, PACK, "full pack");
+    assert_fixed(&records, PACK_TICKS, "full pack");
 }
