@@ -1,9 +1,9 @@
 # 0129. Constitutional wind tunnel and veil-of-ignorance scoring
 
-Status: proposed; amended by 0195 (constitution modules apply to bodies with territorial or pop scope)
+Status: proposed; amended by 0195 (constitution modules apply to bodies with territorial or pop scope); amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 10.1, 10.3 to 10.6, 23.3, 23.4
-Phase: P6, 2.0-alpha (constitution modules); 1.3 (veil scoring)
+Phase: P6, 2.0-alpha (constitution modules); 2.0-alpha (veil scoring, ADR 0239)
 
 ## Context
 
@@ -36,7 +36,7 @@ Option 3.
 
 ## Migration
 
-- 1.3: veil scoring with Steward mode. P6: constitution modules; wind tunnel after synthetic
+- 2.0-alpha (ADR 0239): veil scoring with Steward mode. P6: constitution modules; wind tunnel after synthetic
   worlds.
 
 ## Tests

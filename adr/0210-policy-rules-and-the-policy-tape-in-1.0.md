@@ -1,6 +1,6 @@
 # 0210. Policy in 1.0: estimated rules per lever and the policy tape
 
-Status: proposed (owner chose the option, 2026-10-28); amended per ADR 0241, 0242 (2026-10-29)
+Status: proposed (owner chose the option, 2026-10-28); amended per ADR 0241, 0242 (2026-10-29); amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 2.4, 8.5, 9.2, 9.4, 9.6, 12.3, 12.6, 15.7, 17, 19.3, 23.4; ADRs 0136, 0162, 0207
 Phase: P5a (spec, monetary and fiscal rules, tape loader), P5b (default rule), P9 (estimation and ablation)
@@ -13,7 +13,7 @@ institutional rules (Section 10)" and default (9.4) is "a strategic choice of th
 the Tier 1a planner of 12.3 weighs coalition power shares that only exist with P6, which is 2.0.
 The tape has one bullet in 15.7: no levers, sources or format. Without a policy agent P5a cannot
 set taxes and spending, P5b cannot decide a default, the P8 run to 2150 has no policy after the
-tape ends, and the P9 hindcast cannot separate mechanism error from policy error. The 1.3 player
+tape ends, and the P9 hindcast cannot separate mechanism error from policy error. The 2.0-alpha player
 score (23.4) is measured against "the AI", which in 1.x is this agent. Audit:
 https://claude.ai/artifact/QxYA4tkRQQ4mCx6g8YKg6Q (gap 1).
 
@@ -53,7 +53,7 @@ controls, and a sovereign default database (Bank of Canada and Bank of England, 
 Cruces-Trebesch). Non-commercial sources are acceptable (owner, 28 Oct 2026).
 
 **Modes.** A scenario sets policy per state to `tape`, `rules` or `tape-then-rules` (default). A
-Steward seat (1.3) replaces the rules for its state; a commitment device (ADR 0162) binds a rule's
+Steward seat (2.0-alpha, ADR 0239) replaces the rules for its state; a commitment device (ADR 0162) binds a rule's
 lever. Each rule's terms show in the explainer (20.2), as 12.3 promises for the planner.
 
 **Code.** The rules live in `ceteris-ai` (19.3) as the 1.x policy interface that Tier 1a later

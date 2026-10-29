@@ -62,7 +62,7 @@ Option 2.
 ## Migration
 
 - P3: conditional-forecast mode in the experiment API.
-- P9: vintage-aware origins in the pipeline; scorecard code in python/ceteris/analysis.
+- P9: vintage-aware origins in the pipeline; scorecard code in a Rust crate (ADR 0113).
 
 ## Tests
 
