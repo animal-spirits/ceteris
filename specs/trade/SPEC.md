@@ -306,22 +306,24 @@ fixture's eps:
 
 | Good | theta_g | s_g | kappa1 limit | kappa2 limit at kappa1 0.05 (default) | at kappa1 0.02 |
 |---|---|---|---|---|---|
-| 0 Agriculture | 10.57 | 3 | 0.168 / 0.149 | 0.104 / 0.096 | 0.130 / 0.126 |
-| 1 Crude oil and gas | 10.57 | 1 | 0.169 / 0.151 | 0.048 / 0.074 | 0.016 / 0.095 |
-| 2 Coal and other mining | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
-| 3 Food | 2.62 | 2 | 0.508 / 0.368 | 0.392 / 0.347 | 0.040 / 0.380 |
-| 4 Light manufacturing | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
-| 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
-| 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
+| 0 Agriculture | 7.68 | 3 | 0.222 / 0.191 | 0.152 / 0.141 | 0.179 / 0.172 |
+| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.110 / 0.102 | 0.040 / 0.037 | 0.016 / 0.058 |
+| 2 Coal and other mining | 16.91 | 2 | 0.110 / 0.101 | 0.048 / 0.044 | 0.040 / 0.070 |
+| 3 Food | 2.91 | 2 | 0.473 / 0.349 | 0.360 / 0.321 | 0.040 / 0.353 |
+| 4 Light manufacturing | 7.68 | 2 | 0.222 / 0.191 | 0.142 / 0.130 | 0.040 / 0.158 |
+| 5 Chemicals and metals | 2.91 | 2 | 0.458 / 0.307 | 0.109 / 0.302 | 0.031 / 0.337 |
+| 6 Machinery, electronics, vehicles | 4.14 | 2 | 0.366 / 0.287 | 0.265 / 0.240 | 0.040 / 0.270 |
 
 Limits are the first failing value on a 0.0005 grid (`ceteris calibrate stability` prints the rows from the fixture export).
 
 The default (kappa1 0.05, kappa2 0) lies on the edge kappa2 = 0 of the region and counts as
 inside (owner ruling, MIGRATION Task 6): J1 holds with equality, so the stock has a unit root (it
 keeps what a transient leaves, as decided: inventories are untargeted in P2) while J2 to J4 hold,
-kappa1 at 0.10 to 0.30 of its limit, and prices and output return to the steady state (spectral
-radius of the (x, q) block 0.29 to 0.93; 0.72 to 0.97 at kappa1 0.02). The
-derivation agrees with the fixture: kappa1 0.2 lies beyond the theta-10.57 limits and oscillates;
+kappa1 at 0.11 to 0.50 of its limit (the top at theta 16.91; 0.10 to 0.30 at the P01 values
+before ADR 0101), and prices and output return to the steady state (spectral
+radius of the (x, q) block 0.29 to 0.93; 0.72 to 0.97 at kappa1 0.02, at the earlier values). The
+derivation agreed with the fixture at the P01 values before ADR 0101 (10.57, 5.19 and 2.62),
+where the rest of this paragraph was measured: kappa1 0.2 lies beyond the theta-10.57 limits and oscillates;
 kappa2 0.05 at kappa1 0.02 lies outside in the default mode for goods 1 to 6 and inside
 frictionless, and the fixture overflows in the first and decays in the second (Deviations).
 `price_rule_stability.rs` checks the conditions against a toy market run through

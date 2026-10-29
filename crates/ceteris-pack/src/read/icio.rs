@@ -13,6 +13,7 @@ use super::xlsx::{self, Cell};
 use super::{
     ByYear, Csv, WINDOW, YEAR, cell, err, float, int, nearest_year, open_csv, with_member,
 };
+use crate::econ::goods::{Industry, icio_industry};
 use crate::numeric::pairwise_sum;
 
 /// Number of goods.
@@ -29,28 +30,16 @@ pub const ADB_ISO: [(&str, &str); 1] = [("COO", "COK")];
 /// GDP per person is taken from the year nearest 2000 within these years.
 pub const INCOME_YEARS: (i64, i64) = (1995, 2010);
 
-/// Good of an ICIO industry. The 2025 edition has 50 industries; the older names stay mapped,
-/// except the combined coal, oil and gas industry B05_06, which this reader refuses.
+/// Good of an ICIO industry (`goods::icio_industry`), refusing the combined coal, oil and gas
+/// industry B05_06 of editions before 2025.
 pub fn icio_good(industry: &str) -> Result<usize, String> {
-    Ok(match industry {
-        "A01" | "A02" | "A03" | "A01_02" => 0,
-        "B06" | "B09" => 1,
-        "B05" | "B07" | "B08" | "B07_08" => 2,
-        "C10T12" => 3,
-        "C13T15" | "C16" | "C17_18" | "C31T33" => 4,
-        "C19" | "C20" | "C21" | "C22" | "C23" | "C24" | "C24A" | "C24B" | "C25" => 5,
-        "C26" | "C27" | "C28" | "C29" | "C30" | "C301" | "C302T309" => 6,
-        "D" | "E" => 7,
-        "F" => 8,
-        "G" | "H49" | "H50" | "H51" | "H52" | "H53" | "I" | "J58T60" | "J61" | "J62_63" | "K"
-        | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" => 9,
-        "B05_06" => {
-            return Err(format!(
-                "{industry} combines coal with oil and gas; use the 2025 edition"
-            ));
-        }
-        _ => return Err(format!("unknown ICIO industry {industry}")),
-    })
+    match icio_industry(industry) {
+        Some(Industry::Good(g)) => Ok(g),
+        Some(Industry::Split) => Err(format!(
+            "{industry} combines coal with oil and gas; use the 2025 edition"
+        )),
+        None => Err(format!("unknown ICIO industry {industry}")),
+    }
 }
 
 /// One economy's 2000 structure by good, read from ICIO.

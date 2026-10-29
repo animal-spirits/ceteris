@@ -142,7 +142,7 @@ pub struct Kernel {
     n_countries: usize,
     province_country: Vec<u16>,
     gateway_country: Vec<u16>,
-    /// P01 per good as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
+    /// P01 per good times P150, as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
     /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
     /// (ADR 0018).
     theta: [f64; N_GOODS],
@@ -276,8 +276,10 @@ impl Kernel {
             .chain(&net.gateway_country)
             .max()
             .map_or(0, |&c| usize::from(c) + 1);
+        let theta = p.theta.map(|t| t * p.theta_scale);
         let goods = std::array::from_fn(|g| {
-            TRADED[g].then(|| good_kernel(net, np, ng, n_countries, g, weight[g], wedges, p))
+            TRADED[g]
+                .then(|| good_kernel(net, np, ng, n_countries, g, weight[g], theta[g], wedges, p))
         });
         let first: Option<&GoodKernel> = goods.iter().flatten().next();
         let (crossings_by_target, access_by_gateway, domestic_by_destination) =
@@ -294,7 +296,7 @@ impl Kernel {
             n_countries,
             province_country: net.province_country.clone(),
             gateway_country: net.gateway_country.clone(),
-            theta: p.theta,
+            theta,
             goods,
             crossings_by_target,
             access_by_gateway,
@@ -324,7 +326,7 @@ impl Kernel {
         &self.gateway_country
     }
 
-    /// P01 of good `g`, as the kernel of `g` was built with.
+    /// P01 of good `g` times P150, as the kernel of `g` was built with.
     pub fn theta(&self, g: usize) -> f64 {
         self.theta[g]
     }
@@ -545,12 +547,13 @@ fn good_kernel(
     nc: usize,
     g: usize,
     w: f64,
+    theta: f64,
     wedges: &Wedges,
     p: &TradeParams,
 ) -> GoodKernel {
     let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
     let rt = net.route_taus.as_ref();
-    let k_of = |total: f64| libm::pow(total, -p.theta[g]);
+    let k_of = |total: f64| libm::pow(total, -theta);
     let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
         let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
         Entry {
@@ -757,6 +760,37 @@ mod tests {
         // same legs, the other theta: the factors differ
         let e = k.good(0).domestic.entries[0];
         assert_ne!(e.k, libm::pow(1.0 / e.inv_tau, -8.0));
+    }
+
+    #[test]
+    fn theta_scale_multiplies_every_class() {
+        let net = world(&mut Rng(9));
+        let mut wedges = Wedges::none(2);
+        wedges.tariff.iter_mut().for_each(|t| *t = 0.1);
+        let scaled = TradeParams {
+            theta_scale: 1.4,
+            ..TradeParams::default()
+        };
+        let mut multiplied = TradeParams::default();
+        multiplied.theta.iter_mut().for_each(|t| *t *= 1.4);
+        let (a, b) = (
+            Kernel::build(&net, &W, &wedges, &scaled),
+            Kernel::build(&net, &W, &wedges, &multiplied),
+        );
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            assert_eq!(a.theta(g).to_bits(), b.theta(g).to_bits(), "good {g}");
+            let (ga, gb) = (a.good(g), b.good(g));
+            assert_eq!(ga.domestic.entries, gb.domestic.entries, "good {g}");
+            assert_eq!(ga.access.entries, gb.access.entries, "good {g}");
+            assert_eq!(ga.crossings.entries, gb.crossings.entries, "good {g}");
+        }
+        assert_ne!(
+            a.good(0).domestic.entries,
+            Kernel::build(&net, &W, &wedges, &TradeParams::default())
+                .good(0)
+                .domestic
+                .entries
+        );
     }
 
     #[test]

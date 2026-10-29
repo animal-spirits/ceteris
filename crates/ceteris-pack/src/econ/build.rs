@@ -14,6 +14,7 @@ use arrow_ipc::reader::FileReader;
 
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
+use super::theta::{self, ClassTable};
 use super::{goods, icio, people, tariffs};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
@@ -257,9 +258,21 @@ fn write_batch(out: &Path, name: &str, batch: &RecordBatch) -> Result<(String, [
     Ok((name.to_owned(), digest))
 }
 
-/// `econ_goods.arrow`: name, whether the good is traded, tonnes per USD and inventory coverage.
-fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
+/// `econ_goods.arrow`: name, whether the good is traded, tonnes per USD, inventory coverage,
+/// and the good's theta class with that class's harmonic and arithmetic mean theta (ADRs 0023
+/// and 0101; 0 for local goods).
+fn goods_columns(
+    weight: [f64; goods::NAMES.len()],
+    (of, arithmetic, harmonic): &ClassTable,
+) -> Vec<(String, ArrayRef)> {
     let n = goods::NAMES.len();
+    let per_good = |class_value: &[f64]| -> ArrayRef {
+        Arc::new(
+            (0..n)
+                .map(|g| of.get(g).map_or(0.0, |&c| class_value[usize::from(c)]))
+                .collect::<Float64Array>(),
+        )
+    };
     vec![
         (
             "name".into(),
@@ -277,6 +290,14 @@ fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
             "coverage".into(),
             Arc::new(COVERAGE.into_iter().collect::<Float64Array>()),
         ),
+        (
+            "theta_class".into(),
+            Arc::new(UInt8Array::from_iter_values(
+                (0..n).map(|g| of.get(g).copied().unwrap_or(0)),
+            )),
+        ),
+        ("theta_harmonic".into(), per_good(harmonic)),
+        ("theta_arithmetic".into(), per_good(arithmetic)),
     ]
 }
 
@@ -356,6 +377,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     )?;
 
     let weight = goods::weights_from_baci(&cache.join(BACI), &cache.join(HS_KEY))?;
+    let classes = theta::class_table(&cache.join(BACI), &cache.join(HS_KEY))?;
 
     let trade = trade_by_country(&cache.join(BACI), &iso, &codes)?;
     let agreements = tariffs::pack_pairs(
@@ -393,7 +415,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         gateways_t,
     ] = TABLES;
     let tables = vec![
-        write(out, goods_t, goods_columns(weight))?,
+        write(out, goods_t, goods_columns(weight, &classes))?,
         write(out, countries_t, countries_columns)?,
         write(out, io_t, icio::io_columns(&codes, &world)?)?,
         write(out, provinces_t, {

@@ -565,7 +565,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Invariant | Statement | Tolerance | Checked where |
 |---|---|---|---|
 | Money | Sum of balances zero; every flow tagged | exact | `Ledger::check`, every tick |
-| Goods | Created - destroyed = change in holdings (incl. transit) | 1e-9 relative | every tick |
+| Goods | Created - destroyed = change in holdings (incl. transit) | 1e-9 relative; transit 1e-9 relative plus 1e-12 of the good's market turnover, since markets fill it by differences of their holdings | every tick |
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
 | Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 relative | every tick |
@@ -675,12 +675,13 @@ spillovers, pp. 3-6) has rho(A) <= 1 only without spillovers, and A.6 (forward-l
 pp. 12-15) is unique when alpha + beta <= 0 but has no trade costs. `spectral_bound` raises for a
 nonzero agglomeration or a migration elasticity until the phase that adds one derives its A.
 
-At the P2 defaults (P01 class values 10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19; the fixture's
-value-added shares, 0.46 to 0.73) the bound is 0.922 (chemicals, refined fuels and metals: theta
-10.57, beta 0.46); with labour the only input (beta = 1) it is 10.57 / 11.57 = 0.914. On the 2000
-pack (smallest value-added shares over countries 0.040 to 0.252 for the traded goods) the bound
-is 0.967 (machinery, electronics and vehicles: theta 5.19, beta 0.040); both run V1 in tolerance
-mode (Task 20). The restatement above was checked against the January 2024 version in Task 20
+At the P2 defaults (P01 class values 7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, ADR 0101; the
+fixture's value-added shares, 0.46 to 0.73) the bound is 0.946 (coal and other mining: theta
+16.91, beta 0.66); with labour the only input (beta = 1) it is 16.91 / 17.91 = 0.944. Before ADR
+0101 (10.57, 5.19, 2.62) it was 0.922 on the fixture and 0.967 on the 2000 pack (smallest
+value-added shares over countries 0.040 to 0.252 for the traded goods; machinery, electronics and
+vehicles: theta 5.19, beta 0.040); the pack value is recomputed when the pack is rebuilt with the
+four classes. All run V1 in tolerance mode (Task 20). The restatement above was checked against the January 2024 version in Task 20
 (Theorem 1 p. 6, Remarks 4 and 5 pp. 10 to 11, Online Appendix A.3 pp. 6 to 9 with Gamma, B and
 the radius on p. 9, footnote 10 p. 7).
 

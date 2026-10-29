@@ -504,7 +504,7 @@ fn fixture_defaults_match_the_calibration_constants() {
         .iter()
         .map(|v| v.as_u64().unwrap())
         .collect();
-    assert_eq!(of, [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]);
+    assert_eq!(of, [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]);
     let theta: Vec<f64> = trade["theta"]
         .as_array()
         .unwrap()
@@ -513,7 +513,7 @@ fn fixture_defaults_match_the_calibration_constants() {
         .collect();
     assert_eq!(
         theta,
-        [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]
+        [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]
     );
     let n_classes = *of[..7].iter().max().unwrap() as usize + 1;
     let classes: Vec<Vec<usize>> = (0..n_classes)

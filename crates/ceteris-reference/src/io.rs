@@ -1,4 +1,4 @@
-//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 9).
+//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 10).
 
 use std::fs::File;
 use std::ops::{Index, IndexMut};
@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "9";
+pub const EXPORT_FORMAT: &str = "10";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -192,7 +192,8 @@ pub struct Crossings {
 /// G goods, P provinces, C countries, N gateways, E enterprises, K pops.
 #[derive(Clone, Debug)]
 pub struct Inputs {
-    /// (G,) P01 per good, 0 for local goods (ADR 0018).
+    /// (G,) P01 per good times the theta scale P150, as the kernel uses it; 0 for local goods
+    /// (ADRs 0018 and 0101).
     pub theta: Vec<f64>,
     /// P06, within a PIGL category.
     pub sigma_demand: f64,
@@ -624,7 +625,10 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         .try_into()
         .map_err(|_| "params.json: econ.pigl_theta needs one value per PIGL category")?;
     let inp = Inputs {
-        theta: goods.f64("theta")?,
+        theta: {
+            let scale = json_f64(&params["trade"], "theta_scale")?;
+            goods.f64("theta")?.into_iter().map(|t| t * scale).collect()
+        },
         sigma_demand: json_f64(econ, "sigma_demand")?,
         pigl: Pigl {
             sigma_b: json_f64(econ, "pigl_sigma_b")?,

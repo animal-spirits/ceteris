@@ -25,11 +25,20 @@ struct Parts {
 
 /// An ICIO-shaped CSV (industry block, final demand block, OUT; rows then TLS, VA, OUT) and its parts.
 fn table(invnt: Option<f64>, deplete: Option<f64>, seed: u64) -> (String, Parts) {
+    table_of(&INDUSTRIES, invnt, deplete, seed)
+}
+
+fn table_of(
+    industries: &[&str],
+    invnt: Option<f64>,
+    deplete: Option<f64>,
+    seed: u64,
+) -> (String, Parts) {
     let economies = ["AAA", "BBB"];
     let mut rng = Uniform::new(seed);
     let cols: Vec<String> = economies
         .iter()
-        .flat_map(|e| INDUSTRIES.map(|i| format!("{e}_{i}")))
+        .flat_map(|e| industries.iter().map(move |i| format!("{e}_{i}")))
         .collect();
     let fd_cols: Vec<String> = economies
         .iter()
@@ -123,6 +132,36 @@ fn aggregation_preserves_output_totals() {
                 .map(|j| parts.out[j])
                 .sum();
             assert!(approx(c.output[g], want, 1e-9));
+        }
+    }
+}
+
+/// Refined petroleum (C19) aggregates with crude oil and gas into good 1, not with chemicals into
+/// good 5.
+#[test]
+fn good_1_and_5_totals_follow_the_c19_move() {
+    let industries = ["B06", "C19", "C20", "C24A", "G", "K"];
+    let goods = [1, 1, 5, 5, 9, 9];
+    let dir = tempfile::tempdir().unwrap();
+    let (text, parts) = table_of(&industries, None, None, 3);
+    let path = dir.path().join("2000_SML.csv");
+    fs::write(&path, text).unwrap();
+    let got = aggregate(&path, 2000).unwrap();
+    let n = industries.len();
+    for (k, code) in ["AAA", "BBB"].iter().enumerate() {
+        let c = &got[*code];
+        for g in [1, 5] {
+            let cols: Vec<usize> = (0..n)
+                .filter(|j| goods[*j] == g)
+                .map(|j| k * n + j)
+                .collect();
+            let out: f64 = cols.iter().map(|&j| parts.out[j]).sum();
+            let used: f64 = cols
+                .iter()
+                .map(|&j| parts.z.iter().map(|r| r[j]).sum::<f64>())
+                .sum();
+            assert!(approx(c.output[g], out, 1e-9), "{code} good {g} output");
+            assert!(approx(c.va[g], out - used, 1e-9), "{code} good {g} va");
         }
     }
 }
