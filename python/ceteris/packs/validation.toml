@@ -3,7 +3,7 @@
 # not pack sources: the build neither fetches nor lists them, and `ceteris pack check-sources` profiles only fetch.toml. Each
 # names a manifest source with use = "validation".
 
-# Gravity estimator check (ADR 0022): the published sample of Yotov et al. (2016), read only by python/tests/test_calibrate.py.
+# Gravity estimator check (ADR 0022): the published sample of Yotov et al. (2016), read only by crates/ceteris-calibrate/tests/gravity.rs.
 [[file]]
 source = "yotov-2016"
 name = "AdvancedGuideFiles.zip"

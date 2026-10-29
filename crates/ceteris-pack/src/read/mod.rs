@@ -45,12 +45,12 @@ pub fn nearest(series: &BTreeMap<String, ByYear>) -> BTreeMap<String, f64> {
         .collect()
 }
 
-pub(crate) fn err(path: &Path, e: impl std::fmt::Display) -> String {
+pub fn err(path: &Path, e: impl std::fmt::Display) -> String {
     format!("{}: {e}", path.display())
 }
 
 /// Runs `f` on the first member of the zip at `path` (in directory order) whose name `pick` accepts.
-pub(crate) fn with_member<T>(
+pub fn with_member<T>(
     path: &Path,
     pick: impl Fn(&str) -> bool,
     f: impl FnOnce(&mut dyn Read) -> Result<T, String>,
@@ -68,7 +68,7 @@ pub(crate) fn with_member<T>(
 }
 
 /// The bytes of the first member of the zip at `path` whose name `pick` accepts.
-pub(crate) fn read_member(path: &Path, pick: impl Fn(&str) -> bool) -> Result<Vec<u8>, String> {
+pub fn read_member(path: &Path, pick: impl Fn(&str) -> bool) -> Result<Vec<u8>, String> {
     with_member(path, pick, |r| {
         let mut out = Vec::new();
         r.read_to_end(&mut out).map_err(|e| err(path, e))?;

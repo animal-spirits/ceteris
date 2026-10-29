@@ -1,5 +1,5 @@
 //! Stability of the P2 tick pipeline around the GE reference equilibrium of the fixture
-//! (`tests/golden/p2-fixture/reference`, written by `python -m ceteris.reference solve`) and
+//! (`tests/golden/p2-fixture/reference`, written by `ceteris reference solve`) and
 //! from the data state. Slow in debug builds; run with `--release` for speed.
 
 use std::path::{Path, PathBuf};

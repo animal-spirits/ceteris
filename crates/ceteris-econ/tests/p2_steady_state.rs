@@ -1,5 +1,5 @@
 //! ADR 0089: the calibrated data state is the model's steady state. From the calibration
-//! tables (`python -m ceteris.reference calibrate`), 120 ticks with every friction on stay at
+//! tables (`ceteris calibrate`), 120 ticks with every friction on stay at
 //! the calibrated state: on the fixture (`tests/golden/p2-fixture/calibration`) and, when the
 //! pack holds its calibration, on the full 2000 pack. Run with `--release`; the pack run takes
 //! about 20 s.
@@ -361,8 +361,7 @@ fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     );
     if !EconInputs::has_calibration(&dir) {
         let hint = format!(
-            "no calibration tables in {}; install them from `python -m ceteris.reference \
-             calibrate --pack {}`",
+            "no calibration tables in {}; install them from `ceteris calibrate --pack {}`",
             dir.display(),
             dir.display()
         );
