@@ -449,16 +449,18 @@ fn build(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if centres.is_some() || simple.is_some() {
         return Err("--centres and --simple build the whole pack, not --econ-only".into());
     }
-    let pack = pack.unwrap_or_else(|| sources::workspace_root().join("data/packs/2000"));
+    let pack = match pack {
+        Some(pack) => pack,
+        None => ceteris_pack::build::default_out(&sources::workspace_root())?,
+    };
     let out = out.unwrap_or_else(|| pack.clone());
     let cache = sources::workspace_root().join(fetch::CACHE_DIR);
     let report = econ::build::build(&pack, &out, &cache)?;
-    let hex = |d: &[u8; 32]| d.iter().map(|b| format!("{b:02x}")).collect::<String>();
     let tables = Json::object(
         report
             .tables
             .iter()
-            .map(|(name, d)| (name, Json::Str(hex(d)))),
+            .map(|(name, d)| (name, Json::Str(ceteris_pack::table::hex(d)))),
     );
     for line in &report.summary {
         eprintln!("{line}");

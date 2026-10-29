@@ -4,7 +4,8 @@
 use geo::{Coord, LineString, MultiPolygon, Polygon};
 use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 
-fn fail(e: geos::Error) -> String {
+/// A GEOS error as the message the build reports.
+pub(crate) fn fail(e: geos::Error) -> String {
     e.to_string()
 }
 

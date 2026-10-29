@@ -424,15 +424,11 @@ mod graph {
     use rstar::{AABB, RTree, RTreeObject};
 
     use super::*;
-    use crate::geo::overlay::{self, from_geo, is_empty, union_all};
+    use crate::geo::overlay::{self, fail, from_geo, is_empty, union_all};
     use crate::geo::provinces::{Centres, Province};
     use crate::geo::sphere::cos_lat;
     use crate::read::natural_earth::{Dbf, shapes_from_zip};
     use crate::read::{cell, float, open_csv};
-
-    fn fail(e: geos::Error) -> String {
-        e.to_string()
-    }
 
     struct Boxed(usize, AABB<[f64; 2]>);
 

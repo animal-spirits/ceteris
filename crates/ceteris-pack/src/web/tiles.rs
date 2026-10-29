@@ -10,6 +10,7 @@ use geo::Geometry;
 use sha2::{Digest, Sha256};
 
 use super::{MAX_ZOOM, geojson};
+use crate::table::hex;
 
 /// One layer of the archive: its name, geometries and the zoom from which they are drawn.
 pub struct Layer<'a> {
@@ -39,10 +40,6 @@ pub fn argv(path: &Path, layers: &[(&str, &Path)]) -> Vec<OsString> {
         args.extend([OsString::from("-L"), layer]);
     }
     args
-}
-
-pub(crate) fn hex(digest: impl AsRef<[u8]>) -> String {
-    digest.as_ref().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Writes the archive and returns `web/map.pmtiles:<layer>` -> SHA-256 of the layer's GeoJSON.

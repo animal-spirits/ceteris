@@ -72,7 +72,7 @@ pub fn write_layers(web: &Path, layers: &Layers) -> Result<Written, String> {
         let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         tables.insert(
             format!("web/{name}.fill"),
-            tiles::hex(Sha256::digest(bytes)),
+            crate::table::hex(Sha256::digest(bytes)),
         );
     }
     Ok(Written {
@@ -113,17 +113,6 @@ pub fn layers(
         countries: to_geo(&countries)?,
         counties: to_geo(&counties)?,
     })
-}
-
-/// The web outputs of the provinces, their countries and the clipped counties, written to `web`.
-#[cfg(feature = "geos")]
-pub fn write(
-    web: &Path,
-    provinces: &[Geometry],
-    country: &[String],
-    counties: &[Geometry],
-) -> Result<Written, String> {
-    write_layers(web, &layers(provinces, country, counties)?)
 }
 
 #[cfg(all(test, feature = "geos"))]

@@ -11,3 +11,4 @@ pub mod raster_terrain;
 pub mod resources;
 pub mod sphere;
 pub mod transport;
+pub mod vertices;

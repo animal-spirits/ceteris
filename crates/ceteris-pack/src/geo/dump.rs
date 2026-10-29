@@ -11,57 +11,16 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_array::{ArrayRef, Float64Array, UInt32Array};
-use geo::{Coord, LineString, MultiPolygon, Polygon};
+use geo::MultiPolygon;
 
+use super::raster_terrain::ETOPO;
 use super::raster_terrain::{Elevation, SAMPLE_DEPTH};
+use super::vertices::read_geoms;
 use super::{fills, resources, sphere};
-use crate::build::{ETOPO, cell_columns, resolution, sample, sample_counties};
-use crate::econ::build::values;
+use crate::build::{cell_columns, resolution, sample, sample_counties};
 use crate::sources::{CONFIG_DIR, read_table, workspace_root};
 use crate::{fetch, table};
-
-/// The geometries of a vertex table, in `geom` order.
-pub fn read_geoms(path: &Path) -> Result<Vec<MultiPolygon>, String> {
-    let geom = values::<UInt32Type>(path, "geom")?;
-    let part = values::<UInt32Type>(path, "part")?;
-    let ring = values::<UInt32Type>(path, "ring")?;
-    let x = values::<Float64Type>(path, "x")?;
-    let y = values::<Float64Type>(path, "y")?;
-    let mut rows: Vec<(u32, u32, u32, Coord)> = Vec::with_capacity(geom.len());
-    for i in 0..geom.len() {
-        rows.push((geom[i], part[i], ring[i], Coord { x: x[i], y: y[i] }));
-    }
-    let mut out: Vec<Vec<Vec<LineString>>> = Vec::new();
-    for (g, p, r, c) in rows {
-        let (g, p, r) = (g as usize, p as usize, r as usize);
-        if out.len() <= g {
-            out.resize(g + 1, Vec::new());
-        }
-        if out[g].len() <= p {
-            out[g].resize(p + 1, Vec::new());
-        }
-        if out[g][p].len() <= r {
-            out[g][p].resize(r + 1, LineString(Vec::new()));
-        }
-        out[g][p][r].0.push(c);
-    }
-    Ok(out
-        .into_iter()
-        .map(|parts| {
-            MultiPolygon(
-                parts
-                    .into_iter()
-                    .map(|mut rings| {
-                        let exterior = rings.remove(0);
-                        Polygon::new(exterior, rings)
-                    })
-                    .collect(),
-            )
-        })
-        .collect())
-}
 
 fn f64s(v: Vec<f64>) -> ArrayRef {
     Arc::new(Float64Array::from(v))
@@ -81,38 +40,6 @@ fn named(columns: Vec<(&str, ArrayRef)>) -> Vec<(String, ArrayRef)> {
         .collect()
 }
 
-/// A vertex table of the geometries: one row per vertex, rings closed, in their stored order.
-pub fn write_geoms(path: &Path, geoms: &[MultiPolygon]) -> Result<(), String> {
-    let (mut g, mut p, mut r, mut x, mut y) = (vec![], vec![], vec![], vec![], vec![]);
-    let index = |i: usize| u32::try_from(i).map_err(|e| e.to_string());
-    for (i, geom) in geoms.iter().enumerate() {
-        for (j, part) in geom.iter().enumerate() {
-            for (k, ring) in std::iter::once(part.exterior())
-                .chain(part.interiors())
-                .enumerate()
-            {
-                for c in &ring.0 {
-                    g.push(index(i)?);
-                    p.push(index(j)?);
-                    r.push(index(k)?);
-                    x.push(c.x);
-                    y.push(c.y);
-                }
-            }
-        }
-    }
-    write(
-        path,
-        named(vec![
-            ("geom", Arc::new(UInt32Array::from(g))),
-            ("part", Arc::new(UInt32Array::from(p))),
-            ("ring", Arc::new(UInt32Array::from(r))),
-            ("x", f64s(x)),
-            ("y", f64s(y)),
-        ]),
-    )
-}
-
 pub fn dump(dir: &Path) -> Result<(), String> {
     let provinces = read_geoms(&dir.join("provinces.geom.arrow"))?;
     let counties = read_geoms(&dir.join("counties.geom.arrow"))?;
@@ -130,8 +57,9 @@ pub fn build(
 ) -> Result<(), String> {
     use arrow_array::StringArray;
 
+    use super::vertices::write_geoms;
     use super::{counties, overlay, provinces};
-    use crate::build::{ADMIN0, ADMIN1};
+    use crate::read::natural_earth::{ADMIN0, ADMIN1};
 
     let root = workspace_root();
     let config = read_table(&root.join(CONFIG_DIR).join("pack.toml"))?;

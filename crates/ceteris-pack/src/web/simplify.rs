@@ -6,11 +6,7 @@ use std::collections::BTreeMap;
 use geos::{Geom, Geometry, GeometryTypes, WKBWriter};
 
 use super::SIMPLIFY_DEG;
-use crate::geo::overlay;
-
-fn fail(e: geos::Error) -> String {
-    e.to_string()
-}
+use crate::geo::overlay::{self, fail};
 
 /// `shapely.coverage_simplify(geoms, SIMPLIFY_DEG)`: GEOS's coverage simplification of the
 /// collection of `geoms`, boundary included, its members in order. The inner error is GEOS

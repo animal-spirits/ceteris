@@ -46,7 +46,7 @@ use crate::read::{WINDOW, YEAR};
 pub const MIN_WORKING_AGE: f64 = 1000.0;
 pub const SPAM: &str = "spam2000v3.0.7_global_physical-area.geotiff.zip";
 pub const KUMMU: &str = "kummu_gdp_ppp_2000_5arcmin.tif";
-pub const ADMIN1: &str = "ne_10m_admin_1_states_provinces.zip";
+pub use crate::read::natural_earth::ADMIN1;
 /// GEM coal mines and oil and gas fields.
 pub const GEM: [&str; 2] = [
     "Global Coal Mine Tracker, August 2026.xlsx",

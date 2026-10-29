@@ -10,6 +10,7 @@ use h3o::{CellIndex, LatLng, Resolution};
 use crate::raster::geotiff;
 
 /// Samples per cell are its children this many resolutions finer (7^2 = 49).
+pub const ETOPO: &str = "ETOPO_2022_v1_60s_N90W180_surface.tif";
 pub const SAMPLE_DEPTH: u8 = 2;
 pub const FINEST: Resolution = Resolution::Nine;
 

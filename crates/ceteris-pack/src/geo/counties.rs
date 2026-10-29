@@ -222,7 +222,7 @@ pub fn record(root: &Path) -> Result<(), String> {
         meta.insert(level, by_iso);
     }
     let cache = root.join(fetch::CACHE_DIR);
-    let admin1 = cache.join("ne_10m_admin_1_states_provinces.zip");
+    let admin1 = cache.join(crate::read::natural_earth::ADMIN1);
     let text = lock_text(&meta, &regions_per_country(&admin1)?, |e| {
         fetch::fetch(e, &cache).map_err(|e| e.to_string())
     })?;
