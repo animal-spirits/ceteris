@@ -87,3 +87,73 @@ fn the_pack_tables_hold_their_invariants() {
         stats["split_by_counties"].as_u64().unwrap() > stats["split_by_voronoi"].as_u64().unwrap()
     );
 }
+
+/// The SHA-256 of every file under `dir` but `web/map.pmtiles`, by path relative to `dir`.
+#[cfg(feature = "geos")]
+fn digests(dir: &Path) -> std::collections::BTreeMap<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut out = std::collections::BTreeMap::new();
+    let mut todo = vec![dir.to_owned()];
+    while let Some(d) = todo.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let path = e.unwrap().path();
+            if path.is_dir() {
+                todo.push(path);
+                continue;
+            }
+            let name = path
+                .strip_prefix(dir)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            if name != "web/map.pmtiles" {
+                let digest = Sha256::digest(std::fs::read(&path).unwrap());
+                out.insert(name, format!("{digest:x}"));
+            }
+        }
+    }
+    out
+}
+
+/// Two builds of the whole pack write the same bytes: every file, the manifest with its
+/// digests among them, but the tiles archive, whose tiles tippecanoe writes in a varying order
+/// (the manifest pins each layer's GeoJSON instead).
+#[cfg(feature = "geos")]
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "builds the whole pack twice; run with --release"
+)]
+fn two_builds_write_the_same_bytes() {
+    use ceteris_pack::build::build;
+    use ceteris_pack::fetch;
+    use ceteris_pack::geo::provinces::Centres;
+
+    let missing: Vec<String> = fetch::entries(&workspace_root())
+        .unwrap()
+        .into_iter()
+        .filter(|e| !e.optional && !fetch::path_of(&e.name).exists())
+        .map(|e| e.name)
+        .collect();
+    if !missing.is_empty() {
+        eprintln!("skipping: {} files not in the fetch cache", missing.len());
+        return;
+    }
+    if std::process::Command::new("tippecanoe")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping: no tippecanoe on PATH");
+        return;
+    }
+    let dirs = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
+    let built: Vec<_> = dirs
+        .iter()
+        .map(|d| build(d.path(), &Centres::H3o).unwrap())
+        .collect();
+    assert_eq!(built[0].tables, built[1].tables);
+    let (a, b) = (digests(dirs[0].path()), digests(dirs[1].path()));
+    assert!(a.contains_key("manifest.json") && a.contains_key("web/counties.fill"));
+    assert_eq!(a, b);
+}

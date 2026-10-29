@@ -1,6 +1,7 @@
 //! The pack build (Section 16.1): the sources fetched into the cache; the provinces, clipped
 //! counties, H3 cells, terrain, mineral sites and transport graph built from them; the P1
-//! tables and the map's attribute files written; then the econ tables.
+//! tables, the map's tiles, fills and attribute files written; then the econ tables and the
+//! manifest.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -9,12 +10,16 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, Float64Array, UInt32Array, UInt64Array};
 use geo::MultiPolygon;
 use h3o::{CellIndex, LatLng, Resolution};
+use toml::de::{DeTable, DeValue};
 
+use crate::fetch::Entry;
 use crate::geo::raster_terrain::{
     Elevation, FINEST, Terrain, assign_cells, cell_area_km2, province_means, terrain,
 };
+use crate::json::Json;
 use crate::read::natural_earth::Dbf;
 use crate::sources::{CONFIG_DIR, read_table};
+use crate::table::PACK_FORMAT;
 
 /// Map colours: neighbouring countries differ where a country has fewer neighbours than this.
 pub const PALETTE_SIZE: usize = 8;
@@ -214,6 +219,89 @@ pub fn cell_columns(owner_name: &str, s: &Sampled) -> Vec<(String, ArrayRef)> {
     ]
 }
 
+/// A TOML document as `json.dumps` writes what `tomllib` parses: tables as objects with their
+/// keys in the order they appear, TOML types as their JSON counterparts. Datetimes, which
+/// `json.dumps` cannot write, are an error.
+pub fn toml_json(text: &str) -> Result<Json, String> {
+    let values: toml::Table = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
+    let order = DeTable::parse(text).map_err(|e| e.to_string())?;
+    table_json(&values, order.get_ref())
+}
+
+fn table_json(values: &toml::Table, order: &DeTable) -> Result<Json, String> {
+    let mut keys: Vec<_> = order.iter().collect();
+    keys.sort_by_key(|(k, _)| k.span().start);
+    keys.into_iter()
+        .map(|(k, v)| {
+            let key: &str = k.get_ref();
+            let value = values
+                .get(key)
+                .ok_or_else(|| format!("no value for {key}"))?;
+            Ok((key.to_owned(), value_json(value, v.get_ref())?))
+        })
+        .collect::<Result<_, String>>()
+        .map(Json::Fields)
+}
+
+fn value_json(value: &toml::Value, order: &DeValue) -> Result<Json, String> {
+    use toml::Value;
+    Ok(match (value, order) {
+        (Value::String(s), _) => Json::Str(s.clone()),
+        (Value::Integer(i), _) => Json::Int(*i),
+        (Value::Float(x), _) => Json::Float(*x),
+        (Value::Boolean(b), _) => Json::Bool(*b),
+        (Value::Datetime(d), _) => return Err(format!("{d}: json.dumps writes no datetime")),
+        (Value::Array(a), DeValue::Array(o)) => Json::List(
+            a.iter()
+                .zip(o.iter())
+                .map(|(v, o)| value_json(v, o.get_ref()))
+                .collect::<Result<_, _>>()?,
+        ),
+        (Value::Table(t), DeValue::Table(o)) => table_json(t, o)?,
+        (v, _) => return Err(format!("{v}: parsed two ways")),
+    })
+}
+
+/// `manifest.json` as build.py writes it (before `json.dumps(indent=2)`): the pack format,
+/// year and configuration of `pack.toml` (its text), each fetched file's source, name and
+/// SHA-256, each written file's SHA-256 by path, and the build stats.
+pub fn manifest(
+    config: &str,
+    sources: &[Entry],
+    tables: &BTreeMap<String, String>,
+    stats: Json,
+) -> Result<Json, String> {
+    let config = toml_json(config)?;
+    let year = match &config {
+        Json::Fields(f) => f.iter().find(|(k, _)| k == "year").map(|(_, v)| v.clone()),
+        _ => None,
+    }
+    .ok_or("pack.toml: no year")?;
+    let format: i64 = PACK_FORMAT.parse().map_err(|_| "pack format")?;
+    let sources = sources
+        .iter()
+        .map(|e| {
+            let sha256 = e
+                .sha256
+                .as_deref()
+                .ok_or_else(|| format!("{}: no sha256", e.name))?;
+            Ok(Json::Fields(vec![
+                ("source".to_owned(), Json::from(&e.source)),
+                ("name".to_owned(), Json::from(&e.name)),
+                ("sha256".to_owned(), Json::from(sha256)),
+            ]))
+        })
+        .collect::<Result<_, String>>()?;
+    Ok(Json::Fields(vec![
+        ("pack_format".to_owned(), Json::Int(format)),
+        ("year".to_owned(), year),
+        ("config".to_owned(), config),
+        ("sources".to_owned(), Json::List(sources)),
+        ("tables".to_owned(), Json::object(tables.iter())),
+        ("stats".to_owned(), stats),
+    ]))
+}
+
 #[cfg(feature = "geos")]
 pub use full::{Built, build};
 
@@ -230,18 +318,20 @@ mod full {
     use sha2::{Digest, Sha256};
 
     use super::{
-        ADMIN0, ADMIN1, ETOPO, cell_columns, colour_countries, country_names, resolution,
-        round_int, sample, sample_counties, split_area_km2, terrain_class,
+        ADMIN0, ADMIN1, ETOPO, Sampled, cell_columns, colour_countries, country_names, manifest,
+        resolution, round_int, sample, sample_counties, split_area_km2, terrain_class,
     };
-    use crate::geo::overlay::to_multipolygon;
-    use crate::geo::provinces::{self, Centres};
+    use crate::econ::build::BuildReport;
+    use crate::geo::counties::Clipped;
+    use crate::geo::overlay::{to_geo, to_multipolygon};
+    use crate::geo::provinces::{self, Centres, Province};
     use crate::geo::raster_terrain::{Elevation, SAMPLE_DEPTH};
-    use crate::geo::transport::{self, Mode, NodeKind};
+    use crate::geo::transport::{self, Mode, NodeKind, Transport};
     use crate::geo::{counties, resources, sphere};
     use crate::json::Json;
     use crate::numeric::round;
     use crate::sources::{CONFIG_DIR, read_table, workspace_root};
-    use crate::{econ, fetch, table};
+    use crate::{econ, fetch, table, web};
 
     /// The name of a code, the code itself where there is none. A code admin-0 lists with a
     /// blank ADMIN is an error here, where Python writes a null name; the cache has none.
@@ -286,8 +376,8 @@ mod full {
         digest.iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    /// What a build wrote: each file's SHA-256 by its path in the pack, and the build stats in
-    /// the manifest's order.
+    /// What a build wrote: each file's SHA-256 by its path in the pack (a tile layer's is that
+    /// of its GeoJSON), and the build stats in the manifest's order.
     pub struct Built {
         pub tables: BTreeMap<String, String>,
         pub stats: Json,
@@ -331,16 +421,35 @@ mod full {
         }
     }
 
-    /// Builds the pack into `out` from the fetch cache, the Voronoi splits seeded from, and the
-    /// sea grid placed at, the cell centres `centres` gives.
-    pub fn build(out: &Path, centres: &Centres) -> Result<Built, String> {
-        let root = workspace_root();
-        let cache = root.join(fetch::CACHE_DIR);
-        for e in fetch::entries(&root)? {
-            fetch::fetch(&e, &cache).map_err(|e| e.to_string())?;
-        }
-        let config = read_table(&root.join(CONFIG_DIR).join("pack.toml"))?;
-        let split_area = split_area_km2(&config)?;
+    /// The P1 world a build writes: the provinces, the clipped counties, their cells and
+    /// terrain, the mineral sites, the transport graph and the countries in code order.
+    struct World {
+        provs: Vec<Province>,
+        clipped: Clipped,
+        cty_area: Vec<f64>,
+        cs: Sampled,
+        ps: Sampled,
+        res: Vec<Vec<u32>>,
+        t: Transport,
+        terrain: Vec<u8>,
+        in_slice: Vec<bool>,
+        ports: Vec<u32>,
+        airports: Vec<u32>,
+        rail: Vec<bool>,
+        codes: Vec<String>,
+        code_names: Vec<String>,
+        sovereigns: Vec<String>,
+        sovereign_names: Vec<String>,
+        colours: Vec<u8>,
+    }
+
+    fn world(
+        root: &Path,
+        cache: &Path,
+        config: &toml::Table,
+        centres: &Centres,
+    ) -> Result<World, String> {
+        let split_area = split_area_km2(config)?;
         let dev_slice: BTreeSet<&str> = config
             .get("dev_slice")
             .and_then(toml::Value::as_array)
@@ -349,12 +458,12 @@ mod full {
             .filter_map(toml::Value::as_str)
             .collect();
 
-        let units = counties::load(&root)?;
+        let units = counties::load(root)?;
         let provs = provinces::build(
             &cache.join(ADMIN1),
             &cache.join(ADMIN0),
             split_area,
-            resolution(&config, "land_res")?,
+            resolution(config, "land_res")?,
             &units,
             centres,
         )?;
@@ -369,13 +478,13 @@ mod full {
         let canchor: Vec<(f64, f64)> = cty.iter().map(|c| (c.lon, c.lat)).collect();
         let cty_area: Vec<f64> = cgeoms.iter().map(sphere::area_km2).collect();
         let z = Elevation::open(&cache.join(ETOPO))?;
-        let cs = sample_counties(&cgeoms, &canchor, resolution(&config, "county_res")?, &z)?;
+        let cs = sample_counties(&cgeoms, &canchor, resolution(config, "county_res")?, &z)?;
         let pgeoms: Vec<MultiPolygon> = provs.iter().map(|p| provinces::parts(&p.geom)).collect();
         let panchor: Vec<(f64, f64)> = provs.iter().map(|p| (p.lon, p.lat)).collect();
         let ps = sample(
             &pgeoms,
             &panchor,
-            resolution(&config, "land_res")?,
+            resolution(config, "land_res")?,
             &z,
             SAMPLE_DEPTH,
         )?;
@@ -384,9 +493,9 @@ mod full {
         let t = transport::build(
             &provs,
             &ps.means.tri_m,
-            &cache,
-            resolution(&config, "sea_res")?,
-            resolution(&config, "sea_zone_res")?,
+            cache,
+            resolution(config, "sea_res")?,
+            resolution(config, "sea_zone_res")?,
             centres,
         )?;
         let g = &t.graph;
@@ -427,6 +536,24 @@ mod full {
         for p in &provs {
             sovereign.insert(&p.country, &p.sovereign);
         }
+        let sovereigns: Vec<String> = codes
+            .iter()
+            .map(|c| {
+                sovereign
+                    .get(c.as_str())
+                    .map(|&s| s.to_owned())
+                    .ok_or_else(|| format!("no sovereign for {c}"))
+            })
+            .collect::<Result<_, _>>()?;
+        let code_names: Vec<String> = codes
+            .iter()
+            .map(|c| name_or_code(c))
+            .collect::<Result<_, _>>()?;
+        let sovereign_names: Vec<String> = sovereigns
+            .iter()
+            .map(|c| name_or_code(c))
+            .collect::<Result<_, _>>()?;
+        let colours: Vec<u8> = codes.iter().map(|c| colour[c]).collect();
         let terrain: Vec<u8> = ps
             .means
             .elev_mean_m
@@ -444,23 +571,45 @@ mod full {
             .iter()
             .map(|&k| k > 0)
             .collect();
-        let mut cells_per = vec![0u32; n];
-        for &o in &ps.owner {
-            cells_per[o as usize] += 1;
-        }
+        Ok(World {
+            provs,
+            clipped,
+            cty_area,
+            cs,
+            ps,
+            res,
+            t,
+            terrain,
+            in_slice,
+            ports,
+            airports,
+            rail,
+            codes,
+            code_names,
+            sovereigns,
+            sovereign_names,
+            colours,
+        })
+    }
 
-        let web = out.join("web");
-        std::fs::create_dir_all(&web).map_err(|e| format!("{}: {e}", web.display()))?;
+    fn res_names() -> Vec<String> {
+        resources::GROUPS
+            .iter()
+            .map(|(group, _)| format!("res_{group}"))
+            .collect()
+    }
+
+    /// The eight P1 tables.
+    fn write_tables(pack: &mut Pack, w: &World) -> Result<(), String> {
         let text = |v: Vec<&str>| -> ArrayRef { Arc::new(StringArray::from(v)) };
-        let texts = |v: Vec<String>| -> ArrayRef { Arc::new(StringArray::from(v)) };
         let f64s = |v: Vec<f64>| -> ArrayRef { Arc::new(Float64Array::from(v)) };
         let u32s = |v: Vec<u32>| -> ArrayRef { Arc::new(UInt32Array::from(v)) };
         let bools = |v: Vec<bool>| -> ArrayRef { Arc::new(BooleanArray::from(v)) };
-        let mut pack = Pack {
-            out,
-            tables: BTreeMap::new(),
-        };
-
+        let provs = &w.provs;
+        let mut cells_per = vec![0u32; provs.len()];
+        for &o in &w.ps.owner {
+            cells_per[o as usize] += 1;
+        }
         let mut columns: Vec<(&str, ArrayRef)> = vec![
             ("id", text(provs.iter().map(|p| p.id.as_str()).collect())),
             (
@@ -482,58 +631,42 @@ mod full {
             ("lon", f64s(provs.iter().map(|p| p.lon).collect())),
             ("lat", f64s(provs.iter().map(|p| p.lat).collect())),
             ("area_km2", f64s(provs.iter().map(|p| p.area_km2).collect())),
-            ("elev_mean_m", f64s(ps.means.elev_mean_m.clone())),
-            ("elev_std_m", f64s(ps.means.elev_std_m.clone())),
-            ("tri_m", f64s(ps.means.tri_m.clone())),
-            ("terrain", Arc::new(UInt8Array::from(terrain.clone()))),
-            ("coastal", bools(t.coastal.clone())),
-            ("dev_slice", bools(in_slice.clone())),
+            ("elev_mean_m", f64s(w.ps.means.elev_mean_m.clone())),
+            ("elev_std_m", f64s(w.ps.means.elev_std_m.clone())),
+            ("tri_m", f64s(w.ps.means.tri_m.clone())),
+            ("terrain", Arc::new(UInt8Array::from(w.terrain.clone()))),
+            ("coastal", bools(w.t.coastal.clone())),
+            ("dev_slice", bools(w.in_slice.clone())),
             ("cells", u32s(cells_per)),
-            ("ports", u32s(ports.clone())),
-            ("airports", u32s(airports.clone())),
-            ("rail", bools(rail.clone())),
+            ("ports", u32s(w.ports.clone())),
+            ("airports", u32s(w.airports.clone())),
+            ("rail", bools(w.rail.clone())),
         ];
-        let res_names: Vec<String> = resources::GROUPS
-            .iter()
-            .map(|(group, _)| format!("res_{group}"))
-            .collect();
-        for (name, v) in res_names.iter().zip(&res) {
+        let res_names = res_names();
+        for (name, v) in res_names.iter().zip(&w.res) {
             columns.push((name, u32s(v.clone())));
         }
         pack.columns("provinces.arrow", columns)?;
-        let sovereign_of = |c: &str| {
-            sovereign
-                .get(c)
-                .copied()
-                .ok_or_else(|| format!("no sovereign for {c}"))
-        };
-        let sovereigns: Vec<&str> = codes
-            .iter()
-            .map(|c| sovereign_of(c))
-            .collect::<Result<_, _>>()?;
-        let code_names: Vec<String> = codes
-            .iter()
-            .map(|c| name_or_code(c))
-            .collect::<Result<_, _>>()?;
-        let sovereign_names: Vec<String> = sovereigns
-            .iter()
-            .map(|c| name_or_code(c))
-            .collect::<Result<_, _>>()?;
-        let colours: Vec<u8> = codes.iter().map(|c| colour[c]).collect();
+        let strs = |v: &[String]| text(v.iter().map(String::as_str).collect());
         pack.columns(
             "countries.arrow",
             vec![
-                ("code", text(codes.iter().map(String::as_str).collect())),
-                ("name", texts(code_names.clone())),
-                ("sovereign", text(sovereigns)),
-                ("sovereign_name", texts(sovereign_names.clone())),
-                ("colour", Arc::new(UInt8Array::from(colours.clone()))),
+                ("code", strs(&w.codes)),
+                ("name", strs(&w.code_names)),
+                ("sovereign", strs(&w.sovereigns)),
+                ("sovereign_name", strs(&w.sovereign_names)),
+                ("colour", Arc::new(UInt8Array::from(w.colours.clone()))),
             ],
         )?;
-        pack.table("cells.arrow", &table::batch(cell_columns("province", &ps))?)?;
-        for (name, batch) in transport::tables(&t.graph, &t.zones, &transport::chokepoints()?)? {
+        pack.table(
+            "cells.arrow",
+            &table::batch(cell_columns("province", &w.ps))?,
+        )?;
+        for (name, batch) in transport::tables(&w.t.graph, &w.t.zones, &transport::chokepoints()?)?
+        {
             pack.table(name, &batch)?;
         }
+        let cty = &w.clipped.counties;
         pack.columns(
             "counties.arrow",
             vec![
@@ -546,15 +679,33 @@ mod full {
                     "level",
                     text(cty.iter().map(|c| c.level.as_str()).collect()),
                 ),
-                ("province", u32s(clipped.province.clone())),
-                ("area_km2", f64s(cty_area.clone())),
-                ("elev_mean_m", f64s(cs.means.elev_mean_m.clone())),
-                ("elev_std_m", f64s(cs.means.elev_std_m.clone())),
-                ("tri_m", f64s(cs.means.tri_m.clone())),
+                ("province", u32s(w.clipped.province.clone())),
+                ("area_km2", f64s(w.cty_area.clone())),
+                ("elev_mean_m", f64s(w.cs.means.elev_mean_m.clone())),
+                ("elev_std_m", f64s(w.cs.means.elev_std_m.clone())),
+                ("tri_m", f64s(w.cs.means.tri_m.clone())),
             ],
-        )?;
+        )
+    }
 
-        let index: BTreeMap<&str, i64> = codes
+    /// The map's tiles and fills in `web`, from the provinces and clipped counties simplified.
+    fn write_web(web: &Path, w: &World) -> Result<web::Written, String> {
+        let provinces: Vec<geo::Geometry> = w.provs.iter().map(|p| p.geom.clone()).collect();
+        let country: Vec<String> = w.provs.iter().map(|p| p.country.clone()).collect();
+        let counties = w
+            .clipped
+            .counties
+            .iter()
+            .map(|c| to_geo(&c.geom))
+            .collect::<Result<Vec<_>, _>>()?;
+        web::write(web, &provinces, &country, &counties)
+    }
+
+    /// The map's attribute files, `web/provinces.json` and `web/counties.json`.
+    fn write_attributes(pack: &mut Pack, w: &World) -> Result<(), String> {
+        let provs = &w.provs;
+        let index: BTreeMap<&str, i64> = w
+            .codes
             .iter()
             .enumerate()
             .map(|(i, c)| (c.as_str(), i as i64))
@@ -567,50 +718,46 @@ mod full {
                 Json::list(provs.iter().map(|p| index[p.country.as_str()])),
             ),
             ("area_km2", rounded(provs.iter().map(|p| p.area_km2), 1)),
-            ("elev_mean_m", rounded_ints(&ps.means.elev_mean_m)?),
-            ("tri_m", rounded(ps.means.tri_m.iter().copied(), 1)),
-            ("terrain", ints(&terrain)),
-            ("coastal", Json::list(t.coastal.iter().copied())),
-            ("dev_slice", Json::list(in_slice)),
-            ("ports", ints(&ports)),
-            ("airports", ints(&airports)),
-            ("rail", Json::list(rail)),
+            ("elev_mean_m", rounded_ints(&w.ps.means.elev_mean_m)?),
+            ("tri_m", rounded(w.ps.means.tri_m.iter().copied(), 1)),
+            ("terrain", ints(&w.terrain)),
+            ("coastal", Json::list(w.t.coastal.iter().copied())),
+            ("dev_slice", Json::list(w.in_slice.iter().copied())),
+            ("ports", ints(&w.ports)),
+            ("airports", ints(&w.airports)),
+            ("rail", Json::list(w.rail.iter().copied())),
         ];
-        for (name, v) in res_names.iter().zip(&res) {
+        let res_names = res_names();
+        for (name, v) in res_names.iter().zip(&w.res) {
             attrs.push((name, ints(v)));
         }
         attrs.push((
             "countries",
             fields(vec![
-                ("code", Json::list(codes.iter())),
-                ("name", Json::list(code_names)),
-                ("sovereign", Json::list(sovereign_names)),
-                ("colour", ints(&colours)),
+                ("code", Json::list(w.codes.iter())),
+                ("name", Json::list(w.code_names.iter())),
+                ("sovereign", Json::list(w.sovereign_names.iter())),
+                ("colour", ints(&w.colours)),
             ]),
         ));
         pack.text("web/provinces.json", &fields(attrs).text())?;
+        let cty = &w.clipped.counties;
         let county_attrs = fields(vec![
             ("name", Json::list(cty.iter().map(|c| c.name.as_str()))),
             ("level", Json::list(cty.iter().map(|c| c.level.as_str()))),
-            ("province", ints(&clipped.province)),
-            ("area_km2", rounded(cty_area.iter().copied(), 1)),
-            ("elev_mean_m", rounded_ints(&cs.means.elev_mean_m)?),
-            ("tri_m", rounded(cs.means.tri_m.iter().copied(), 1)),
+            ("province", ints(&w.clipped.province)),
+            ("area_km2", rounded(w.cty_area.iter().copied(), 1)),
+            ("elev_mean_m", rounded_ints(&w.cs.means.elev_mean_m)?),
+            ("tri_m", rounded(w.cs.means.tri_m.iter().copied(), 1)),
         ]);
-        pack.text("web/counties.json", &county_attrs.text())?;
+        pack.text("web/counties.json", &county_attrs.text())
+    }
 
-        let report = econ::build::build(out, out, &cache)?;
-        for line in &report.summary {
-            eprintln!("{line}");
-        }
-        let written: BTreeSet<&str> = report.tables.iter().map(|(n, _)| n.as_str()).collect();
-        if written != econ::build::TABLES.into_iter().collect() {
-            return Err(format!("the econ build wrote {written:?}"));
-        }
-        pack.tables
-            .extend(report.tables.iter().map(|(name, d)| (name.clone(), hex(d))));
-
-        let s = &t.stats;
+    /// The manifest's build stats: the transport graph's, the build's own, the fills' and the
+    /// econ build's, in build.py's order.
+    fn stats(w: &World, written: &web::Written, econ: &BuildReport) -> Result<Json, String> {
+        let s = &w.t.stats;
+        let provs = &w.provs;
         let largest = provs
             .iter()
             .map(|p| p.area_km2)
@@ -623,7 +770,18 @@ mod full {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
-        let stats = fields(vec![
+        let fill = |name: &str| {
+            let f = written
+                .fills
+                .get(name)
+                .ok_or_else(|| format!("no {name} fill"))?;
+            Ok::<_, String>(fields(vec![
+                ("vertices", count(f.vertices)),
+                ("triangles", count(f.triangles)),
+            ]))
+        };
+        let c = &w.clipped;
+        Ok(fields(vec![
             ("land_borders", count(s.land_borders)),
             ("rail_borders", count(s.rail_borders)),
             ("ports_dropped", count(s.ports_dropped)),
@@ -632,23 +790,78 @@ mod full {
             ("airports", count(s.airports)),
             ("air_links", count(s.air_links)),
             ("coastal", count(s.coastal)),
-            ("provinces", count(n)),
-            ("countries", count(codes.len())),
-            ("cells", count(ps.cells.len())),
-            ("nodes", count(g.kind.len())),
-            ("edges", count(g.edges.len())),
-            ("sea_zones", count(t.zones.len())),
+            ("provinces", count(provs.len())),
+            ("countries", count(w.codes.len())),
+            ("cells", count(w.ps.cells.len())),
+            ("nodes", count(w.t.graph.kind.len())),
+            ("edges", count(w.t.graph.edges.len())),
+            ("sea_zones", count(w.t.zones.len())),
             ("largest_province_km2", Json::Int(round_int(largest)?)),
             ("split_by_counties", count(split("counties"))),
             ("split_by_voronoi", count(split("voronoi"))),
-            ("counties", count(cty.len())),
-            ("counties_unassigned", count(clipped.unassigned)),
+            ("counties", count(c.counties.len())),
+            ("counties_unassigned", count(c.unassigned)),
             (
                 "county_area_outside_province",
-                Json::Float(round(1.0 - clipped.fits_inside / clipped.fits, 4)),
+                Json::Float(round(1.0 - c.fits_inside / c.fits, 4)),
             ),
-            ("econ", report.stats.json()),
-        ]);
+            (
+                "fills",
+                fields(vec![
+                    ("provinces", fill("provinces")?),
+                    ("counties", fill("counties")?),
+                ]),
+            ),
+            ("econ", econ.stats.json()),
+        ]))
+    }
+
+    /// Builds the pack into `out` from the fetch cache, the Voronoi splits seeded from, and the
+    /// sea grid placed at, the cell centres `centres` gives: the P1 tables, the map's tiles,
+    /// fills and attribute files in `out/web` (emptied first), the econ tables, and
+    /// `manifest.json`.
+    pub fn build(out: &Path, centres: &Centres) -> Result<Built, String> {
+        let root = workspace_root();
+        let cache = root.join(fetch::CACHE_DIR);
+        let entries = fetch::entries(&root)?;
+        for e in &entries {
+            fetch::fetch(e, &cache).map_err(|e| e.to_string())?;
+        }
+        let config_path = root.join(CONFIG_DIR).join("pack.toml");
+        let config = read_table(&config_path)?;
+        let w = world(&root, &cache, &config, centres)?;
+
+        std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let web = out.join("web");
+        // The build owns its web directory, as build.py's rmtree(web, ignore_errors=True).
+        let _ = std::fs::remove_dir_all(&web);
+        std::fs::create_dir(&web).map_err(|e| format!("{}: {e}", web.display()))?;
+        let mut pack = Pack {
+            out,
+            tables: BTreeMap::new(),
+        };
+        write_tables(&mut pack, &w)?;
+        let written = write_web(&web, &w)?;
+        pack.tables.extend(written.tables.clone());
+        write_attributes(&mut pack, &w)?;
+
+        let report = econ::build::build(out, out, &cache)?;
+        for line in &report.summary {
+            eprintln!("{line}");
+        }
+        let econ_tables: BTreeSet<&str> = report.tables.iter().map(|(n, _)| n.as_str()).collect();
+        if econ_tables != econ::build::TABLES.into_iter().collect() {
+            return Err(format!("the econ build wrote {econ_tables:?}"));
+        }
+        pack.tables
+            .extend(report.tables.iter().map(|(name, d)| (name.clone(), hex(d))));
+
+        let stats = stats(&w, &written, &report)?;
+        let config_text = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("{}: {e}", config_path.display()))?;
+        let text = manifest(&config_text, &entries, &pack.tables, stats.clone())?.pretty() + "\n";
+        let path = out.join("manifest.json");
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         Ok(Built {
             tables: pack.tables,
             stats,
@@ -736,6 +949,76 @@ mod tests {
         assert_eq!(round_int(1234.4999999999998).unwrap(), 1234);
         assert!(round_int(f64::NAN).is_err());
         assert!(round_int(f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn toml_is_written_as_json_dumps_writes_tomllib_s_dict() {
+        let text = "year = 2000\nzeta = 1.5\nalpha = \"é\"\nbig = 250_000\n\
+                    list = [1, 2.0, -0.0, 1e300, inf]\n[sub]\nb = true\na = [ \"x\" ]\n\
+                    [[rows]]\nk = 1\n[[rows]]\nk = 2\n";
+        // json.dumps(tomllib.loads(text), indent=2)
+        let want = "{\n  \"year\": 2000,\n  \"zeta\": 1.5,\n  \"alpha\": \"\\u00e9\",\n  \
+                    \"big\": 250000,\n  \"list\": [\n    1,\n    2.0,\n    -0.0,\n    1e+300,\n    \
+                    Infinity\n  ],\n  \"sub\": {\n    \"b\": true,\n    \"a\": [\n      \"x\"\n    \
+                    ]\n  },\n  \"rows\": [\n    {\n      \"k\": 1\n    },\n    {\n      \"k\": 2\n    \
+                    }\n  ]\n}";
+        assert_eq!(toml_json(text).unwrap().pretty(), want);
+        assert!(toml_json("when = 2000-01-01").is_err());
+    }
+
+    #[test]
+    fn the_manifest_is_build_py_s() {
+        let entry = |source: &str, name: &str, sha256: Option<&str>| Entry {
+            source: source.to_owned(),
+            name: name.to_owned(),
+            sha256: sha256.map(str::to_owned),
+            bytes: None,
+            url: "u".to_owned(),
+            optional: false,
+            manual: false,
+        };
+        let sources = [
+            entry("natural-earth", "b.zip", Some("ab")),
+            entry("x", "geoboundaries/A-ADM2.geojson", Some("cd")),
+        ];
+        let tables: BTreeMap<String, String> = [
+            ("web/provinces.json", "03"),
+            ("cells.arrow", "01"),
+            ("web/map.pmtiles:countries", "02"),
+        ]
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .into();
+        let stats = Json::Fields(vec![
+            ("ports".to_owned(), Json::Int(3)),
+            (
+                "fills".to_owned(),
+                Json::Fields(vec![(
+                    "provinces".to_owned(),
+                    Json::Fields(vec![
+                        ("vertices".to_owned(), Json::Int(5)),
+                        ("triangles".to_owned(), Json::Int(4)),
+                    ]),
+                )]),
+            ),
+            ("share".to_owned(), Json::Float(0.0302)),
+        ]);
+        let config = "year = 2000\nland_res = 4\n";
+        // json.dumps(manifest, indent=2) + "\n" as build.py writes it.
+        let want = "{\n  \"pack_format\": 3,\n  \"year\": 2000,\n  \"config\": {\n    \"year\": 2000,\n    \
+                    \"land_res\": 4\n  },\n  \"sources\": [\n    {\n      \"source\": \"natural-earth\",\n      \
+                    \"name\": \"b.zip\",\n      \"sha256\": \"ab\"\n    },\n    {\n      \"source\": \"x\",\n      \
+                    \"name\": \"geoboundaries/A-ADM2.geojson\",\n      \"sha256\": \"cd\"\n    }\n  ],\n  \
+                    \"tables\": {\n    \"cells.arrow\": \"01\",\n    \"web/map.pmtiles:countries\": \"02\",\n    \
+                    \"web/provinces.json\": \"03\"\n  },\n  \"stats\": {\n    \"ports\": 3,\n    \"fills\": {\n      \
+                    \"provinces\": {\n        \"vertices\": 5,\n        \"triangles\": 4\n      }\n    },\n    \
+                    \"share\": 0.0302\n  }\n}\n";
+        let got = manifest(config, &sources, &tables, stats.clone())
+            .unwrap()
+            .pretty()
+            + "\n";
+        assert_eq!(got, want);
+        let unpinned = [entry("x", "y", None)];
+        assert!(manifest(config, &unpinned, &tables, stats).is_err());
     }
 
     #[cfg(feature = "geos")]
