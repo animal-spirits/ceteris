@@ -42,7 +42,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use ceteris_calibrate::steady::{self, Limits};
+use ceteris_calibrate::steady::Limits;
+use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
 use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
@@ -192,6 +193,9 @@ fn export(args: &Args) -> Result<(), String> {
              --history-every and --history-format belong to run"
                 .into(),
         );
+    }
+    if let Source::Pack(dir) = &args.source {
+        return ceteris_calibrate::export_pack(dir, &args.out);
     }
     let inputs = args.source.load(false)?;
     let (params, trade) = (EconParams::default(), TradeParams::default());
@@ -448,8 +452,9 @@ fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     let mut export = None;
     let (dir, u_star, pack_province, out) = match (pack, inputs) {
         (Some(pack), None) => {
-            let name = std::fs::canonicalize(&pack)
-                .map_err(|e| format!("{}: {e}", pack.display()))?
+            let canonical =
+                std::fs::canonicalize(&pack).map_err(|e| format!("{}: {e}", pack.display()))?;
+            let name = canonical
                 .file_name()
                 .map(|n| n.to_owned())
                 .ok_or("--pack names no directory")?;
@@ -458,6 +463,11 @@ fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
                     .join("target/calibration")
                     .join(name)
             });
+            if std::fs::canonicalize(&out).is_ok_and(|o| o == canonical) {
+                return Err(
+                    "--out is the pack: write the tables elsewhere and copy them in".into(),
+                );
+            }
             let tmp = tempfile::tempdir().map_err(|e| format!("temporary directory: {e}"))?;
             ceteris_calibrate::export_pack(&pack, tmp.path())?;
             let pack_province = calibration::read_pack_provinces(tmp.path())?;
@@ -487,7 +497,7 @@ fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
             return Ok(ExitCode::FAILURE);
         }
     };
-    println!("{}", steady::summary(&inp, &s).pretty());
+    println!("{}", summary::summary(&inp, &s).pretty());
     println!("wrote {}", out.display());
     Ok(ExitCode::SUCCESS)
 }
