@@ -2,8 +2,6 @@
 //! tiles (ADR 0009) and the fill buffers (ADR 0010), all from geometry simplified for the map,
 //! so fills meet the drawn borders.
 
-#[cfg(feature = "geos")]
-pub mod dump;
 pub mod geojson;
 #[cfg(feature = "geos")]
 pub mod simplify;

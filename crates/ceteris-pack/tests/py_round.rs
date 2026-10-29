@@ -1,5 +1,5 @@
 //! Python's `round(x, 4)` and float `repr`, which the map's GeoJSON writes every coordinate
-//! with, against values CPython computed (`scripts/parity/py_round4.py`).
+//! with, against values CPython computed (`data/py_round4.txt`).
 
 use ceteris_pack::numeric::{repr_f64, round};
 use proptest::prelude::*;

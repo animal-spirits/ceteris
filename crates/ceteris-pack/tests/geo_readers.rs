@@ -1,5 +1,5 @@
 //! The admin-1 shapefile, the geoBoundaries files and the Natural Earth land, railways and ports
-//! read as pyogrio reads them: the digests of `scripts/parity/geo_readers.py`.
+//! read as pyogrio reads them: the digests pyogrio's geometries gave.
 
 mod common;
 
