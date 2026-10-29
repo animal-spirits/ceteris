@@ -189,7 +189,7 @@ pub fn table(fixture: &Path) -> Result<Vec<String>, String> {
             .collect::<Result<Vec<_>, String>>()?;
             Ok(format!(
                 "| {g} {name} | {theta:.2} | {} | {} |",
-                crate::gravity::py_g(cover, 6),
+                crate::pyfmt::py_g(cover, 6),
                 cells.join(" | ")
             ))
         })

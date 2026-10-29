@@ -3,8 +3,8 @@
 //!
 //! Needs `CETERIS_PACK_EXPORT`, a `ceteris export --pack` directory of the calibrated pack in
 //! `CETERIS_PACK` (default `data/packs/2000`), and the pack's calibration tables; H2 also reads
-//! the CEPII gravity file of the data cache. Without them every test skips. Each run is 1,200 ticks of the release binary on the full pack: run with
-//! `--release`.
+//! the CEPII gravity file of the data cache. Without them every test skips. Each run is 1,200
+//! ticks of the release binary on the full pack: run with `--release`.
 //!
 //! The reference of V1 is the GE reference model at the calibrated point (ADR 0089): its inputs
 //! and root come from the calibration tables (`write::read_reference`), and the test checks that
@@ -19,11 +19,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use ceteris_pack::fetch;
-use ceteris_pack::read::natural_earth::read_codes;
-use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
-use ceteris_reference::ppml::{self, GravityTable, RunFlows};
-
 use arrow_array::RecordBatch;
 use arrow_array::cast::AsArray;
 use arrow_array::types::Float64Type;
@@ -31,8 +26,12 @@ use arrow_cast::cast;
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
 use ceteris_calibrate::write;
+use ceteris_pack::fetch;
+use ceteris_pack::read::natural_earth::read_codes;
+use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
 use ceteris_reference::io::{self, Inputs, pairwise_sum};
 use ceteris_reference::model::{self, Model, max_abs};
+use ceteris_reference::ppml::{self, GravityTable, RunFlows};
 use ceteris_reference::solve::{self, Equilibrium, Info};
 use ceteris_reference::uniqueness::{self, V1Mode};
 
@@ -544,7 +543,13 @@ fn h2_theta_by_class() {
         .collect();
     let (mut lines, mut misses) = (vec![], vec![]);
     let n_classes = *of.iter().max().unwrap() + 1;
-    for (c, &(lo, hi)) in THETA_BANDS.iter().enumerate().take(n_classes) {
+    assert_eq!(
+        n_classes,
+        THETA_BANDS.len(),
+        "the export has {n_classes} theta classes, the gate has bands for {}",
+        THETA_BANDS.len()
+    );
+    for (c, &(lo, hi)) in THETA_BANDS.iter().enumerate() {
         let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
         let rows: Vec<(usize, usize, usize)> = pairs
             .iter()
