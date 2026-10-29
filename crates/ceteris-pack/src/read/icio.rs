@@ -252,6 +252,65 @@ pub fn exports(path: &Path, year: i64) -> Result<BTreeMap<String, [f64; N_GOODS]
     Ok(out)
 }
 
+/// One economy's use of each good (million USD): intermediate use by its industries plus the
+/// `FINAL_DEMAND` columns, from home and from every source economy.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HomeUse {
+    pub home: [f64; N_GOODS],
+    pub total: [f64; N_GOODS],
+}
+
+impl HomeUse {
+    /// Domestic-origin use over total use of good `g`; NaN without use.
+    pub fn share(&self, g: usize) -> f64 {
+        if self.total[g] > 0.0 {
+            self.home[g] / self.total[g]
+        } else {
+            f64::NAN
+        }
+    }
+}
+
+/// Economy code to its use of each good by origin (ADR 0092's home shares): the buyer is the
+/// economy of the column, the origin that of the row; DPABR (purchases abroad by residents) is
+/// left out, as in [`aggregate`].
+pub fn home_use(path: &Path, year: i64) -> Result<BTreeMap<String, HomeUse>, String> {
+    let table = open_table(path, year)?;
+    let (mut rows, mut seller, mut good) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, label) in table.labels.iter().enumerate() {
+        if !SPECIAL_ROWS.contains(&label.as_str()) {
+            let (code, industry) = split_once(label);
+            rows.push(i);
+            seller.push(code);
+            good.push(icio_good(
+                industry.ok_or_else(|| format!("row label {label} has no industry"))?,
+            )?);
+        }
+    }
+    let mut out: BTreeMap<String, HomeUse> = BTreeMap::new();
+    for (name, x) in table.names.iter().zip(&table.columns) {
+        let (buyer, tail) = split_once(name);
+        let tail = tail.ok_or_else(|| format!("column {name} has no industry"))?;
+        if tail == "DPABR" {
+            continue;
+        }
+        if !FINAL_DEMAND.contains(&tail) {
+            icio_good(tail)?;
+        }
+        let u = out.entry(buyer.to_owned()).or_insert(HomeUse {
+            home: [0.0; N_GOODS],
+            total: [0.0; N_GOODS],
+        });
+        for ((&i, s), &g) in rows.iter().zip(&seller).zip(&good) {
+            u.total[g] += x[i];
+            if *s == buyer {
+                u.home[g] += x[i];
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Value of the year nearest 2000 within `INCOME_YEARS` (the earlier year on a tie).
 pub fn nearest_income(series: &ByYear) -> Option<f64> {
     series

@@ -9,7 +9,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use ceteris_pack::numeric::repr_f64;
-use ceteris_pack::read::icio::{CountryIo, N_GOODS, aggregate, exports, income_by_year};
+use ceteris_pack::read::icio::{CountryIo, N_GOODS, aggregate, exports, home_use, income_by_year};
 use common::{Uniform, approx, cached, write_zip};
 
 // Industries of the hand-made table and their goods: A01 and A02 are good 0, B06 good 1, C10T12 good 3, G and K good 9.
@@ -187,6 +187,36 @@ fn exports_sum_sales_to_foreign_columns() {
         for (g, w) in got[*code].iter().zip(want) {
             assert!(approx(*g, w, 1e-12), "{code}");
         }
+    }
+}
+
+/// ADR 0092's home share: each economy's use (intermediate plus the `FINAL_DEMAND` columns, not
+/// DPABR) of goods produced at home over its use from every source economy, per good.
+#[test]
+fn home_shares_follow_the_icio_aggregation() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, parts) = write_table(dir.path(), "2000_SML.csv", None, None);
+    let got = home_use(&path, 2000).unwrap();
+    assert_eq!(got.keys().collect::<Vec<_>>(), ["AAA", "BBB"]);
+    let n_fd = FINAL.len();
+    for (k, code) in ["AAA", "BBB"].iter().enumerate() {
+        let (mut home, mut total) = ([0.0; N_GOODS], [0.0; N_GOODS]);
+        for (i, (z, fd)) in parts.z.iter().zip(&parts.fd).enumerate() {
+            let used: f64 = (k * 6..k * 6 + 6).map(|j| z[j]).sum::<f64>()
+                + (k * n_fd..k * n_fd + 5).map(|j| fd[j]).sum::<f64>();
+            total[GOOD[i % 6]] += used;
+            if i / 6 == k {
+                home[GOOD[i % 6]] += used;
+            }
+        }
+        let u = &got[*code];
+        for g in 0..N_GOODS {
+            assert!(approx(u.home[g], home[g], 1e-12), "{code} good {g} home");
+            assert!(approx(u.total[g], total[g], 1e-12), "{code} good {g} total");
+        }
+        assert!(u.share(0) > 0.0 && u.share(0) < 1.0);
+        assert!(approx(u.share(0), home[0] / total[0], 1e-12));
+        assert!(u.share(2).is_nan(), "a good without use has no share");
     }
 }
 

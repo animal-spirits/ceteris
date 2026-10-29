@@ -7,12 +7,12 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
-    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, impute, impute_pack, median_va_over_gdp,
-    sector_shares,
+    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, home_share_columns, impute, impute_pack,
+    median_va_over_gdp, sector_shares,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
-use ceteris_pack::read::icio::{CountryIo, N_GOODS, Wdi, aggregate, load_wdi};
+use ceteris_pack::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi, aggregate, load_wdi};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{Observed, load_observed};
 use ceteris_pack::read::wdi::Names;
@@ -821,4 +821,65 @@ fn real_venezuela_is_not_left_empty() {
     let ven = &d.imputed["VEN"];
     assert_eq!(ven.va_basis, Basis::WdiGdp);
     assert!((80e3..130e3).contains(&total(&ven.table.va)));
+}
+
+/// `econ_home_shares.arrow`: one row per pack country and traded good; an ICIO economy (by its ISO
+/// code) carries its domestic over total use and its total use, a country outside ICIO is flagged
+/// and carries NaN.
+#[test]
+fn home_share_rows_follow_the_pack_countries() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
+
+    let mut home = [0.0; N_GOODS];
+    let mut total = [0.0; N_GOODS];
+    for g in 0..7 {
+        home[g] = 1.0 + g as f64;
+        total[g] = 4.0 + 2.0 * g as f64;
+    }
+    total[2] = 0.0;
+    home[2] = 0.0;
+    let used = map(&[("AAA", HomeUse { home, total })]);
+    let iso = map(&[("XAA", "AAA".to_owned())]);
+    let codes = ["XAA".to_owned(), "BBB".to_owned()];
+    let batch =
+        arrow_array::RecordBatch::try_from_iter(home_share_columns(&codes, &used, &iso).unwrap())
+            .unwrap();
+    assert_eq!(batch.num_rows(), 14);
+    let col = |n: &str| batch.column_by_name(n).unwrap().clone();
+    let country = col("country")
+        .as_primitive::<UInt32Type>()
+        .values()
+        .to_vec();
+    let good = col("good").as_primitive::<UInt8Type>().values().to_vec();
+    let share = col("home_share")
+        .as_primitive::<Float64Type>()
+        .values()
+        .to_vec();
+    let absorption = col("absorption")
+        .as_primitive::<Float64Type>()
+        .values()
+        .to_vec();
+    let icio: Vec<bool> = col("icio")
+        .as_boolean()
+        .iter()
+        .map(|b| b.unwrap())
+        .collect();
+    for r in 0..14 {
+        let (c, g) = (r / 7, r % 7);
+        assert_eq!((country[r] as usize, usize::from(good[r])), (c, g));
+        if c == 0 && g != 2 {
+            assert!(icio[r]);
+            assert!(approx(share[r], home[g] / total[g], 1e-12), "row {r}");
+            assert_eq!(absorption[r], total[g]);
+        } else {
+            // outside ICIO, or an ICIO economy that uses none of the good
+            assert_eq!(icio[r], c == 0);
+            assert!(share[r].is_nan(), "row {r}");
+            assert!(
+                c == 0 && absorption[r] == 0.0 || absorption[r].is_nan(),
+                "row {r}"
+            );
+        }
+    }
 }
