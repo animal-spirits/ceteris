@@ -32,6 +32,9 @@ comparing runs.
 
 ## Architecture
 
+- **Workspace.** Its own cargo workspace in `native/` (owner, 2026-10-29), as `app/src-tauri`
+  is, so Slint and wgpu stay out of the core's lockfile, CI and `cargo deny`. It reaches the
+  core by path dependencies. At stage 3 it moves to `app/`.
 - **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, PMTiles
   reader), `ui` (`.slint` files compiled in by `slint-build`), `sim` (sim thread, view
   publishing, ring), `commands` (registry and keymap). Pack reading goes through `ceteris-geo`
@@ -81,7 +84,6 @@ n/a: the app computes nothing the core does not.
 
 ## Open questions
 
-- Workspace placement (main workspace or its own, as `app/src-tauri` is): owner pick pending.
 - Slint licence for runtime-loaded mod markup (0088): moot in 1.0 if mods change themes and
   data only; to confirm with Slint before mods reach panel markup.
 - PMTiles over the local file needs no HTTP Range server; confirm the `pmtiles` crate's sync
