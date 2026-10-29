@@ -16,6 +16,15 @@
   returned state is a fixed point to the 1e-12 its checks claim; the fixture now takes 21 passes
   (20 before this change).
 
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash (the weights and s_w). The hashes are the same at 1, 3
+  and all threads.
+- `tests/golden/p2-fixture/`: `pigl_check.arrow`, the calibration (the PIGL weights, `pigl_sigma`,
+  the state at the new household shares, 21 passes at the new pass tolerance) and the reference
+  solution.
+- `tests/golden/p0-toy.txt`, `p1-geo.txt`, `p1-pack.txt` and `p2-pack.txt` do not move.
+
 ### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
 
 - ICIO C19 (refined petroleum) and its HS lines move from good 5 into good 1, renamed "Crude oil,
