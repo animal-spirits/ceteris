@@ -109,14 +109,18 @@ K_od = tau_od^-theta, dense within each country. A cross-border pair is reached 
 gateways of the two countries:
 
 ```
-K_od = sum over a in G(A), b in G(B) of  K_oa * K_ab * K_bd
-K_ab = (tau_ab * (1 + nu_AB) * (1 + t_AB,g)) ^ -theta
+K_od = sum over a in G(A), b in G(B) of  K_oa * m_a * K_ab * m_b * K_bd
+K_ab = (tau_ab * (1 + nu_c) * (1 + t_AB,g)) ^ -theta
 ```
 
-ADR 0092's gateway mass weights (K_oa m_a K_ab m_b K_bd with the masses of a country's gateways
-summing to 1, so access no longer grows with the number of gateway pairs) are not built: they
-are deferred to the fit of the border friction per theta class, with which they land (owner,
-2026-10-26). Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and theta 64.85
+m_a is the gateway's mass (ADR 0092), its share of its country's 2000 trade throughput, so the
+masses of a country's gateways sum to 1 (`Network.gateway_mass`, checked to 1e-12 at
+`Kernel::build`): access no longer grows with the number of gateway pairs, and duplicating a
+gateway with half its mass on each copy changes no flow (`duplicating_a_gateway_with_half_mass_changes_no_flow`,
+1e-12). The pack has no throughput per gateway, so every gateway of a country with k gateways
+takes 1/k. The masses fold into the crossing factor, k = m_a m_b K_ab, so the low-rank
+evaluation and the stored reciprocals are unchanged. nu_c is the border friction of good g's
+theta class c (P05, one per class; `TradeParams::border_nu_of`). Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and theta 64.85
 (about 4e-260, `kernel_round_trip_at_extreme_tau`), beyond ADR 0093's 1e-7, so K is
 stored in f64 (ADR 0093's second option), which holds it down to about 1e-308.
 
@@ -426,7 +430,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03c | Price and wage step clip c_max, on the gap terms only (pi^e passes through, ADR 0106) | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
 | P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
-| P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated (P9) |
+| P05 | Border friction nu_c per theta class, ad valorem equivalent (ADR 0092) | Calibrated per class to ICIO 2000's cross-border share of the class (`ceteris_calibrate::border`, econ SPEC Calibration), read from the calibration tables into `TradeParams::border_nu` (`EconInputs::trade_params`); default (uncalibrated worlds and the fixture) 0.3 for every class, the start of the old prior log-uniform 0.1 to 1.0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated |
 | P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
 | P45 | Expectation gain g of pi^e (ADR 0019) | 0.004 to 0.65 per month. Low end: Poledna et al. (2023, EER 151, Section 3.3 p. 7; IIASA WP 2020 version, Appendix A.1.2 eqs. 8 to 10 pp. 23 to 24) let firms scale every cost component of the price by (1 + pi^e) (unit pass-through), with pi^e from an AR(1) on past inflation re-estimated by OLS every quarter on all data since 1997Q1: decreasing-gain learning, gain 1/n on the mean, 0.011 to 0.019 per quarter over their reference quarters 2010 to 2019 (n = 53 to 91), about 0.004 to 0.006 per month. High end: the adaptive heuristic of 12.2, p^e_{t+1} = w p_{t-1} + (1 - w) p^e_t (Anufriev and Hommes 2012, AEJ Micro 4(4), eq. 6 p. 45), w = 0.65 in their four-heuristic model (Table 1 p. 51; Figure 4 p. 44 also 0.25; individual estimates up to 1, fn. 4 p. 45), per experimental period, which has no calendar length Start 0.006, the Poledna end (owner decision 2026-10-24, MIGRATION Task 6; at kappa1 0.02 every value in the prior broke V1) | Literature |
 | P44 | Route-choice dispersion theta_r (ADR 0017); unused in P2 (ADR 0017 deferred) | 41 to 182, value 111.5: Fan, Lu and Luo (2021, pp. 21 and 23, Table 3; Table 4 p. 28), routing elasticity on China's road network from exporters' port choice and price gaps, 111.5 (s.e. 35.4; bootstrap p10 to p90 103.5 to 127.3), prior = estimate +- 2 s.e. The other route-choice models set it equal to the trade elasticity by assumption: 8 in Allen and Arkolakis (2022, p. 2936) and Fuchs and Wong (2026, pp. 16 and 36), 4 in Ganapati, Wong and Ziv (2024, p. 268; p. 254 fn. 27 names a separate route elasticity as an alternative, not estimated). On the P1 graph the spectral radius at the prior's upper end is 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 to 880,000 (MIGRATION Task 4 report), so no value in the prior passes | Literature |

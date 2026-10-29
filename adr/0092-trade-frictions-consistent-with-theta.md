@@ -96,3 +96,26 @@ primary tariff group (group 0, with good 1; under good 5 they took the manufactu
 closer to WDI's primary-products rate (SITC 0 to 4 and 68, fuels included); good 5 stays a
 storable commodity (P151) without refined fuels, since metals are; good 1's P02 coverage stays 1
 month; PIGL category M is unchanged for goods 1 and 5.
+
+Built on 2026-10-29 (pre-P3 B2), with the fixture's tests; the pack steps (the fit on the full
+pack, H2 and the gateway count) wait until the full pack calibrates again:
+
+- Gateway masses as above, m_a = 1/k_A (no throughput data in the pack), folded into the
+  crossing factor; duplicating a gateway with half its mass on each copy changes no flow
+  (1e-12).
+- P05 is four values, one per theta class. `econ_home_shares.arrow` holds, per pack country and
+  traded good, ICIO 2000's domestic-origin use over total use (intermediate plus final demand,
+  DPABR left out) and the total use. The target of class c is the absorption-weighted
+  cross-border share over the ICIO economies. The model's share is the value the destinations of
+  those countries buy from other countries over all they buy, at origin prices. Each evaluation
+  is ADR 0089's stage 2 at stage 1's spending of the data state, held for every trial (controller
+  ruling, 2026-10-29), so the four classes are independent 1-D roots; Brent's method per class to
+  1e-9 in nu over [0, 10], the classes sharing each evaluation. On the fixture, targets made at
+  nu 0.15, 0.6, 0.35 and 1.2 are recovered to 1e-8 in 23 evaluations. The shares the calibrated
+  steady state reaches, with stage 1 no longer at the data state, are printed after the
+  calibration (the coupled check).
+- H2 per class: theta_c within 2 pair-clustered standard errors of the class's PPML estimate
+  (controller ruling, 2026-10-29). The kernel-control regression is not built yet.
+- ICIO 2000 targets on the 2000 pack (80 ICIO economies): 0.154 (food; chemicals and metals),
+  0.309 (machinery, electronics and vehicles), 0.139 (agriculture; light manufacturing), 0.296
+  (crude oil, gas and refined fuels; coal and other mining).

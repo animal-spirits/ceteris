@@ -70,7 +70,8 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_provinces.arrow` | 4,796 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
 | `econ_pops.arrow` | 4,796 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
-| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing) | P1 graph, BACI 2000 trade by country |
+| `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing), mass (share of the country's trade throughput, ADR 0092) | P1 graph, BACI 2000 trade by country |
+| `econ_home_shares.arrow` | countries x 7 traded goods | country, good, home_share (ICIO 2000 domestic-origin use over total use, intermediate plus final demand without DPABR), absorption (total use, million USD), icio (an ICIO economy; outside ICIO the share and absorption are NaN, as is the share of a good an ICIO economy does not use) | ICIO 2000 (ADR 0092) |
 
 **Coverage.** `TradeParams::coverage` (P02, trade SPEC) is the authoritative value: the model, the
 snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The
@@ -114,10 +115,11 @@ edges (road, rail) whose two ends lie in different 2000 countries, merged within
 midpoint per country pair. k is proportional to the square root of 2000 trade (BACI exports
 plus imports), at least one and at most the candidate count, scaled to about 600 in total; each
 gateway's kind is its candidate's. Agent default under 22.2, set by benchmark (open questions).
-ADR 0092's gateway mass weights are deferred to the fit of the border friction per theta class
-(they land together): the pack's sources carry no throughput per gateway (Natural Earth ports and
-OurAirports airports list no tonnage, value or passengers, and land crossings no traffic), so the
-masses would be 1/k per country.
+Each gateway's mass (ADR 0092) is its share of its country's 2000 trade throughput; the pack's
+sources carry no throughput per gateway (Natural Earth ports and OurAirports airports list no
+tonnage, value or passengers, and land crossings no traffic), so every gateway of a country with
+k gateways has mass 1/k (`gateway_mass_sums_to_one`, 1e-12). A pack built before the column is
+refused at load with an error naming it.
 
 **Tariffs.** The importer's WDI weighted mean applied rate of each group (primary goods 0 to 3,
 manufactures 4 to 6), the year nearest 2000 within five years (a year at 100% or more is a data
@@ -492,6 +494,25 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
    Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"
    section.
+3. Before the stages, `ceteris calibrate --pack` fits the border friction nu_c of each theta class
+   (P05, ADR 0092; `ceteris_calibrate::border`) so that the cross-border share of the class in the
+   ICIO economies, sum of (1 - home share) absorption over sum of absorption from
+   `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
+   from other countries over all they buy, at origin prices. Each evaluation is stage 2 at stage
+   1's spending of the data state (r = 1, no rebates, the data state's buyer prices and PIGL
+   weights), held across trials, so each class's share depends on its own nu only and falls as it
+   rises; the four roots are found by Brent's method per class to 1e-9 in nu over [0, 10] (the
+   upper end halved where the scaling fails there), the classes sharing each evaluation and each
+   scaling starting from the last one's weights (23 evaluations on the fixture,
+   `nu_fit_matches_cross_border_share`). A target outside the shares at the bracket's ends stops
+   the calibration, naming the class. The stages then run at the fitted nu (crossing factors and
+   arrival shares rescaled, base buyer prices recomputed), the calibration tables record it
+   (`econ_calib.arrow` metadata `border_nu`, calibration format 4), and `EconInputs::calibrate`
+   reads it into `EconInputs::border_nu`, from which `EconInputs::trade_params` builds the trade
+   parameters a calibrated world runs under; `EconWorld::new` refuses a calibrated start under
+   other structural parameters, nu included. After the stages the command prints the shares at
+   the calibrated steady state, where stage 1 is no longer the data state's. The fixture keeps
+   its default nu (it has no ICIO data).
 
 **Stage 1, values.** Output value V_o = VA_o / (1 - sum_k a_kg) per traded enterprise, VA the
 pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
@@ -522,7 +543,11 @@ times its good's cheapest price, which its destinations buy almost only from. It
 scaling contracts by about 0.99995 a sweep (the residual falls about 5% per 1,000 sweeps), and pass
 7 needs 34,614 sweeps. Keeping Anderson mixing from restarting while the residual still falls
 over its 20-sweep stall window was tried and is slower (pass 7 above 7e-13 after 15,000 sweeps,
-against 2.9e-13); dropping the restarts makes pass 4 diverge. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+against 2.9e-13); dropping the restarts makes pass 4 diverge. An extrapolated step that leaves f64 (a non-finite
+residual) restarts the mixing from the plain sweep it extrapolated, which a plain sweep's
+overflow does not (that is an error): the fixture's scaling at border frictions 0.15, 0.6, 0.35
+and 1.2 overflowed this way after 182 sweeps where plain sweeps converge. Scalings that converged
+before take the same path. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
 the index is 1. q_d, the arrival slots and the lead follow from sourcing.
 
@@ -758,11 +783,10 @@ the radius on p. 9, footnote 10 p. 7).
   tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity` for a
   one-good class; `ppml.hdfe` on (pair, good) rows with exporter x good and importer x good
   effects for a class of several goods) recovers
-  the class's theta (ADR 0023) within its prior band: theta_c plus or minus 2 standard errors of
-  the trade-weighted harmonic mean of the Caliendo-Parro sector estimates, by the delta method (ADR
-  0023, Amendment 2026-10-29), 1.02 to 4.81 (food; chemicals and metals), -3.97 to 12.26
-  (machinery, electronics and vehicles), 5.94 to 9.42 (agriculture; light manufacturing) and 8.33
-  to 25.50 (crude oil, gas and refined fuels; coal and other mining). If a class misses, work stops and the estimates go to the owner, as for H2.
+  the class's own theta_c (ADR 0092, replacing the prior bands of ADR 0023): theta_c lies within 2
+  pair-clustered standard errors of the class's PPML estimate. If a class misses, work stops and
+  the estimates go to the owner, as for H2. Not yet run with the gateway masses and the fitted
+  nu (pre-P3 B8).
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
