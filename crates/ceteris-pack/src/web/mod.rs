@@ -91,6 +91,14 @@ pub fn layers(
 ) -> Result<Layers, String> {
     use crate::geo::overlay;
 
+    if country.len() != provinces.len() {
+        return Err(format!(
+            "{} provinces, {} country codes",
+            provinces.len(),
+            country.len()
+        ));
+    }
+
     let to_geos = |geoms: &[Geometry]| -> Result<Vec<geos::Geometry>, String> {
         geoms.iter().map(overlay::from_geo).collect()
     };
@@ -116,4 +124,21 @@ pub fn write(
     counties: &[Geometry],
 ) -> Result<Written, String> {
     write_layers(web, &layers(provinces, country, counties)?)
+}
+
+#[cfg(all(test, feature = "geos"))]
+mod tests {
+    use super::*;
+    use geo::{LineString, Polygon};
+
+    #[test]
+    fn layers_refuse_a_country_list_of_another_length() {
+        let square = Geometry::Polygon(Polygon::new(
+            LineString::from(vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]),
+            vec![],
+        ));
+        let provinces = [square.clone(), square];
+        let err = layers(&provinces, &["AAA".to_owned()], &[]).err().unwrap();
+        assert_eq!(err, "2 provinces, 1 country codes");
+    }
 }

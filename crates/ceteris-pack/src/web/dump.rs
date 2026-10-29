@@ -44,7 +44,7 @@ fn column<A: Array + Clone + 'static>(path: &Path, name: &str) -> Result<Vec<A>,
 /// The geometries of `DIR/NAME.geom.arrow`, each a Polygon or a MultiPolygon as
 /// `DIR/NAME.web.arrow` says.
 fn geometries(dir: &Path, name: &str) -> Result<Vec<Geometry>, String> {
-    let mut geoms = read_geoms(&dir.join(format!("{name}.geom.arrow")))?;
+    let geoms = read_geoms(&dir.join(format!("{name}.geom.arrow")))?;
     let multi: Vec<bool> = column::<BooleanArray>(&dir.join(format!("{name}.web.arrow")), "multi")?
         .iter()
         .flat_map(|a| a.values().iter().collect::<Vec<_>>())
@@ -57,7 +57,7 @@ fn geometries(dir: &Path, name: &str) -> Result<Vec<Geometry>, String> {
         ));
     }
     geoms
-        .drain(..)
+        .into_iter()
         .zip(multi)
         .map(|(mut m, multi)| match (multi, m.0.len()) {
             (true, _) => Ok(Geometry::MultiPolygon(m)),
@@ -72,7 +72,7 @@ fn method(geoms: &[Geometry]) -> Result<&'static str, String> {
         .iter()
         .map(overlay::from_geo)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(if simplify::coverage(&geoms).is_ok() {
+    Ok(if simplify::coverage(&geoms)?.is_ok() {
         "coverage"
     } else {
         "per geometry"

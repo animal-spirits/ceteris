@@ -6,9 +6,9 @@
 # `web_outputs.py` in Python, `ceteris pack dump-web DIR` in Rust.
 #
 # Exact: each layer's GeoJSON byte for byte, the simplified vertices of every layer (`pack
-# compare` in file row order), the digests the manifest records and the fill stats; the fill
-# files byte for byte, or else by `fills.py`'s rule. The PMTiles archives are compared for
-# information only: tippecanoe writes the same tiles in a varying order.
+# compare` in file row order, every max_rel zero), the digests the manifest records and the
+# fill stats; the fill files byte for byte, or else by `fills.py`'s rule. The PMTiles archives
+# are compared for information only: tippecanoe writes the same tiles in a varying order.
 #
 # GEOS_PYTHON names a Python whose shapely is built on GEOS 3.15 and has the packages of
 # python/pyproject.toml. WORK, if given, keeps the outputs there (a new directory).
@@ -49,8 +49,8 @@ done
 code=0
 "$bin" pack compare "$work/python" "$work/rust" >"$work/compare" || code=$?
 cat "$work/compare"
-if [[ ! -s "$work/compare" ]] || ((code != 0)); then
-    echo "FAIL pack compare of the simplified vertices (exit $code)"
+if [[ ! -s "$work/compare" ]] || ((code != 0)) || grep -qv ': ok max_rel=0e0$' "$work/compare"; then
+    echo "FAIL the simplified vertices are not exactly equal (pack compare exit $code)"
     status=1
 fi
 
