@@ -45,9 +45,9 @@ const FLOW_FLOOR: f64 = 1e-6;
 /// The reference solver's tolerance on scaled residuals.
 const REFERENCE_TOL: f64 = 1e-10;
 const H2_DISTANCE: (f64, f64) = (-1.1, -0.7);
-/// ADR 0023, Prior band and Amendment 2026-10-29: theta_c +/- 2 s.e. of the harmonic class mean
-/// of the Caliendo-Parro sector estimates (delta method), fixed before the gate ran.
-const THETA_BANDS: [(f64, f64); 4] = [(1.02, 4.81), (-3.97, 12.26), (5.94, 9.42), (8.33, 25.50)];
+/// Theta classes; each must recover its own theta_c within 2 pair-clustered standard errors of
+/// its PPML estimate (ADR 0092).
+const N_CLASSES: usize = 4;
 const N_TRADED: usize = 7;
 
 fn root() -> PathBuf {
@@ -474,10 +474,11 @@ fn h2_distance_elasticity() {
     );
 }
 
-/// H2 per theta class (ADR 0018): per class, PPML of the simulated country-pair flows of its
-/// goods on ln(1 + tariff) and ln distance (CEPII population-weighted) with exporter and
+/// H2 per theta class (ADRs 0018 and 0092): per class, PPML of the simulated country-pair flows
+/// of its goods on ln(1 + tariff) and ln distance (CEPII population-weighted) with exporter and
 /// importer effects per good, domestic pairs excluded, zero flows kept; theta is minus the
-/// tariff coefficient and must lie in the class's prior band (ADR 0023). The flow is what the
+/// tariff coefficient, and the class's theta_c (the export's) must lie within 2 pair-clustered
+/// standard errors of it. The flow is what the
 /// importer pays, FOB value times (1 + t): the kernel carries (1 + t)^-theta on spending (trade
 /// SPEC, Sourcing), so that is the flow whose tariff elasticity is theta (the FOB value's is
 /// theta + 1). The class with one good is also fitted by `ppml::trade_elasticity`.
@@ -520,6 +521,10 @@ fn h2_theta_by_class() {
         .iter()
         .map(|v| v.as_u64().unwrap() as usize)
         .collect();
+    let theta_good: Vec<f64> = params["trade"]["theta"].as_array().unwrap()[..N_TRADED]
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
     // Tariff groups: primary goods 0 to 3, manufactures 4 to 6.
     let group = [0, 0, 0, 0, 1, 1, 1];
     let index: std::collections::BTreeMap<&str, usize> = g
@@ -544,13 +549,12 @@ fn h2_theta_by_class() {
     let (mut lines, mut misses) = (vec![], vec![]);
     let n_classes = *of.iter().max().unwrap() + 1;
     assert_eq!(
-        n_classes,
-        THETA_BANDS.len(),
-        "the export has {n_classes} theta classes, the gate has bands for {}",
-        THETA_BANDS.len()
+        n_classes, N_CLASSES,
+        "the export has {n_classes} theta classes"
     );
-    for (c, &(lo, hi)) in THETA_BANDS.iter().enumerate() {
+    for c in 0..N_CLASSES {
         let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
+        let theta_c = theta_good[goods[0]];
         let rows: Vec<(usize, usize, usize)> = pairs
             .iter()
             .flat_map(|&(e, m)| goods.iter().map(move |&k| (e, m, k)))
@@ -588,10 +592,12 @@ fn h2_theta_by_class() {
         let clustered = ppml::hdfe(&flow, &[&fe_e, &fe_m], &regressors, Some(&cluster)).unwrap();
         let fob_fit = ppml::hdfe(&fob, &[&fe_e, &fe_m], &regressors, None).unwrap();
         let theta = -fit.coef("ln_tariff");
+        let se = clustered.se("ln_tariff");
+        let (lo, hi) = (theta - 2.0 * se, theta + 2.0 * se);
         let mut line = format!(
             "class {c} goods {goods:?}: theta {theta:.4} (s.e. {:.4}, pair-clustered {:.4}), ln \
-             distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n {} ({} separated); band {lo} to \
-             {hi}; FOB value: tariff coefficient {:.4} (s.e. {:.4})",
+             distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n {} ({} separated); theta_c \
+             {theta_c} against {lo:.4} to {hi:.4}; FOB value: tariff coefficient {:.4} (s.e. {:.4})",
             fit.se("ln_tariff"),
             clustered.se("ln_tariff"),
             fit.coef("ln_dist"),
@@ -617,13 +623,13 @@ fn h2_theta_by_class() {
         }
         println!("H2 per class: {line}");
         lines.push(line);
-        if !(lo <= theta && theta <= hi) {
+        if !(lo <= theta_c && theta_c <= hi) {
             misses.push(c);
         }
     }
     assert!(
         misses.is_empty(),
-        "classes {misses:?} outside their prior band: {}",
+        "classes {misses:?}: theta_c outside 2 pair-clustered s.e. of the estimate: {}",
         lines.join("; ")
     );
 }

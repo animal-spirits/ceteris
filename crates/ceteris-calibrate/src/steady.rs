@@ -72,7 +72,7 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "3";
+pub const FORMAT: &str = "4";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -335,7 +335,7 @@ pub fn sinkhorn(
     sinkhorn_limited(m, spend, supply, start, MAX_SWEEPS)
 }
 
-fn sinkhorn_limited(
+pub fn sinkhorn_limited(
     m: &Model,
     spend: &Mat,
     supply: &Mat,
@@ -681,7 +681,99 @@ struct Setup<'a> {
     local: Vec<usize>,
 }
 
-impl Setup<'_> {
+impl<'a> Setup<'a> {
+    fn new(inp: &'a Inputs) -> Result<Setup<'a>, CalibrationError> {
+        let va_target = inp
+            .ent_va_target
+            .as_ref()
+            .ok_or("the inputs carry no value-added target")?;
+        let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
+        let eg = &inp.ent_good;
+        let n_e = eg.len();
+        let traded = &inp.traded;
+        let traded_e: Vec<bool> = eg.iter().map(|&g| traded[g]).collect();
+        let ent_country = inp.ent_country();
+        let a_e = Mat::from_fn(n_e, n_g, |e, k| inp.io[ent_country[e]][(k, eg[e])]);
+        let a_va: Vec<f64> = a_e.row_sums().iter().map(|s| 1.0 - s).collect();
+        let c = &inp.province_country;
+        let kp = &inp.pop_province;
+        let kc: Vec<usize> = kp.iter().map(|&p| c[p]).collect();
+        let people = &inp.pop_population;
+        let country_people = bincount(&kc, people.iter().copied(), n_c);
+        let wage_share = inp
+            .pop_effective
+            .iter()
+            .zip(kp)
+            .map(|(e, &p)| e / inp.labour_supply[p])
+            .collect();
+        let people_share = (0..kp.len())
+            .map(|k| {
+                let n = country_people[kc[k]];
+                divide_where(people[k], n, n > 0.0, 0.0)
+            })
+            .collect();
+        let province_people = bincount(c, inp.population.iter().copied(), n_c);
+        let province_share = (0..n_p)
+            .map(|p| {
+                let n = province_people[c[p]];
+                divide_where(inp.population[p], n, n > 0.0, 0.0)
+            })
+            .collect();
+        let sigma_within = inp.within_sigma();
+        let v_data: Vec<f64> = (0..n_e)
+            .map(|e| {
+                if traded_e[e] {
+                    va_target[e] / a_va[e]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        Ok(Setup {
+            inp,
+            ent_country,
+            sigma_k: kc.iter().map(|&k| sigma_within[k]).collect(),
+            pop_country: kc,
+            wage_share,
+            people_share,
+            province_share,
+            s_l: inp.ent_s_l(),
+            v_data,
+            local: (0..n_g).filter(|&g| !traded[g]).collect(),
+            traded_e,
+            a_e,
+            a_va,
+        })
+    }
+
+    /// (P, G) output value of the data state, V = VA / a_VA, at traded origins.
+    fn supply_data(&self) -> Mat {
+        let inp = self.inp;
+        let mut out = Mat::zeros(inp.n_provinces(), inp.n_goods());
+        for (e, v) in self.v_data.iter().enumerate() {
+            out[(inp.ent_province[e], inp.ent_good[e])] += v;
+        }
+        out
+    }
+
+    /// Local output at the data state's VA, the start of the income fixed point.
+    fn local_start(&self) -> Result<Vec<f64>, CalibrationError> {
+        let va_target = self
+            .inp
+            .ent_va_target
+            .as_ref()
+            .ok_or("the inputs carry no value-added target")?;
+        Ok((0..self.v_data.len())
+            .map(|e| {
+                if self.traded_e[e] {
+                    0.0
+                } else {
+                    va_target[e] / self.a_va[e]
+                }
+            })
+            .collect())
+    }
+
     fn households(&self, v: &[f64], rebate: &[f64], q: &Mat, weights: &Weights) -> Households {
         let inp = self.inp;
         let (n_p, n_c, n_g) = (inp.n_provinces(), inp.n_countries(), inp.n_goods());
@@ -876,6 +968,42 @@ impl State {
     }
 }
 
+/// Stage 1 at the data state: traded spending E (P, G) of households and enterprises at r = 1, no
+/// rebates, the data state's buyer prices (`Inputs::base_price`) and the inputs' PIGL weights,
+/// with income and local output settled; and the output value V (P, G) of traded origins.
+pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
+    let setup = Setup::new(inp)?;
+    let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
+    let traded = &inp.traded;
+    let q = Mat::from_fn(n_p, n_g, |p, g| {
+        if traded[g] {
+            inp.base_price[(p, g)]
+        } else {
+            1.0
+        }
+    });
+    let (r, rebate) = (vec![1.0; n_g], vec![0.0; n_c]);
+    let weights = inp.pigl_weights()?;
+    let v = setup.settle(
+        &r,
+        &rebate,
+        &q,
+        &weights,
+        &setup.local_start()?,
+        limits.max_local,
+    )?;
+    let hh = setup.households(&v, &rebate, &q, &weights);
+    let spend_int = setup.input_spending(&v);
+    let spend = Mat::from_fn(n_p, n_g, |p, g| {
+        if traded[g] {
+            hh.spend_hh[(p, g)] + spend_int[(p, g)]
+        } else {
+            0.0
+        }
+    });
+    Ok((spend, setup.supply_data()))
+}
+
 /// The steady state of ADR 0089 (module documentation) at natural rates `u_star` (C,).
 /// `progress` gets one line per pass.
 pub fn calibrate(
@@ -936,72 +1064,24 @@ pub fn calibrate_from(
     let n_e = eg.len();
     let traded = &inp.traded;
     let traded_e: Vec<bool> = eg.iter().map(|&g| traded[g]).collect();
-    let ent_country = inp.ent_country();
-    let a_e = Mat::from_fn(n_e, n_g, |e, k| inp.io[ent_country[e]][(k, eg[e])]);
-    let a_va: Vec<f64> = a_e.row_sums().iter().map(|s| 1.0 - s).collect();
+    let setup = Setup::new(inp)?;
+    let (a_e, a_va) = (setup.a_e.clone(), setup.a_va.clone());
     let c = &inp.province_country;
     let kp = &inp.pop_province;
-    let kc: Vec<usize> = kp.iter().map(|&p| c[p]).collect();
+    let kc = setup.pop_country.clone();
     let people = &inp.pop_population;
-    let country_people = bincount(&kc, people.iter().copied(), n_c);
-    let wage_share = inp
-        .pop_effective
-        .iter()
-        .zip(kp)
-        .map(|(e, &p)| e / inp.labour_supply[p])
-        .collect();
-    let people_share = (0..kp.len())
-        .map(|k| {
-            let n = country_people[kc[k]];
-            divide_where(people[k], n, n > 0.0, 0.0)
-        })
-        .collect();
-    let province_people = bincount(c, inp.population.iter().copied(), n_c);
-    let province_share = (0..n_p)
-        .map(|p| {
-            let n = province_people[c[p]];
-            divide_where(inp.population[p], n, n > 0.0, 0.0)
-        })
-        .collect();
     let sigma_within = inp.within_sigma();
     let omega_total = inp.omega.row_sums();
     let om = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] / omega_total[k]);
-    let v_data: Vec<f64> = (0..n_e)
-        .map(|e| {
-            if traded_e[e] {
-                va_target[e] / a_va[e]
-            } else {
-                0.0
-            }
-        })
-        .collect();
     let traded_va_data: f64 = (0..n_e)
         .filter(|&e| traded_e[e])
         .map(|e| va_target[e])
         .sum();
-    let mut supply_data = Mat::zeros(n_p, n_g);
-    for e in 0..n_e {
-        supply_data[(ep[e], eg[e])] += v_data[e];
-    }
+    let supply_data = setup.supply_data();
     let origin = |p: usize, g: usize| inp.active[p][g] && traded[g];
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
         .collect();
-    let setup = Setup {
-        inp,
-        a_va: a_va.clone(),
-        ent_country,
-        sigma_k: kc.iter().map(|&k| sigma_within[k]).collect(),
-        pop_country: kc.clone(),
-        wage_share,
-        people_share,
-        province_share,
-        s_l: inp.ent_s_l(),
-        v_data,
-        local: (0..n_g).filter(|&g| !traded[g]).collect(),
-        traded_e: traded_e.clone(),
-        a_e: a_e.clone(),
-    };
     let state = State {
         n_p,
         n_c,
@@ -1012,15 +1092,7 @@ pub fn calibrate_from(
     let mut q = start.clone();
     let mut r = vec![1.0; n_g];
     let mut rebate = vec![0.0; n_c];
-    let mut y_local: Vec<f64> = (0..n_e)
-        .map(|e| {
-            if traded_e[e] {
-                0.0
-            } else {
-                va_target[e] / a_va[e]
-            }
-        })
-        .collect();
+    let mut y_local = setup.local_start()?;
     let mut weights = inp.pigl_weights()?;
     let mut lw: Option<Mat> = None;
     let mut history: Vec<Pass> = Vec::new();
