@@ -193,6 +193,102 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   - GeoTIFF predictors 2 and 3 are not read yet: no econ raster uses one. ETOPO needs
     predictor 3 in step 3.
   - The manifest's econ stats come back from the binary with their keys sorted.
+- Step 3 (geography and the P1 build): `ceteris pack build [--out DIR]` builds the whole pack:
+  fetch, provinces and counties, H3 cells and terrain, mineral site counts, the transport graph,
+  the eight P1 tables, `web/provinces.json` and `web/counties.json`, the map outputs (GeoJSON
+  layers, the PMTiles archive through tippecanoe with the flags of `build.py`, the fill files),
+  the econ build in process, and `manifest.json`. `ceteris pack record-counties` replaces
+  `counties.py --record`. The geometry follows the spike (`specs/rust-migration/geometry-spike.md`)
+  and the owner's decisions of 2026-10-28:
+  - Polygon overlay (intersection, difference, multi-input union, line intersection lengths),
+    the Voronoi diagram of a split, `make_valid`, buffers, the predicates behind the STRtree
+    queries (rstar finds the candidates) and `coverage_simplify` run through GEOS 3.15.0
+    (Homebrew), behind the `geos` feature of `ceteris-pack` and `ceteris-cli`, off by default.
+    Without it `pack build` runs only `--econ-only`; fetch, the manifest check, the readers, the
+    econ build, H3, terrain, fills and the spherical helpers are pure Rust in every build. The
+    geo layer and the web outputs are built by the owner and ship prebuilt, so players never need
+    GEOS. Parity runs against shapely 2.2.0 built from source on the same GEOS 3.15
+    (`scripts/parity/README.md`): overlay results move between GEOS versions, and the 2000 pack
+    was built on an older one (Python on 3.15 reproduces every table of it but `edges` and
+    `counties`).
+  - `coverage_simplify` lives in `ceteris-geos-coverage`, the one crate outside
+    `unsafe_code = "forbid"`: the safe `geos` crate (11.3.1) has no wrapper for
+    `GEOSCoverageSimplifyVW_r`, so one function calls `geos-sys` directly (`unsafe_code = "deny"`,
+    allowed on that function only), WKB in and out, with GEOS's error message kept. Without its
+    `geos` feature the crate is empty. Where GEOS raises in the simplification, each geometry
+    falls back to `topology_preserve_simplify`, as `build.simplify` does; on GEOS 3.15 both
+    layers take the coverage path.
+  - Toolchain: Rust 1.99.1, h3o 0.11.0 and geo 0.33.1, with every parity gate re-run.
+  - Anchors: `sphere::anchor` computes the centroid as GEOS's `Centroid` does (triangles fanned
+    from the first shell vertex, each ring signed by its orientation), in pure Rust (owner ruling
+    2026-10-29). geo's `Centroid` sums in another order and missed by up to 1.28e-12 deg, which
+    short edges amplified to 9.82e-12 in `edges.length_km`; the anchors now equal shapely's bit
+    for bit. A centroid outside its part falls back to a port of JTS `InteriorPointArea`.
+  - Cell centres and areas: h3o and h3 compute cell centres and boundaries differently in the
+    last bits (centres up to 8.8e-12 deg apart). H3 cell `area_km2` and the area-weighted terrain
+    means are held to 1e-8 relative (the area formula is the same); the areas of Voronoi-split
+    provinces and of the counties clipped to them to 1e-7, since a split seeds at cell centres;
+    sea node positions and the lengths that reach them to 1e-8. Each parity script also runs a
+    Rust build seeded with h3's centres (`--centres`), which must match on every column but the
+    cell areas and the means they weight.
+  - Fills: the `earcut` crate (not `earcutr`) triangulates some polygons with holes differently
+    from `mapbox_earcut`, which overlaps by up to 4% on some of them. Fill files are compared per
+    feature by triangle area against the polygon's area within 1e-4, each build against its own
+    simplified polygons; the fill stats of the manifest (vertex and triangle counts) differ and
+    are not a parity column.
+  - The transport adjacency buffers with 16 segments per quarter circle, the default of the
+    `buffer` method `transport.py` calls (the `shapely.buffer` function's is 8); parity was equal
+    with either on this data.
+  - A `make_valid` repair that leaves lines is a GeometryCollection; the build keeps its
+    polygonal part, as `geo.polygonal` does. On GEOS 3.15 one admin-1 polygon is invalid and
+    repairs to a Polygon, which a test pins.
+  - Counties left without a cell of their own (slivers whose only cell went to a neighbour) take
+    their terrain from the finest cell at their anchor, as `build.py` does. The fallback is part
+    of the build (`build::sample_counties`), which the parity dump calls.
+  - `pack.toml` enters the manifest in `tomllib`'s key order: a key comes where it, or the first
+    key of its table, first appears in the file.
+  - Bytes: arrow-rs writes other bytes than pyarrow, so the P1 table digests in the manifest and
+    `tests/golden/p1-pack.txt` change at the 4f regeneration; schemas and metadata are equal.
+    tippecanoe writes tiles in a varying order, so `web/map.pmtiles` is not byte-reproducible; the
+    manifest pins each layer's GeoJSON digest (`web/map.pmtiles:<layer>`) instead, as before. A
+    test builds the whole pack twice (release, `geos`, about 5 minutes) and requires the same
+    SHA-256 for every file but `web/map.pmtiles`, and manifest digests that match the files. It
+    reads the owner's cache and skips without it or without tippecanoe: no fixture cache can
+    drive the P1 build, so CI does not run it.
+
+  Parity on the full cache and pack, GEOS 3.15 on both sides, largest relative difference with
+  h3o's centres (and with h3's where it differs):
+  - `step3-geo.sh` (`geo`, `raster`, `resources`, `fills` on the same vertices): every other
+    column 0; `cells.area_km2` 3.51e-11 (resolution 4), `county_cells.area_km2` 2.54e-9
+    (resolution 6), the terrain means up to 1.07e-10 (`counties.elev_mean_m`); 4,757 of 4,796
+    province and 52,777 of 53,084 county fills with equal triangle sets, areas up to 3.9e-2 apart
+    where `mapbox_earcut` overlaps, none off its polygon by more than 1e-4.
+  - `step3-provinces.sh`: every attribute, H3 cell owner and mineral count equal; anchors
+    3.9e-15 and 4.3e-15 (provinces), 3.0e-15 and 2.7e-15 (counties), 0 with h3's centres; split
+    areas within 1e-7.
+  - `step3-transport.sh`: nodes, edges, sea zones and chokepoints equal in order (11,455 land
+    borders, 4,050 rail crossings, 1,001 ports, 1,283 minor ports, 1,154 airports, 24,849 air
+    links, 1,934 coastal provinces); `nodes.lon` 2.94e-12, `nodes.lat` 1.47e-12,
+    `edges.length_km` 5.15e-12 (2.85e-16 with h3's centres, where numpy's and libm's sin, cos
+    and asin differ by one ulp); `edges.tri_m` 6.5e-13.
+  - `step3-web.sh`: the three GeoJSON layers byte for byte, the simplified vertices exact, the
+    layer digests equal; 4,757 of 4,796 provinces and 52,934 of 53,084 counties with equal
+    triangle sets, none off its polygon by more than 1e-4.
+  - `step3-build.sh` (the unstubbed `build.py` against `ceteris pack build`): every discrete
+    column equal; `cells.area_km2` 3.51e-11, `provinces.elev_mean_m` 7.09e-12,
+    `counties.elev_mean_m` 1.07e-10; split areas 1.17e-8 (provinces) and 4.75e-8 (counties);
+    all seven econ tables 0;
+    `provinces.json` and `counties.json` byte for byte; manifest config, sources, table names
+    and stats equal but the fill stats, and with h3's centres the layer digests too. Fill stats:
+    provinces 1,023,780 vertices and 1,288,912 triangles in Python against 1,020,791 and
+    1,281,909 in Rust, counties 2,567,709 triangles against 2,567,501 (vertices equal).
+
+  Task 3f (province merges) was dropped: the owner keeps the 4,796 provinces. Every pytest of
+  `test_packs.py` has a Rust test in `ceteris-pack`. `python/ceteris/packs/*.py` (but
+  `__init__.py`) and `test_packs.py` are deleted; the configuration files stay in
+  `python/ceteris/packs/` until step 5, and the step 3 parity scripts take the package from the
+  commit before the deletion. The CI `python` job goes with them, since no pytest is left
+  (pytest exits 5 on an empty run); step 5 removes the rest of `python/`.
 - Step 4 (reference model and calibration): `ceteris-reference` holds the reference model
   (`io`, `demand`, `sinkhorn`, `uniqueness`, `model`, `solve`, `output`, `ppml`, `linalg`),
   read from the `ceteris export` directory; a workspace test reads `cargo metadata` and fails on
