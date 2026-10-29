@@ -1,0 +1,65 @@
+import { AboutSlint, Button } from "std-widgets.slint";
+import { Tokens } from "tokens.slint";
+
+export { Tokens }
+
+component About inherits Rectangle {
+    callback close();
+    background: Tokens.paper;
+    border-color: Tokens.rule;
+    border-width: Tokens.hairline;
+    width: 360px;
+    height: 300px;
+    VerticalLayout {
+        padding: Tokens.pad * 2;
+        spacing: Tokens.pad;
+        Text {
+            text: "Ceteris Paribus";
+            color: Tokens.ink;
+            font-size: 18px;
+        }
+        Text {
+            text: "Deterministic, forkable world simulator from 1 January 2000.";
+            color: Tokens.ink;
+            wrap: word-wrap;
+        }
+        AboutSlint { }
+        Button {
+            text: "Close";
+            clicked => { root.close(); }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Ceteris Paribus";
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    background: Tokens.sea;
+    default-font-size: Tokens.body-size;
+
+    // The map pass renders into this texture each frame (ADR 0088).
+    in property <image> map-texture;
+    in-out property <bool> about-open;
+
+    MenuBar {
+        Menu {
+            title: "Ceteris";
+            MenuItem {
+                title: "About Ceteris Paribus";
+                activated => { root.about-open = true; }
+            }
+        }
+    }
+
+    Image {
+        source: root.map-texture;
+        width: 100%;
+        height: 100%;
+        image-fit: fill;
+    }
+
+    if root.about-open: About {
+        close => { root.about-open = false; }
+    }
+}
