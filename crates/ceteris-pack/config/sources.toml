@@ -1589,18 +1589,18 @@ name = "Ethnic Power Relations v1.1 and GeoEPR v1.0"
 provider = "Cederman, Min, Wimmer; Wucherpfennig et al. (Harvard Dataverse)"
 version = "EPR 1946-2005; GeoEPR 2011"
 role = "Ethnic group status and settlement areas in 2000 (6.4, 11.6)"
-licence = "CC0-1.0"
-licence_url = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/NDJUJM"
-attribution = "Cederman, Wimmer and Min (2010), World Politics; Wucherpfennig et al. (2011)"
-commercial_use = true
-share_alike = false
+licence = "CC-BY-NC-SA-4.0"
+licence_url = "https://icr.ethz.ch/data/epr/"
+attribution = "Cederman, Wimmer and Min (2010), World Politics; Wucherpfennig et al. (2011); data modified"
+commercial_use = false
+share_alike = true
 use = "primary"
-policy = "bundle"
-reason = "CC0 on Dataverse; covers the 2000 initialization"
-checked = 2026-10-23
-confidence = "medium"
+policy = "fetch"
+reason = "ETH ICR confirmed by email (2026-10-27) that the whole EPR family is CC BY-NC-SA 4.0; the Dataverse CC0 was a platform default. Ceteris is non-commercial and each user fetches their own data."
+checked = 2026-10-27
+confidence = "high"
 replaces = "epr-2021"
-notes = "Legacy 2010-2011 deposits: CC0 may be a platform default. Ends 2005."
+notes = "Ends 2005. Derived files are CC BY-NC-SA 4.0, credit the sources and note modification; never combine with V-Dem (CC BY-SA) in one derived table (ADR 0182)."
 
 [[source]]
 id = "epr-2021"
@@ -1615,11 +1615,10 @@ commercial_use = false
 share_alike = true
 use = "fallback"
 policy = "fetch"
-reason = "Non-commercial and share-alike (CC BY-NC-SA 4.0, stated on the ICR data page); epr-v1 covers only to 2005"
+reason = "CC BY-NC-SA 4.0 (ICR data page; confirmed by ICR email 2026-10-27). Ceteris is non-commercial and each user fetches their own data; epr-v1 covers only to 2005."
 checked = 2026-10-28
 confidence = "high"
-closed_source_only = true
-notes = "Ask ICR for a licence without the non-commercial term before opening."
+notes = "Derived files are CC BY-NC-SA 4.0, credit Vogt et al. (2015), plus Wucherpfennig et al. (2011) for GeoEPR, and note modification. Never combine with V-Dem (CC BY-SA) in one derived table (ADR 0182)."
 
 [[source]]
 id = "cia-factbook"
