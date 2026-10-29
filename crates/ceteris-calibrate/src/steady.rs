@@ -434,6 +434,8 @@ fn sinkhorn_limited(
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     let (mut best, mut since) = (f64::INFINITY, 0);
     let mut err = f64::NAN;
+    // the plain sweep from the last finite point, where a mixed step leaves f64
+    let mut plain: Option<Vec<f64>> = None;
     for sweep in 1..=max_sweeps {
         let (fx, r, e) = step(&lw);
         err = e;
@@ -449,7 +451,16 @@ fn sinkhorn_limited(
             });
         }
         if !err.is_finite() {
-            return Err(format!("Sinkhorn residual not finite after {sweep} sweeps").into());
+            // An extrapolated step overflowed: restart the mixing from the plain sweep it
+            // extrapolated; a plain sweep that overflows is an error.
+            let Some(p) = plain.take() else {
+                return Err(format!("Sinkhorn residual not finite after {sweep} sweeps").into());
+            };
+            xs.clear();
+            gs.clear();
+            (best, since) = (f64::INFINITY, 0);
+            lw = p;
+            continue;
         }
         if err < best {
             (best, since) = (err, 0);
@@ -474,8 +485,10 @@ fn sinkhorn_limited(
             let gamma = lstsq(&dg, &g)?;
             let stepped: Vec<f64> = lw.iter().zip(&g).map(|(x, g)| x + g).collect();
             lw = mix(&stepped, &dx, &dg, &gamma);
+            plain = Some(stepped);
         } else {
             lw = fx;
+            plain = None;
         }
     }
     Err(format!(
