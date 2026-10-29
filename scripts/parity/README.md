@@ -93,8 +93,7 @@ GEOS_CONFIG=/opt/homebrew/bin/geos-config uv pip install --python "$VENV/bin/pyt
 GEOS_PYTHON="$VENV/bin/python" scripts/parity/step3-provinces.sh
 ```
 
-The package versions are those of `python/uv.lock`; only shapely is built from source. The
-script imports `ceteris` from `python/` through `PYTHONPATH`.
+The package versions are those of `python/uv.lock`; only shapely is built from source.
 
 `split_rows.py` moves the areas and vertices of split provinces, and of the counties clipped to
 them, into tables of their own, so that only those rows take the split tolerance. A second Rust
@@ -141,6 +140,15 @@ with which the GeoJSON writes coordinates.
 `geo_readers.py` prints digests of the geometries pyogrio reads from the admin-1 shapefile, the
 geoBoundaries files and the Natural Earth land, railways and ports; `tests/geo_readers.rs`
 checks the Rust readers against them.
+
+The Python pack modules (`python/ceteris/packs/*.py` but `__init__.py`) and `test_packs.py`
+are deleted after step 3's parity; the configuration files stay in `python/ceteris/packs/` until
+step 5. Each step 3 script takes the package from the commit before that deletion: `packs_tree.sh`
+extracts `python/ceteris` from it (`git archive`) into `tree/` in the script's work directory and
+links every other top-level entry of the checkout beside it, because the package finds
+`data/cache`, its configuration and the cargo workspace from its own path. The Python runs with
+`PYTHONPATH=tree/python`; `build.build`'s econ step runs `cargo run` in that tree.
+`geo_readers.py` needs the same `PYTHONPATH`.
 
 The Python reference and calibration packages (`python/ceteris/reference`,
 `python/ceteris/calibrate`) and their tests are deleted after step 4's parity; `step4.sh` and its

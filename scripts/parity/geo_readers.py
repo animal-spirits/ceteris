@@ -1,7 +1,9 @@
 """Digests of the geometries pyogrio reads from the admin-1 shapefile, the geoBoundaries files
 and the Natural Earth land, railways and ports of the transport graph.
 
-    python scripts/parity/geo_readers.py
+    PYTHONPATH=TREE/python python -P scripts/parity/geo_readers.py
+
+where TREE holds the Python pack package from before its deletion (`packs_tree.sh`, README.md).
 
 Each polygon is hashed as: a type byte (0 none, 3 Polygon, 6 MultiPolygon), then u32 counts of
 parts, rings and points, then the coordinates as little-endian f64; a point as the byte 1 and

@@ -37,6 +37,8 @@ bin="$root/target/release/ceteris"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$work/tree"
 
 # `pack compare A B > OUT`; fails when it prints nothing, or exits non-zero with every line ok.
 compare() {
@@ -59,7 +61,7 @@ listed() {
     [[ " ${2//$'\n'/ } " == *" $1 "* ]]
 }
 
-(cd python && PYTHONPATH="$root/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/geo_inputs.py" "$work/py")
+PYTHONPATH="$work/tree/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/geo_inputs.py" "$work/py"
 cp "$work"/py/*.arrow "$work/py/python/"
 if "$bin" pack compare "$work/py/python" "$pack" --table cells >/dev/null; then
     echo "ok   the Python build reproduces the pack's cells.arrow"
@@ -110,8 +112,8 @@ while read -r line; do
 done < <(grep -v ': ok ' "$work/compare-h3")
 
 for name in provinces counties; do
-    (cd python && uv run --locked python -I "$root/scripts/parity/fills.py" \
-        "$work/py/python/$name.fill" "$work/rs/rust/$name.fill" "$work/rs/rust/$name.geom.arrow") || {
+    PYTHONPATH="$work/tree/python" uv run --project "$root/python" --locked python -P -s "$root/scripts/parity/fills.py" \
+        "$work/py/python/$name.fill" "$work/rs/rust/$name.fill" "$work/rs/rust/$name.geom.arrow" || {
         echo "FAIL $name.fill"
         status=1
     }

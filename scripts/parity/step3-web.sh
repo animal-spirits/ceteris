@@ -28,8 +28,10 @@ else
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
 fi
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$work/tree"
 py() {
-    PYTHONPATH="$root/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@"
+    PYTHONPATH="$work/tree/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@"
 }
 
 py "$root/scripts/parity/web_inputs.py" "$work"

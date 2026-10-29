@@ -31,6 +31,8 @@ bin="$root/target/release/ceteris"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="${WORK:-$(mktemp -d)}"
 echo "outputs in $work"
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$work/tree"
 
 # `pack compare` of every table into OUT; fails when it prints nothing, or exits non-zero with
 # every line ok.
@@ -57,7 +59,7 @@ within() {
     python3 -I -c 'import sys; sys.exit(float(sys.argv[1]) > float(sys.argv[2]))' "$1" "$2"
 }
 
-(cd python && PYTHONPATH="$root/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/transport_tables.py" "$work/py")
+PYTHONPATH="$work/tree/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/transport_tables.py" "$work/py"
 for t in nodes edges sea_zones chokepoints; do
     if "$bin" pack compare "$work/py/python" "$pack" --table "$t" >/dev/null; then
         echo "ok   the Python build reproduces the pack's $t.arrow"
