@@ -37,18 +37,20 @@ impl Column {
 
     /// The rows where `keep` holds.
     pub fn select(&self, keep: &[bool]) -> Column {
-        fn pick<T: Clone>(v: &[T], keep: &[bool]) -> Vec<T> {
-            v.iter()
-                .zip(keep)
-                .filter(|(_, k)| **k)
-                .map(|(x, _)| x.clone())
-                .collect()
-        }
         match self {
-            Column::Numbers(v) => Column::Numbers(pick(v, keep)),
-            Column::Strings(v) => Column::Strings(pick(v, keep)),
+            Column::Numbers(v) => Column::Numbers(select(v, keep)),
+            Column::Strings(v) => Column::Strings(select(v, keep)),
         }
     }
+}
+
+/// The elements of `v` where `keep` holds.
+pub(crate) fn select<T: Clone>(v: &[T], keep: &[bool]) -> Vec<T> {
+    v.iter()
+        .zip(keep)
+        .filter(|(_, k)| **k)
+        .map(|(x, _)| x.clone())
+        .collect()
 }
 
 /// Columns by variable name.

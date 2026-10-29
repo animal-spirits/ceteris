@@ -111,6 +111,64 @@ fn read_dta_round_trips_numbers_strings_and_missing() {
     assert!(flag[2].is_nan());
 }
 
+/// A big-endian file (byte order 1) of two rows, one of each numeric width.
+#[test]
+fn read_dta_reads_big_endian_files() {
+    let names = ["code", "b", "h", "l", "f", "d"];
+    let types = [2u8, 251, 252, 253, 254, 255];
+    let mut data = vec![114u8, 1, 1, 0];
+    data.extend((names.len() as u16).to_be_bytes());
+    data.extend(2i32.to_be_bytes());
+    data.extend([0u8; 81 + 18]);
+    data.extend(types);
+    for n in names {
+        let mut b = n.as_bytes().to_vec();
+        b.resize(33, 0);
+        data.extend(b);
+    }
+    data.extend(vec![
+        0u8;
+        2 * (names.len() + 1)
+            + 49 * names.len()
+            + 33 * names.len()
+    ]);
+    data.extend(vec![0u8; 81 * names.len()]);
+    data.extend([0u8; 5]);
+    for (code, b, h, l, f, d) in [
+        ("AB", -3i8, -300i16, 70_000i32, 1.5f32, -2.25f64),
+        (
+            "Z",
+            101,
+            32_741,
+            2_147_483_621,
+            1.701_411_8e38,
+            8.988_465_674_311_58e307,
+        ),
+    ] {
+        let mut c = code.as_bytes().to_vec();
+        c.resize(2, 0);
+        data.extend(c);
+        data.extend(b.to_be_bytes());
+        data.extend(h.to_be_bytes());
+        data.extend(l.to_be_bytes());
+        data.extend(f.to_be_bytes());
+        data.extend(d.to_be_bytes());
+    }
+    let out = read_dta(&data).unwrap();
+    assert_eq!(out["code"], Column::Strings(vec!["AB".into(), "Z".into()]));
+    for (name, want) in [
+        ("b", -3.0),
+        ("h", -300.0),
+        ("l", 70_000.0),
+        ("f", 1.5),
+        ("d", -2.25),
+    ] {
+        let v = out[name].numbers().unwrap();
+        assert_eq!(v[0], want, "{name}");
+        assert!(v[1].is_nan(), "{name}: missing code read as {}", v[1]);
+    }
+}
+
 /// splitmix64 draws without a dependency.
 struct Draws(u64);
 

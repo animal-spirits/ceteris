@@ -198,8 +198,8 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   read from the `ceteris export` directory; a workspace test reads `cargo metadata` and fails on
   any edge from it to `ceteris-core`, `-geo`, `-trade` or `-econ`. `ceteris-calibrate` holds
   the steady-state calibration (`steady`, `summary`, `write`), the gravity estimation (`dta`,
-  `gravity`) and the stability table (`stability`); it exports a pack in process, with no cargo
-  subprocess. The commands are `ceteris reference solve --inputs DIR --out DIR`, `ceteris
+  `yotov`, `costs`, `gravity`) and the stability table (`stability`); it exports a pack in
+  process, with no cargo subprocess. The commands are `ceteris reference solve --inputs DIR --out DIR`, `ceteris
   calibrate --pack DIR | --inputs DIR [--out DIR]`, `ceteris calibrate stability
   [FIXTURE_DIR]` and `ceteris gravity [--pack DIR] [--write] [--out FILE]`, with the arguments
   and output of the Python entry points. The HANK reference, SBI and Sobol analysis are built
@@ -235,6 +235,8 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
     pointer jumping.
   - Calibration passes are not compared for equality: a pass count can move by one with the
     tables still within 1e-9.
+  - The comment heading `gravity_2000.toml` names `ceteris gravity --write` as the command that
+    writes it; the rest of the file is the Python layout.
   - `gravity --write` still defaults to `python/ceteris/packs/gravity_2000.toml`, beside the
     pack configuration, until step 5 moves the configuration.
   - `python/ceteris/reference/` (with the JAX model and `reduced.py`) and

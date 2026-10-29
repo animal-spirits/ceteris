@@ -131,10 +131,10 @@ fn fixture_export_is_current() {
     assert!(
         stale.is_empty(),
         "tests/golden/p2-fixture differs from the fixture export in {stale:?}; regenerate with \
-         `cargo run -p ceteris-cli --bin ceteris -- export --fixture --out tests/golden/p2-fixture` \
-         and, because the inputs changed, re-solve the reference with `cargo run --release -p ceteris-cli \
-         --bin ceteris -- reference solve --inputs tests/golden/p2-fixture --out \
-         tests/golden/p2-fixture/reference`"
+         `cargo run -p ceteris-cli --bin ceteris -- export --fixture --out \
+         tests/golden/p2-fixture` and, because the inputs changed, re-solve the reference with \
+         `cargo run --release -p ceteris-cli --bin ceteris -- reference solve --inputs \
+         tests/golden/p2-fixture --out tests/golden/p2-fixture/reference`"
     );
 }
 

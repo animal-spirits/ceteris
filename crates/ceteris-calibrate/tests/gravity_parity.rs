@@ -102,8 +102,11 @@ fn estimates_json(e: &Estimates) -> Value {
         .theta
         .iter()
         .map(|t| {
-            json!({"goods": t.goods, "theta": float(t.theta), "se": float(t.se), "tau": float(t.tau),
-                   "se_tau": float(t.se_tau), "n": t.n, "pseudo_r2": float(t.pseudo_r2)})
+            json!({
+                "goods": t.goods, "theta": float(t.theta), "se": float(t.se),
+                "tau": float(t.tau), "se_tau": float(t.se_tau), "n": t.n,
+                "pseudo_r2": float(t.pseudo_r2),
+            })
         })
         .collect();
     let b = &e.border;
@@ -112,12 +115,17 @@ fn estimates_json(e: &Estimates) -> Value {
         serde_json::from_str(&e.notes.json().compact().replace("NaN", "null")).unwrap();
     json!({
         "theta": theta,
-        "border": {"nu": float(b.nu), "se": float(b.se), "nu_by_class": floats(&b.nu_by_class),
-                   "se_by_class": floats(&b.se_by_class), "theta_by_class": floats(&b.theta_by_class),
-                   "border_by_class": floats(&b.border_by_class), "n": b.n, "pseudo_r2": float(b.pseudo_r2)},
-        "modes": {"ratio": floats(&m.ratio), "se": floats(&m.se), "identified": m.identified,
-                  "theta_by_class": floats(&m.theta_by_class), "tau_by_class": floats(&m.tau_by_class),
-                  "n": m.n, "pseudo_r2": float(m.pseudo_r2), "iterations": m.iterations},
+        "border": {
+            "nu": float(b.nu), "se": float(b.se), "nu_by_class": floats(&b.nu_by_class),
+            "se_by_class": floats(&b.se_by_class), "theta_by_class": floats(&b.theta_by_class),
+            "border_by_class": floats(&b.border_by_class), "n": b.n,
+            "pseudo_r2": float(b.pseudo_r2),
+        },
+        "modes": {
+            "ratio": floats(&m.ratio), "se": floats(&m.se), "identified": m.identified,
+            "theta_by_class": floats(&m.theta_by_class), "tau_by_class": floats(&m.tau_by_class),
+            "n": m.n, "pseudo_r2": float(m.pseudo_r2), "iterations": m.iterations,
+        },
         "class_shares": floats(&e.class_shares),
         "n_countries": e.n_countries,
         "n_domestic_countries": e.n_domestic_countries,
@@ -239,8 +247,10 @@ fn gravity_matches_python() {
         let se: Vec<f64> = (0..fit.names.len())
             .map(|i| fit.cov[(i, i)].sqrt())
             .collect();
-        let got = json!({"names": fit.names, "coef": floats(&fit.coef), "se": floats(&se), "n": fit.n,
-                         "n_separated": fit.n_separated, "pseudo_r2": float(fit.pseudo_r2)});
+        let got = json!({
+            "names": fit.names, "coef": floats(&fit.coef), "se": floats(&se), "n": fit.n,
+            "n_separated": fit.n_separated, "pseudo_r2": float(fit.pseudo_r2),
+        });
         worst.value(name, w, &got);
     }
     assert_eq!(want.as_object().unwrap().len(), fits.len(), "yotov columns");
