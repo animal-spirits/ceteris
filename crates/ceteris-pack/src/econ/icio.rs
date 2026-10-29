@@ -7,9 +7,10 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray, UInt8Array, UInt32Array};
 
+use super::goods::TRADED;
 use super::people::donor;
 use crate::numeric::{median, pairwise_sum, py_sum};
-use crate::read::icio::{CountryIo, N_GOODS, Wdi};
+use crate::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi};
 use crate::read::people::{Observed, parts};
 use crate::read::wdi::Names;
 
@@ -578,6 +579,53 @@ pub fn io_columns(
             floats(
                 rows.iter()
                     .flat_map(|r| r.table.io.iter().flat_map(|row| row.iter().copied())),
+            ),
+        ),
+    ])
+}
+
+/// `econ_home_shares.arrow` (ADR 0092): one row per pack country and traded good, country-major:
+/// `home_share` the ICIO 2000 domestic-origin use over total use (intermediate plus final),
+/// `absorption` the total use (million USD), `icio` whether the country is an ICIO economy. A
+/// country outside ICIO has NaN share and absorption, and so has the share of a good an ICIO
+/// economy does not use.
+pub fn home_share_columns(
+    codes: &[String],
+    used: &BTreeMap<String, HomeUse>,
+    iso: &Names,
+) -> Result<Vec<(String, ArrayRef)>, String> {
+    let n = u32::try_from(codes.len()).map_err(|_| "too many countries for uint32")?;
+    let own: Vec<Option<&HomeUse>> = codes
+        .iter()
+        .map(|c| used.get(iso.get(c).unwrap_or(c)))
+        .collect();
+    let per_row = |f: &dyn Fn(&HomeUse, usize) -> f64| {
+        floats(
+            own.iter()
+                .flat_map(|u| (0..TRADED).map(move |g| u.map_or(f64::NAN, |u| f(u, g)))),
+        )
+    };
+    Ok(vec![
+        (
+            "country".into(),
+            Arc::new(UInt32Array::from_iter_values(
+                (0..n).flat_map(|c| std::iter::repeat_n(c, TRADED)),
+            )),
+        ),
+        (
+            "good".into(),
+            Arc::new(UInt8Array::from_iter_values(
+                (0..n).flat_map(|_| 0..TRADED as u8),
+            )),
+        ),
+        ("home_share".into(), per_row(&|u, g| u.share(g))),
+        ("absorption".into(), per_row(&|u, g| u.total[g])),
+        (
+            "icio".into(),
+            Arc::new(
+                own.iter()
+                    .flat_map(|u| std::iter::repeat_n(Some(u.is_some()), TRADED))
+                    .collect::<BooleanArray>(),
             ),
         ),
     ])

@@ -22,7 +22,7 @@ use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
 use crate::read::baci::trade_by_country;
-use crate::read::icio::{aggregate, load_wdi};
+use crate::read::icio::{aggregate, home_use, load_wdi};
 use crate::read::natural_earth::read_codes;
 use crate::read::people::load_observed;
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
@@ -30,7 +30,7 @@ use crate::read::wdi::read_rates;
 use crate::table;
 
 /// The written tables, in writing order.
-pub const TABLES: [&str; 7] = [
+pub const TABLES: [&str; 8] = [
     "econ_goods.arrow",
     "econ_countries.arrow",
     "econ_io.arrow",
@@ -38,6 +38,7 @@ pub const TABLES: [&str; 7] = [
     "econ_pops.arrow",
     "econ_tariffs.arrow",
     "gateways.arrow",
+    "econ_home_shares.arrow",
 ];
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
 pub use crate::read::natural_earth::ADMIN0;
@@ -413,6 +414,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         pops_t,
         tariffs_t,
         gateways_t,
+        home_shares_t,
     ] = TABLES;
     let tables = vec![
         write(out, goods_t, goods_columns(weight, &classes))?,
@@ -426,6 +428,11 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         write_batch(out, pops_t, &people::pops(&country, &population, &labour)?)?,
         write(out, tariffs_t, tariffs::columns(&rates)?)?,
         write(out, gateways_t, gateways::columns(&gw))?,
+        write(
+            out,
+            home_shares_t,
+            icio::home_share_columns(&codes, &home_use(&cache.join(icio::ICIO), YEAR)?, &iso)?,
+        )?,
     ];
     Ok(BuildReport {
         tables,
