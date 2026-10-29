@@ -3,7 +3,8 @@
     python scripts/parity/json_diff.py A B
 
 Exit 0 when the bytes are identical. Otherwise lists, per key (`countries.<key>` inside the
-countries object), the rows whose values differ, with both values, and exits 1.
+countries object), the rows whose values differ, with both values, and exits 2; any other
+failure (a missing or unreadable file) exits 1.
 """
 
 import json
@@ -39,7 +40,7 @@ def main(a: Path, b: Path) -> int:
         if rows:
             shown = ", ".join(f"{i}: {x!r} vs {y!r}" for i, x, y in rows[:10])
             print(f"  {k}: {len(rows)} rows differ ({shown}{', ...' if len(rows) > 10 else ''})")
-    return 1
+    return 2
 
 
 if __name__ == "__main__":

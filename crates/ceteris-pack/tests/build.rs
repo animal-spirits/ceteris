@@ -83,5 +83,7 @@ fn the_pack_tables_hold_their_invariants() {
         serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
     let stats = &manifest["stats"];
     assert!(stats["county_area_outside_province"].as_f64().unwrap() < 0.05);
-    assert!(stats["split_by_counties"].as_u64() > stats["split_by_voronoi"].as_u64());
+    assert!(
+        stats["split_by_counties"].as_u64().unwrap() > stats["split_by_voronoi"].as_u64().unwrap()
+    );
 }
