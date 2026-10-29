@@ -4,7 +4,7 @@
 use ceteris_app::camera::Camera;
 use ceteris_app::fill::Fill;
 use ceteris_app::map::Map;
-use ceteris_app::tokens::SEA;
+use ceteris_app::tokens::{PAPER, SEA};
 use slint::wgpu_30::wgpu;
 
 const RED: [u8; 4] = [200, 30, 40, 255];
@@ -137,4 +137,31 @@ fn the_world_wraps_across_the_antimeridian() {
         .expect("allocates");
     assert_eq!(read_pixel(&device, &queue, &target, 25, 50), BLUE);
     assert_eq!(read_pixel(&device, &queue, &target, 75, 50), RED);
+}
+
+#[test]
+fn the_globe_shows_the_near_side_only() {
+    let Some((device, queue)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let mut map = Map::new(&device, &two_squares());
+    map.set_colours(&queue, &[RED, BLUE]);
+    let mut camera = Camera::fit(100.0, 100.0);
+    camera.globe = true;
+    // Radius 100 / 2 pi px; centred on feature 0 (x 0.25), feature 1 (x 0.75) is behind.
+    camera.scale = 100.0 * std::f64::consts::TAU / 2.0;
+    camera.centre = [0.25, 0.5];
+    let target = map
+        .render(&device, &queue, [100, 100], &camera, None)
+        .expect("allocates");
+    assert_eq!(read_pixel(&device, &queue, &target, 50, 50), RED);
+    assert_eq!(pick(&mut map, &device, &queue, &camera, [50, 50]), Some(0));
+    camera.centre = [0.75, 0.5];
+    map.render(&device, &queue, [100, 100], &camera, None);
+    assert_eq!(read_pixel(&device, &queue, &target, 50, 50), BLUE);
+    // Off the disc is paper, and picks nothing.
+    let corner = read_pixel(&device, &queue, &target, 2, 2);
+    assert_eq!(corner, [PAPER[0], PAPER[1], PAPER[2], 255]);
+    assert_eq!(pick(&mut map, &device, &queue, &camera, [2, 2]), None);
 }

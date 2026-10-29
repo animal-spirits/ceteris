@@ -1,4 +1,4 @@
-import { AboutSlint, Button } from "std-widgets.slint";
+import { AboutSlint, Button, CheckBox } from "std-widgets.slint";
 import { Tokens } from "tokens.slint";
 
 export { Tokens }
@@ -49,6 +49,7 @@ export component AppWindow inherits Window {
     callback pan(length, length);
     callback zoom(length, length, length);
     callback select(length, length);
+    callback globe(bool);
 
     MenuBar {
         Menu {
@@ -108,6 +109,20 @@ export component AppWindow inherits Window {
         label := Text {
             text: root.status;
             color: Tokens.ink;
+        }
+    }
+
+    Rectangle {
+        x: parent.width - self.width - Tokens.pad;
+        y: Tokens.pad;
+        width: toggle.preferred-width + 2 * Tokens.pad;
+        height: toggle.preferred-height + Tokens.pad;
+        background: Tokens.paper;
+        border-color: Tokens.rule;
+        border-width: Tokens.hairline;
+        toggle := CheckBox {
+            text: "Globe";
+            toggled => { root.globe(self.checked); }
         }
     }
 

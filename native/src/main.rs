@@ -87,6 +87,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         weak.upgrade().inspect(|a| a.window().request_redraw());
     });
 
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_globe(move |on| {
+        let mut s = s.borrow_mut();
+        let viewport = s.viewport;
+        if let Some(c) = s.camera.as_mut() {
+            c.set_globe(viewport, on);
+        }
+        weak.upgrade().inspect(|a| a.window().request_redraw());
+    });
+
     let weak = app.as_weak();
     app.window().set_rendering_notifier(move |rendering, api| {
         let slint::GraphicsAPI::WGPU30 { device, queue, .. } = api else {
