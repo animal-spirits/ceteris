@@ -4,6 +4,7 @@ Status: proposed; amended per ADR 0241 (2026-10-29)
 Date: 2026-10-24
 Design sections: 15.3, 15.4, 15.5, 15.7
 Phase: P9 (scorecard), with the conditional-forecast mode in P3
+Paths (ADR 0113, 2026-10-29): `python/` is gone; scorecard code goes in a Rust crate, and analysis reads the Arrow and Parquet outputs.
 
 ## Context
 

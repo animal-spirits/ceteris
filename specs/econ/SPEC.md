@@ -15,7 +15,7 @@ Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1
 numeraire money. It assembles the P2 world (`EconWorld`) and its tick schedule from
 `ceteris-core`, `ceteris-geo` and `ceteris-trade` (`specs/trade/SPEC.md`). This spec also
 covers the P2 additions to the pack pipeline (2000 economic data, gateways), the GE reference
-model in `python/ceteris/reference`, the P2 gate, and what the app shows. Demography,
+model in `ceteris-reference`, the P2 gate, and what the app shows. Demography,
 investment, finance, the state and politics are later phases.
 
 ## Deviations from DESIGN.md (approved with the spec)
@@ -503,10 +503,10 @@ positive and clears; the stage 5 state is stationary under the order rule. In Ru
 friction on hold every quantity to 1e-9 on the fixture. On the full pack, integer money bounds
 them: real quantities to 2e-6, money to 2e-6 or 4 minor units, world aggregates to 1e-9, and the
 drift stays bounded (ADR 0089, As built). The reduced residual
-of the former joint inversion stays as `reference/reduced.py`, the numpy twin of
-`reference/jax_model.py` (exact derivatives, kept for ADR 0096).
+of the former joint inversion (`reference/reduced.py`) and its JAX twin were deleted with the
+Python reference (ADR 0113).
 
-## GE reference model (`python/ceteris/reference`)
+## GE reference model (`ceteris-reference`)
 
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every
 active (province, good) cell (origin markets of traded goods, province markets of local goods)
@@ -849,21 +849,21 @@ texture fed from core columns.
   the rest of their money, its one user orders none, never restocks and ends producing nothing,
   no price, wage or flow turns NaN and the invariants hold
   (`unreachable_destination_buys_nothing_in_the_world`); the reference solves the same variant
-  with a finite residual (`test_unreachable_destination_solves`). V1 holds on the variant (final
+  with a finite residual (`unreachable_destination_solves`). V1 holds on the variant (final
   fix wave: price 3.0e-5, wage 2.5e-5, flow units 5.8e-5, value 7.5e-5 at 1,200 ticks) except at
   the island's light manufacturing, whose price is not determined: with no output and no orders
   any price that leaves its weight below the market floor solves its market.
-- Python (pytest, hypothesis): ICIO aggregation preserves totals; downscaling preserves national
-  VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
+- Pipeline and reference (`ceteris-pack`, `ceteris-reference`; proptest): ICIO aggregation
+  preserves totals; downscaling preserves national VA; imputation flags; GE reference residuals; reference versus balanced Sinkhorn on small
   worlds; PPML recovers a known elasticity on synthetic gravity data; the uniqueness check
   reproduces the paper's worked examples (footnotes 3 and 6, Section 3 with Figure 1, Online
-  Appendix A.3: `test_bound_reproduces_paper_examples`), is below 1 at the P2 defaults
-  (`test_trade_only_is_unique`) and picks the V1 mode (`test_v1_mode`); the reference's PIGL
+  Appendix A.3: `bound_reproduces_paper_examples`), is below 1 at the P2 defaults
+  (`trade_only_is_unique`) and picks the V1 mode (`v1_mode`); the reference's PIGL
   reproduces Rust's on the export's 100 `pigl_check` draws (1e-12) and its inversion the base
   shares.
 - History (`history.rs`, `tests/history_cli.rs`): row counts at intervals 1 and 5, last row equals the run files, same state hash with and without recording, deterministic bytes, default output byte-identical.
 - Acceptance: `tests/p2_acceptance.rs` (V0, V1, 100 years, determinism) and
-  `python/tests/test_p2_gate.py` (V1 comparison, H2); full-pack parts skip without a pack, as
+  `ceteris-cli/tests/p2_gate.rs` (V1 comparison, H2); full-pack parts skip without a pack, as
   in P1.
 - Benchmarks: `labour`, `produce`, `consume` (criterion, full pack).
 

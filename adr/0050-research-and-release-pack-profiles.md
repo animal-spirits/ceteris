@@ -1,6 +1,6 @@
 # 0050. Research and release pack profiles, and sources to audit
 
-Status: proposed
+Status: proposed; amended per ADR 0113 (2026-10-29)
 Date: 2026-10-24
 Design sections: 16, 16.1, 2.5, 15.4, 22
 Phase: pipeline, now
@@ -153,3 +153,12 @@ profile stays enforced in every distribution and `check_sources.py` keeps its ch
   the pack build neither fetches nor lists in its provenance, and which `pack_sources()` does not read.
   `check_sources.py` requires each to name a source with `use = "validation"`. The Yotov et al. (2016) sample
   (`yotov-2016`, WTO all rights reserved) moved there; `test_gravity_reproduces_yotov_2016` is unchanged.
+
+## Amendment (ADR 0113, 2026-10-29)
+
+The check moved to Rust with the same rules: `check_sources.py --profile` is `ceteris pack
+check-sources --profile research|release`, which CI runs for the research profile. The manifest,
+`fetch.toml` and `validation.toml` moved from `python/ceteris/packs/` to
+`crates/ceteris-pack/config/` with their schemas unchanged; `pack_sources()` is
+`ceteris_pack::sources::pack_sources`, and `test_gravity_reproduces_yotov_2016` is
+`gravity_reproduces_yotov_2016` in `crates/ceteris-calibrate/tests/gravity.rs`.

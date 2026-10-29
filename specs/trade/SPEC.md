@@ -92,7 +92,7 @@ part's scale in log space, and it overflows only when its true value does, leavi
 share below part / f64::MAX, taken as 0. Where E_d / Phi_d itself is beyond f64 (a part near the
 smallest normal f64 times large spending), every destination's E_d / Phi_d is carried as 2^-k of
 its value and the orders and dispatched flows built on it are scaled back by 2^k, so flows stay
-finite and spending is conserved; k is 0 otherwise, which leaves every bit unchanged. The Python
+finite and spending is conserved; k is 0 otherwise, which leaves every bit unchanged. The GE
 reference keeps one global scale and divides E_d by Phi_d directly, so it matches only where
 neither underflows nor overflows, as on every pack and fixture price vector. A term is lost to
 underflow only when it is below about 1e-308 of the largest term of its part, kernel factors
@@ -426,7 +426,7 @@ Steady state of T1-T4 with any stable kappa: prices stop moving when every origi
 output (D = Q) and every local market clears (and S = S* when kappa2 > 0; with the default
 kappa2 = 0 the stock stays where the transient left it). That is the structural-gravity
 equilibrium of destination sourcing, computed directly by the GE reference model
-(`python/ceteris/reference`, econ SPEC) on the same kernel. V1: frictionless runs reach it within
+(`ceteris-reference`, econ SPEC) on the same kernel. V1: frictionless runs reach it within
 1%. H2: PPML on simulated country-pair flows (the origin value of the shipped units) gives a distance
 elasticity in -0.7 to -1.1, and per
 theta class, a PPML on ln(1 + tariff) of the flows valued at what the importer pays (value times 1 + t:

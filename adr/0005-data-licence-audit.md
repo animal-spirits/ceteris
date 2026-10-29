@@ -3,6 +3,7 @@
 Status: accepted; closed-source fallback superseded 2026-10-28 (owner: open source and non-commercial, each user downloads the data; DESIGN 22.1)
 Date: 2026-10-23
 Design sections: 2.5 (open by construction), 5.2, 5.4, 13.4, 16, 22, 22.1 (licence)
+Paths (ADR 0113, 2026-10-29): the manifest is `crates/ceteris-pack/config/sources.toml`; `check_sources.py` is `ceteris pack check-sources`.
 
 ## Context
 

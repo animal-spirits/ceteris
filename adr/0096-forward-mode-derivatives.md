@@ -1,6 +1,6 @@
 # 0096. Forward-mode derivatives in the Rust core
 
-Status: proposed
+Status: proposed; amended per ADR 0113 (2026-10-29)
 Date: 2026-10-24
 Design sections: 15.2, 15.7, 17, 19.4
 
@@ -62,3 +62,10 @@ Variational inference and gradient-based MCMC become available in P9 for the smo
 without emulators; JAX stays only in the GE reference model. Calibration builds differ from
 release builds in the soft clips and rationing, so each posterior is checked by re-running its
 mean in release mode.
+
+## Amendment (ADR 0113, 2026-10-29)
+
+The JAX relaxations are gone: the GE reference model is the `ceteris-reference` crate and no JAX
+model remains, so "JAX stays only in the GE reference model" no longer holds. The finite-difference
+test of the dual numbers runs against `ceteris-reference`. Gradients of summary statistics reach
+analysis through the Arrow and Parquet outputs, not Python.
