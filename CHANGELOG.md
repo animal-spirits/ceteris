@@ -44,12 +44,13 @@ Goldens re-blessed:
   fixture's calibrated nominal values (VA0, output, w0, money, pipeline, rebates) move by 1.9%
   and its PIGL scales by 1.4% (the factor to the power eps); a recalibration of the 2000 pack
   moves them by 2.56% (r from 0.98795 to 1.01322 for agriculture). The installed pack tables are
-  unchanged and still load (B8 recalibrates).
+  unchanged and still load until the next recalibration of the pack.
 
 Goldens re-blessed:
 
 - `tests/golden/p0-toy.txt`, `tests/golden/p2-econ.txt`: every hash (format 2 and the account
-  kinds in the canonical bytes; the clip move rounds differently once pi^e != 0). The hashes are
+  kinds in the canonical bytes; where the clip binds and pi^e != 0 the step is pi^e larger,
+  elsewhere the sum rounds differently). The hashes are
   the same at 1, 3 and all (14) threads.
 - `tests/golden/p2-fixture/params.json` (P151) and `tests/golden/p2-fixture/calibration` (the
   nominal level). The fixture reference is unchanged.

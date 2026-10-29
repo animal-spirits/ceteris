@@ -840,7 +840,8 @@ pub fn distribute(w: &mut EconWorld) {
                 cash.max(0),
             );
         }
-        let cash = w.ledger.money(acc.market[i]);
+        let cash = i64::try_from(w.ledger.money_wide(acc.market[i]))
+            .expect("ledger overflow: a market's cash beyond one payment");
         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
     }
     let mut parts = Vec::new();

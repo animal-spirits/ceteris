@@ -516,8 +516,8 @@ On both the drift stays bounded (ADR 0089, As built): its largest value over the
 the run, over its tolerance, is at most twice that over ticks 5 to the half. The fixture run was
 120 ticks until the calibrated nominal level was pinned (ADR 0106, As built): the fixture's
 rounding drift then peaks near tick 105 (market sales 8.1e-12 relative, 0.8% of the tolerance)
-and falls after, so ticks 61 to 120 read 2.01 times ticks 5 to 60; over 480 ticks every quantity's
-second half is below its first (controller ruling, 2026-10-29). The reduced residual
+and falls after, so ticks 61 to 120 read 2.01 times ticks 5 to 60; over 480 ticks every quantity
+above rounding is no larger in its second half than in its first (controller ruling, 2026-10-29). The reduced residual
 of the former joint inversion (`reference/reduced.py`) and its JAX twin were deleted with the
 Python reference (ADR 0113).
 
@@ -950,7 +950,10 @@ texture fed from core columns.
   at a uniform scale of about 802 on prices, wages and balances (ADR 0089, Evidence) is gone
   (`mint_survives_scale_1000` runs the fixture with its mint at 1,000 times the pack's). Pops and
   enterprises stay `i64`: the largest single balance, and each payment (an `i64` entry), bounds the
-  nominal scale now. The currency scale is a P5 decision (core SPEC, Money scale).
+  nominal scale now. On the installed 2000 pack the largest cell sales value is 7.0e10 numeraire
+  per tick and the largest pop balance 1.4e10, so single sale entries bind at a uniform scale of
+  about 1.3e4 and pop money at about 6.5e4 (`nominal_scale_beyond_the_ledger_fails_loudly`: on the
+  fixture too a payment fails first). The currency scale is a P5 decision (core SPEC, Money scale).
 
 ## Changes for the next design-doc snapshot
 
@@ -969,6 +972,9 @@ rev 226 (Task 21); re-grep again before editing.
   - P03 splits into P03a kappa1 (start 0.05), P03b kappa2 (start 0) and P03c the step clip (0.1);
     P01 takes its class values 2.91, 4.14, 7.68 and 16.91 (ADRs 0023 and 0101; DESIGN 1061 says
     "centre 5"). P150 theta scale (ADR 0101; 1, lane {0.6, 1, 1.4} in tariff experiments).
+    P03c's row says the clip bounds the gap terms and expected inflation passes through, and P151
+    is the step clip c_max_storable of the storable commodities, goods 0, 1, 2, 5 (ADR 0106; 0.3 in
+    log per month, oil fell about 30% in one month in late 2008).
   - P148 loss write-off threshold M, 3 months of base sales (ADR 0112, accepted), and P149 input stock
     cover, 1 month (owner decision, 2026-10-24; the `cover` of the order rule). Held or proposed, not
     built in P2: P143 kappa_n of ADR 0090 (proposed; the split price rule is parked on `p2-adr0090`),

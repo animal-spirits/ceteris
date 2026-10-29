@@ -177,6 +177,24 @@ mod tests {
         assert!((w - 2.0 * libm::exp(-0.15)).abs() < 1e-15);
     }
 
+    /// ADR 0106: at pi^e = 0 the step is the old one, w exp(clip(kappa_w (x + u*))), damped when
+    /// negative, bit for bit.
+    #[test]
+    fn zero_expected_inflation_is_the_old_wage_rule() {
+        let p = EconParams::default();
+        for x in [-10.0, -0.3, -0.0773, -0.01, 0.0, 0.004, 0.2, 10.0] {
+            let mut old = (p.kappa_w * (x + 0.0773)).clamp(-0.1, 0.1);
+            if old < 0.0 {
+                old *= 1.0 - p.delta_w;
+            }
+            let old = 2.0 * libm::exp(old);
+            assert_eq!(
+                wage_step(2.0, x, 0.0773, 0.0, &p, 0.1).to_bits(),
+                old.to_bits()
+            );
+        }
+    }
+
     /// ADR 0089: excess demand is read against the natural rate, so at x = -u* the step is
     /// exactly pi^e (a nominal cut, pi^e < 0, still meets the rigidity), and at x = 0 the wage
     /// rises by kappa_w u*.
