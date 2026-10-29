@@ -49,7 +49,7 @@ changes only the mean inside it, as an amendment to 0023 (owner, 2026-10-26). Ow
 ## Tests
 
 - On a two-line toy class, the welfare change from a uniform cost shock at the harmonic class
-  theta equals the line-level sum to first order.
+  theta equals the line-level sum to first order. (Replaced, see As built.)
 - H2 distance elasticity gate (-1.1 to -0.7) still passes, or the change is reported to the
   owner.
 
