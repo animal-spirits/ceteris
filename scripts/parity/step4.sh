@@ -16,6 +16,12 @@
 # their six tables compared with `pack compare --iterative` and the metadata and printed summary
 # by the `parity` test of ceteris-calibrate; the `steady_state` tests then run on the pack
 # export, loading the Rust tables into `EconInputs::from_pack` from a linked copy of the pack.
+# Gravity: step4_gravity_dump.py runs `gravity.estimate` on 2000 BACI and the pack (timed) and
+# `gravity.yotov`, dumping the printed report, the TOML, every estimate, the country costs of
+# the least-cost trees and the Yotov fits; `ceteris gravity` prints its report beside them and
+# the `gravity_parity` test of ceteris-calibrate estimates again and compares (1e-9 relative,
+# 1e-12 for the country costs, the printed text equal). Stability: both entry points print the
+# stability table of the fixture, compared byte for byte.
 # The export, the dumps, the solutions, the fits and the calibrations stay in WORK_DIR.
 set -euo pipefail
 
@@ -97,3 +103,30 @@ done
 echo "== steady state on the pack, the Rust tables loaded by EconInputs::from_pack"
 CETERIS_PACK="$pack" CETERIS_PACK_EXPORT="$work/pack-export" \
     cargo test --release --quiet -p ceteris-calibrate --test steady_state -- --nocapture
+
+echo "== gravity on 2000 BACI and the pack"
+gravity="$work/gravity"
+mkdir -p "$gravity/rust"
+start=$SECONDS
+uv run --project "$root/python" --locked python "$root/scripts/parity/step4_gravity_dump.py" \
+    "$gravity/python" --pack "$pack" --yotov "$root/data/cache/AdvancedGuideFiles.zip"
+echo "python (estimate and yotov): $((SECONDS - start)) s"
+start=$SECONDS
+# Exit status 1 means a stop rule fired; the report is compared either way.
+set +e
+"$root/target/release/ceteris" gravity --pack "$pack" >"$gravity/rust/gravity.txt"
+status=$?
+set -e
+echo "rust (estimate): $((SECONDS - start)) s, exit status $status"
+if [ "$status" -gt 1 ]; then
+    exit "$status"
+fi
+CETERIS_PACK="$pack" CETERIS_GRAVITY_PARITY="$gravity" \
+    cargo test --release --quiet -p ceteris-calibrate --test gravity_parity -- --nocapture
+
+echo "== stability table of the fixture"
+uv run --project "$root/python" --locked python -m ceteris.calibrate.stability "$fixture" \
+    >"$work/stability-python.txt"
+"$root/target/release/ceteris" calibrate stability "$fixture" >"$work/stability-rust.txt"
+cmp "$work/stability-python.txt" "$work/stability-rust.txt"
+echo "stability: $(wc -l <"$work/stability-rust.txt") rows equal"
