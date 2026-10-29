@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. Python (uv) runs the data pipeline, the reference model and calibration via PyO3. The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. The data pipeline, the reference model and calibration are Rust crates driven by the `ceteris` CLI (ADR 0113). The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -44,7 +44,7 @@ The product is a laboratory first and a game second: a living world map where th
 | God mode (ex ante) | Edits initial state or parameters, then runs an ensemble | What if China never joins the WTO, or the trade elasticity were 8 instead of 5? |
 | God mode (ex post) | Pauses at tick t, edits anything, forks a branch | What if Lehman is rescued in September 2008, given everything up to then? |
 | Steward (later) | Controls one state's policy levers; AI runs the rest | Can Brazil raise its growth rate with a different tariff and infrastructure policy? |
-| Batch / scripted | Python API runs experiment grids headless | Distribution of 2030 outcomes across 64 seeds under three tariff regimes |
+| Batch / scripted | The `ceteris` CLI runs experiment grids headless from scenario files | Distribution of 2030 outcomes across 64 seeds under three tariff regimes |
 
 ### 2.2 Era choice
 
@@ -134,13 +134,13 @@ The map client sends edits straight into the systems pipeline and reads results 
 
 ### 4.1 Layers
 
-1. **Data packs**: versioned, built offline by the Python pipeline (geography, initial populations, capital, technology tree, institutions, parameter priors).
+1. **Data packs**: versioned, built offline by the `ceteris-pack` pipeline (geography, initial populations, capital, technology tree, institutions, parameter priors).
 2. **World state**: component arrays keyed by stable entity IDs.
 3. **Systems pipeline**: pure functions of (state, parameters, RNG streams) that mutate state in a fixed order.
 4. **Ledger and event log**: every monetary and goods flow as a balanced transaction; every discrete decision (law change, war declaration, firm entry) as an event.
 5. **Snapshot and branch store**: periodic full snapshots plus logs; any tick of any branch is reconstructible.
-6. **Query API**: Arrow-based reads for the map client and Python.
-7. **Clients**: web map, Python notebooks, CLI batch runner.
+6. **Query API**: Arrow-based reads for the map client and external analysis tools.
+7. **Clients**: web map, CLI batch runner; analysis reads the Arrow and Parquet outputs.
 
 ### 4.2 Entity model
 
@@ -1164,7 +1164,7 @@ The simulator is built to adjudicate between explanations, so each hypothesis na
 
 ## 19. Technology Stack, Performance and Repository
 
-A Rust core gives deterministic, parallel speed; Python owns data, calibration and analysis; the desktop app renders the map, in its webview today and natively in Rust (wgpu map, Slint panels; ADR 0088) later; the three meet on Apache Arrow.
+A Rust core gives deterministic, parallel speed; Rust crates also own the data pipeline and calibration, and analysis reads the outputs from outside; the desktop app renders the map, in its webview today and natively in Rust (wgpu map, Slint panels; ADR 0088) later; the three meet on Apache Arrow.
 
 ### 19.1 Stack
 
@@ -1281,7 +1281,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Data packs are immutable Arrow files memory-mapped by every process, so ensembles share one physical copy through the page cache.
 - Lanes share packs, kernels and route-choice factors; trade products widen from (provinces x goods) to (provinces x goods x lanes).
 - Copy-on-write snapshots in about 64k-row content-hashed chunks with low-level zstd.
-- Emulate principal components of output series; reuse Saltelli sample matrices; random Fourier features keep emulators linear in run count; Python crosses the boundary only with zero-copy Arrow, never per-entity calls.
+- Emulate principal components of output series; reuse Saltelli sample matrices; random Fourier features keep emulators linear in run count; analysis tools read runs only through Arrow and Parquet outputs, never per-entity calls.
 
 **GPU (fallback only)**
 
@@ -1324,7 +1324,7 @@ The interface is a Paradox-style map with time controls, plus two things Paradox
 - **Branch manager**: a tree of branches with fork ticks and intervention lists; select two to compare.
 - **Ensemble view**: fan charts with quantile bands per branch; event-probability tables.
 - **Timeline**: scrubber over snapshots; jump to any tick and fork.
-- **Console**: Python-equivalent commands for anything done by clicking, exported as a script for reproducibility.
+- **Console**: CLI-equivalent commands for anything done by clicking, exported as a scenario file for reproducibility.
 
 ### 20.3 Time controls
 
@@ -1346,7 +1346,7 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
    - Accept: a toy world of 10 provinces runs 1,200 ticks; identical hashes across two runs and across 1 vs 8 threads; restore-and-replay from any snapshot matches.
 2. **P1 World and map.** Geography pipeline (H3 raster, provinces, sea zones), transport graph with mode costs, least-cost-path cache, 2000 borders, web map with political, terrain and resource modes.
    - Accept: about 4,000 provinces render at 60 fps; clicking a province shows attributes; cost-from-node map mode looks plausible to a reviewer.
-3. **P2 Economic core (minimal).** 10 goods, static pops, one enterprise per (province, sector), labour market, province markets with the stock-flow rule, structural-gravity trade over least-cost legs through gateways (route choice deferred, ADR 0017), cleared across ticks, with transit, a single numeraire money, accounting assertions, and the GE reference model in Python.
+3. **P2 Economic core (minimal).** 10 goods, static pops, one enterprise per (province, sector), labour market, province markets with the stock-flow rule, structural-gravity trade over least-cost legs through gateways (route choice deferred, ADR 0017), cleared across ticks, with transit, a single numeraire money, accounting assertions, and the GE reference model (in Python at P2, in Rust since ADR 0113).
    - Accept: V0 and V1 pass (frictionless convergence to the GE reference within 1% where the uniqueness condition holds; long-run neutrality); simulated gravity elasticities in range by theta class (H2); no invariant violations over 100 years; ADRs 0015 to 0023, 0089 and 0112 implemented (Section 25); V1 is the run from the perturbed steady state (gate decision below).
    - As built (26 Oct 2026):
      - Trade elasticity in 3 classes (2.62, 5.19, 10.57), drawn from the OECD key's thetas by ADR 0023's rule, with a per-class H2 prior band of two standard errors (1.40 to 3.84, 3.36 to 7.02, 8.15 to 12.99).
@@ -1381,7 +1381,7 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
 The plan is written to be executed by coding agents in focused steps. Rules for every task:
 
 1. **Spec first.** Before code, the agent writes or updates `specs/<module>/SPEC.md`: state components, equations, system order, invariants, parameter IDs from Section 17, and test plan. A human approves specs for modules in P2, P5 and P6.
-2. **Tests before implementation.** Unit tests for each equation, property-based tests for invariants (proptest in Rust, hypothesis in Python), and an equilibrium-nesting test where applicable.
+2. **Tests before implementation.** Unit tests for each equation, property-based tests for invariants (proptest), and an equilibrium-nesting test where applicable.
 3. **Small tasks.** One system or one data table per task; each task leaves the world runnable.
 4. **Golden runs.** Each phase adds a golden scenario with stored state hashes; any change that alters them must state why in its commit and update the hashes deliberately.
 5. **No silent tuning.** A parameter changed to make a test pass is recorded in the register with its justification; otherwise the change is rejected.
@@ -1430,7 +1430,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Licence | Open source and non-commercial (owner, 28 Oct 2026; supersedes the closed-source fallback of ADR 0005) | Apache-2.0 / MIT code; each user downloads the data, so non-commercial sources are acceptable; nothing restricted is bundled |
 | LLM leaders | Out of v1 | Tier 2 deferred |
 | First release | 1.0 at the end of R, after P9 (calibrated, validated economic world; P6 and P7 are 2.0, ADR 0136; phase plan ADR 0207) | No public partial builds |
-| Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-\*, Python package ceteris, CLI ceteris; check crates.io, PyPI and GitHub before P0 |
+| Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-\*, CLI ceteris; Python package name dormant until bindings exist (ADRs 0003, 0113); check crates.io, PyPI and GitHub before P0 |
 
 ### 22.2 Defaults the coding agent may take (recorded as ADRs)
 
@@ -1813,10 +1813,10 @@ An economics review on 24 Oct 2026 changed P2's core: the trade objective, how m
 | 0019 | Expected inflation in price and wage rules | markets, labour | Yes (small in P2) |
 | 0020 | Putty-clay intermediates; within-tick rationing | econ | Rationing only |
 | 0021 | PIGL demand; consumption rule | econ | Yes |
-| 0022 | Uniqueness check, static nesting gate, direct estimation | python reference and calibrate | Gate only |
+| 0022 | Uniqueness check, static nesting gate, direct estimation | reference and calibrate (`ceteris-reference`, `ceteris-calibrate`) | Gate only |
 | 0096 | Forward-mode derivatives through a Real trait | core, econ, trade, geo | No (f64 path identical) |
 | 0024 | Ensemble lanes as the innermost array dimension | core, all systems | No (lane k equals seed k) |
-| 0025 | Sequence-space HANK reference for the macro block | python reference; P2 test harness | No |
+| 0025 | Sequence-space HANK reference for the macro block | reference (`ceteris-reference`); P2 test harness | No |
 | 0026 | Pareto firm heterogeneity within cells | econ, trade, register | Yes |
 
 ### 0015. Trade flows in value with a dimensionless gravity kernel
@@ -2029,7 +2029,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 15.2, 15.7, 17, 19.4.
 - Write the P2 economic kernels and the route-choice solve generic over Real. Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
 - Give non-smooth operations smooth versions in calibration builds only: the price-step clip becomes a soft clip, and priority rationing a softmax ordering with a temperature. Discrete events (default, entry, exit) are held at their primal outcome, and gradients are reported as conditional on that event path.
 - Ledger balances stay fixed-point i64 without tangents; tangents live on prices, quantities and parameters.
-- Gradients of summary statistics reach Python through the same Arrow boundary as other outputs.
+- Gradients of summary statistics reach analysis through the same Arrow boundary as other outputs.
 
 **Tests.**
 
@@ -2037,7 +2037,7 @@ Status: proposed. Date: 2026-10-24. Design sections: 15.2, 15.7, 17, 19.4.
 - Dual gradients match central finite differences under common random numbers to 1e-6 relative on the P2 golden scenario.
 - A criterion benchmark of Dual<10> against f64 sets the calibration-build budget in the P2 spec.
 
-**Consequences.** Variational inference and gradient-based MCMC become available in P9 for the smooth blocks without emulators; JAX stays only in the GE reference model. Calibration builds differ from release builds in the soft clips and rationing, so each posterior is checked by re-running its mean in release mode.
+**Consequences.** Variational inference and gradient-based MCMC become available in P9 for the smooth blocks without emulators; no JAX model remains (the GE reference is `ceteris-reference`, ADR 0113). Calibration builds differ from release builds in the soft clips and rationing, so each posterior is checked by re-running its mean in release mode.
 
 ### 0024. Ensemble lanes
 
