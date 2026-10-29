@@ -4,8 +4,10 @@
 pub struct Camera {
     /// World point at the viewport centre.
     pub centre: [f64; 2],
-    /// Physical pixels per world unit.
+    /// Physical pixels per world unit; on the globe the radius is `scale / 2 pi`, so the
+    /// equator has the same length in both projections.
     pub scale: f64,
+    pub globe: bool,
 }
 
 /// Deepest zoom: about 2 m per pixel at the equator.
@@ -17,7 +19,20 @@ impl Camera {
         Self {
             centre: [0.5, 0.5],
             scale: width.min(height).max(1.0),
+            globe: false,
         }
+    }
+
+    /// Switches projection and refits the world: the whole map flat, a globe filling 90% of
+    /// the shorter side.
+    pub fn set_globe(&mut self, viewport: [f64; 2], globe: bool) {
+        let short = viewport[0].min(viewport[1]).max(1.0);
+        self.globe = globe;
+        self.scale = if globe {
+            0.9 * short * std::f64::consts::PI
+        } else {
+            short
+        };
     }
 
     pub fn screen_to_world(&self, viewport: [f64; 2], px: [f64; 2]) -> [f64; 2] {
@@ -42,13 +57,19 @@ impl Camera {
         self.centre[1] = (self.centre[1] + before[1] - after[1]).clamp(0.0, 1.0);
     }
 
-    /// Shader uniform: world to clip is `clip = (world - centre) * k`.
+    /// Shader uniform: centre and k. Flat, world to clip is `(world - centre) * k`; on the
+    /// globe, k scales the unit sphere (y up).
     pub fn uniform(&self, viewport: [f64; 2]) -> [f32; 4] {
+        let (scale, flip) = if self.globe {
+            (self.scale / std::f64::consts::TAU, 1.0)
+        } else {
+            (self.scale, -1.0)
+        };
         [
             self.centre[0] as f32,
             self.centre[1] as f32,
-            (2.0 * self.scale / viewport[0]) as f32,
-            (-2.0 * self.scale / viewport[1]) as f32,
+            (2.0 * scale / viewport[0]) as f32,
+            (flip * 2.0 * scale / viewport[1]) as f32,
         ]
     }
 }

@@ -9,7 +9,7 @@ use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
 use crate::fill::Fill;
-use crate::tokens::SEA;
+use crate::tokens::{PAPER, SEA};
 
 // Slint composites sRGB values as stored, so the target is not an sRGB format.
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -30,6 +30,7 @@ struct Pick {
 }
 
 pub struct Map {
+    background: wgpu::RenderPipeline,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     view_buffer: wgpu::Buffer,
@@ -51,7 +52,7 @@ impl Map {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -71,15 +72,35 @@ impl Map {
                 },
             ],
         });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("map"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let background = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("map background"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_bg"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_bg"),
+                compilation_options: Default::default(),
+                targets: &[Some(FORMAT.into()), Some(ID_FORMAT.into())],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("map fills"),
-            layout: Some(
-                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("map"),
-                    bind_group_layouts: &[Some(&layout)],
-                    immediate_size: 0,
-                }),
-            ),
+            layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs"),
@@ -111,7 +132,7 @@ impl Map {
         });
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map view"),
-            size: 32,
+            size: 64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -161,6 +182,7 @@ impl Map {
             .collect();
         let words = |w: &[u32]| -> Vec<u8> { w.iter().flat_map(|v| v.to_le_bytes()).collect() };
         Self {
+            background,
             pipeline,
             bind_group,
             view_buffer,
@@ -226,11 +248,23 @@ impl Map {
         let targets = self.targets.as_ref()?;
         let viewport = [f64::from(width), f64::from(height)];
         let [cx, cy, kx, ky] = camera.uniform(viewport);
-        // World copies left and right of the centre that can reach the viewport.
-        let reach = (viewport[0] / (2.0 * camera.scale)).ceil() as i32 + 1;
-        let uniform: Vec<u8> = [cx, cy, kx, ky, -(reach as f32), 0.0, 0.0, 0.0]
+        // Flat: world copies left and right of the centre that can reach the viewport.
+        let reach = if camera.globe {
+            0
+        } else {
+            (viewport[0] / (2.0 * camera.scale)).ceil() as i32 + 1
+        };
+        let uniform: Vec<u8> = [cx, cy, kx, ky, -(reach as f32)]
             .iter()
             .flat_map(|v| v.to_le_bytes())
+            .chain(u32::from(camera.globe).to_le_bytes())
+            .chain([0; 8])
+            .chain(
+                [SEA, PAPER]
+                    .iter()
+                    .flat_map(|c| c.iter().chain(&[255]))
+                    .flat_map(|&c| (f32::from(c) / 255.0).to_le_bytes()),
+            )
             .collect();
         queue.write_buffer(&self.view_buffer, 0, &uniform);
 
@@ -240,13 +274,15 @@ impl Map {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("map"),
                 color_attachments: &[
-                    Some(attachment(&targets.colour_view, sea())),
-                    Some(attachment(&targets.id_view, wgpu::Color::TRANSPARENT)),
+                    Some(attachment(&targets.colour_view)),
+                    Some(attachment(&targets.id_view)),
                 ],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_pipeline(&self.background);
+            pass.draw(0..3, 0..1);
+            pass.set_pipeline(&self.pipeline);
             pass.set_vertex_buffer(0, self.xy.slice(..));
             pass.set_vertex_buffer(1, self.feature.slice(..));
             pass.set_index_buffer(self.index.slice(..), wgpu::IndexFormat::Uint32);
@@ -316,13 +352,14 @@ impl Map {
     }
 }
 
-fn attachment(view: &wgpu::TextureView, clear: wgpu::Color) -> wgpu::RenderPassColorAttachment<'_> {
+/// The background pass covers every pixel, so nothing is cleared.
+fn attachment(view: &wgpu::TextureView) -> wgpu::RenderPassColorAttachment<'_> {
     wgpu::RenderPassColorAttachment {
         view,
         depth_slice: None,
         resolve_target: None,
         ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(clear),
+            load: wgpu::LoadOp::Load,
             store: wgpu::StoreOp::Store,
         },
     }
@@ -354,15 +391,5 @@ fn targets(device: &wgpu::Device, width: u32, height: u32) -> Targets {
         id_view: id.create_view(&Default::default()),
         colour,
         id,
-    }
-}
-
-fn sea() -> wgpu::Color {
-    let c = |v: u8| f64::from(v) / 255.0;
-    wgpu::Color {
-        r: c(SEA[0]),
-        g: c(SEA[1]),
-        b: c(SEA[2]),
-        a: 1.0,
     }
 }
