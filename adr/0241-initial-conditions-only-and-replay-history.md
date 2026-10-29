@@ -1,6 +1,6 @@
 # 0241. Initial conditions only: calendar-blind runs and replay history
 
-Status: proposed (owner chose the options, 2026-10-29)
+Status: accepted (owner, 2026-10-29)
 Date: 2026-10-29
 Design sections: 4.4, 13, 14.1, 14.4, 15.2, 15.4, 15.5, 15.7, 17.2, 22; ADRs 0051, 0052, 0103, 0107, 0118, 0178, 0206, 0210, 0229, 0230, 0233
 Phase: P3 (year-relabel test, replay loader), P8 (hazards), P9 (calibration and scoring)

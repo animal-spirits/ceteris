@@ -1,6 +1,6 @@
 # 0240. Narration, chrome, flavour and replay hooks after 1.0
 
-Status: proposed (owner chose the scope, 2026-10-29)
+Status: accepted (owner, 2026-10-29)
 Date: 2026-10-29
 Design sections: 20, 23.7, 23.8; ADRs 0049, 0078, 0124, 0137, 0140, 0141, 0144, 0207, 0238, 0239
 Phase: none on the 1.0 path; the moved items become 2.0+ work
