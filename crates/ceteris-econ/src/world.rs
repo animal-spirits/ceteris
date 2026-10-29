@@ -182,6 +182,9 @@ pub struct Scratch {
     pub drawn: Vec<f64>,
     /// Passes of the same-tick chain per province at E2 (`local::fills`).
     pub chain_iterations: Vec<u32>,
+    /// Whether the same-tick chain of a province met a fall its stall rule could not resolve
+    /// (`local::Fills::stalled`): a diagnostic.
+    pub chain_stalled: Vec<bool>,
     /// Units dispatched at T2b by each origin market, home purchases included,
     /// `[province * N_GOODS + g]`: the filled orders, equal to the market's sales.
     pub dispatched: Vec<f64>,
@@ -231,6 +234,7 @@ impl Scratch {
             from_output: vec![0.0; n_ent * N_GOODS],
             drawn: vec![0.0; np * N_GOODS],
             chain_iterations: vec![0; np],
+            chain_stalled: vec![false; np],
             dispatched: vec![0.0; np * N_GOODS],
             pop_demand: vec![0.0; n_pops * N_GOODS],
             ent_order: vec![0.0; n_ent * N_GOODS],

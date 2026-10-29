@@ -31,6 +31,13 @@ Goldens re-blessed:
   solved exactly with the work bounded (ADR 0093, amendments of 2026-10-29); the 32-pass bound and
   the clearing of what it left short are gone. It changes outputs wherever the chain binds. No
   golden moves: the fixture's default and frictionless runs never bind it.
+- Rules that can change outputs where the chain binds:
+  - No fall below rounding (4,096 eps f per cycle) is extrapolated.
+  - A pass at what f64 resolves settles at a confirmed fixed point of the last passes, or stops
+    with every good fitting to 1e-12 of its flows (the Leontief tolerance).
+  - After 256 passes, the fills move to the last pass's fixed point, clamped to [0, f], or the
+    stall is reported (`Scratch::chain_stalled`).
+  - Markets balanced exactly at the limit keep their fills; before, the doubling took them to 0.
 
 ### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
 
