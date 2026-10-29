@@ -45,6 +45,9 @@ Goldens re-blessed:
 - `econ_goods.arrow` records each good's class with the class's harmonic and arithmetic theta.
   The installed 2000 pack is not rebuilt here: its econ tables and calibration still have refined
   petroleum in good 5 and the old classes until the pack is rebuilt and recalibrated.
+- Side effects of the move (ADR 0092, As built): refined fuels take the primary tariff group
+  (group 0, with good 1); good 5 stays storable (P151) without refined fuels; good 1's P02
+  coverage stays 1 month; PIGL category M is unchanged for goods 1 and 5.
 
 Goldens re-blessed:
 
