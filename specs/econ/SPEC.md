@@ -774,14 +774,26 @@ the radius on p. 9, footnote 10 p. 7).
     A first build that also had ADR 0092's gateway masses (1/k per country) missed H2 distance
     at -0.536 (s.e. 0.013) with V1 and H2 per class passing; the owner deferred the masses to the
     border friction fit per class (2026-10-26).
+  - On the pack built and calibrated in Rust (ADR 0113, step 4f; GEOS 3.15, 46 passes, Sinkhorn
+    residual 9.6e-14), the gate in Rust (`p2_gate.rs`, `p2_acceptance.rs`, release): V1 from the
+    perturbed steady state passes (price 9.085e-3, São Tomé and Príncipe light manufacturing;
+    wage 9.057e-4; flow units 4.631e-5; value 5.039e-5; bound 0.9671; reference residual 7.6e-12
+    at the calibrated point); V1 from the data state still misses (price 0.826, wage 0.580, flow
+    units 1.83, value 1.56), as the stress test expects; H2 distance -0.7531 (s.e. 0.0161,
+    pseudo-R2 0.982, 47,306 pairs) passes; H2 per class passes (food 1.750, s.e. 0.148;
+    machinery 3.715, 0.468; the five-good class 9.520, 0.335). 100 years: no violation, world
+    price index 1.0000000000000067, no pop with negative money, no negative pool, no retained
+    loss, no stockout. 1 vs 8 threads, 120 ticks: identical hashes (20.0 s and 6.3 s). Every
+    number equals the Python gate's at its printed precision.
   - Commands (M4 Pro, `data/packs/2000` built and calibrated, `PACK=$PWD/data/packs/2000`,
     `EXPORT` a scratch directory):
     - `cargo run --release --bin ceteris -- export --pack $PACK --out $EXPORT`, the export the
-      Python gate reads.
-    - V1 (both starts), H2 distance and H2 per class, about 205 s:
-      `CETERIS_PACK=$PACK CETERIS_PACK_EXPORT=$EXPORT uv run --project python pytest python/tests/test_p2_gate.py -s`;
-      `-k "v1 and perturbed"` gives the 9.085e-3 line, `-k "v1 and data_state"` the stress test
-      (xfail), `-k h2_distance` the -0.753 line, `-k h2_theta` one line per class.
+      gate reads.
+    - V1 (both starts), H2 distance and H2 per class, about 265 s:
+      `CETERIS_PACK=$PACK CETERIS_PACK_EXPORT=$EXPORT cargo test -p ceteris-cli --release --test p2_gate -- --nocapture`;
+      `v1_full_pack_from_the_perturbed_steady_state` gives the 9.085e-3 line,
+      `v1_full_pack_from_the_data_state_stays_open` the stress test, `h2_distance_elasticity` the
+      -0.753 line, `h2_theta_by_class` one line per class.
     - 100 years and 1 vs 8 threads (`hundred_years_without_violation`,
       `full_pack_one_vs_eight_threads`, with V0's determinism and replay):
       `CETERIS_PACK=$PACK cargo test -p ceteris-econ --release --test p2_acceptance`.
