@@ -1,6 +1,6 @@
 {
-  "format": "10",
-  "static_digest": "5da0320fbaba6f731c2a8a66186664484efdc51f9ca62f0d4134f1fb6102affb",
+  "format": "11",
+  "static_digest": "c30f42df7710a747a0fbbf786d76b953f9c24afefee387105d98dc7758cf4cee",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -57,7 +57,7 @@
     "c_max": 0.1,
     "c_max_storable": 0.3,
     "expectation_gain": 0.006,
-    "border_nu": 0.3,
+    "border_nu": [0.3, 0.3, 0.3, 0.3],
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0]
   }
 }

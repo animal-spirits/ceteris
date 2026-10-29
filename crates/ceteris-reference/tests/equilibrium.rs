@@ -577,6 +577,12 @@ fn fixture_reference_is_current() {
 /// Newton-Krylov from there, and the solution reports it. At a wage of e^-800 (0) the residual is
 /// not finite: Newton-Krylov falls back at once, tatonnement does not settle within its cap, and
 /// the solve errs instead of panicking.
+///
+/// The cap `NEWTON_CAP` is chosen for the fixture as it stands (gateway masses, ADR 0092): from
+/// the perturbed start Newton-Krylov needs more than 6 steps (residuals 2.9, 1.9, 0.91, 0.12,
+/// 0.013, 0.0038, 2.2e-5), while from tatonnement's point it needs 2 (4.7e-6, 1.2e-10, 3.2e-15).
+/// At 3 the first run fails and the second converges; at 2 the second fails too (3.2e-15 is
+/// reached only at the third check).
 #[test]
 fn nonconverging_solve_reports_and_falls_back() {
     let inp = inputs();
@@ -593,22 +599,25 @@ fn nonconverging_solve_reports_and_falls_back() {
         (eq, lines)
     };
 
+    const NEWTON_CAP: usize = 3;
     let limits = Limits {
-        max_newton: 2,
+        max_newton: NEWTON_CAP,
         ..Limits::default()
     };
     let (eq, lines) = solve_from(&perturbed(0.1), limits);
     let eq = eq.unwrap();
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.starts_with("newton_krylov failed (residual ")
-                && l.ends_with(" after 2 Newton steps): tatonnement")),
-        "{lines:?}"
-    );
+    let failed = lines
+        .iter()
+        .find_map(|l| {
+            l.strip_prefix("newton_krylov failed (residual ")?
+                .strip_suffix(&format!(" after {NEWTON_CAP} Newton steps): tatonnement"))
+        })
+        .unwrap_or_else(|| panic!("no capped Newton-Krylov run: {lines:?}"));
+    // the first run really did not converge within the cap
+    assert!(failed.parse::<f64>().unwrap() > TOL, "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("tatonnement 0 step")));
     assert_eq!(eq.info.method, "tatonnement, newton_krylov");
-    assert!(eq.info.iterations <= 2 && eq.info.residual <= TOL);
+    assert!(eq.info.iterations < NEWTON_CAP && eq.info.residual <= TOL);
     assert!(model::max_abs(&model::residual(&eq.x, &m)) <= TOL);
 
     let limits = Limits {
