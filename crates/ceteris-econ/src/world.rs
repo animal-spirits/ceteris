@@ -54,11 +54,18 @@ pub fn to_minor(value: f64) -> i64 {
 }
 
 pub fn to_numeraire(minor: i64) -> f64 {
+    to_numeraire_wide(i128::from(minor))
+}
+
+/// [`to_numeraire`] of a wide balance or of a sum of balances.
+pub fn to_numeraire_wide(minor: i128) -> f64 {
     minor as f64 / MINOR_PER_UNIT
 }
 
 /// Ledger accounts, opened at load in field order and ID order within each field, so the
-/// layout follows from the inputs alone.
+/// layout follows from the inputs alone. Pops, enterprises and transit accounts are narrow
+/// (`i64`); markets, gateways, the pools and the mint, which aggregate them, are wide (`i128`,
+/// ADR 0106).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Accounts {
     /// Per pop: money balance (spent at E3, refilled by wages, dividends and rebates).
@@ -351,8 +358,9 @@ pub struct EconWorld {
     pub scratch: Scratch,
 }
 
-/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148,
-/// which the snapshot header carries after the digest: everything else a snapshot leaves out.
+/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148
+/// and the storable price clip P151, which the snapshot header carries after the digest:
+/// everything else a snapshot leaves out.
 pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     // destructured so a new parameter cannot be left out of the digest
     let EconParams {
@@ -376,6 +384,9 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         kappa1,
         kappa2,
         c_max,
+        // binds only off a steady state, so calibrations do not depend on it; the snapshot
+        // header carries it
+        c_max_storable: _,
         expectation_gain,
         border_nu,
         time_cost,
@@ -573,6 +584,10 @@ fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
     (0..n).map(|_| ledger.open()).collect()
 }
 
+fn open_wide_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
+    (0..n).map(|_| ledger.open_wide()).collect()
+}
+
 fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
     if change >= 0.0 {
         ledger.create(account, good, change);
@@ -718,12 +733,12 @@ impl EconWorld {
         let accounts = Accounts {
             pop: open_n(&mut ledger, n_pops),
             enterprise: open_n(&mut ledger, n_ent),
-            market: open_n(&mut ledger, np),
-            gateway: open_n(&mut ledger, inp.network.n_gateways()),
+            market: open_wide_n(&mut ledger, np),
+            gateway: open_wide_n(&mut ledger, inp.network.n_gateways()),
             transit: open_n(&mut ledger, n_traded),
-            rebate: open_n(&mut ledger, nc),
-            dividend: open_n(&mut ledger, nc),
-            mint: ledger.open(),
+            rebate: open_wide_n(&mut ledger, nc),
+            dividend: open_wide_n(&mut ledger, nc),
+            mint: ledger.open_wide(),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -1141,10 +1156,11 @@ impl EconWorld {
 }
 
 impl Encode for EconWorld {
-    /// The static digest, the write-off threshold P148, then the dynamic state.
+    /// The static digest, the write-off threshold P148 and the storable price clip P151, then
+    /// the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         self.digest.iter().for_each(|&b| e.u8(b));
-        e.f64s(&[self.params.write_off_months]);
+        e.f64s(&[self.params.write_off_months, self.trade.c_max_storable]);
         self.ledger.encode(e);
         self.markets.encode(e);
         self.pipeline.encode(e);
@@ -1278,9 +1294,9 @@ impl State for EconWorld {
             .accounts
             .gateway
             .iter()
-            .find(|&&a| self.ledger.money(a) != 0)
+            .find(|&&a| self.ledger.money_wide(a) != 0)
         {
-            let detail = format!("gateway account {a:?} holds {}", self.ledger.money(*a));
+            let detail = format!("gateway account {a:?} holds {}", self.ledger.money_wide(*a));
             return fail("gateway clearing", detail);
         }
         for &a in &lay.accounts.gateway {
@@ -1373,10 +1389,11 @@ impl State for EconWorld {
                 "snapshot belongs to other inputs or parameters".into(),
             ));
         }
-        let months = d.f64s()?;
-        if months != [self.params.write_off_months] {
+        let header = d.f64s()?;
+        if header != [self.params.write_off_months, self.trade.c_max_storable] {
             return Err(DecodeError(format!(
-                "snapshot taken with write-off threshold (P148) {months:?}"
+                "snapshot taken with write-off threshold (P148) and storable price clip (P151) \
+                 {header:?}"
             )));
         }
         let ledger = Ledger::decode(d)?;
@@ -1520,7 +1537,7 @@ mod tests {
     fn money_sum(w: &EconWorld) -> i128 {
         let n = w.layout.accounts.mint.0 as usize + 1;
         (0..n as u32)
-            .map(|a| i128::from(w.ledger.money(AccountId(a))))
+            .map(|a| w.ledger.money_wide(AccountId(a)))
             .sum()
     }
 
@@ -1729,6 +1746,22 @@ mod tests {
                 ..EconParams::default()
             },
             TradeParams::default(),
+        );
+        assert_eq!(other.digest(), w.digest());
+        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+    }
+
+    #[test]
+    fn restore_rejects_another_storable_clip() {
+        let w = world();
+        let bytes = canonical(0, &w);
+        let other = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams {
+                c_max_storable: 0.2,
+                ..TradeParams::default()
+            },
         );
         assert_eq!(other.digest(), w.digest());
         assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());

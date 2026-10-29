@@ -109,8 +109,13 @@ fn scaled(mut w: EconWorld, scale: i64) -> EconWorld {
     w.wage.iter_mut().for_each(|x| *x *= s);
     let acc = w.layout().accounts.clone();
     for &pop in &acc.pop {
-        let extra = w.ledger.money(pop) * (scale - 1);
-        w.ledger.transfer(MINT, acc.mint, pop, extra);
+        let mut extra = i128::from(w.ledger.money(pop)) * i128::from(scale - 1);
+        while extra != 0 {
+            let part = extra.clamp(i128::from(i64::MIN), i128::from(i64::MAX));
+            w.ledger
+                .transfer(MINT, acc.mint, pop, i64::try_from(part).unwrap());
+            extra -= part;
+        }
     }
     w
 }
@@ -231,22 +236,36 @@ fn expected_inflation_follows_the_world_index() {
     assert!(pi.abs() > 1e-6, "the data state never moved the index");
 }
 
-/// Expected inflation above c_max makes every price step and every nominal wage step bind;
-/// a Walrasian wage has no step to clip.
+/// Expected inflation far above c_max passes through the clip (ADR 0106): every active price
+/// and every rule-set wage moves by pi^e within its clip, which bounds only the gap terms.
 #[test]
 fn world_counts_clip_bindings() {
-    for params in [EconParams::default(), EconParams::frictionless()] {
-        let frictionless = params.frictionless;
-        let mut w = world(params);
-        w.expected_inflation = 10.0;
-        let mut sim = sim_of(w);
-        sim.step().unwrap();
-        let w = sim.world();
-        for (c, &active) in w.markets.active.iter().enumerate() {
-            assert_eq!(w.markets.clip_ticks[c], u32::from(active), "cell {c}");
+    let pi = 10.0;
+    let mut w = world(EconParams::default());
+    w.expected_inflation = pi;
+    let (price, wage) = (w.markets.price.clone(), w.wage.clone());
+    let trade = w.trade().clone();
+    let mut sim = sim_of(w);
+    sim.step().unwrap();
+    let w = sim.world();
+    for (c, &active) in w.markets.active.iter().enumerate() {
+        let step = libm::log(w.markets.price[c] / price[c]);
+        if active {
+            let c_max = trade.price_clip(c % N_GOODS);
+            assert!(
+                (step - pi).abs() <= c_max * (1.0 + 1e-12),
+                "cell {c}: {step}"
+            );
+        } else {
+            assert_eq!(step, 0.0, "cell {c}");
         }
-        let want = u32::from(!frictionless);
-        assert!(w.wage_clip_ticks.iter().all(|&n| n == want));
+    }
+    for (i, (&now, &before)) in w.wage.iter().zip(&wage).enumerate() {
+        let step = libm::log(now / before);
+        assert!(
+            (step - pi).abs() <= trade.c_max * (1.0 + 1e-12),
+            "province {i}: {step}"
+        );
     }
     let mut sim = sim_of(world(EconParams::default()));
     sim.run_until(120).unwrap();
@@ -256,10 +275,45 @@ fn world_counts_clip_bindings() {
     assert!(counts.clone().any(|&n| n > 0), "the data state never clips");
 }
 
+/// The full pack's mint holds -1.15e16 minor units at scale 1, beyond i64 from a scale of about
+/// 802 (ADR 0089, Evidence). The fixture, scaled until its mint holds what the pack's would at
+/// scale 1,000, runs a year on the wide mint and pools (ADR 0106), and its real state matches the
+/// unscaled run.
+#[test]
+fn mint_survives_scale_1000() {
+    let params = EconParams {
+        write_off_months: f64::INFINITY,
+        ..EconParams::default()
+    };
+    let w = world(params.clone());
+    let mint = w.layout().accounts.mint;
+    let issued = -w.ledger.money_wide(mint);
+    let scale = i64::try_from(1000 * 11_500_000_000_000_000 / issued).unwrap();
+    let mut big = sim_of(scaled(world(params.clone()), scale));
+    assert!(big.world().ledger.money_wide(mint) < i128::from(i64::MIN));
+    let mut base = sim_of(world(params));
+    base.run_until(12).unwrap();
+    big.run_until(12).unwrap();
+    assert!(big.world().ledger.money_wide(mint) < i128::from(i64::MIN));
+    let (a, b) = (base.world(), big.world());
+    assert_same("output", &a.output, &b.output, &a.output);
+    assert_same("employment", &a.employment, &b.employment, &a.employment);
+}
+
 #[test]
 #[should_panic(expected = "ledger overflow")]
 fn nominal_scale_beyond_the_ledger_fails_loudly() {
-    let mut sim = sim_of(scaled(world(EconParams::default()), 1_000_000));
+    let w = world(EconParams::default());
+    let largest = w
+        .layout()
+        .accounts
+        .pop
+        .iter()
+        .map(|&a| w.ledger.money(a))
+        .max()
+        .unwrap();
+    // pops stay i64: twice the scale at which the richest pop fills it
+    let mut sim = sim_of(scaled(w, 2 * (i64::MAX / largest)));
     sim.run_until(1).unwrap();
 }
 

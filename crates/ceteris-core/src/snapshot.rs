@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 const MAGIC: &[u8; 4] = b"CETS";
-const FORMAT: u32 = 1;
+/// 2: ledger accounts carry their kind and wide balances are `i128` (ADR 0106).
+const FORMAT: u32 = 2;
 const ZSTD_LEVEL: i32 = 1;
 
 pub type Hash = [u8; 32];
@@ -54,6 +55,9 @@ impl Encoder {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
     pub fn i64(&mut self, v: i64) {
+        self.buf.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn i128(&mut self, v: i128) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
     pub fn f64(&mut self, v: f64) {
@@ -123,6 +127,9 @@ impl<'a> Decoder<'a> {
     pub fn i64(&mut self) -> Result<i64, DecodeError> {
         Ok(i64::from_le_bytes(self.take()?))
     }
+    pub fn i128(&mut self) -> Result<i128, DecodeError> {
+        Ok(i128::from_le_bytes(self.take()?))
+    }
     pub fn f64(&mut self) -> Result<f64, DecodeError> {
         Ok(f64::from_bits(u64::from_le_bytes(self.take()?)))
     }
@@ -178,7 +185,9 @@ pub fn decode_canonical_with<W>(
     }
     let format = d.u32()?;
     if format != FORMAT {
-        return Err(DecodeError(format!("unsupported format {format}")));
+        return Err(DecodeError(format!(
+            "snapshot format version {format}, this build reads {FORMAT}"
+        )));
     }
     let tick = d.u32()?;
     let world = decode(&mut d)?;
@@ -293,6 +302,40 @@ mod tests {
         assert!(decode_canonical::<Sample>(&bytes[..bytes.len() - 1]).is_err());
         bytes.push(0);
         assert!(decode_canonical::<Sample>(&bytes).is_err());
+    }
+
+    #[test]
+    fn i128_round_trips() {
+        let mut e = Encoder::default();
+        for v in [0, -1, i128::MIN, i128::MAX, i128::from(i64::MIN) - 1] {
+            e.i128(v);
+        }
+        let bytes = e.into_bytes();
+        let mut d = Decoder::new(&bytes);
+        for v in [0, -1, i128::MIN, i128::MAX, i128::from(i64::MIN) - 1] {
+            assert_eq!(d.i128().unwrap(), v);
+        }
+        d.finish().unwrap();
+    }
+
+    #[test]
+    fn old_codec_version_is_a_decode_error() {
+        let s = Sample {
+            a: vec![1],
+            b: vec![2],
+            c: vec![],
+            d: vec![],
+            e: 0,
+        };
+        let mut bytes = canonical(7, &s);
+        for old in [0, FORMAT - 1, FORMAT + 1] {
+            bytes[4..8].copy_from_slice(&old.to_le_bytes());
+            let err = decode_canonical::<Sample>(&bytes).unwrap_err();
+            assert!(
+                err.0.contains(&format!("version {old}")),
+                "{err} does not name version {old}"
+            );
+        }
     }
 
     #[test]

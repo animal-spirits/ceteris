@@ -364,6 +364,7 @@ dependencies = [
  "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
+ "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",
  "ceteris-pack",

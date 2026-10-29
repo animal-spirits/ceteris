@@ -142,11 +142,11 @@ impl Markets {
 
     /// Price step of spec 8.2 for every active cell, after clearing, with the merchants'
     /// expected inflation pi^e (ADR 0019):
-    /// dlnp = clip(pi^e + kappa1 (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_max, c_max),
-    /// S* = coverage D, Q_eff and S*_eff floored at 1e-9 of the good's world mean Q over
-    /// active cells. Local goods have coverage 0 so the stock term is absent. A good whose
-    /// world mean Q is 0 keeps its prices. Each cell whose step is clipped counts the tick in
-    /// `clip_ticks`.
+    /// dlnp = pi^e + clip(kappa1 (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_g, c_g)
+    /// (ADR 0106), c_g = [`TradeParams::price_clip`], S* = coverage D, Q_eff and S*_eff floored
+    /// at 1e-9 of the good's world mean Q over active cells. Local goods have coverage 0 so the
+    /// stock term is absent. A good whose world mean Q is 0 keeps its prices. Each cell whose
+    /// gap terms are clipped counts the tick in `clip_ticks`.
     pub fn reprice(&mut self, p: &TradeParams, expected_inflation: f64) {
         let mut floor = [0.0; N_GOODS];
         let mut count = [0usize; N_GOODS];
@@ -165,15 +165,16 @@ impl Markets {
                 continue;
             }
             let (q, d) = (self.supply[i], self.demand[i]);
-            let mut dlnp = expected_inflation + p.kappa1 * (d - q) / q.max(floor[g]);
+            let mut gap = p.kappa1 * (d - q) / q.max(floor[g]);
             if p.coverage[g] > 0.0 {
                 let target = p.coverage[g] * d;
-                dlnp -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
+                gap -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
             }
-            if dlnp.abs() > p.c_max {
+            let c_max = p.price_clip(g);
+            if gap.abs() > c_max {
                 self.clip_ticks[i] += 1;
             }
-            self.price[i] *= libm::exp(dlnp.clamp(-p.c_max, p.c_max));
+            self.price[i] *= libm::exp(expected_inflation + gap.clamp(-c_max, c_max));
         }
     }
 }
@@ -226,6 +227,7 @@ impl Decode for Markets {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::goods::STORABLE;
     use ceteris_core::snapshot::canonical;
 
     const G: usize = 3; // food, traded
@@ -340,6 +342,50 @@ mod tests {
     }
 
     #[test]
+    fn clip_lets_expected_inflation_through() {
+        // zero gap: D = Q, S' = S*; the step is pi^e however far beyond c_max
+        let (mut m, p) = one();
+        set(&mut m, G, 2.0, 1.0, 1.0);
+        clear(&mut m);
+        m.reprice(&p, 0.2);
+        assert_eq!(m.price[G], libm::exp(0.2));
+        assert_eq!(m.clip_ticks[G], 0);
+        // a clipped gap adds to pi^e: huge excess demand at pi^e 0.2 and at -0.2
+        for pi in [0.2, -0.2] {
+            let (mut m, p) = one();
+            set(&mut m, G, 0.0, 1.0, 50.0);
+            clear(&mut m);
+            m.reprice(&p, pi);
+            assert_eq!(m.price[G], libm::exp(pi + p.c_max));
+            assert_eq!(m.clip_ticks[G], 1);
+        }
+    }
+
+    #[test]
+    fn storable_goods_clip_at_0_3() {
+        let p = rule();
+        assert_eq!(p.c_max_storable, 0.3);
+        for g in 0..N_GOODS {
+            // huge excess demand, then a glut far above the stock target
+            for (s, q, d, sign) in [(0.0, 1.0, 50.0, 1.0), (100.0, 10.0, 0.1, -1.0)] {
+                let mut m = Markets::new(1);
+                set(&mut m, g, s, q, d);
+                if TRADED[g] {
+                    clear(&mut m);
+                }
+                m.reprice(&p, 0.0);
+                let c_max = if STORABLE[g] { 0.3 } else { p.c_max };
+                assert_eq!(m.price[g], libm::exp(sign * c_max), "good {g}");
+                assert_eq!(m.clip_ticks[g], 1, "good {g}");
+            }
+        }
+        assert_eq!(
+            (0..N_GOODS).filter(|&g| STORABLE[g]).collect::<Vec<_>>(),
+            [0, 1, 2, 5]
+        );
+    }
+
+    #[test]
     fn clip_ticks_count_bindings() {
         let mut m = Markets::new(2);
         let p = rule();
@@ -358,12 +404,13 @@ mod tests {
         };
         assert_eq!(tick(&mut m, 0.0), [1, 1, 0, 0]);
         assert_eq!(tick(&mut m, 0.0), [2, 2, 0, 0]);
-        // expected inflation beyond the clip binds on the balanced cells too
-        assert_eq!(tick(&mut m, 0.5), [3, 3, 1, 1]);
-        assert_eq!(m.price[L], libm::exp(p.c_max));
+        // expected inflation beyond c_max passes through: the balanced cells do not clip
+        let before = m.price[L];
+        assert_eq!(tick(&mut m, 0.5), [3, 3, 0, 0]);
+        assert_eq!(m.price[L], before * libm::exp(0.5));
         // an inactive cell never counts
         m.active[N_GOODS + L] = false;
-        assert_eq!(tick(&mut m, -0.5), [4, 4, 2, 1]);
+        assert_eq!(tick(&mut m, -0.5), [4, 4, 0, 0]);
         let others: u32 = (0..2 * N_GOODS)
             .filter(|c| !cells.contains(c))
             .map(|c| m.clip_ticks[c])

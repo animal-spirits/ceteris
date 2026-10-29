@@ -1,6 +1,8 @@
-//! Double-entry ledger for money (fixed-point `i64`) and goods (`f64`), Section 4.6.
+//! Double-entry ledger for money (fixed-point minor units) and goods (`f64`), Section 4.6.
 //! Money only moves between accounts; goods appear and disappear only through
-//! `create` and `destroy`, which are tallied and checked every tick.
+//! `create` and `destroy`, which are tallied and checked every tick. An account is narrow
+//! (balance within `i64`) or wide (`i128`, for accounts that aggregate many others; ADR 0106),
+//! chosen when it is opened.
 
 use rayon::prelude::*;
 
@@ -33,14 +35,16 @@ const POST_CHUNK: usize = 1 << 17;
 /// (an overflow panic), whose sums the next call clears first.
 #[derive(Clone, Debug, Default)]
 pub struct PostScratch {
-    deltas: Vec<Vec<i64>>,
+    deltas: Vec<Vec<i128>>,
     dirty: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ledger {
     n_goods: usize,
-    money: Vec<i64>,
+    /// Balances of every account; a narrow account's stays within `i64`.
+    money: Vec<i128>,
+    wide: Vec<bool>,
     goods: Vec<f64>,
     open: Vec<bool>,
     journal: Vec<Entry>,
@@ -54,6 +58,7 @@ impl Ledger {
         Self {
             n_goods,
             money: Vec::new(),
+            wide: Vec::new(),
             goods: Vec::new(),
             open: Vec::new(),
             journal: Vec::new(),
@@ -63,9 +68,20 @@ impl Ledger {
         }
     }
 
+    /// Opens a narrow account, whose balance stays within `i64`.
     pub fn open(&mut self) -> AccountId {
+        self.open_as(false)
+    }
+
+    /// Opens a wide account, whose balance is an `i128`.
+    pub fn open_wide(&mut self) -> AccountId {
+        self.open_as(true)
+    }
+
+    fn open_as(&mut self, wide: bool) -> AccountId {
         let id = AccountId(u32::try_from(self.money.len()).expect("account space exhausted"));
         self.money.push(0);
+        self.wide.push(wide);
         self.goods.extend(std::iter::repeat_n(0.0, self.n_goods));
         self.open.push(true);
         id
@@ -74,7 +90,7 @@ impl Ledger {
     /// Closes an empty account. Its ID is never reused.
     pub fn close(&mut self, a: AccountId) {
         assert!(self.is_open(a), "closing closed account {a:?}");
-        assert_eq!(self.money(a), 0, "closing account {a:?} with money");
+        assert_eq!(self.money_wide(a), 0, "closing account {a:?} with money");
         assert!(
             self.holdings(a).iter().all(|&q| q == 0.0),
             "closing account {a:?} with goods"
@@ -91,8 +107,29 @@ impl Ledger {
         self.open[a.0 as usize]
     }
 
+    pub fn is_wide(&self, a: AccountId) -> bool {
+        self.wide[a.0 as usize]
+    }
+
+    /// The balance of `a`; panics where it does not fit an `i64` (only a wide account's can
+    /// leave that range: read it with [`Ledger::money_wide`]).
     pub fn money(&self, a: AccountId) -> i64 {
+        i64::try_from(self.money[a.0 as usize])
+            .unwrap_or_else(|_| panic!("account {a:?} holds beyond i64; read it wide"))
+    }
+
+    pub fn money_wide(&self, a: AccountId) -> i128 {
         self.money[a.0 as usize]
+    }
+
+    /// `balance + delta` for account index `i`, panicking past its kind's range.
+    fn moved(&self, i: usize, delta: i128) -> i128 {
+        let next = self.money[i].checked_add(delta).expect("ledger overflow");
+        assert!(
+            self.wide[i] || i64::try_from(next).is_ok(),
+            "ledger overflow"
+        );
+        next
     }
 
     pub fn goods(&self, a: AccountId, good: usize) -> f64 {
@@ -112,8 +149,9 @@ impl Ledger {
     pub fn transfer(&mut self, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
         debug_assert!(self.is_open(from) && self.is_open(to));
         let (f, t) = (from.0 as usize, to.0 as usize);
-        self.money[f] = self.money[f].checked_sub(amount).expect("ledger overflow");
-        self.money[t] = self.money[t].checked_add(amount).expect("ledger overflow");
+        let amount_wide = i128::from(amount);
+        self.money[f] = self.moved(f, -amount_wide);
+        self.money[t] = self.moved(t, amount_wide);
         self.journal.push(Entry {
             flow,
             from,
@@ -123,9 +161,9 @@ impl Ledger {
     }
 
     /// [`Ledger::transfer`] of each entry in turn: the same balances and journal. Each
-    /// account's money moves by the integer sum of its entries, summed over chunks in
-    /// parallel and added in chunk order, so an overflow is caught in a chunk's sum or the
-    /// final balance rather than at the step that would cross the bound. `scratch` keeps the
+    /// account's money moves by the integer sum of its entries, summed in `i128` over chunks
+    /// in parallel and added in chunk order, so an overflow is caught at a chunk's addition to
+    /// the balance rather than at the step that would cross the bound. `scratch` keeps the
     /// chunks' sums between calls.
     pub fn post(&mut self, entries: &[Entry], scratch: &mut PostScratch) {
         let (n, chunks) = (self.money.len(), entries.len().div_ceil(POST_CHUNK));
@@ -147,13 +185,13 @@ impl Ledger {
                 for e in chunk {
                     debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
                     let (f, t) = (e.from.0 as usize, e.to.0 as usize);
-                    delta[f] = delta[f].checked_sub(e.amount).expect("ledger overflow");
-                    delta[t] = delta[t].checked_add(e.amount).expect("ledger overflow");
+                    delta[f] -= i128::from(e.amount);
+                    delta[t] += i128::from(e.amount);
                 }
             });
         for delta in deltas {
-            for (m, d) in self.money.iter_mut().zip(delta.iter_mut()) {
-                *m = m.checked_add(*d).expect("ledger overflow");
+            for (i, d) in delta.iter_mut().enumerate() {
+                self.money[i] = self.moved(i, *d);
                 *d = 0;
             }
         }
@@ -203,7 +241,17 @@ impl Ledger {
     }
 
     pub fn check(&self, tick: u32) -> Result<(), Violation> {
-        let net: i128 = self.money.iter().map(|&m| i128::from(m)).sum();
+        let net = self
+            .money
+            .iter()
+            .try_fold(0i128, |acc, &m| acc.checked_add(m));
+        let Some(net) = net else {
+            return Err(Violation::new(
+                tick,
+                "money",
+                "balances overflow i128".into(),
+            ));
+        };
         if net != 0 {
             return Err(Violation::new(
                 tick,
@@ -236,9 +284,17 @@ impl Ledger {
 }
 
 impl Encode for Ledger {
+    /// Each account's kind, then its balance as `i64` (narrow) or `i128` (wide).
     fn encode(&self, e: &mut Encoder) {
         e.count(self.n_goods);
-        e.i64s(&self.money);
+        e.bools(&self.wide);
+        for (&m, &wide) in self.money.iter().zip(&self.wide) {
+            if wide {
+                e.i128(m);
+            } else {
+                e.i64(i64::try_from(m).expect("narrow balance within i64"));
+            }
+        }
         e.f64s(&self.goods);
         e.bools(&self.open);
     }
@@ -247,7 +303,18 @@ impl Encode for Ledger {
 impl Decode for Ledger {
     fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
         let mut ledger = Ledger::new(d.count()?);
-        ledger.money = d.i64s()?;
+        ledger.wide = d.bools()?;
+        ledger.money = ledger
+            .wide
+            .iter()
+            .map(|&wide| {
+                if wide {
+                    d.i128()
+                } else {
+                    d.i64().map(i128::from)
+                }
+            })
+            .collect::<Result<_, _>>()?;
         ledger.goods = d.f64s()?;
         ledger.open = d.bools()?;
         let n = ledger.money.len();
@@ -402,6 +469,51 @@ mod tests {
         let a = l.open();
         l.money[a.0 as usize] = 1;
         assert_eq!(l.check(0).unwrap_err().invariant, "money");
+    }
+
+    /// A wide account holds beyond i64 and round-trips through the codec; a narrow one panics
+    /// at the transfer that would take it past i64, in `transfer` and in `post`.
+    #[test]
+    fn wide_accounts_hold_beyond_i64() {
+        let mut l = Ledger::new(1);
+        let mint = l.open_wide();
+        let pops: Vec<AccountId> = (0..3).map(|_| l.open()).collect();
+        for &a in &pops {
+            l.transfer(Flow(0), mint, a, i64::MAX);
+        }
+        assert_eq!(l.money_wide(mint), -3 * i128::from(i64::MAX));
+        assert!(l.is_wide(mint) && !l.is_wide(pops[0]));
+        assert!(l.check(0).is_ok());
+        let mut e = Encoder::default();
+        l.encode(&mut e);
+        let bytes = e.into_bytes();
+        let back = Ledger::decode(&mut Decoder::new(&bytes)).unwrap();
+        assert_eq!((&back.money, &back.wide), (&l.money, &l.wide));
+        let caught = std::panic::catch_unwind(|| l.money(mint));
+        assert!(caught.is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "ledger overflow")]
+    fn narrow_side_of_a_transfer_overflows_loudly() {
+        let mut l = Ledger::new(0);
+        let (mint, a) = (l.open_wide(), l.open());
+        l.transfer(Flow(0), mint, a, i64::MAX);
+        l.transfer(Flow(0), mint, a, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "ledger overflow")]
+    fn narrow_side_of_a_post_overflows_loudly() {
+        let mut l = Ledger::new(0);
+        let (mint, a) = (l.open_wide(), l.open());
+        let entry = |amount| Entry {
+            flow: Flow(0),
+            from: mint,
+            to: a,
+            amount,
+        };
+        l.post(&[entry(i64::MAX), entry(1)], &mut PostScratch::default());
     }
 
     #[test]

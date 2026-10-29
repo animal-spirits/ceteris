@@ -174,7 +174,7 @@ another format or other coefficients stop the load with a `PackError`.
 | Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u*_i) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
-| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint | ledger | money `i64` (1 minor unit = 1e-4 numeraire), goods `f64` | |
+| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint | ledger | money in minor units (1 minor unit = 1e-4 numeraire): `i64` for pops and enterprises, `i128` for markets, gateways, rebate and profit pools and the mint (ADR 0106); goods `f64` | |
 
 **Initial state.** A world whose inputs carry the calibration tables (`EconInputs::calibrate`,
 `EconInputs::from_pack` when the pack holds them) starts from the calibrated steady state of ADR
@@ -269,15 +269,17 @@ rata.
 rate u*_i (below), expected inflation pi^e (trade SPEC, Origin market; ADR 0019):
 
 ```
-dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
+dlnw = pi^e + clip( kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative    (P39, P40)
 ```
 
 Unit pass-through of pi^e is a homogeneity restriction, not a parameter; downward rigidity
 applies to nominal cuts, so a real cut that is a nominal rise is not damped. pi^e tracks the
 world price index over buyer prices with base consumption weights; cells whose buyer price is
 infinite (no reachable origin) are left out of the index (owner ruling, MIGRATION Task 6), so a
-change in reachability moves its weights. c_max is P03c; every tick the clip binds is counted
-per province (`clip_ticks` in `run_wages`).
+change in reachability moves its weights. c_max is P03c; it bounds the excess-demand term only,
+so expected inflation passes through unclipped (ADR 0106), and the rigidity applies after the clip
+to the whole step when it is a nominal cut. Every tick the clip binds is counted per province
+(`clip_ticks` in `run_wages`).
 
 Frictionless mode (V1): w_i solves sum_g L*_ig(w) = (1 - u*_i) L^s_i exactly on the uncapped
 targets (monotone in w; safeguarded Newton in ln w; ADR 0093), so the wage follows the closed
@@ -293,7 +295,7 @@ u*_i, its mean ILOSTAT modelled unemployment rate 1995 to 2005 (`econ_countries.
 2000 cycle is not frozen in:
 
 ```
-dlnw = clip( pi^e + kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative
+dlnw = pi^e + clip( kappa_w (x_i + u*_i), -c_max, c_max ),  times (1 - delta_w) when negative
 ```
 
 At the calibrated state x_i = -u*_i and the wage step is pi^e = 0, so steady-state unemployment
@@ -331,7 +333,7 @@ nobody would own its profits.
 
 *Rounding (E4).* Every enterprise pays its balance when positive, and every province market its
 signed cash flow, in minor units, into its country's profit pool account; an enterprise with a
-negative balance pays nothing and keeps it. Each country then pays its pool, one i64 sum per tick,
+negative balance pays nothing and keeps it. Each country then pays its pool, one i128 sum per tick,
 and its rebate account to its pops in pop ID order by cumulative population shares rounded half
 to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
 pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
@@ -460,7 +462,11 @@ plus sum_g' a_gg' V_dg' of the province's enterprises. Household income follows 
 the province's wages s_L VA by effective labour share, and the country's profits (1 - s_L) VA and
 tariff rebate by population. One scalar r_g per traded
 good rescales its V and VA so that world spending net of tariffs equals world output value (the
-2000 imbalances, reported). Rebates follow from
+2000 imbalances, reported). Spending scales with the r (incomes are value added, and stage 4
+re-inverts lambda at the new income), so this fixes the r only up to one common factor; each pass
+rescales the traded r so that world traded value added sum_e r_g VA_e equals the data's (ADR 0106;
+without it the level depended on the start and the mixing path, by up to 4e-4 from starts at
++-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-11 relative (Anderson-mixed);
 within a pass the income and local-output fixed point is iterated until no local output changes by more than 1e-14 relative.
@@ -932,13 +938,12 @@ texture fed from core columns.
   slowly (geometrically, at a loop gain near 1), and at the bound the chain clears the rest by
   cutting the users that produce no local good rather than all users pro rata; on the fixture it
   never reaches the bound. Measure on the pack (Task 19) and revisit the bound or the solve there.
-- Money headroom: the i64 ledger (1 minor unit = 1e-4) holds the full pack with about 300 times one
-  month of world income to spare, and about 800 times the money the mint issues: the mint holds minus
-  the world's money (-1.15e16 minor units), so it overflows first, at a uniform scale of about 802 on
-  prices, wages and balances (a scale of 1,000 overflowed, ADR 0089, Evidence); at a scale of 1,000 the largest
-  country pool (the United States) reaches 2.7e18 (2.7e15 at scale 1) against the i64 maximum of 9.2e18. The overflows seen at the
-  loss write-off came from a hyperinflation of the trial that ADR 0112 (second decision) did not
-  adopt, not from this limit. The currency scale is a P5 decision (core SPEC, Money scale).
+- Money headroom (ADR 0106): the mint, which holds minus the world's money (-1.15e16 minor units
+  on the full pack), the pools, markets and gateways are `i128`, so the overflow the i64 ledger hit
+  at a uniform scale of about 802 on prices, wages and balances (ADR 0089, Evidence) is gone
+  (`mint_survives_scale_1000` runs the fixture with its mint at 1,000 times the pack's). Pops and
+  enterprises stay `i64`: the largest single balance, and each payment (an `i64` entry), bounds the
+  nominal scale now. The currency scale is a P5 decision (core SPEC, Money scale).
 
 ## Changes for the next design-doc snapshot
 
