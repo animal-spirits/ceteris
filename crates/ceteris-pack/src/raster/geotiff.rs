@@ -181,14 +181,15 @@ impl<R: Read + Seek> Raster<R> {
         if bytes.len() < 4 * n {
             return Err(fail(&format!("{} bytes, {} expected", bytes.len(), 4 * n)));
         }
-        let word = |b: &[u8]| -> [u8; 4] { [b[0], b[1], b[2], b[3]] };
         Ok(bytes[..4 * n]
-            .chunks_exact(4)
-            .map(|b| {
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&b| {
                 if self.little_endian {
-                    f32::from_le_bytes(word(b))
+                    f32::from_le_bytes(b)
                 } else {
-                    f32::from_be_bytes(word(b))
+                    f32::from_be_bytes(b)
                 }
             })
             .collect())
@@ -227,7 +228,9 @@ fn geotransform<R: Read + Seek>(decoder: &mut Decoder<R>) -> Result<[f64; 6], St
         let point = keys
             .get(4..)
             .unwrap_or_default()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|k| k[0] == RASTER_TYPE_KEY && k[1] == 0 && k[3] == PIXEL_IS_POINT);
         if point {
             return Err("PixelIsPoint rasters are not supported".into());

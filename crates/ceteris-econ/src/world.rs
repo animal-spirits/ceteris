@@ -487,7 +487,7 @@ fn base_profit_pool(inp: &EconInputs) -> Vec<f64> {
 
 /// Household income per province at the base point, rebates aside: wages w0 (1 - u*) L^s
 /// plus the province's population share N_i / N_c of its country's profit pool sum (1 -
-/// s_L) VA0 (national ownership). As `ceteris.reference.io.Inputs.base_income`.
+/// s_L) VA0 (national ownership). As `ceteris_reference::io::Inputs::base_income`.
 pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let supply = inp.labour_supply(&params.edu_eff);
     let pool = base_profit_pool(inp);
@@ -507,7 +507,7 @@ pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Base spending per person of each country: its provinces' [`base_income`] over its pops'
-/// population, 0 for a country without people. As `ceteris.reference.io.Inputs.base_spend`.
+/// population, 0 for a country without people. As `ceteris_reference::io::Inputs::base_spend`.
 pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let nc = inp.n_countries();
     let (mut spend, mut people) = (vec![0.0; nc], vec![0.0; nc]);
@@ -553,7 +553,7 @@ pub fn household_preferences(
 /// Base household consumption quantities at prices 1, the weights of the world price index
 /// over buyer prices: each country's final demand shares times the province's
 /// [`base_income`], `[province * N_GOODS + g]`. The same weights as
-/// `ceteris.reference.io.Inputs.index_weights`, so V1 normalizes run and reference alike.
+/// `ceteris_reference::io::Inputs::index_weights`, so V1 normalizes run and reference alike.
 pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let base = base_income(inp, params);
     let mut out = vec![0.0; inp.n_provinces() * N_GOODS];
@@ -681,10 +681,7 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
         &mut index,
         &mut lead,
     );
-    index
-        .chunks_exact(N_GOODS)
-        .map(|row| row.try_into().expect("one row of goods"))
-        .collect()
+    index.as_chunks::<N_GOODS>().0.to_vec()
 }
 
 impl EconWorld {

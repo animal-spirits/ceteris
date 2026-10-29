@@ -173,6 +173,55 @@ pub fn baci_values(baci: &Path) -> Result<ByLine, String> {
     Ok(value)
 }
 
+/// BACI's numeric country codes and their ISO3 codes (`country_codes` of the package; the last
+/// row of a repeated code wins).
+pub fn country_codes(baci: &Path) -> Result<BTreeMap<i64, String>, String> {
+    let origin = baci.display().to_string();
+    let table = read_member(baci, |n| n.starts_with("country_codes"))?;
+    let mut csv = Csv::new(table.as_slice(), baci)?;
+    let (code, iso3) = (csv.col("country_code")?, csv.col("country_iso3")?);
+    let mut numeric = BTreeMap::new();
+    let mut row = StringRecord::new();
+    while csv.next(&mut row)? {
+        numeric.insert(int(cell(&row, code), &origin)?, cell(&row, iso3).to_owned());
+    }
+    Ok(numeric)
+}
+
+/// One 2000 BACI flow: exporter and importer codes, HS 6-digit line and value in thousands of
+/// USD (NaN where empty).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Flow {
+    pub i: i64,
+    pub j: i64,
+    pub k: i64,
+    pub v: f64,
+}
+
+/// Calls `f` with every 2000 flow in file order and with None at the end of each batch.
+pub fn for_each_flow(baci: &Path, mut f: impl FnMut(Option<Flow>)) -> Result<(), String> {
+    let origin = baci.display().to_string();
+    with_member(
+        baci,
+        |n| n.ends_with(BACI_2000),
+        |member| {
+            batches(member, baci, &["i", "j", "k", "v"], |row| {
+                let Some((r, c)) = row else {
+                    f(None);
+                    return Ok(());
+                };
+                f(Some(Flow {
+                    i: int(cell(r, c[0]), &origin)?,
+                    j: int(cell(r, c[1]), &origin)?,
+                    k: int(cell(r, c[2]), &origin)?,
+                    v: nullable(cell(r, c[3]), &NULLS, &origin)?.unwrap_or(f64::NAN),
+                }));
+                Ok(())
+            })
+        },
+    )
+}
+
 /// 2000 exports plus imports (USD) of each pack country in `codes` from BACI, summing the
 /// economies a country combines.
 pub fn trade_by_country(
@@ -181,15 +230,7 @@ pub fn trade_by_country(
     codes: &[String],
 ) -> Result<BTreeMap<String, f64>, String> {
     let origin = baci.display().to_string();
-    let table = read_member(baci, |n| n.starts_with("country_codes"))?;
-    let mut csv = Csv::new(table.as_slice(), baci)?;
-    let (code, iso3) = (csv.col("country_code")?, csv.col("country_iso3")?);
-    let mut numeric: BTreeMap<i64, String> = BTreeMap::new();
-    let mut row = StringRecord::new();
-    while csv.next(&mut row)? {
-        numeric.insert(int(cell(&row, code), &origin)?, cell(&row, iso3).to_owned());
-    }
-
+    let numeric = country_codes(baci)?;
     let mut total: Ordered<i64, 1> = Ordered::new();
     let (mut by_i, mut by_j): (Ordered<i64, 1>, Ordered<i64, 1>) = (Ordered::new(), Ordered::new());
     with_member(

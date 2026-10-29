@@ -24,7 +24,7 @@ use tempfile::TempDir;
 
 const N_GOODS: usize = 10;
 const GOLDEN_P2: &str = "tests/golden/p2-pack.txt";
-/// Written by `python -m ceteris.reference calibrate` and installed into the pack (ADR 0089).
+/// Written by `ceteris calibrate` and installed into the pack (ADR 0089).
 const CALIBRATION_TABLES: [&str; 6] = [
     "econ_calib.arrow",
     "econ_calib_cells.arrow",
