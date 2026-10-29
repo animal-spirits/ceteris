@@ -1,6 +1,6 @@
 # 0136. What earns a major version
 
-Status: accepted
+Status: accepted; amended 2026-10-29 (minor versions; P10 order per ADR 0239)
 Date: 2026-10-28
 Design sections: 2.4, 21, 22.1, 23.1, 23.9; ADRs 0121, 0129 to 0134
 
@@ -61,3 +61,31 @@ lab default changes only at the next major.
 The first release is smaller and comes sooner, with politics and borders held fixed and
 labelled as such. Each major pairs a new kind of question with a new calibration, so a version
 number tells a reader which results are comparable.
+
+## Amendment (owner, 2026-10-29): what earns a minor version
+
+Patches and the bump mechanics stay as in the release roadmap: identical golden hashes make a
+patch, and any output change or new feature is at least a minor. A release ships as a minor only
+if all three hold:
+
+1. Same lab default and same question class. New data, start years, editors, views, extended
+   mechanisms and opt-in lab mechanisms qualify. Seats and other game items follow ADRs 0239
+   and 0240 and start at 2.0.
+2. The scorecard does not get worse. Each minor recalibrates the same model (a calibration is
+   valid only for its minor, per the roadmap) and reruns the scorecard. A loss on any scored
+   target beyond the Monte Carlo error of ADR 0107 is a bug, or the change waits for the next
+   major.
+3. One theme a user can name. BEHAVIOUR entries say what moved and by how much, and the
+   living-papers rerun (ADR 0127) lists published results that changed.
+
+Minors are ordered by dependency and theme, not by date. An item not shipped in its planned
+minor rides a later one; a 1.x item not shipped before 2.0-alpha becomes a 2.x minor. The
+planned sequence from 1.1 to 5.x:
+https://claude.ai/artifact/NwyGjzAgZtjXF6XfJwCm7K (proposed placement)
+
+Phase order note: ADR 0239 replaces "P10 (1.3 Steward)" above. Steward for economic levers lands
+with 2.0-alpha, and full Steward and Tier 1b ship as 2.x minors.
+
+Proposed, not yet decided: 5.0 is cities (the province stops being the smallest unit; an urban layer at nested-zoom
+grain becomes the lab default). Minds (ADR 0139) is the 6.0 candidate; its parts ship as opt-in
+minors before then.
