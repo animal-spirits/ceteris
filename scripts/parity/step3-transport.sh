@@ -8,7 +8,8 @@
 # Two Rust builds:
 # - with h3o's cell centres: the sea grid's node positions and the lengths that reach them, and
 #   the anchors of Voronoi-split provinces, differ from h3's in the last bits, so nodes.lon,
-#   nodes.lat and edges.length_km are listed, not failed; every other column must match;
+#   nodes.lat and edges.length_km are held to LISTED_TOL, not 1e-12; every other column must
+#   match;
 # - with h3's centres (`h3_centres.py` at the land and the sea resolutions): every column must
 #   match.
 #
@@ -16,6 +17,7 @@
 # python/pyproject.toml. Outputs go to WORK (default: a new temporary directory), kept.
 set -euo pipefail
 
+LISTED_TOL=1e-8
 listed_columns="nodes.lon nodes.lat edges.length_km"
 tables="nodes edges sea_zones chokepoints transport transport_stats"
 
@@ -51,6 +53,9 @@ compare() {
 listed() {
     [[ " ${2//$'\n'/ } " == *" $1 "* ]]
 }
+within() {
+    python3 -I -c 'import sys; sys.exit(float(sys.argv[1]) > float(sys.argv[2]))' "$1" "$2"
+}
 
 (cd python && PYTHONPATH="$root/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/transport_tables.py" "$work/py")
 for t in nodes edges sea_zones chokepoints; do
@@ -74,8 +79,9 @@ compare "$work/compare" "$work/py/python" "$work/rs/rust" || status=1
 cat "$work/compare"
 while read -r line; do
     column="${line%%:*}"
-    if listed "$column" "$listed_columns" && [[ $line != *"table missing"* ]]; then
-        echo "listed (h3o centres): $line"
+    rel="${line##*max_rel=}"
+    if listed "$column" "$listed_columns" && [[ $line == *max_rel=* ]] && within "$rel" "$LISTED_TOL"; then
+        echo "h3o centres: $column max_rel=$rel within $LISTED_TOL"
     else
         echo "FAIL $line"
         status=1

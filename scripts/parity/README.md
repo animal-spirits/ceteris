@@ -66,7 +66,7 @@ provinces, their mean ruggedness and the graph in Python and writes the tables `
 writes from it (nodes, edges, sea_zones, chokepoints) with the coastal flags and the build stats;
 `ceteris pack dump-geo DIR --build --transport` writes the same from Rust. Every table is
 compared in file row order. Built on h3o's cell centres, sea node positions and the lengths that
-reach them differ in the last bits and are listed; a second Rust build takes h3's centres at the
+reach them differ in the last bits and are held to 1e-8; a second Rust build takes h3's centres at the
 land and the sea resolutions and must match on every column. The script keeps its outputs in
 `WORK` (default: a new temporary directory).
 
