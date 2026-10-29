@@ -907,7 +907,7 @@ For each variable the engine measures when across-seed dispersion of the baselin
 
 ### 14.8 Scripting API
 
-Everything in the UI is available in Python, for example: create a branch from a baseline at a tick, apply edits, run an ensemble, and query outcome tables as Polars data frames for analysis.
+Everything in the UI is available from scripts through the `ceteris` CLI driven by a scenario file (ADR 0113), for example: create a branch from a baseline at a tick, apply edits, run an ensemble. Runs write their outcome tables as Arrow IPC and Parquet, which Polars, DuckDB or any other language reads for analysis without glue code. A thin Python client that only drives runs and reads Arrow is added only if notebook-driven runs prove necessary, under its own ADR.
 
 ## 15. Calibration, Estimation and Validation
 
@@ -1018,7 +1018,7 @@ Named firms or individuals, sub-province geography, daily financial markets, pow
 
 ## 16. Data Sources and Pipeline
 
-The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (python/ceteris/packs/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit.
+The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (crates/ceteris-pack/config/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit.
 
 | Dataset | Content | Role | Licence | Bundle or fetch |
 | --- | --- | --- | --- | --- |
@@ -1052,7 +1052,7 @@ The 2000 pack is built from pinned sources; each is listed with its licence, evi
 
 ### 16.1 Pipeline
 
-A Python package builds the pack reproducibly: download with checksums, harmonize to the H3 grid and province map, impute with documented rules (for example, downscaling national ICIO output to provinces with subnational sector shares and night lights; imputing ICIO coefficients for the roughly 115 economies outside OECD ICIO from regional averages adjusted by income), reconcile to national totals, and emit versioned Parquet tables plus a manifest recording every source, version, licence and imputation flag. Fetch-only sources are downloaded on the user's machine at build time. The start year is a pipeline parameter (1995-2022).
+The `ceteris-pack` crate builds the pack reproducibly (`ceteris pack build`, ADR 0113): download with checksums, harmonize to the H3 grid and province map, impute with documented rules (for example, downscaling national ICIO output to provinces with subnational sector shares and night lights; imputing ICIO coefficients for the roughly 115 economies outside OECD ICIO from regional averages adjusted by income), reconcile to national totals, and emit versioned Parquet tables plus a manifest recording every source, version, licence and imputation flag. Fetch-only sources are downloaded on the user's machine at build time. The start year is a pipeline parameter (1995-2022).
 
 ## 17. Degrees of Freedom Register
 
@@ -1175,8 +1175,8 @@ A Rust core gives deterministic, parallel speed; Python owns data, calibration a
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
 | App shell | Today Tauri 2: Rust core in-process, raw buffers to the UI over IPC, pack files through pack://. Target: one native Rust process, winit window, Slint panels, core columns read directly (ADR 0088) | One native macOS app, no server |
 | Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADR 0088; stage 1 of ADR 0011 becomes a native spike instead of the hybrid) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
-| Bindings | PyO3 + maturin | Python drives headless runs and reads Arrow tables with zero copy |
-| Python tooling | uv; polars, duckdb, numpy, jax (CPU), torch (MPS) + sbi, SALib, optuna, geopandas, h3, pytest, hypothesis | Pipeline, reference model, inference, analysis |
+| Pipeline, reference model, calibration | Rust crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate`, driven by the `ceteris` CLI; GEOS only on the owner-side map build (ADR 0113) | One toolchain; the restricted part of the pack builds on the user's machine with no Python runtime |
+| Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow and Parquet outputs | No bindings to maintain; runs are driven by scenario files |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
 | Licence | Open source, non-commercial: Apache-2.0 / MIT dual for code; data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
@@ -1218,14 +1218,12 @@ ceteris/
     ceteris-war/          diplomacy, forces, combat, civil conflict
     ceteris-climate/      emissions, emulator, damages
     ceteris-ai/           state planners, policy interfaces
-    ceteris-py/           PyO3 bindings
+    ceteris-pack/         data pipeline (any start year 1995-2022); config/ holds the licence manifest
+    ceteris-geos-coverage/  GEOS coverage simplification, owner-side map build only
+    ceteris-reference/    GE hat-algebra reference model
+    ceteris-calibrate/    calibration, estimation, SBI, MSM, emulators
+    ceteris-cli/          the ceteris binary: pack, reference, calibrate, runs, branch and ensemble runners
   app/                    Tauri shell (Rust) + TypeScript map UI, until the native app reaches parity (ADR 0088)
-  python/ceteris/
-    packs/                data pipeline (any start year 1995-2022), licence manifest
-    calibrate/            SBI, MSM, emulators
-    experiments/          branch and ensemble runners
-    reference/            GE hat-algebra reference model
-    analysis/             plots, metrics, reports
   tests/golden/           golden runs with state hashes
 ```
 
@@ -1421,7 +1419,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
 | App | Tauri desktop app today; moving to a fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
-| Core language | Rust from the start | Python only for pipeline, reference model, calibration |
+| Core language | Rust from the start | Pipeline, reference model and calibration in Rust too (ADR 0113); no Python in the build, release or test path |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |
 | Climate | Simple emulator with damages, from 1.1 (ADR 0207) | Endogenous feedback for long runs; 1.0 runs with climate off |

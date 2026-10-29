@@ -3,6 +3,7 @@
 Status: proposed
 Date: 2026-10-26
 Design sections: 6.2, 7.5, 10, 11, 15.1, 15.2, 17; amends ADRs 0024, 0031, 0032, 0036, 0103
+Paths (ADR 0113, 2026-10-29): `python/` is gone; the estimation scripts go in `ceteris-calibrate`.
 
 ## Context
 
