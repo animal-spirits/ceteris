@@ -1,7 +1,7 @@
-//! The same-tick chain of local goods (ADR 0020, Mapping to P2 as built; `specs/econ/SPEC.md`,
-//! Production). Utilities, construction and services have no transit, so their production,
-//! input use and rationing run as one pass inside E2: a shortage of a local good cuts its
-//! users' output in the same tick. Traded inputs keep their stocks and transit lags.
+//! The same-tick chain of local goods (ADR 0020, Mapping to P2 as built; ADR 0093, Amendment;
+//! `specs/econ/SPEC.md`, Production). Utilities, construction and services have no transit, so
+//! their production, input use and rationing run as one pass inside E2: a shortage of a local
+//! good cuts its users' output in the same tick. Traded inputs keep their stocks and transit lags.
 
 use rayon::prelude::*;
 
@@ -11,51 +11,14 @@ use ceteris_trade::N_GOODS;
 use crate::inputs::EconInputs;
 use crate::world::{EconWorld, Layout};
 
-/// Iteration bound of the chain.
-pub const N_LOCAL: usize = 32;
 /// Local goods, in input-output order.
 pub const LOCAL: [usize; 3] = [7, 8, 9];
-/// Relative change of every output at which the chain has converged.
-const CONVERGED: f64 = 1e-12;
-/// Shortfall of a good, relative to the needs its users' stocks cannot cover, that the last
-/// step of the chain leaves as rounding.
-const ROUNDING: f64 = 1e-13;
-
-/// Common fill of the users of one local good, with `rest` units of output and users with
-/// needs n and stocks b: the largest x <= 1 at which the needs fit the output and the stocks,
-/// x sum n <= rest + sum min(b, x n). It is the limit of applying
-/// f = min(1, (rest + sum min(b, n)) / sum n) to every user until it stops cutting, found
-/// exactly: on the users whose stock binds (b < x n) the condition is linear, so x moves to
-/// (rest + sum b) / sum n over them, and that set only shrinks.
-fn fill(rest: f64, users: &[(f64, f64)]) -> f64 {
-    let need: f64 = users.iter().map(|u| u.0).sum();
-    if need <= rest {
-        return 1.0;
-    }
-    let mut x: f64 = 1.0;
-    for _ in 0..=users.len() {
-        let (mut n, mut b) = (0.0, 0.0);
-        for &(ne, be) in users.iter().filter(|&&(ne, be)| be < x * ne) {
-            n += ne;
-            b += be;
-        }
-        if n == 0.0 {
-            break;
-        }
-        let next = ((rest + b) / n).max(0.0);
-        if next >= x {
-            break;
-        }
-        x = next;
-    }
-    x
-}
 
 /// Splits `rest` units of output among users with needs n and stocks b, writing each user's
 /// draw from output into `out`: output first, so with enough output every need is met from
 /// it; short, each user gets what its stock cannot cover, max(n - b, 0), and the rest of the
 /// output pro rata to min(b, n), its stock covering the remainder. Where even the uncovered
-/// needs exceed the output (only before the chain converges), they share it pro rata.
+/// needs exceed the output (never at the chain's fills), they share it pro rata.
 fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
     let need: f64 = users.iter().map(|u| u.0).sum();
     if need <= rest {
@@ -85,19 +48,62 @@ fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
 }
 
 /// A province's enterprises as the chain sees them, by position in the province.
-struct Province {
+#[derive(Clone, Debug)]
+pub struct Province {
     /// Output capped by capacity and traded input stocks.
-    cap: Vec<f64>,
+    pub cap: Vec<f64>,
     /// Coefficients of the local goods; 0 for an enterprise's own good, which its own
     /// output serves first.
-    coef: Vec<[f64; 3]>,
-    stock: Vec<[f64; 3]>,
-    producer: [Option<usize>; 3],
+    pub coef: Vec<[f64; 3]>,
+    pub stock: Vec<[f64; 3]>,
+    pub producer: [Option<usize>; 3],
     /// The producer's own coefficient of each local good.
-    own: [f64; 3],
+    pub own: [f64; 3],
 }
 
 impl Province {
+    /// The province's enterprises from the ledger, `cap` their capped outputs.
+    pub fn new(inp: &EconInputs, lay: &Layout, ledger: &Ledger, i: usize, cap: &[f64]) -> Self {
+        let ents = lay.enterprises(i);
+        let first = ents.start;
+        let good = |e: usize| usize::from(inp.enterprises.good[e]);
+        let producer = LOCAL.map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first));
+        Province {
+            cap: cap.to_vec(),
+            coef: ents
+                .clone()
+                .map(|e| {
+                    let mut c = LOCAL.map(|k| lay.coef[e][k]);
+                    if let Some(j) = LOCAL.iter().position(|&k| k == good(e)) {
+                        c[j] = 0.0;
+                    }
+                    c
+                })
+                .collect(),
+            stock: ents
+                .clone()
+                .map(|e| LOCAL.map(|k| ledger.goods(lay.accounts.enterprise[e], k)))
+                .collect(),
+            producer,
+            own: std::array::from_fn(|j| {
+                producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])
+            }),
+        }
+    }
+
+    /// Smallest fill of enterprise `u`'s local inputs, 1 if it uses none.
+    fn least(&self, u: usize, f: &[f64; 3]) -> f64 {
+        (0..3)
+            .filter(|&j| self.coef[u][j] > 0.0)
+            .fold(1.0, |m, j| m.min(f[j]))
+    }
+
+    /// Outputs at fills `f`: Y_e = cap_e min_k F_k over the local goods e uses.
+    pub fn outputs(&self, f: &[f64; 3], y: &mut Vec<f64>) {
+        y.clear();
+        y.extend((0..self.cap.len()).map(|u| self.cap[u] * self.least(u, f)));
+    }
+
     /// Output left for the users of good j, its users as (need, stock), at outputs y.
     fn users(&self, j: usize, y: &[f64], out: &mut Vec<(f64, f64)>) -> f64 {
         out.clear();
@@ -110,33 +116,423 @@ impl Province {
         self.producer[j].map_or(0.0, |p| (1.0 - self.own[j]) * y[p])
     }
 
-    /// The output left for the users of good j at outputs y and what their stocks cannot
-    /// cover, sum max(n - b, 0): the good fits while the first is at least the second.
-    fn uncovered(&self, j: usize, y: &[f64], users: &mut Vec<(f64, f64)>) -> (f64, f64) {
+    /// What good j's users' stocks cannot cover, sum max(n - b, 0), and the output its
+    /// producer leaves, at outputs y.
+    fn balance(&self, j: usize, y: &[f64], users: &mut Vec<(f64, f64)>) -> (f64, f64) {
         let rest = self.users(j, y, users);
-        (rest, users.iter().map(|&(n, b)| (n - b).max(0.0)).sum())
+        (users.iter().map(|&(n, b)| (n - b).max(0.0)).sum(), rest)
+    }
+
+    /// Whether good j fits at outputs y: the first of [`Province::balance`] is at most the
+    /// second.
+    fn fits(&self, j: usize, y: &[f64], users: &mut Vec<(f64, f64)>) -> bool {
+        let (uncovered, rest) = self.balance(j, y, users);
+        uncovered <= rest
+    }
+}
+
+/// Working buffers of [`fills`].
+#[derive(Default)]
+struct Work {
+    y: Vec<f64>,
+    users: Vec<(f64, f64)>,
+    kinks: Vec<f64>,
+}
+
+/// A fill as an affine function of the fills at the start of a pass: c + sum_k d_k F_k.
+#[derive(Clone, Copy, Debug)]
+struct Affine {
+    c: f64,
+    d: [f64; 3],
+}
+
+impl Affine {
+    fn of(j: usize) -> Self {
+        let mut d = [0.0; 3];
+        d[j] = 1.0;
+        Affine { c: 0.0, d }
+    }
+
+    fn at(&self, f: &[f64; 3]) -> f64 {
+        self.c + (0..3).map(|k| self.d[k] * f[k]).sum::<f64>()
+    }
+
+    /// This function of the fills `inner` gives, each affine in the same fills.
+    fn after(&self, inner: &[Affine; 3]) -> Affine {
+        let mut row = Affine {
+            c: self.c,
+            d: [0.0; 3],
+        };
+        for (dk, ik) in self.d.iter().zip(inner) {
+            row.c += dk * ik.c;
+            for (r, i) in row.d.iter_mut().zip(&ik.d) {
+                *r += dk * i;
+            }
+        }
+        row
+    }
+}
+
+/// How a user of the good being stepped enters U on the step's piece.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Role {
+    /// Its need exceeds its stock and its smallest fill is the step's own.
+    OnStep,
+    /// Its need exceeds its stock and its smallest fill is good k's.
+    On(usize),
+    /// Its stock covers its need.
+    Covered,
+}
+
+/// The piece on which a step found its root: the role of each user and the good whose fill
+/// bounds the producer's output (None where it uses no local good).
+#[derive(Clone, Debug, Default)]
+struct Piece {
+    roles: Vec<(usize, Role)>,
+    producer: Option<usize>,
+}
+
+/// The good whose fill is user `u`'s smallest at fills `f` among its local inputs other than
+/// `but`, the lowest on a tie; None if it uses none.
+fn binding(p: &Province, u: usize, f: &[f64; 3], but: Option<usize>) -> Option<usize> {
+    (0..3)
+        .filter(|&k| p.coef[u][k] > 0.0 && Some(k) != but)
+        .fold(None, |best: Option<usize>, k| match best {
+            Some(b) if f[b] <= f[k] => Some(b),
+            _ => Some(k),
+        })
+}
+
+/// Whether the step of good j that sets its fill to `x` from fills `f` (the other goods'
+/// current values) lies on `piece`. Comparisons are not strict: on a tie or at a stock
+/// threshold both sides give the same U.
+fn on_piece(p: &Province, j: usize, piece: &Piece, f: &[f64; 3], x: f64) -> bool {
+    let smallest =
+        |u: usize, k: usize| (0..3).all(|i| i == j || p.coef[u][i] == 0.0 || f[k] <= f[i]);
+    let producer = match (p.producer[j], piece.producer) {
+        (Some(q), Some(k)) => smallest(q, k),
+        _ => true,
+    };
+    producer
+        && piece.roles.iter().all(|&(u, role)| {
+            let (a, b) = (p.coef[u][j] * p.cap[u], p.stock[u][j]);
+            let m = p.least(u, &{
+                let mut o = *f;
+                o[j] = 1.0;
+                o
+            });
+            match role {
+                Role::OnStep => m >= x && a * x >= b,
+                Role::On(k) => f[k] <= x && smallest(u, k) && a * f[k] >= b,
+                Role::Covered => a * x.min(m) <= b,
+            }
+        })
+}
+
+/// One step of the fill iteration for good j: the largest x <= f_j at which j fits, the other
+/// fills as they stand. What the users' stocks cannot cover, U(x) = sum_e max(a_e cap_e
+/// min(x, m_e) - b_e, 0) with m_e the user's smallest other fill, is continuous,
+/// nondecreasing and piecewise linear in x, and the producer's output does not depend on x
+/// (its own good is not its input): the root lies on one piece, found from its kinks.
+///
+/// Returns None where j already fits. Otherwise the piece and the root on it as an affine
+/// function of the other fills, x = (R - level) / slope; the affine has NaN coefficients where
+/// rounding put the root on a kink.
+fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affine, Piece)> {
+    p.outputs(f, &mut w.y);
+    if p.fits(j, &w.y, &mut w.users) {
+        return None;
+    }
+    let mut others = *f;
+    others[j] = 1.0;
+    let users = || (0..p.cap.len()).filter(|&u| p.coef[u][j] > 0.0);
+    let uncovered = |x: f64| -> f64 {
+        users()
+            .map(|u| {
+                let m = p.least(u, &others);
+                (p.coef[u][j] * p.cap[u] * x.min(m) - p.stock[u][j]).max(0.0)
+            })
+            .sum()
+    };
+    w.kinks.clear();
+    for u in users() {
+        let slope = p.coef[u][j] * p.cap[u];
+        w.kinks.push(p.least(u, &others));
+        if slope > 0.0 {
+            w.kinks.push(p.stock[u][j] / slope);
+        }
+    }
+    w.kinks.retain(|&x| x > 0.0 && x < f[j]);
+    w.kinks.sort_by(|a, b| b.total_cmp(a));
+    // the piece (lo, hi) on which U crosses R: lo the largest kink with U(lo) <= R
+    let rest_now = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * w.y[q]);
+    let mut hi = f[j];
+    let mut lo = 0.0;
+    for &x in &w.kinks {
+        if uncovered(x) <= rest_now {
+            lo = x;
+            break;
+        }
+        hi = x;
+    }
+    // R - level on the piece, as an affine function of the other fills
+    let mut num = Affine {
+        c: 0.0,
+        d: [0.0; 3],
+    };
+    let mut piece = Piece::default();
+    if let Some(q) = p.producer[j] {
+        let share = (1.0 - p.own[j]) * p.cap[q];
+        piece.producer = binding(p, q, f, None);
+        match piece.producer {
+            Some(k) => num.d[k] += share,
+            None => num.c += share,
+        }
+    }
+    let mid = 0.5 * (lo + hi);
+    let mut slope = 0.0;
+    for u in users() {
+        let (a, b) = (p.coef[u][j] * p.cap[u], p.stock[u][j]);
+        let m = p.least(u, &others);
+        let role = if m > mid && a * mid > b {
+            slope += a;
+            num.c += b;
+            Role::OnStep
+        } else if m <= mid && a * m > b {
+            let k = binding(p, u, f, Some(j)).expect("a smaller fill than x");
+            num.d[k] -= a;
+            num.c += b;
+            Role::On(k)
+        } else {
+            Role::Covered
+        };
+        piece.roles.push((u, role));
+    }
+    let root = num.at(f) / slope;
+    let inside = slope > 0.0 && root >= lo && root <= hi;
+    // U is flat on the piece only where rounding put the crossing at its upper kink
+    let mut x = if slope > 0.0 { root.clamp(lo, hi) } else { hi };
+    // a fill falling geometrically to 0 would otherwise crawl through the subnormals
+    if x < f64::MIN_POSITIVE {
+        x = 0.0;
+    }
+    // the closed form rounds: step down until the fit holds as `Province::fits` evaluates it
+    loop {
+        f[j] = x;
+        p.outputs(f, &mut w.y);
+        if x == 0.0 || p.fits(j, &w.y, &mut w.users) {
+            break;
+        }
+        x = x.next_down().max(0.0);
+    }
+    let map = if inside {
+        Affine {
+            c: num.c / slope,
+            d: num.d.map(|d| d / slope),
+        }
+    } else {
+        Affine {
+            c: f64::NAN,
+            d: [f64::NAN; 3],
+        }
+    };
+    Some((map, piece))
+}
+
+/// What a pass did: each good's fill at its end as an affine function of the fills at its
+/// start, and the piece of each step that cut.
+struct Pass {
+    map: [Affine; 3],
+    pieces: [Option<Piece>; 3],
+}
+
+/// One pass of the fill iteration over the goods in order.
+fn pass(p: &Province, f: &mut [f64; 3], w: &mut Work) -> Pass {
+    let mut map = [0, 1, 2].map(Affine::of);
+    let mut pieces = [None, None, None];
+    for j in 0..3 {
+        if let Some((s, piece)) = step(p, j, f, w) {
+            map[j] = s.after(&map);
+            pieces[j] = Some(piece);
+        }
+    }
+    Pass { map, pieces }
+}
+
+/// The longest cycle of passes [`jump`] looks for.
+const PERIOD: usize = 3;
+/// Relative rounding of the affine maps that [`jump`] allows where a good fits with equality.
+const ROUNDING: f64 = 1e-12;
+
+/// Where [`jump`] takes the passes.
+enum Jump {
+    /// The limit, confirmed by running the cycle's passes from it.
+    Limit([f64; 3]),
+    /// The fills after the last whole cycle that stays on the cycle's pieces.
+    Ahead([f64; 3]),
+}
+
+/// The passes repeating the cycle of the last passes `cycle` (oldest first), from the fills
+/// `f` at the end of the last, as the cycle's affine maps give them: each step on the same
+/// piece, every fill not raised, every good the cycle does not lower still fitting. Their
+/// limit is the fixed point g of the composed map on the goods the cycle lowers, the others
+/// held: taken where the passes reach it on the pieces and running the cycle from g returns g.
+/// Where they leave a piece first, the fills after the last whole cycle before that, which
+/// the passes reach in exact arithmetic. None where the first cycle already leaves.
+fn jump(p: &Province, cycle: &[Pass], f: &[f64; 3], w: &mut Work) -> Option<Jump> {
+    let cut: Vec<usize> = (0..3)
+        .filter(|&j| cycle.iter().any(|q| q.pieces[j].is_some()))
+        .collect();
+    let map = cycle.iter().fold([0, 1, 2].map(Affine::of), |acc, q| {
+        q.map.map(|o| o.after(&acc))
+    });
+    let n = cut.len();
+    // (I - M_CC) g_C = c_C + M_CN f_N
+    let mut a = [[0.0f64; 4]; 3];
+    for (r, &j) in cut.iter().enumerate() {
+        let row = &map[j];
+        if !row.c.is_finite() || !row.d.iter().all(|d| d.is_finite()) {
+            return None;
+        }
+        a[r][3] = row.c
+            + (0..3)
+                .filter(|k| !cut.contains(k))
+                .map(|k| row.d[k] * f[k])
+                .sum::<f64>();
+        for (s, &k) in cut.iter().enumerate() {
+            a[r][s] = f64::from(u8::from(r == s)) - row.d[k];
+        }
+    }
+    for c in 0..n {
+        let pivot = (c..n).max_by(|&x, &y| a[x][c].abs().total_cmp(&a[y][c].abs()))?;
+        if a[pivot][c] == 0.0 {
+            return None;
+        }
+        a.swap(c, pivot);
+        let top = a[c];
+        for row in a.iter_mut().take(n).skip(c + 1) {
+            let ratio = row[c] / top[c];
+            for (x, t) in row.iter_mut().zip(&top).skip(c) {
+                *x -= ratio * t;
+            }
+        }
+    }
+    let mut x = [0.0; 3];
+    for c in (0..n).rev() {
+        let s: f64 = (c + 1..n).map(|k| a[c][k] * x[k]).sum();
+        x[c] = (a[c][3] - s) / a[c][c];
+    }
+    // the solve rounds: a limit at 0 or at f may come out just beyond it
+    let mut g = *f;
+    let mut limit = true;
+    for (v, &j) in cut.iter().enumerate() {
+        limit &= x[v] >= -1e-14 && x[v] <= f[j] + 1e-14;
+        g[j] = x[v].clamp(0.0, f[j]);
+    }
+    // the passes from f, as the maps give them, until they are within rounding of g
+    let mut now = *f;
+    let ahead = |now: [f64; 3]| (now != *f).then_some(Jump::Ahead(now));
+    let scale = cut
+        .iter()
+        .fold(f64::MIN_POSITIVE, |s, &j| s.max((f[j] - g[j]).abs()));
+    for _ in 0..100_000 {
+        if limit && cut.iter().all(|&j| (now[j] - g[j]).abs() <= 1e-15 * scale) {
+            let mut h = g;
+            for _ in cycle {
+                pass(p, &mut h, w);
+            }
+            let size = g.iter().fold(0.0f64, |s, &v| s.max(v));
+            let still = (0..3).all(|k| (h[k] - g[k]).abs() <= 1e-12 * size);
+            return if still {
+                Some(Jump::Limit(h))
+            } else {
+                ahead(now)
+            };
+        }
+        let mut through = now;
+        for q in cycle {
+            let mut state = through;
+            for j in 0..3 {
+                // a good the pass leaves fits where its step comes, one it lowers does not, up
+                // to the rounding of the maps
+                p.outputs(&state, &mut w.y);
+                let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+                let slack = ROUNDING * (uncovered + rest);
+                let on = match &q.pieces[j] {
+                    None => uncovered <= rest + slack,
+                    Some(piece) => {
+                        let next = q.map[j].at(&through);
+                        let on = uncovered + slack > rest
+                            && next <= state[j]
+                            && next >= 0.0
+                            && on_piece(p, j, piece, &state, next);
+                        state[j] = next;
+                        on
+                    }
+                };
+                if !on {
+                    return ahead(now);
+                }
+            }
+            through = state;
+        }
+        if through == now {
+            return ahead(now);
+        }
+        now = through;
+    }
+    ahead(now)
+}
+
+/// The fill of each local good (ADR 0093, Amendment): the limit of the fill iteration from
+/// F = 1, passes over the goods in order, each setting F_k to the largest value at most F_k
+/// at which k fits ([`step`]). Where the last passes, repeated, would fall to a fixed point
+/// without leaving their pieces, the passes jump there ([`jump`], cycles of up to [`PERIOD`]
+/// passes). Returns the fills and the passes run, a jump's confirming passes included.
+pub fn fills(p: &Province) -> ([f64; 3], usize) {
+    let mut w = Work::default();
+    let mut f = [1.0; 3];
+    let mut passes = 0;
+    let mut recent: Vec<Pass> = Vec::with_capacity(PERIOD);
+    loop {
+        passes += 1;
+        let start = f;
+        let last = pass(p, &mut f, &mut w);
+        if f == start {
+            return (f, passes);
+        }
+        if recent.len() == PERIOD {
+            recent.remove(0);
+        }
+        recent.push(last);
+        // a limit from the shortest cycle that reaches one, else the first cycle that runs ahead
+        let mut ahead = None;
+        for period in 1..=recent.len() {
+            let cycle = &recent[recent.len() - period..];
+            match jump(p, cycle, &f, &mut w) {
+                Some(Jump::Limit(h)) => {
+                    passes += period;
+                    ahead = Some(h);
+                    break;
+                }
+                Some(Jump::Ahead(h)) => {
+                    ahead.get_or_insert(h);
+                }
+                None => {}
+            }
+        }
+        if let Some(h) = ahead {
+            f = h;
+            recent.clear();
+        }
     }
 }
 
 /// Runs the chain for the enterprises of province `i`. On entry `Scratch::produced` holds
 /// each enterprise's output capped by capacity and traded input stocks; on return it holds
-/// the output, and `Scratch::from_output` the units of each local good the enterprise draws
-/// from this tick's output (the rest of its use comes from its stock, the buffer). Returns
-/// the iterations run.
-///
-/// Each iteration, from outputs Y and for each local good k: its producer's own use,
-/// coef_kk Y_k, comes out of its output first; the other users, with needs n_ek = coef_ek
-/// Y_e and stocks b_ek, share the rest R_k = (1 - coef_kk) Y_k and their stocks at the common
-/// fill f_k of [`fill`], the fixed point of f_k = min(1, (R_k + sum_e min(b_ek, n_ek)) /
-/// sum_e n_ek), and each enterprise runs at the smallest fill of its local inputs:
-/// Y'_e = Y_e min_k f_k. Y never rises; the chain stops when no output moves by more than
-/// 1e-12 of itself, or after [`N_LOCAL`] iterations, with the last fills applied. A cycle
-/// among local goods converges geometrically and may leave a shortage at the bound: it is
-/// then cleared, good by good in order 7, 8, 9, by cutting the users that produce no local
-/// good by the fill of what their producers leave, which changes no local output; where the
-/// producers alone do not fit, the users of the good that their stock cannot cover stop, and
-/// so on, so every good fits exactly. The draws are then split at the final outputs
-/// ([`split`]).
+/// the output at the province's [`fills`], and `Scratch::from_output` the units of each local
+/// good the enterprise draws from this tick's output ([`split`]; the rest of its use comes from
+/// its stock, the buffer). Returns the passes run.
 ///
 /// `produced` and `from_output` are the province's rows of `Scratch::produced` and
 /// `Scratch::from_output`; no other province's state is read or written.
@@ -148,97 +544,11 @@ pub fn chain(
     produced: &mut [f64],
     from_output: &mut [f64],
 ) -> usize {
-    let ents = lay.enterprises(i);
-    let first = ents.start;
-    let good = |e: usize| usize::from(inp.enterprises.good[e]);
-    let producer = LOCAL.map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first));
-    let province = Province {
-        cap: produced.to_vec(),
-        coef: ents
-            .clone()
-            .map(|e| {
-                let mut c = LOCAL.map(|k| lay.coef[e][k]);
-                if let Some(j) = LOCAL.iter().position(|&k| k == good(e)) {
-                    c[j] = 0.0;
-                }
-                c
-            })
-            .collect(),
-        stock: ents
-            .clone()
-            .map(|e| LOCAL.map(|k| ledger.goods(lay.accounts.enterprise[e], k)))
-            .collect(),
-        producer,
-        own: std::array::from_fn(|j| producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])),
-    };
-
+    let province = Province::new(inp, lay, ledger, i, produced);
+    let (f, passes) = fills(&province);
+    let mut y = Vec::new();
+    province.outputs(&f, &mut y);
     let mut users = Vec::new();
-    let mut y = province.cap.clone();
-    let mut cut = vec![1.0f64; y.len()];
-    let mut iterations = 0;
-    loop {
-        iterations += 1;
-        cut.fill(1.0);
-        for j in 0..3 {
-            let rest = province.users(j, &y, &mut users);
-            let f = fill(rest, &users);
-            for (u, c) in cut.iter_mut().enumerate() {
-                if province.coef[u][j] * y[u] > 0.0 {
-                    *c = c.min(f);
-                }
-            }
-        }
-        let mut converged = true;
-        for (yu, &c) in y.iter_mut().zip(&cut) {
-            let next = *yu * c;
-            converged &= (*yu - next).abs() <= CONVERGED * *yu;
-            *yu = next;
-        }
-        if converged || iterations == N_LOCAL {
-            break;
-        }
-    }
-    // what is left short: cut the users that produce no local good, which leaves every local
-    // output as it is; where the producers alone do not fit, stop the users of the good, and
-    // so on down the chain (each round stops at least one more enterprise)
-    let makes_local = |u: usize| province.producer.contains(&Some(u));
-    let mut others = Vec::new();
-    for j in 0..3 {
-        let (mut rest, uncovered) = province.uncovered(j, &y, &mut users);
-        if uncovered <= rest {
-            continue;
-        }
-        others.clear();
-        for (u, &yu) in y.iter().enumerate() {
-            let (need, stock) = (province.coef[u][j] * yu, province.stock[u][j]);
-            if need > 0.0 && makes_local(u) {
-                rest -= (need - stock).max(0.0);
-            } else if need > 0.0 {
-                others.push((need, stock));
-            }
-        }
-        let z = fill(rest, &others);
-        for (u, yu) in y.iter_mut().enumerate() {
-            if province.coef[u][j] > 0.0 && !makes_local(u) {
-                *yu *= z;
-            }
-        }
-    }
-    for _ in 0..=y.len() {
-        let short = |j: usize, users: &mut Vec<(f64, f64)>| {
-            let (rest, uncovered) = province.uncovered(j, &y, users);
-            uncovered * (1.0 - ROUNDING) > rest
-        };
-        let Some(j) = (0..3).find(|&j| short(j, &mut users)) else {
-            break;
-        };
-        for (u, yu) in y.iter_mut().enumerate() {
-            if province.coef[u][j] * *yu > province.stock[u][j] {
-                *yu = 0.0;
-            }
-        }
-    }
-
     let mut draws = Vec::new();
     for (j, &k) in LOCAL.iter().enumerate() {
         let rest = province.users(j, &y, &mut users);
@@ -246,7 +556,7 @@ pub fn chain(
         split(rest, &users, &mut draws);
         let mut d = draws.iter();
         for (u, &yu) in y.iter().enumerate() {
-            from_output[u * N_GOODS + k] = if Some(u) == producer[j] {
+            from_output[u * N_GOODS + k] = if Some(u) == province.producer[j] {
                 province.own[j] * yu
             } else if province.coef[u][j] * yu > 0.0 {
                 *d.next().expect("one draw per user")
@@ -256,7 +566,7 @@ pub fn chain(
         }
     }
     produced.copy_from_slice(&y);
-    iterations
+    passes
 }
 
 /// [`chain`] for every province, in parallel: `Scratch::produced` from the capped outputs to
@@ -285,29 +595,6 @@ pub fn chain_all(w: &mut EconWorld) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fill_is_the_limit_of_the_cut() {
-        // enough output: no cut
-        assert_eq!(fill(12.0, &[(6.0, 0.0), (6.0, 0.0)]), 1.0);
-        // no stocks: output over need
-        assert!((fill(10.0, &[(6.0, 0.0), (6.0, 0.0)]) - 10.0 / 12.0).abs() < 1e-15);
-        // one user covers itself from stock: x 12 <= 4 + min(6, 6 x) gives x = 2 / 3
-        let users = [(6.0, 6.0), (6.0, 0.0)];
-        let x = fill(4.0, &users);
-        assert!((x - 2.0 / 3.0).abs() < 1e-15);
-        // the fixed-point form f = min(1, (rest + sum min(b, n)) / sum n) repeated converges there
-        let mut f = 1.0;
-        for _ in 0..200 {
-            let need: f64 = users.iter().map(|u| f * u.0).sum();
-            let usable: f64 = users.iter().map(|&(n, b)| b.min(f * n)).sum();
-            f *= ((4.0 + usable) / need).min(1.0);
-        }
-        assert!((f - x).abs() < 1e-12);
-        // more stock than needed counts only up to the need; nothing left over is nil
-        assert_eq!(fill(0.0, &[(2.0, 5.0)]), 1.0);
-        assert_eq!(fill(0.0, &[(2.0, 0.0)]), 0.0);
-    }
 
     #[test]
     fn split_draws_output_first_and_stock_for_the_rest() {

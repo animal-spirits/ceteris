@@ -76,7 +76,10 @@ The uncapped wage search is built in pre-p3/econ-review: the frictionless wage i
 the uncapped targets (`production::labour_target_uncapped`, infinite at the corners where no
 finite profit maximum exists, as the GE reference's), and only the allocation caps at L^s.
 
-Not built, and still open: the exact local fill.
+The exact local fill is built in pre-p3/econ-review as the Amendment states (`local::fills`,
+`local::Province`); `exact_fill_equals_converged_iteration` compares it with the fill iteration
+run to convergence by bisection on every province tick of the fixture runs and on random small
+provinces.
 
 ## Amendment (2026-10-29): one fill per local good
 
@@ -106,18 +109,30 @@ the rest pro rata to its usable stock).
 F_k, with kinks where a user's stock stops covering it (a_ek cap_e x = b_ek) and where another
 of its fills becomes its smallest; the step finds the root on the right piece in closed form,
 then lowers it by rounding units until the fit holds as evaluated in floating point. Passes run
-until one changes nothing. A cycle (two local goods each feeding the other's producer) converges
-only geometrically, so after each pass that cut some goods C the limit is solved directly: for
-the regime of the pass (each user's smallest fill, lowest good on a tie, and the users whose
-need exceeds their stock), the goods of C fitting with equality are a linear system of size at
-most 3 in F_C. Its solution is taken when it lies in [0, F] and keeps the regime, and every
-good outside C still fits there; the next pass then confirms it. Otherwise the passes go on,
-and the regime changes only finitely often, since F only falls. No pass bound and no clearing
-step remain.
+until one changes nothing. A fill below the smallest normal f64 is 0, as a destination's access
+is in the Decision as built, so a fill falling geometrically to 0 does not crawl through the
+subnormals.
+
+A cycle (goods feeding each other's producers) converges only geometrically, so the passes are
+accelerated. On its piece each step is affine in the other fills, so a pass is an affine map
+of the fills at its start, and so is a cycle of the last one, two or three passes. Its fixed
+point g on the goods the cycle lowers, the others held, is the limit wherever the passes,
+repeated, stay on the same pieces. The passes the maps give are followed from the current fills
+(a few multiplications each): every step on its piece, no fill raised, every good a pass leaves
+still fitting where its step comes, every good it lowers short there (comparisons allow 1e-12
+of the flows for the maps' rounding). Where they reach g to 1e-15 of the distance, the cycle's
+passes are run from g and must return it to 1e-12; that is the limit. Where they leave a piece
+first, the fills jump to the last whole cycle before that, which the passes reach in exact
+arithmetic, and the passes go on from there. The shortest cycle that reaches a limit is taken.
+No pass bound and no clearing step remain; F only falls, so the passes end.
 
 **Ties and cycles.** A user's output depends only on the smallest of its fills, so ties among
-its fills do not change Y; the regime takes the lowest good, and the check accepts the solution
-only where that good is still smallest. A cycle settles in one solve plus the confirming pass.
+its fills do not change Y; a piece takes the lowest good, and the comparisons that place a step
+on a piece are not strict, since both sides of a tie or a stock threshold give the same U. On
+the fixture with services and construction feeding each other (`local_chain_terminates_on_cycles`)
+every province tick settles in at most 6 passes; the old chain ran to its bound of 32 there. On
+random small provinces with coefficients up to 0.6, nearly all settle within 12 passes and a
+loop gain near 1 can take about 200.
 
 **Why the old chain differs.** The old chain multiplied each enterprise's output by the
 smallest fill of its local inputs in each pass, so its total cut was the product of the
@@ -127,7 +142,7 @@ and B short after pB is cut, u1 ends at the product of both goods' cuts and u2 a
 u1 runs below min(F_A, F_B). The old bound of 32 passes then left cycles still converging and
 cleared them by cutting the users that make no local good, which changed who was rationed.
 
-**Consequences.** State hashes move wherever the chain binds (on the fixture's default run 6 of
-30,000 province ticks) and on every tick of the cycle fixtures. The steady state never rations,
-so the calibration and the GE reference, whose local output solves the unrationed Leontief
-system, do not change.
+**Consequences.** State hashes move wherever the chain binds. On the fixture's default and
+frictionless runs it never binds (1,200 ticks), so the goldens do not move; it binds in the
+cycle fixtures, which have no golden. The steady state never rations, so the calibration and
+the GE reference, whose local output solves the unrationed Leontief system, do not change.

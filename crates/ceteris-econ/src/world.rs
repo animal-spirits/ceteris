@@ -180,7 +180,7 @@ pub struct Scratch {
     /// Units of local output drawn by intermediate users at E2 per province market,
     /// `[province * N_GOODS + g]` (0 for traded goods): part of the market's demand and sales.
     pub drawn: Vec<f64>,
-    /// Iterations of the same-tick chain per province at E2.
+    /// Passes of the same-tick chain per province at E2 (`local::fills`).
     pub chain_iterations: Vec<u32>,
     /// Units dispatched at T2b by each origin market, home purchases included,
     /// `[province * N_GOODS + g]`: the filled orders, equal to the market's sales.
