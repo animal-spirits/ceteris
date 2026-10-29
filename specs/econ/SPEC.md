@@ -221,20 +221,24 @@ solved exactly: each step is the root of a piecewise-linear U_k on its piece; a 
 smallest normal f64 is 0; on its pieces a pass, and a cycle of up to three passes, is an affine
 map of the fills, and the passes jump to its fixed point where repeating it stays on the pieces,
 or ahead to the last cycle before it leaves them; passes stop when one changes nothing
+bounded work (ADR 0093, second amendment): a jump follows at most 64 cycles one at a time (4,096
+per province and tick), then 2^k cycles at once (k <= 64), checked at those points; after 256
+passes since the last such cut, the goods the last pass's map takes to 0 (else every good it
+lowered) are set to 0
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
 lowers its root by rounding units until it does), so no clearing step is needed. The draws are
-paid at the posted price at E2, count in the market's demand and sales, and come before household demand under every S11 setting (the chain runs before E3); at
-T3 the rest of local output is shared between enterprise orders (stock refills) and households by
+paid at the posted price at E2, count in the market's demand and sales, and come before
+household demand under every S11 setting (the chain runs before E3); at T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
 services at 0.3 and construction and services each other at 0.2 it binds in 413 of 3,000 province
 ticks over 120 ticks and settles in at most 6 passes (`local_chain_terminates_on_cycles`). On
-random small provinces with coefficients up to 0.6 nearly all settle within 12 passes; a loop
-gain near 1 can take some 200. Each tick the enterprise orders up to an
+1,000,000 random small provinces with coefficients up to 0.6, all but 83 settle within 12
+passes, the most take 259 (the pass bound) and none takes more than 0.2 ms. Each tick the enterprise orders up to an
 inventory position (stock plus goods on order, the paid shipments in its pipeline):
 
 ```
@@ -494,12 +498,10 @@ without it the level depended on the start and the mixing path, by up to 4e-4 fr
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-12 relative
-(Anderson-mixed; `PASS_TOL`). The stopping tolerance is a solver setting, not a model parameter,
-so it has no register ID: it was 1e-11 until the joint PIGL inversion (ADR 0094), after which the
-fixture's last pass changed by 9.9e-12 and the returned r stood 1.2e-12 from the scaling at its
-own spending, beyond the 1e-12 that `sinkhorn_is_unique_up_to_scale` checks. The solver now
-converges to the tolerance the test claims (controller ruling, 2026-10-29);
-within a pass the income and local-output fixed point is iterated until no local output changes by more than 1e-14 relative.
+(Anderson-mixed; `PASS_TOL`), so the returned state is a fixed point to the 1e-12 its checks
+claim (`sinkhorn_is_unique_up_to_scale`). The stopping tolerance is a solver setting, not a model
+parameter, so it has no register ID. Within a pass the income and local-output fixed point is
+iterated until no local output changes by more than 1e-14 relative.
 
 **Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
 w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
