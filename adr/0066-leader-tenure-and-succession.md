@@ -36,7 +36,8 @@ Option 2.
 - Succession in personalist autocracies: when the leader exits, a crisis state raises coup,
   purge and policy-reversal hazards until consolidation.
 - Leaders are generated, not named, consistent with 2.4; the chronicle (0078) gives them
-  generated names and biographies.
+  generated names and biographies. Amended by ADR 0183 (28 Oct 2026): the 2000 roster carries
+  real names; successors are generated.
 
 ## Migration
 
