@@ -22,7 +22,7 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_GOODS, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch, source};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use rayon::prelude::*;
 
@@ -107,7 +107,7 @@ fn tick_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
-    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let (params, trade) = (EconParams::default(), inputs.trade_params());
     let mut w = EconWorld::new(Arc::new(inputs), params, trade.clone());
     // tick 1, whose prices moved at tick 0's repricing: the sourcing kept from tick 0 is stale
     let posted = w.markets.price.clone();

@@ -42,7 +42,7 @@ struct World {
 }
 
 /// Country 0 fills x < 0.5, country 1 x > 0.5. Each country has two gateways at its side of
-/// the border, at y = 0.25 and y = 0.75.
+/// the border, at y = 0.25 and y = 0.75, each with half its country's mass.
 fn planar_world(seed: u64) -> World {
     let mut rng = Rng(seed);
     let mut provinces = vec![];
@@ -56,6 +56,7 @@ fn planar_world(seed: u64) -> World {
     }
     let gateways: Vec<Point> = vec![(0.48, 0.25), (0.48, 0.75), (0.52, 0.25), (0.52, 0.75)];
     net.gateway_country = vec![0, 0, 1, 1];
+    net.gateway_mass = vec![0.5; 4];
     for (o, &po) in provinces.iter().enumerate() {
         for (d, &pd) in provinces.iter().enumerate() {
             if o != d && net.province_country[o] == net.province_country[d] {
@@ -94,7 +95,7 @@ fn median(mut v: Vec<f64>) -> f64 {
 #[test]
 fn two_level_vs_direct_report() {
     let p = TradeParams::default();
-    let (nu, theta) = (1.0 + p.border_nu, p.theta[GOOD]);
+    let (nu, theta) = (1.0 + p.border_nu_of(GOOD), p.theta[GOOD]);
     let mut diffs_orders = vec![];
     let mut diffs_arrival = vec![];
 

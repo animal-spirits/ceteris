@@ -2,6 +2,9 @@
 
 use crate::goods::{N_GOODS, STORABLE};
 
+/// Theta classes of P01 (ADR 0023, Amendment 2026-10-29).
+pub const N_CLASSES: usize = 4;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
     /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.91 to 16.91, the
@@ -64,8 +67,11 @@ pub struct TradeParams {
     /// Table 1) weights the last observation 0.65 per period. Start 0.006, the Poledna end
     /// (owner decision, 2026-10-24, MIGRATION Task 6).
     pub expectation_gain: f64,
-    /// P05 non-tariff border friction nu, ad valorem equivalent.
-    pub border_nu: f64,
+    /// P05 non-tariff border friction nu per theta class, ad valorem equivalent (ADR 0092): the
+    /// default is the prior's start; a calibrated pack carries the values that match the ICIO
+    /// 2000 cross-border share of each class (`ceteris_calibrate::border`), which
+    /// `EconInputs::trade_params` puts here.
+    pub border_nu: [f64; N_CLASSES],
     /// P43 ad valorem cost of a day in transit, lambda_g.
     pub time_cost: [f64; N_GOODS],
     /// P44 route-choice dispersion theta_r (ADR 0017): edge factors `a = t^-theta_r`, route
@@ -77,6 +83,11 @@ pub struct TradeParams {
 }
 
 impl TradeParams {
+    /// The border friction of good `g`'s theta class.
+    pub fn border_nu_of(&self, g: usize) -> f64 {
+        self.border_nu[usize::from(self.theta_class[g])]
+    }
+
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
     pub fn price_clip(&self, g: usize) -> f64 {
         if STORABLE[g] {
@@ -99,7 +110,7 @@ impl Default for TradeParams {
             c_max: 0.1,
             c_max_storable: 0.3,
             expectation_gain: 0.006,
-            border_nu: 0.3,
+            border_nu: [0.3; N_CLASSES],
             time_cost: [
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],

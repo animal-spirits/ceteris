@@ -13,7 +13,7 @@
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -113,6 +113,7 @@ pub fn small_world() -> EconInputs {
     let mut net = Network {
         province_country: province_country.clone(),
         gateway_country: gateway_country.clone(),
+        gateway_mass: equal_gateway_mass(&gateway_country),
         ..Network::default()
     };
     for o in 0..np {
@@ -219,6 +220,7 @@ pub fn small_world() -> EconInputs {
         pops,
         enterprises: ent,
         steady: None,
+        border_nu: None,
     };
     inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();
@@ -335,7 +337,7 @@ mod tests {
         let k = Kernel::build(&w.network, &w.weight, &w.wedges, &p);
         let coal = 2;
         for c in k.good(coal).crossings.row(island_port) {
-            let tau = 1.0 / (c.inv_loss * (1.0 + p.border_nu));
+            let tau = 1.0 / (c.inv_loss * (1.0 + p.border_nu_of(coal)));
             assert!(tau < 2.5, "island coal crossing tau {tau}");
         }
     }

@@ -195,10 +195,14 @@ pub fn write_rows(path: &Path, sheets: &[(&str, Vec<Row>)]) -> PathBuf {
     write_xlsx(path, &[], &refs)
 }
 
-/// A table of the built 2000 pack, or None (with a note) when it has not been built: data tests
-/// skip without it.
+/// A table of the built 2000 pack (`CETERIS_PACK`, default `data/packs/2000`), or None (with a
+/// note) when it has not been built: data tests skip without it.
 pub fn pack_table(name: &str) -> Option<PathBuf> {
-    let path = sources::workspace_root().join("data/packs/2000").join(name);
+    let pack = std::env::var_os("CETERIS_PACK").map_or_else(
+        || sources::workspace_root().join("data/packs/2000"),
+        PathBuf::from,
+    );
+    let path = pack.join(name);
     if path.exists() {
         Some(path)
     } else {

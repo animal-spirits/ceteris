@@ -49,13 +49,15 @@ fn check_owners(
     }
 }
 
-/// Gateways of the pack (`gateways.arrow`): graph node and country of each, and its kind
-/// (0 port, 1 airport, 2 land crossing).
+/// Gateways of the pack (`gateways.arrow`): graph node and country of each, its kind
+/// (0 port, 1 airport, 2 land crossing) and its mass, the share of its country's trade
+/// throughput (ADR 0092; the pack builder's source is in the econ SPEC, Gateways).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gateways {
     pub node: Vec<u32>,
     pub country: Vec<u16>,
     pub kind: Vec<u8>,
+    pub mass: Vec<f64>,
 }
 
 impl Gateways {
@@ -65,10 +67,18 @@ impl Gateways {
             .into_iter()
             .map(|c| u16::try_from(c).map_err(|_| err(format!("gateway country {c}"))))
             .collect::<Result<_, _>>()?;
+        if t.column_by_name("mass").is_none() {
+            return Err(err(format!(
+                "{} has no mass column (gateway masses, ADR 0092): the pack's econ tables \
+                 predate it; rebuild them with `ceteris pack build --econ-only`",
+                dir.join("gateways.arrow").display()
+            )));
+        }
         Ok(Self {
             node: u32s(&t, "node")?,
             country,
             kind: u8s(&t, "kind")?,
+            mass: f64s(&t, "mass")?,
         })
     }
 
@@ -241,6 +251,7 @@ impl EconInputs {
             pops: pop_data,
             enterprises: ent,
             steady: None,
+            border_nu: None,
         };
         inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
         inputs.set_base_prices(&TradeParams::default());
@@ -312,6 +323,7 @@ impl EconInputs {
         let mut net = Network {
             province_country: country.clone(),
             gateway_country: gateways.country.clone(),
+            gateway_mass: gateways.mass.clone(),
             ..Network::default()
         };
         for (s, (first, second)) in legs.into_iter().enumerate() {
@@ -402,6 +414,7 @@ mod tests {
             node: vec![4, 5],
             country: vec![0, 1],
             kind: vec![0, 0],
+            mass: vec![1.0, 1.0],
         }
     }
 
@@ -442,6 +455,7 @@ mod tests {
             (net.province_country, net.gateway_country),
             (vec![0, 0, 1], vec![0, 1])
         );
+        assert_eq!(net.gateway_mass, gateways().mass);
         let g = &pack.graph;
         let road = g.cost[0] + g.cost[1];
         assert_eq!(net.domestic[0].cost_per_t, road);
@@ -455,5 +469,29 @@ mod tests {
         let closed = inputs.network_from_graph(&pack, &gateways());
         assert!(closed.crossings.is_empty());
         assert_eq!(closed.domestic, net.domestic);
+    }
+
+    /// A pack built before the gateway masses is refused with an error naming the column.
+    #[test]
+    fn gateways_without_mass_name_the_column() {
+        use arrow_array::{RecordBatch, UInt8Array, UInt32Array};
+        use arrow_ipc::writer::FileWriter;
+        use std::sync::Arc;
+
+        let dir = std::env::temp_dir().join(format!("ceteris-gateways-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let t = RecordBatch::try_from_iter([
+            ("node", Arc::new(UInt32Array::from(vec![4, 5])) as _),
+            ("country", Arc::new(UInt32Array::from(vec![0, 1])) as _),
+            ("kind", Arc::new(UInt8Array::from(vec![0, 0])) as _),
+        ])
+        .unwrap();
+        let file = std::fs::File::create(dir.join("gateways.arrow")).unwrap();
+        let mut w = FileWriter::try_new(file, &t.schema()).unwrap();
+        w.write(&t).unwrap();
+        w.finish().unwrap();
+        let e = Gateways::read(&dir).unwrap_err();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(e.0.contains("has no mass column"), "{e}");
     }
 }

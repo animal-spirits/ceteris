@@ -634,12 +634,23 @@ mod tests {
     }
 
     /// Complete leg sets for the given province and gateway countries, random costs (lags 0
-    /// to 3) and random tariffs.
+    /// to 3), random gateway masses and random tariffs.
     fn complete_world(rng: &mut Rng, provinces: Vec<u16>, gateways: Vec<u16>) -> (Network, Wedges) {
         let n_countries = usize::from(*provinces.iter().chain(&gateways).max().unwrap()) + 1;
+        let raw: Vec<f64> = gateways.iter().map(|_| 0.2 + rng.next()).collect();
+        let mut total = vec![0.0; n_countries];
+        for (&c, m) in gateways.iter().zip(&raw) {
+            total[usize::from(c)] += m;
+        }
+        let gateway_mass = gateways
+            .iter()
+            .zip(&raw)
+            .map(|(&c, m)| m / total[usize::from(c)])
+            .collect();
         let mut net = Network {
             province_country: provinces,
             gateway_country: gateways,
+            gateway_mass,
             ..Network::default()
         };
         let (np, ng) = (net.n_provinces() as u32, net.n_gateways() as u32);
@@ -726,7 +737,7 @@ mod tests {
 
     /// Every route o to d, by explicit enumeration of gateway pairs.
     fn hops(net: &Network, wedges: &Wedges, g: usize, o: usize, d: usize, theta: f64) -> Vec<Hop> {
-        let nu = 1.0 + TradeParams::default().border_nu;
+        let nu = 1.0 + TradeParams::default().border_nu_of(g);
         let (co, cd) = (net.province_country[o], net.province_country[d]);
         if o == d {
             return vec![Hop {
@@ -762,8 +773,10 @@ mod tests {
                 };
                 let ab = find(&net.crossings, a, b);
                 let t = f64::from(wedges.rate(cd as usize, co as usize, tariff_group(g)));
+                let m = net.gateway_mass[a] * net.gateway_mass[b];
                 hs.push(Hop {
                     k: k_leg(g, &oa, 1.0, theta)
+                        * m
                         * k_leg(g, ab, nu * (1.0 + t), theta)
                         * k_leg(g, &bd, 1.0, theta),
                     tau: tau_leg(g, &oa) * tau_leg(g, ab) * nu * tau_leg(g, &bd),
@@ -1626,6 +1639,58 @@ mod tests {
     }
 
     #[test]
+    fn duplicating_a_gateway_with_half_mass_changes_no_flow() {
+        for seed in 1..=8u64 {
+            let (net, wedges) = random_world(seed * 0x3c6e_f372);
+            let n = net.n_provinces();
+            // gateway a and its copy share a's legs and half its mass each
+            let a = rng(seed).below(net.n_gateways());
+            let copy = net.n_gateways() as u32;
+            let mut split = net.clone();
+            split.gateway_country.push(net.gateway_country[a]);
+            split.gateway_mass[a] /= 2.0;
+            split.gateway_mass.push(split.gateway_mass[a]);
+            for l in net.access.iter().filter(|l| l.to as usize == a) {
+                split.access.push(Leg { to: copy, ..*l });
+            }
+            for l in &net.crossings {
+                if l.from as usize == a {
+                    split.crossings.push(Leg { from: copy, ..*l });
+                }
+                if l.to as usize == a {
+                    split.crossings.push(Leg { to: copy, ..*l });
+                }
+            }
+            let (one, two) = (kernel(&net, &wedges), kernel(&split, &wedges));
+            let mut r = rng(seed + 50);
+            let price = draw(&mut r, n, 0.5, 2.0);
+            let mut active = vec![true; n];
+            active[r.below(n)] = false;
+            let spend = draw2(&mut r, n, 0.0, 100.0);
+            let fill = draw2(&mut r, n, 0.0, 1.0);
+            for g in [0, 3, 5] {
+                let base = run(&one, g, &price, &active, &spend, &fill);
+                let out = run(&two, g, &price, &active, &spend, &fill);
+                let tag = |what: &str| format!("seed {seed} g {g} {what}");
+                for c in 0..2 {
+                    let (got, want) = (class(&out.orders, c), class(&base.orders, c));
+                    assert_close(&tag("orders"), &got, &want, 1e-12);
+                    for s in 0..5 {
+                        let (got, want) = (class(&out.arrive[s], c), class(&base.arrive[s], c));
+                        assert_close(&tag("arrive"), &got, &want, 1e-12);
+                    }
+                }
+                assert_close(&tag("index"), &out.price_index, &base.price_index, 1e-12);
+                assert_close(&tag("shipped"), &out.shipped, &base.shipped, 1e-12);
+                assert_close(&tag("paid"), &out.paid, &base.paid, 1e-12);
+                assert_close(&tag("received"), &out.received, &base.received, 1e-12);
+                assert_close(&tag("tariff"), &out.tariff, &base.tariff, 1e-12);
+                assert_close(&tag("lost"), &[out.lost], &[base.lost], 1e-12);
+            }
+        }
+    }
+
+    #[test]
     fn extreme_prices_spend_everything_when_filled() {
         let mut rng = rng(77);
         for seed in 1..=30u64 {
@@ -1710,13 +1775,14 @@ mod tests {
         let net = Network {
             province_country: vec![0, 1],
             gateway_country: vec![0, 1],
+            gateway_mass: vec![1.0, 1.0],
             access: vec![leg(0, 0, 1.0), leg(1, 1, 1.0)],
             crossings: vec![leg(1, 0, 2.0 * 140.4f64.exp() / 1.3), leg(0, 1, 1.0)],
             ..Network::default()
         };
         let wedges = Wedges::none(2);
         let k = kernel(&net, &wedges);
-        let nu = 1.0 + TradeParams::default().border_nu;
+        let nu = 1.0 + TradeParams::default().border_nu_of(g);
         let abroad =
             k_leg(g, &net.access[0], 1.0, THETA).powi(2) * k_leg(g, &net.crossings[0], nu, THETA);
         let gap = 4.0 - abroad.ln();
@@ -1753,6 +1819,7 @@ mod tests {
         let net = Network {
             province_country: vec![0, 0, 1],
             gateway_country: vec![0, 1],
+            gateway_mass: vec![1.0, 1.0],
             domestic: vec![leg(0, 1, 2.0 * 141.38f64.exp()), leg(1, 0, 1.0)],
             access: vec![leg(0, 0, 1.0), leg(1, 0, 1.0), leg(2, 1, 1.0)],
             crossings: vec![leg(0, 1, 2.0 * 140.04f64.exp() / 1.3), leg(1, 0, 1.0)],

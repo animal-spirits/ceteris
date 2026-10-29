@@ -8,6 +8,11 @@
 //! countries, merged within `MERGE_KM` per country pair. The k gateways are the k-medoids of the
 //! candidates on great-circle distance (an agent default, ADR 0014).
 //!
+//! Each gateway's mass m_a (ADR 0092) is its share of its country's 2000 trade throughput, so the
+//! masses of a country's gateways sum to 1. The pack's sources give no throughput per gateway
+//! (Natural Earth ports and OurAirports airports carry no tonnage, value or passenger counts, and
+//! land crossings no traffic), so every gateway of a country with k gateways takes 1/k.
+//!
 //! Every land crossing enters as a candidate, not as a gateway of its own: gateways for all of
 //! the P1 graph's merged crossings would make the all-pairs crossing matrix about twenty times
 //! larger than the kernel's budget of about 600 gateways (trade SPEC, cost per good).
@@ -15,7 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, UInt8Array, UInt32Array};
+use arrow_array::{ArrayRef, Float64Array, UInt8Array, UInt32Array};
 
 use crate::numeric::pairwise_sum;
 
@@ -53,12 +58,14 @@ pub struct Edges {
     pub mode: Vec<u8>,
 }
 
-/// One row of `gateways.arrow`; `country` indexes the sorted country codes of the provinces.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// One row of `gateways.arrow`; `country` indexes the sorted country codes of the provinces,
+/// `mass` is the gateway's share of its country's trade throughput.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Gateway {
     pub node: u32,
     pub country: u32,
     pub kind: u8,
+    pub mass: f64,
 }
 
 /// Haversine distance in km, in numpy's operation order.
@@ -292,19 +299,22 @@ pub fn select(
         let ids: Vec<(usize, u8)> = cand[c].iter().map(|(&i, &kind)| (i, kind)).collect();
         let lon: Vec<f64> = ids.iter().map(|&(i, _)| nodes.lon[i]).collect();
         let lat: Vec<f64> = ids.iter().map(|&(i, _)| nodes.lat[i]).collect();
-        for m in kmedoids(&lon, &lat, k[*c], ITERATIONS) {
+        let medoids = kmedoids(&lon, &lat, k[*c], ITERATIONS);
+        let mass = 1.0 / medoids.len() as f64;
+        for m in medoids {
             let (node, kind) = ids[m];
             rows.push(Gateway {
                 node: u32::try_from(node).map_err(|_| format!("node {node} beyond uint32"))?,
                 country: u32::try_from(ci).map_err(|_| "too many countries for uint32")?,
                 kind,
+                mass,
             });
         }
     }
     Ok(rows)
 }
 
-/// `gateways.arrow`: node, country, kind.
+/// `gateways.arrow`: node, country, kind, mass.
 pub fn columns(rows: &[Gateway]) -> Vec<(String, ArrayRef)> {
     vec![
         (
@@ -320,6 +330,10 @@ pub fn columns(rows: &[Gateway]) -> Vec<(String, ArrayRef)> {
         (
             "kind".into(),
             Arc::new(UInt8Array::from_iter_values(rows.iter().map(|r| r.kind))),
+        ),
+        (
+            "mass".into(),
+            Arc::new(Float64Array::from_iter_values(rows.iter().map(|r| r.mass))),
         ),
     ]
 }

@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "10";
+pub const EXPORT_FORMAT: &str = "11";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -195,6 +195,11 @@ pub struct Inputs {
     /// (G,) P01 per good times the theta scale P150, as the kernel uses it; 0 for local goods
     /// (ADRs 0018 and 0101).
     pub theta: Vec<f64>,
+    /// (G,) P01 theta class of each good (ADR 0023; 0 for local goods).
+    pub theta_class: Vec<usize>,
+    /// P05 per theta class (ADR 0092), the border friction the crossings' `k` and `inv_loss`
+    /// carry.
+    pub border_nu: Vec<f64>,
     /// P06, within a PIGL category.
     pub sigma_demand: f64,
     pub pigl: Pigl,
@@ -204,6 +209,9 @@ pub struct Inputs {
     pub traded: Vec<bool>,
     pub province_country: Vec<usize>,
     pub gateway_country: Vec<usize>,
+    /// (N,) each gateway's share of its country's trade throughput, summing to 1 per country
+    /// (ADR 0092); the crossings' `k` carry m_a m_b.
+    pub gateway_mass: Vec<f64>,
     /// (P,) effective units, sum_k e_k LF_k.
     pub labour_supply: Vec<f64>,
     /// (P,) sum of the province's pops, rebate weights.
@@ -638,6 +646,7 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
     let ent = Table::open(d, "enterprises")?;
     let active = Table::open(d, "active")?;
     let io = Table::open(d, "country_io")?;
+    let gateways = Table::open(d, "gateways")?;
 
     let n_goods = params["n_goods"]
         .as_u64()
@@ -690,6 +699,8 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
             let scale = json_f64(&params["trade"], "theta_scale")?;
             goods.f64("theta")?.into_iter().map(|t| t * scale).collect()
         },
+        theta_class: goods.usize("theta_class")?,
+        border_nu: json_f64s(&params["trade"], "border_nu")?,
         sigma_demand: json_f64(econ, "sigma_demand")?,
         pigl: Pigl {
             sigma_b: json_f64(econ, "pigl_sigma_b")?,
@@ -701,7 +712,8 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         category: goods.usize("category")?,
         sigma_fl: json_f64(econ, "sigma_fl")?,
         traded: goods.bool("traded")?,
-        gateway_country: Table::open(d, "gateways")?.usize("country")?,
+        gateway_country: gateways.usize("country")?,
+        gateway_mass: gateways.f64("mass")?,
         labour_supply: bincount(&pop_province, &pop_effective, n_p),
         population: bincount(&pop_province, &pop_population, n_p),
         w0: provinces.f64("w0")?,
@@ -761,6 +773,32 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
         .collect();
     if !gini.is_empty() {
         return Err(format!("Gini outside [0, 1) in countries {gini:?}"));
+    }
+    if let Some(g) =
+        (0..inp.traded.len()).find(|&g| inp.traded[g] && inp.theta_class[g] >= inp.border_nu.len())
+    {
+        return Err(format!(
+            "good {g} is in theta class {}, the inputs have {} border frictions",
+            inp.theta_class[g],
+            inp.border_nu.len()
+        ));
+    }
+    if inp.gateway_mass.len() != inp.gateway_country.len() {
+        return Err(format!(
+            "{} gateway masses for {} gateways",
+            inp.gateway_mass.len(),
+            inp.gateway_country.len()
+        ));
+    }
+    let mut mass = vec![0.0; inp.n_countries()];
+    for (&c, &m) in inp.gateway_country.iter().zip(&inp.gateway_mass) {
+        if !(m > 0.0 && m <= 1.0) {
+            return Err(format!("a gateway of country {c} has mass {m}"));
+        }
+        mass[c] += m;
+    }
+    if let Some(c) = (0..mass.len()).find(|&c| mass[c] != 0.0 && (mass[c] - 1.0).abs() > 1e-12) {
+        return Err(format!("gateway masses of country {c} sum to {}", mass[c]));
     }
     if inp.ent_a_va().iter().any(|&a| a <= 0.0) {
         return Err("an enterprise has a nonpositive value-added coefficient".into());

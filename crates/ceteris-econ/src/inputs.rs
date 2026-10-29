@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{Leg, N_CLASSES, N_GOODS, Network, TradeParams, Wedges};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
@@ -108,9 +108,22 @@ pub struct EconInputs {
     /// The calibrated steady state a world starts from (ADR 0089, stage 5); `None` starts
     /// from the data state. Not in the digest: snapshots carry the state.
     pub steady: Option<Arc<Steady>>,
+    /// P05 per theta class of the calibration (ADR 0092), which its steady state was solved at;
+    /// `None` uncalibrated. [`EconInputs::trade_params`] carries it into the trade parameters.
+    pub border_nu: Option<[f64; N_CLASSES]>,
 }
 
 impl EconInputs {
+    /// The default trade parameters with the calibrated border friction, where there is one:
+    /// the parameters the calibrated steady state holds under.
+    pub fn trade_params(&self) -> TradeParams {
+        let default = TradeParams::default();
+        TradeParams {
+            border_nu: self.border_nu.unwrap_or(default.border_nu),
+            ..default
+        }
+    }
+
     pub fn n_countries(&self) -> usize {
         self.countries.s_l.len()
     }
@@ -412,10 +425,12 @@ impl EconInputs {
             enterprises,
             // the initial state, which snapshots carry
             steady: _,
+            border_nu,
         } = self;
         let Network {
             province_country,
             gateway_country,
+            gateway_mass,
             domestic,
             access,
             crossings,
@@ -459,6 +474,7 @@ impl EconInputs {
         b"ceteris-econ-inputs-1".iter().for_each(|&b| e.u8(b));
         u16s(&mut e, province_country);
         u16s(&mut e, gateway_country);
+        e.f64s(gateway_mass);
         for legs in [domestic, access, crossings] {
             encode_legs(&mut e, legs);
         }
@@ -498,6 +514,10 @@ impl EconInputs {
                 e.f64s(&w.within);
                 e.f64(w.sigma);
             }
+        }
+        if let Some(nu) = border_nu {
+            b"border-nu".iter().for_each(|&b| e.u8(b));
+            e.f64s(nu);
         }
         // appended only when present, so generated worlds keep their digest
         if !pack.is_empty() {
