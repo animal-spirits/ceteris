@@ -1,6 +1,6 @@
 # 0052. Forecast scorecard: real-time vintages, hard benchmarks and proper tests
 
-Status: proposed
+Status: proposed; amended per ADR 0241 (2026-10-29)
 Date: 2026-10-24
 Design sections: 15.3, 15.4, 15.5, 15.7
 Phase: P9 (scorecard), with the conditional-forecast mode in P3

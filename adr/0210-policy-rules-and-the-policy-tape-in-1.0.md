@@ -1,6 +1,6 @@
 # 0210. Policy in 1.0: estimated rules per lever and the policy tape
 
-Status: proposed (owner chose the option, 2026-10-28)
+Status: proposed (owner chose the option, 2026-10-28); amended per ADR 0241, 0242 (2026-10-29)
 Date: 2026-10-28
 Design sections: 2.4, 8.5, 9.2, 9.4, 9.6, 12.3, 12.6, 15.7, 17, 19.3, 23.4; ADRs 0136, 0162, 0207
 Phase: P5a (spec, monetary and fiscal rules, tape loader), P5b (default rule), P9 (estimation and ablation)

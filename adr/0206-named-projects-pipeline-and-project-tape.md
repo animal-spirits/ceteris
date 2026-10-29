@@ -1,6 +1,6 @@
 # 0206. Named projects, the 2000 pipeline and the project tape
 
-Status: proposed
+Status: proposed; amended per ADR 0241 (2026-10-29)
 Date: 2026-10-28
 Design sections: 5.2, 5.3, 5.5, 12.6, 14.2, 15.4, 15.5, 20.1; ADRs 0034, 0136, 0160, 0163, 0178, 0204, 0205
 Phase: P8 (named projects, tape); 1.x (seats and placement verbs)
