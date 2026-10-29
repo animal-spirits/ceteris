@@ -23,8 +23,13 @@ bin="$root/target/release/ceteris"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$work/tree"
+py() {
+    PYTHONPATH="$work/tree/python" uv run --project "$root/python" --locked python -P -s "$@"
+}
 
-(cd python && uv run --locked python -I "$root/scripts/parity/geo_inputs.py" "$work")
+py "$root/scripts/parity/geo_inputs.py" "$work"
 "$bin" pack compare "$work/python" "$pack" --table cells >"$work/pack-cells" || {
     cat "$work/pack-cells"
     echo "FAIL the Python inputs do not reproduce the pack's cells.arrow"
@@ -56,8 +61,8 @@ while read -r line; do
 done < <(grep -v ': ok ' "$work/compare")
 
 for name in provinces counties; do
-    (cd python && uv run --locked python -I "$root/scripts/parity/fills.py" \
-        "$work/python/$name.fill" "$work/rust/$name.fill" "$work/$name.geom.arrow") || {
+    py "$root/scripts/parity/fills.py" \
+        "$work/python/$name.fill" "$work/rust/$name.fill" "$work/$name.geom.arrow" || {
         echo "FAIL $name.fill"
         status=1
     }

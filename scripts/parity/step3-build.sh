@@ -49,8 +49,10 @@ pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="${WORK:-$(mktemp -d)}"
 mkdir -p "$work"
 echo "outputs in $work"
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$work/tree"
 py() {
-    (cd "$root/python" && PYTHONPATH="$root/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@")
+    (cd "$work/tree" && PYTHONPATH="$work/tree/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@")
 }
 
 # The Python build first: its econ step runs `cargo run --release` without the geos feature,
