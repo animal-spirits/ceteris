@@ -1,9 +1,9 @@
 # 0132. Stakes, memory and community play
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 14.4, 14.5, 12.4, 23.4, 23.5, 23.8; ADRs 0065, 0078
-Phase: 1.3 (cost screen, detective mode, relay, library); 2.0 (thirteen days, ghosts, alternate
+Phase: 2.0-alpha (ADR 0239: cost screen, detective mode, relay, library); 2.0 (thirteen days, ghosts, alternate
 lives)
 
 ## Context
@@ -39,7 +39,7 @@ Option 2.
 
 ## Migration
 
-- 1.3: cost screen, detective mode, relay, library. 2.0: thirteen days, ghosts, alternate
+- 2.0-alpha (ADR 0239): cost screen, detective mode, relay, library. 2.0: thirteen days, ghosts, alternate
   lives.
 
 ## Tests

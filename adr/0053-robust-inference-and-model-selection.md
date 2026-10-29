@@ -37,7 +37,7 @@ Option 2.
   2018), not point skill alone; lanes that the data cannot weigh (climate damages, ADR 0036)
   are excluded from stacking and reported separately.
 - Neural surrogates of annual aggregates, trained on the overnight batches, inside history
-  matching; Rust inference with burn or candle if Python round trips cost too much.
+  matching, with Rust inference (burn or candle) in `ceteris-calibrate`.
 - Causal validation: in simulated natural experiments (China shock, tariffs), the empirical
   estimators (difference in differences, synthetic control, shift-share) must recover the
   model's known causal effect; when they do not, the gap is reported with the comparison to the
@@ -50,7 +50,7 @@ Option 2.
 
 ## Migration
 
-- P9: python/ceteris/calibrate gains the SBC harness, stacking and the causal-validation
+- P9: `ceteris-calibrate` gains the SBC harness, stacking and the causal-validation
   runner.
 
 ## Tests

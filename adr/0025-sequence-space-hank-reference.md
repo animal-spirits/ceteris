@@ -28,7 +28,7 @@ matter most for fiscal counterfactuals.
 
 - P2: add a harness that computes the intertemporal MPC matrix of the consumption rule (8.6)
   from simulated one-off transfers to each pop group. It runs even with m = 1 and lambda = 0.
-- P5: build the reference in python/ceteris/reference with each state's income process, Taylor
+- P5: build the reference in `ceteris-reference` (in Rust, ADR 0113) with each state's income process, Taylor
   rule (P35), fiscal rule and trade openness from its initial data, and calibrate its household
   block to the same intertemporal MPC targets as P37.
 - V1 macro test: with perfect foresight in place of heuristics (S04) and frictions off, impulse
