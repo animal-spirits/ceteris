@@ -247,7 +247,7 @@ Carries ADR 0092's gateway mass weights, moved here from Task A3 by owner decisi
 **Interfaces:**
 - Produces: `local::fill_exact(users: &LocalUsers, stock: &[f64; N_LOCAL]) -> [f64; N_LOCAL]` enumerating the at most 2^3 regimes, keeping the largest feasible fill; the 32-pass bound and ad hoc clearing removed. The frictionless search finds the root of sum L*_ig(w) = (1 - u*) L^s on uncapped targets and caps only `allocate`.
 
-- [ ] Failing tests: `exact_fill_equals_converged_iteration` (every fixture case and proptest small provinces, 1e-12); `local_chain_terminates_on_cycles` settles in one solve; `frictionless_wage_matches_closed_form_when_one_target_reaches_supply`; `local_output_is_nonnegative_and_clears_locally` (steady_state.rs) still passes. Implement, run `cargo test -p ceteris-econ -p ceteris-calibrate`, commit `fix(econ): exact local fill and uncapped wage search (adr 0093)`.
+- [x] Failing tests: `exact_fill_equals_converged_iteration` (every fixture case and proptest small provinces, 1e-12); `local_chain_terminates_on_cycles` settles in one solve; `frictionless_wage_matches_closed_form_when_one_target_reaches_supply`; `local_output_is_nonnegative_and_clears_locally` (steady_state.rs) still passes. Implement, run `cargo test -p ceteris-econ -p ceteris-calibrate`, commit `fix(econ): exact local fill and uncapped wage search (adr 0093)`.
 
 ### Task B4: PIGL aggregation across pops (ADR 0094)
 
