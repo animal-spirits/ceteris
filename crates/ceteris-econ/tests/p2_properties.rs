@@ -1084,10 +1084,28 @@ fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
     uncovered <= rest
 }
 
+/// Whether good j fits at fills f up to rounding (ADR 0093, bounded work): where the passes stop
+/// at what f64 resolves, a good may be short by rounding, at most 1e-12 of its flows, which the
+/// split shares pro rata within the Leontief invariant's 1e-12.
+fn fits_up_to_rounding(p: &Province, j: usize, f: &[f64; 3]) -> bool {
+    let y = outputs_at(p, f);
+    let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
+    let uncovered: f64 = (0..y.len())
+        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
+        .sum();
+    uncovered <= rest + 1e-12 * (uncovered + rest)
+}
+
 /// The fill iteration run until a pass changes nothing, each step by bisection: the reference
 /// the exact solve must reproduce. None where that takes more than a million passes (a loop
 /// gain near 1) or a fill falls towards 0 below 1e-200.
 fn converged_fills(p: &Province) -> Option<[f64; 3]> {
+    bisection_iteration(p, false)
+}
+
+/// The fill iteration by bisection until a pass changes nothing (at most a million passes). A
+/// fill falling below 1e-200 is None, or 0 with `flush`.
+fn bisection_iteration(p: &Province, flush: bool) -> Option<[f64; 3]> {
     let mut f = [1.0; 3];
     for _ in 0..1_000_000 {
         let before = f;
@@ -1111,7 +1129,10 @@ fn converged_fills(p: &Province) -> Option<[f64; 3]> {
             }
             // near the bottom of f64 the iteration underflows good by good, which is no limit
             if lo > 0.0 && lo < 1e-200 {
-                return None;
+                if !flush {
+                    return None;
+                }
+                lo = 0.0;
             }
             f[j] = lo;
         }
@@ -1125,9 +1146,16 @@ fn converged_fills(p: &Province) -> Option<[f64; 3]> {
 /// Checks that every good fits at the exact fills and, where the fill iteration converges,
 /// that they are its limit. Returns the passes of the exact solve and whether it compared.
 fn fills_match(p: &Province, what: &str) -> (usize, bool) {
-    let (exact, passes) = local::fills(p);
+    let local::Fills {
+        fills: exact,
+        passes,
+        ..
+    } = local::fills(p);
     for j in 0..3 {
-        assert!(fits_at(p, j, &exact), "{what}: good {j} short at {exact:?}");
+        assert!(
+            fits_up_to_rounding(p, j, &exact),
+            "{what}: good {j} short at {exact:?}"
+        );
     }
     let Some(iterated) = converged_fills(p) else {
         return (passes, false);
@@ -1212,29 +1240,364 @@ proptest! {
     }
 }
 
-/// ADR 0093, Bounded work (2026-10-29): provinces whose fills fall towards 0 settle in bounded
-/// passes, at fills exactly 0 (never subnormal), every good fitting. Seed 13622680876955865696
-/// falls at a rate near 1 on one pass map (it took 781 passes and seconds before the closed
-/// form of a collapse); seed 709302389291714235 switches irregularly between two maps (15,678
-/// passes before the pass bound).
+/// The exact fills of `p` against the fill iteration run to convergence by bisection, which must
+/// converge: 1e-12 on the fills, every good fitting, no subnormal fill. Returns the fills and the
+/// jumps' work.
+fn assert_iteration_limit(p: &Province, what: &str) -> ([f64; 3], usize) {
+    let out = local::fills(p);
+    let iterated = converged_fills(p).unwrap_or_else(|| panic!("{what}: no reference limit"));
+    for j in 0..3 {
+        assert!(
+            fits_up_to_rounding(p, j, &out.fills),
+            "{what}: good {j} short at {out:?}"
+        );
+        assert!(
+            out.fills[j] == 0.0 || out.fills[j] >= f64::MIN_POSITIVE,
+            "{what}: {out:?}"
+        );
+        assert!(
+            (out.fills[j] - iterated[j]).abs() <= 1e-12,
+            "{what}: good {j}: {out:?} against {iterated:?}"
+        );
+    }
+    assert!(!out.stalled, "{what}: {out:?}");
+    (out.fills, out.work)
+}
+
+/// A province in the calibrated form: producers of the three local goods (enterprises 0 to 2)
+/// and 1 to 4 others, every enterprise using every local good but its own, no stocks, the caps
+/// solved so that every local market balances exactly at F = 1; then one enterprise's cap cut to
+/// 30 to 99%. None where the caps come out nonpositive.
+fn balanced_province(seed: u64) -> Option<Province> {
+    let mut s = seed | 1;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        (s >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let m = 1 + (next() * 4.0) as usize;
+    let n = 3 + m;
+    let coef: Vec<[f64; 3]> = (0..n)
+        .map(|u| std::array::from_fn(|j| if u == j { 0.0 } else { 0.02 + 0.2 * next() }))
+        .collect();
+    let own: [f64; 3] = std::array::from_fn(|_| 0.2 * next());
+    let mut cap = vec![0.0; n];
+    for c in cap.iter_mut().skip(3) {
+        *c = 0.5 + 10.0 * next();
+    }
+    // (1 - own_k) cap_k - sum over the other producers e of coef_ek cap_e = the others' use
+    let mut a = [[0.0f64; 4]; 3];
+    for k in 0..3 {
+        for e in 0..3 {
+            a[k][e] = if e == k { 1.0 - own[k] } else { -coef[e][k] };
+        }
+        a[k][3] = (3..n).map(|e| coef[e][k] * cap[e]).sum();
+    }
+    for c in 0..3 {
+        let pivot = (c..3)
+            .max_by(|&x, &y| a[x][c].abs().total_cmp(&a[y][c].abs()))
+            .unwrap();
+        a.swap(c, pivot);
+        for r in (0..3).filter(|&r| r != c) {
+            let ratio = a[r][c] / a[c][c];
+            let top = a[c];
+            for (x, t) in a[r].iter_mut().zip(&top) {
+                *x -= ratio * t;
+            }
+        }
+    }
+    for k in 0..3 {
+        cap[k] = a[k][3] / a[k][k];
+        if cap[k].is_nan() || cap[k] <= 0.0 {
+            return None;
+        }
+    }
+    let who = (next() * n as f64) as usize;
+    cap[who] *= 0.3 + 0.69 * next();
+    Some(Province {
+        cap,
+        coef,
+        stock: vec![[0.0; 3]; n],
+        producer: [Some(0), Some(1), Some(2)],
+        own,
+    })
+}
+
+/// The collapse of `p` towards 0 moved to a limit at fills t: users with stock fully covered,
+/// the others given stocks so that U - R is homogeneous in F - t (an extra user where the
+/// producer alone would exceed the needs).
+fn translate(p: &Province, t: f64) -> Province {
+    let mut q = p.clone();
+    for k in 0..3 {
+        let mut total = 0.0;
+        for u in 0..p.cap.len() {
+            let a = p.coef[u][k] * p.cap[u];
+            if a > 0.0 {
+                if p.stock[u][k] > 0.0 {
+                    q.stock[u][k] = a * 1.01;
+                } else {
+                    total += a;
+                }
+            }
+        }
+        let rest = match p.producer[k] {
+            None => 0.0,
+            Some(pp) => {
+                let uses = (0..3).any(|j| p.coef[pp][j] > 0.0);
+                (1.0 - p.own[k]) * p.cap[pp] * if uses { t } else { 1.0 }
+            }
+        };
+        if total == 0.0 {
+            continue;
+        }
+        let mut lambda = 1.0 - rest / (total * t);
+        if lambda < 0.0 {
+            q.cap.push((rest / t - total) / 0.5);
+            let mut c = [0.0; 3];
+            c[k] = 0.5;
+            q.coef.push(c);
+            q.stock.push([0.0; 3]);
+            lambda = 0.0;
+        }
+        for u in 0..p.cap.len() {
+            let a = p.coef[u][k] * p.cap[u];
+            if a > 0.0 && p.stock[u][k] == 0.0 {
+                q.stock[u][k] = lambda * a * t;
+            }
+        }
+    }
+    q
+}
+
+/// A two-good cycle with loop gain 1 - eps: enterprise 0 makes good 7 from good 8, enterprise 1
+/// good 8 from good 7, enterprise 2 uses good 7. The fill iteration's limit is F_8 = 0.6, F_7 =
+/// 0.6 (1 - eps) / 2, F_9 = 1.
+fn near_singular(eps: f64) -> (Province, [f64; 3]) {
+    let d = 1.0 - eps;
+    let s = 2.0 / d;
+    let p = Province {
+        cap: vec![1.0, 1.0, 3.0],
+        coef: vec![
+            [0.0, 0.5, 0.0],
+            [0.5, 0.0, 0.0],
+            [(s - 0.5) / 3.0, 0.0, 0.0],
+        ],
+        stock: vec![[0.0, 0.3 * eps, 0.0], [0.0; 3], [0.0; 3]],
+        producer: [Some(0), Some(1), None],
+        own: [0.0; 3],
+    };
+    (p, [0.6 / s, 0.6, 1.0])
+}
+
+/// ADR 0093, bounded work: provinces whose fills fall towards 0 settle in bounded passes and
+/// work, at fills exactly 0 (never subnormal), every good fitting. Seed 13622680876955865696
+/// falls at a rate near 1 on one pass map (781 passes and seconds when every cycle was followed);
+/// seed 709302389291714235 switches irregularly between two maps (15,678 passes before the stall
+/// rule).
 #[test]
 fn collapsing_provinces_settle_in_bounded_passes() {
-    for seed in [13622680876955865696u64, 709302389291714235] {
+    for (seed, bound) in [
+        (13622680876955865696u64, 16),
+        (709302389291714235, 4 * local::STALL_PASSES + 16),
+    ] {
         let p = random_province(seed);
-        let (f, passes) = local::fills(&p);
-        assert!(
-            passes <= 4 * local::STALL_PASSES + 16,
-            "seed {seed}: {passes} passes"
-        );
+        let out = local::fills(&p);
+        assert!(out.passes <= bound, "seed {seed}: {out:?}");
+        assert!(out.work <= local::WORK_BOUND, "seed {seed}: {out:?}");
         for j in 0..3 {
-            assert!(fits_at(&p, j, &f), "seed {seed}: good {j} short at {f:?}");
             assert!(
-                f[j] == 0.0 || f[j] >= f64::MIN_POSITIVE,
-                "seed {seed}: {f:?}"
+                fits_up_to_rounding(&p, j, &out.fills),
+                "seed {seed}: good {j} short at {out:?}"
             );
         }
-        assert_eq!(f, [0.0; 3], "seed {seed}");
+        assert_eq!(out.fills, [0.0; 3], "seed {seed}");
     }
+}
+
+/// ADR 0093, bounded work: markets balanced exactly along a ray of fills (the calibrated form
+/// after a capacity cut with stocks used up) drift by a unit in the last place per pass; no jump
+/// extrapolates that drift, and the fills are the iteration's limit (1e-12).
+#[test]
+fn balanced_markets_keep_their_fills() {
+    for seed in [
+        12609463204538519967u64,
+        8100737891477092383,
+        3786356886628797132,
+        11555781272310548465,
+        18077030379050124424,
+    ] {
+        let p = balanced_province(seed).expect("positive caps");
+        let (_, work) = assert_iteration_limit(&p, &format!("balanced seed {seed}"));
+        assert!(work <= local::WORK_BOUND, "seed {seed}: work {work}");
+    }
+}
+
+/// The exact limit of `translate(p, t)` where it is degenerate, by construction. `translate`
+/// makes U - R of every good homogeneous in F - t. So the goods whose fill the iteration on `p`
+/// itself takes to 0 (by bisection, a fill below 1e-200 taken as 0) fall to t, where supply
+/// equals need exactly and the iteration's own result depends on rounding (ADR 0093, bounded
+/// work): their limit is t. A good the iteration on `p` never cuts (fill 1) fits at every fill
+/// above 0 there, so above t here, and its limit is 1, though rounding at the others' limit may
+/// cut it in the plain iteration. None for any other good, which keeps the comparison with the
+/// iteration.
+fn degenerate_limit(p: &Province, t: f64) -> [Option<f64>; 3] {
+    let original = bisection_iteration(p, true).expect("the original iteration converges");
+    original.map(|v| {
+        if v == 0.0 {
+            Some(t)
+        } else if v == 1.0 {
+            Some(1.0)
+        } else {
+            None
+        }
+    })
+}
+
+/// How close to its exact limit a degenerate good can be placed (ADR 0093, bounded work): at the
+/// limit, U - R is a difference of terms of the size of the gross flows that vanishes linearly in
+/// F - t, so its rounding, eps times the gross flows, decides whether the good fits within eps
+/// times the gross flows over the slope of U - R of t. That is about 2e-12 on the translated
+/// collapses; the tests use the cap 1e-11.
+const RESOLUTION: f64 = 1e-11;
+
+/// The fills of `translate(random_province(seed), t)`. Where the province is degenerate (some
+/// good of the original falls to 0, by [`degenerate_limit`]), each good with a known exact limit
+/// is within [`RESOLUTION`] of it, and each other good lies in [t, 1] to that resolution (the
+/// fills only fall, and a good falls no further than its share of the collapse). Otherwise every
+/// good is at the plain iteration's limit (1e-12). Every good fits to 1e-12 of its flows.
+fn assert_translated_limit(seed: u64, t: f64) -> local::Fills {
+    let original = random_province(seed);
+    let p = translate(&original, t);
+    let exact = degenerate_limit(&original, t);
+    let degenerate = exact.contains(&Some(t));
+    let out = local::fills(&p);
+    let iterated = (!degenerate).then(|| converged_fills(&p)).flatten();
+    for (j, (&f, &limit)) in out.fills.iter().zip(&exact).enumerate() {
+        assert!(
+            fits_up_to_rounding(&p, j, &out.fills),
+            "seed {seed}: good {j} short at {out:?}"
+        );
+        if degenerate {
+            match limit {
+                Some(want) => assert!(
+                    (f - want).abs() <= RESOLUTION,
+                    "seed {seed} t {t}: good {j}: {out:?} against {want}"
+                ),
+                None => assert!(
+                    f >= t - RESOLUTION && f <= 1.0,
+                    "seed {seed} t {t}: good {j}: {out:?} outside [t, 1]"
+                ),
+            }
+        } else {
+            let want = iterated.unwrap_or_else(|| panic!("seed {seed}: no reference"))[j];
+            assert!(
+                (f - want).abs() <= 1e-12,
+                "seed {seed} t {t}: good {j}: {out:?} against {want}"
+            );
+        }
+    }
+    out
+}
+
+/// ADR 0093, bounded work: collapses moved to a limit at t, at their exact limits to the
+/// resolution bound.
+/// - 14411755600342564334 and 9578761762967406418 at 0.1: a jump once overshot them to 0.
+/// - 14707373548302171422 at 0.1: its first step lands one unit below 1 (a midpoint of the
+///   piece rounded onto its end, a panic before).
+/// - 7252145407610438004 at 0.3 and 13596793787635918054 at 0.5: the fills stop 1.0e-12 and
+///   1.8e-12 above t, where rounding of U - R decides the fit.
+/// - 12318889963466380618 at 0.3 and 16703400009402685098 at 0.5: the plain iteration stops
+///   3.6e-12 and 1.4e-12 above t on a good whose original limit is neither 0 nor 1.
+/// - 6603813906490728229 at 0.3: good 1 fits strictly above t in exact arithmetic (its balance
+///   there is delta (a - r) with a <= r), so its limit is 1; the plain iteration rounds it down
+///   to 0.3 once the other goods reach t to rounding.
+#[test]
+fn translated_collapses_stop_at_their_limit() {
+    for (seed, t) in [
+        (14411755600342564334u64, 0.1),
+        (9578761762967406418, 0.1),
+        (14707373548302171422, 0.1),
+        (7252145407610438004, 0.3),
+        (13596793787635918054, 0.5),
+        (12318889963466380618, 0.3),
+        (16703400009402685098, 0.5),
+        (6603813906490728229, 0.3),
+    ] {
+        let out = assert_translated_limit(seed, t);
+        if seed == 6603813906490728229 {
+            assert_eq!(out.fills[1], 1.0, "{out:?}");
+        }
+    }
+}
+
+/// The collapsing provinces among `n` random draws from `offset` (SplitMix64 seeds): at least
+/// 12 passes and at least two fills of 0, each moved to limits at 0.1, 0.3 and 0.5, every one
+/// held to [`assert_translated_limit`].
+fn translated_sample(n: u64, offset: u64) -> usize {
+    let mix = |i: u64| {
+        let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    };
+    let mut checked = 0;
+    for i in 0..n {
+        let seed = mix(i + offset);
+        let out = local::fills(&random_province(seed));
+        if out.passes < 12 || out.fills.iter().filter(|&&x| x == 0.0).count() < 2 {
+            continue;
+        }
+        for t in [0.1, 0.3, 0.5] {
+            assert_translated_limit(seed, t);
+            checked += 1;
+        }
+    }
+    checked
+}
+
+/// ADR 0093, bounded work: a sample of the translated collapses (300,000 draws).
+#[test]
+fn translated_collapses_sample() {
+    assert!(translated_sample(300_000, 12 << 40) > 60);
+}
+
+/// ADR 0093, bounded work: the translated collapses of 3,000,000 draws (about 1,260 provinces);
+/// slow, so run on request.
+#[test]
+#[ignore]
+fn translated_collapses_full() {
+    assert!(translated_sample(3_000_000, 12 << 40) > 1_000);
+}
+
+/// ADR 0093, bounded work: a province alternating between two pass maps stops at what f64
+/// resolves 1.7e-12 above its limit unless the stop takes the two-pass cycle's fixed point.
+#[test]
+fn stop_takes_the_cycle_fixed_point() {
+    let p = random_province(13018842184927700166);
+    let (_, work) = assert_iteration_limit(&p, "seed 13018842184927700166");
+    assert!(work <= local::WORK_BOUND);
+}
+
+/// ADR 0093, bounded work: a cycle with loop gain 1 - 1e-15 ends near its limit 0.6, not at 0:
+/// the stall rule moves its goods to the last pass's fixed point, clamped to [0, f]. Within 10%:
+/// the gain's rounding (about 1e-16) is a tenth of its distance from 1, which is the problem's
+/// own conditioning.
+#[test]
+fn near_singular_cycle_keeps_its_limit() {
+    let (p, limit) = near_singular(1e-15);
+    let out = local::fills(&p);
+    for j in 0..3 {
+        assert!(
+            fits_up_to_rounding(&p, j, &out.fills),
+            "good {j} short at {out:?}"
+        );
+        assert!(
+            (out.fills[j] - limit[j]).abs() <= 0.1 * limit[j],
+            "{out:?} against {limit:?}"
+        );
+    }
+    assert!(out.passes <= 4 * local::STALL_PASSES + 16, "{out:?}");
 }
 
 /// ADR 0093, Amendment: at every province tick of the fixture's default run (60 ticks) and of
