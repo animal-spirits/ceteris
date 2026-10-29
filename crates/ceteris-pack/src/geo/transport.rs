@@ -146,24 +146,33 @@ fn number(v: &Value) -> Option<f64> {
 
 pub fn chokepoints() -> Result<Vec<Chokepoint>, String> {
     let path = workspace_root().join(CONFIG_DIR).join("chokepoints.toml");
-    let t = read_table(&path)?;
-    let bad = |what: &str| format!("{}: {what}", path.display());
+    parse_chokepoints(&read_table(&path)?).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The chokepoints of a `chokepoints.toml` table: a missing name, centre or radius, or a link
+/// of fewer than two points, is an error, as in the Python build.
+pub fn parse_chokepoints(t: &toml::Table) -> Result<Vec<Chokepoint>, String> {
     let list = t
         .get("chokepoint")
         .and_then(Value::as_array)
-        .ok_or_else(|| bad("no [[chokepoint]]"))?;
+        .ok_or("no [[chokepoint]]")?;
     list.iter()
-        .map(|c| {
-            let name = c.get("name").and_then(Value::as_str).unwrap_or_default();
+        .enumerate()
+        .map(|(i, c)| {
+            let name = c
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("chokepoint {i}: no name"))?;
             let field = |k: &str| {
                 c.get(k)
                     .and_then(number)
-                    .ok_or_else(|| bad(&format!("{name}: no {k}")))
+                    .ok_or_else(|| format!("{name}: no {k}"))
             };
             let link = match c.get("link") {
                 None => None,
-                Some(v) => Some(
-                    v.as_array()
+                Some(v) => {
+                    let path = v
+                        .as_array()
                         .into_iter()
                         .flatten()
                         .map(|p| match p.as_array().map(|xy| xy.as_slice()) {
@@ -171,8 +180,12 @@ pub fn chokepoints() -> Result<Vec<Chokepoint>, String> {
                             _ => None,
                         })
                         .collect::<Option<Vec<_>>>()
-                        .ok_or_else(|| bad(&format!("{name}: link is not a list of [lon, lat]")))?,
-                ),
+                        .ok_or_else(|| format!("{name}: link is not a list of [lon, lat]"))?;
+                    if path.len() < 2 {
+                        return Err(format!("{name}: a link needs two points or more"));
+                    }
+                    Some(path)
+                }
             };
             Ok(Chokepoint {
                 name: name.to_owned(),
@@ -470,6 +483,14 @@ mod graph {
         }
     }
 
+    /// Segments per quarter circle of `BaseGeometry.buffer`, which transport.py calls (the
+    /// function `shapely.buffer` takes 8).
+    const QUAD_SEGS: i32 = 16;
+
+    fn buffer(g: &impl Geom, distance: f64) -> geos::GResult<Geometry> {
+        g.buffer(distance, QUAD_SEGS)
+    }
+
     fn point(x: f64, y: f64) -> Result<Geometry, String> {
         CoordSeq::new_from_buffer(&[x, y], 1, CoordType::XY)
             .and_then(Geometry::create_point)
@@ -520,6 +541,7 @@ mod graph {
                 }
             }
             if found.is_none() {
+                // The lowest index on a tie; shapely takes GEOS's STRtree traversal order.
                 let mut best: Option<(usize, f64)> = None;
                 for g in index.meeting(&envelope(&p, max_deg)?) {
                     let d = geoms[g].distance(&p).map_err(fail)?;
@@ -554,7 +576,7 @@ mod graph {
         for (a, b) in pairs {
             let border = geoms[a]
                 .boundary()
-                .and_then(|edge| edge.intersection(&geoms[b].buffer(0.005, 8)?))
+                .and_then(|edge| edge.intersection(&buffer(&geoms[b], 0.005)?))
                 .map_err(fail)?;
             if is_empty(&border)? {
                 continue;
@@ -567,7 +589,7 @@ mod graph {
             if border.length().map_err(fail)? * km_per_deg < MIN_BORDER_KM.min(smaller / 4.0) {
                 continue;
             }
-            let zone = border.buffer(0.01, 8).map_err(fail)?;
+            let zone = buffer(&border, 0.01).map_err(fail)?;
             let prepared = zone.to_prepared_geom().map_err(fail)?;
             let mut crossed = false;
             for r in rail_index.meeting(&envelope(&zone, 0.0)?) {
@@ -987,6 +1009,21 @@ mod graph {
             coastal,
         })
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Shapely's `box(0, 0, 1, 1).buffer(0.5)` on GEOS 3.15: 69 ring points.
+        #[test]
+        fn buffers_take_the_segments_of_the_buffer_method() {
+            let square = overlay::rectangle(0.0, 0.0, 1.0, 1.0).unwrap();
+            let b = buffer(&square, 0.5).unwrap();
+            let ring = b.get_exterior_ring().unwrap();
+            assert_eq!(ring.get_num_points().unwrap(), 69);
+            assert_eq!(b.area().unwrap(), 3.7841371226364857);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -999,6 +1036,26 @@ mod tests {
             assert!(cp.radius_km > 0.0 && !cp.name.is_empty(), "{cp:?}");
             assert!(cp.link.as_ref().is_none_or(|l| l.len() >= 2), "{cp:?}");
         }
+    }
+
+    #[test]
+    fn chokepoints_need_a_name_and_links_two_points() {
+        let parse = |text: &str| parse_chokepoints(&text.parse().unwrap());
+        let ok = "[[chokepoint]]\nname = \"A\"\nlon = 1\nlat = 2.5\nradius_km = 3\n";
+        let cp = parse(ok).unwrap();
+        assert_eq!((cp[0].lon, cp[0].radius_km, cp[0].canal), (1.0, 3.0, false));
+        let unnamed = "[[chokepoint]]\nlon = 1\nlat = 2\nradius_km = 3\n";
+        assert_eq!(parse(unnamed).unwrap_err(), "chokepoint 0: no name");
+        let short = format!("{ok}link = [[1.0, 2.0]]\n");
+        assert_eq!(
+            parse(&short).unwrap_err(),
+            "A: a link needs two points or more"
+        );
+        let long = format!("{ok}link = [[1.0, 2.0], [3, 4]]\n");
+        assert_eq!(
+            parse(&long).unwrap()[0].link,
+            Some(vec![[1.0, 2.0], [3.0, 4.0]])
+        );
     }
 
     #[test]
