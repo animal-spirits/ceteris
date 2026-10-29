@@ -95,7 +95,7 @@ pub fn to_multipolygon(g: &impl Geom) -> Result<MultiPolygon, String> {
 }
 
 /// A Polygon or MultiPolygon as geo holds it, keeping its type; anything empty is the empty
-/// polygon.
+/// polygon. A collection, such as a repair that leaves lines, keeps its `polygonal` part.
 pub fn to_geo(g: &impl Geom) -> Result<geo::Geometry, String> {
     if g.is_empty().map_err(fail)? {
         return Ok(geo::Geometry::Polygon(Polygon::new(
@@ -105,6 +105,7 @@ pub fn to_geo(g: &impl Geom) -> Result<geo::Geometry, String> {
     }
     match kind(g)? {
         GeometryTypes::Polygon => Ok(geo::Geometry::Polygon(to_polygon(g)?)),
+        GeometryTypes::GeometryCollection => to_geo(&polygonal(g)?),
         _ => Ok(geo::Geometry::MultiPolygon(to_multipolygon(g)?)),
     }
 }
@@ -268,6 +269,37 @@ mod tests {
             let repaired = make_valid(&bowtie).unwrap();
             assert_eq!(to_multipolygon(&repaired).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn a_repair_that_leaves_a_line_keeps_its_polygon() {
+        let spike = from_polygon(&Polygon::new(
+            LineString::from(vec![
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (1.0, 1.0),
+                (1.0, 2.0),
+                (1.0, 1.0),
+                (0.0, 1.0),
+                (0.0, 0.0),
+            ]),
+            vec![],
+        ))
+        .unwrap();
+        let repaired = make_valid(&spike).unwrap();
+        assert_eq!(kind(&repaired).unwrap(), GeometryTypes::GeometryCollection);
+        // shapely 2.2 on GEOS 3.15: geo.polygonal(make_valid(g)).
+        let expected = Polygon::new(
+            LineString::from(vec![
+                (1.0, 1.0),
+                (1.0, 0.0),
+                (0.0, 0.0),
+                (0.0, 1.0),
+                (1.0, 1.0),
+            ]),
+            vec![],
+        );
+        assert_eq!(to_geo(&repaired).unwrap(), geo::Geometry::Polygon(expected));
     }
 
     #[test]
