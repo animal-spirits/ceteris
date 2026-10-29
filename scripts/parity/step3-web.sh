@@ -29,7 +29,7 @@ else
     trap 'rm -rf "$work"' EXIT
 fi
 source "$root/scripts/parity/packs_tree.sh"
-packs_tree "$work/tree"
+packs_tree "$root" "$work/tree"
 py() {
     PYTHONPATH="$work/tree/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@"
 }

@@ -32,7 +32,7 @@ pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="${WORK:-$(mktemp -d)}"
 echo "outputs in $work"
 source "$root/scripts/parity/packs_tree.sh"
-packs_tree "$work/tree"
+packs_tree "$root" "$work/tree"
 
 # `pack compare` of every table into OUT; fails when it prints nothing, or exits non-zero with
 # every line ok.

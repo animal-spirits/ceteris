@@ -50,7 +50,7 @@ work="${WORK:-$(mktemp -d)}"
 mkdir -p "$work"
 echo "outputs in $work"
 source "$root/scripts/parity/packs_tree.sh"
-packs_tree "$work/tree"
+packs_tree "$root" "$work/tree"
 py() {
     (cd "$work/tree" && PYTHONPATH="$work/tree/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@")
 }

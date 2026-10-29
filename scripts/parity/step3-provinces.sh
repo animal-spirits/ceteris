@@ -38,7 +38,7 @@ pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 source "$root/scripts/parity/packs_tree.sh"
-packs_tree "$work/tree"
+packs_tree "$root" "$work/tree"
 
 # `pack compare A B > OUT`; fails when it prints nothing, or exits non-zero with every line ok.
 compare() {

@@ -143,10 +143,12 @@ checks the Rust readers against them.
 
 The Python pack modules (`python/ceteris/packs/*.py` but `__init__.py`) and `test_packs.py`
 are deleted after step 3's parity; the configuration files stay in `python/ceteris/packs/` until
-step 5. Each step 3 script takes the package from the commit before that deletion: `packs_tree.sh`
-extracts `python/ceteris` from it (`git archive`) into `tree/` in the script's work directory and
-links every other top-level entry of the checkout beside it, because the package finds
-`data/cache`, its configuration and the cargo workspace from its own path. The Python runs with
+step 5. Each step 3 script, and the fetch cases of `step1.sh`, take the package from the commit
+before that deletion: `packs_tree.sh` extracts `python/ceteris` from it (`git archive`) into
+`tree/` in the script's work directory, copies the current configuration over it, and links every
+other top-level entry of the checkout beside it, because the package finds `data/cache`, its
+configuration and the cargo workspace from its own path. A history without that commit (a
+shallow clone) stops the script with a message. The Python runs with
 `PYTHONPATH=tree/python`; `build.build`'s econ step runs `cargo run` in that tree.
 `geo_readers.py` needs the same `PYTHONPATH`.
 

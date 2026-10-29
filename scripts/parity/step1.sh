@@ -2,7 +2,8 @@
 # Step 1 parity: `ceteris pack check-sources` against check_sources.py and `ceteris pack fetch`
 # against `python -m ceteris.packs.fetch`: same stdout, stderr and exit code on the real files
 # and cache and on mutated copies of the configuration. check_sources.py is deleted from the
-# tree, so it is restored from the commit before the port.
+# tree, so it is restored from the commit before the port; the Python fetch module is deleted
+# too, so the fetch cases run in a tree of the package before its deletion (`packs_tree.sh`).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -12,6 +13,8 @@ bin="$root/target/release/ceteris"
 packs=python/ceteris/packs
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+source "$root/scripts/parity/packs_tree.sh"
+packs_tree "$root" "$work/tree"
 
 git show 6ebe94a^:python/ceteris/packs/check_sources.py >"$work/check_sources.py"
 mkdir -p "$work/real/python/ceteris"
@@ -122,16 +125,15 @@ run_fetch() {
     fi
 }
 
-run_fetch "$root" real
-run_fetch "$root" real --record
+run_fetch "$work/tree" real
+run_fetch "$work/tree" real --record
 
 # Each mutation edits fetch.toml in a copy of the tree and prints nothing.
-python3 -I - "$work/fetch" "$root/data" <<'PY'
+python3 -I - "$work/fetch" "$root/data" "$work/tree/python/ceteris" <<'PY'
 import re, shutil, sys
 from pathlib import Path
 
-out, data = Path(sys.argv[1]), Path(sys.argv[2])
-src = Path.cwd() / "python/ceteris"
+out, data, src = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 toml = (src / "packs/fetch.toml").read_text()
 first = re.search(r"\[\[file\]\]\n(?:.*\n)+?\n", toml[toml.index("[[file]]"):]).group(0)
 manual = next(b for b in re.split(r"\n(?=\[\[file\]\])", toml) if "manual = true" in b and "optional" not in b and "sha256" in b)
