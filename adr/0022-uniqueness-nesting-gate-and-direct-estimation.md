@@ -199,7 +199,8 @@ unchanged; this records how "Gauss-Newton" is carried out and what the diagnosti
   (`gravity::write_toml`).
 
 Result on the 2000 pack with the B1 econ tables (scratch rebuild, as above): air not identified (3
-pairs), held at 8; 37 steps, 5 of them halved; profile deviance 191,825 to 179,517; rail / road
+pairs; rail 13,367, sea 14,654), held at 8; 33 steps, none halved (a strict deviance comparison
+took 37 steps, halving 5 of them on deviance noise near convergence); profile deviance 191,825 to 179,517; rail / road
 36.61 (s.e. 19.1), sea / road 84.59 (39.5); ln tau coefficients -0.99, -1.08, -1.05, -1.51; N
 319,275, pseudo-R2 0.873. This is the log-distance corner described under "P04 is not
 identified", now reached without a crash; the ordering stop rule fires and nothing is written.
