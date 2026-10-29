@@ -60,3 +60,17 @@ Clip (b); width (b).
 
 - Inflation and price collapses are bounded by behaviour, not by a numerical guard.
 - Aggregate accounts double in width; their count is small, so memory change is negligible.
+
+## As built
+
+Built in pre-p3/econ-review. The eight-start test found the calibration unique only up to one
+common factor on the traded r (and so on VA0, output, w0, money and the PIGL scale): spending
+scales with the r, and stage 4 re-inverts lambda at the new income, so the level followed the
+start (by up to 4e-4 from starts at +-50%). Each pass now rescales the traded r so that world
+traded value added, sum_e r_g VA_e, equals the data's (`ceteris_calibrate::steady::calibrate_from`,
+after the pass's Sinkhorn; controller ruling, 2026-10-29, pending the owner), and the test asserts
+the whole fixed point. The fixture's calibrated nominal values move by 1.9%; a recalibration of
+the 2000 pack moves them by 2.56% (every traded r times 1.02559), so the installed pack tables,
+which still load, differ from a fresh calibration by that factor until B8 recalibrates. P151
+(c_max_storable) is carried in the snapshot header beside P148, outside the static digest, since
+it never binds at a steady state and the installed calibrations keep their digest.
