@@ -43,9 +43,9 @@ const YEAR: i64 = 2000;
 /// P43 time cost of transit lambda_g per day, the starts of `TradeParams::default()` (trade
 /// SPEC), traded goods.
 pub const TIME_COST: [f64; N_TRADED] = [0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010];
-/// P01 classes of `TradeParams::default()` (ADR 0023) and their current values.
-pub const CLASSES: [&[usize]; 3] = [&[3], &[6], &[0, 1, 2, 4, 5]];
-pub const THETA_DEFAULT: [f64; 3] = [2.62, 5.19, 10.57];
+/// P01 classes of `TradeParams::default()` (ADRs 0023 and 0101) and their current values.
+pub const CLASSES: [&[usize]; 4] = [&[3, 5], &[6], &[0, 4], &[1, 2]];
+pub const THETA_DEFAULT: [f64; 4] = [2.91, 4.14, 7.68, 16.91];
 /// P05 start.
 pub const BORDER_DEFAULT: f64 = 0.3;
 /// `ceteris_trade::goods::tariff_group`: primary, manufactured.

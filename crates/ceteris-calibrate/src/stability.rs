@@ -10,11 +10,11 @@ use crate::write::Table;
 
 pub const NAMES: [&str; 7] = [
     "Agriculture",
-    "Crude oil and gas",
+    "Crude oil, gas and refined fuels",
     "Coal and other mining",
     "Food",
     "Light manufacturing",
-    "Chemicals, refined fuels, metals",
+    "Chemicals and metals",
     "Machinery, electronics, vehicles",
 ];
 /// Lower end of E: total household demand (P06).
@@ -170,7 +170,8 @@ pub fn table(fixture: &Path) -> Result<Vec<String>, String> {
         .iter()
         .enumerate()
         .map(|(g, name)| {
-            let theta = number(&trade["theta"][g], "trade.theta")?;
+            let theta = number(&trade["theta"][g], "trade.theta")?
+                * number(&trade["theta_scale"], "trade.theta_scale")?;
             let cover = number(&trade["coverage"][g], "trade.coverage")?;
             let range = *eps
                 .get(&g)

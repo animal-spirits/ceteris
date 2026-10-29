@@ -380,6 +380,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     } = params;
     let TradeParams {
         theta,
+        theta_scale,
         coverage,
         kappa1,
         kappa2,
@@ -415,6 +416,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         e.u8(*technology as u8);
     }
     e.f64s(theta);
+    e.f64(*theta_scale);
     e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain, *border_nu]);
     e.f64s(coverage);
     e.f64s(time_cost);
@@ -423,7 +425,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
 
 /// [`static_digest`] of `inputs` under the structural subset of the parameters, the rest at
 /// their defaults: the parameters a steady state (calibrated or solved) depends on, `sigma_demand`,
-/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `coverage`, `border_nu` and `time_cost`.
+/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `theta_scale`, `coverage`, `border_nu` and
+/// `time_cost`.
 /// The adjustment speeds and the frictionless and rationing switches are free.
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
@@ -437,6 +440,7 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
         },
         &TradeParams {
             theta: trade.theta,
+            theta_scale: trade.theta_scale,
             coverage: trade.coverage,
             border_nu: trade.border_nu,
             time_cost: trade.time_cost,
@@ -698,6 +702,9 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
     );
     index.as_chunks::<N_GOODS>().0.to_vec()
 }
+
+/// Relative rounding of market holdings that the transit accounts carry (`EconWorld::end_tick`).
+const TRANSIT_ROUNDING: f64 = 1e-12;
 
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the initial state: the calibrated
@@ -1201,7 +1208,8 @@ impl State for EconWorld {
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
     /// (S >= 0, and held by the market account to 1e-9 of the turnover S + Q + D), transit
-    /// (pipeline and transit accounts agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// (pipeline and transit accounts agree to 1e-9, plus 1e-12 of the good's market turnover),
+    /// gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
     /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
     /// dispatch mass (units dispatched = origin sales, 1e-12)
@@ -1283,7 +1291,17 @@ impl State for EconWorld {
         let in_flight = self.pipeline.in_flight_all();
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
             let (flight, held) = (in_flight[g], self.ledger.goods(account, g));
-            if (held - flight).abs() > GOODS_TOLERANCE * flight.max(held).max(1.0) {
+            // the account is filled with differences of market holdings, so it carries their
+            // rounding, a few ulps of each market's turnover: shipments far below a market's
+            // stock can vanish from it
+            let turnover: f64 = (0..lay.accounts.market.len())
+                .map(|i| i * N_GOODS + g)
+                .map(|c| {
+                    self.markets.inventory[c] + self.markets.supply[c] + self.markets.demand[c]
+                })
+                .sum();
+            let rounding = TRANSIT_ROUNDING * turnover;
+            if (held - flight).abs() > GOODS_TOLERANCE * flight.max(held).max(1.0) + rounding {
                 return fail(
                     "transit",
                     format!("good {g}: pipeline {flight}, account {held}"),

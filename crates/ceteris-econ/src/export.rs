@@ -73,8 +73,9 @@ use crate::world::{
 /// enterprise coefficients follow as cost shares (owner decision, 2026-10-25). 8: `countries`
 /// has the natural rate `u_star` (ADR 0089). 9: kernel factors are f64 (ADR 0093), the kernel
 /// tables carry the reciprocal loss and duty factors in place of tau, border tau and tariff
-/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093).
-pub const EXPORT_FORMAT: &str = "9";
+/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093). 10: `params.json` has
+/// `theta_scale` (P150), by which the kernel factors and the sourcing scale theta (ADR 0101).
+pub const EXPORT_FORMAT: &str = "10";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -455,6 +456,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
     let register = [
         ("theta", "P01"),
         ("theta_class", "P01"),
+        ("theta_scale", "P150"),
         ("coverage", "P02"),
         ("kappa1", "P03a"),
         ("kappa2", "P03b"),
@@ -517,6 +519,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
     let trade = [
         ("theta", nums(&t.theta)),
         ("theta_class", format!("{:?}", t.theta_class)),
+        ("theta_scale", num(t.theta_scale)),
         ("coverage", nums(&t.coverage)),
         ("kappa1", num(t.kappa1)),
         ("kappa2", num(t.kappa2)),
@@ -886,15 +889,14 @@ mod tests {
 
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
-            json.contains(
-                "\"theta\": [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]"
-            ),
+            json.contains("\"theta\": [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
             "{json}"
         );
         assert!(
-            json.contains("\"theta_class\": [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]"),
+            json.contains("\"theta_class\": [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]"),
             "{json}"
         );
+        assert!(json.contains("\"theta_scale\": 1.0"), "{json}");
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
         assert!(
             json.contains("\"pigl_theta\": [0.634, 0.082, 0.284]"),
@@ -910,7 +912,7 @@ mod tests {
         );
         for id in [
             "P01", "P02", "P03a", "P03b", "P03c", "P05", "P43", "P06", "P08", "P39", "P40", "P41",
-            "P42", "P45", "P46", "P47",
+            "P42", "P45", "P46", "P47", "P150",
         ] {
             assert!(
                 json.contains(&format!("\"{id}\"")),

@@ -45,9 +45,9 @@ const FLOW_FLOOR: f64 = 1e-6;
 /// The reference solver's tolerance on scaled residuals.
 const REFERENCE_TOL: f64 = 1e-10;
 const H2_DISTANCE: (f64, f64) = (-1.1, -0.7);
-/// ADR 0023, Prior band: theta_c +/- 2 s.e. of the Caliendo-Parro class estimate, fixed before
-/// the gate ran.
-const THETA_BANDS: [(f64, f64); 3] = [(1.40, 3.84), (3.36, 7.02), (8.15, 12.99)];
+/// ADR 0023, Prior band and Amendment 2026-10-29: theta_c +/- 2 s.e. of the harmonic class mean
+/// of the Caliendo-Parro sector estimates (delta method), fixed before the gate ran.
+const THETA_BANDS: [(f64, f64); 4] = [(1.02, 4.81), (-3.97, 12.26), (5.94, 9.42), (8.33, 25.50)];
 const N_TRADED: usize = 7;
 
 fn root() -> PathBuf {

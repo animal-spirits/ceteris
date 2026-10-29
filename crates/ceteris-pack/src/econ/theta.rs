@@ -1,5 +1,5 @@
 //! Trade elasticity theta of the P2 goods from Caliendo and Parro (2015) sector estimates, and
-//! its classes (ADRs 0018 and 0023).
+//! its classes (ADRs 0018, 0023 and 0101).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -59,6 +59,30 @@ pub const CALIENDO_PARRO: [Sector; 20] = [
     sector("Other Transport", &["35"], 0.39, 1.08),
     sector("Other", &["36", "37"], 3.98, 1.08),
 ];
+
+/// Sectors whose theta the authors' replication files (`Equilibrium/T.txt`) set to 8.22, the
+/// vector the goods use in place of the printed column (ADR 0023, Amendment 2026-10-29).
+pub const REPLICATION: [(&str, f64); 2] = [("Auto", 8.22), ("Other Transport", 8.22)];
+
+/// Theta of sector `s` (an index into `CALIENDO_PARRO`) on the replication vector.
+pub fn sector_theta(s: usize) -> f64 {
+    let sector = &CALIENDO_PARRO[s];
+    REPLICATION
+        .iter()
+        .find(|(name, _)| *name == sector.name)
+        .map_or(sector.theta, |(_, theta)| *theta)
+}
+
+/// Weighted harmonic mean (sum w / sum w / theta); entries of zero weight are left out.
+pub fn harmonic_mean(theta: &[f64], weight: &[f64]) -> f64 {
+    let (w, inv): (Vec<f64>, Vec<f64>) = theta
+        .iter()
+        .zip(weight)
+        .filter(|(_, w)| **w != 0.0)
+        .map(|(t, w)| (*w, w / t))
+        .unzip();
+    pairwise_sum(&w) / pairwise_sum(&inv)
+}
 
 /// ISIC Rev 3 division of each CPA 2.1 activity of the OECD key, from the Rev 3 to Rev 4
 /// breaks: weapons (C254) and military vehicles (C304) were Rev 3 2927, computers (C262) Rev 3
@@ -125,31 +149,23 @@ fn sector_of_cpa(code: &str) -> Option<usize> {
         .position(|s| s.divisions.contains(&division))
 }
 
-/// Theta per good, the trade-value-weighted arithmetic mean of the sector estimates over the HS
-/// lines of the good (the sector of a line is the ISIC Rev 3 division of its CPA activity), and
-/// the trade value of the lines with an estimate. Lines without one, and goods without such
-/// lines, weigh nothing (theta 0).
+/// Theta per good, the trade-value-weighted harmonic mean of the sector thetas (replication
+/// vector) over the HS lines of the good (the sector of a line is the ISIC Rev 3 division of its
+/// CPA activity), and the trade value of the lines with an estimate. Lines without one, and
+/// goods without such lines, weigh nothing (theta 0).
 pub fn by_good(
     hs_cpa: &Names,
     lines: &BTreeMap<&str, usize>,
     value: &ByLine,
 ) -> ([f64; N_GOODS], [f64; N_GOODS]) {
-    let (mut num, mut den) = ([0.0; N_GOODS], [0.0; N_GOODS]);
-    for (&hs, &good) in lines {
-        let v = value.get(hs).copied().unwrap_or(0.0);
-        let Some(sector) = sector_of_cpa(&hs_cpa[hs]) else {
-            continue;
-        };
-        if v == 0.0 {
-            continue;
-        }
-        num[good] += v * CALIENDO_PARRO[sector].theta;
-        den[good] += v;
-    }
+    let thetas: [f64; 20] = std::array::from_fn(sector_theta);
+    let values = sector_values(hs_cpa, lines, value);
     let mut theta = [0.0; N_GOODS];
+    let mut den = [0.0; N_GOODS];
     for g in 0..N_GOODS {
+        den[g] = pairwise_sum(&values[g]);
         if den[g] > 0.0 {
-            theta[g] = num[g] / den[g];
+            theta[g] = harmonic_mean(&thetas, &values[g]);
         }
     }
     (theta, den)
@@ -157,7 +173,7 @@ pub fn by_good(
 
 /// Trade value (USD) of each good's lines by Caliendo-Parro sector, `[good][sector]` in the
 /// order of `CALIENDO_PARRO`: the weights behind `by_good`, whose theta of good g is the row's
-/// mean of the sector thetas.
+/// harmonic mean of the sector thetas.
 pub fn sector_values(
     hs_cpa: &Names,
     lines: &BTreeMap<&str, usize>,
@@ -177,38 +193,57 @@ pub fn sector_values(
     out
 }
 
-/// H2 prior band of each class (ADR 0023, Prior band): its theta is the mean of the sector
-/// estimates weighted by the class's trade value per sector (the weights of `classes`), and its
-/// standard error that of the same weighted mean of independent estimates,
-/// sqrt(sum_s w_s^2 se_s^2). `values` is `sector_values` of the traded goods, `of` their
-/// classes. Returns each class's theta and standard error; the band is theta +/- 2 se.
-pub fn class_bands(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
+/// Trade value by sector of each class: the rows of `values` (`sector_values` of the traded
+/// goods) summed over the goods `of` puts in the class.
+fn class_values(values: &[[f64; 20]], of: &[u8]) -> Vec<[f64; 20]> {
     let classes = usize::from(of.iter().copied().max().unwrap_or(0)) + 1;
-    let (mut centre, mut se) = (Vec::new(), Vec::new());
-    for c in 0..classes {
-        let mut by_class = [0.0; 20];
-        for row in values
-            .iter()
-            .zip(of)
-            .filter(|(_, o)| usize::from(**o) == c)
-            .map(|(r, _)| r)
-        {
-            for (s, x) in by_class.iter_mut().zip(row) {
-                *s += x;
-            }
+    let mut out = vec![[0.0; 20]; classes];
+    for (row, &c) in values.iter().zip(of) {
+        for (s, x) in out[usize::from(c)].iter_mut().zip(row) {
+            *s += x;
         }
-        let total = pairwise_sum(&by_class);
-        let w = by_class.map(|x| x / total);
-        centre.push(dot(w.iter().zip(&CALIENDO_PARRO).map(|(w, s)| w * s.theta)));
-        se.push(
-            dot(w
-                .iter()
-                .zip(&CALIENDO_PARRO)
-                .map(|(w, s)| (w * w) * (s.se * s.se)))
-            .sqrt(),
-        );
     }
-    (centre, se)
+    out
+}
+
+/// Arithmetic and harmonic means of the sector thetas (replication vector) over each class's
+/// lines, weighted by trade value. The harmonic one is the class theta of `classes`.
+pub fn class_means(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
+    let thetas: [f64; 20] = std::array::from_fn(sector_theta);
+    class_values(values, of)
+        .iter()
+        .map(|v| {
+            let total = pairwise_sum(v);
+            let arithmetic = dot(v.iter().zip(&thetas).map(|(v, t)| v / total * t));
+            (arithmetic, harmonic_mean(&thetas, v))
+        })
+        .unzip()
+}
+
+/// H2 prior band of each class (ADR 0023, Prior band and Amendment 2026-10-29): its theta is the
+/// harmonic mean H of the sector thetas weighted by the class's trade value per sector (the
+/// weights of `classes`), and its standard error that of H for independent sector estimates by
+/// the delta method, H^2 sqrt(sum_s w_s^2 se_s^2 / theta_s^4). `values` is `sector_values` of
+/// the traded goods, `of` their classes. Returns each class's theta and standard error; the band
+/// is theta +/- 2 se.
+pub fn class_bands(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
+    let thetas: [f64; 20] = std::array::from_fn(sector_theta);
+    class_values(values, of)
+        .iter()
+        .map(|v| {
+            let total = pairwise_sum(v);
+            let h = harmonic_mean(&thetas, v);
+            let var = dot(v
+                .iter()
+                .zip(&thetas)
+                .zip(&CALIENDO_PARRO)
+                .map(|((v, t), s)| {
+                    let d = v / total * s.se / (t * t);
+                    d * d
+                }));
+            (h, h * h * var.sqrt())
+        })
+        .unzip()
 }
 
 fn dot(terms: impl Iterator<Item = f64>) -> f64 {
@@ -230,6 +265,22 @@ pub fn caliendo_parro_with_value(
     Ok((theta, value))
 }
 
+/// Class of each traded good by the ADR 0023 rule on the harmonic thetas, and the arithmetic
+/// and harmonic means of each class (`class_means`).
+pub type ClassTable = (Vec<u8>, Vec<f64>, Vec<f64>);
+
+/// [`ClassTable`] from BACI 2000 values through the OECD HS to CPA key.
+pub fn class_table(baci_2000: &Path, hs_key: &Path) -> Result<ClassTable, String> {
+    let hs_cpa = read_hs_cpa(hs_key)?;
+    let lines = hs_goods(&hs_cpa);
+    let value = baci_values(baci_2000)?;
+    let (theta, v) = by_good(&hs_cpa, &lines, &value);
+    let (of, _) = classes(&theta[..TRADED], &v[..TRADED])?;
+    let (arithmetic, harmonic) =
+        class_means(&sector_values(&hs_cpa, &lines, &value)[..TRADED], &of);
+    Ok((of, arithmetic, harmonic))
+}
+
 /// Theta per good (0 for the local goods 7 to 9).
 pub fn caliendo_parro_by_good(baci_2000: &Path, hs_key: &Path) -> Result<[f64; N_GOODS], String> {
     Ok(caliendo_parro_with_value(baci_2000, hs_key)?.0)
@@ -238,8 +289,8 @@ pub fn caliendo_parro_by_good(baci_2000: &Path, hs_key: &Path) -> Result<[f64; N
 /// Sort the thetas by value and split them into the fewest classes (3 to 5) of consecutive
 /// goods whose largest theta is at most `CLASS_SPREAD` times their smallest; among such splits
 /// the one with the smallest largest spread, then the first in order. Returns the class of each
-/// good (0 for the lowest thetas) and each class's theta, the trade-value-weighted mean of its
-/// goods'.
+/// good (0 for the lowest thetas) and each class's theta, the trade-value-weighted harmonic mean
+/// of its goods' (the harmonic mean over the class's lines when the goods' are).
 pub fn classes(theta: &[f64], value: &[f64]) -> Result<(Vec<u8>, Vec<f64>), String> {
     let n = theta.len();
     let mut order: Vec<usize> = (0..n).collect();
@@ -278,8 +329,8 @@ pub fn classes(theta: &[f64], value: &[f64]) -> Result<(Vec<u8>, Vec<f64>), Stri
                 if total == 0.0 {
                     return Err("Weights sum to zero, can't be normalized".into());
                 }
-                let products: Vec<f64> = members.iter().map(|&m| theta[m] * value[m]).collect();
-                class_theta.push(pairwise_sum(&products) / total);
+                let thetas: Vec<f64> = members.iter().map(|&m| theta[m]).collect();
+                class_theta.push(harmonic_mean(&thetas, &weights));
             }
             return Ok((of, class_theta));
         }

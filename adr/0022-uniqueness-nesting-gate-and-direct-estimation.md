@@ -130,6 +130,39 @@ vehicles (2,421 to 2,891); the rest move by less than 10%. The ADR 0023 rule reg
 manufacturing joins agriculture, mining and chemicals in the top class). The estimates above are
 pending a re-run on the new sample and classes; the owner decision stands.
 
+**Re-run after the C19 move and the four classes (2026-10-29, ADRs 0092 and 0101).** `ceteris
+gravity` on the 2000 pack with its econ tables rebuilt in scratch (refined petroleum in good 1; the
+installed pack is unchanged until it is rebuilt and recalibrated), BACI HS92 V202601 split by the
+OECD key: 242 countries, 218 trading, 4,266 unreached pairs, international trade 6,495.1 bn USD
+(6,495.0 bn in the sample), domestic flows for 80 ICIO economies with no cell dropped.
+
+| Parameter | Estimate (s.e.) | N | pseudo-R2 | Default |
+|---|---|---|---|---|
+| P01 class 0 (goods 3, 5) | 12.42 (0.97) | 92,880 | 0.840 | 2.91 |
+| P01 class 1 (good 6) | 14.01 (1.65) | 46,440 | 0.863 | 4.14 |
+| P01 class 2 (goods 0, 4) | 10.94 (1.38) | 92,880 | 0.871 | 7.68 |
+| P01 class 3 (goods 1, 2) | 14.05 (2.01) | 87,075 | 0.616 | 16.91 |
+| P05 border friction nu | 0.206 (0.036) | 44,800 | 0.990 | 0.3 |
+
+Class trade weights 0.268, 0.445, 0.174, 0.113. P05 by class: nu 0.263, 0.116, 0.342, 0.248 (s.e.
+0.038, 0.024, 0.078, 0.058) at same-fit thetas 12.05, 15.80, 10.19, 12.75 (border coefficients
+-2.81, -1.73, -3.00, -2.82). The ln tau coefficients of the theta fits are -8.49, -7.94, -8.80 and
+-7.50.
+
+The PPML thetas lie between 10.9 and 14.1 for every class, as on the earlier partitions: the
+tariff variation identifies the agreement effect (see Sensitivity), not the spread of the
+Caliendo-Parro classes. Only class 3 (16.91) has its default inside two standard errors of its
+estimate.
+
+P04 did not converge on the four classes. The Gauss-Newton steps drive the air ratio down (-5.2,
+-4.6, -6.0, -7.3, -9.6, -12.2), rail and sea up (1.56 and 1.97 at step 6), until tau is no longer
+positive on an air path and the step-7 fit refuses it; `ceteris gravity` then stops with "flows must
+be finite and nonnegative, regressors finite" and writes no report. On the same flows with the
+three classes of before (food; good 6; goods 0, 1, 2, 4, 5) it converges in 47 steps to rail 0.234
+(s.e. 0.093), sea 0.102 (0.014) and air -1.59 (1.49), and the ordering stop rule fires as before.
+The P01 estimates on those three classes are 12.98 (1.19), 14.01 (1.65) and 12.21 (1.06); P05 is
+0.207 (0.035). P04 stays unidentified (above); the estimator is unchanged.
+
 ## Consequences
 
 The P2 gate is well posed, and fewer parameters enter joint inference in P9.

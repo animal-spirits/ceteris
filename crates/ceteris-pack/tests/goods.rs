@@ -15,8 +15,9 @@ use ceteris_pack::econ::goods::{
     weights_from_baci,
 };
 use ceteris_pack::econ::theta::{
-    CALIENDO_PARRO, CLASS_SPREAD, REV3_OF_CPA, by_good, caliendo_parro_by_good,
-    caliendo_parro_with_value, class_bands, classes, sector_values,
+    CALIENDO_PARRO, CLASS_SPREAD, REPLICATION, REV3_OF_CPA, by_good, caliendo_parro_by_good,
+    caliendo_parro_with_value, class_bands, class_means, classes, harmonic_mean, sector_theta,
+    sector_values,
 };
 use ceteris_pack::read::baci::{baci_values, read_hs_cpa};
 use ceteris_pack::read::icio::N_GOODS;
@@ -67,14 +68,11 @@ fn icio_map_follows_the_spec_table() {
         .collect();
     let expected: [(usize, Vec<&str>); 10] = [
         (0, vec!["A01", "A02", "A03"]),
-        (1, vec!["B06", "B09"]),
+        (1, vec!["B06", "B09", "C19"]),
         (2, vec!["B05", "B07", "B08"]),
         (3, vec!["C10T12"]),
         (4, vec!["C13T15", "C16", "C17_18", "C31T33"]),
-        (
-            5,
-            vec!["C19", "C20", "C21", "C22", "C23", "C24A", "C24B", "C25"],
-        ),
+        (5, vec!["C20", "C21", "C22", "C23", "C24A", "C24B", "C25"]),
         (6, vec!["C26", "C27", "C28", "C29", "C301", "C302T309"]),
         (7, vec!["D", "E"]),
         (8, vec!["F"]),
@@ -85,6 +83,15 @@ fn icio_map_follows_the_spec_table() {
             assert_eq!(good(code), Some(g), "{code}");
         }
     }
+}
+
+#[test]
+fn c19_is_in_good_1() {
+    assert_eq!(good("C19"), Some(1));
+    assert_eq!(good_of_division("19"), Some(1));
+    assert_eq!(good_of_cpa("C19"), Some(1));
+    assert_eq!(NAMES[1], "Crude oil, gas and refined fuels");
+    assert_eq!(NAMES[5], "Chemicals and metals");
 }
 
 #[test]
@@ -157,7 +164,7 @@ fn hs_goods_put_each_line_in_one_good() {
         ("999999", "_X"),
     ]);
     let got: Vec<(&str, usize)> = hs_goods(&key).into_iter().collect();
-    assert_eq!(got, [("270111", 2), ("270120", 5), ("270900", 1)]);
+    assert_eq!(got, [("270111", 2), ("270120", 1), ("270900", 1)]);
 }
 
 #[test]
@@ -315,7 +322,7 @@ fn theta_by_good_is_weighted_by_trade() {
         &hs_key(&dir.path().join("key.xlsx"), &lines),
     )
     .unwrap();
-    assert!(approx(t[4], (3.0 * 8.10 + 1.0 * 11.50) / 4.0, 1e-12));
+    assert!(approx(t[4], 4.0 / (3.0 / 8.10 + 1.0 / 11.50), 1e-12));
     assert!(approx(t[3], 2.62, 1e-12));
     for g in [0, 1, 2, 5, 6, 7, 8, 9] {
         assert_eq!(t[g], 0.0, "good {g}");
@@ -329,7 +336,11 @@ fn classes_follow_the_rule() {
     let v = [1.0, 1.0, 3.0, 1.0, 1.0, 1.0, 2.0];
     let (of, ct) = classes(&t, &v).unwrap();
     assert_eq!(of, [0, 1, 1, 0, 2, 2, 2]);
-    let want = [2.45, (4.0 + 3.0 * 5.9) / 4.0, (8.0 + 9.0 + 22.0) / 4.0];
+    let want = [
+        2.0 / (1.0 / 2.0 + 1.0 / 2.9),
+        4.0 / (1.0 / 4.0 + 3.0 / 5.9),
+        4.0 / (1.0 / 8.0 + 1.0 / 9.0 + 2.0 / 11.0),
+    ];
     for (got, want) in ct.iter().zip(want) {
         assert!(approx(*got, want, 1e-12));
     }
@@ -364,9 +375,79 @@ fn class_bands_weight_the_sector_estimates() {
     (a[0], b[1]) = (1.0, 3.0);
     let (centre, se) = class_bands(&[a, b], &[0, 0]);
     let (w0, w1) = (0.25, 0.75);
-    assert!(approx(centre[0], w0 * 9.11 + w1 * 13.53, 1e-12));
-    let var = w0 * w0 * 2.01 * 2.01 + w1 * w1 * 3.67 * 3.67;
-    assert!(approx(se[0], f64::sqrt(var), 1e-12));
+    let h = 1.0 / (w0 / 9.11 + w1 / 13.53);
+    assert!(approx(centre[0], h, 1e-12));
+    // delta method: dH/dtheta_s = H^2 w_s / theta_s^2
+    let var = (w0 * 2.01 / (9.11 * 9.11)).powi(2) + (w1 * 3.67 / (13.53 * 13.53)).powi(2);
+    assert!(approx(se[0], h * h * f64::sqrt(var), 1e-12));
+    let (arithmetic, harmonic) = class_means(&[a, b], &[0, 0]);
+    assert!(approx(arithmetic[0], w0 * 9.11 + w1 * 13.53, 1e-12));
+    assert_eq!(harmonic, centre);
+}
+
+#[test]
+fn class_theta_is_harmonic() {
+    // A two-line toy class: theta 2 and 8 with trade weights 1 and 3.
+    let (theta, weight) = ([2.0, 8.0], [1.0, 3.0]);
+    let want = 1.0 / (0.25 / 2.0 + 0.75 / 8.0);
+    assert!(approx(harmonic_mean(&theta, &weight), want, 1e-15));
+    let (of, ct) = classes(&[2.0, 2.2, 5.0, 8.0, 8.5, 20.0, 21.0], &[1.0; 7]).unwrap();
+    assert_eq!(of, [0, 0, 1, 2, 2, 3, 3]);
+    assert!(approx(
+        ct[2],
+        harmonic_mean(&[8.0, 8.5], &[1.0, 1.0]),
+        1e-15
+    ));
+    // A zero weight leaves its theta out, even a theta of 0.
+    assert_eq!(harmonic_mean(&[0.0, 4.0], &[0.0, 2.0]), 4.0);
+}
+
+/// First-order welfare of a two-line class under a non-uniform cost shock that lowers every
+/// line's domestic share by the same log amount: lines are Eaton-Kortum markets with domestic
+/// share lambda_l = 1 / (1 + tau_l^-theta_l), welfare lambda_l^(-1/theta_l), and Cobb-Douglas
+/// weights w_l across lines. A class model reads its domestic share's change and its theta; it
+/// matches the lines at the harmonic mean and not at the arithmetic one.
+#[test]
+fn welfare_first_order_at_harmonic_theta() {
+    let theta = [2.0, 8.0];
+    let w = [0.5, 0.5];
+    let tau = [1.6, 1.25];
+    let lambda = |t: f64, th: f64| 1.0 / (1.0 + t.powf(-th));
+    let d = -1e-6;
+    let mut line = 0.0;
+    let (mut before, mut after) = (0.0, 0.0);
+    for l in 0..2 {
+        let l0 = lambda(tau[l], theta[l]);
+        let l1 = l0 * f64::exp(d);
+        // the shock that takes the line's share from l0 to l1
+        let tau1 = (1.0 / l1 - 1.0).powf(-1.0 / theta[l]);
+        assert!(approx(lambda(tau1, theta[l]), l1, 1e-12));
+        line += w[l] * (-(l1.ln() - l0.ln()) / theta[l]);
+        before += w[l] * l0;
+        after += w[l] * l1;
+    }
+    let d_class = after.ln() - before.ln();
+    let class = |th: f64| -d_class / th;
+    let harmonic = harmonic_mean(&theta, &w);
+    let arithmetic = w[0] * theta[0] + w[1] * theta[1];
+    assert!(
+        approx(class(harmonic), line, 1e-6),
+        "{} vs {line}",
+        class(harmonic)
+    );
+    assert!((class(arithmetic) / line - 1.0).abs() > 0.3);
+}
+
+#[test]
+fn replication_vector_replaces_auto_and_other_transport() {
+    for (s, sector) in CALIENDO_PARRO.iter().enumerate() {
+        let want = match sector.name {
+            "Auto" | "Other Transport" => 8.22,
+            _ => sector.theta,
+        };
+        assert_eq!(sector_theta(s), want, "{}", sector.name);
+    }
+    assert_eq!(REPLICATION.len(), 2);
 }
 
 #[test]
@@ -447,17 +528,18 @@ fn bulk_is_heavier_than_machinery() {
 #[test]
 fn caliendo_parro_by_good_from_baci() {
     let Some((t, v)) = cp() else { return };
-    let want = [9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19, 0.0, 0.0, 0.0];
+    let want = [9.11, 17.64, 13.53, 2.62, 7.46, 3.00, 4.14, 0.0, 0.0, 0.0];
     for (g, w) in want.into_iter().enumerate() {
         assert!((t[g] - w).abs() <= 0.005, "good {g}: {} vs {w}", t[g]);
     }
     assert!(v[..7].iter().all(|x| *x > 1e11) && v[7..].iter().all(|x| *x == 0.0));
     let (of, ct) = classes(&t[..7], &v[..7]).unwrap();
-    assert_eq!(of, [2, 2, 2, 0, 2, 2, 1]);
-    for (got, want) in ct.iter().zip([2.62, 5.19, 10.57]) {
-        assert!((got - want).abs() <= 0.005);
+    assert_eq!(of, [2, 3, 3, 0, 2, 0, 1]);
+    for (got, want) in ct.iter().zip([2.91, 4.14, 7.68, 16.91]) {
+        assert!((got - want).abs() <= 0.005, "{got} vs {want}");
     }
-    assert!((ct[2] / ct[0]).ln() > CLASS_SPREAD.ln());
+    // three classes cannot hold: food and machinery alone are more than 1.5 apart
+    assert!(t[6] / t[3] > CLASS_SPREAD);
 }
 
 /// The fixture's goods table as exported from `TradeParams::default()`.
@@ -554,10 +636,12 @@ fn h2_prior_bands_follow_the_standard_errors() {
     for (c, w) in centre.iter().zip(&ct) {
         assert!(approx(*c, *w, 1e-12));
     }
-    for (got, want) in se.iter().zip([0.61, 0.917, 1.211]) {
+    for (got, want) in se.iter().zip([0.948, 4.058, 0.870, 4.294]) {
         assert!((got - want).abs() <= 5e-4, "{got} vs {want}");
     }
-    for (got, want) in se.iter().zip([1.22, 1.83, 2.42]) {
-        assert!((2.0 * got - want).abs() <= 5e-3);
+    let (arithmetic, harmonic) = class_means(&sector_values(key, &lines, &value)[..7], &of);
+    assert_eq!(harmonic, centre);
+    for (got, want) in arithmetic.iter().zip([3.23, 7.20, 9.15, 26.51]) {
+        assert!((got - want).abs() <= 0.005, "{got} vs {want}");
     }
 }

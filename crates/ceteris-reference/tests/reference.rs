@@ -179,10 +179,10 @@ fn validate_rejects_a_gini_outside_the_unit_interval() {
 fn load_rejects_another_export_format() {
     let dir = std::env::temp_dir().join(format!("ceteris-reference-format-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("params.json"), r#"{"format": "8"}"#).unwrap();
+    std::fs::write(dir.join("params.json"), r#"{"format": "9"}"#).unwrap();
     let err = io::load(&dir).unwrap_err();
     std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(err, "export format 8, expected 9");
+    assert_eq!(err, "export format 9, expected 10");
 }
 
 /// Flows of the form a_o K_od b_d are recovered from their own marginals.

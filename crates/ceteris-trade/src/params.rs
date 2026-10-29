@@ -4,14 +4,15 @@ use crate::goods::{N_GOODS, STORABLE};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
-    /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.62 to 10.57, the
-    /// range of the class values (ADR 0018). Each traded good carries its class's theta, derived
+    /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.91 to 16.91, the
+    /// range of the class values (ADR 0101). Each traded good carries its class's theta, derived
     /// by the ADR 0023 rule from the OECD concordance (`ceteris_pack::econ::theta`): Caliendo and
-    /// Parro (2015, Table 1, 99% sample) sector estimates averaged over the HS lines of the good
-    /// with BACI 2000 trade weights: agriculture 9.11, crude oil and gas 13.53, coal and other
-    /// mining 13.53, food 2.62, light manufacturing 9.15, chemicals, refined fuels and metals
-    /// 10.57, machinery, electronics and vehicles 5.19; grouped into 3 classes within a factor
-    /// 1.5, each at the trade-weighted mean of its goods, to two decimals. The test
+    /// Parro (2015, Table 1, 99% sample) sector estimates, with Auto and Other Transport at 8.22
+    /// as in the authors' replication vector, harmonic means over the HS lines of the good with
+    /// BACI 2000 trade weights: agriculture 9.11, crude oil, gas and refined fuels 17.64, coal and
+    /// other mining 13.53, food 2.62, light manufacturing 7.46, chemicals and metals 3.00,
+    /// machinery, electronics and vehicles 4.14; grouped into 4 classes within a factor 1.5, each
+    /// at the harmonic mean over its lines, to two decimals. The test
     /// `fixture_theta_defaults_follow_the_estimator` (ceteris-pack) keeps these and `theta_class`
     /// equal to the estimator's output.
     pub theta: [f64; N_GOODS],
@@ -19,18 +20,22 @@ pub struct TradeParams {
     /// (unused). Kernels stay per good, since weight classes are goods in P2 (ADR 0018); the
     /// map lets goods of one class share kernels once weight classes merge.
     pub theta_class: [u8; N_GOODS],
+    /// P150 theta scale: the kernel is built at theta_g times this (ADR 0101). Tariff
+    /// experiments report the lane {0.6, 1, 1.4}.
+    pub theta_scale: f64,
     /// P02 inventory target coverage s_g in months; local goods 0.
     pub coverage: [f64; N_GOODS],
     /// P03a price response to the demand-supply gap, per month. Prior 0.01 to 0.5 (widened
     /// from 0.05 by owner decision, 2026-10-24, for stability), default 0.05 (owner decision,
     /// 2026-10-24, MIGRATION Task 6: at 0.02 the expectation loop of ADR 0019 breaks V1 for
     /// every gain in the P45 prior). The derived stability region (`specs/trade/SPEC.md`,
-    /// Stability region) bounds it at 0.141 to 0.169 for the theta-10.57 goods, 0.250 to 0.307
-    /// at theta 5.19 and 0.368 to 0.508 for food. Growth factor per tick of a small deviation
-    /// from the fixture's GE equilibrium between ticks 300 and 600 at the per-good thetas,
-    /// kappa2 = 0 (frictionless / default): at the defaults (pi^e gain 0.006) 0.99597 /
-    /// 0.99636 on the blessed fixture (after the theta task; 0.99644 / 0.99676 at MIGRATION
-    /// Task 8 and 0.9963 / 0.9969 at Task 6, at the previous thetas);
+    /// Stability region) bounds it at 0.101 to 0.110 for the theta-16.91 goods, 0.191 to 0.222
+    /// at theta 7.68, 0.287 to 0.366 at theta 4.14 and 0.307 to 0.473 at theta 2.91. Growth
+    /// factor per tick of a small deviation from the fixture's GE equilibrium between ticks 300
+    /// and 600 at the per-good thetas before ADR 0101 (10.57, 5.19, 2.62), kappa2 = 0
+    /// (frictionless / default): at the defaults (pi^e gain 0.006) 0.99597 / 0.99636 on the
+    /// blessed fixture (after the theta task; 0.99644 / 0.99676 at MIGRATION Task 8 and
+    /// 0.9963 / 0.9969 at Task 6, at the previous thetas);
     /// measured at MIGRATION Task 6, with pi^e = 0, kappa1 0.02: 0.9954 / 0.9954; 0.05:
     /// 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756; 0.2: 1.0000 / 1.0000 (oscillates), the same with
     /// every crossing lag at 3 months (the full pack's cap).
@@ -85,8 +90,9 @@ impl TradeParams {
 impl Default for TradeParams {
     fn default() -> Self {
         Self {
-            theta: [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0],
-            theta_class: [2, 2, 2, 0, 2, 2, 1, 0, 0, 0],
+            theta: [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
+            theta_class: [2, 3, 3, 0, 2, 0, 1, 0, 0, 0],
+            theta_scale: 1.0,
             coverage: [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.05,
             kappa2: 0.0,
