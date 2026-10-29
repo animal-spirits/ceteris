@@ -1,6 +1,6 @@
 # 0238. Data revisions and real-time vintages
 
-Status: proposed
+Status: proposed (owner chose the option, 2026-10-29)
 Date: 2026-10-29
 Design sections: 12.3, 12.6, 15.2, 15.4, 17, 19.2; ADRs 0052, 0065, 0161, 0176, 0207, 0210, 0212
 Phase: P9 (with 0065, lean)
@@ -26,7 +26,7 @@ scorecard; ADR 0161 names revisions as an ascension rung with no mechanism behin
 
 ## Decision
 
-Option 1, under switch S21 (off: published equals truth, golden hashes unchanged).
+Option 1 (owner, 2026-10-29), under switch S21 (off: published equals truth, golden hashes unchanged).
 
 **Release model.** For state s, series x and reference period t, the release at age k is
 truth plus an error e(k) = e(0) * rho^k, where e(0) has standard deviation scaled by statistical
