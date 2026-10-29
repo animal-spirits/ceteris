@@ -1,6 +1,6 @@
 # 0144. Replay hooks
 
-Status: proposed
+Status: proposed; amended by ADR 0240 (game and flavour items to 2.0+)
 Date: 2026-10-28
 Design sections: 20, 23.7; ADRs 0049, 0078, 0118, 0124, 0128, 0132
 Phase: P3 (ghost line, run names, postcards), 1.x (codex, front page, seed of the week)
