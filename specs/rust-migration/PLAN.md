@@ -31,6 +31,7 @@
 - Pack format stays 3: schemas and metadata are unchanged; only file bytes differ (pyarrow vs arrow-rs), so the pinned digests in `tests/golden/p1-pack.txt`, `p2-pack.txt` and `manifest.json` are re-pinned once, at step 4f, with the core goldens, as ADR 0113 says. [none]
 - `ceteris-reference` reads the `ceteris export` Arrow directory (export format 9), never core structs; a workspace test reads `cargo metadata` and fails on any edge from it to `ceteris-core`, `-geo`, `-trade` or `-econ`. [none]
 - Fill files (`web/*.fill`, read by the app) are compared by decoded triangle sets and per-province area; byte identity is required only if `earcutr` reproduces `mapbox_earcut`'s order. [app reader unchanged either way]
+- Step 3 determinism test runs owner-side (two full builds, equal digests but web/map.pmtiles); no fixture cache drives the geo build and CI has no GEOS. [owner ruling pending]
 
 ## Global Constraints
 
@@ -192,7 +193,16 @@ Dropped 2026-10-28: the owner keeps the 4,796 provinces and ADR 0114 is rejected
 
 ### Task 5: Remove Python and update records
 
-- [ ] Delete `python/` (pyproject, uv.lock, remaining tests), the CI `python` job; move the TOML configs to `crates/ceteris-pack/config/`; update DESIGN 14.8, 16.1, 19.1, 19.3, 22.1 (snapshot and the Claude Doc), ADRs 0003, 0050, 0096 per ADR 0113 Migration, READMEs and specs that name `uv run` commands (grep `uv run`, `python -m ceteris`); ADR 0113 As built completed. Full workspace tests, determinism test, `cargo deny`. Commit `chore: remove python after the rust migration (adr 0113)`.
+- [ ] Delete `python/` (pyproject, uv.lock); the CI `python` job and the last pytest went in step 3. Move the TOML configs to `crates/ceteris-pack/config/`; update DESIGN 14.8, 16.1, 19.1, 19.3, 22.1 (snapshot and the Claude Doc), ADRs 0003, 0050, 0096 per ADR 0113 Migration, READMEs and specs that name `uv run` commands (grep `uv run`, `python -m ceteris`); ADR 0113 As built completed. Full workspace tests, determinism test, `cargo deny`. Commit `chore: remove python after the rust migration (adr 0113)`.
+
+  Left by step 3 (found at 3e3):
+  - Paths: `ceteris_pack::sources::CONFIG_DIR`, `CONFIG` in `crates/ceteris-cli/tests/fetch_cli.rs`, `gravity --write`'s default `python/ceteris/packs/gravity_2000.toml` (`ceteris-cli/src/main.rs`), the Edit allow on `sources.toml` in `.claude/settings.json`, the `sources.toml` path in CLAUDE.md and README.md, the README layout row.
+  - Stale TOML header comments that name the Python: `fetch.toml` (line 2, `fetch.py` and `python -m ceteris.packs.fetch --record`), `counties.lock.toml` (line 1, `python -m ceteris.packs.counties --record`; `ceteris pack record-counties` writes this header, so change both together), `validation.toml` (line 2).
+  - Doc comments naming deleted `.py` files: 19 lines in `crates/` (`git grep -E "[a-z_]+\.py([^a-z]|$)" -- crates`), mostly in `ceteris-pack` (`build`, `manifest`, `geo/{dump,overlay,provinces,transport}`, `web/dump`) and the parity tests of `ceteris-reference` and `ceteris-calibrate`.
+  - Parity-only code that goes with `scripts/parity/` (with `h3_centres.py`): `pack build --centres` and `--simple`, `pack dump-geo` and `dump-web`, `provinces::Centres::Table` (keep `Centres::H3o`), `pack dump-reader`, and the parity tests that read `CETERIS_*_PARITY` dumps.
+  - Specs: `specs/geo/SPEC.md` line 10 (`python/ceteris/packs`), `specs/econ/SPEC.md`, `specs/trade/SPEC.md`, `specs/pre-p3/PLAN.md`; `specs/econ/{PLAN,MIGRATION}.md` are history.
+  - ADRs naming the Python pipeline besides 0003, 0050, 0096: 0005, 0009, 0010, 0015, 0018, 0022, 0025, 0052, 0053, 0089, 0107, 0108 (a pointer line each, or leave as history).
+  - `python/ceteris/__init__.py` and `packs/__init__.py`, `.claude/rules/python.md`, `scripts/convert_kummu.py` (uv and rasterio, owner-side: keep under a documented environment or port), `scripts/parity/` with `packs_tree.sh`.
 
 ---
 
