@@ -15,7 +15,7 @@ any edge cost changes. For P2 it also computes route-choice trade costs per good
 Route choice below). It owns the physical part of the generalized trade cost (5.4); the
 inventory, risk, tariff and friction terms, and the iceberg mapping, arrive with trade in P2.
 
-## Pack (built by `uv run python -m ceteris.packs`, about 2.5 minutes; needs tippecanoe)
+## Pack (built by `ceteris pack build` with the `geos` feature, about 2.5 minutes; needs GEOS 3.15 and tippecanoe)
 
 Inputs are pinned by URL, sha256 and size in `fetch.toml` and `counties.lock.toml`; same inputs
 give byte-identical tables (`tests/golden/p1-pack.txt`; for the tile archive, its layer inputs).

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use csv::StringRecord;
 
-use super::natural_earth::{country_names, read_codes};
+use super::natural_earth::{iso_by_name, read_codes};
 use super::wdi::{Names, read_wdi, read_wdi_regions};
 use super::xlsx::{self, Cell};
 use super::{ByYear, Csv, YEAR, cell, float, int, nearest, open_csv, with_member};
@@ -306,7 +306,7 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
     let m49_to_iso: BTreeMap<i64, String> = m49.into_iter().map(|(i, m)| (m, i)).collect();
     let gini_zip = cache.join("wdi_SI.POV.GINI.zip");
     let (region, table_names) = read_wdi_regions(&gini_zip)?;
-    let mut names = country_names(admin0)?;
+    let mut names = iso_by_name(admin0)?;
     names.extend(table_names);
     let pwt = read_pwt(&cache.join("pwt110.xlsx"))?;
     let pop = read_wdi(&cache.join("wdi_SP.POP.TOTL.zip"))?;

@@ -301,7 +301,7 @@ fn built_pack() -> Option<(ceteris_geo::pack::Pack, PathBuf)> {
     let dir = ceteris_geo::pack::default_dir();
     if !dir.join("provinces.arrow").exists() {
         eprintln!(
-            "skipping: no pack at {}; build it with `uv run python -m ceteris.packs`",
+            "skipping: no pack at {}; build it with `cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build`",
             dir.display()
         );
         return None;
@@ -509,8 +509,9 @@ fn calibrated_pack() -> Option<Arc<EconInputs>> {
     let dir = ceteris_geo::pack::default_dir();
     if !EconInputs::has_calibration(&dir) {
         let hint = format!(
-            "no calibrated pack at {}; build it with `uv run python -m ceteris.packs` and \
-             install its calibration from `ceteris calibrate --pack`",
+            "no calibrated pack at {}; build it with `cargo run --release --features \
+             ceteris-cli/geos --bin ceteris -- pack build` and install its calibration from \
+             `ceteris calibrate --pack`",
             dir.display()
         );
         assert!(std::env::var_os("CETERIS_PACK").is_none(), "{hint}");

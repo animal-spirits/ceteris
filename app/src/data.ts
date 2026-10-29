@@ -57,7 +57,7 @@ export async function loadCounties(): Promise<Counties> {
 
 export async function loadProvinces(): Promise<Provinces> {
   const r = await fetch(packUrl("provinces.json"));
-  if (!r.ok) throw new Error("pack not found: build it with `uv run python -m ceteris.packs`");
+  if (!r.ok) throw new Error("pack not found: build it with `ceteris pack build` (owner-side, `geos` feature)");
   return r.json();
 }
 

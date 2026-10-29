@@ -1,6 +1,8 @@
 //! Fetching against a local HTTP server: download, verification, and the entries that are never
-//! downloaded.
+//! downloaded; and the repository's fetch configuration: which files are manual, optional or
+//! validation-only.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -9,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use ceteris_pack::fetch::{self, Entry, FetchError};
+use ceteris_pack::sources::workspace_root;
 use sha2::{Digest, Sha256};
 
 const BODY: &[u8] = b"cached bytes for the fetch test";
@@ -178,6 +181,12 @@ fn manual_entry_is_never_fetched() {
     );
     assert!(seen.lock().unwrap().is_empty());
     assert!(leftovers(cache.path()).is_empty());
+
+    fs::create_dir_all(cache.path().join("sub")).unwrap();
+    fs::write(cache.path().join("sub/file.bin"), BODY).unwrap();
+    let path = fetch::fetch(&manual, cache.path()).unwrap();
+    assert_eq!(path, cache.path().join("sub/file.bin"));
+    assert!(seen.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -256,4 +265,76 @@ fn derived_manual_entry_is_never_downloaded() {
     assert!(matches!(error, FetchError::Manual { .. }));
     assert!(!cache.path().join("band.tif").exists());
     assert!(!cache.path().join("band.tif.part").exists());
+}
+
+fn icio_entries() -> Vec<Entry> {
+    fetch::entries(&workspace_root())
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.source == "oecd-icio")
+        .collect()
+}
+
+#[test]
+fn icio_packages_are_manual_downloads() {
+    let icio = icio_entries();
+    assert_eq!(icio.len(), 10);
+    assert!(
+        icio.iter()
+            .all(|e| e.manual && e.sha256.as_deref().is_some_and(|s| !s.is_empty()))
+    );
+}
+
+#[test]
+fn only_the_2000_icio_package_is_required() {
+    let required: Vec<String> = icio_entries()
+        .into_iter()
+        .filter(|e| !e.optional)
+        .map(|e| e.name)
+        .collect();
+    assert_eq!(required, ["1995-2000_SML.zip"]);
+}
+
+#[test]
+fn validation_files_are_fetched_but_not_pack_sources() {
+    let root = workspace_root();
+    let pack: BTreeSet<String> = fetch::entries(&root)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    let validation = fetch::validation_entries(&root).unwrap();
+    assert!(
+        validation
+            .iter()
+            .any(|e| e.name == "AdvancedGuideFiles.zip")
+    );
+    assert!(validation.iter().all(|e| !pack.contains(&e.name)));
+    assert!(
+        validation
+            .iter()
+            .all(|e| e.sha256.as_deref().is_some_and(|s| !s.is_empty()))
+    );
+}
+
+#[test]
+fn no_pack_code_names_a_validation_file() {
+    let names: Vec<String> = fetch::validation_entries(&workspace_root())
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    let mut todo = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+    while let Some(dir) = todo.pop() {
+        for item in fs::read_dir(&dir).unwrap() {
+            let path = item.unwrap().path();
+            if path.is_dir() {
+                todo.push(path);
+            } else if path.extension().is_some_and(|x| x == "rs") {
+                let text = fs::read_to_string(&path).unwrap();
+                let named: Vec<&String> = names.iter().filter(|n| text.contains(*n)).collect();
+                assert!(named.is_empty(), "{}: {named:?}", path.display());
+            }
+        }
+    }
 }

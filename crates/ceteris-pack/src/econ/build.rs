@@ -6,8 +6,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::cast::AsArray;
-use arrow_array::types::{ArrowPrimitiveType, Float64Type, UInt8Type, UInt32Type};
+use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray, UInt8Array,
 };
@@ -40,7 +39,7 @@ pub const TABLES: [&str; 7] = [
     "gateways.arrow",
 ];
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
-pub const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
+pub use crate::read::natural_earth::ADMIN0;
 pub const BACI: &str = "BACI_HS92_V202601.zip";
 pub const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
 /// P02 inventory target coverage s_g in months, the prior's start (trade SPEC, Parameters;
@@ -162,48 +161,12 @@ fn strings<const N: usize>(path: &Path, columns: [&str; N]) -> Result<[Vec<Strin
     Ok(out)
 }
 
-/// One primitive column of a pack table, every batch in order.
-fn values<T: ArrowPrimitiveType>(path: &Path, column: &str) -> Result<Vec<T::Native>, String> {
-    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
-    let reader =
-        FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
-    let mut out = Vec::new();
-    for batch in reader {
-        let batch = batch.map_err(|e| fail(&e))?;
-        let a = batch
-            .column_by_name(column)
-            .ok_or_else(|| fail(&format!("no column {column}")))?;
-        let a = a
-            .as_primitive_opt::<T>()
-            .ok_or_else(|| fail(&format!("{column} is not {}", T::DATA_TYPE)))?;
-        if a.null_count() > 0 {
-            return Err(fail(&format!("null in {column}")));
-        }
-        out.extend_from_slice(a.values());
-    }
-    Ok(out)
-}
-
 /// One boolean column of a pack table, every batch in order.
 fn flags(path: &Path, column: &str) -> Result<Vec<bool>, String> {
-    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
-    let reader =
-        FileReader::try_new(File::open(path).map_err(|e| fail(&e))?, None).map_err(|e| fail(&e))?;
-    let mut out = Vec::new();
-    for batch in reader {
-        let batch = batch.map_err(|e| fail(&e))?;
-        let a = batch
-            .column_by_name(column)
-            .ok_or_else(|| fail(&format!("no column {column}")))?;
-        let a = a
-            .as_boolean_opt()
-            .ok_or_else(|| fail(&format!("{column} is not boolean")))?;
-        if a.null_count() > 0 {
-            return Err(fail(&format!("null in {column}")));
-        }
-        out.extend(a.values().iter());
-    }
-    Ok(out)
+    Ok(table::arrays::<BooleanArray>(path, column)?
+        .iter()
+        .flat_map(|a| a.values().iter())
+        .collect())
 }
 
 /// The provinces table columns the downscaling proxies read.
@@ -212,14 +175,14 @@ pub fn read_geography(pack: &Path) -> Result<Geography, String> {
     let [id, country] = strings(&path, ["id", "country"])?;
     let mut res: [Vec<u32>; RESOURCES.len()] = Default::default();
     for (r, name) in res.iter_mut().zip(RESOURCES) {
-        *r = values::<UInt32Type>(&path, &format!("res_{name}"))?;
+        *r = table::values::<UInt32Type>(&path, &format!("res_{name}"))?;
     }
     Ok(Geography {
         id,
         country,
         coastal: flags(&path, "coastal")?,
-        lon: values::<Float64Type>(&path, "lon")?,
-        lat: values::<Float64Type>(&path, "lat")?,
+        lon: table::values::<Float64Type>(&path, "lon")?,
+        lat: table::values::<Float64Type>(&path, "lat")?,
         res,
     })
 }
@@ -266,15 +229,15 @@ fn read_graph(pack: &Path) -> Result<(Nodes, Edges), String> {
     let (nodes, edges) = (pack.join("nodes.arrow"), pack.join("edges.arrow"));
     Ok((
         Nodes {
-            kind: values::<UInt8Type>(&nodes, "kind")?,
-            province: values::<UInt32Type>(&nodes, "province")?,
-            lon: values::<Float64Type>(&nodes, "lon")?,
-            lat: values::<Float64Type>(&nodes, "lat")?,
+            kind: table::values::<UInt8Type>(&nodes, "kind")?,
+            province: table::values::<UInt32Type>(&nodes, "province")?,
+            lon: table::values::<Float64Type>(&nodes, "lon")?,
+            lat: table::values::<Float64Type>(&nodes, "lat")?,
         },
         Edges {
-            a: values::<UInt32Type>(&edges, "a")?,
-            b: values::<UInt32Type>(&edges, "b")?,
-            mode: values::<UInt8Type>(&edges, "mode")?,
+            a: table::values::<UInt32Type>(&edges, "a")?,
+            b: table::values::<UInt32Type>(&edges, "b")?,
+            mode: table::values::<UInt8Type>(&edges, "mode")?,
         },
     ))
 }

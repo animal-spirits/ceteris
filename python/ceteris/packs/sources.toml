@@ -1608,18 +1608,18 @@ name = "Ethnic Power Relations Core 2021 and GeoEPR 2021"
 provider = "ETH Zurich, International Conflict Research"
 version = "2021 (1946-2021)"
 role = "Ethnic group status 2006-2021, validation (10.8, 11.6)"
-licence = "LicenseRef-NoLicence"
+licence = "CC-BY-NC-SA-4.0"
 licence_url = "https://icr.ethz.ch/data/epr/core/"
 attribution = "Vogt et al. (2015), Journal of Conflict Resolution 59(7)"
 commercial_use = false
-share_alike = false
+share_alike = true
 use = "fallback"
 policy = "fetch"
-reason = "No licence stated; epr-v1 covers only to 2005"
-checked = 2026-10-23
-confidence = "medium"
+reason = "Non-commercial and share-alike (CC BY-NC-SA 4.0, stated on the ICR data page); epr-v1 covers only to 2005"
+checked = 2026-10-28
+confidence = "high"
 closed_source_only = true
-notes = "Ask ICR for written permission before opening."
+notes = "Ask ICR for a licence without the non-commercial term before opening."
 
 [[source]]
 id = "cia-factbook"

@@ -6,7 +6,7 @@ pub fn pack() -> Option<Pack> {
     let dir = default_dir();
     if !dir.join("provinces.arrow").exists() {
         eprintln!(
-            "skipping: no pack at {}; build it with `uv run python -m ceteris.packs`",
+            "skipping: no pack at {}; build it with `cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build`",
             dir.display()
         );
         return None;

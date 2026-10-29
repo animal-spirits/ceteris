@@ -11,4 +11,4 @@ The pipeline, reference model and calibration are moving to `ceteris-pack`,
 - No new features in Python. Fixes only, and only when the Rust port is not yet in place.
 - Python output is the parity baseline for the port: do not change it during a migration step
   unless the plan says so.
-- Run through uv: `uv run --project python --locked pytest python/tests`.
+- No Python tests are left; only the parity scripts run Python (`scripts/parity/README.md`).
