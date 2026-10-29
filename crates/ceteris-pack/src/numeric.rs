@@ -202,6 +202,18 @@ pub fn repr_f64(x: f64) -> String {
     format!("{sign}{body}")
 }
 
+/// Python's `round(x, ndigits)`: the decimal of `ndigits` places nearest the exact binary value,
+/// ties to even, read back as the nearest float. NaN and the infinities are returned as they
+/// are.
+pub fn round(x: f64, ndigits: usize) -> f64 {
+    if !x.is_finite() {
+        return x;
+    }
+    format!("{x:.ndigits$}")
+        .parse()
+        .expect("formatted float parses")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
