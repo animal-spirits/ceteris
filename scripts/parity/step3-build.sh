@@ -8,17 +8,18 @@
 # - `json_diff.py` compares web/provinces.json and web/counties.json byte for byte;
 # - `manifest_diff.py` compares the manifests: config, sources and stats (but the fill stats)
 #   equal, the tile layers' and attribute files' digests equal, the Arrow tables' digests listed
-#   (pyarrow and arrow-rs write different bytes);
-# - `fills.py` compares the fill files decoded, each feature's triangles against its simplified
-#   polygon, which `web_inputs.py` and `web_outputs.py` rebuild in Python (their fills must be
-#   build.build's, byte for byte).
+#   (pyarrow and arrow-rs write different bytes), and the Rust file in json.dumps(indent=2) text;
+# - the stats each build prints must be the same text, but the fill stats;
+# - `fills.py` compares the fill files decoded: a Rust feature fails when it is off its own
+#   simplified polygon (`pack build --simple DIR`) by more than 1e-4 and off Python's area by
+#   more than that too.
 # map.pmtiles is not compared: tippecanoe writes its tiles in a varying order.
 #
 # Two Rust builds:
 # - with h3o's cell centres: split provinces' areas and those of the counties clipped to them are
 #   held to SPLIT_TOL (`build_split_rows.py` separates those rows), the transport graph's sea
 #   positions and the lengths that reach them to LISTED_TOL, and the attribute files' differing
-#   rows, the layer digests and the fill features off Python's polygons are listed, not failed;
+#   rows and the layer digests are listed, not failed;
 # - with h3's centres (`h3_centres.py` at the land and the sea resolutions): every column must
 #   match and the attribute files and layer digests must be identical.
 # In both, H3 cell areas and the means they weight are held to RULING_TOL (as step3-geo.sh).
@@ -98,36 +99,47 @@ sea_res="$(sed -n 's/^sea_res = //p' python/ceteris/packs/pack.toml)"
 "$GEOS_PYTHON" -I "$root/scripts/parity/h3_centres.py" "$land_res" "$work/land.bin"
 "$GEOS_PYTHON" -I "$root/scripts/parity/h3_centres.py" "$sea_res" "$work/sea.bin"
 cat "$work/land.bin" "$work/sea.bin" >"$work/centres.bin"
-"$bin" pack build --out "$work/rs" >"$work/rs.stats"
-"$bin" pack build --out "$work/rs-h3" --centres "$work/centres.bin" >"$work/rs-h3.stats"
-# The simplified polygons of the fills, rebuilt in Python.
-py "$root/scripts/parity/web_inputs.py" "$work/web"
-py "$root/scripts/parity/web_outputs.py" "$work/web"
+"$bin" pack build --out "$work/rs" --simple "$work/rs-simple" >"$work/rs.stats"
+"$bin" pack build --out "$work/rs-h3" --centres "$work/centres.bin" --simple "$work/rs-h3-simple" \
+    >"$work/rs-h3.stats"
 status=0
 
-for name in provinces counties; do
-    if cmp -s "$work/py/web/$name.fill" "$work/web/python/$name.fill"; then
-        echo "ok   web_outputs.py writes build.build's $name.fill"
+# The stats a build prints, without the fill stats; fails unless the printed text is
+# json.dumps(indent=2) of them.
+stats() {
+    python3 -I - "$1" <<'PY'
+import json, sys
+t = open(sys.argv[1]).read()
+s = json.loads(t)
+if t != json.dumps(s, indent=2) + "\n":
+    sys.exit(f"{sys.argv[1]}: not json.dumps(indent=2) text")
+del s["fills"]
+print(json.dumps(s, indent=2))
+PY
+}
+for variant in rs rs-h3; do
+    if stats "$work/py.stats" >"$work/py.p1-stats" && stats "$work/$variant.stats" >"$work/$variant.p1-stats" &&
+        diff "$work/$variant.p1-stats" "$work/py.p1-stats"; then
+        echo "ok   $variant printed stats but fills"
     else
-        echo "FAIL web_outputs.py does not write build.build's $name.fill"
+        echo "FAIL $variant printed stats"
         status=1
     fi
 done
-# The fill files: bytes, or else each feature's triangles against its polygon. The polygons are
-# Python's, so with --listed (h3o's centres, whose split provinces simplify to other vertices
-# where they and their neighbours meet) a feature off them is listed, not failed.
+# The fill files: bytes, or else each Rust feature's triangles against its own polygon.
 fills() {
-    local variant="$1" listed="${2:-}" name
+    local variant="$1" name code
     for name in provinces counties; do
+        code=0
         py "$root/scripts/parity/fills.py" "$work/py/web/$name.fill" "$work/$variant/web/$name.fill" \
-            "$work/web/python/$name.simple.arrow" || {
-            if [[ $listed == --listed ]]; then
-                echo "h3o centres: $name.fill off Python's simplified polygons (listed above)"
-            else
-                echo "FAIL $variant $name.fill"
-                status=1
-            fi
-        }
+            "$work/$variant-simple/$name.simple.arrow" || code=$?
+        if ((code == 2)); then
+            echo "FAIL $variant $name.fill"
+            status=1
+        elif ((code != 0)); then
+            echo "FAIL fills.py $variant $name.fill exited $code"
+            status=1
+        fi
     done
 }
 # The manifests; with --listed the layer and attribute digests are listed, not failed.
@@ -180,7 +192,7 @@ for name in provinces counties; do
     fi
 done
 manifests rs --listed
-fills rs --listed
+fills rs
 
 echo "== Rust with h3 centres"
 # shellcheck disable=SC2086

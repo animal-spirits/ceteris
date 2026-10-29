@@ -7,7 +7,8 @@ the same files, with equal digests for the tile layers' GeoJSON (`web/map.pmtile
 the attribute files (`web/*.json`); the Arrow tables' digests are listed (pyarrow and arrow-rs
 write different bytes), the fills' too (`fills.py` compares them decoded). `stats` must be equal,
 keys in order, but for `fills`, which is listed (earcut's triangle order). With --listed, the
-layer and attribute digests that differ are listed, not failed.
+layer and attribute digests that differ are listed, not failed. Each file must also be
+byte for byte `json.dumps(json.load(f), indent=2) + "\n"`, as build.py writes it.
 
 Exit 0 when everything required is equal, 2 when something required differs, 1 on any other
 failure (a missing or unreadable file).
@@ -23,7 +24,8 @@ def text(x) -> str:
 
 
 def main(a: Path, b: Path, listed: bool) -> int:
-    ma, mb = json.loads(a.read_text()), json.loads(b.read_text())
+    ta, tb = a.read_text(), b.read_text()
+    ma, mb = json.loads(ta), json.loads(tb)
     failed = False
 
     def report(ok: bool, what: str, required: bool = True) -> None:
@@ -36,6 +38,8 @@ def main(a: Path, b: Path, listed: bool) -> int:
         else:
             print(f"note manifest {what}")
 
+    for path, raw, m in ((a, ta, ma), (b, tb, mb)):
+        report(raw == text(m) + "\n", f"{path} is json.dumps(indent=2) text")
     if list(ma) != list(mb):
         report(False, f"keys: {list(ma)} vs {list(mb)}")
     for key in ("pack_format", "year", "config", "sources"):

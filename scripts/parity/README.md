@@ -85,12 +85,12 @@ which runs the Rust econ build itself) with `ceteris pack build --out DIR`, on G
 the two attribute files byte for byte (`json_diff.py` lists differing rows), the manifests by
 `manifest_diff.py` (config, sources and stats equal but the fill stats; the tile layers' GeoJSON
 and attribute files' digests equal; the Arrow tables' digests listed, as pyarrow and arrow-rs
-write different bytes), and the fills by `fills.py`'s rule against the simplified polygons that
-`web_inputs.py` and `web_outputs.py` rebuild in Python. The tiles archive is not compared.
+write different bytes, and the Rust file must be `json.dumps(indent=2)` text), the stats each
+build prints (but the fill stats), and the fills by `fills.py`'s rule against each Rust build's
+own simplified polygons (`pack build --simple DIR`). The tiles archive is not compared.
 Built on h3o's centres, split provinces' areas and their counties' (`build_split_rows.py`) take
 the split tolerance, the graph's sea positions and lengths `LISTED_TOL`, and the attribute
-files' differing rows, the layer digests and fill features off Python's simplified polygons
-are listed; a second Rust build takes h3's centres
+files' differing rows and the layer digests are listed; a second Rust build takes h3's centres
 (`--centres`) and must match on every column but the H3 cell areas and the means they weight,
 with identical attribute files and layer digests. The script keeps its outputs in `WORK`
 (default: a new temporary directory).
