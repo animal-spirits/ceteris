@@ -86,6 +86,6 @@ https://claude.ai/artifact/NwyGjzAgZtjXF6XfJwCm7K (proposed placement)
 Phase order note: ADR 0239 replaces "P10 (1.3 Steward)" above. Steward for economic levers lands
 with 2.0-alpha, and full Steward and Tier 1b ship as 2.x minors.
 
-Proposed, not yet decided: 5.0 is cities (the province stops being the smallest unit; an urban layer at nested-zoom
-grain becomes the lab default). Minds (ADR 0139) is the 6.0 candidate; its parts ship as opt-in
-minors before then.
+Proposed, not yet decided: 5.0 is cities (the province stops being the smallest unit; an urban
+layer at nested-zoom grain becomes the lab default). Minds (ADR 0139) is the 6.0 candidate; its
+parts ship as opt-in minors before then.
