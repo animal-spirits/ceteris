@@ -131,12 +131,13 @@ pub fn build(
     use arrow_array::StringArray;
 
     use super::{counties, overlay, provinces};
+    use crate::build::{ADMIN0, ADMIN1};
 
     let root = workspace_root();
     let config = read_table(&root.join(CONFIG_DIR).join("pack.toml"))?;
     let split_area = crate::build::split_area_km2(&config)?;
-    let admin1 = fetch::path_of("ne_10m_admin_1_states_provinces.zip");
-    let admin0 = fetch::path_of("ne_10m_admin_0_countries.zip");
+    let admin1 = fetch::path_of(ADMIN1);
+    let admin0 = fetch::path_of(ADMIN0);
     let units = counties::load(&root)?;
     let provs = provinces::build(
         &admin1,

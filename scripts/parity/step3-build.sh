@@ -39,7 +39,6 @@ bin="$root/target/release/ceteris"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="${WORK:-$(mktemp -d)}"
 mkdir -p "$work"
-mkdir -p "$work"
 echo "outputs in $work"
 
 # `pack compare` of each of TABLES into OUT; fails when a table prints nothing, or exits
@@ -100,7 +99,7 @@ for variant in rs rs-h3; do
 done
 
 echo "== Rust with h3o centres"
-mkdir "$work/py-masked" "$work/rs-masked"
+mkdir -p "$work/py-masked" "$work/rs-masked"
 for t in $tables; do
     cp "$work/py/$t.arrow" "$work/py-masked/"
     cp "$work/rs/$t.arrow" "$work/rs-masked/"
@@ -127,8 +126,14 @@ while read -r line; do
     fi
 done < <(grep -v ': ok ' "$work/compare")
 for name in provinces counties; do
-    "$GEOS_PYTHON" -I "$root/scripts/parity/json_diff.py" "$work/py/web/$name.json" "$work/rs/web/$name.json" |
-        sed 's/^FAIL /h3o centres: /' || true
+    code=0
+    "$GEOS_PYTHON" -I "$root/scripts/parity/json_diff.py" "$work/py/web/$name.json" "$work/rs/web/$name.json" \
+        >"$work/json-$name" || code=$?
+    sed 's/^FAIL /h3o centres: /' "$work/json-$name"
+    if ((code != 0 && code != 2)); then
+        echo "FAIL json_diff.py $name.json exited $code"
+        status=1
+    fi
 done
 
 echo "== Rust with h3 centres"

@@ -218,3 +218,31 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
         "county areas",
     );
 }
+
+/// Python keeps an admin-1 repair as `make_valid` returns it, Rust its polygonal part: the same
+/// geometry while no repair is a collection.
+#[cfg(feature = "geos")]
+#[test]
+fn admin_1_repairs_leave_no_collection() {
+    use ceteris_pack::geo::overlay;
+    use geos::{Geom, GeometryTypes};
+
+    let (Some(admin1), Some(admin0)) = (cached(ADMIN1), cached(ADMIN0)) else {
+        return;
+    };
+    let mut repaired = Vec::new();
+    for p in provinces::regions(&admin1, &admin0).unwrap() {
+        let g = overlay::from_geo(&p.geom).unwrap();
+        if !overlay::is_valid(&g).unwrap() {
+            let kind = overlay::make_valid(&g).unwrap().geometry_type().unwrap();
+            repaired.push((p.id, kind));
+        }
+    }
+    assert_eq!(repaired.len(), 1, "{repaired:?}");
+    assert!(
+        repaired
+            .iter()
+            .all(|(_, k)| *k != GeometryTypes::GeometryCollection),
+        "{repaired:?}"
+    );
+}

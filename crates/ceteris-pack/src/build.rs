@@ -243,7 +243,8 @@ mod full {
     use crate::sources::{CONFIG_DIR, read_table, workspace_root};
     use crate::{econ, fetch, table};
 
-    /// The name of a code, the code itself where there is none.
+    /// The name of a code, the code itself where there is none. A code admin-0 lists with a
+    /// blank ADMIN is an error here, where Python writes a null name; the cache has none.
     pub(super) fn name_of<'a>(
         names: &'a BTreeMap<String, Option<String>>,
         code: &'a str,
@@ -601,6 +602,10 @@ mod full {
         let report = econ::build::build(out, out, &cache)?;
         for line in &report.summary {
             eprintln!("{line}");
+        }
+        let written: BTreeSet<&str> = report.tables.iter().map(|(n, _)| n.as_str()).collect();
+        if written != econ::build::TABLES.into_iter().collect() {
+            return Err(format!("the econ build wrote {written:?}"));
         }
         pack.tables
             .extend(report.tables.iter().map(|(name, d)| (name.clone(), hex(d))));

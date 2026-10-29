@@ -96,6 +96,11 @@ pub fn to_multipolygon(g: &impl Geom) -> Result<MultiPolygon, String> {
 
 /// A Polygon or MultiPolygon as geo holds it, keeping its type; anything empty is the empty
 /// polygon. A collection, such as a repair that leaves lines, keeps its `polygonal` part.
+///
+/// Python takes the polygonal part of a repair on the county path only and keeps the raw
+/// `make_valid` result of an admin-1 region. The two agree on the cache: its one invalid
+/// admin-1 region repairs to a Polygon on GEOS 3.15 (test
+/// `admin_1_repairs_leave_no_collection`).
 pub fn to_geo(g: &impl Geom) -> Result<geo::Geometry, String> {
     if g.is_empty().map_err(fail)? {
         return Ok(geo::Geometry::Polygon(Polygon::new(
@@ -288,7 +293,7 @@ mod tests {
         .unwrap();
         let repaired = make_valid(&spike).unwrap();
         assert_eq!(kind(&repaired).unwrap(), GeometryTypes::GeometryCollection);
-        // shapely 2.2 on GEOS 3.15: geo.polygonal(make_valid(g)).
+        // shapely 2.2 on GEOS 3.15: geo.polygonal(make_valid(g)), as counties.load repairs.
         let expected = Polygon::new(
             LineString::from(vec![
                 (1.0, 1.0),
