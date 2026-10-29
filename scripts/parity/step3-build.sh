@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
-# Step 3 build parity: the P1 tables and map attribute files of build.build against `ceteris
-# pack build`, both on GEOS 3.15 (see README.md for the shapely build). `build_tables.py` runs
-# build.build with its map and econ steps left out; `ceteris pack build --out DIR` runs the whole
-# Rust build. `pack compare` checks the eight P1 tables in file row order, never sorted;
-# `json_diff.py` compares web/provinces.json and web/counties.json byte for byte; the build stats
-# (without fills and econ) must be the same text.
+# Step 3 build parity: the whole pack of build.build (`python -m ceteris.packs --out DIR`, which
+# runs the Rust econ build itself) against `ceteris pack build --out DIR`, both on GEOS 3.15 (see
+# README.md for the shapely build).
+#
+# - `pack compare` checks the eight P1 tables and the seven econ tables in file row order, never
+#   sorted;
+# - `json_diff.py` compares web/provinces.json and web/counties.json byte for byte;
+# - `manifest_diff.py` compares the manifests: config, sources and stats (but the fill stats)
+#   equal, the tile layers' and attribute files' digests equal, the Arrow tables' digests listed
+#   (pyarrow and arrow-rs write different bytes);
+# - `fills.py` compares the fill files decoded, each feature's triangles against its simplified
+#   polygon, which `web_inputs.py` and `web_outputs.py` rebuild in Python (their fills must be
+#   build.build's, byte for byte).
+# map.pmtiles is not compared: tippecanoe writes its tiles in a varying order.
 #
 # Two Rust builds:
 # - with h3o's cell centres: split provinces' areas and those of the counties clipped to them are
 #   held to SPLIT_TOL (`build_split_rows.py` separates those rows), the transport graph's sea
 #   positions and the lengths that reach them to LISTED_TOL, and the attribute files' differing
-#   rows are listed, not failed;
+#   rows, the layer digests and the fill features off Python's polygons are listed, not failed;
 # - with h3's centres (`h3_centres.py` at the land and the sea resolutions): every column must
-#   match and the attribute files must be identical.
+#   match and the attribute files and layer digests must be identical.
 # In both, H3 cell areas and the means they weight are held to RULING_TOL (as step3-geo.sh).
 #
 # GEOS_PYTHON names a Python whose shapely is built on GEOS 3.15 and has the packages of
-# python/pyproject.toml. Outputs go to WORK (default: a new temporary directory), kept.
+# python/pyproject.toml, and tippecanoe must be on PATH. Outputs go to WORK (default: a new
+# temporary directory), kept.
 set -euo pipefail
 
 RULING_TOL=1e-8
@@ -26,7 +35,8 @@ ruling_columns="cells.area_km2 provinces.elev_mean_m provinces.elev_std_m provin
 counties.elev_mean_m counties.elev_std_m counties.tri_m"
 split_columns="provinces_area_split.area_km2 counties_area_split.area_km2"
 listed_columns="nodes.lon nodes.lat edges.length_km"
-tables="provinces countries cells nodes edges counties sea_zones chokepoints"
+tables="provinces countries cells nodes edges counties sea_zones chokepoints
+econ_goods econ_countries econ_io econ_provinces econ_pops econ_tariffs gateways"
 split_tables="provinces_area provinces_area_split counties_area counties_area_split"
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -34,12 +44,21 @@ cd "$root"
 : "${GEOS_PYTHON:?set GEOS_PYTHON to a Python with shapely on GEOS 3.15}"
 "$GEOS_PYTHON" -c 'import shapely, sys; v = shapely.geos_version_string; print(f"shapely on GEOS {v}"); sys.exit(not v.startswith("3.15."))'
 echo "Rust on GEOS $(geos-config --version)"
-cargo build --release --bin ceteris --features ceteris-cli/geos
-bin="$root/target/release/ceteris"
 pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="${WORK:-$(mktemp -d)}"
 mkdir -p "$work"
 echo "outputs in $work"
+py() {
+    (cd "$root/python" && PYTHONPATH="$root/python:$root/scripts/parity" "$GEOS_PYTHON" -P -s "$@")
+}
+
+# The Python build first: its econ step runs `cargo run --release` without the geos feature,
+# which rebuilds target/release/ceteris; the geos binary is built after it and copied.
+py -m ceteris.packs --out "$work/py" >"$work/py.stats"
+cargo build --release --bin ceteris --features ceteris-cli/geos
+mkdir -p "$work/bin"
+cp "$root/target/release/ceteris" "$work/bin/ceteris"
+bin="$work/bin/ceteris"
 
 # `pack compare` of each of TABLES into OUT; fails when a table prints nothing, or exits
 # non-zero with every line ok.
@@ -50,11 +69,11 @@ compare() {
     for t in "$@"; do
         code=0
         "$bin" pack compare "$a" "$b" --table "$t" >>"$out" || code=$?
-        if ! grep -q "^$t[.:]" "$out"; then
+        if ! grep -q "^${t}[.:]" "$out"; then
             echo "FAIL pack compare --table $t printed nothing (exit $code)"
             return 1
         fi
-        if ((code != 0)) && ! grep "^$t[.:]" "$out" | grep -qv ': ok '; then
+        if ((code != 0)) && ! grep "^${t}[.:]" "$out" | grep -qv ': ok '; then
             echo "FAIL pack compare --table $t exited $code with every line ok"
             return 1
         fi
@@ -66,12 +85,7 @@ listed() {
 within() {
     python3 -I -c 'import sys; sys.exit(float(sys.argv[1]) > float(sys.argv[2]))' "$1" "$2"
 }
-# The Rust stats without econ, as json.dumps(stats, indent=2) writes them.
-p1_stats() {
-    python3 -I -c 'import json, sys; s = json.load(open(sys.argv[1])); del s["econ"]; print(json.dumps(s, indent=2))' "$1"
-}
 
-(cd python && PYTHONPATH="$root/python" "$GEOS_PYTHON" -P -s "$root/scripts/parity/build_tables.py" "$work/py" >"$work/py.stats")
 for t in $tables; do
     if "$bin" pack compare "$work/py" "$pack" --table "$t" >/dev/null; then
         echo "ok   the Python build reproduces the pack's $t.arrow"
@@ -86,17 +100,47 @@ sea_res="$(sed -n 's/^sea_res = //p' python/ceteris/packs/pack.toml)"
 cat "$work/land.bin" "$work/sea.bin" >"$work/centres.bin"
 "$bin" pack build --out "$work/rs" >"$work/rs.stats"
 "$bin" pack build --out "$work/rs-h3" --centres "$work/centres.bin" >"$work/rs-h3.stats"
+# The simplified polygons of the fills, rebuilt in Python.
+py "$root/scripts/parity/web_inputs.py" "$work/web"
+py "$root/scripts/parity/web_outputs.py" "$work/web"
 status=0
 
-for variant in rs rs-h3; do
-    if diff <(p1_stats "$work/$variant.stats") "$work/py.stats" >/dev/null; then
-        echo "ok   $variant build stats"
+for name in provinces counties; do
+    if cmp -s "$work/py/web/$name.fill" "$work/web/python/$name.fill"; then
+        echo "ok   web_outputs.py writes build.build's $name.fill"
     else
-        echo "FAIL $variant build stats"
-        diff <(p1_stats "$work/$variant.stats") "$work/py.stats" || true
+        echo "FAIL web_outputs.py does not write build.build's $name.fill"
         status=1
     fi
 done
+# The fill files: bytes, or else each feature's triangles against its polygon. The polygons are
+# Python's, so with --listed (h3o's centres, whose split provinces simplify to other vertices
+# where they and their neighbours meet) a feature off them is listed, not failed.
+fills() {
+    local variant="$1" listed="${2:-}" name
+    for name in provinces counties; do
+        py "$root/scripts/parity/fills.py" "$work/py/web/$name.fill" "$work/$variant/web/$name.fill" \
+            "$work/web/python/$name.simple.arrow" || {
+            if [[ $listed == --listed ]]; then
+                echo "h3o centres: $name.fill off Python's simplified polygons (listed above)"
+            else
+                echo "FAIL $variant $name.fill"
+                status=1
+            fi
+        }
+    done
+}
+# The manifests; with --listed the layer and attribute digests are listed, not failed.
+manifests() {
+    local variant="$1" code=0
+    shift
+    "$GEOS_PYTHON" -I "$root/scripts/parity/manifest_diff.py" "$work/py/manifest.json" \
+        "$work/$variant/manifest.json" "$@" || code=$?
+    if ((code != 0)); then
+        echo "FAIL $variant manifest (manifest_diff.py exit $code)"
+        status=1
+    fi
+}
 
 echo "== Rust with h3o centres"
 mkdir -p "$work/py-masked" "$work/rs-masked"
@@ -135,6 +179,8 @@ for name in provinces counties; do
         status=1
     fi
 done
+manifests rs --listed
+fills rs --listed
 
 echo "== Rust with h3 centres"
 # shellcheck disable=SC2086
@@ -153,4 +199,6 @@ done < <(grep -v ': ok ' "$work/compare-h3")
 for name in provinces counties; do
     "$GEOS_PYTHON" -I "$root/scripts/parity/json_diff.py" "$work/py/web/$name.json" "$work/rs-h3/web/$name.json" || status=1
 done
+manifests rs-h3
+fills rs-h3
 exit $status
