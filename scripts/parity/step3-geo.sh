@@ -24,7 +24,7 @@ pack="${CETERIS_PACK:-$root/data/packs/2000}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 source "$root/scripts/parity/packs_tree.sh"
-packs_tree "$work/tree"
+packs_tree "$root" "$work/tree"
 py() {
     PYTHONPATH="$work/tree/python" uv run --project "$root/python" --locked python -P -s "$@"
 }
