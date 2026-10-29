@@ -515,7 +515,14 @@ iterated until no local output changes by more than 1e-14 relative.
 w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
 (Sinkhorn 1967). Sweeps run in the log domain (each good's weights shifted by their largest
 before each pass over the kernel), Anderson-accelerated (memory 8), to max |ln(received /
-target)| <= 1e-13. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+target)| <= 1e-13, within at most 100,000 sweeps (`MAX_SWEEPS`, an iteration cap, not a
+tolerance; 20,000 before 2026-10-29). The cap was raised because of a slow mode: on the full pack
+with ADR 0101's thetas, coal and other mining (theta 16.91) has an origin, province 3906, about 52
+times its good's cheapest price, which its destinations buy almost only from. Its part of the
+scaling contracts by about 0.99995 a sweep (the residual falls about 5% per 1,000 sweeps), and pass
+7 needs 34,614 sweeps. Keeping Anderson mixing from restarting while the residual still falls
+over its 20-sweep stall window was tried and is slower (pass 7 above 7e-13 after 15,000 sweeps,
+against 2.9e-13); dropping the restarts makes pass 4 diverge. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
 the index is 1. q_d, the arrival slots and the lead follow from sourcing.
 
