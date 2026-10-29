@@ -1,8 +1,9 @@
-//! P2 gate on the full pack (`specs/econ/SPEC.md`, P2 gate): V1 after the uniqueness check.
+//! P2 gate on the full pack (`specs/econ/SPEC.md`, P2 gate): V1 after the uniqueness check, H2
+//! (the distance elasticity) and H2 per theta class (ADRs 0018 and 0023).
 //!
 //! Needs `CETERIS_PACK_EXPORT`, a `ceteris export --pack` directory of the calibrated pack in
-//! `CETERIS_PACK` (default `data/packs/2000`), and the pack's calibration tables; without them
-//! every test skips. Each run is 1,200 ticks of the release binary on the full pack: run with
+//! `CETERIS_PACK` (default `data/packs/2000`), and the pack's calibration tables; H2 also reads
+//! the CEPII gravity file of the data cache. Without them every test skips. Each run is 1,200 ticks of the release binary on the full pack: run with
 //! `--release`.
 //!
 //! The reference of V1 is the GE reference model at the calibrated point (ADR 0089): its inputs
@@ -17,6 +18,11 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
+
+use ceteris_pack::fetch;
+use ceteris_pack::read::natural_earth::read_codes;
+use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
+use ceteris_reference::ppml::{self, GravityTable, RunFlows};
 
 use arrow_array::RecordBatch;
 use arrow_array::cast::AsArray;
@@ -39,6 +45,11 @@ const V1_TOL: f64 = 0.01;
 const FLOW_FLOOR: f64 = 1e-6;
 /// The reference solver's tolerance on scaled residuals.
 const REFERENCE_TOL: f64 = 1e-10;
+const H2_DISTANCE: (f64, f64) = (-1.1, -0.7);
+/// ADR 0023, Prior band: theta_c +/- 2 s.e. of the Caliendo-Parro class estimate, fixed before
+/// the gate ran.
+const THETA_BANDS: [(f64, f64); 3] = [(1.40, 3.84), (3.36, 7.02), (8.15, 12.99)];
+const N_TRADED: usize = 7;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -56,9 +67,10 @@ struct Reference {
     eq: Equilibrium,
 }
 
-fn reference() -> Option<&'static Reference> {
-    static REFERENCE: OnceLock<Option<Reference>> = OnceLock::new();
-    REFERENCE
+/// The export of the calibrated pack, when it and the calibration tables are there.
+fn export() -> Option<&'static Inputs> {
+    static EXPORT: OnceLock<Option<Inputs>> = OnceLock::new();
+    EXPORT
         .get_or_init(|| {
             let Some(export) = std::env::var_os("CETERIS_PACK_EXPORT").map(PathBuf::from) else {
                 eprintln!(
@@ -72,9 +84,22 @@ fn reference() -> Option<&'static Reference> {
                 eprintln!("skipping: no calibration tables in {}", pack.display());
                 return None;
             }
-            let inp = io::load(&export).unwrap();
+            Some(io::load(&export).unwrap())
+        })
+        .as_ref()
+}
+
+fn reference() -> Option<&'static Reference> {
+    static REFERENCE: OnceLock<Option<Reference>> = OnceLock::new();
+    REFERENCE
+        .get_or_init(|| {
+            let inp = export()?;
+            let export = std::env::var_os("CETERIS_PACK_EXPORT")
+                .map(PathBuf::from)
+                .unwrap();
+            let pack = pack();
             let pack_province = write::read_pack_provinces(&export).unwrap();
-            let (inputs, x) = write::read_reference(&pack, &inp, &pack_province).unwrap();
+            let (inputs, x) = write::read_reference(&pack, inp, &pack_province).unwrap();
             let m = Model::new(&inputs).unwrap();
             let residual = max_abs(&model::residual(&x, &m));
             assert!(
@@ -342,4 +367,258 @@ fn v1_full_pack_from_the_data_state_stays_open() {
     let Some(r) = reference() else { return };
     let (holds, summary) = v1(r, "data_state", &["--frictionless", "--data-state"]);
     assert!(!holds, "V1 from the data state now holds: {summary}");
+}
+
+/// The default run of 1,200 ticks from the calibrated steady state.
+fn default_run() -> Option<&'static Path> {
+    static RUN: OnceLock<Option<tempfile::TempDir>> = OnceLock::new();
+    RUN.get_or_init(|| {
+        export()?;
+        let tmp = tempfile::tempdir().unwrap();
+        run(tmp.path(), &[]);
+        Some(tmp)
+    })
+    .as_ref()
+    .map(tempfile::TempDir::path)
+}
+
+/// CEPII gravity of 2000 (`distw` the population-weighted harmonic distance `distw_harmonic`,
+/// `contig`) and the CEPII code of each pack country (its ISO code; pairs of countries CEPII
+/// does not list are dropped and counted).
+struct Gravity {
+    rows: Vec<ceteris_pack::read::tariffs::Distance>,
+    iso3: Vec<String>,
+}
+
+fn gravity() -> Option<&'static Gravity> {
+    static GRAVITY_TABLE: OnceLock<Option<Gravity>> = OnceLock::new();
+    GRAVITY_TABLE
+        .get_or_init(|| {
+            export()?;
+            let path = fetch::path_of(GRAVITY);
+            if !path.exists() {
+                eprintln!(
+                    "skipping: no {GRAVITY} in {}; fetch it with `ceteris pack fetch`",
+                    path.parent().unwrap().display()
+                );
+                return None;
+            }
+            let rows = read_distances(&path, 2000).unwrap();
+            let (iso, _) = read_codes(&fetch::path_of("ne_10m_admin_0_countries.zip")).unwrap();
+            let codes = table(&pack().join("countries.arrow"));
+            let codes = codes
+                .column_by_name("code")
+                .unwrap()
+                .as_string::<i32>()
+                .iter()
+                .map(|c| {
+                    let c = c.unwrap();
+                    iso.get(c).cloned().unwrap_or_else(|| c.to_owned())
+                })
+                .collect();
+            Some(Gravity { rows, iso3: codes })
+        })
+        .as_ref()
+}
+
+/// H2: PPML of simulated country-pair trade (traded goods, FOB value, the last 12 ticks of the
+/// default run) on ln distance and contiguity with exporter and importer effects, domestic
+/// pairs excluded: the distance coefficient lies in -1.1 to -0.7 (owner decision; a miss stops
+/// work for the owner, ADR 0013).
+#[test]
+fn h2_distance_elasticity() {
+    let (Some(out), Some(g)) = (default_run(), gravity()) else {
+        return;
+    };
+    let f = table(&out.join("run_flows.arrow"));
+    let good = column(&f, "good");
+    let traded: Vec<usize> = (0..good.len())
+        .filter(|&i| good[i] < N_TRADED as f64)
+        .collect();
+    let pick = |name: &str| -> Vec<f64> {
+        let v = column(&f, name);
+        traded.iter().map(|&i| v[i]).collect()
+    };
+    let index = |v: Vec<f64>| -> Vec<usize> { v.into_iter().map(|x| x as usize).collect() };
+    let (ex, im, value) = (
+        index(pick("exporter_country")),
+        index(pick("importer_country")),
+        pick("value"),
+    );
+    let o: Vec<&str> = g.rows.iter().map(|r| r.iso3_o.as_str()).collect();
+    let d: Vec<&str> = g.rows.iter().map(|r| r.iso3_d.as_str()).collect();
+    let distw: Vec<f64> = g.rows.iter().map(|r| r.distw).collect();
+    let contig: Vec<f64> = g.rows.iter().map(|r| r.contig).collect();
+    let iso3: Vec<&str> = g.iso3.iter().map(String::as_str).collect();
+    let e = ppml::distance_elasticity(
+        &RunFlows {
+            exporter_country: &ex,
+            importer_country: &im,
+            value: &value,
+        },
+        &GravityTable {
+            iso3_o: &o,
+            iso3_d: &d,
+            distw: &distw,
+            contig: &contig,
+        },
+        &iso3,
+    )
+    .unwrap();
+    println!("H2 distance: {e:?}");
+    let (lo, hi) = H2_DISTANCE;
+    assert!(
+        lo <= e.elasticity && e.elasticity <= hi,
+        "distance elasticity {:.4} (s.e. {:.4}) outside {H2_DISTANCE:?}",
+        e.elasticity,
+        e.se_elasticity
+    );
+}
+
+/// H2 per theta class (ADR 0018): per class, PPML of the simulated country-pair flows of its
+/// goods on ln(1 + tariff) and ln distance (CEPII population-weighted) with exporter and
+/// importer effects per good, domestic pairs excluded, zero flows kept; theta is minus the
+/// tariff coefficient and must lie in the class's prior band (ADR 0023). The flow is what the
+/// importer pays, FOB value times (1 + t): the kernel carries (1 + t)^-theta on spending (trade
+/// SPEC, Sourcing), so that is the flow whose tariff elasticity is theta (the FOB value's is
+/// theta + 1). The class with one good is also fitted by `ppml::trade_elasticity`.
+#[test]
+fn h2_theta_by_class() {
+    let (Some(inp), Some(out), Some(g)) = (export(), default_run(), gravity()) else {
+        return;
+    };
+    let n_c = inp.n_countries();
+    let n_g = inp.n_goods();
+    let f = table(&out.join("run_flows.arrow"));
+    let mut value = vec![0.0; n_c * n_c * n_g];
+    let (fe, fi, fg, fv) = (
+        column(&f, "exporter_country"),
+        column(&f, "importer_country"),
+        column(&f, "good"),
+        column(&f, "value"),
+    );
+    for i in 0..fv.len() {
+        value[(fe[i] as usize * n_c + fi[i] as usize) * n_g + fg[i] as usize] = fv[i];
+    }
+    let t = table(&pack().join("econ_tariffs.arrow"));
+    let mut rate = vec![0.0; n_c * n_c * 2];
+    let (ti, te, tg, tr) = (
+        column(&t, "importer"),
+        column(&t, "exporter"),
+        column(&t, "group"),
+        column(&t, "rate"),
+    );
+    for i in 0..tr.len() {
+        rate[(ti[i] as usize * n_c + te[i] as usize) * 2 + tg[i] as usize] = tr[i];
+    }
+    let export = std::env::var_os("CETERIS_PACK_EXPORT")
+        .map(PathBuf::from)
+        .unwrap();
+    let params: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(export.join("params.json")).unwrap())
+            .unwrap();
+    let of: Vec<usize> = params["trade"]["theta_class"].as_array().unwrap()[..N_TRADED]
+        .iter()
+        .map(|v| v.as_u64().unwrap() as usize)
+        .collect();
+    // Tariff groups: primary goods 0 to 3, manufactures 4 to 6.
+    let group = [0, 0, 0, 0, 1, 1, 1];
+    let index: std::collections::BTreeMap<&str, usize> = g
+        .iso3
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.as_str(), i))
+        .collect();
+    let mut dist = vec![f64::NAN; n_c * n_c];
+    for row in &g.rows {
+        if let (Some(&o), Some(&d)) = (
+            index.get(row.iso3_o.as_str()),
+            index.get(row.iso3_d.as_str()),
+        ) {
+            dist[o * n_c + d] = row.distw;
+        }
+    }
+    let pairs: Vec<(usize, usize)> = (0..n_c * n_c)
+        .filter(|&i| dist[i].is_finite() && dist[i] > 0.0 && i / n_c != i % n_c)
+        .map(|i| (i / n_c, i % n_c))
+        .collect();
+    let (mut lines, mut misses) = (vec![], vec![]);
+    let n_classes = *of.iter().max().unwrap() + 1;
+    for (c, &(lo, hi)) in THETA_BANDS.iter().enumerate().take(n_classes) {
+        let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
+        let rows: Vec<(usize, usize, usize)> = pairs
+            .iter()
+            .flat_map(|&(e, m)| goods.iter().map(move |&k| (e, m, k)))
+            .collect();
+        let tariff: Vec<f64> = rows
+            .iter()
+            .map(|&(e, m, k)| rate[(m * n_c + e) * 2 + group[k]])
+            .collect();
+        let fob: Vec<f64> = rows
+            .iter()
+            .map(|&(e, m, k)| value[(e * n_c + m) * n_g + k])
+            .collect();
+        let flow: Vec<f64> = fob
+            .iter()
+            .zip(&tariff)
+            .map(|(v, t)| v * (1.0 + t))
+            .collect();
+        let distance: Vec<f64> = rows.iter().map(|&(e, m, _)| dist[e * n_c + m]).collect();
+        let ln_tariff: Vec<f64> = tariff.iter().map(|t| t.ln_1p()).collect();
+        let ln_dist: Vec<f64> = distance.iter().map(|d| d.ln()).collect();
+        let regressors = [("ln_tariff", ln_tariff.as_slice()), ("ln_dist", &ln_dist)];
+        let fe_e: Vec<i64> = rows
+            .iter()
+            .map(|&(e, _, k)| (e * N_TRADED + k) as i64)
+            .collect();
+        let fe_m: Vec<i64> = rows
+            .iter()
+            .map(|&(_, m, k)| (m * N_TRADED + k) as i64)
+            .collect();
+        let cluster: Vec<i64> = rows
+            .iter()
+            .map(|&(e, m, _)| (e.min(m) * n_c + e.max(m)) as i64)
+            .collect();
+        let fit = ppml::hdfe(&flow, &[&fe_e, &fe_m], &regressors, None).unwrap();
+        let clustered = ppml::hdfe(&flow, &[&fe_e, &fe_m], &regressors, Some(&cluster)).unwrap();
+        let fob_fit = ppml::hdfe(&fob, &[&fe_e, &fe_m], &regressors, None).unwrap();
+        let theta = -fit.coef("ln_tariff");
+        let mut line = format!(
+            "class {c} goods {goods:?}: theta {theta:.4} (s.e. {:.4}, pair-clustered {:.4}), ln \
+             distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n {} ({} separated); band {lo} to \
+             {hi}; FOB value: tariff coefficient {:.4} (s.e. {:.4})",
+            fit.se("ln_tariff"),
+            clustered.se("ln_tariff"),
+            fit.coef("ln_dist"),
+            fit.se("ln_dist"),
+            fit.pseudo_r2,
+            fit.n,
+            fit.n_separated,
+            fob_fit.coef("ln_tariff"),
+            fob_fit.se("ln_tariff")
+        );
+        if goods.len() == 1 {
+            let (e, m): (Vec<usize>, Vec<usize>) = rows.iter().map(|&(e, m, _)| (e, m)).unzip();
+            let dense = ppml::trade_elasticity(&flow, &e, &m, &tariff, &distance).unwrap();
+            assert!(
+                (dense.theta - theta).abs() <= 1e-6 * theta.abs(),
+                "trade_elasticity {} vs hdfe {theta}",
+                dense.theta
+            );
+            line += &format!(
+                "; trade_elasticity {:.4} (s.e. {:.4})",
+                dense.theta, dense.se_theta
+            );
+        }
+        println!("H2 per class: {line}");
+        lines.push(line);
+        if !(lo <= theta && theta <= hi) {
+            misses.push(c);
+        }
+    }
+    assert!(
+        misses.is_empty(),
+        "classes {misses:?} outside their prior band: {}",
+        lines.join("; ")
+    );
 }
