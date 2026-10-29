@@ -1,10 +1,13 @@
-"""Digests of the polygons pyogrio reads from the admin-1 shapefile and the geoBoundaries files.
+"""Digests of the geometries pyogrio reads from the admin-1 shapefile, the geoBoundaries files
+and the Natural Earth land, railways and ports of the transport graph.
 
     python scripts/parity/geo_readers.py
 
-Each geometry is hashed as: a type byte (0 none, 3 Polygon, 6 MultiPolygon), then u32 counts of
-parts, rings and points, then the coordinates as little-endian f64; a geoBoundaries feature is
-preceded by its `shapeName` as UTF-8 and a NUL. `tests/geo_readers.rs` holds the digests.
+Each polygon is hashed as: a type byte (0 none, 3 Polygon, 6 MultiPolygon), then u32 counts of
+parts, rings and points, then the coordinates as little-endian f64; a point as the byte 1 and
+its coordinates; a line as the byte 2 (LineString) or 5 (MultiLineString), then u32 counts of
+parts and points and the coordinates. A geoBoundaries feature or a port is preceded by its name
+(`shapeName`, `name`) as UTF-8 and a NUL. `tests/geo_readers.rs` holds the digests.
 
 Also prints the digest of the invalid admin-1 polygons as `shapely.make_valid` repairs them (with
 their ids); run it on shapely built on GEOS 3.15 (README.md) for that line.
@@ -22,6 +25,18 @@ from ceteris.packs import counties, fetch
 def feed(h, g) -> None:
     if g is None:
         h.update(b"\0")
+        return
+    if g.geom_type == "Point":
+        h.update(b"\1" + struct.pack("<dd", g.x, g.y))
+        return
+    if g.geom_type in ("LineString", "MultiLineString"):
+        h.update(bytes([2 if g.geom_type == "LineString" else 5]))
+        parts = shapely.get_parts(g)
+        h.update(struct.pack("<I", len(parts)))
+        for p in parts:
+            c = shapely.get_coordinates(p)
+            h.update(struct.pack("<I", len(c)))
+            h.update(c.astype("<f8").tobytes())
         return
     h.update(bytes([3 if g.geom_type == "Polygon" else 6]))
     parts = shapely.get_parts(g)
@@ -60,6 +75,18 @@ def main() -> None:
             feed(h, g)
             n += 1
     print(f"geoboundaries {n} {h.hexdigest()}")
+    for name in ("ne_10m_land.zip", "ne_10m_railroads.zip"):
+        h = hashlib.sha256()
+        _, gs = geoms(fetch.CACHE / name, [])
+        for g in gs:
+            feed(h, g)
+        print(f"{name} {len(gs)} {h.hexdigest()}")
+    h = hashlib.sha256()
+    t, gs = geoms(fetch.CACHE / "ne_10m_ports.zip", ["name"])
+    for name, g in zip(t.column("name").to_pylist(), gs):
+        h.update((name or "").encode() + b"\0")
+        feed(h, g)
+    print(f"ne_10m_ports.zip {len(gs)} {h.hexdigest()}")
 
 
 if __name__ == "__main__":

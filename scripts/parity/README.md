@@ -61,7 +61,17 @@ them, into tables of their own, so that only those rows take the split tolerance
 build seeds the Voronoi splits from h3's cell centres (`h3_centres.py`, `dump-geo --build
 --centres FILE`) and must match Python exactly but for the H3 cell areas.
 
-`geo_readers.py` prints digests of the polygons pyogrio reads from the admin-1 shapefile and the
-geoBoundaries files; `tests/geo_readers.rs` checks the Rust readers against them.
+`step3-transport.sh` compares the port of `transport.py`. `transport_tables.py` builds the
+provinces, their mean ruggedness and the graph in Python and writes the tables `build.build`
+writes from it (nodes, edges, sea_zones, chokepoints) with the coastal flags and the build stats;
+`ceteris pack dump-geo DIR --build --transport` writes the same from Rust. Every table is
+compared in file row order. Built on h3o's cell centres, sea node positions and the lengths that
+reach them differ in the last bits and are listed; a second Rust build takes h3's centres at the
+land and the sea resolutions and must match on every column. The script keeps its outputs in
+`WORK` (default: a new temporary directory).
+
+`geo_readers.py` prints digests of the geometries pyogrio reads from the admin-1 shapefile, the
+geoBoundaries files and the Natural Earth land, railways and ports; `tests/geo_readers.rs`
+checks the Rust readers against them.
 
 The scripts are deleted with the Python they drive (ADR 0113, step 5).
