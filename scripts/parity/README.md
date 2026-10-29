@@ -48,11 +48,19 @@ fits. For the calibration, `python -m ceteris.reference calibrate` and `ceteris 
 calibrate the fixture (`--inputs`) and the pack (`--pack`), each timed, into
 `WORK_DIR/calibration-<name>/{python,rust}` with their printed output beside them;
 `pack compare --iterative` compares the six tables in file row order, and the `parity` test of
-`ceteris-calibrate` (`CETERIS_CALIBRATION_PARITY`) the schema metadata (format, static digest and
-passes equal, r within 1e-9) and the printed summary (within 1e-9; timings, Sinkhorn sweeps and
-the per-pass changes, which are iteration noise, left out). The `steady_state` tests of
+`ceteris-calibrate` (`CETERIS_CALIBRATION_PARITY`) the schema metadata (format and static digest
+equal, r within 1e-9) and the printed summary (within 1e-9; timings, pass counts, Sinkhorn sweeps
+and the per-pass changes, which are iteration noise, printed but left out). The `steady_state` tests of
 `ceteris-calibrate` then run on the pack export, including `EconInputs::from_pack` on a linked
 copy of the pack holding the Rust tables.
+For gravity, `step4_gravity_dump.py` runs `gravity.estimate` on 2000 BACI and the pack and
+`gravity.yotov` on the Yotov et al. (2016) files, dumping the printed report and notes, the TOML,
+every field of the estimates, the country costs of the least-cost trees and the Yotov fits, with
+both timings; `ceteris gravity` prints its report beside them, and the `gravity_parity` test of
+`ceteris-calibrate` (`CETERIS_GRAVITY_PARITY`) estimates again in process: the printed text must
+be equal, the estimates, the TOML values and the Yotov fits within 1e-9 relative (counts equal)
+and the country costs within 1e-12. Last, both entry points print the stability table of the
+fixture, compared byte for byte.
 
 The per-module scripts of step 2 compared each module's columns, every source reader's output as
 canonical JSON and the raster pixel to H3 cell mapping while the port was under way. They were
