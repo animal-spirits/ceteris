@@ -651,6 +651,8 @@ name = "ceteris-app"
 version = "0.0.1"
 dependencies = [
  "pollster",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
 ]
