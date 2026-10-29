@@ -112,7 +112,7 @@ pub fn run() {
     let dir = default_dir();
     let pack = Pack::load(&dir, &TransportParams::default()).unwrap_or_else(|e| {
         panic!(
-            "{e} (pack at {}; build it with `uv run python -m ceteris.packs`)",
+            "{e} (pack at {}; build it with `cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build`)",
             dir.display()
         )
     });

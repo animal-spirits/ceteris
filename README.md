@@ -32,8 +32,8 @@ crates/
   ceteris-geo/  pack loading, transport graph, least-cost paths and their cache
 app/            Tauri desktop app: TypeScript map (MapLibre, React) over the Rust core
 python/ceteris/packs/
-                pack pipeline: pinned sources, provinces, H3 raster, transport graph;
-                licence manifest and its validator
+                pack configuration: pinned sources, licence manifest, 2000 borders,
+                chokepoints (the build is the `ceteris-pack` crate)
 tests/golden/   stored hashes of golden scenarios
 ```
 
@@ -43,18 +43,17 @@ them (Section 19.3).
 ## Develop
 
 Build the world pack first. It needs [tippecanoe](https://github.com/felt/tippecanoe)
-(`brew install tippecanoe`), downloads about 920 MB of pinned sources into `data/cache/`
+and GEOS 3.15 (`brew install tippecanoe geos`), downloads about 920 MB of pinned sources into `data/cache/`
 once, then builds `data/packs/2000/` in about 2.5 minutes:
 
 ```
-cd python && uv run python -m ceteris.packs
+cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build
 ```
 
 Then:
 
 ```
 cargo test --workspace
-cd python && uv run pytest
 cd app && npm install && npm run tauri dev
 ```
 
@@ -76,8 +75,9 @@ prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo`
 benchmarks; `ceteris pack check-sources --profile research|release` validates the licence manifest.
 Tests that need the pack skip when it has not been built, as in CI.
 
-Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden` or
-`CETERIS_BLESS=1 uv run pytest`, then explain why in the commit.
+Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golden`, or
+`CETERIS_BLESS=1 cargo test -p ceteris-pack --test build --test econ_build` for the pack's
+digests, then explain why in the commit.
 
 The rules for contributors and coding agents are in Section 21.2 of the design: spec
 first, tests before implementation, one system per task, golden runs, no silent

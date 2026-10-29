@@ -1,7 +1,8 @@
 # Ceteris Paribus
 
 Deterministic, forkable, agent-based world simulator from 1 January 2000. Rust workspace
-(`crates/`), Tauri desktop app (`app/`), Python pack pipeline being removed (ADR 0113).
+(`crates/`), Tauri desktop app (`app/`); `python/` keeps the pack configuration and the parity
+scripts' uv environment until ADR 0113 step 5.
 
 ## Where things are
 
@@ -44,8 +45,10 @@ cargo run --release --bin ceteris -- pack check-sources --profile research
 cargo deny check licenses
 ```
 
-Pack-dependent tests read the pack from `CETERIS_PACK`. App: `cd app && npm run build`;
-`app/src-tauri` is a separate cargo workspace (fmt, clippy, test there too).
+Pack-dependent tests read the pack from `CETERIS_PACK`. The pack is built owner-side (GEOS 3.15,
+tippecanoe): `cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build`.
+App: `cd app && npm run build`; `app/src-tauri` is a separate cargo workspace (fmt, clippy,
+test there too).
 
 ## Commits
 
