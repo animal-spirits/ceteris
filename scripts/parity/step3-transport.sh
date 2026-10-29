@@ -10,8 +10,7 @@
 #   the anchors of Voronoi-split provinces, differ from h3's in the last bits, so nodes.lon,
 #   nodes.lat and edges.length_km are listed, not failed; every other column must match;
 # - with h3's centres (`h3_centres.py` at the land and the sea resolutions): every column must
-#   match. Pending a ruling, edges.length_km does not: province anchors (geo's centroid against
-#   GEOS's) differ in the last bits, which short access and border edges amplify.
+#   match.
 #
 # GEOS_PYTHON names a Python whose shapely is built on GEOS 3.15 and has the packages of
 # python/pyproject.toml. Outputs go to WORK (default: a new temporary directory), kept.
