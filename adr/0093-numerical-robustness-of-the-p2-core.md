@@ -70,4 +70,8 @@ unnecessary. The price spread of 1e12 between two countries, a wide-spread reach
 the kernel round trip at extreme tau, a scale gap beyond 709.78 and spending per unit of access
 beyond f64 are tests.
 
-Not built, and still open: the exact local fill and the uncapped wage search.
+The uncapped wage search is built in pre-p3/econ-review: the frictionless wage is the root on
+the uncapped targets (`production::labour_target_uncapped`, infinite at the corners where no
+finite profit maximum exists, as the GE reference's), and only the allocation caps at L^s.
+
+Not built, and still open: the exact local fill.

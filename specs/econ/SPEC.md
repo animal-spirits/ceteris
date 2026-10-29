@@ -279,8 +279,12 @@ infinite (no reachable origin) are left out of the index (owner ruling, MIGRATIO
 change in reachability moves its weights. c_max is P03c; every tick the clip binds is counted
 per province (`clip_ticks` in `run_wages`).
 
-Frictionless mode (V1): w_i solves sum_g L*_ig(w) = (1 - u*_i) L^s_i exactly (monotone in w;
-safeguarded Newton in ln w), and eta = 1, so frictionless unemployment is u*. The unemployment
+Frictionless mode (V1): w_i solves sum_g L*_ig(w) = (1 - u*_i) L^s_i exactly on the uncapped
+targets (monotone in w; safeguarded Newton in ln w; ADR 0093), so the wage follows the closed
+form where one target alone reaches L^s; only the allocation caps (sum L_ig <= L^s), and eta = 1,
+so frictionless unemployment is u*. Where demand never meets supply (every p_VA <= 0, say), the
+wage moves at most a doubling or halving per tick
+(`frictionless_wage_matches_closed_form_when_one_target_reaches_supply`). The unemployment
 rate u_i = 1 - sum_g L_ig / L^s_i applies equally to each education level.
 
 **Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
@@ -928,11 +932,6 @@ texture fed from core columns.
   slowly (geometrically, at a loop gain near 1), and at the bound the chain clears the rest by
   cutting the users that produce no local good rather than all users pro rata; on the fixture it
   never reaches the bound. Measure on the pack (Task 19) and revisit the bound or the solve there.
-- Frictionless clearing wage: each labour target is capped at L^s, so where one enterprise's
-  target reaches L^s, capped demand equals L^s on a whole interval of low wages; the search
-  then finds no sign change and the wage is indeterminate below the true root. Searching on
-  uncapped targets (capping only the allocation) would follow the closed form. No fixture
-  province is affected.
 - Money headroom: the i64 ledger (1 minor unit = 1e-4) holds the full pack with about 300 times one
   month of world income to spare, and about 800 times the money the mint issues: the mint holds minus
   the world's money (-1.15e16 minor units), so it overflows first, at a uniform scale of about 802 on

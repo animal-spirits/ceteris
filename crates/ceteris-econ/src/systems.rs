@@ -30,7 +30,7 @@ use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch as dispatch_good, source 
 use crate::inputs::EconInputs;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local::{self, LOCAL};
-use crate::production::{labour_target, rho, value_added};
+use crate::production::{labour_target, labour_target_uncapped, rho, value_added};
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
     TRADE, WAGE, WRITE_OFF, to_minor, to_numeraire,
@@ -46,6 +46,19 @@ pub const SEED: Seed = Seed(42);
 /// Relative gap between labour demand and supply above which the clearing wage is taken to
 /// have no root (all value-added prices nonpositive, say).
 const NO_ROOT: f64 = 1e-9;
+
+/// The frictionless wage (ADR 0089, 0093): the root of `demand(w) = natural`, `demand` the sum
+/// of the uncapped labour targets, so it follows the closed form where one target alone
+/// reaches the supply. With no root the search ran to an extreme, and the wage moves at most a
+/// doubling or halving from `w0`.
+fn frictionless_wage(w0: f64, natural: f64, demand: impl Fn(f64) -> f64) -> f64 {
+    let w1 = clearing_wage(w0, natural, &demand);
+    if (demand(w1) - natural).abs() > NO_ROOT * natural {
+        w1.clamp(0.5 * w0, 2.0 * w0)
+    } else {
+        w1
+    }
+}
 
 pub fn schedule() -> Schedule<EconWorld> {
     let def = |id, name, run| SystemDef {
@@ -215,17 +228,15 @@ pub fn labour(w: &mut EconWorld) {
             let w0 = wage[i];
             let (w1, t, clipped) = if params.frictionless {
                 let demand = |w: f64| -> f64 {
+                    let ent = &inp.enterprises;
                     ents.clone()
                         .zip(&p_va)
-                        .map(|(e, &pv)| target(e, pv, w))
+                        .map(|(e, &pv)| {
+                            labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                        })
                         .sum()
                 };
-                let natural = (1.0 - u_star) * supply;
-                let mut w1 = clearing_wage(w0, natural, demand);
-                // no root: the search ran to an extreme; take at most a doubling or halving
-                if (demand(w1) - natural).abs() > NO_ROOT * natural {
-                    w1 = w1.clamp(0.5 * w0, 2.0 * w0);
-                }
+                let w1 = frictionless_wage(w0, (1.0 - u_star) * supply, demand);
                 (w1, targets(w1), false)
             } else {
                 let t = targets(w0);
@@ -947,6 +958,41 @@ mod tests {
             assert_eq!(out.iter().sum::<i64>(), total);
             assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
         }
+    }
+
+    /// Cobb-Douglas targets L* = L0 (w L0 / (p A VA0 s_L))^(1 / (s_L - 1)): with u* = 0 and a
+    /// second enterprise hiring no one, the clearing wage is where the first alone hires L^s.
+    /// Capped at L^s, its demand equals the supply on every lower wage, and the search stopped
+    /// at the first one it tried.
+    #[test]
+    fn frictionless_wage_matches_closed_form_when_one_target_reaches_supply() {
+        let (a, va0, l0, s_l, supply) = (1.3, 100.0, 50.0, 0.6, 80.0);
+        let p_va = [1.7, -0.3];
+        let closed = p_va[0] * a * va0 * s_l / l0 * libm::pow(supply / l0, s_l - 1.0);
+        let uncapped = |w: f64| -> f64 {
+            p_va.iter()
+                .map(|&p| labour_target_uncapped(p, w, a, va0, l0, s_l, 0.0))
+                .sum()
+        };
+        let capped = |w: f64| -> f64 {
+            p_va.iter()
+                .map(|&p| labour_target(p, w, a, va0, l0, s_l, 0.0, supply))
+                .sum()
+        };
+        for w0 in [
+            0.1 * closed,
+            0.9 * closed,
+            closed,
+            1.5 * closed,
+            10.0 * closed,
+        ] {
+            let w = frictionless_wage(w0, supply, uncapped);
+            assert!(
+                (w / closed - 1.0).abs() < 1e-12,
+                "from {w0}: {w} vs {closed}"
+            );
+        }
+        assert_eq!(clearing_wage(0.1 * closed, supply, capped), 0.1 * closed);
     }
 
     #[test]

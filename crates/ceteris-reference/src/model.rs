@@ -565,10 +565,8 @@ impl<'a> Model<'a> {
     }
 }
 
-/// `production::labour_target` of one enterprise, uncapped: at a clearing wage no target exceeds
-/// L^s unless one enterprise alone employs the province (then Rust finds no clearing wage
-/// either), so the cap never binds at a steady state; leaving it out keeps labour demand
-/// responsive to the wage everywhere.
+/// `production::labour_target_uncapped` of one enterprise: the frictionless wage solves on
+/// uncapped targets in Rust too, which keeps labour demand responsive to the wage everywhere.
 #[allow(clippy::too_many_arguments)]
 fn labour_target(p_va: f64, w: f64, a: f64, va0: f64, l0: f64, s_l: f64, r: f64) -> f64 {
     let q = w * l0 / (p_va * a * va0 * s_l);
