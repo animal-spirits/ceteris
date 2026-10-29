@@ -177,11 +177,11 @@ Starts from main 7219de2 (A merged; Rust pack, reference and calibration on main
 **Interfaces:**
 - Produces: good 1 "Crude oil, gas and refined fuels" (ICIO B06 and B09 as `goods::icio_industry` maps them today, plus C19 from good 5); `econ_goods.arrow` records both `theta_arithmetic` and `theta_harmonic` per class; `TradeParams.theta` per good from ADR 0023's rule on the harmonic means; `TradeParams.theta_scale: f64` (register P150, default 1, lane values {0.6, 1, 1.4} for tariff experiments, applied as theta_g * theta_scale in `Kernel::build`); `theta::harmonic_mean(theta: &[f64], weight: &[f64]) -> f64`.
 
-- [ ] **Step 1: Failing tests:** `c19_is_in_good_1` (goods.rs: `icio_industry("C19")` is good 1); `good_1_and_5_totals_follow_the_c19_move` (icio.rs, synthetic ICIO: good 1 and good 5 output and VA equal the aggregation with C19 moved, 1e-9); `class_theta_is_harmonic` (goods.rs, two-line toy class: theta_class = (sum w_l / theta_l)^-1); `welfare_first_order_at_harmonic_theta` (goods.rs, ADR 0101's toy test); `theta_scale_multiplies_every_class` (trade params, kernel factors at scale 1.4 equal those at theta x 1.4 by bits).
-- [ ] **Step 2: Run** `cargo test -p ceteris-pack --test goods --test icio` and `cargo test -p ceteris-trade theta_scale`; expect failures.
-- [ ] **Step 3: Implement**; widen the P01 prior to cover the harmonic values; update `fixture_theta_follows_the_classes` and `h2_prior_bands_follow_the_standard_errors` to the new class values.
-- [ ] **Step 4: Rebuild the pack econ tables** (`pack build --econ-only`), run `cargo test -p ceteris-pack --release --test econ_build` (update `pack_econ_tables_match_golden`), re-run the ADR 0022 gravity diagnostics with `cargo run --release --bin ceteris -- gravity --pack $CETERIS_PACK` and record them in ADR 0022.
-- [ ] **Step 5: Commit** `feat(econ): move refined fuels into good 1 and use harmonic class theta (adrs 0092, 0101)`.
+- [x] **Step 1: Failing tests:** `c19_is_in_good_1` (goods.rs: `icio_industry("C19")` is good 1); `good_1_and_5_totals_follow_the_c19_move` (icio.rs, synthetic ICIO: good 1 and good 5 output and VA equal the aggregation with C19 moved, 1e-9); `class_theta_is_harmonic` (goods.rs, two-line toy class: theta_class = (sum w_l / theta_l)^-1); `welfare_first_order_at_harmonic_theta` (goods.rs, ADR 0101's toy test); `theta_scale_multiplies_every_class` (trade params, kernel factors at scale 1.4 equal those at theta x 1.4 by bits).
+- [x] **Step 2: Run** `cargo test -p ceteris-pack --test goods --test icio` and `cargo test -p ceteris-trade theta_scale`; expect failures.
+- [x] **Step 3: Implement**; widen the P01 prior to cover the harmonic values; update `fixture_theta_follows_the_classes` and `h2_prior_bands_follow_the_standard_errors` to the new class values.
+- [x] **Step 4: Rebuild the pack econ tables** (`pack build --econ-only`), run `cargo test -p ceteris-pack --release --test econ_build` (update `pack_econ_tables_match_golden`), re-run the ADR 0022 gravity diagnostics with `cargo run --release --bin ceteris -- gravity --pack $CETERIS_PACK` and record them in ADR 0022.
+- [x] **Step 5: Commit** `feat(econ): move refined fuels into good 1 and use harmonic class theta (adrs 0092, 0101)`.
 
 ### Task B2: Gateway masses and nu per theta class, fitted to the cross-border share (ADR 0092)
 
