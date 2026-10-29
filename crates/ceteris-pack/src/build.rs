@@ -238,7 +238,6 @@ mod full {
     use crate::geo::raster_terrain::ETOPO;
     use crate::geo::raster_terrain::{Elevation, SAMPLE_DEPTH};
     use crate::geo::transport::{self, Mode, NodeKind, Transport};
-    use crate::geo::vertices::write_geoms;
     use crate::geo::{counties, resources, sphere};
     use crate::json::Json;
     use crate::manifest::manifest;
@@ -600,9 +599,7 @@ mod full {
     }
 
     /// The map's tiles and fills in `web`, from the provinces and clipped counties simplified.
-    /// With `simple`, the simplified provinces and counties also go there as vertex tables
-    /// (`provinces.simple.arrow`, `counties.simple.arrow`), the polygons the fills cover.
-    fn write_web(web: &Path, w: &World, simple: Option<&Path>) -> Result<web::Written, String> {
+    fn write_web(web: &Path, w: &World) -> Result<web::Written, String> {
         let provinces: Vec<geo::Geometry> = w.provs.iter().map(|p| p.geom.clone()).collect();
         let country: Vec<String> = w.provs.iter().map(|p| p.country.clone()).collect();
         let counties = w
@@ -612,16 +609,6 @@ mod full {
             .map(|c| to_geo(&c.geom))
             .collect::<Result<Vec<_>, _>>()?;
         let layers = web::layers(&provinces, &country, &counties)?;
-        if let Some(dir) = simple {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-            for (name, geoms) in [
-                ("provinces", &layers.provinces),
-                ("counties", &layers.counties),
-            ] {
-                let polygons: Vec<_> = geoms.iter().map(provinces::parts).collect();
-                write_geoms(&dir.join(format!("{name}.simple.arrow")), &polygons)?;
-            }
-        }
         web::write_layers(web, &layers)
     }
 
@@ -678,7 +665,7 @@ mod full {
     }
 
     /// The manifest's build stats: the transport graph's, the build's own, the fills' and the
-    /// econ build's, in build.py's order.
+    /// econ build's, in the manifest's order.
     fn stats(w: &World, written: &web::Written, econ: &BuildReport) -> Result<Json, String> {
         let s = &w.t.stats;
         let provs = &w.provs;
@@ -740,12 +727,9 @@ mod full {
         ]))
     }
 
-    /// Builds the pack into `out` from the fetch cache, the Voronoi splits seeded from, and the
-    /// sea grid placed at, the cell centres `centres` gives: the P1 tables, the map's tiles,
-    /// fills and attribute files in `out/web` (emptied first), the econ tables, and
-    /// `manifest.json`. `simple`, if given, receives the simplified map polygons (see
-    /// `write_web`).
-    pub fn build(out: &Path, centres: &Centres, simple: Option<&Path>) -> Result<Built, String> {
+    /// Builds the pack into `out` from the fetch cache: the P1 tables, the map's tiles, fills
+    /// and attribute files in `out/web` (emptied first), the econ tables, and `manifest.json`.
+    pub fn build(out: &Path) -> Result<Built, String> {
         let root = workspace_root();
         let cache = root.join(fetch::CACHE_DIR);
         let entries = fetch::entries(&root)?;
@@ -754,11 +738,11 @@ mod full {
         }
         let config_path = root.join(CONFIG_DIR).join("pack.toml");
         let config = read_table(&config_path)?;
-        let w = world(&root, &cache, &config, centres)?;
+        let w = world(&root, &cache, &config, &Centres::H3o)?;
 
         std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
         let web = out.join("web");
-        // The build owns its web directory, as build.py's rmtree(web, ignore_errors=True).
+        // The build owns its web directory: whatever was there is removed first.
         let _ = std::fs::remove_dir_all(&web);
         std::fs::create_dir(&web).map_err(|e| format!("{}: {e}", web.display()))?;
         let mut pack = Pack {
@@ -766,7 +750,7 @@ mod full {
             tables: BTreeMap::new(),
         };
         write_tables(&mut pack, &w)?;
-        let written = write_web(&web, &w, simple)?;
+        let written = write_web(&web, &w)?;
         pack.tables.extend(written.tables.clone());
         write_attributes(&mut pack, &w)?;
 

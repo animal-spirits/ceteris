@@ -1,6 +1,6 @@
 [package]
 name = "ceteris-pack"
-description = "Pack tables, Arrow output and the parity comparison for Ceteris Paribus"
+description = "Pack tables, Arrow output and the table comparison for Ceteris Paribus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
