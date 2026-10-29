@@ -1,10 +1,12 @@
-//! Natural Earth admin-0 and admin-1 attributes, from the dBASE table of the zipped shapefile, and
-//! admin-1 polygons, from its `.shp` member.
+//! Natural Earth attributes, from the dBASE table of a zipped shapefile, and shapes, from its
+//! `.shp` member.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use geo::{BoundingRect, Coord, Geometry, LineString, MultiPolygon, Polygon, Rect};
+use geo::{
+    BoundingRect, Coord, Geometry, LineString, MultiLineString, MultiPolygon, Point, Polygon, Rect,
+};
 
 use super::{err, int, read_member};
 
@@ -194,8 +196,9 @@ pub fn us_states(admin1: &Path) -> Result<BTreeMap<String, String>, String> {
     Ok(out)
 }
 
-/// The polygons of the `.shp` member of the zipped shapefile at `path`, one per record (None for
-/// a null shape), as GDAL's shapefile driver reads them.
+/// The shapes of the `.shp` member of the zipped shapefile at `path`, one per record (None for
+/// a null shape), as GDAL's shapefile driver reads them: points, lines (a MultiLineString when
+/// a record has more than one part) and polygons.
 pub fn shapes_from_zip(path: &Path) -> Result<Vec<Option<Geometry>>, String> {
     let bytes = read_member(path, |n| n.to_ascii_lowercase().ends_with(".shp"))?;
     parse_shapes(&bytes).map_err(|e| err(path, e))
@@ -215,32 +218,49 @@ pub fn parse_shapes(b: &[u8]) -> Result<Vec<Option<Geometry>>, String> {
             return Err("truncated shapefile record".into());
         }
         at = rec + len;
+        let parts = || -> Result<Vec<LineString>, String> {
+            let (parts, points) = (count(rec + 36)?, count(rec + 40)?);
+            let xy = rec + 44 + 4 * parts;
+            if xy + 16 * points > at {
+                return Err("truncated record".into());
+            }
+            let mut starts = (0..parts)
+                .map(|k| count(rec + 44 + 4 * k))
+                .collect::<Result<Vec<_>, _>>()?;
+            starts.push(points);
+            Ok(starts
+                .windows(2)
+                .map(|w| {
+                    (w[0]..w[1])
+                        .map(|i| Coord {
+                            x: le64(xy + 16 * i),
+                            y: le64(xy + 16 * i + 8),
+                        })
+                        .collect()
+                })
+                .collect())
+        };
         match le32(rec) {
             0 => out.push(None),
-            5 => {
-                let (parts, points) = (count(rec + 36)?, count(rec + 40)?);
-                let xy = rec + 44 + 4 * parts;
-                if xy + 16 * points > at {
-                    return Err("truncated polygon record".into());
+            1 => {
+                if rec + 20 > at {
+                    return Err("truncated point record".into());
                 }
-                let mut starts = (0..parts)
-                    .map(|k| count(rec + 44 + 4 * k))
-                    .collect::<Result<Vec<_>, _>>()?;
-                starts.push(points);
-                let rings = starts
-                    .windows(2)
-                    .map(|w| {
-                        (w[0]..w[1])
-                            .map(|i| Coord {
-                                x: le64(xy + 16 * i),
-                                y: le64(xy + 16 * i + 8),
-                            })
-                            .collect()
-                    })
-                    .collect();
-                out.push(Some(organize(rings)));
+                out.push(Some(Geometry::Point(Point::new(
+                    le64(rec + 4),
+                    le64(rec + 12),
+                ))));
             }
-            t => return Err(format!("shape type {t} is not a polygon")),
+            3 => {
+                let mut lines = parts()?;
+                out.push(Some(if lines.len() == 1 {
+                    Geometry::LineString(lines.remove(0))
+                } else {
+                    Geometry::MultiLineString(MultiLineString(lines))
+                }));
+            }
+            5 => out.push(Some(organize(parts()?))),
+            t => return Err(format!("unsupported shape type {t}")),
         }
     }
     Ok(out)

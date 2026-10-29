@@ -3,7 +3,10 @@
 //! geom, part, ring, x, y), written to `DIR/rust` as the tables and fills of
 //! `scripts/parity/geo_inputs.py`. With `--build`, the provinces and clipped counties are built
 //! here instead, and their vertex tables, attributes and clipping misfit are written to
-//! `DIR/rust` too; `--centres FILE` seeds the Voronoi splits from a table of cell centres.
+//! `DIR/rust` too; `--centres FILE` seeds the Voronoi splits and places the sea grid's cells at
+//! a table of cell centres; `--transport` also builds the transport graph on them and writes its
+//! tables, the provinces' coastal flags and the graph's stats as
+//! `scripts/parity/transport_tables.py` does.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -154,14 +157,18 @@ pub fn write_geoms(path: &Path, geoms: &[MultiPolygon]) -> Result<(), String> {
 pub fn dump(dir: &Path) -> Result<(), String> {
     let provinces = read_geoms(&dir.join("provinces.geom.arrow"))?;
     let counties = read_geoms(&dir.join("counties.geom.arrow"))?;
-    dump_into(&dir.join("rust"), &provinces, &counties)
+    dump_into(&dir.join("rust"), &provinces, &counties).map(drop)
 }
 
 /// Builds the provinces and clipped counties from the fetch cache as the pack build does, the
 /// Voronoi splits seeded from `centres`, and writes them with what the geo modules compute from
-/// them to `DIR/rust`.
+/// them to `DIR/rust`; with `transport`, the transport graph on them too.
 #[cfg(feature = "geos")]
-pub fn build(dir: &Path, centres: &super::provinces::Centres) -> Result<(), String> {
+pub fn build(
+    dir: &Path,
+    centres: &super::provinces::Centres,
+    transport: bool,
+) -> Result<(), String> {
     use arrow_array::StringArray;
 
     use super::{counties, overlay, provinces};
@@ -246,14 +253,61 @@ pub fn build(dir: &Path, centres: &super::provinces::Centres) -> Result<(), Stri
         .collect::<Result<Vec<_>, _>>()?;
     write_geoms(&out.join("provinces.geom.arrow"), &provinces)?;
     write_geoms(&out.join("counties.geom.arrow"), &counties)?;
-    dump_into(&out, &provinces, &counties)
+    let tri_m = dump_into(&out, &provinces, &counties)?;
+    if transport {
+        write_transport(&out, &provs, &tri_m, &config, centres)?;
+    }
+    Ok(())
 }
 
+#[cfg(feature = "geos")]
+fn write_transport(
+    out: &Path,
+    provs: &[super::provinces::Province],
+    tri_m: &[f64],
+    config: &toml::Table,
+    centres: &super::provinces::Centres,
+) -> Result<(), String> {
+    use arrow_array::{BooleanArray, Int64Array};
+
+    use super::transport;
+
+    let cache = workspace_root().join(fetch::CACHE_DIR);
+    let t = transport::build(
+        provs,
+        tri_m,
+        &cache,
+        resolution(config, "sea_res")?,
+        resolution(config, "sea_zone_res")?,
+        centres,
+    )?;
+    for (name, batch) in transport::tables(&t.graph, &t.zones, &transport::chokepoints()?)? {
+        let path = out.join(name);
+        table::write(&path, &batch, &Default::default())
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    write(
+        &out.join("transport.arrow"),
+        named(vec![("coastal", Arc::new(BooleanArray::from(t.coastal)))]),
+    )?;
+    let stats = t
+        .stats
+        .named()
+        .into_iter()
+        .map(|(k, v)| {
+            let v = i64::try_from(v).map_err(|e| e.to_string())?;
+            Ok((k, Arc::new(Int64Array::from(vec![v])) as ArrayRef))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    write(&out.join("transport_stats.arrow"), named(stats))
+}
+
+/// Writes the tables and fills; returns the provinces' mean terrain ruggedness.
 fn dump_into(
     out: &Path,
     provinces: &[MultiPolygon],
     counties: &[MultiPolygon],
-) -> Result<(), String> {
+) -> Result<Vec<f64>, String> {
     let config = read_table(&workspace_root().join(CONFIG_DIR).join("pack.toml"))?;
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let z = Elevation::open(&fetch::path_of(ETOPO))?;
@@ -312,6 +366,7 @@ fn dump_into(
     let terr = terrain(&cells, &z, SAMPLE_DEPTH)?;
     let area = cell_area_km2(&cells);
     let stat = means(&owner, &area, &terr, n);
+    let tri_m = stat.tri_m.clone();
     let mut count = vec![0u32; n];
     for &o in &owner {
         count[o as usize] += 1;
@@ -339,5 +394,5 @@ fn dump_into(
     write(&out.join("provinces.arrow"), columns)?;
     fills::write(&out.join("provinces.fill"), provinces)?;
     fills::write(&out.join("counties.fill"), counties)?;
-    Ok(())
+    Ok(tri_m)
 }

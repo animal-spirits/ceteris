@@ -7,7 +7,7 @@
 //! ceteris pack fetch [--record]
 //! ceteris pack dump-reader NAME [ARGS]
 //! ceteris pack record-counties
-//! ceteris pack dump-geo DIR [--build [--centres FILE]]
+//! ceteris pack dump-geo DIR [--build [--centres FILE] [--transport]]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -53,7 +53,7 @@ const USAGE: &str = "usage:
   ceteris pack fetch [--record]
   ceteris pack dump-reader NAME [ARGS]
   ceteris pack record-counties
-  ceteris pack dump-geo DIR [--build [--centres FILE]]
+  ceteris pack dump-geo DIR [--build [--centres FILE] [--transport]]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -304,23 +304,27 @@ fn record_counties(mut args: impl Iterator<Item = String>) -> Result<ExitCode, S
     Ok(ExitCode::SUCCESS)
 }
 
-/// `pack dump-geo DIR [--build [--centres FILE]]`: the geo modules' tables and fills of the
-/// provinces and counties in DIR, or with `--build` of those built from the cache (Voronoi
-/// splits seeded from the cell centres of FILE, else h3o's), written to DIR/rust.
+/// `pack dump-geo DIR [--build [--centres FILE] [--transport]]`: the geo modules' tables and
+/// fills of the provinces and counties in DIR, or with `--build` of those built from the cache
+/// (Voronoi splits seeded from, and the sea grid placed at, the cell centres of FILE, else
+/// h3o's), written to DIR/rust; `--transport` adds the transport graph's tables.
 fn dump_geo(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let dir = args.next().ok_or("dump-geo needs a directory")?;
-    let (mut build, mut centres) = (false, None);
+    let (mut build, mut centres, mut transport) = (false, None, false);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--build" => build = true,
             "--centres" => centres = Some(args.next().ok_or("--centres needs a file")?),
+            "--transport" => transport = true,
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
     if build {
-        build_geo(Path::new(&dir), centres.as_deref())?;
+        build_geo(Path::new(&dir), centres.as_deref(), transport)?;
     } else if centres.is_some() {
         return Err("--centres needs --build".into());
+    } else if transport {
+        return Err("--transport needs --build".into());
     } else {
         ceteris_pack::geo::dump::dump(Path::new(&dir))?;
     }
@@ -328,17 +332,17 @@ fn dump_geo(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> 
 }
 
 #[cfg(feature = "geos")]
-fn build_geo(dir: &Path, centres: Option<&str>) -> Result<(), String> {
+fn build_geo(dir: &Path, centres: Option<&str>, transport: bool) -> Result<(), String> {
     use ceteris_pack::geo::provinces::Centres;
     let centres = match centres {
         Some(path) => Centres::read(Path::new(path))?,
         None => Centres::H3o,
     };
-    ceteris_pack::geo::dump::build(dir, &centres)
+    ceteris_pack::geo::dump::build(dir, &centres, transport)
 }
 
 #[cfg(not(feature = "geos"))]
-fn build_geo(_: &Path, _: Option<&str>) -> Result<(), String> {
+fn build_geo(_: &Path, _: Option<&str>, _: bool) -> Result<(), String> {
     Err("dump-geo --build needs the owner-side `geos` feature".into())
 }
 

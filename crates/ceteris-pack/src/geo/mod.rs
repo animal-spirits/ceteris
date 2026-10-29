@@ -1,5 +1,5 @@
 //! The geography of the pack: provinces and counties on the sphere, their H3 cells and terrain,
-//! mineral sites, and the map's fill buffers.
+//! mineral sites, the transport graph, and the map's fill buffers.
 
 pub mod counties;
 pub mod dump;
@@ -10,3 +10,4 @@ pub mod provinces;
 pub mod raster_terrain;
 pub mod resources;
 pub mod sphere;
+pub mod transport;
