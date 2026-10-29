@@ -162,26 +162,37 @@ converged in 47 steps to rail 0.234 (s.e. 0.093), sea 0.102 (0.014) and air -1.5
 estimates on those classes are 12.98 (1.19), 14.01 (1.65) and 12.21 (1.06), and P05 is 0.207
 (0.035).
 
-**Amendment (2026-10-29): guarded P04 fit, support threshold, non-fatal failure.** The estimator,
-objective and owner decision above are unchanged; this records how "Gauss-Newton" is carried out
-and what the diagnostic reports.
+**Amendment (2026-10-29): guarded P04 fit, support threshold, non-fatal failure.** Owner-delegated
+ruling during pre-P3 B, for owner review. The estimator, objective and owner decision above are
+unchanged; this records how "Gauss-Newton" is carried out and what the diagnostic reports.
 
 - *Guard.* Each step is halved, at most `MODE_MAX_HALVINGS` = 30 times, until every tau is
-  positive and the profile deviance (the PPML without the step regressors, at the trial ratios;
-  `Fit.deviance`) does not rise. Convergence is tested on the undamped step, so a heavily halved
-  step does not pass for convergence. The ln tau coefficients that scale the step regressors are
-  those of the profile fit at the current ratios. At the cap the fit returns an error.
+  positive, the profile PPML (without the step regressors, at the trial ratios) converges, and its
+  deviance D (`Fit.deviance`) does not rise beyond the resolution of the fits:
+  D_trial <= D + `ppml::TOL` (|D| + 0.1). That allowance is the IRLS stopping rule of the PPML,
+  so two deviances closer than it are not distinguishable at the tolerance the fits were solved
+  to; it adds no free number. A strict comparison fails on that noise near convergence, where
+  a step's true decrease falls below it and halving cuts the decrease but not the noise, and
+  would report a converged fit as a failure. The allowance is the decrease of a move of about
+  1e-5 of the ratios, far below the rises of order 1 to 1e3 the guard exists to stop. A trial
+  whose PPML fails is a rejected trial. Convergence is tested on the undamped step, so a heavily
+  halved step does not pass for convergence. The ln tau coefficients that scale the step
+  regressors are those of the profile fit at the current ratios. At the cap the fit returns an
+  error.
 - *Support.* A mode is fitted only if at least `MODE_MIN_PAIRS` = 50 unordered country pairs have a
   positive flow on a least-cost path with km on that mode; otherwise it stays at its geo SPEC
   start, has no estimate (NaN) and the report names it as not identified with its count. Pairs
-  are the clusters of the covariance, so a ratio carried by fewer of them has no usable clustered
-  standard error (with few clusters the cluster-robust covariance is biased down; about 50 is
-  the common rule of thumb, Angrist and Pischke 2009 put it at 42). On 2000 BACI air has 3 such
-  pairs (about 70 least-cost rows, 4 to 6 positive per good, 0.1 bn USD) and its step s.e. was
-  1.5 to 20; rail and sea have positive flows on tens of thousands of rows. The threshold falls
-  in that gap; the synthetic samples of the tests (30 countries, 435 pairs) clear it on every
-  mode, and the test that drops it keeps air on 10 pairs. This is an estimation rule, not a model
-  parameter, so it has no register ID.
+  are the clusters of the covariance. When the variation of a regressor comes from few clusters,
+  cluster-robust inference fails however many clusters the sample has in all (few treated
+  clusters: Conley and Taber 2011; MacKinnon and Webb 2017, 2018), so a ratio carried by a few
+  pairs has no usable standard error. The threshold does not bind: on 2000 BACI air has 3 such
+  pairs (about 70 least-cost rows, 4 to 6 positive per good, 0.1 bn USD; its step s.e. was 1.5
+  to 20), while rail and sea have thousands of pairs and positive flows on tens of thousands of
+  rows, so any threshold from about 5 to several thousand gives the same result. The synthetic
+  samples of the tests (30 countries, 435 pairs) clear it on every mode, and the test that drops
+  it keeps air on at most 10 pairs. This is an estimation rule, not a model parameter: an
+  unidentified mode has no estimate, the ordering stop rule fails on it and nothing is written,
+  so it cannot change a model input and has no register ID.
 - *Failure.* A P04 error (no step at the cap, no convergence in 50 steps, a failed PPML) no
   longer stops `ceteris gravity`: P01 and P05 are reported, the report prints "P04 did not
   converge: ...", a stop rule fires and `--write` leaves `gravity_2000.toml` as it is
