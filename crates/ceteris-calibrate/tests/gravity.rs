@@ -277,11 +277,12 @@ fn world(n: usize, seed: u64) -> (Vec<Quantities>, Vec<f64>) {
 fn synthetic_sample(theta: &[f64; 7], nu: f64, cost: [f64; 4], domestic: bool) -> Sample {
     // Light enough that every good trades.
     let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
-    weighted_sample(theta, nu, cost, domestic, weight, usize::MAX)
+    weighted_sample(theta, nu, cost, domestic, weight, usize::MAX, false)
 }
 
 /// [`synthetic_sample`] at the given weights, with air only between the first `air_among`
-/// countries (elsewhere its km go by road; `q` holds road, rail, sea and air km first).
+/// countries (elsewhere its km go by road; `q` holds road, rail, sea and air km first), and
+/// with `log_cost` flows on ln(tau - 1), the log of cost, in place of the S05 ln tau.
 fn weighted_sample(
     theta: &[f64; 7],
     nu: f64,
@@ -289,6 +290,7 @@ fn weighted_sample(
     domestic: bool,
     weight: [f64; 7],
     air_among: usize,
+    log_cost: bool,
 ) -> Sample {
     let n = 30;
     let (mut q, rate) = world(n, 11);
@@ -310,6 +312,9 @@ fn weighted_sample(
                 let i = o * n + d;
                 let c: f64 = (0..4).map(|m| q[i][m] * cost[m]).sum::<f64>() + q[i][Q_FEE];
                 tau[i] = 1.0 + weight[g] * c + TIME_COST[g] * q[i][Q_HOURS] / 24.0;
+                if log_cost {
+                    tau[i] -= 1.0;
+                }
                 let border = if o == d { 0.0 } else { 1.0 };
                 mu[i] = (ao + bd
                     - theta[g] * (rate[i].ln_1p() + tau[i].ln() + border * nu.ln_1p()))
@@ -400,12 +405,12 @@ const MODE: [&str; 3] = ["rail", "sea", "air"];
 
 /// Deliberately heavy goods and an air cost far below its start (8 times road): ln tau is
 /// concave in the air ratio, so the undamped first Gauss-Newton step overshoots past the ratio
-/// at which some tau reaches 0 (the crash of ADR 0022, Re-run 2026-10-29). The guarded step
-/// halves it instead and the fit still recovers the ratios.
+/// at which some tau reaches 0 (the crash recorded in ADR 0022 before its Amendment
+/// 2026-10-29). The guarded step halves it instead and the fit still recovers the ratios.
 #[test]
 fn mode_costs_guard_keeps_tau_positive() {
     let cost = [0.10, 0.04, 0.008, 0.004];
-    let s = weighted_sample(&THETA, 0.0, cost, false, [0.01; 7], usize::MAX);
+    let s = weighted_sample(&THETA, 0.0, cost, false, [0.01; 7], usize::MAX, false);
     let p = Transport::default();
     let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
     let start: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / p.per_tkm[0]);
@@ -423,36 +428,92 @@ fn mode_costs_guard_keeps_tau_positive() {
     );
 }
 
-/// The profile deviance (the fit at the accepted ratios without the step regressors) never
-/// rises from one Gauss-Newton step to the next.
+/// Flows on the log of cost (the form the 2000 data prefer, ADR 0022) and a start far above
+/// the data: some undamped step keeps every tau positive but raises the profile deviance, and
+/// the guard halves it. The profile deviance never rises from one step to the next.
 #[test]
-fn mode_costs_deviance_does_not_rise() {
-    let light = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
-    let heavy = weighted_sample(
+fn mode_costs_halve_a_step_that_raises_the_deviance() {
+    let s = weighted_sample(
         &THETA,
         0.0,
         [0.10, 0.04, 0.008, 0.004],
         false,
         [0.01; 7],
         usize::MAX,
+        true,
     );
-    for s in [light, heavy] {
-        let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
-        assert_eq!(est.deviance.len(), est.iterations, "{est:?}");
-        for w in est.deviance.windows(2) {
-            assert!(w[1] <= w[0], "{:?}", est.deviance);
+    let p = Transport {
+        per_tkm: [0.10, 0.5, 0.5, 5.0],
+        ..Transport::default()
+    };
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    assert_eq!(est.deviance.len(), est.iterations, "{est:?}");
+    for w in est.deviance.windows(2) {
+        assert!(w[1] <= w[0], "{:?}", est.deviance);
+    }
+    let mut r: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / p.per_tkm[0]);
+    let mut rises = 0;
+    for (k, step) in est.steps.iter().enumerate() {
+        let full: [f64; 3] = std::array::from_fn(|m| r[m] + step[m]);
+        if gravity::mode_tau(&s, &full, &p).iter().all(|&t| t > 0.0) {
+            let d = gravity::profile_deviance(&s, &SYNTHETIC_CLASSES, &p, &full).unwrap();
+            if d > est.deviance[k] {
+                assert!(est.halvings[k] > 0, "step {k}: {est:?}");
+                rises += 1;
+            }
         }
+        let alpha = 0.5_f64.powi(est.halvings[k] as i32);
+        r = std::array::from_fn(|m| r[m] + alpha * step[m]);
+    }
+    assert!(rises > 0, "{est:?}");
+}
+
+/// Started a relative 3e-9 off its own converged ratios (the first step is above `MODE_TOL`),
+/// inside the band where the deviance moves by less than the PPML's resolution, the fit converges
+/// back. With a strict deviance comparison it fails on that noise: the halved trials never lower
+/// the deviance, the last one equals the ratios bit for bit, and the same step repeats until
+/// `MODE_MAX_ITER`.
+#[test]
+fn mode_costs_converge_from_inside_the_deviance_band() {
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let p = Transport::default();
+    let first = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    let mut near = p.clone();
+    for m in 0..3 {
+        near.per_tkm[m + 1] = p.per_tkm[0] * first.ratio[m] * (1.0 + 3e-9);
+    }
+    let again = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &near).unwrap();
+    for (m, mode) in MODE.iter().enumerate() {
+        approx(again.ratio[m], first.ratio[m], 1e-6, mode);
     }
 }
 
-/// Air between 5 countries only: 10 country pairs, as on 2000 BACI, fewer than
-/// `MODE_MIN_PAIRS`. Air keeps its start and is reported as not identified; rail and sea are
+/// At the cap the fit returns an error, not a panic: with no halving allowed, the heavy
+/// sample's first step (which drives a tau below 0) cannot be taken.
+#[test]
+fn mode_costs_return_an_error_at_the_cap() {
+    let s = weighted_sample(
+        &THETA,
+        0.0,
+        [0.10, 0.04, 0.008, 0.004],
+        false,
+        [0.01; 7],
+        usize::MAX,
+        false,
+    );
+    let err =
+        gravity::mode_costs_halving(&s, &SYNTHETIC_CLASSES, &Transport::default(), 0).unwrap_err();
+    assert!(err.starts_with("step 1: within 0 halvings"), "{err}");
+}
+
+/// Air between 5 countries only: at most 10 country pairs (2000 BACI has 3 with a positive flow),
+/// fewer than `MODE_MIN_PAIRS`. Air keeps its start and is reported as not identified; rail and sea are
 /// still recovered.
 #[test]
 fn mode_below_the_support_threshold_is_unidentified() {
     let cost = [0.10, 0.03, 0.01, 0.5];
     let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
-    let s = weighted_sample(&THETA, 0.0, cost, false, weight, 5);
+    let s = weighted_sample(&THETA, 0.0, cost, false, weight, 5, false);
     let support = gravity::mode_support(&s);
     assert!(0 < support[2] && support[2] <= 10, "{support:?}");
     assert!(support[0] >= gravity::MODE_MIN_PAIRS && support[1] >= gravity::MODE_MIN_PAIRS);

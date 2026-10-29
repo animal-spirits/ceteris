@@ -25,7 +25,7 @@ use ceteris_pack::read::icio::{aggregate, exports};
 use ceteris_pack::read::natural_earth::{ADMIN0, IsoCodes, read_codes};
 use ceteris_pack::read::people::parts;
 use ceteris_reference::io::pairwise_sum;
-use ceteris_reference::ppml::Fit;
+use ceteris_reference::ppml::{Fit, TOL};
 
 pub use crate::costs::*;
 use crate::dta::select;
@@ -479,32 +479,60 @@ pub fn mode_tau(s: &Sample, r: &[f64; 3], p: &Transport) -> Vec<f64> {
         .collect()
 }
 
+/// Per class, ln(1 + tariff) and ln tau at the factors `t`: the regressors of the profile fit.
+fn profile_regressors(s: &Sample, member: &[Vec<bool>], t: &[f64]) -> Columns {
+    let ln_tariff = s.ln_tariff();
+    let ln_t: Vec<f64> = t.iter().map(|t| t.ln()).collect();
+    let mut reg = Vec::new();
+    for (c, m) in member.iter().enumerate() {
+        reg.push((format!("ln_tariff_{c}"), masked(&ln_tariff, m)));
+        reg.push((format!("ln_tau_{c}"), masked(&ln_t, m)));
+    }
+    reg
+}
+
+/// The deviance of the profile fit of [`mode_costs`] (international rows, without the step
+/// regressors) at rail, sea and air ratios `r` to road.
+pub fn profile_deviance(
+    s: &Sample,
+    classes: &[&[usize]],
+    p: &Transport,
+    r: &[f64; 3],
+) -> Result<f64, String> {
+    let s = international(s);
+    let member = members(&s, classes);
+    let reg = profile_regressors(&s, &member, &mode_tau(&s, r, p));
+    Ok(s.fit(&reg)?.deviance)
+}
+
 /// P04 ratios: nonlinear PPML of international flows on, per class, ln(1 + tariff) and ln
 /// tau(r), with tau(r) = 1 + w (f_road (km_road + sum_m r_m km_m) + fees) + lambda hours / 24 the
 /// S05 factor along the least-cost paths and road at its P04a value as numeraire. Gauss-Newton:
 /// each step is a PPML on the same regressors plus kappa_c w f_road km_m / tau, kappa_c the ln
 /// tau coefficients of the profile fit at the current r, whose coefficients update r; at
 /// convergence the clustered covariance of those coefficients is that of r. Guarded (ADR 0022,
-/// Amendment 2026-10-29): a step is halved until every tau is positive and the profile deviance
-/// does not rise; convergence is tested on the undamped step. A mode below [`MODE_MIN_PAIRS`]
-/// stays at its start.
+/// Amendment 2026-10-29): a step is halved until every tau is positive, the profile fit
+/// converges and its deviance does not rise beyond the PPML's resolution `ppml::TOL` (|D| + 0.1);
+/// convergence is tested on the undamped step. A mode below [`MODE_MIN_PAIRS`] stays at its
+/// start.
 pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Modes, String> {
+    mode_costs_halving(s, classes, p, MODE_MAX_HALVINGS)
+}
+
+/// [`mode_costs`] with at most `max_halvings` halvings of a step.
+pub fn mode_costs_halving(
+    s: &Sample,
+    classes: &[&[usize]],
+    p: &Transport,
+    max_halvings: usize,
+) -> Result<Modes, String> {
     let s = international(s);
     let member = members(&s, classes);
     let support = mode_support(&s);
     let identified: [bool; 3] = std::array::from_fn(|m| support[m] >= MODE_MIN_PAIRS);
     let road = p.per_tkm[0];
     let mut r: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / road);
-    let ln_tariff = s.ln_tariff();
-    let base = |t: &[f64]| -> Columns {
-        let ln_t: Vec<f64> = t.iter().map(|t| t.ln()).collect();
-        let mut reg = Vec::new();
-        for (c, m) in member.iter().enumerate() {
-            reg.push((format!("ln_tariff_{c}"), masked(&ln_tariff, m)));
-            reg.push((format!("ln_tau_{c}"), masked(&ln_t, m)));
-        }
-        reg
-    };
+    let base = |t: &[f64]| profile_regressors(&s, &member, t);
     let d_name = |m: usize| format!("d_{}", MODE_NAMES[m + 1]);
     let mut profile = s.fit(&base(&mode_tau(&s, &r, p)))?;
     let (mut steps, mut halvings, mut deviance) = (Vec::new(), Vec::new(), Vec::new());
@@ -545,21 +573,22 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
         }
         let mut alpha = 1.0;
         let mut taken = None;
-        for h in 0..=MODE_MAX_HALVINGS {
+        let resolution = TOL * (profile.deviance.abs() + 0.1);
+        for h in 0..=max_halvings {
             let trial: [f64; 3] = std::array::from_fn(|m| r[m] + alpha * step[m]);
             let t = mode_tau(&s, &trial, p);
-            if t.iter().all(|&t| t > 0.0 && t.is_finite()) {
-                let at = s.fit(&base(&t))?;
-                if at.deviance <= profile.deviance {
-                    taken = Some((trial, h, at));
-                    break;
-                }
+            if t.iter().all(|&t| t > 0.0 && t.is_finite())
+                && let Ok(at) = s.fit(&base(&t))
+                && at.deviance <= profile.deviance + resolution
+            {
+                taken = Some((trial, h, at));
+                break;
             }
             alpha *= 0.5;
         }
         let Some((trial, h, at)) = taken else {
             return Err(format!(
-                "step {iteration}: within {MODE_MAX_HALVINGS} halvings, no step from {r:?} along \
+                "step {iteration}: within {max_halvings} halvings, no step from {r:?} along \
                  {step:?} keeps tau positive without raising the deviance"
             ));
         };
@@ -973,8 +1002,9 @@ pub fn report(est: &Estimates) -> String {
     match &est.modes {
         Ok(m) => {
             lines.push(format!(
-                "P04 fit: theta by class {}, ln tau coefficients {}, {} Gauss-Newton steps \
-                 ({} halved), profile deviance {} to {}",
+                "P04 fit: country pairs by mode {}, theta by class {}, ln tau coefficients {}, \
+                 {} Gauss-Newton steps ({} halved), profile deviance {} to {}",
+                int_list(&m.support),
                 fixed3(&m.theta_by_class),
                 fixed3(&m.tau_by_class),
                 m.iterations,
