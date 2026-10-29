@@ -6,7 +6,9 @@
 //! (their province's wages s_L VA by effective labour share; their country's profits (1 - s_L) VA
 //! and tariff rebate by population, national ownership) plus sum a_kg V of the province's
 //! enterprises. One scalar r_g per traded good rescales its V (and VA) so that world spending net
-//! of tariffs equals world output value. Rebates depend on sourcing, local output on income and
+//! of tariffs equals world output value. Spending scales with the r, so that fixes them only up to
+//! one common factor; each pass rescales them so that world traded value added, sum_e r_g VA_e, is
+//! the data's (ADR 0106: the fixed point is then unique, not one of a ray). Rebates depend on sourcing, local output on income and
 //! income on local output, so passes of stages 1, 2 and 4 repeat until rebates, r, buyer prices
 //! and the PIGL weights settle ([`PASS_TOL`]).
 //!
@@ -878,16 +880,41 @@ pub fn calibrate(
     calibrate_with(inp, u_star, Limits::default(), progress)
 }
 
-/// [`calibrate`] with explicit iteration caps.
+/// [`calibrate`] with explicit iteration caps, from the buyer prices of the data state.
 pub fn calibrate_with(
     inp: &Inputs,
     u_star: &[f64],
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Steady, CalibrationError> {
+    let start = Mat::from_fn(inp.n_provinces(), inp.n_goods(), |p, g| {
+        if inp.traded[g] {
+            inp.base_price[(p, g)]
+        } else {
+            1.0
+        }
+    });
+    calibrate_from(inp, u_star, limits, &start, progress)
+}
+
+/// [`calibrate_with`] from buyer prices `start` (P, G) in place of the data state's: the passes
+/// begin at these q (local goods' are read as given). The fixed point does not depend on the
+/// start where the calibration is unique (ADR 0106, `calibration_unique_from_eight_starts`).
+pub fn calibrate_from(
+    inp: &Inputs,
+    u_star: &[f64],
+    limits: Limits,
+    start: &Mat,
+    progress: &mut dyn FnMut(&str),
+) -> Result<Steady, CalibrationError> {
     let t0 = Instant::now();
     if inp.base_price.data.iter().any(|p| !p.is_finite()) {
         return Err("a traded good is unreachable at some province".into());
+    }
+    if (start.rows, start.cols) != (inp.n_provinces(), inp.n_goods())
+        || start.data.iter().any(|&p| !(p.is_finite() && p > 0.0))
+    {
+        return Err("start prices must be positive and finite, one per province and good".into());
     }
     let va_target = inp
         .ent_va_target
@@ -942,6 +969,10 @@ pub fn calibrate_with(
             }
         })
         .collect();
+    let traded_va_data: f64 = (0..n_e)
+        .filter(|&e| traded_e[e])
+        .map(|e| va_target[e])
+        .sum();
     let mut supply_data = Mat::zeros(n_p, n_g);
     for e in 0..n_e {
         supply_data[(ep[e], eg[e])] += v_data[e];
@@ -971,13 +1002,7 @@ pub fn calibrate_with(
         traded: traded.clone(),
     };
 
-    let mut q = Mat::from_fn(n_p, n_g, |p, g| {
-        if traded[g] {
-            inp.base_price[(p, g)]
-        } else {
-            1.0
-        }
-    });
+    let mut q = start.clone();
     let mut r = vec![1.0; n_g];
     let mut rebate = vec![0.0; n_c];
     let mut y_local: Vec<f64> = (0..n_e)
@@ -1011,7 +1036,17 @@ pub fn calibrate_with(
             }
         });
 
-        let scaling = sinkhorn_limited(&m, &spend, &supply_data, lw.as_ref(), limits.max_sweeps)?;
+        let mut scaling =
+            sinkhorn_limited(&m, &spend, &supply_data, lw.as_ref(), limits.max_sweeps)?;
+        // spending scales with r, so the passes fix r only up to one common factor: pin it
+        let model_va: f64 = (0..n_e)
+            .filter(|&e| traded_e[e])
+            .map(|e| scaling.r[eg[e]] * va_target[e])
+            .sum();
+        let level = traded_va_data / model_va;
+        for g in (0..n_g).filter(|&g| traded[g]) {
+            scaling.r[g] *= level;
+        }
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for p in 0..n_p {

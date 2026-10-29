@@ -10,10 +10,11 @@ const MAX_ITER: usize = 200;
 /// Relative tolerance on the wage.
 const TOL: f64 = 1e-13;
 
-/// P39, P40 with the natural-rate wedge of ADR 0089: dlnw = clip(pi^e + kappa_w (x + u*),
-/// -c_max, c_max), scaled by (1 - delta_w) when negative: downward rigidity applies to nominal
-/// cuts (ADR 0019). `excess` is x_i = (sum L* - L^s) / L^s, `u_star` the natural rate u*_i,
-/// `expected_inflation` pi^e. Returns the new wage.
+/// P39, P40 with the natural-rate wedge of ADR 0089: dlnw = pi^e + clip(kappa_w (x + u*),
+/// -c_max, c_max) (ADR 0106: expected inflation passes through the clip), scaled by
+/// (1 - delta_w) when negative: downward rigidity applies to nominal cuts (ADR 0019). `excess`
+/// is x_i = (sum L* - L^s) / L^s, `u_star` the natural rate u*_i, `expected_inflation` pi^e.
+/// Returns the new wage.
 pub fn wage_step(
     w: f64,
     excess: f64,
@@ -22,7 +23,7 @@ pub fn wage_step(
     p: &EconParams,
     c_max: f64,
 ) -> f64 {
-    let mut dlnw = (expected_inflation + p.kappa_w * (excess + u_star)).clamp(-c_max, c_max);
+    let mut dlnw = expected_inflation + (p.kappa_w * (excess + u_star)).clamp(-c_max, c_max);
     if dlnw < 0.0 {
         dlnw *= 1.0 - p.delta_w;
     }
@@ -157,10 +158,23 @@ mod tests {
         // expected deflation turns full employment into a nominal cut
         let w = wage_step(2.0, 0.0, 0.0, -0.01, &p, 0.1);
         assert!((w - 2.0 * libm::exp(-0.005)).abs() < 1e-15);
-        // with no excess the wage moves by pi^e; the clip applies to the sum
+        // with no excess the wage moves by pi^e; the clip applies to the excess term only
         let w = wage_step(2.0, 0.0, 0.0, 0.03, &p, 0.1);
         assert!((w - 2.0 * libm::exp(0.03)).abs() < 1e-15);
-        assert!((wage_step(2.0, 0.5, 0.0, 0.08, &p, 0.1) - 2.0 * libm::exp(0.1)).abs() < 1e-15);
+        assert!((wage_step(2.0, 0.5, 0.0, 0.08, &p, 0.1) - 2.0 * libm::exp(0.13)).abs() < 1e-15);
+    }
+
+    /// ADR 0106: expected inflation beyond c_max passes through; the clip bounds the excess
+    /// term, and the rigidity damps the whole step when it is a nominal cut.
+    #[test]
+    fn wage_clip_lets_expected_inflation_through() {
+        let p = EconParams::default();
+        assert_eq!(wage_step(2.0, 0.0, 0.0, 0.2, &p, 0.1), 2.0 * libm::exp(0.2));
+        let w = wage_step(2.0, 10.0, 0.0, 0.2, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(0.3)).abs() < 1e-15);
+        // expected deflation and a glut: (-0.2 - 0.1) halved
+        let w = wage_step(2.0, -10.0, 0.0, -0.2, &p, 0.1);
+        assert!((w - 2.0 * libm::exp(-0.15)).abs() < 1e-15);
     }
 
     /// ADR 0089: excess demand is read against the natural rate, so at x = -u* the step is

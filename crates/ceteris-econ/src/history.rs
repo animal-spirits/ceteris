@@ -29,7 +29,7 @@ use ceteris_core::sim::Sim;
 use ceteris_trade::N_GOODS;
 
 use crate::export::{Column, ExportError, write_table_zstd};
-use crate::world::{EconWorld, to_numeraire};
+use crate::world::{EconWorld, to_numeraire_wide};
 
 /// File format of [`History::write`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,13 +153,13 @@ impl History {
         self.n_provinces = inp.n_provinces();
 
         let (mut employment, mut supply) = (0.0, 0.0);
-        let (mut money, mut negative) = (0_i64, 0_u32);
+        let (mut money, mut negative) = (0_i128, 0_u32);
         for i in 0..inp.n_provinces() {
             let emp: f64 = lay.enterprises(i).map(|e| world.employment[e]).sum();
-            let (mut minor, mut income) = (0_i64, 0.0);
+            let (mut minor, mut income) = (0_i128, 0.0);
             for k in lay.pops(i) {
                 let balance = world.ledger.money(lay.accounts.pop[k]);
-                minor += balance;
+                minor += i128::from(balance);
                 negative += u32::from(balance < 0);
                 income += world.income[k];
             }
@@ -169,7 +169,7 @@ impl History {
                 emp,
                 ls,
                 1.0 - emp / ls,
-                to_numeraire(minor),
+                to_numeraire_wide(minor),
                 income,
             ]);
             employment += emp;
@@ -203,7 +203,7 @@ impl History {
             employment,
             supply,
             1.0 - employment / supply,
-            to_numeraire(money),
+            to_numeraire_wide(money),
         ]);
         self.pops_negative_money.push(negative);
         self.sampled.push(tick);

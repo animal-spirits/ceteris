@@ -13,6 +13,9 @@ use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
 use ceteris_calibrate::steady::{self, COVER, CalibrationError, Limits, PASS_TOL, SLOTS, Steady};
 use ceteris_calibrate::write;
+use ceteris_core::entity::{EntityId, Kind};
+use ceteris_core::rng::Seed;
+use ceteris_core::schedule::SystemId;
 use ceteris_pack::compare::{self, Tolerance};
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
@@ -171,6 +174,53 @@ fn inversion_at_given_prices_reproduces_the_shares() {
         1e-13,
         1e-15,
     );
+}
+
+/// ADR 0106: the passes reach the same fixed point from eight starts, every traded buyer price
+/// of the data state times a factor uniform in [0.5, 1.5] (Philox seeds 0 to 7, one stream per
+/// province). A failure is a finding for the owner (several steady states), not a flake.
+#[test]
+fn calibration_unique_from_eight_starts() {
+    let inp = io::load(fixture()).unwrap();
+    let base = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    for seed in 0..8u64 {
+        let mut start = Mat::filled(n_p, n_g, 1.0);
+        for p in 0..n_p {
+            let mut draw = Seed(seed).stream(0, SystemId(0), Kind(0), EntityId(p as u32));
+            for g in (0..n_g).filter(|&g| inp.traded[g]) {
+                start[(p, g)] = inp.base_price[(p, g)] * (0.5 + draw.uniform());
+            }
+        }
+        let s = steady::calibrate_from(
+            &inp,
+            &inp.u_star.clone(),
+            Limits::default(),
+            &start,
+            &mut quiet(),
+        )
+        .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+        let what = format!("seed {seed}");
+        allclose(&what, &s.price.data, &base.price.data, 1e-9, 0.0);
+        allclose(&what, &s.consumer.data, &base.consumer.data, 1e-9, 0.0);
+        allclose(&what, &s.r, &base.r, 1e-9, 0.0);
+        allclose(
+            &what,
+            &s.output,
+            &base.output,
+            1e-9,
+            1e-9 * max_abs(&base.output),
+        );
+        allclose(&what, &s.w0, &base.w0, 1e-9, 0.0);
+        allclose(&what, &s.weights.scale, &base.weights.scale, 1e-9, 0.0);
+        allclose(
+            &what,
+            &s.weights.omega.data,
+            &base.weights.omega.data,
+            1e-9,
+            1e-12,
+        );
+    }
 }
 
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.

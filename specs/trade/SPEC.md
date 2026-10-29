@@ -208,8 +208,15 @@ Priority: intermediate users first, households share the rest, DESIGN 8.2). S' =
 supply goes to merchant inventory. Then (8.2):
 
 ```
-dlnp = clip( pi^e + kappa1 (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max, c_max ),   S* = s_g D
+dlnp = pi^e + clip( kappa1 (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_max_g ),   S* = s_g D
 ```
+
+The clip bounds the gap terms only (ADR 0106): expected inflation passes through unclipped, so a
+sustained inflation or collapse is bounded by the expectation rule, not by the numerical guard.
+c_max_g is c_max (P03c, 0.1) for most goods and c_max_storable (P151, 0.3) for the storable
+commodities, agriculture, crude oil and gas, coal and other mining, and chemicals, refined fuels
+and metals (goods 0, 1, 2, 5; `goods::STORABLE`), whose monthly price moves in the data exceed
+0.1 (oil fell about 30% in one month in late 2008).
 
 pi^e is the merchants' expected inflation (ADR 0019), with unit pass-through: a homogeneity
 restriction, not a parameter. P2 has one currency area, the numeraire, and adaptive expectations
@@ -224,8 +231,8 @@ goods) at this tick's E3, weighted by base household consumption (`price_index_w
 weights of V1 and of the GE reference's normalization; cells with an infinite buyer price are
 left out). The inflation observed is that of the last repricing, as the adaptive heuristic of
 12.2 forecasts from the last observed price. At a steady state I is constant and pi^e = 0, so the
-GE reference is unchanged. Every tick the clip binds at a cell is counted (`clip_ticks`, run
-export).
+GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
+(`clip_ticks`, run export).
 
 **Province market, local good** (utilities, construction, services): Q = local output. Its
 intermediate users draw from it within the tick, at E2, in the same-tick chain (ADR 0020; econ
@@ -240,7 +247,8 @@ Q_floor = 1e-9 of the world mean of Q for that good.
 
 The rule is a proportional-integral controller on the inventory gap (8.2): excess demand is the
 flow, the stock deviation its integral. Linearize one origin market around a steady state (p\*,
-Q\* = D\*, S\* = s_g D\*) with pi^e = 0: x = ln p - ln p\*, q the output deviation (Q - Q\*)/Q\*,
+Q\* = D\*, S\* = s_g D\*) with pi^e = 0 (the clip acts on the gap terms only, ADR 0106, so a
+constant pi^e shifts every price by the same log step and leaves the region unchanged): x = ln p - ln p\*, q the output deviation (Q - Q\*)/Q\*,
 sigma = S / (s_g D\*) - 1. As built, E1 hires toward the labour target at this tick's price (P41
 eta), T3 clears this tick's orders and T4 reads the stock after clearing against this tick's
 target s_g D_t:
@@ -410,7 +418,8 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P02 | Inventory target coverage s_g | 1 to 6 months by good, start: agriculture 3, oil and gas 1, coal and mining 2, food 2, manufactures 2; local goods 0 | Free |
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
-| P03c | Price and wage step clip c_max | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
+| P03c | Price and wage step clip c_max, on the gap terms only (pi^e passes through, ADR 0106) | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
+| P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated (P9) |
 | P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
@@ -446,8 +455,9 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   wraparound; origin clearing, rationing classes (`mixed_rationing_matches_definition`: S11 Mixed
   on a hand-computed two-class shortage, equal to Priority without essential consumption), price
   clip, zero-supply floor; expected
-  inflation in the rule (`reprice_adds_expected_inflation`) and clip counts
-  (`clip_ticks_count_bindings`).
+  inflation in the rule (`reprice_adds_expected_inflation`), outside the clip
+  (`clip_lets_expected_inflation_through`), the wider clip of storable goods
+  (`storable_goods_clip_at_0_3`) and clip counts (`clip_ticks_count_bindings`).
 - Stability: the Jury conditions against a toy market run through `Markets`
   (`stability_region_matches_simulation`) and the default on the region's kappa2 = 0 edge
   (`default_lies_on_the_untargeted_stock_edge`), in `tests/price_rule_stability.rs`.

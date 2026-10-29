@@ -89,22 +89,28 @@ fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: 
 
 /// Splits `total` minor units in proportion to `weights`, rounding the cumulative shares
 /// half to even, so the parts add up to `total` exactly. Without a positive weight the last
-/// part takes everything.
-fn split(total: i64, weights: impl ExactSizeIterator<Item = f64> + Clone, out: &mut Vec<i64>) {
+/// part takes everything. The total may be a wide (`i128`) balance; each part is one payment
+/// and must fit `i64`.
+fn split(
+    total: impl Into<i128>,
+    weights: impl ExactSizeIterator<Item = f64> + Clone,
+    out: &mut Vec<i64>,
+) {
+    let total: i128 = total.into();
     out.clear();
     let n = weights.len();
     let sum: f64 = weights.clone().sum();
-    let (mut cum, mut paid) = (0.0, 0i64);
+    let (mut cum, mut paid) = (0.0, 0i128);
     for (j, w) in weights.enumerate() {
         cum += w;
         let upto = if j + 1 == n {
             total
         } else if sum > 0.0 {
-            (total as f64 * (cum / sum)).round_ties_even() as i64
+            (total as f64 * (cum / sum)).round_ties_even() as i128
         } else {
             0
         };
-        out.push(upto - paid);
+        out.push(i64::try_from(upto - paid).expect("ledger overflow: a payment beyond i64"));
         paid = upto;
     }
 }
@@ -241,7 +247,7 @@ pub fn labour(w: &mut EconWorld) {
             } else {
                 let t = targets(w0);
                 let excess = (fixed_sum(&t) - supply) / supply;
-                let clipped = (pi + params.kappa_w * (excess + u_star)).abs() > c_max;
+                let clipped = (params.kappa_w * (excess + u_star)).abs() > c_max;
                 (wage_step(w0, excess, u_star, pi, params, c_max), t, clipped)
             };
             let mut l = vec![0.0; t.len()];
@@ -813,7 +819,7 @@ pub fn reprice(w: &mut EconWorld) {
 /// enterprise as retained losses, which later cash flow repays before anything is paid out;
 /// every province market pays its signed cash flow (ADR 0112, Markets). Each country pays its
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
-/// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
+/// end the tick at zero. Each pool is one i128 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
 /// parts add up to the pool exactly. Then [`write_off`]. Records each pop's income of the
 /// tick, and as each enterprise's profit its balance before the payout
@@ -841,7 +847,7 @@ pub fn distribute(w: &mut EconWorld) {
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
             let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
-            split(w.ledger.money(payer), weights, &mut parts);
+            split(w.ledger.money_wide(payer), weights, &mut parts);
             for (&k, &part) in pops.iter().zip(&parts) {
                 pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
                 w.scratch.income_paid[k as usize] += part;

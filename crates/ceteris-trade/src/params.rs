@@ -1,6 +1,6 @@
 //! Trade parameters with their register IDs (`specs/trade/SPEC.md`, Parameters).
 
-use crate::goods::N_GOODS;
+use crate::goods::{N_GOODS, STORABLE};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
@@ -44,9 +44,14 @@ pub struct TradeParams {
     /// kappa1 0.02 and grows at 0.05 (1.0014), and decays frictionless at kappa1 0.02 and 0.05
     /// (0.9876, 0.9738).
     pub kappa2: f64,
-    /// P03c price step clip in log points per month, also the wage step clip; every tick it
-    /// binds is counted per market (`Markets::clip_ticks`) and per wage.
+    /// P03c price step clip in log points per month, also the wage step clip; it bounds the gap
+    /// terms only, expected inflation passes through (ADR 0106). Every tick it binds is counted
+    /// per market (`Markets::clip_ticks`) and per wage.
     pub c_max: f64,
+    /// P151 price step clip of the storable commodities (`goods::STORABLE`), in log points per
+    /// month (ADR 0106): monthly commodity moves exceed P03c (oil fell about 30% in one month in
+    /// late 2008).
+    pub c_max_storable: f64,
     /// P45 expectation gain g: pi^e <- pi^e + g (ln(I_t / I_{t-1}) - pi^e) per month, I the
     /// world price index (ADR 0019). Prior 0.004 to 0.65: Poledna et al. (2023) learn an AR(1)
     /// on inflation by OLS over an expanding sample (gain 1/n, about 0.004 to 0.006 per month
@@ -66,6 +71,17 @@ pub struct TradeParams {
     pub theta_r: f64,
 }
 
+impl TradeParams {
+    /// The price step clip of good `g`: P151 for storable commodities, else P03c.
+    pub fn price_clip(&self, g: usize) -> f64 {
+        if STORABLE[g] {
+            self.c_max_storable
+        } else {
+            self.c_max
+        }
+    }
+}
+
 impl Default for TradeParams {
     fn default() -> Self {
         Self {
@@ -75,6 +91,7 @@ impl Default for TradeParams {
             kappa1: 0.05,
             kappa2: 0.0,
             c_max: 0.1,
+            c_max_storable: 0.3,
             expectation_gain: 0.006,
             border_nu: 0.3,
             time_cost: [

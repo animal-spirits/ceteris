@@ -8,6 +8,13 @@ pub const TRADED: [bool; N_GOODS] = [
     true, true, true, true, true, true, true, false, false, false,
 ];
 
+/// Storable commodities (ADR 0106, under ADR 0091): agriculture, crude oil and gas, coal and other
+/// mining, and chemicals, refined fuels and metals. Their price step clips at
+/// `TradeParams::c_max_storable`.
+pub const STORABLE: [bool; N_GOODS] = [
+    true, true, true, false, false, true, false, false, false, false,
+];
+
 pub const NAME: [&str; N_GOODS] = [
     "Agriculture",
     "Crude oil and gas",
