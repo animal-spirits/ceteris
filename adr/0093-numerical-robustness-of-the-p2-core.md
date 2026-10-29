@@ -124,7 +124,8 @@ of the flows for the maps' rounding). Where they reach g to 1e-15 of the distanc
 passes are run from g and must return it to 1e-12; that is the limit. Where they leave a piece
 first, the fills jump to the last whole cycle before that, which the passes reach in exact
 arithmetic, and the passes go on from there. The shortest cycle that reaches a limit is taken.
-No pass bound and no clearing step remain; F only falls, so the passes end.
+No clearing step remains; F only falls, so the passes end. (The work is bounded by the second
+amendment, Bounded work.)
 
 **Ties and cycles.** A user's output depends only on the smallest of its fills, so ties among
 its fills do not change Y; a piece takes the lowest good, and the comparisons that place a step
@@ -146,3 +147,33 @@ cleared them by cutting the users that make no local good, which changed who was
 frictionless runs it never binds (1,200 ticks), so the goldens do not move; it binds in the
 cycle fixtures, which have no golden. The steady state never rations, so the calibration and
 the GE reference, whose local output solves the unrationed Leontief system, do not change.
+
+## Amendment (2026-10-29): bounded work
+
+The exact solve above has no bound on its work. A review timed 1,000,000 random provinces: a
+handful take thousands of passes or seconds, all of them provinces whose fills fall towards 0.
+One falls on one pass map at a rate within 1e-5 of 1, so following its cycles one at a time
+replays up to 100,000 cycles after every pass (2.97 s). Another switches irregularly between two
+pass maps, which no cycle of up to three passes captures (15,678 passes). One such province in a
+tick costs about 100 times the tick's budget, so the work is bounded, by three rules.
+
+- **Cycles at once.** A jump follows the cycle's maps one cycle at a time for at most 64 cycles,
+  and for at most 4,096 cycles within one `fills` call, all jumps together. Then it takes 2^k
+  cycles at once, the composed map squared k times, for k up to 64. It checks the pieces, the
+  falls and the fits at those points only. A fall at a rate near 1 then reaches its fixed point
+  in about 60 steps, a collapse towards 0 included, since the composed map is linear there and
+  its fixed point is exactly 0. A piece left between two checked points and entered again before
+  the next is not seen; at the points checked, the conditions are the exact ones.
+- **Stalled falls.** After 256 passes since the last such cut, the goods that the last pass's
+  map takes to 0 are set to 0. These are the goods it lowers whose fixed point is exactly 0, as
+  in a collapse; where there are none, every good it lowered is set to 0. The passes then go on
+  until one changes nothing. Each such cut zeroes at least one good for good, since F never
+  rises, so a province takes at most about 4 x 256 passes. This can change a result only where
+  the iteration still falls after 256 passes without any cycle of up to three passes reaching
+  its limit. In the 1,000,000 random provinces this happened twice. Both provinces fall
+  irregularly towards 0, and both end where the unbounded iteration ends: [0, 0, 0] in one,
+  [0.1243, 0, 0] in the other, to 3e-17. On the fixture, no province comes near it.
+- **Zero, not subnormal.** Every fill below the smallest normal f64 is 0: at a step, after its
+  rounding descent, and wherever a jump lands.
+
+`collapsing_provinces_settle_in_bounded_passes` holds both review seeds to a pass bound.
