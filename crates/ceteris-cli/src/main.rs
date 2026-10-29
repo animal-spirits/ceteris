@@ -9,6 +9,8 @@
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
+//! ceteris calibrate stability [FIXTURE_DIR]
+//! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -37,11 +39,22 @@
 //! loads them at their `calibration_format` and the static digest of the export they were
 //! solved from. `--inputs DIR` calibrates an export directory at its own u*, its provinces
 //! serving as their own pack provinces, and needs `--out`.
+//!
+//! `calibrate stability` prints the stability table of the stock-flow price rule for the
+//! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`).
+//!
+//! `gravity` estimates theta by class, the border friction and the mode cost ratios by PPML
+//! structural gravity on 2000 BACI and the pack's least-cost costs (`--pack`, default
+//! `data/packs/2000`; the sources from the fetch cache), printing the table of estimates, the
+//! sample counts and any stop rule that fires; it exits 1 when one fires. `--write` writes the
+//! estimates as TOML into `--out` (default `python/ceteris/packs/gravity_2000.toml`, beside the
+//! pack configuration) when no stop rule fires.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ceteris_calibrate::gravity;
 use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
@@ -72,6 +85,8 @@ const USAGE: &str = "usage:
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
+  ceteris calibrate stability [FIXTURE_DIR]
+  ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -429,8 +444,60 @@ fn reference(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
+/// `calibrate stability [FIXTURE_DIR]`.
+fn stability(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let fixture = args.next().map_or_else(
+        || sources::workspace_root().join("tests/golden/p2-fixture"),
+        PathBuf::from,
+    );
+    if let Some(a) = args.next() {
+        return Err(format!("unknown argument '{a}'"));
+    }
+    for row in ceteris_calibrate::stability::table(&fixture)? {
+        println!("{row}");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `gravity [--pack DIR] [--write] [--out FILE]`: exit 1 when a stop rule fires.
+fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let root = sources::workspace_root();
+    let (mut pack, mut write, mut out) = (root.join("data/packs/2000"), false, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--pack" => pack = PathBuf::from(args.next().ok_or("--pack needs a directory")?),
+            "--write" => write = true,
+            "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a file")?)),
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let out = out.unwrap_or_else(|| root.join("python/ceteris/packs/gravity_2000.toml"));
+    let est = gravity::estimate(&pack, &root.join(fetch::CACHE_DIR))?;
+    println!("{}", gravity::report(&est));
+    println!("{}", est.notes.json().pretty());
+    let fired = gravity::stop_rules(&est);
+    for f in &fired {
+        println!("stop rule: {f}");
+    }
+    if write && fired.is_empty() {
+        std::fs::write(&out, gravity::to_toml(&est))
+            .map_err(|e| format!("{}: {e}", out.display()))?;
+        println!("wrote {}", out.display());
+    }
+    Ok(if fired.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
 /// `calibrate --pack DIR | --inputs DIR [--out DIR]`: exit 1 without a calibration.
-fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut args = args.peekable();
+    if args.peek().map(String::as_str) == Some("stability") {
+        args.next();
+        return stability(args);
+    }
     let (mut pack, mut inputs, mut out) = (None, None, None);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -505,10 +572,11 @@ fn calibrate(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if command == "pack" || command == "reference" || command == "calibrate" {
+    if ["pack", "reference", "calibrate", "gravity"].contains(&command.as_str()) {
         let result = match command.as_str() {
             "pack" => pack(argv),
             "reference" => reference(argv),
+            "gravity" => gravity(argv),
             _ => calibrate(argv),
         };
         return result.unwrap_or_else(|e| {
@@ -524,7 +592,7 @@ fn main() -> ExitCode {
                 run(&args)
             }
         }),
-        _ => Err("expected a command, export, run, pack, reference or calibrate".into()),
+        _ => Err("expected a command, export, run, pack, reference, calibrate or gravity".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

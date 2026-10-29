@@ -255,14 +255,14 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
 }
 
 /// One Arrow table, its batches concatenated column by column on read.
-struct Table {
+pub(crate) struct Table {
     name: String,
     batches: Vec<RecordBatch>,
     metadata: BTreeMap<String, String>,
 }
 
 impl Table {
-    fn open(path: &Path) -> Result<Table, String> {
+    pub(crate) fn open(path: &Path) -> Result<Table, String> {
         let name = path
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
@@ -299,7 +299,7 @@ impl Table {
             .collect()
     }
 
-    fn f64(&self, col: &str) -> Result<Vec<f64>, String> {
+    pub(crate) fn f64(&self, col: &str) -> Result<Vec<f64>, String> {
         Ok(self
             .column(col, &DataType::Float64)?
             .iter()
@@ -307,7 +307,24 @@ impl Table {
             .collect())
     }
 
-    fn usize(&self, col: &str) -> Result<Vec<usize>, String> {
+    pub(crate) fn strings(&self, col: &str) -> Result<Vec<String>, String> {
+        Ok(self
+            .column(col, &DataType::Utf8)?
+            .iter()
+            .flat_map(|a| {
+                a.as_string::<i32>()
+                    .iter()
+                    .map(|s| s.unwrap_or_default().to_owned())
+                    .collect::<Vec<_>>()
+            })
+            .collect())
+    }
+
+    pub(crate) fn rows(&self) -> usize {
+        self.batches.iter().map(RecordBatch::num_rows).sum()
+    }
+
+    pub(crate) fn usize(&self, col: &str) -> Result<Vec<usize>, String> {
         Ok(self
             .column(col, &DataType::UInt64)?
             .iter()
