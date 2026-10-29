@@ -132,8 +132,8 @@ fn fixture_export_is_current() {
         stale.is_empty(),
         "tests/golden/p2-fixture differs from the fixture export in {stale:?}; regenerate with \
          `cargo run -p ceteris-cli --bin ceteris -- export --fixture --out tests/golden/p2-fixture` \
-         and, because the inputs changed, re-solve the reference with `uv run --project python \
-         python -m ceteris.reference solve --inputs tests/golden/p2-fixture --out \
+         and, because the inputs changed, re-solve the reference with `cargo run --release -p ceteris-cli \
+         --bin ceteris -- reference solve --inputs tests/golden/p2-fixture --out \
          tests/golden/p2-fixture/reference`"
     );
 }
@@ -170,7 +170,7 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 /// expectations of ADR 0019 track; the reference is normalized to an index of 1);
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
-/// (`python/ceteris/reference/uniqueness.py`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
+/// (`ceteris_reference::uniqueness`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
 /// special case the SPEC states) is 0.922 at the fixture's theta and value-added shares, at most
 /// 1, so one equilibrium is presumed; `test_trade_only_is_unique` checks it on the same export.
 #[test]
@@ -510,7 +510,7 @@ fn calibrated_pack() -> Option<Arc<EconInputs>> {
     if !EconInputs::has_calibration(&dir) {
         let hint = format!(
             "no calibrated pack at {}; build it with `uv run python -m ceteris.packs` and \
-             install its calibration from `python -m ceteris.reference calibrate --pack`",
+             install its calibration from `ceteris calibrate --pack`",
             dir.display()
         );
         assert!(std::env::var_os("CETERIS_PACK").is_none(), "{hint}");

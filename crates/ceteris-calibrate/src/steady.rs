@@ -33,9 +33,8 @@
 //! later; merchant stocks coverage times output (S* = coverage D at D = Q); pops hold one month
 //! of income less the wages of the tick (dividends and rebates); pi^e = 0.
 //!
-//! Sums follow numpy's order where it is cheap to copy (sequential `bincount` and `add.at`,
-//! pairwise row sums), so the steady state matches the Python calibration to the tolerance of an
-//! iterative solve.
+//! Sums run in a fixed order (sequential per index, pairwise row sums), so the steady state is
+//! reproducible to the last bit.
 
 use std::f64::consts::LN_10;
 use std::fmt;

@@ -35,8 +35,7 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap()
 }
 
-/// The committed fixture reference, solved by the Python reference, within the tolerance of an
-/// iterative solve.
+/// The committed fixture reference, within the tolerance of an iterative solve.
 #[test]
 fn reference_solve_reproduces_the_fixture_reference() {
     let out = tempfile::tempdir().unwrap();

@@ -306,7 +306,7 @@ fixture's eps:
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
 
-Limits are the first failing value on a 0.0005 grid (`python -m ceteris.calibrate.stability` prints the rows from the fixture export).
+Limits are the first failing value on a 0.0005 grid (`ceteris calibrate stability` prints the rows from the fixture export).
 
 The default (kappa1 0.05, kappa2 0) lies on the edge kappa2 = 0 of the region and counts as
 inside (owner ruling, MIGRATION Task 6): J1 holds with equality, so the stock has a unit root (it
@@ -323,7 +323,7 @@ replaces the simplified 3 x 3 of the migration plan (owner ruling, MIGRATION Tas
 stock before clearing against a fixed target misclassifies that toy market both ways (at E =
 13.55, theta 12.55 as before the OECD key, it calls (0.02, 0.06) unstable and (0.1, 0.06) stable).
 
-On the 2000 pack (PLAN Task 20; `python -m ceteris.calibrate.stability EXPORT` on a pack export).
+On the 2000 pack (PLAN Task 20; `ceteris calibrate stability EXPORT` on a pack export).
 The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30.4 (medians 1.5 to
 3.0 by good; fixture 0.90 to 2.61), since value-added shares go down to 0.04:
 

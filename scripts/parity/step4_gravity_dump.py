@@ -12,6 +12,9 @@ gravity.baci_flows calls int() on every key of `ceteris pack dump-reader hs-good
 keys the EU aggregate lines ("12EU20"); they match no BACI line, so the wrapper leaves them out.
 
     python step4_gravity_dump.py OUT --pack PACK --yotov ZIP
+
+The Python reference and calibration packages are deleted: run it from a checkout of the commit
+before their deletion (`git log --diff-filter=D -- python/ceteris/reference`).
 """
 
 import argparse

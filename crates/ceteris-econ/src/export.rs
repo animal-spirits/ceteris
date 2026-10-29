@@ -1,5 +1,5 @@
-//! Arrow export of the P2 world: the only interface between the Rust core and the Python GE
-//! reference model (`specs/econ/SPEC.md`, GE reference model), which rebuilds the same
+//! Arrow export of the P2 world: the only interface between the Rust core and the GE reference
+//! model (`ceteris-reference`; `specs/econ/SPEC.md`, GE reference model), which rebuilds the same
 //! economy from it. One record batch per table, fixed column order, no timestamps: the same
 //! world gives byte-identical files. Every table carries `export_format` in its schema
 //! metadata. Indices are zero-based IDs in the order of the inputs.

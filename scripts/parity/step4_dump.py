@@ -9,6 +9,9 @@ ln p and ln w. Non-finite floats are written as
 strings.
 
     python step4_dump.py EXPORT_DIR OUT.json [--dense] [--solve] [--reference PACK]
+
+The Python reference and calibration packages are deleted: run it from a checkout of the commit
+before their deletion (`git log --diff-filter=D -- python/ceteris/reference`).
 """
 
 import argparse
