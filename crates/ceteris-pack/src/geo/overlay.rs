@@ -1,5 +1,5 @@
 //! Polygon overlay through GEOS, called as shapely calls it: `union_all` is a unary union of a
-//! geometry collection, and the antimeridian helpers of `geo.py` (`polygonal`, `wrap`, `unwrap`).
+//! geometry collection, and the antimeridian helpers (`polygonal`, `wrap`, `unwrap`).
 
 use geo::{Coord, LineString, MultiPolygon, Polygon};
 use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};

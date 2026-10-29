@@ -155,7 +155,6 @@ fn digests(dir: &Path) -> std::collections::BTreeMap<String, String> {
 fn two_builds_write_the_same_bytes() {
     use ceteris_pack::build::build;
     use ceteris_pack::fetch;
-    use ceteris_pack::geo::provinces::Centres;
 
     let missing: Vec<String> = fetch::entries(&workspace_root())
         .unwrap()
@@ -176,10 +175,7 @@ fn two_builds_write_the_same_bytes() {
         return;
     }
     let dirs = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
-    let built: Vec<_> = dirs
-        .iter()
-        .map(|d| build(d.path(), &Centres::H3o, None).unwrap())
-        .collect();
+    let built: Vec<_> = dirs.iter().map(|d| build(d.path()).unwrap()).collect();
     assert_eq!(built[0].tables, built[1].tables);
     let (a, b) = (digests(dirs[0].path()), digests(dirs[1].path()));
     assert!(a.contains_key("manifest.json") && a.contains_key("web/counties.fill"));

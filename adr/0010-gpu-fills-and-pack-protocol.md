@@ -3,6 +3,7 @@
 Status: accepted (owner, 2026-10-23); amends ADR 0008 and ADR 0009
 Date: 2026-10-23
 Design sections: 19.1 (Map UI, App shell), 19.4, 20.1
+Paths (ADR 0113, 2026-10-29): the fill writer is `ceteris_pack::geo::fills`.
 
 ## Context
 

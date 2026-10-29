@@ -6,7 +6,9 @@
 
 **Architecture:** Five code branches, each a PR off the previous one's merge (A, then B, C, D, E), plus one records branch (F) that is independent. A changes speed and the kernel; B changes the price rule, storage and the trade frictions, then recalibrates and re-runs the P2 gate; C changes the calibration data and the demand and income blocks, then recalibrates and re-runs the gate; D adds what P3's seek, branching and sweeps need; E retrofits the kernels generic over `Real` and a lane count once the economics have settled. The Python GE reference mirrors every model change, because V1 compares against it.
 
-**Tech Stack:** Rust 2024 workspace (`ceteris-core`, `-geo`, `-trade`, `-econ`; rayon, libm, arrow), Python 3 via `uv` (`python/ceteris`: pack builders, GE reference, PPML, calibration), GitHub Actions.
+**Tech Stack:** Rust 2024 workspace (`ceteris-core`, `-geo`, `-trade`, `-econ`; rayon, libm, arrow; `ceteris-pack`, `-reference`, `-calibrate` for the pack builders, GE reference, PPML and calibration), GitHub Actions.
+
+**Python removed (ADR 0113):** the `python/` paths and pytest files named in the open tasks below are the Python originals; branches B and C are rewritten against `ceteris-pack`, `ceteris-reference` and `ceteris-calibrate` before execution.
 
 **Spec:** `specs/econ/SPEC.md`, `specs/trade/SPEC.md` (as built), ADRs 0089 to 0112, the P2 ledger `.superpowers/sdd/PLAN/progress.md` and `.superpowers/sdd/PLAN/final-review.md` (main checkout), and the owner request of 2026-10-26 (thread "Prepare the simulator for P3").
 
@@ -34,7 +36,7 @@
 - Determinism: identical state hashes at 1 thread, 3 threads and all threads; parallel float sums only through `ceteris_core::reduce::fixed_sum` or fixed slots combined in index order; no `HashMap`/`HashSet` reaching state.
 - Money is exact: i64 transfers rounded half to even (pops and enterprises), i128 for aggregate accounts after B5; every invariant in `EconWorld::end_tick` keeps holding.
 - `CETERIS_PACK` is an absolute path; the pack is `data/packs/2000`.
-- Calibrate: `uv run --project python --locked python -m ceteris.reference calibrate` writes `target/calibration/<pack>`; install the tables into the pack yourself.
+- Calibrate: `cargo run --release --bin ceteris -- calibrate --pack $CETERIS_PACK` writes `target/calibration/<pack>`; install the tables into the pack yourself.
 - Python reference mirrors the Rust model: routing and payments to 1e-12 relative (today 3e-16), the fixture equilibrium within the existing test tolerances.
 - Goldens (`tests/golden/p2-econ.txt`, `p2-pack.txt`, `p2-fixture/`) change only in a commit whose subject says re-bless and why.
 - Every new parameter takes a register ID: next free P150. Reserved: P143 kappa_n, P144 psi, P145 zeta, P146 g_s (0091), P147 M_F (held), P56 storage cost.

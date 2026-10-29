@@ -479,8 +479,8 @@ mod graph {
         }
     }
 
-    /// Segments per quarter circle of `BaseGeometry.buffer`, which transport.py calls (the
-    /// function `shapely.buffer` takes 8).
+    /// Segments per quarter circle: the default of shapely's `BaseGeometry.buffer`, which built
+    /// the 2000 pack (the function `shapely.buffer` takes 8).
     const QUAD_SEGS: i32 = 16;
 
     fn buffer(g: &impl Geom, distance: f64) -> geos::GResult<Geometry> {

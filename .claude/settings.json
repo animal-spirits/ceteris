@@ -3,7 +3,7 @@
     "ask": [
       "Edit(/tests/golden/**)",
       "Write(/tests/golden/**)",
-      "Edit(/python/ceteris/packs/sources.toml)",
+      "Edit(/crates/ceteris-pack/config/sources.toml)",
       "Edit(/clippy.toml)",
       "Edit(/rust-toolchain.toml)"
     ]

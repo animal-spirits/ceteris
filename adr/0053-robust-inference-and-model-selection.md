@@ -4,6 +4,7 @@ Status: proposed
 Date: 2026-10-24
 Design sections: 15.2, 15.6, 15.7, 17.2
 Phase: P9
+Paths (ADR 0113, 2026-10-29): `python/` is gone; the calibration harness is `ceteris-calibrate`.
 
 ## Context
 

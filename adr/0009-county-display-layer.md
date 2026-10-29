@@ -3,6 +3,7 @@
 Status: accepted (owner, 2026-10-23); amends ADR 0006 and ADR 0008
 Date: 2026-10-23
 Design sections: 5.1, 5.2, 16, 19.1 (Map UI), 20.1, ADR 0005, ADR 0008
+Paths (ADR 0113, 2026-10-29): the lock is `crates/ceteris-pack/config/counties.lock.toml`; `ceteris pack record-counties` regenerates it.
 
 ## Context
 
