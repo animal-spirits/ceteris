@@ -1,6 +1,6 @@
 # 0051. A fat-tailed hazard library for rare events
 
-Status: proposed
+Status: proposed; amended per ADR 0241, 0242 (2026-10-29)
 Date: 2026-10-24
 Design sections: 13.1, 13.3, 13.4, 13.5, 11.2, 19.4, 15.4
 Phase: P8 (natural and epidemic hazards), P7 (war severity), P9 (calibration)

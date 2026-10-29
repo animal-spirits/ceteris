@@ -1,6 +1,6 @@
 # 0230. Latent demand dynamics in the demand system
 
-Status: proposed (owner chose the option, 2026-10-28)
+Status: proposed (owner chose the option, 2026-10-28); amended per ADR 0241 (2026-10-29)
 Date: 2026-10-28
 Design sections: 9.9, 9.14, 13.1, 14.4, 17; ADR 0111
 Phase: P5b

@@ -1,6 +1,6 @@
 # 0028. Oil and gas market structure
 
-Status: proposed; amended per ADR 0095 (2026-10-26)
+Status: proposed; amended per ADR 0095 (2026-10-26); amended per ADR 0241 (2026-10-29)
 Date: 2026-10-24
 Design sections: 7.1, 7.7, 8.2, 8.4, 15.4, 17.1, 17.2
 Phase: P2 (crude oil), P8 (natural gas and LNG)

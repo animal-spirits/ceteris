@@ -1,6 +1,6 @@
 # 0233. Margin-constrained leverage and LDI spirals
 
-Status: proposed (owner chose to record it, 2026-10-29)
+Status: proposed (owner chose to record it, 2026-10-29); amended per ADR 0241, 0242 (2026-10-29)
 Date: 2026-10-29
 Design sections: 9.7, 9.8, 9.11, 9.13, 15.4, 17; ADRs 0227, 0229
 Phase: P5b, behind a flag until it passes the ablation test (15.7)
