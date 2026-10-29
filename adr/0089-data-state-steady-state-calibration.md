@@ -1,6 +1,6 @@
 # 0089. Data-state steady-state calibration and natural-rate unemployment
 
-Status: accepted (owner, 2026-10-25; core pulled into P2 before the gate)
+Status: accepted (owner, 2026-10-25; core pulled into P2 before the gate); amended per ADR 0243 (2026-10-29)
 Date: 2026-10-25
 Design sections: 8.7, 15.2, 15.3 (V1), 19.4; econ SPEC Calibration, Labour; ADR 0022
 Paths (ADR 0113, 2026-10-29): `reference/calibrate.py` is `ceteris_calibrate::steady` (`ceteris calibrate`).
