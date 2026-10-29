@@ -1,6 +1,6 @@
 # 0078. Chronicle narration, storyteller camera and legends
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (game items to 2.0+)
 Date: 2026-10-24
 Design sections: 20, ADR 0049, ADR 0066
 Phase: P3 onward

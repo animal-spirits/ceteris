@@ -1,6 +1,6 @@
 # 0162. Commitment devices
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (game items to 2.0+)
 Date: 2026-10-28
 Design sections: 9.2, 9.6, 9.13, 12.6, 14.2, 17; ADRs 0083, 0123
 Phase: P5 (monetary and fiscal), 1.3 (as a Steward verb)

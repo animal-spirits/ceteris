@@ -1,6 +1,6 @@
 # 0124. Economic views: trade-cost cartogram, receipt, atlas and diegetic eras
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (game items to 2.0+)
 Date: 2026-10-28
 Design sections: 5.4, 8.3, 20.1, 20.2; ADR 0088
 Phase: P3 (cartogram, receipt, atlas); 1.x (eras)

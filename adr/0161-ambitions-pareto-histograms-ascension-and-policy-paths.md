@@ -1,6 +1,6 @@
 # 0161. Ambitions, Pareto histograms, ascension and policy paths
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (game items to 2.0+)
 Date: 2026-10-28
 Design sections: 23.4, 14.2, 14.4; ADRs 0065, 0079, 0129, 0132
 Phase: 1.3 (Steward mode)
