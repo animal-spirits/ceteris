@@ -13,8 +13,12 @@ fn fail(e: geos::Error) -> String {
 }
 
 /// `shapely.coverage_simplify(geoms, SIMPLIFY_DEG)`: GEOS's coverage simplification of the
-/// collection of `geoms`, boundary included, its members in order.
-pub fn coverage(geoms: &[Geometry]) -> Result<Vec<Geometry>, String> {
+/// collection of `geoms`, boundary included, its members in order. The inner error is GEOS
+/// raising in the simplification (shapely's GEOSException, with GEOS's message); the outer one
+/// any other failure.
+pub fn coverage(geoms: &[Geometry]) -> Result<Result<Vec<Geometry>, String>, String> {
+    use ceteris_geos_coverage::{Error, coverage_simplify_vw};
+
     let members = geoms
         .iter()
         .map(|g| Geom::clone(g).map_err(fail))
@@ -23,13 +27,18 @@ pub fn coverage(geoms: &[Geometry]) -> Result<Vec<Geometry>, String> {
     let wkb = WKBWriter::new()
         .and_then(|mut w| w.write_wkb(&collection))
         .map_err(fail)?;
-    let out = ceteris_geos_coverage::coverage_simplify_vw(&wkb, SIMPLIFY_DEG, false)?;
-    overlay::parts(&Geometry::new_from_wkb(&out).map_err(fail)?)
+    match coverage_simplify_vw(&wkb, SIMPLIFY_DEG, false) {
+        Ok(out) => Ok(Ok(overlay::parts(
+            &Geometry::new_from_wkb(&out).map_err(fail)?,
+        )?)),
+        Err(e @ Error::Simplify(_)) => Ok(Err(e.to_string())),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-/// `build.simplify`: the coverage simplification, or where GEOS fails on the set (clipped
-/// counties are not always a valid coverage), each geometry simplified on its own with its
-/// topology kept. Anything but polygons fails, as shapely refuses it before GEOS sees it.
+/// `build.simplify`: the coverage simplification, or where GEOS raises in it (clipped counties
+/// are not always a valid coverage), each geometry simplified on its own with its topology
+/// kept. Anything but polygons fails, as shapely refuses it before GEOS sees it.
 pub fn simplify(geoms: &[Geometry]) -> Result<Vec<Geometry>, String> {
     for g in geoms {
         let kind = g.geometry_type().map_err(fail)?;
@@ -37,12 +46,13 @@ pub fn simplify(geoms: &[Geometry]) -> Result<Vec<Geometry>, String> {
             return Err(format!("simplify: a {kind:?} among the polygons"));
         }
     }
-    coverage(geoms).or_else(|_| {
-        geoms
+    match coverage(geoms)? {
+        Ok(simple) => Ok(simple),
+        Err(_) => geoms
             .iter()
             .map(|g| g.topology_preserve_simplify(SIMPLIFY_DEG).map_err(fail))
-            .collect()
-    })
+            .collect(),
+    }
 }
 
 /// The countries layer: `shapely.union_all` of the simplified provinces of each country, the
@@ -99,7 +109,7 @@ mod tests {
     #[test]
     fn coverage_simplification_is_shapely_s() {
         // shapely 2.2.0 on GEOS 3.15.0: shapely.coverage_simplify([a, b], 0.01)
-        let out = coverage(&coverage_pair()).unwrap();
+        let out = coverage(&coverage_pair()).unwrap().unwrap();
         let out: Vec<String> = out.iter().map(wkt).collect();
         assert_eq!(
             out,
@@ -124,7 +134,8 @@ mod tests {
         ]);
         let square = polygon(&[(5.0, 0.0), (6.0, 0.0), (6.0, 1.0), (5.0, 1.0), (5.0, 0.0)]);
         let set = [spike, square];
-        assert!(coverage(&set).is_err());
+        let raised = coverage(&set).unwrap().err().unwrap();
+        assert!(raised.contains("point array must contain"), "{raised}");
         let out = simplify(&set).unwrap();
         assert_eq!(out.len(), 2);
         for (a, b) in set.iter().zip(&out) {

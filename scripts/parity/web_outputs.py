@@ -14,6 +14,7 @@ path each layer took.
 import hashlib
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -59,9 +60,16 @@ def geometries(dir: Path, name: str) -> list:
     return out
 
 
+def quiet(f, *args):
+    """f(*args) without the RuntimeWarning numpy raises on GEOS's notices in coverage_simplify."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "invalid value encountered in coverage_simplify", RuntimeWarning)
+        return f(*args)
+
+
 def path_taken(geoms) -> str:
     try:
-        shapely.coverage_simplify(np.array(geoms, dtype=object), build.SIMPLIFY_DEG)
+        quiet(shapely.coverage_simplify, np.array(geoms, dtype=object), build.SIMPLIFY_DEG)
         return "coverage"
     except shapely.errors.GEOSException:
         return "per geometry"
@@ -73,12 +81,12 @@ def main(dir: Path) -> None:
     py = dir / "python"
     py.mkdir(parents=True, exist_ok=True)
 
-    simple = build.simplify(provs)
+    simple = quiet(build.simplify, provs)
     groups = {}
     for i, c in enumerate(country):
         groups.setdefault(c, []).append(i)
     codes = sorted(set(country))
-    county_simple = build.simplify(cty)
+    county_simple = quiet(build.simplify, cty)
     layers = {
         "provinces": (simple, 0),
         "countries": ([shapely.union_all(simple[groups[c]]) for c in codes], 0),
