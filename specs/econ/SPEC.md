@@ -408,7 +408,15 @@ out; a category with none of its goods reachable is left out, and B and Dt run o
 with omega and theta renormalized.
 
 *Pop demand.* A pop's income per person is lognormal with mean m = money / population and log
-dispersion s = sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G), G its country's 2000 Gini. With
+dispersion s = s_w, its country's within-pop dispersion (ADR 0094): s_w^2 = max(0, s_nat^2 -
+Var_k ln m_k), s_nat = sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G) from the country's 2000 Gini
+and the variance population-weighted over its pops' base incomes per person m_k, rebates aside
+(w0 (1 - u*) times the pop's effective labour, plus its population share of the country's
+profit pool, over its population; `world::pop_base_income`). The national Gini contains the
+spread between pops, so it is not counted twice. A country whose between-pop variance alone
+exceeds s_nat^2 gets s_w = 0 and is listed in the calibration summary (`within_sigma_zero`;
+none on the fixture). The weights carry s_w (`PiglWeights::sigma`, `pigl_sigma` in the
+calibration's country table). With
 E[e^(1 - eps)] = m^(1 - eps) exp(-eps (1 - eps) s^2 / 2), the pop's category shares are, in
 closed form,
 
@@ -420,15 +428,29 @@ Shares below 0 (a pop far poorer than its country's base) are set to 0 and the r
 sum to 1 (Review Focus 4). Spending on good g is s_c(g) times its within-category share times
 the money balance: spending equals money.
 
-*Inversion (at load, per country).* Parameters theta, sigma_B, phi, gamma, eps and omega_A = 0
-from the pooled PIGL column of the paper (Tables 3 and A3, column 3, pp. 24 and 48). At prices 1
-(B = Dt = 1, sB = omega, sD = theta) and the country's base spending per person m_0 (base
-household income over population), Omega_c = (1 - z) omega_c + z theta_c with z = lambda m_0^-eps
-exp(-eps (1 - eps) s^2 / 2). Hence z = Omega_A / theta_A, omega_c = (Omega_c - z theta_c) / (1 -
-z) for M and S, lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g = Omega_g / Omega_c(g):
-the 2000 final demand shares are reproduced exactly at prices 1 and m_0. A country with z >= 1
-or a negative omega_c stops the load (never clipped). On the fixture z = 0.284, omega = (0,
-0.247, 0.753) in every country.
+*Inversion (per country, over its pops; ADR 0094, Amendment).* Parameters theta, sigma_B, phi,
+gamma, eps and omega_A = 0 from the pooled PIGL column of the paper (Tables 3 and A3, column 3,
+pp. 24 and 48). The unknowns lambda, omega_M = t, omega_S = 1 - t and alpha (summing to 1 within
+each category over the goods with demand) solve, for every good,
+
+```
+sum_k E_k s_kg(q_k, m_k, s_w) = Omega_g sum_k E_k
+```
+
+over the country's pops k, each at its own buyer prices q_k and income per person m_k, weighted
+by its spending E_k (unclamped shares). Rounds from alpha_g = Omega_g / Omega_c(g): at the
+current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) for each t, and
+t solves the M aggregate by a bracketed secant (Illinois) on [0, 1]; then alpha_g is rescaled by
+Omega_g over its aggregate share and renormalized within its category (the contraction of Berry,
+Levinsohn and Pakes 1995). The rounds stop when every aggregate share is within 1e-14 of Omega
+relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000 is an error. No
+sign change of the M aggregate on [0, 1] or a negative lambda is a negative weight and stops the
+load (never clipped). At load without a calibration the pops are at prices 1 with E_k their base
+income and m_k their base income per person (`world::household_preferences`); with one pop, or
+pops alike, the solve is the closed form of one lognormal: z = Omega_A / theta_A, omega_c =
+(Omega_c - z theta_c) / (1 - z), lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g =
+Omega_g / Omega_c(g) (`invert_pigl`). The simulator (`demand::invert_pigl_pops`) and the GE
+reference (`demand::invert_pops`) implement it independently.
 
 Spending on traded goods is sourced over origins (trade SPEC) and paid at dispatch for what is
 filled; rationed purchases leave money unspent until the next tick.
@@ -471,7 +493,12 @@ rescales the traded r so that world traded value added sum_e r_g VA_e equals the
 without it the level depended on the start and the mixing path, by up to 4e-4 from starts at
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
-repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-11 relative (Anderson-mixed);
+repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-12 relative
+(Anderson-mixed; `PASS_TOL`). The stopping tolerance is a solver setting, not a model parameter,
+so it has no register ID: it was 1e-11 until the joint PIGL inversion (ADR 0094), after which the
+fixture's last pass changed by 9.9e-12 and the returned r stood 1.2e-12 from the scaling at its
+own spending, beyond the 1e-12 that `sinkhorn_is_unique_up_to_scale` checks. The solver now
+converges to the tolerance the test claims (controller ruling, 2026-10-29);
 within a pass the income and local-output fixed point is iterated until no local output changes by more than 1e-14 relative.
 
 **Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
@@ -493,13 +520,12 @@ condition holds. S09 FixedLeontief reads the same calibrated column. Every provi
 under national ownership even a province without traded output earns dividends and buys local
 goods.
 
-**Stage 4, demand weights.** Per country, PIGL weights inverted (ADR 0021 form, omega_A = 0) at
-the country's buyer prices, the unit value of its households' purchases of each good, and its
-mean household income per person (`demand.invert_at`): within a category alpha_g is
-proportional to Omega_g p_g^(sigma - 1), K = Omega_A / sD_A, sB = (Omega - K sD) / (1 - K), lambda
-in closed form. Pops then spend by PIGL at their province's q and income, so national shares
-match Omega only up to the spread of prices and incomes within the country (ADR 0094 is after
-the gate).
+**Stage 4, demand weights.** Per country, PIGL weights inverted jointly over its pops (ADR 0094,
+Amendment; `demand::invert_pops`), each pop at its province's buyer prices q of the pass, its
+income per person, and weighted by its income (rebates included), at the within-pop dispersion
+s_w fixed by the inputs. Pops then spend by PIGL at those prices and incomes, so in the data
+state each country's aggregate household shares are Omega
+(`aggregate_data_state_shares_match_omega`, 1e-12).
 
 **Stage 5, state at the start of a tick.** Input stocks (1 + COVER) months of use, traded and
 local, so the order-up-to rule orders one month of use; the pipeline of every buyer (pops and
@@ -859,7 +885,10 @@ texture fed from core columns.
   demand against 64-node Gauss-Hermite quadrature of individual demand over the lognormal
   (1e-10), adding-up (1e-14), inversion reproducing base shares (1e-12), Engel curves across
   fixture pops (food share falls, services share rises), clamping far from base (money x 1e-3
-  and x 1e3), homogeneity, unreachable goods and categories, Gini to sigma.
+  and x 1e3), homogeneity, unreachable goods and categories, Gini to sigma, the within-pop
+  dispersion (`within_sigma_subtracts_the_between_pop_variance`), the joint inversion over pops
+  (`pigl_pops_inversion_reproduces_base_shares`; reference `one_pop_inversion_equals_old_at_prices_one`,
+  `between_and_within_variance_add_up`, `pigl_inversion_reproduces_base_shares`).
 - Property (proptest): money and goods conservation through a full tick on random small
   worlds; employment bounds; homogeneity (scaling all nominal values leaves real outcomes
   identical; pi^e is a log difference and stays; run with the loss write-off off, whose cap is
@@ -942,11 +971,6 @@ texture fed from core columns.
   at the reference equilibrium, recovers 2.6200, 5.1900 and 10.5700 with pseudo-R2 1, so the
   flows and kernel are right and the gap is the ln distance regressor, which does not span the
   S05 costs (ADR 0022). Whether the gate should test theta on the model's costs is for the owner.
-- PIGL aggregation across pops: the inversion matches the 2000 shares for one lognormal at the
-  country's mean income per person; the country's pops differ in mean income (education,
-  province), so the aggregate data-state shares differ from Omega by up to 0.0018 on the fixture
-  (food 0.118 for 0.120). Matching the aggregate exactly would need a per-country solve over
-  its pops.
 - Money headroom (ADR 0106): the mint, which holds minus the world's money (-1.15e16 minor units
   on the full pack), the pools, markets and gateways are `i128`, so the overflow the i64 ledger hit
   at a uniform scale of about 802 on prices, wages and balances (ADR 0089, Evidence) is gone

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### BEHAVIOUR: PIGL inverted jointly over each country's pops at within-pop dispersion (ADR 0094)
+
+- Every pop spends at its country's within-pop log income dispersion s_w, s_w^2 = max(0, s_nat^2 -
+  Var_k ln m_k) over the pops' base incomes per person, instead of the national Gini's s_nat.
+- The PIGL weights are inverted per country jointly over its pops, each at its own buyer prices
+  and income, so that their spending-weighted shares are the 2000 final demand shares exactly:
+  at prices 1 and the base incomes at load, at the province buyer prices of each pass in
+  calibration stage 4 (which no longer inverts at country unit-value prices).
+- The weights carry s_w: `pigl_sigma` in `econ_calib_countries.arrow`, and in the inputs digest.
+  The calibration summary lists the countries with s_w = 0 (`within_sigma_zero`).
+- The calibration passes stop at a relative change of 1e-12 (`PASS_TOL`, was 1e-11), so the
+  returned state is a fixed point to the 1e-12 its checks claim; the fixture now takes 21 passes
+  (20 before this change).
+
 ### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
 
 - ICIO C19 (refined petroleum) and its HS lines move from good 5 into good 1, renamed "Crude oil,

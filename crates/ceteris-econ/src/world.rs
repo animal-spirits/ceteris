@@ -17,7 +17,7 @@ use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
 use ceteris_trade::{Kernel, Markets, N_GOODS, Network, Pipeline, Sourced, TradeParams};
 
 use crate::calibration::Steady;
-use crate::demand::{PiglWeights, invert_pigl, lognormal_sigma, pigl};
+use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
 use crate::inputs::EconInputs;
 use crate::params::{EconParams, Pigl, Technology};
@@ -112,10 +112,10 @@ pub struct Layout {
     /// Weights of the world price index, [`price_index_weights`].
     pub index_weights: Vec<f64>,
     /// PIGL weights per country: the calibrated ones (`Countries::pigl`), else inverted at
-    /// load from its final demand shares at prices 1 and its base spending per person
-    /// ([`base_spend`]).
+    /// load over its pops at prices 1 ([`household_preferences`]).
     pub pigl: Vec<PiglWeights>,
-    /// Log income dispersion sigma of every pop of a country, from the country's Gini.
+    /// Within-pop log income dispersion of every pop of a country, which its weights carry
+    /// (ADR 0094).
     pub sigma_income: Vec<f64>,
     /// Retained loss each enterprise keeps before the write-off (ADR 0112), minor units: M
     /// months of its base sales VA0 / a_VA (the calibrated steady-state sales value).
@@ -540,28 +540,68 @@ pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
         .collect()
 }
 
+/// Base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times its
+/// effective labour, plus its population share of its country's base profit pool, over its
+/// population; 0 without people. As `ceteris_reference::io::Inputs::pop_base_income`.
+pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+    let pool = base_profit_pool(inp);
+    let (_, country_people) = pop_people(inp);
+    (0..inp.n_pops())
+        .map(|k| {
+            let i = inp.pops.province[k] as usize;
+            let c = inp.country_of(i);
+            let n = inp.pops.population[k];
+            if n > 0.0 {
+                let effective =
+                    params.edu_eff[usize::from(inp.pops.edu[k])] * inp.pops.labour_force[k];
+                let wage = inp.provinces.w0[i] * (1.0 - inp.countries.u_star[c]) * effective;
+                (wage + n / country_people[c] * pool[c]) / n
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
 /// Per country, the calibrated PIGL weights (`Countries::pigl`) or else the weights inverted
-/// from its final demand shares at prices 1 and its [`base_spend`], and the log income
-/// dispersion of its pops from its Gini (ADR 0021). Panics where a country's shares cannot be
-/// inverted (`invert_pigl`).
+/// jointly over its pops at prices 1, each at its [`pop_base_income`] and weighted by its base
+/// spending (ADR 0094), and the within-pop log income dispersion every pop of the country uses,
+/// which the weights carry. Panics where a country's shares cannot be inverted
+/// (`invert_pigl_pops`).
 pub fn household_preferences(
     inp: &EconInputs,
     params: &EconParams,
 ) -> (Vec<PiglWeights>, Vec<f64>) {
-    let sigma: Vec<f64> = inp
-        .countries
-        .gini
-        .iter()
-        .map(|&g| lognormal_sigma(g))
-        .collect();
     let weights = match &inp.countries.pigl {
         Some(w) => w.clone(),
-        None => base_spend(inp, params)
-            .iter()
-            .enumerate()
-            .map(|(c, &m)| invert_pigl(&inp.countries.omega[c], m, sigma[c], params))
-            .collect(),
+        None => {
+            let income = pop_base_income(inp, params);
+            let mut pops = vec![Vec::new(); inp.n_countries()];
+            for k in 0..inp.n_pops() {
+                pops[inp.country_of(inp.pops.province[k] as usize)].push(k);
+            }
+            pops.iter()
+                .enumerate()
+                .map(|(c, members)| {
+                    let people: Vec<(f64, f64)> = members
+                        .iter()
+                        .map(|&k| (inp.pops.population[k], income[k]))
+                        .collect();
+                    let sigma = within_sigma(inp.countries.gini[c], &people);
+                    let at: Vec<PopAt> = people
+                        .iter()
+                        .map(|&(n, m)| PopAt {
+                            price: [1.0; N_GOODS],
+                            income: m,
+                            spend: n * m,
+                        })
+                        .collect();
+                    invert_pigl_pops(&inp.countries.omega[c], &at, sigma, params)
+                })
+                .collect()
+        }
     };
+    let sigma = weights.iter().map(|w| w.sigma).collect();
     (weights, sigma)
 }
 

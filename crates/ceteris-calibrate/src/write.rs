@@ -9,7 +9,7 @@
 //! | `econ_calib_provinces` | province u32, w0, employment, income f64 |
 //! | `econ_calib_pops` | province u32, edu u8, money, income, wage f64 |
 //! | `econ_calib_pipeline` | buyer u8 (0 pops, 1 enterprises), province u32, key u8 (edu or good), good u8, ahead u8, units f64 |
-//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9 f64 |
+//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_sigma (the within-pop dispersion, ADR 0094), pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9 f64 |
 //!
 //! Every table carries `calibration_format` [`FORMAT`] in its schema metadata.
 
@@ -248,6 +248,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
         named("u_star", f64s(s.u_star.iter().copied())),
         named("rebate", f64s(s.rebate.iter().copied())),
         named("pigl_scale", f64s(w.scale.iter().copied())),
+        named("pigl_sigma", f64s(w.sigma.iter().copied())),
     ];
     countries.extend((0..N_CATEGORIES).map(|c| (format!("pigl_omega_{c}"), column(&w.omega, c))));
     countries.extend((0..n_g).map(|g| (format!("pigl_within_{g}"), column(&w.within, g))));
@@ -429,6 +430,7 @@ pub fn read_reference(
         scale: countries.f64("pigl_scale")?,
         omega: by_column("pigl_omega_", N_CATEGORIES)?,
         within: by_column("pigl_within_", n_g)?,
+        sigma: countries.f64("pigl_sigma")?,
     };
 
     let cells = read("econ_calib_cells.arrow")?;

@@ -194,6 +194,7 @@ impl EconInputs {
             ));
         }
         let scale = f64s(&countries, "pigl_scale")?;
+        let sigma = f64s(&countries, "pigl_sigma")?;
         let omega = (0..N_CATEGORIES)
             .map(|c| f64s(&countries, &format!("pigl_omega_{c}")))
             .collect::<Result<Vec<_>, _>>()?;
@@ -204,6 +205,7 @@ impl EconInputs {
                     scale: scale[c],
                     omega: std::array::from_fn(|j| omega[j][c]),
                     within: within[c],
+                    sigma: sigma[c],
                 })
                 .collect(),
         );

@@ -20,6 +20,9 @@ pub struct PiglWeights {
     pub omega: [f64; N_CATEGORIES],
     /// Within-category CES weights alpha_g, summing to 1 over each category with demand.
     pub within: [f64; N_GOODS],
+    /// Within-pop log income dispersion s_w the weights were inverted with, which every pop of
+    /// the country uses (ADR 0094).
+    pub sigma: f64,
 }
 
 /// Log standard deviation of a lognormal with Gini `gini`: sqrt(2) Phi^-1((G + 1) / 2), which
@@ -201,7 +204,220 @@ pub fn invert_pigl(
             * libm::exp(eps * (1.0 - eps) * sigma_income * sigma_income / 2.0),
         omega: weight,
         within,
+        sigma: sigma_income,
     }
+}
+
+/// ADR 0094: a country's within-pop dispersion s_w = sqrt(max(0, s_nat^2 - Var ln m)), s_nat
+/// = [`lognormal_sigma`] of its Gini and the variance over its pops (people, income per person)
+/// weighted by people, pops without people or income left out; s_nat without any.
+pub fn within_sigma(gini: f64, pops: &[(f64, f64)]) -> f64 {
+    let national = lognormal_sigma(gini);
+    let counted = || pops.iter().filter(|&&(n, m)| n > 0.0 && m > 0.0);
+    let people: f64 = counted().map(|&(n, _)| n).sum();
+    if people <= 0.0 {
+        return national;
+    }
+    let mean = counted().map(|&(n, m)| n * libm::log(m)).sum::<f64>() / people;
+    let var = counted()
+        .map(|&(n, m)| {
+            let d = libm::log(m) - mean;
+            n * d * d
+        })
+        .sum::<f64>()
+        / people;
+    libm::sqrt((national * national - var).max(0.0))
+}
+
+/// One pop of a country in [`invert_pigl_pops`].
+#[derive(Clone, Copy, Debug)]
+pub struct PopAt {
+    pub price: [f64; N_GOODS],
+    /// Mean income per person.
+    pub income: f64,
+    /// Spending, the pop's weight in its country's aggregate.
+    pub spend: f64,
+}
+
+/// Rounds of [`invert_pigl_pops`] before it panics.
+const MAX_ROUNDS: usize = 1000;
+
+/// A pop at the current alpha: category indexes, shares within them, sD and the factor of
+/// lambda without B, Dt^gamma m^-eps exp(-eps (1 - eps) s^2 / 2).
+type Fixed = (
+    [f64; N_CATEGORIES],
+    [f64; N_GOODS],
+    [f64; N_CATEGORIES],
+    f64,
+);
+
+/// ADR 0094, Amendment: the weights at which the PIGL shares of a country's pops (each at its
+/// prices and income, with dispersion `sigma`), weighted by their spending, are its final demand
+/// shares `omega` (normalized). From alpha_g = Omega_g / Omega_c, rounds of: the split t =
+/// omega_M of omega_M + omega_S = 1 that meets the M aggregate (bracketed secant), with lambda
+/// from the food aggregate in closed form (omega_A = 0); then alpha_g times Omega_g over its
+/// aggregate share, renormalized within its category; until every aggregate share is within
+/// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
+/// out; without any, [`invert_pigl`] at spending 0. Panics where a weight would be negative.
+pub fn invert_pigl_pops(
+    omega: &[f64; N_GOODS],
+    pops: &[PopAt],
+    sigma: f64,
+    p: &EconParams,
+) -> PiglWeights {
+    let pops: Vec<PopAt> = pops.iter().copied().filter(|k| k.spend > 0.0).collect();
+    if pops.is_empty() {
+        return invert_pigl(omega, 0.0, sigma, p);
+    }
+    let total: f64 = omega.iter().sum();
+    let share = omega.map(|o| o / total);
+    let mut cat = [0.0; N_CATEGORIES];
+    for g in 0..N_GOODS {
+        cat[CATEGORY[g]] += share[g];
+    }
+    let mut w = PiglWeights {
+        scale: 0.0,
+        omega: [0.0; N_CATEGORIES],
+        within: std::array::from_fn(|g| {
+            if share[g] > 0.0 {
+                share[g] / cat[CATEGORY[g]]
+            } else {
+                0.0
+            }
+        }),
+        sigma,
+    };
+    let spent: f64 = pops.iter().map(|k| k.spend).sum();
+    let q = &p.pigl;
+    let eps = q.eps;
+    let negative = || -> ! {
+        panic!(
+            "PIGL inversion gives a negative weight: Omega {share:?} over {} pops",
+            pops.len()
+        )
+    };
+    let (mut best, mut stalled) = (f64::INFINITY, 0);
+    for _ in 0..MAX_ROUNDS {
+        let fixed: Vec<Fixed> = pops
+            .iter()
+            .map(|k| {
+                let (index, within) = category_prices(&w, &k.price, p.sigma_demand);
+                let (dt, s_d) = aggregate(&q.theta, &index, q.phi);
+                let x = libm::pow(dt, q.gamma)
+                    * libm::pow(k.income, -eps)
+                    * libm::exp(-eps * (1.0 - eps) * sigma * sigma / 2.0);
+                (index, within, s_d, x)
+            })
+            .collect();
+        // lambda and every pop's category shares at the split t
+        let at = |t: f64| -> (f64, Vec<[f64; N_CATEGORIES]>) {
+            let weight = [0.0, t, 1.0 - t];
+            let parts: Vec<([f64; N_CATEGORIES], f64)> = fixed
+                .iter()
+                .map(|(index, _, _, x)| {
+                    let (b, s_b) = aggregate(&weight, index, q.sigma_b);
+                    (s_b, x * libm::pow(b, eps - q.gamma))
+                })
+                .collect();
+            let food: f64 = parts
+                .iter()
+                .zip(&fixed)
+                .zip(&pops)
+                .map(|(((_, f), (_, _, s_d, _)), k)| k.spend * f * s_d[0])
+                .sum();
+            let lambda = if cat[0] > 0.0 {
+                cat[0] * spent / food
+            } else {
+                0.0
+            };
+            let shares = parts
+                .iter()
+                .zip(&fixed)
+                .map(|((s_b, f), (_, _, s_d, _))| {
+                    std::array::from_fn(|c| s_b[c] + lambda * f * (s_d[c] - s_b[c]))
+                })
+                .collect();
+            (lambda, shares)
+        };
+        let miss_m = |t: f64| -> f64 {
+            let (_, shares) = at(t);
+            shares
+                .iter()
+                .zip(&pops)
+                .map(|(s, k)| k.spend * s[1])
+                .sum::<f64>()
+                - cat[1] * spent
+        };
+        let t = {
+            let (mut a, mut b) = (0.0, 1.0);
+            let (mut fa, mut fb) = (miss_m(a), miss_m(b));
+            if fa > 0.0 || fb < 0.0 {
+                negative();
+            }
+            // Illinois: the retained end's value is halved when the same end moves twice
+            let mut last = 0i8;
+            while fa != 0.0 && fb != 0.0 {
+                let mut t = (a * fb - b * fa) / (fb - fa);
+                if !(t > a && t < b) {
+                    t = 0.5 * (a + b);
+                }
+                if !(t > a && t < b) {
+                    break;
+                }
+                let ft = miss_m(t);
+                if ft <= 0.0 {
+                    (a, fa) = (t, ft);
+                    if last == 1 {
+                        fb *= 0.5;
+                    }
+                    last = 1;
+                } else {
+                    (b, fb) = (t, ft);
+                    if last == 2 {
+                        fa *= 0.5;
+                    }
+                    last = 2;
+                }
+            }
+            if fa == 0.0 || -fa <= fb { a } else { b }
+        };
+        let (lambda, shares) = at(t);
+        if !(lambda.is_finite() && lambda >= 0.0) {
+            negative();
+        }
+        w.scale = lambda;
+        w.omega = [0.0, t, 1.0 - t];
+        let mut model = [0.0; N_GOODS];
+        for ((s, (_, within, _, _)), k) in shares.iter().zip(&fixed).zip(&pops) {
+            for g in 0..N_GOODS {
+                model[g] += k.spend * s[CATEGORY[g]] * within[g];
+            }
+        }
+        let miss = (0..N_GOODS)
+            .filter(|&g| share[g] > 0.0)
+            .map(|g| (model[g] / spent / share[g] - 1.0).abs())
+            .fold(0.0, f64::max);
+        if miss <= 1e-14 || (miss <= 1e-12 && stalled >= 20) {
+            return w;
+        }
+        if miss < best {
+            (best, stalled) = (miss, 0);
+        } else {
+            stalled += 1;
+        }
+        let mut sum = [0.0; N_CATEGORIES];
+        for g in (0..N_GOODS).filter(|&g| share[g] > 0.0) {
+            w.within[g] *= share[g] * spent / model[g];
+            sum[CATEGORY[g]] += w.within[g];
+        }
+        for g in (0..N_GOODS).filter(|&g| share[g] > 0.0) {
+            w.within[g] /= sum[CATEGORY[g]];
+        }
+    }
+    panic!(
+        "PIGL inversion over {} pops did not settle in {MAX_ROUNDS} rounds",
+        pops.len()
+    );
 }
 
 #[cfg(test)]
@@ -401,6 +617,67 @@ mod tests {
                 assert!((got - want).abs() <= 1e-12, "country {c} good {g}");
             }
         }
+    }
+
+    /// ADR 0094: the weights the world loads reproduce each country's Omega as the aggregate of
+    /// its pops' shares at prices 1, weighted by their base spending; with one pop at the
+    /// country's base spending the joint inversion is the closed form.
+    #[test]
+    fn pigl_pops_inversion_reproduces_base_shares() {
+        let p = EconParams::default();
+        let inp = small_world();
+        let (weights, sigma) = crate::world::household_preferences(&inp, &p);
+        let income = crate::world::pop_base_income(&inp, &p);
+        let mut spent = vec![[0.0; N_GOODS]; inp.n_countries()];
+        for (k, &m) in income.iter().enumerate() {
+            let c = inp.country_of(inp.pops.province[k] as usize);
+            let mut s = [0.0; N_GOODS];
+            pigl_shares(&weights[c], &[1.0; N_GOODS], m, sigma[c], &p, &mut s);
+            for g in 0..N_GOODS {
+                spent[c][g] += s[g] * m * inp.pops.population[k];
+            }
+        }
+        for (c, row) in spent.iter().enumerate() {
+            let total: f64 = row.iter().sum();
+            for (g, v) in row.iter().enumerate() {
+                let want = inp.countries.omega[c][g];
+                assert!((v / total - want).abs() <= 1e-12, "country {c} good {g}");
+            }
+        }
+        let alone = invert_pigl_pops(
+            &OMEGA,
+            &[PopAt {
+                price: [1.0; N_GOODS],
+                income: BASE,
+                spend: 3.0,
+            }],
+            SIGMA,
+            &p,
+        );
+        let closed = weights_at(&OMEGA);
+        assert!((alone.scale / closed.scale - 1.0).abs() <= 1e-13);
+        for (a, b) in alone.omega.iter().zip(&closed.omega) {
+            assert!((a - b).abs() <= 1e-14);
+        }
+        for (a, b) in alone.within.iter().zip(&closed.within) {
+            assert!((a - b).abs() <= 1e-14);
+        }
+    }
+
+    fn weights_at(omega: &[f64; N_GOODS]) -> PiglWeights {
+        invert_pigl(omega, BASE, SIGMA, &EconParams::default())
+    }
+
+    #[test]
+    fn within_sigma_subtracts_the_between_pop_variance() {
+        let s = lognormal_sigma(0.4);
+        // two pops of equal size at incomes e^-0.1 and e^0.1: variance 0.01
+        let pops = [(1.0, libm::exp(-0.1)), (1.0, libm::exp(0.1))];
+        let w = within_sigma(0.4, &pops);
+        assert!((w * w + 0.01 - s * s).abs() <= 1e-14);
+        // a spread beyond the national dispersion leaves none within
+        assert_eq!(within_sigma(0.05, &[(1.0, 0.1), (1.0, 10.0)]), 0.0);
+        assert_eq!(within_sigma(0.4, &[]), s);
     }
 
     #[test]
