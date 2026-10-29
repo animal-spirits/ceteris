@@ -104,3 +104,26 @@ fn calibrate_needs_one_input() {
         assert!(stderr.contains(message), "{args:?}: {stderr}");
     }
 }
+
+/// The stability table of the fixture, as the Python table printed it.
+#[test]
+fn calibrate_stability_prints_the_fixture_table() {
+    let run = ceteris(&["calibrate", "stability", path(&fixture())]);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(run.stdout).unwrap(),
+        "\
+| 0 Agriculture | 10.57 | 3 | 0.168 / 0.149 | 0.104 / 0.096 | 0.130 / 0.126 |
+| 1 Crude oil and gas | 10.57 | 1 | 0.169 / 0.151 | 0.048 / 0.074 | 0.016 / 0.095 |
+| 2 Coal and other mining | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
+| 3 Food | 2.62 | 2 | 0.508 / 0.368 | 0.392 / 0.347 | 0.040 / 0.380 |
+| 4 Light manufacturing | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
+| 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
+| 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
+"
+    );
+}
