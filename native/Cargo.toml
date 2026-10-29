@@ -1,0 +1,21 @@
+[package]
+name = "ceteris-app"
+description = "Ceteris Paribus native desktop app: Slint panels over a wgpu map (ADR 0088)"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace: Slint and wgpu stay out of the core's lockfile, CI and licence check.
+[workspace]
+
+[dependencies]
+# Pinned together: `unstable-wgpu-30` can change in Slint minor releases (ADR 0088).
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "accessibility"] }
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[dev-dependencies]
+pollster = "0.4"
