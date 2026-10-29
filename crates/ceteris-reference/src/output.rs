@@ -80,7 +80,8 @@ pub fn json_float(x: f64) -> String {
     }
 }
 
-fn json_string(s: &str) -> String {
+/// Python's `json.dumps` of a string.
+pub fn json_string(s: &str) -> String {
     serde_json::Value::from(s).to_string()
 }
 

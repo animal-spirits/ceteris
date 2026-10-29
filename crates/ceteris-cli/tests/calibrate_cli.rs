@@ -87,6 +87,16 @@ fn calibrate_needs_one_input() {
             vec!["calibrate", "--ticks", "3"],
             "unknown argument '--ticks'",
         ),
+        (
+            vec![
+                "calibrate",
+                "--pack",
+                path(&fixture),
+                "--out",
+                path(&fixture),
+            ],
+            "--out is the pack",
+        ),
     ] {
         let run = ceteris(&args);
         assert!(!run.status.success(), "{args:?}");

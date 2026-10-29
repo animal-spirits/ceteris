@@ -334,8 +334,8 @@ fn v1_full_pack_from_the_perturbed_steady_state() {
 
 /// V1 from the shocked data state is a stress test, not the gate's V1 (owner, 2026-10-26):
 /// after the coal-led shock output stays at full employment while demand collapses, merchant
-/// losses become pop debts (Mali, Albania) and the price level returns slowly; see the Task 20c
-/// debug report, ADRs 0090 and 0112, and the econ SPEC open questions. It is expected to fail
+/// losses become pop debts (Mali, Albania) and the price level returns slowly; see ADRs 0090
+/// and 0112 and the econ SPEC open questions. It is expected to fail
 /// V1, and this test fails when it passes, so that the question is reopened.
 #[test]
 fn v1_full_pack_from_the_data_state_stays_open() {

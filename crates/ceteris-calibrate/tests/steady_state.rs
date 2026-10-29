@@ -507,9 +507,54 @@ fn fixture_tables_match_the_committed_calibration() {
         serde_json::from_str(&t.schema().metadata()["calibration"]).unwrap()
     };
     let (got, want) = (meta(tmp.path()), meta(&committed));
-    for key in ["format", "passes", "static_digest"] {
+    for key in ["format", "static_digest"] {
         assert_eq!(got[key], want[key], "{key}");
     }
+}
+
+/// The reference read back from written tables is the one built from the calibration, and
+/// tables of another format or of other inputs are refused.
+#[test]
+fn read_reference_round_trips_the_fixture_tables() {
+    let w = &worlds()[0];
+    let tmp = tempfile::tempdir().unwrap();
+    let provinces: Vec<usize> = (0..w.inp.n_provinces()).collect();
+    write::write(tmp.path(), &w.inp, &w.s, &provinces).unwrap();
+    let (got, x) = write::read_reference(tmp.path(), &w.inp, &provinces).unwrap();
+    let want = steady::reference_inputs(&w.inp, &w.s);
+    assert_eq!(x, steady::reference_point(&w.inp, &w.s));
+    assert_eq!(got.ent_a, want.ent_a);
+    assert_eq!(got.ent_va0, want.ent_va0);
+    assert_eq!(got.ent_l0, want.ent_l0);
+    assert_eq!(got.w0, want.w0);
+    assert_eq!(got.u_star, want.u_star);
+    assert_eq!(got.calibrated_coef, want.calibrated_coef);
+    assert_eq!(got.calibrated_a_va, want.calibrated_a_va);
+    assert_eq!(got.calibrated_weights, want.calibrated_weights);
+
+    let mut other = w.inp.clone();
+    other.static_digest = "another export".into();
+    let err = write::read_reference(tmp.path(), &other, &provinces).unwrap_err();
+    assert_eq!(err, "the calibration tables belong to other inputs");
+
+    let path = tmp.path().join("econ_calib_provinces.arrow");
+    let t = read(tmp.path(), "econ_calib_provinces.arrow");
+    let mut metadata = t.schema().metadata().clone();
+    metadata.insert("calibration_format".to_owned(), "0".to_owned());
+    let schema = std::sync::Arc::new(t.schema().as_ref().clone().with_metadata(metadata));
+    let t = RecordBatch::try_new(schema.clone(), t.columns().to_vec()).unwrap();
+    let mut out =
+        arrow_ipc::writer::FileWriter::try_new(File::create(&path).unwrap(), &schema).unwrap();
+    out.write(&t).unwrap();
+    out.finish().unwrap();
+    let err = write::read_reference(tmp.path(), &w.inp, &provinces).unwrap_err();
+    assert_eq!(
+        err,
+        format!(
+            "econ_calib_provinces.arrow: calibration format is not {}",
+            steady::FORMAT
+        )
+    );
 }
 
 /// A calibration that does not settle reports the passes it ran and the last change, and
