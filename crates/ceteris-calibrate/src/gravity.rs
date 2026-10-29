@@ -949,10 +949,10 @@ pub fn stop_rules(est: &Estimates) -> Vec<String> {
             return fired;
         }
     };
-    // water < rail < road < air, road = 1; NaN (unidentified) fails.
-    if !(sea < rail && rail < 1.0 && 1.0 < air) {
+    // 0 < water < rail < road < air, road = 1; NaN (unidentified) fails.
+    if !(0.0 < sea && sea < rail && rail < 1.0 && 1.0 < air) {
         fired.push(format!(
-            "P04: ratios to road rail {}, sea {}, air {} break water < rail < road < air",
+            "P04: ratios to road rail {}, sea {}, air {} break 0 < water < rail < road < air",
             py_g(rail, 4),
             py_g(sea, 4),
             py_g(air, 4)

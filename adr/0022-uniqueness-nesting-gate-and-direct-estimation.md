@@ -197,6 +197,8 @@ unchanged; this records how "Gauss-Newton" is carried out and what the diagnosti
   longer stops `ceteris gravity`: P01 and P05 are reported, the report prints "P04 did not
   converge: ...", a stop rule fires and `--write` leaves `gravity_2000.toml` as it is
   (`gravity::write_toml`).
+- *Positive ratios.* The ordering stop rule also requires every ratio to be positive
+  (0 < sea < rail < 1 < air): a ratio at or below zero is not a cost and fires it.
 
 Result on the 2000 pack with the B1 econ tables (scratch rebuild, as above): air not identified (3
 pairs; rail 13,367, sea 14,654), held at 8; 33 steps, none halved (a strict deviance comparison
