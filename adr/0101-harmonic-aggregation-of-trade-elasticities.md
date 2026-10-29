@@ -58,3 +58,17 @@ changes only the mean inside it, as an amendment to 0023 (owner, 2026-10-26). Ow
 - Trade responses to tariffs fall in the classes with mixed values; welfare gains from trade
   rise.
 - The distance elasticity at fixed P04 changes; 0092's nu fit absorbs part of it.
+
+## As built (2026-10-29)
+
+Built with ADR 0092's C19 move, on the Caliendo-Parro replication vector, in which Auto and Other
+Transport are 8.22 (owner ruling; ADR 0023, Amendment 2026-10-29). The rule draws four classes:
+2.91, 4.14, 7.68 and 16.91. The P01 prior is 2.91 to 16.91. The theta scale is P150
+(`TradeParams.theta_scale`).
+
+The welfare test above cannot fail: under a uniform shock, theta cancels from each line's first-order
+welfare change. It is replaced by a non-uniform shock that lowers every line's domestic share by
+the same log amount. The class-level change at the class theta then equals the line-level sum only
+at the harmonic mean (ADR 0023, Amendment). The response of the trade share to a uniform tariff
+runs through the arithmetic mean instead, so the Context's claim about trade diversion holds for
+welfare read from observed shares but not for that response.

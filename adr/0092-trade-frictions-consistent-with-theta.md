@@ -82,5 +82,11 @@ pack has no throughput data), and the stored reciprocals, ADR 0093's log-domain 
 re-bless carried them. With them, H2 distance moved from -0.7531 (s.e. 0.0161) to -0.536 (s.e.
 0.013), outside the -1.1 to -0.7 band. By owner decision (2026-10-26) the masses were removed and
 are deferred to the per-class nu fit, with which they land; the band holds at -0.7531 without
-them. Everything else in this ADR (per-class nu, the border friction fit, H2 per class, the pack
-changes) remains to be built.
+them. The per-class nu, the border friction fit and H2 per class remain to be built.
+
+The C19 move was built on 2026-10-29 with ADR 0101's harmonic means, on the Caliendo-Parro
+replication vector (owner ruling; ADR 0023, Amendment 2026-10-29). The rule draws four classes,
+not three: 2.91 (food; chemicals and metals), 4.14 (machinery, electronics and vehicles), 7.68
+(agriculture; light manufacturing) and 16.91 (crude oil, gas and refined fuels; coal and other
+mining). P05 therefore becomes four values, one per class. Good 5 is renamed "Chemicals and
+metals". The PPML diagnostics on the new goods are in ADR 0022.

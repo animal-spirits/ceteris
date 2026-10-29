@@ -20,7 +20,7 @@ them only as quantities offered to and demanded from each market.
 | Per-tick unbalanced Sinkhorn over both marginals (8.3) | Destination sourcing in value (ADR 0015): each destination spreads its spending over origins with Eaton-Kortum shares K_od p_o^-theta / Phi_d on the two-level kernel; origin markets clear the orders against output and merchant stock across ticks, one normalization per tick (ADR 0016). Balanced Sinkhorn is the S02 full solve, in the GE reference only | Flows keep the gravity form and are homogeneous of degree zero in prices; one destination normalization followed by the origin price update is one Sinkhorn sweep spread over ticks, with the same frictionless fixed point. ADRs 0013, 0015, 0016 |
 | Per-unit plus iceberg costs (5.4, A7) | Iceberg only (S05 = iceberg): tau = 1 + c w_g + lambda_g T at reference prices, the second term the time cost of transit (Hummels and Schaur 2013) standing in for 5.4's carrying cost; risk and per-unit composition effects deferred to P8 (freight) | Per-unit costs need a transport sector that owns fleets; iceberg nests exactly in the GE reference. Freight alone gives distance elasticities far below H2's range (owner decision: add the literature time cost, nothing fitted to H2) |
 | Route-choice costs with A = t^-theta, the trade elasticity (ADR 0017 as accepted) | Least-cost legs (S05) in P2; route choice with a separate dispersion theta_r (P44) is built and tested but off, deferred past P2 (owner decision, 2026-10-24) | With theta the spectral radius on the P1 graph is 6.5 (coal) to 27 (machinery) at theta 5; with theta_r at its prior's upper end (182) still 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 to 880,000, driven by short sea-grid edges. Per-edge factors also compound (coal Rotterdam to Shanghai 13.1 against 3.6 under S05). ADR 0017, Deferral |
-| Kernels per (theta class, weight class) (ADR 0018) | Kernels per traded good, each good at its theta class's value (3 classes, ADR 0023); `TradeParams.theta_class` carries the map | In P2 each good has its own weight w_g, so weight classes are goods and theta classes add no kernels while goods number 7 (ADR 0018, Mapping to P2 as built) |
+| Kernels per (theta class, weight class) (ADR 0018) | Kernels per traded good, each good at its theta class's value (4 classes, ADRs 0023 and 0101); `TradeParams.theta_class` carries the map | In P2 each good has its own weight w_g, so weight classes are goods and theta classes add no kernels while goods number 7 (ADR 0018, Mapping to P2 as built) |
 | Utilities, construction and services traded through demand frictions (7.1) | Not traded between provinces in P2 | Province-local markets; cross-province service frictions arrive with P8 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
 | Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
@@ -51,7 +51,7 @@ alignment where it helps vectorization.
 ## Equations
 
 Symbols: o origin province, d destination province, a and b gateways, A and B countries,
-g good, theta = theta_g = P01 of good g (its class's value, ADR 0023), w_g weight per value (tonnes per unit, econ pack), c path cost per tonne
+g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150 (1 by default), w_g weight per value (tonnes per unit, econ pack), c path cost per tonne
 (`ceteris-geo`).
 
 **Leg factors.** Two sources, chosen by the network (`Network.route_taus`):
@@ -214,7 +214,7 @@ dlnp = pi^e + clip( kappa1 (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_max_g
 The clip bounds the gap terms only (ADR 0106): expected inflation passes through unclipped, so a
 sustained inflation or collapse is bounded by the expectation rule, not by the numerical guard.
 c_max_g is c_max (P03c, 0.1) for most goods and c_max_storable (P151, 0.3) for the storable
-commodities, agriculture, crude oil and gas, coal and other mining, and chemicals, refined fuels
+commodities, agriculture, crude oil, gas and refined fuels, coal and other mining, and chemicals
 and metals (goods 0, 1, 2, 5; `goods::STORABLE`), whose monthly price moves in the data exceed
 0.1 (oil fell about 30% in one month in late 2008).
 
@@ -331,7 +331,9 @@ replaces the simplified 3 x 3 of the migration plan (owner ruling, MIGRATION Tas
 stock before clearing against a fixed target misclassifies that toy market both ways (at E =
 13.55, theta 12.55 as before the OECD key, it calls (0.02, 0.06) unstable and (0.1, 0.06) stable).
 
-On the 2000 pack (PLAN Task 20; `ceteris calibrate stability EXPORT` on a pack export).
+On the 2000 pack (PLAN Task 20; `ceteris calibrate stability EXPORT` on a pack export), at the
+P01 values before ADR 0101 and with refined petroleum in good 5 (the pack is rebuilt and
+recalibrated with the four classes in a later task, and this table with it).
 The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30.4 (medians 1.5 to
 3.0 by good; fixture 0.90 to 2.61), since value-added shares go down to 0.04:
 
@@ -414,7 +416,8 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P01 | Trade elasticity theta_g per traded good, in classes (ADRs 0018 and 0023) | 2.62 to 10.57, the range of the class values (widened from 4 to 8, ADR 0018). Values: class 0 (food) 2.62, class 1 (machinery, electronics and vehicles) 5.19, class 2 (agriculture; crude oil and gas; coal and other mining; light manufacturing; chemicals, refined fuels and metals) 10.57, derived by the ADR 0023 rule from the OECD concordance. Caliendo and Parro (2015, Table 1 p. 18, 99% sample) sector estimates averaged over each good's HS lines with 2000 BACI trade weights (9.11, 13.53, 13.53, 2.62, 9.15, 10.57, 5.19 for goods 0 to 6), grouped into the fewest classes within a factor 1.5, each at its goods' trade-weighted mean; local goods 0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI, S05 costs, on the classes of the time: food; goods 4 and 6; goods 0, 1, 2, 5; values kept, owner 2026-10-24): 13.36 (s.e. 1.24), 13.20 (1.42), 11.82 (1.02); 8.4 to 9.4 with contiguity, language and colony controls | Literature |
+| P01 | Trade elasticity theta_g per traded good, in classes (ADRs 0018, 0023 and 0101) | 2.91 to 16.91, the range of the class values (widened from 4 to 8, ADR 0018; from 2.62 to 10.57, ADR 0101). Values: class 0 (food; chemicals and metals) 2.91, class 1 (machinery, electronics and vehicles) 4.14, class 2 (agriculture; light manufacturing) 7.68, class 3 (crude oil, gas and refined fuels; coal and other mining) 16.91, derived by the ADR 0023 rule from the OECD concordance: Caliendo and Parro (2015, Table 1 p. 18, 99% sample) sector estimates with Auto and Other Transport at 8.22 as in the authors' replication vector (ADR 0023, Amendment 2026-10-29), harmonic means over each good's HS lines with 2000 BACI trade weights (9.11, 17.64, 13.53, 2.62, 7.46, 3.00, 4.14 for goods 0 to 6), grouped into the fewest classes within a factor 1.5, each at the harmonic mean over its lines; local goods 0. Direct PPML estimates recorded as diagnostics, ADR 0022 | Literature |
+| P150 | Theta scale, multiplies every theta_g where the kernel is built (ADR 0101) | 1; tariff experiments report the lane {0.6, 1, 1.4} until direct estimates replace the literature values | Free (experiment lane) |
 | P02 | Inventory target coverage s_g | 1 to 6 months by good, start: agriculture 3, oil and gas 1, coal and mining 2, food 2, manufactures 2; local goods 0 | Free |
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
