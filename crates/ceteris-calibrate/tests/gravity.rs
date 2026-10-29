@@ -583,6 +583,22 @@ fn p04_failure_leaves_the_toml_unchanged() {
     assert!(std::fs::read_to_string(&out).unwrap().contains("P04d/P04a"));
 }
 
+/// A cost ratio at or below zero is not a cost, whatever the ordering: sea < 0 < rail < 1 < air
+/// fires the P04 stop rule and nothing is written.
+#[test]
+fn nonpositive_mode_ratio_fires_the_stop_rule() {
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let fitted = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
+    for sea in [-0.05, 0.0] {
+        let mut m = fitted.clone();
+        m.ratio[1] = sea;
+        let est = estimates(Ok(m));
+        let fired = gravity::stop_rules(&est);
+        assert_eq!(fired.len(), 1, "sea {sea}: {fired:?}");
+        assert!(fired[0].starts_with("P04"), "{fired:?}");
+    }
+}
+
 #[test]
 fn edge_prices_follow_the_geo_spec() {
     let p = Transport::default();
