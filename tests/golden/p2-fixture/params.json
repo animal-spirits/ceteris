@@ -10,6 +10,7 @@
     "kappa1": "P03a",
     "kappa2": "P03b",
     "c_max": "P03c",
+    "c_max_storable": "P151",
     "border_nu": "P05",
     "sigma_demand": "P06",
     "pigl_sigma_b": "P46",
@@ -52,6 +53,7 @@
     "kappa1": 0.05,
     "kappa2": 0.0,
     "c_max": 0.1,
+    "c_max_storable": 0.3,
     "expectation_gain": 0.006,
     "border_nu": 0.3,
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0]
