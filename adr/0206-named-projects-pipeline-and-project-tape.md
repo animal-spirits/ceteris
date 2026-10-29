@@ -1,9 +1,9 @@
 # 0206. Named projects, the 2000 pipeline and the project tape
 
-Status: proposed; amended per ADR 0241 (2026-10-29)
+Status: proposed; amended per ADR 0241 (2026-10-29); amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 5.2, 5.3, 5.5, 12.6, 14.2, 15.4, 15.5, 20.1; ADRs 0034, 0136, 0160, 0163, 0178, 0204, 0205
-Phase: P8 (named projects, tape); 1.x (seats and placement verbs)
+Phase: P8 (named projects, tape); 2.0-alpha or later (seats and placement verbs, ADR 0239)
 
 ## Context
 
@@ -38,8 +38,8 @@ Option 2 (owner, 28 Oct 2026).
   to the endogenous proposer of 5.5. The scorecard reports both lanes.
 - **Who places what** (owner). Private capacity is never placed by the player; it responds to
   prices, credit and incentives. Seats place only state capacity: the corridor planner (0160),
-  Steward public investment, SOE investment and concessions (1.3), and direct placement of state
-  capacity in a planned-economy seat (1.x). The lab can add, cancel or reschedule any project as an
+  Steward public investment, SOE investment and concessions (2.0-alpha, ADR 0239), and direct placement of state
+  capacity in a planned-economy seat (2.0-alpha or later). The lab can add, cancel or reschedule any project as an
   edit (14.2).
 - **Views.** A project map mode (pins with schedule bars) and a construction-capacity heat map.
 - Learning on repeated projects of one type in one country (Wright's law, like HOI3's gearing) is a
