@@ -154,14 +154,49 @@ tariff variation identifies the agreement effect (see Sensitivity), not the spre
 Caliendo-Parro classes. Only class 3 (16.91) has its default inside two standard errors of its
 estimate.
 
-P04 did not converge on the four classes. The Gauss-Newton steps drive the air ratio down (-5.2,
--4.6, -6.0, -7.3, -9.6, -12.2), rail and sea up (1.56 and 1.97 at step 6), until tau is no longer
-positive on an air path and the step-7 fit refuses it; `ceteris gravity` then stops with "flows must
-be finite and nonnegative, regressors finite" and writes no report. On the same flows with the
-three classes of before (food; good 6; goods 0, 1, 2, 4, 5) it converges in 47 steps to rail 0.234
-(s.e. 0.093), sea 0.102 (0.014) and air -1.59 (1.49), and the ordering stop rule fires as before.
-The P01 estimates on those three classes are 12.98 (1.19), 14.01 (1.65) and 12.21 (1.06); P05 is
-0.207 (0.035). P04 stays unidentified (above); the estimator is unchanged.
+P04 on the four classes: see the Amendment below. Without a guard the Gauss-Newton steps drove the
+air ratio down (-5.2 to -12.2 by step 6) until tau was no longer positive on an air path, and
+`ceteris gravity` stopped with "flows must be finite and nonnegative, regressors finite". On the
+same flows with the three classes of before (food; good 6; goods 0, 1, 2, 4, 5) the unguarded fit
+converged in 47 steps to rail 0.234 (s.e. 0.093), sea 0.102 (0.014) and air -1.59 (1.49); the P01
+estimates on those classes are 12.98 (1.19), 14.01 (1.65) and 12.21 (1.06), and P05 is 0.207
+(0.035).
+
+**Amendment (2026-10-29): guarded P04 fit, support threshold, non-fatal failure.** The estimator,
+objective and owner decision above are unchanged; this records how "Gauss-Newton" is carried out
+and what the diagnostic reports.
+
+- *Guard.* Each step is halved, at most `MODE_MAX_HALVINGS` = 30 times, until every tau is
+  positive and the profile deviance (the PPML without the step regressors, at the trial ratios;
+  `Fit.deviance`) does not rise. Convergence is tested on the undamped step, so a heavily halved
+  step does not pass for convergence. The ln tau coefficients that scale the step regressors are
+  those of the profile fit at the current ratios. At the cap the fit returns an error.
+- *Support.* A mode is fitted only if at least `MODE_MIN_PAIRS` = 50 unordered country pairs have a
+  positive flow on a least-cost path with km on that mode; otherwise it stays at its geo SPEC
+  start, has no estimate (NaN) and the report names it as not identified with its count. Pairs
+  are the clusters of the covariance, so a ratio carried by fewer of them has no usable clustered
+  standard error (with few clusters the cluster-robust covariance is biased down; about 50 is
+  the common rule of thumb, Angrist and Pischke 2009 put it at 42). On 2000 BACI air has 3 such
+  pairs (about 70 least-cost rows, 4 to 6 positive per good, 0.1 bn USD) and its step s.e. was
+  1.5 to 20; rail and sea have positive flows on tens of thousands of rows. The threshold falls
+  in that gap; the synthetic samples of the tests (30 countries, 435 pairs) clear it on every
+  mode, and the test that drops it keeps air on 10 pairs. This is an estimation rule, not a model
+  parameter, so it has no register ID.
+- *Failure.* A P04 error (no step at the cap, no convergence in 50 steps, a failed PPML) no
+  longer stops `ceteris gravity`: P01 and P05 are reported, the report prints "P04 did not
+  converge: ...", a stop rule fires and `--write` leaves `gravity_2000.toml` as it is
+  (`gravity::write_toml`).
+
+Result on the 2000 pack with the B1 econ tables (scratch rebuild, as above): air not identified (3
+pairs), held at 8; 37 steps, 5 of them halved; profile deviance 191,825 to 179,517; rail / road
+36.61 (s.e. 19.1), sea / road 84.59 (39.5); ln tau coefficients -0.99, -1.08, -1.05, -1.51; N
+319,275, pseudo-R2 0.873. This is the log-distance corner described under "P04 is not
+identified", now reached without a crash; the ordering stop rule fires and nothing is written.
+P01 and P05 are as in the table above. The earlier convergence on the three classes (rail 0.234,
+sea 0.102, air -1.59) was a local stationary point: the profile deviance there is 191,640, about
+10,000 above the corner (181,360 on those classes, started from the corner); the four classes
+remove the small barrier in front of the corner. Diagnosis:
+`.superpowers/sdd/PLAN-pre-p3-rust/p04-diagnosis.md`.
 
 ## Consequences
 
