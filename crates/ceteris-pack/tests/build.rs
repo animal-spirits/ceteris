@@ -150,10 +150,20 @@ fn two_builds_write_the_same_bytes() {
     let dirs = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
     let built: Vec<_> = dirs
         .iter()
-        .map(|d| build(d.path(), &Centres::H3o).unwrap())
+        .map(|d| build(d.path(), &Centres::H3o, None).unwrap())
         .collect();
     assert_eq!(built[0].tables, built[1].tables);
     let (a, b) = (digests(dirs[0].path()), digests(dirs[1].path()));
     assert!(a.contains_key("manifest.json") && a.contains_key("web/counties.fill"));
     assert_eq!(a, b);
+    // Each file the manifest lists carries that file's digest; a tile layer's is its GeoJSON's.
+    let text = std::fs::read_to_string(dirs[0].path().join("manifest.json")).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let tables = manifest["tables"].as_object().unwrap();
+    assert_eq!(tables.len(), built[0].tables.len());
+    for (name, digest) in tables {
+        if !name.starts_with("web/map.pmtiles:") {
+            assert_eq!(digest.as_str(), Some(a[name].as_str()), "{name}");
+        }
+    }
 }

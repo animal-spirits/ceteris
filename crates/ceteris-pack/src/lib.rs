@@ -7,6 +7,7 @@ pub mod econ;
 pub mod fetch;
 pub mod geo;
 pub mod json;
+pub mod manifest;
 pub mod numeric;
 pub mod raster;
 pub mod read;
