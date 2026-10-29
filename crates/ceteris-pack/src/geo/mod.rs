@@ -2,7 +2,6 @@
 //! mineral sites, the transport graph, and the map's fill buffers.
 
 pub mod counties;
-pub mod dump;
 pub mod fills;
 #[cfg(feature = "geos")]
 pub mod overlay;
@@ -11,4 +10,3 @@ pub mod raster_terrain;
 pub mod resources;
 pub mod sphere;
 pub mod transport;
-pub mod vertices;

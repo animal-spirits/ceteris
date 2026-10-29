@@ -1,8 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["numpy==2.5.4", "rasterio==1.5.2"]
+# ///
 """Extracts the year-2000 band of the Kummu et al. gridded GDP NetCDF-4 file into a GeoTIFF.
 
-The pack reads GeoTIFFs only; the NetCDF stays pinned in fetch.toml as the provenance source.
+The pack reads GeoTIFFs only; the NetCDF stays pinned in crates/ceteris-pack/config/fetch.toml
+as the provenance source. An owner-side, one-off conversion: the output is pinned by sha256, so
+it runs only to reproduce that file, in the environment declared above (the rasterio wheel
+bundles GDAL with NetCDF support):
 
-    uv run --project python --locked python scripts/convert_kummu.py
+    uv run scripts/convert_kummu.py
 """
 
 import hashlib

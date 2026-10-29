@@ -3,6 +3,7 @@
 Status: proposed
 Date: 2026-10-24
 Design sections: 3.4, 8.6, 9, 15.3 (V1), 21.1 (P5)
+Paths (ADR 0113, 2026-10-29): the reference is built in `ceteris-reference`; `python/` is gone.
 
 ## Context
 

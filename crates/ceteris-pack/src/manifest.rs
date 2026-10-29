@@ -1,5 +1,4 @@
-//! `manifest.json` as build.py writes it, and `pack.toml` as `json.dumps` writes what `tomllib`
-//! parses.
+//! `manifest.json`, and `pack.toml` in it as `json.dumps` writes what `tomllib` parses.
 
 use std::collections::BTreeMap;
 
@@ -70,7 +69,7 @@ fn value_json(value: &toml::Value, order: &DeValue) -> Result<Json, String> {
     })
 }
 
-/// `manifest.json` as build.py writes it (before `json.dumps(indent=2)`): the pack format,
+/// `manifest.json` (before `json.dumps(indent=2)`): the pack format,
 /// year and configuration of `pack.toml` (its text), each fetched file's source, name and
 /// SHA-256, each written file's SHA-256 by path, and the build stats.
 pub fn manifest(
@@ -174,7 +173,7 @@ mod tests {
             ("share".to_owned(), Json::Float(0.0302)),
         ]);
         let config = "year = 2000\nland_res = 4\n";
-        // json.dumps(manifest, indent=2) + "\n" as build.py writes it.
+        // json.dumps(manifest, indent=2) + "\n".
         let want = "{\n  \"pack_format\": 3,\n  \"year\": 2000,\n  \"config\": {\n    \"year\": 2000,\n    \
                     \"land_res\": 4\n  },\n  \"sources\": [\n    {\n      \"source\": \"natural-earth\",\n      \
                     \"name\": \"b.zip\",\n      \"sha256\": \"ab\"\n    },\n    {\n      \"source\": \"x\",\n      \

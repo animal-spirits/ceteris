@@ -3,6 +3,7 @@
 Status: proposed
 Date: 2026-10-26
 Design sections: 14.4, 15.4, 15.6, 15.7, 19.2; amends ADRs 0024, 0052, 0053, 0063, 0066, 0071
+Paths (ADR 0113, 2026-10-29): `python/` is gone; the holdout config and Monte Carlo error columns go in the Rust crates and the run outputs.
 
 ## Context
 

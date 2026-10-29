@@ -1,8 +1,8 @@
 # Ceteris Paribus
 
 Deterministic, forkable, agent-based world simulator from 1 January 2000. Rust workspace
-(`crates/`), Tauri desktop app (`app/`); `python/` keeps the pack configuration and the parity
-scripts' uv environment until ADR 0113 step 5.
+(`crates/`), Tauri desktop app (`app/`); the pack pipeline, reference model and calibration
+are Rust crates (ADR 0113).
 
 ## Where things are
 
@@ -12,7 +12,7 @@ scripts' uv environment until ADR 0113 step 5.
 - Module specs: `specs/<module>/SPEC.md`, template `specs/TEMPLATE.md`. Plans for multi-step
   work: `specs/<topic>/PLAN.md`.
 - Golden hashes: `tests/golden/` and each crate's `tests/golden.rs`.
-- Data-source licence manifest: `python/ceteris/packs/sources.toml` (ADRs 0005, 0050).
+- Data-source licence manifest: `crates/ceteris-pack/config/sources.toml` (ADRs 0005, 0050).
 
 ## Workflow (DESIGN 21.2)
 

@@ -1,6 +1,6 @@
 # 0113. Full migration of the Python code to Rust
 
-Status: accepted (owner, 2026-10-27)
+Status: accepted (owner, 2026-10-27); implemented, steps 0 to 5 (2026-10-29)
 Date: 2026-10-27
 Design sections: 14.8 (scripting API), 15.2, 16, 16.1, 19.1 (stack), 19.3 (repository layout), 21.1, 22.1 (core language); amends ADRs 0003, 0050, 0096
 
@@ -352,3 +352,27 @@ later only if notebook-driven runs prove necessary; it would get its own ADR.
   - `python/ceteris/reference/` (with the JAX model and `reduced.py`) and
     `python/ceteris/calibrate/` and their tests are deleted; `scripts/parity/step4.sh` runs the
     Python side from a checkout before that commit.
+- Step 5 (removal): `python/` is deleted (`pyproject.toml`, `uv.lock`, the package's
+  `__init__` files), with `.claude/rules/python.md`; the CI `python` job had gone in step 3. The
+  seven configuration files moved to `crates/ceteris-pack/config/` with their schemas unchanged
+  (`ceteris_pack::sources::CONFIG_DIR`); `ceteris gravity --write` now defaults to
+  `gravity_2000.toml` there. The headers of `fetch.toml`, `validation.toml` and
+  `counties.lock.toml` name the `ceteris` commands; the lock's header is the one
+  `ceteris pack record-counties` writes. `ceteris pack check-sources --profile research` is clean
+  after the move.
+  - The parity tooling is deleted: `scripts/parity/`, `pack dump-reader`, `pack dump-geo`,
+    `pack dump-web`, `pack build --centres` and `--simple`, `provinces::Centres::Table` (h3o's
+    centres remain, `Centres::H3o`), the vertex tables (`geo::vertices`), and the tests that read
+    `CETERIS_REFERENCE_PARITY`, `CETERIS_PPML_PARITY`, `CETERIS_CALIBRATION_PARITY` and
+    `CETERIS_GRAVITY_PARITY` dumps. The parity results above are reproducible from dcf6241,
+    the last commit that has them, with the Python package from the commit before each step's
+    deletion, as its scripts did. `ceteris pack compare` stays as a dev command.
+  - `scripts/convert_kummu.py` stays as an owner-side, one-off conversion of the Kummu NetCDF to
+    the pinned GeoTIFF; it declares its own uv script environment (rasterio 1.5.2, numpy 2.5.4,
+    the versions that made the pinned file), and `fetch.toml` records `uv run
+    scripts/convert_kummu.py` as its command.
+  - Records: DESIGN 14.8, 16 (manifest path), 16.1, 19.1, 19.3 and 22.1 per Migration; ADRs
+    0003, 0050 and 0096 amended; ADRs 0005, 0009, 0010, 0022, 0025, 0052, 0053, 0089, 0107 and
+    0108 carry a pointer line to the Rust paths; the econ, geo and trade SPECs name the Rust
+    crates and tests. `specs/econ/PLAN.md`, `specs/econ/MIGRATION.md` and this ADR's parity
+    records keep the Python names as history.

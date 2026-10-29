@@ -100,35 +100,14 @@ pub fn borders() -> Result<Borders, String> {
     })
 }
 
-/// Where a Voronoi split takes the centres of H3 cells from: h3o, or a table of (lng, lat) by
-/// cell, such as `scripts/parity/h3_centres.py` writes from h3 to show that the split's
-/// geometry follows the centres exactly.
+/// Where a Voronoi split takes the centres of H3 cells from.
 #[derive(Debug, Default)]
 pub enum Centres {
     #[default]
     H3o,
-    Table(BTreeMap<u64, [f64; 2]>),
 }
 
 impl Centres {
-    /// A table file: per cell, its index as u64 then latitude and longitude as f64, little-endian.
-    pub fn read(path: &Path) -> Result<Centres, String> {
-        let b = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let (rows, rest) = b.as_chunks::<24>();
-        if !rest.is_empty() {
-            return Err(format!("{}: not whole rows", path.display()));
-        }
-        let f = |r: &[u8]| f64::from_le_bytes(r.try_into().expect("8 bytes"));
-        Ok(Centres::Table(
-            rows.iter()
-                .map(|r| {
-                    let cell = u64::from_le_bytes(r[..8].try_into().expect("8 bytes"));
-                    (cell, [f(&r[16..24]), f(&r[8..16])])
-                })
-                .collect(),
-        ))
-    }
-
     /// The (lng, lat) centre of a cell, in degrees.
     pub fn lng_lat(&self, cell: h3o::CellIndex) -> Result<[f64; 2], String> {
         match self {
@@ -136,10 +115,6 @@ impl Centres {
                 let c = h3o::LatLng::from(cell);
                 Ok([c.lng(), c.lat()])
             }
-            Centres::Table(t) => t
-                .get(&u64::from(cell))
-                .copied()
-                .ok_or_else(|| format!("no centre for cell {cell}")),
         }
     }
 }
@@ -730,29 +705,12 @@ mod tests {
     }
 
     #[test]
-    fn centres_come_from_h3o_or_a_table_file() {
+    fn centres_come_from_h3o() {
         let cell = h3o::LatLng::new(45.0, 7.0)
             .unwrap()
             .to_cell(h3o::Resolution::Four);
         let h = h3o::LatLng::from(cell);
         assert_eq!(Centres::H3o.lng_lat(cell).unwrap(), [h.lng(), h.lat()]);
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("centres.bin");
-        let row = [
-            u64::from(cell).to_le_bytes(),
-            45.5f64.to_le_bytes(),
-            7.25f64.to_le_bytes(),
-        ];
-        std::fs::write(&path, row.concat()).unwrap();
-        let table = Centres::read(&path).unwrap();
-        assert_eq!(table.lng_lat(cell).unwrap(), [7.25, 45.5]);
-        assert!(
-            table
-                .lng_lat(cell.parent(h3o::Resolution::Three).unwrap())
-                .is_err()
-        );
-        std::fs::write(&path, &row.concat()[..20]).unwrap();
-        assert!(Centres::read(&path).is_err());
     }
 
     fn points() -> impl Strategy<Value = Vec<[f64; 2]>> {

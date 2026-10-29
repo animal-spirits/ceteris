@@ -6,7 +6,7 @@ Design sections: 5.1, 5.2, 5.3, 5.4, 5.6, 16.1, 19.1, 19.4, 20.1, 21.1 (P1); ADR
 
 ## Purpose
 
-The world pack and `ceteris-geo`. The pack pipeline (`python/ceteris/packs`) turns pinned
+The world pack and `ceteris-geo`. The pack pipeline (`ceteris-pack`) turns pinned
 public-domain sources into provinces at 1 January 2000 borders, an H3 base raster and a
 multimodal transport graph, and nests a county display layer in the provinces (ADR 0009).
 `ceteris-geo` loads the pack, prices graph edges per tonne from
@@ -118,8 +118,8 @@ change). `warm` computes missing trees in parallel; results are independent of t
 | Symmetry | c(a,b) = c(b,a) | 1e-9 relative | `tests/pack_properties.rs` |
 | Shock reversibility | Close then reopen a chokepoint: identical bits | exact | `tests/pack_properties.rs` |
 | Thread independence | Cache warmed on 1 and 8 threads: identical bits | exact | `tests/pack_properties.rs` |
-| Pack reproducibility | Rebuild gives the stored table hashes | exact | `python/tests/test_packs.py` |
-| County nesting | Every county lies in one province; of counties at most half the area limit, under 5% of area falls outside it | 5% | `python/tests/test_packs.py` |
+| Pack reproducibility | Rebuild gives the stored table hashes | exact | `ceteris-pack/tests/build.rs` (`pack_tables_match_golden`, `two_builds_write_the_same_bytes`) |
+| County nesting | Every county lies in one province; of counties at most half the area limit, under 5% of area falls outside it | 5% | `ceteris-pack/tests/build.rs` (`the_pack_tables_hold_their_invariants`) |
 | Mode ordering | Default per tonne-km: sea < rail < road < air | exact | `graph.rs` unit test |
 | Route-choice radius | Spectral radius of A below 1 for every traded good at P44 | exact (asserted) | `solve_from`; `tests/pack_properties.rs` (ignored while route choice is deferred) |
 
@@ -161,7 +161,7 @@ reference model's iceberg factors.
 - Measurement: `cargo run -p ceteris-geo --release --example route_choice_radius` prints, per
   traded good, the smallest theta_r with radius below 0.99, the radius at the ends of the P44
   prior and the time of all gateway and domestic solves (MIGRATION Task 4 report).
-- Pipeline (pytest, hypothesis): spherical area, antimeridian unwrap and wrap, split counts,
+- Pipeline (`ceteris-pack`, proptest): spherical area, antimeridian unwrap and wrap, split counts,
   bisection balance (by count and by weight) and determinism, county level choice, county
   splits, neighbour colouring, terrain classes, 2000 remapping, pack table invariants.
 - Golden: `tests/golden/p1-geo.txt` (cost and hour bits from eight probe provinces) and
