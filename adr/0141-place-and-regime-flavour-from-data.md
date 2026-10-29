@@ -1,6 +1,6 @@
 # 0141. Place and regime flavour from data
 
-Status: proposed
+Status: proposed; amended by ADR 0240 (game and flavour items to 2.0+)
 Date: 2026-10-28
 Design sections: 20; ADRs 0049, 0050, 0065, 0078, 0137, 0140
 Phase: P3 (scripts, calendars, formats), P8 (seasons, night lights), P5-P6 (letterhead, party colours)
