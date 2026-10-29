@@ -153,7 +153,8 @@ fn omega_shares(inp: &Inputs) -> Mat {
 
 /// Stage 4 (ADR 0094): weights inverted jointly over a country's pops, each at its own buyer
 /// prices and spending, give the final demand shares as the pops' spending-weighted aggregate
-/// exactly; at prices 1 and the base incomes the inversion is the one the simulator loads.
+/// exactly. The simulator's own inversion at prices 1 is checked against the reference's by
+/// `pigl_matches_rust`.
 #[test]
 fn inversion_at_given_prices_reproduces_the_shares() {
     let inp = io::load(fixture()).unwrap();
@@ -190,39 +191,6 @@ fn inversion_at_given_prices_reproduces_the_shares() {
     .unwrap();
     let got = aggregate_shares(&inp, &w, &price, &spend);
     allclose("shares", &got.data, &omega_shares(&inp).data, 0.0, 1e-12);
-
-    let ones = Mat::filled(n_k, n_g, 1.0);
-    let base_spend: Vec<f64> = (0..n_k).map(|k| base[k] * inp.pop_population[k]).collect();
-    let at_one = demand::invert_pops(
-        &inp.omega,
-        &demand::Pops {
-            country: &country,
-            price: &ones,
-            income: &base,
-            spend: &base_spend,
-        },
-        &sigma,
-        &inp.category,
-        inp.sigma_demand,
-        &inp.pigl,
-    )
-    .unwrap();
-    let loaded = inp.pigl_weights().unwrap();
-    allclose("scale", &at_one.scale, &loaded.scale, 1e-13, 1e-15);
-    allclose(
-        "omega",
-        &at_one.omega.data,
-        &loaded.omega.data,
-        1e-13,
-        1e-15,
-    );
-    allclose(
-        "within",
-        &at_one.within.data,
-        &loaded.within.data,
-        1e-13,
-        1e-15,
-    );
 }
 
 /// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its

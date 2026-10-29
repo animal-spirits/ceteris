@@ -1212,6 +1212,31 @@ proptest! {
     }
 }
 
+/// ADR 0093, Bounded work (2026-10-29): provinces whose fills fall towards 0 settle in bounded
+/// passes, at fills exactly 0 (never subnormal), every good fitting. Seed 13622680876955865696
+/// falls at a rate near 1 on one pass map (it took 781 passes and seconds before the closed
+/// form of a collapse); seed 709302389291714235 switches irregularly between two maps (15,678
+/// passes before the pass bound).
+#[test]
+fn collapsing_provinces_settle_in_bounded_passes() {
+    for seed in [13622680876955865696u64, 709302389291714235] {
+        let p = random_province(seed);
+        let (f, passes) = local::fills(&p);
+        assert!(
+            passes <= 4 * local::STALL_PASSES + 16,
+            "seed {seed}: {passes} passes"
+        );
+        for j in 0..3 {
+            assert!(fits_at(&p, j, &f), "seed {seed}: good {j} short at {f:?}");
+            assert!(
+                f[j] == 0.0 || f[j] >= f64::MIN_POSITIVE,
+                "seed {seed}: {f:?}"
+            );
+        }
+        assert_eq!(f, [0.0; 3], "seed {seed}");
+    }
+}
+
 /// ADR 0093, Amendment: at every province tick of the fixture's default run (60 ticks) and of
 /// the cycle fixture (120 ticks), every good fits at the exact fills and they equal the fill
 /// iteration run to convergence (1e-12) wherever it converges (all but 2 of the 413 province

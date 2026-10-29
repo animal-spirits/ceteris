@@ -140,6 +140,8 @@ pub struct Pops<'a> {
 
 /// Rounds of [`invert_pops`] before it gives up.
 const MAX_ROUNDS: usize = 1000;
+/// Secant steps of one split in [`invert_pops`] before it errs.
+const MAX_SECANT_STEPS: usize = 400;
 /// Largest relative miss of an aggregate good share at which [`invert_pops`] stops.
 const SHARE_TOL: f64 = 1e-14;
 
@@ -194,6 +196,10 @@ pub fn invert_pops(
                 "the PIGL inversion over the pops of country {c} did not settle in \
                  {MAX_ROUNDS} rounds (miss {miss:e})"
             ),
+            SplitUnsettled => format!(
+                "the PIGL inversion over the pops of country {c}: the split did not settle in \
+                 {MAX_SECANT_STEPS} steps"
+            ),
             Negative => negative_weight(&[c]),
         })?;
         out.scale[c] = scale;
@@ -209,8 +215,9 @@ pub fn invert_pops(
 enum Failure {
     Negative,
     Unsettled(f64),
+    SplitUnsettled,
 }
-use Failure::{Negative, Unsettled};
+use Failure::{Negative, SplitUnsettled, Unsettled};
 
 /// One country's inversion over its spending pops `members`.
 struct Country<'a> {
@@ -336,7 +343,7 @@ impl Country<'_> {
     }
 
     /// The split t in [0, 1] at which the M aggregate is met: a bracketed secant (Illinois) to
-    /// the last bit.
+    /// the last bit, an error after [`MAX_SECANT_STEPS`] steps.
     fn split(&self, fixed: &[Fixed]) -> Result<f64, Failure> {
         let (mut a, mut b) = (0.0, 1.0);
         let (mut fa, mut fb) = (self.miss(fixed, a), self.miss(fixed, b));
@@ -350,11 +357,11 @@ impl Country<'_> {
             return Err(Negative);
         }
         let mut side = 0;
-        for _ in 0..400 {
+        for _ in 0..MAX_SECANT_STEPS {
             let t = (a * fb - b * fa) / (fb - fa);
             let t = if t > a && t < b { t } else { 0.5 * (a + b) };
             if t <= a || t >= b {
-                break;
+                return Ok(if -fa <= fb { a } else { b });
             }
             let ft = self.miss(fixed, t);
             if ft == 0.0 {
@@ -374,7 +381,7 @@ impl Country<'_> {
                 side = 1;
             }
         }
-        Ok(if -fa <= fb { a } else { b })
+        Err(SplitUnsettled)
     }
 
     /// (lambda, t, alpha) at which every aggregate good share is Omega.

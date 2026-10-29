@@ -101,4 +101,5 @@ weights carry s_w (`PiglWeights::sigma`, `Weights::sigma`, `pigl_sigma` in
 `econ_calib_countries.arrow`), so a calibrated world uses the dispersion its weights were
 inverted with. The calibration summary lists the countries with s_w = 0 (`within_sigma_zero`);
 none on the fixture. On the fixture the joint inversion settles in a few rounds per country and
-the aggregate data-state shares match Omega at 1e-12.
+the aggregate data-state shares match Omega at 1e-12. Both implementations stop a split after 400
+secant steps with an error (it settles to the last bit in far fewer).
