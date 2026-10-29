@@ -37,8 +37,9 @@ comparing runs.
   core by path dependencies. At stage 3 it moves to `app/`.
 - **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, PMTiles
   reader), `ui` (`.slint` files compiled in by `slint-build`), `sim` (sim thread, view
-  publishing, ring), `commands` (registry and keymap). Pack reading goes through `ceteris-geo`
-  and `ceteris-econ`; no pack format is parsed twice.
+  publishing, ring), `commands` (registry and keymap). Arrow tables are read through `ceteris-geo`
+  and `ceteris-econ`. The `.fill` reader is the app's own (`fill.rs`, a few lines against the
+  format of `ceteris_pack::geo::fills`), so the app does not link the pack builder.
 - **Frame.** Slint's rendering notifier (`BeforeRendering`) runs the map pass into a texture
   the size of the map viewport and hands it to an `Image`. Picking renders feature ids into an
   R32Uint target and reads back one pixel on pointer move.

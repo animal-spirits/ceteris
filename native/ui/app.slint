@@ -40,7 +40,15 @@ export component AppWindow inherits Window {
 
     // The map pass renders into this texture each frame (ADR 0088).
     in property <image> map-texture;
+    in property <string> status;
     in-out property <bool> about-open;
+    out property <length> map-width: map.width;
+    out property <length> map-height: map.height;
+
+    // Pointer positions in logical pixels of the map area.
+    callback pan(length, length);
+    callback zoom(length, length, length);
+    callback select(length, length);
 
     MenuBar {
         Menu {
@@ -52,11 +60,55 @@ export component AppWindow inherits Window {
         }
     }
 
-    Image {
+    map := Image {
         source: root.map-texture;
         width: 100%;
         height: 100%;
         image-fit: fill;
+
+        property <length> last-x;
+        property <length> last-y;
+        property <bool> dragged;
+        TouchArea {
+            mouse-cursor: self.pressed && dragged ? grabbing : default;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down {
+                    last-x = self.mouse-x;
+                    last-y = self.mouse-y;
+                    dragged = false;
+                }
+            }
+            moved => {
+                root.pan(self.mouse-x - last-x, self.mouse-y - last-y);
+                dragged = dragged || abs(self.mouse-x - self.pressed-x) + abs(self.mouse-y - self.pressed-y) > 3px;
+                last-x = self.mouse-x;
+                last-y = self.mouse-y;
+            }
+            clicked => {
+                if !dragged {
+                    root.select(self.mouse-x, self.mouse-y);
+                }
+            }
+            scroll-event(e) => {
+                root.zoom(self.mouse-x, self.mouse-y, e.delta-y);
+                accept
+            }
+        }
+    }
+
+    Rectangle {
+        x: Tokens.pad;
+        y: parent.height - self.height - Tokens.pad;
+        width: label.preferred-width + 2 * Tokens.pad;
+        height: label.preferred-height + Tokens.pad;
+        visible: root.status != "";
+        background: Tokens.paper;
+        border-color: Tokens.rule;
+        border-width: Tokens.hairline;
+        label := Text {
+            text: root.status;
+            color: Tokens.ink;
+        }
     }
 
     if root.about-open: About {
