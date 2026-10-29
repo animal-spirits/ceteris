@@ -16,6 +16,9 @@
 - `TradeParams.theta_scale` (P150, default 1) multiplies every theta where the kernel is built. It
   enters the static and structural digests and `params.json` (export format 10), and the reference
   applies it to the exported theta.
+- The transit invariant allows 1e-12 of the good's market turnover beside its 1e-9 relative
+  tolerance: markets fill the transit account by differences of their holdings, and tiny shipments
+  vanish against large stocks.
 - `econ_goods.arrow` records each good's class with the class's harmonic and arithmetic theta.
   The installed 2000 pack is not rebuilt here: its econ tables and calibration still have refined
   petroleum in good 5 and the old classes until the pack is rebuilt and recalibrated.
