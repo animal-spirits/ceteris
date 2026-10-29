@@ -256,7 +256,7 @@ Carries ADR 0092's gateway mass weights, moved here from Task A3 by owner decisi
 **Interfaces:**
 - Produces: within-pop dispersion `s_w^2 = max(0, s_nat^2 - Var_k(ln m_k))` per country (population-weighted); inversion at the calibrated buyer prices q_d over the country's pops by a 1-D root on lambda; countries with s_w = 0 listed in the calibration summary.
 
-- [ ] Failing tests: `aggregate_data_state_shares_match_omega` (steady_state.rs, per country, 1e-12); `one_pop_inversion_equals_old_at_prices_one` (reference.rs); `between_and_within_variance_add_up` (reference.rs); `pigl_matches_rust` (reference.rs) on the new aggregation. Implement simulator and reference, run, commit `feat(econ): invert pigl over each country's pops (adr 0094)`.
+- [x] Failing tests: `aggregate_data_state_shares_match_omega` (steady_state.rs, per country, 1e-12); `one_pop_inversion_equals_old_at_prices_one` (reference.rs); `between_and_within_variance_add_up` (reference.rs); `pigl_matches_rust` (reference.rs) on the new aggregation. Implement simulator and reference, run, commit `feat(econ): invert pigl over each country's pops (adr 0094)`.
 
 ### Task B5: Clip outside pi^e, wider clip for storables, i128 aggregates (ADR 0106)
 
