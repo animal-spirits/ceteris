@@ -54,7 +54,11 @@ pub const COVER: f64 = 1.0;
 pub const SLOTS: usize = 4;
 /// Largest |ln(received / target)| over origins that ends the scaling.
 pub const SINKHORN_TOL: f64 = 1e-13;
-pub const MAX_SWEEPS: usize = 20_000;
+/// The cap on sweeps of one scaling: an iteration cap, not a tolerance. 100,000 since the B1
+/// thetas: on the full pack, coal and other mining (theta 16.91) has an origin (province 3906,
+/// about 52 times its good's cheapest price) that its destinations buy almost only from, so its
+/// part of the scaling contracts by about 0.99995 a sweep; pass 7 needs 34,614 sweeps.
+pub const MAX_SWEEPS: usize = 100_000;
 pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
 pub const ANDERSON_STALL: usize = 20;
