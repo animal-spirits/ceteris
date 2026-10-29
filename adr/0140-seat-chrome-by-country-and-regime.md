@@ -1,6 +1,6 @@
 # 0140. Seat chrome by country and regime
 
-Status: accepted (owner, 2026-10-28)
+Status: accepted (owner, 2026-10-28); amended by ADR 0240 (game and flavour items to 2.0+)
 Date: 2026-10-28
 Design sections: 20 (Interface and Visualization); ADRs 0065, 0078, 0088, 0124, 0137
 Phase: P3 (tokens and accent), P5-P6 (regime wording once regimes are endogenous)
