@@ -1,6 +1,6 @@
 # 0229. Crisis levers as state-triggered rules in 1.0
 
-Status: proposed (owner chose the option, 2026-10-28)
+Status: proposed (owner chose the option, 2026-10-28); amended per ADR 0241, 0242 (2026-10-29)
 Date: 2026-10-28
 Design sections: 9.2, 9.4, 9.11, 9.12, 15.4; ADRs 0043, 0210
 Phase: P5b (rules), P9 (estimation)
