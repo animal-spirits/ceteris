@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use toml::{Table, Value};
 
 /// Where the pack configuration lives, relative to the workspace root.
-pub const CONFIG_DIR: &str = "python/ceteris/packs";
+pub const CONFIG_DIR: &str = "crates/ceteris-pack/config";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Profile {

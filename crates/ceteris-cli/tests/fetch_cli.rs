@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 
 use sha2::{Digest, Sha256};
 
-const CONFIG: &str = "python/ceteris/packs";
+const CONFIG: &str = "crates/ceteris-pack/config";
 
 fn setup(root: &Path, fetch_toml: &str) {
     let config = root.join(CONFIG);

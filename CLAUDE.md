@@ -12,7 +12,7 @@ scripts' uv environment until ADR 0113 step 5.
 - Module specs: `specs/<module>/SPEC.md`, template `specs/TEMPLATE.md`. Plans for multi-step
   work: `specs/<topic>/PLAN.md`.
 - Golden hashes: `tests/golden/` and each crate's `tests/golden.rs`.
-- Data-source licence manifest: `python/ceteris/packs/sources.toml` (ADRs 0005, 0050).
+- Data-source licence manifest: `crates/ceteris-pack/config/sources.toml` (ADRs 0005, 0050).
 
 ## Workflow (DESIGN 21.2)
 
