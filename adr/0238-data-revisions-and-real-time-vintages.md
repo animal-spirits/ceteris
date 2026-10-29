@@ -1,9 +1,9 @@
 # 0238. Data revisions and real-time vintages
 
-Status: proposed (owner chose the option, 2026-10-29)
+Status: proposed (owner chose the scope, 2026-10-29)
 Date: 2026-10-29
-Design sections: 12.3, 12.6, 15.2, 15.4, 17, 19.2; ADRs 0052, 0065, 0161, 0176, 0207, 0210, 0212
-Phase: P9 (with 0065, lean)
+Design sections: 12.3, 12.6, 15.2, 15.4, 17, 19.2; ADRs 0052, 0065, 0161, 0176, 0207, 0210, 0212 (amends 0207)
+Phase: 2.0+ (game layer); amends the 0207 triage of 0065
 
 ## Context
 
@@ -22,11 +22,21 @@ scorecard; ADR 0161 names revisions as an ascension rung with no mechanism behin
 1. Revisions in 1.0 with 0065: each release converges toward truth, plus rebasings and the
    unwinding of manipulation; decisions read the vintage available at the time.
 2. Noise only: published equals truth plus persistent noise and manipulation, never revised.
-3. Defer revisions to 1.x behind a flag; 0210 rules fitted on revised data.
+3. Defer revisions past 1.0; 0210 rules fitted on revised data.
 
 ## Decision
 
-Option 1 (owner, 2026-10-29), under switch S21 (off: published equals truth, golden hashes unchanged).
+Option 3, deferred to the game (owner, 2026-10-29): 1.0 is a pure simulator, fog of data is a
+game mechanic, and the game is 2.0+.
+
+**In 1.0.** Agents, the 0210 rules and the 0176 r* filter read true state; S21 stays off and its
+published layer is not built. Of 0065, P9 keeps only the calibration part: targets adjusted for
+manipulation where independent measures exist, down-weighted unverifiable components, and the
+scorecard scored against the same targets. This amends 0207, which listed 0065 whole in P9.
+0210 rules are estimated on latest-vintage data.
+
+**In 2.0+.** 0065's published layer and the revision model below land together under S21 (off:
+published equals truth, golden hashes unchanged), with the 0161 rungs that use them.
 
 **Release model.** For state s, series x and reference period t, the release at age k is
 truth plus an error e(k) = e(0) * rho^k, where e(0) has standard deviation scaled by statistical
@@ -60,7 +70,9 @@ the tiers of 0212. Rebasing and unwinding events go to the event chronicle (0049
 
 ## Migration
 
-- P9: release model and events in the 0065 published layer; real-time estimation of 0210 rules.
+- P9 (1.0): 0065 calibration targets only, as above.
+- 2.0+: 0065 published layer, release model and events; re-estimation of 0210 rules on
+  real-time data.
 - Pack: the four real-time sources above in the manifest.
 - DESIGN 12.3 and 12.6 gain a sentence pointing here when accepted.
 
@@ -76,5 +88,6 @@ the tiers of 0212. Rebasing and unwinding events go to the event chronicle (0049
 ## Consequences
 
 Agents and the player face recognition lags: recessions are seen late and booms look bigger than
-they were. The cost is about 1 to 1.5 owner-weeks in P9 and five register parameters. Ensembles and
+they were. In 1.0 nothing is built beyond 0065's calibration targets, and 0210 rules carry the Orphanides
+bias. The revision model costs about 1 to 1.5 owner-weeks and five register parameters in 2.0+. Ensembles and
 replays are unaffected beyond a small store per run.
