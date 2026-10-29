@@ -376,6 +376,20 @@ fn hdfe_matches_the_dummy_variable_fit() {
     assert!(0.0 < fit.pseudo_r2 && fit.pseudo_r2 < 1.0);
 }
 
+/// The deviance is of the flows scaled to mean 1, so it does not move with the flows' units, and
+/// a fit on fewer regressors of the same sample has a larger one.
+#[test]
+fn hdfe_deviance_compares_fits_of_one_sample() {
+    let t = two_way(25, 3);
+    let (o, d) = (codes(&t.o), codes(&t.d));
+    let full = ppml::hdfe(&t.y, &[&o, &d], &t.reg(), None).unwrap();
+    let big: Vec<f64> = t.y.iter().map(|y| 1e6 * y).collect();
+    let scaled = ppml::hdfe(&big, &[&o, &d], &t.reg(), None).unwrap();
+    assert!((scaled.deviance - full.deviance).abs() <= 1e-9 * full.deviance);
+    let fewer = ppml::hdfe(&t.y, &[&o, &d], &[("x1", &t.x1)], None).unwrap();
+    assert!(0.0 < full.deviance && full.deviance < fewer.deviance);
+}
+
 #[test]
 fn hdfe_clusters_and_drops_separated_groups() {
     let mut t = two_way(25, 3);

@@ -275,11 +275,30 @@ fn world(n: usize, seed: u64) -> (Vec<Quantities>, Vec<f64>) {
 /// Flows exp(FE - theta ln(1 + t) - theta ln tau - theta ln(1 + nu) border) with tau the S05
 /// form.
 fn synthetic_sample(theta: &[f64; 7], nu: f64, cost: [f64; 4], domestic: bool) -> Sample {
-    let n = 30;
-    let (q, rate) = world(n, 11);
-    let mut r = Draws(5);
     // Light enough that every good trades.
     let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
+    weighted_sample(theta, nu, cost, domestic, weight, usize::MAX)
+}
+
+/// [`synthetic_sample`] at the given weights, with air only between the first `air_among`
+/// countries (elsewhere its km go by road; `q` holds road, rail, sea and air km first).
+fn weighted_sample(
+    theta: &[f64; 7],
+    nu: f64,
+    cost: [f64; 4],
+    domestic: bool,
+    weight: [f64; 7],
+    air_among: usize,
+) -> Sample {
+    let n = 30;
+    let (mut q, rate) = world(n, 11);
+    for (i, q) in q.iter_mut().enumerate() {
+        if i / n >= air_among || i % n >= air_among {
+            q[0] += q[3];
+            q[3] = 0.0;
+        }
+    }
+    let mut r = Draws(5);
     let mut s = Sample::default();
     for g in 0..theta.len() {
         let a: Vec<f64> = (0..n).map(|_| r.normal()).collect();
@@ -378,6 +397,130 @@ fn mode_costs_recover_known_ratios() {
 }
 
 const MODE: [&str; 3] = ["rail", "sea", "air"];
+
+/// Deliberately heavy goods and an air cost far below its start (8 times road): ln tau is
+/// concave in the air ratio, so the undamped first Gauss-Newton step overshoots past the ratio
+/// at which some tau reaches 0 (the crash of ADR 0022, Re-run 2026-10-29). The guarded step
+/// halves it instead and the fit still recovers the ratios.
+#[test]
+fn mode_costs_guard_keeps_tau_positive() {
+    let cost = [0.10, 0.04, 0.008, 0.004];
+    let s = weighted_sample(&THETA, 0.0, cost, false, [0.01; 7], usize::MAX);
+    let p = Transport::default();
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    let start: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / p.per_tkm[0]);
+    let undamped: [f64; 3] = std::array::from_fn(|m| start[m] + est.steps[0][m]);
+    let tau = gravity::mode_tau(&s, &undamped, &p);
+    assert!(tau.iter().any(|&t| t <= 0.0), "{undamped:?}");
+    assert!(est.halvings[0] > 0, "{est:?}");
+    for m in 0..3 {
+        approx(est.ratio[m], cost[m + 1] / cost[0], 0.1, MODE[m]);
+    }
+    assert!(
+        gravity::mode_tau(&s, &est.ratio, &p)
+            .iter()
+            .all(|&t| t > 0.0)
+    );
+}
+
+/// The profile deviance (the fit at the accepted ratios without the step regressors) never
+/// rises from one Gauss-Newton step to the next.
+#[test]
+fn mode_costs_deviance_does_not_rise() {
+    let light = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let heavy = weighted_sample(
+        &THETA,
+        0.0,
+        [0.10, 0.04, 0.008, 0.004],
+        false,
+        [0.01; 7],
+        usize::MAX,
+    );
+    for s in [light, heavy] {
+        let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
+        assert_eq!(est.deviance.len(), est.iterations, "{est:?}");
+        for w in est.deviance.windows(2) {
+            assert!(w[1] <= w[0], "{:?}", est.deviance);
+        }
+    }
+}
+
+/// Air between 5 countries only: 10 country pairs, as on 2000 BACI, fewer than
+/// `MODE_MIN_PAIRS`. Air keeps its start and is reported as not identified; rail and sea are
+/// still recovered.
+#[test]
+fn mode_below_the_support_threshold_is_unidentified() {
+    let cost = [0.10, 0.03, 0.01, 0.5];
+    let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
+    let s = weighted_sample(&THETA, 0.0, cost, false, weight, 5);
+    let support = gravity::mode_support(&s);
+    assert!(0 < support[2] && support[2] <= 10, "{support:?}");
+    assert!(support[0] >= gravity::MODE_MIN_PAIRS && support[1] >= gravity::MODE_MIN_PAIRS);
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
+    assert_eq!(est.identified, [true, true, false]);
+    assert_eq!(est.support, support);
+    assert!(est.ratio[2].is_nan() && est.se[2].is_nan(), "{est:?}");
+    for m in 0..2 {
+        approx(est.ratio[m], cost[m + 1] / cost[0], 0.1, MODE[m]);
+    }
+    assert!(gravity::report(&estimates(Ok(est))).contains("air not identified"));
+}
+
+/// Estimates on the synthetic samples with the given P04 result.
+fn estimates(modes: Result<gravity::Modes, String>) -> gravity::Estimates {
+    let s = synthetic_sample(&THETA, 0.4, COST, true);
+    let international: Vec<bool> = (0..s.len())
+        .map(|i| s.exporter[i] != s.importer[i])
+        .collect();
+    let border = gravity::border_friction(&s, &SYNTHETIC_CLASSES, Some(&[0.1, 0.4, 0.5])).unwrap();
+    gravity::Estimates {
+        theta: gravity::theta_by_class(&s.rows(&international), &SYNTHETIC_CLASSES).unwrap(),
+        border,
+        modes,
+        class_shares: vec![0.1, 0.4, 0.5],
+        n_countries: 30,
+        n_domestic_countries: 30,
+        notes: gravity::Notes {
+            countries: 30,
+            countries_with_baci_trade: 30,
+            unreached_pairs: 0,
+            baci_international_usd: 0.0,
+            baci_international_usd_in_sample: 0.0,
+            domestic_countries: 30,
+            domestic_cells_dropped: 0,
+            class_trade_usd: vec![0.0; 3],
+        },
+    }
+}
+
+/// A failed P04 fit is a diagnostic: the other estimates stand, the report says why P04 has no
+/// values, a stop rule fires and `gravity_2000.toml` is left as it was. Ratios that keep the
+/// ordering are written.
+#[test]
+fn p04_failure_leaves_the_toml_unchanged() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("gravity_2000.toml");
+    std::fs::write(&out, "kept\n").unwrap();
+    let failed = estimates(Err("forced".to_owned()));
+    assert!(gravity::report(&failed).contains("P04 did not converge: forced"));
+    let fired = gravity::stop_rules(&failed);
+    assert_eq!(fired.len(), 1, "{fired:?}");
+    assert!(fired[0].starts_with("P04"), "{fired:?}");
+    assert!(!gravity::to_toml(&failed).contains("P04b/P04a"));
+    assert!(!gravity::write_toml(&failed, &out).unwrap());
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "kept\n");
+
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let fitted = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default());
+    let ok = estimates(fitted);
+    assert!(
+        gravity::stop_rules(&ok).is_empty(),
+        "{:?}",
+        gravity::stop_rules(&ok)
+    );
+    assert!(gravity::write_toml(&ok, &out).unwrap());
+    assert!(std::fs::read_to_string(&out).unwrap().contains("P04d/P04a"));
+}
 
 #[test]
 fn edge_prices_follow_the_geo_spec() {

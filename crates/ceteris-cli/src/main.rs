@@ -503,9 +503,7 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     for f in &fired {
         println!("stop rule: {f}");
     }
-    if write && fired.is_empty() {
-        std::fs::write(&out, gravity::to_toml(&est))
-            .map_err(|e| format!("{}: {e}", out.display()))?;
+    if write && gravity::write_toml(&est, &out)? {
         println!("wrote {}", out.display());
     }
     Ok(if fired.is_empty() {

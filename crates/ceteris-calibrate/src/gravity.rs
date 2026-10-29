@@ -16,7 +16,7 @@
 //! only when no stop rule fires ([`stop_rules`]); the econ pack build does not read that file,
 //! since whether the model switches to the estimates is the owner's decision.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use ceteris_pack::econ::goods::hs_goods;
@@ -414,10 +414,14 @@ pub fn border_friction(
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Modes {
-    /// P04b-d over P04a: rail, sea and air cost per tonne-km relative to road.
+    /// P04b-d over P04a: rail, sea and air cost per tonne-km relative to road; NaN for a mode
+    /// that is not identified.
     pub ratio: [f64; 3],
     pub se: [f64; 3],
-    /// False for a mode no path uses.
+    /// Country pairs with a positive flow on a path that uses the mode ([`mode_support`]).
+    pub support: [usize; 3],
+    /// False for a mode with fewer than [`MODE_MIN_PAIRS`] pairs: it stays at its start and is
+    /// not fitted.
     pub identified: [bool; 3],
     pub theta_by_class: Vec<f64>,
     /// Coefficient on ln tau(ratio).
@@ -425,37 +429,72 @@ pub struct Modes {
     pub n: usize,
     pub pseudo_r2: f64,
     pub iterations: usize,
+    /// The undamped Gauss-Newton step of each iteration.
+    pub steps: Vec<[f64; 3]>,
+    /// The halvings of each step before it was taken (none for the converged last step).
+    pub halvings: Vec<usize>,
+    /// Profile deviance (the fit without the step regressors) at the ratios each step starts
+    /// from.
+    pub deviance: Vec<f64>,
 }
 
 pub const MODE_TOL: f64 = 1e-9;
 pub const MODE_MAX_ITER: usize = 50;
+/// Step halvings before the fit gives up: 2^-30 of a step is about `MODE_TOL` of it.
+pub const MODE_MAX_HALVINGS: usize = 30;
+/// Fewest country pairs, the clusters of the covariance, with a positive flow on a mode for its
+/// ratio to be fitted (ADR 0022, Amendment 2026-10-29).
+pub const MODE_MIN_PAIRS: usize = 50;
+
+/// International rows of `s`.
+fn international(s: &Sample) -> Sample {
+    let mask: Vec<bool> = (0..s.len())
+        .map(|i| s.exporter[i] != s.importer[i])
+        .collect();
+    s.rows(&mask)
+}
+
+/// Rail, sea and air: the unordered international country pairs with a positive flow on a path
+/// with km on the mode.
+pub fn mode_support(s: &Sample) -> [usize; 3] {
+    let pairs = s.pairs();
+    std::array::from_fn(|m| {
+        let used: BTreeSet<i64> = (0..s.len())
+            .filter(|&i| s.exporter[i] != s.importer[i] && s.flow[i] > 0.0 && s.q[i][m + 1] > 0.0)
+            .map(|i| pairs[i])
+            .collect();
+        used.len()
+    })
+}
+
+/// tau(r) of every row of `s` at rail, sea and air ratios `r` to road, road at its P04a value.
+pub fn mode_tau(s: &Sample, r: &[f64; 3], p: &Transport) -> Vec<f64> {
+    let road = p.per_tkm[0];
+    (0..s.len())
+        .map(|i| {
+            let q = &s.q[i];
+            let km = q[1] * r[0] + q[2] * r[1] + q[3] * r[2];
+            1.0 + s.weight[i] * (road * (q[0] + km) + q[Q_FEE]) + s.time_cost[i] * q[Q_HOURS] / 24.0
+        })
+        .collect()
+}
 
 /// P04 ratios: nonlinear PPML of international flows on, per class, ln(1 + tariff) and ln
 /// tau(r), with tau(r) = 1 + w (f_road (km_road + sum_m r_m km_m) + fees) + lambda hours / 24 the
 /// S05 factor along the least-cost paths and road at its P04a value as numeraire. Gauss-Newton:
-/// each step is a PPML on the same regressors plus kappa_c w f_road km_m / tau, whose
-/// coefficients update r; at convergence the clustered covariance of those coefficients is that
-/// of r.
+/// each step is a PPML on the same regressors plus kappa_c w f_road km_m / tau, kappa_c the ln
+/// tau coefficients of the profile fit at the current r, whose coefficients update r; at
+/// convergence the clustered covariance of those coefficients is that of r. Guarded (ADR 0022,
+/// Amendment 2026-10-29): a step is halved until every tau is positive and the profile deviance
+/// does not rise; convergence is tested on the undamped step. A mode below [`MODE_MIN_PAIRS`]
+/// stays at its start.
 pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Modes, String> {
-    let mask: Vec<bool> = (0..s.len())
-        .map(|i| s.exporter[i] != s.importer[i])
-        .collect();
-    let s = s.rows(&mask);
+    let s = international(s);
     let member = members(&s, classes);
-    let identified: [bool; 3] =
-        std::array::from_fn(|m| s.q.iter().fold(f64::NEG_INFINITY, |a, q| a.max(q[m + 1])) > 0.0);
+    let support = mode_support(&s);
+    let identified: [bool; 3] = std::array::from_fn(|m| support[m] >= MODE_MIN_PAIRS);
     let road = p.per_tkm[0];
     let mut r: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / road);
-    let tau_of = |r: &[f64; 3]| -> Vec<f64> {
-        (0..s.len())
-            .map(|i| {
-                let q = &s.q[i];
-                let km = q[1] * r[0] + q[2] * r[1] + q[3] * r[2];
-                1.0 + s.weight[i] * (road * (q[0] + km) + q[Q_FEE])
-                    + s.time_cost[i] * q[Q_HOURS] / 24.0
-            })
-            .collect()
-    };
     let ln_tariff = s.ln_tariff();
     let base = |t: &[f64]| -> Columns {
         let ln_t: Vec<f64> = t.iter().map(|t| t.ln()).collect();
@@ -467,13 +506,15 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
         reg
     };
     let d_name = |m: usize| format!("d_{}", MODE_NAMES[m + 1]);
-    let mut fit = s.fit(&base(&tau_of(&r)))?;
-    let mut iterations = 0;
+    let mut profile = s.fit(&base(&mode_tau(&s, &r, p)))?;
+    let (mut steps, mut halvings, mut deviance) = (Vec::new(), Vec::new(), Vec::new());
+    let mut converged = None;
     for iteration in 1..=MODE_MAX_ITER {
-        let t = tau_of(&r);
+        deviance.push(profile.deviance);
+        let t = mode_tau(&s, &r, p);
         let mut kappa = vec![0.0; s.len()];
         for (c, m) in member.iter().enumerate() {
-            let coef = fit.coef(&format!("ln_tau_{c}"));
+            let coef = profile.coef(&format!("ln_tau_{c}"));
             for (k, &m) in kappa.iter_mut().zip(m) {
                 *k += coef * f64::from(u8::from(m));
             }
@@ -485,7 +526,7 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
                 .collect();
             reg.push((d_name(m), v));
         }
-        fit = s.fit(&reg)?;
+        let fit = s.fit(&reg)?;
         let step: [f64; 3] = std::array::from_fn(|m| {
             if identified[m] {
                 fit.coef(&d_name(m))
@@ -493,19 +534,44 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
                 0.0
             }
         });
-        for m in 0..3 {
-            r[m] += step[m];
-        }
+        steps.push(step);
         if (0..3).all(|m| step[m].abs() <= MODE_TOL * r[m].abs().max(1.0)) {
-            iterations = iteration;
+            for m in 0..3 {
+                r[m] += step[m];
+            }
+            halvings.push(0);
+            converged = Some(fit);
             break;
         }
+        let mut alpha = 1.0;
+        let mut taken = None;
+        for h in 0..=MODE_MAX_HALVINGS {
+            let trial: [f64; 3] = std::array::from_fn(|m| r[m] + alpha * step[m]);
+            let t = mode_tau(&s, &trial, p);
+            if t.iter().all(|&t| t > 0.0 && t.is_finite()) {
+                let at = s.fit(&base(&t))?;
+                if at.deviance <= profile.deviance {
+                    taken = Some((trial, h, at));
+                    break;
+                }
+            }
+            alpha *= 0.5;
+        }
+        let Some((trial, h, at)) = taken else {
+            return Err(format!(
+                "step {iteration}: within {MODE_MAX_HALVINGS} halvings, no step from {r:?} along \
+                 {step:?} keeps tau positive without raising the deviance"
+            ));
+        };
+        r = trial;
+        halvings.push(h);
+        profile = at;
     }
-    if iterations == 0 {
+    let Some(fit) = converged else {
         return Err(format!(
             "mode costs did not converge in {MODE_MAX_ITER} steps: {r:?}"
         ));
-    }
+    };
     let k = classes.len();
     Ok(Modes {
         ratio: std::array::from_fn(|m| if identified[m] { r[m] } else { f64::NAN }),
@@ -516,6 +582,7 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
                 f64::NAN
             }
         }),
+        support,
         identified,
         theta_by_class: (0..k)
             .map(|c| -fit.coef(&format!("ln_tariff_{c}")))
@@ -523,7 +590,10 @@ pub fn mode_costs(s: &Sample, classes: &[&[usize]], p: &Transport) -> Result<Mod
         tau_by_class: (0..k).map(|c| fit.coef(&format!("ln_tau_{c}"))).collect(),
         n: fit.n,
         pseudo_r2: fit.pseudo_r2,
-        iterations,
+        iterations: steps.len(),
+        steps,
+        halvings,
+        deviance,
     })
 }
 
@@ -579,7 +649,9 @@ impl Notes {
 pub struct Estimates {
     pub theta: Vec<Theta>,
     pub border: Border,
-    pub modes: Modes,
+    /// A failed P04 fit is a diagnostic, not an error of the estimation (ADR 0022, Amendment
+    /// 2026-10-29).
+    pub modes: Result<Modes, String>,
     /// 2000 BACI international trade by class, the weights of P05.
     pub class_shares: Vec<f64>,
     pub n_countries: usize,
@@ -712,7 +784,7 @@ pub fn estimate(pack: &Path, cache: &Path) -> Result<Estimates, String> {
     Ok(Estimates {
         theta: theta_by_class(&international, &CLASSES)?,
         border: border_friction(&with_domestic, &CLASSES, Some(&shares))?,
-        modes: mode_costs(&international, &CLASSES, &p)?,
+        modes: mode_costs(&international, &CLASSES, &p),
         class_shares: shares,
         n_countries: notes.countries,
         n_domestic_countries: notes.domestic_countries,
@@ -765,7 +837,9 @@ pub fn rows(est: &Estimates, p: &Transport) -> Vec<Row> {
         pseudo_r2: b.pseudo_r2,
         default: BORDER_DEFAULT,
     });
-    let m = &est.modes;
+    let Ok(m) = &est.modes else {
+        return out;
+    };
     for (k, id) in P04_IDS.iter().enumerate() {
         out.push(Row {
             id,
@@ -810,6 +884,15 @@ pub fn to_toml(est: &Estimates) -> String {
     lines.join("\n")
 }
 
+/// Write `gravity_2000.toml` to `out` when no stop rule fires; whether it wrote.
+pub fn write_toml(est: &Estimates, out: &Path) -> Result<bool, String> {
+    if !stop_rules(est).is_empty() {
+        return Ok(false);
+    }
+    std::fs::write(out, to_toml(est)).map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(true)
+}
+
 /// The stop rules: estimates that go to the owner instead of the pack.
 pub fn stop_rules(est: &Estimates) -> Vec<String> {
     let mut fired = Vec::new();
@@ -830,7 +913,13 @@ pub fn stop_rules(est: &Estimates) -> Vec<String> {
             fixed(b.se, 3)
         ));
     }
-    let [rail, sea, air] = est.modes.ratio;
+    let [rail, sea, air] = match &est.modes {
+        Ok(m) => m.ratio,
+        Err(e) => {
+            fired.push(format!("P04 did not converge: {e}"));
+            return fired;
+        }
+    };
     // water < rail < road < air, road = 1; NaN (unidentified) fails.
     if !(sea < rail && rail < 1.0 && 1.0 < air) {
         fired.push(format!(
@@ -881,13 +970,31 @@ pub fn report(est: &Estimates) -> String {
         fixed3(&b.border_by_class),
         fixed3(&est.class_shares)
     ));
-    let m = &est.modes;
-    lines.push(format!(
-        "P04 fit: theta by class {}, ln tau coefficients {}, {} Gauss-Newton steps",
-        fixed3(&m.theta_by_class),
-        fixed3(&m.tau_by_class),
-        m.iterations
-    ));
+    match &est.modes {
+        Ok(m) => {
+            lines.push(format!(
+                "P04 fit: theta by class {}, ln tau coefficients {}, {} Gauss-Newton steps \
+                 ({} halved), profile deviance {} to {}",
+                fixed3(&m.theta_by_class),
+                fixed3(&m.tau_by_class),
+                m.iterations,
+                m.halvings.iter().filter(|&&h| h > 0).count(),
+                fixed(m.deviance[0], 3),
+                fixed(m.deviance[m.deviance.len() - 1], 3)
+            ));
+            let p = Transport::default();
+            for k in (0..3).filter(|&k| !m.identified[k]) {
+                lines.push(format!(
+                    "P04: {} not identified ({} country pairs with a positive flow, fewer than \
+                     {MODE_MIN_PAIRS}); held at its start {}",
+                    MODE_NAMES[k + 1],
+                    m.support[k],
+                    py_g(p.per_tkm[k + 1] / p.per_tkm[0], 4)
+                ));
+            }
+        }
+        Err(e) => lines.push(format!("P04 did not converge: {e}")),
+    }
     let t: Vec<String> = est
         .theta
         .iter()
