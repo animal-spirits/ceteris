@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### BEHAVIOUR: gateway masses and the border friction per theta class (ADR 0092)
+
+- Every gateway carries a mass, its share of its country's 2000 trade throughput (1/k for a
+  country's k gateways: the pack has no throughput per gateway); a crossing a to b weighs
+  m_a m_b, so access no longer grows with the number of gateway pairs. `gateways.arrow` gains
+  `mass`; a pack without it is refused at load with an error naming the column.
+- P05 is one nu per theta class (`TradeParams::border_nu: [f64; 4]`); the default stays 0.3 for
+  every class. `ceteris calibrate --pack` fits them to ICIO 2000's cross-border share of each
+  class (the new pack table `econ_home_shares.arrow`) before the steady state, records them in
+  the calibration (format 4), and a calibrated world runs under them
+  (`EconInputs::trade_params`). The fixture keeps the default.
+- Export format 11 (`gateways.mass`, the masses in the crossings' k, `border_nu` a list); the
+  static digest encodes nu as a list.
+- The P2 gate's H2 per class asks that each class's theta_c lie within 2 pair-clustered
+  standard errors of its PPML estimate (ADR 0092), in place of the prior bands.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash (the masses change the fixture's crossing factors, and
+  nu enters the digest as a list). The hashes are the same at 1, 3 and all threads.
+- `tests/golden/p2-fixture/`: the export in every table (format 11), the reference solution and
+  the calibration (format 4, `border_nu` in its metadata) at the mass-weighted kernel.
+- `tests/golden/p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move. `p2-pack.txt` waits for
+  the pack rebuild (pre-P3 B8): the installed pack has neither the mass column nor the home
+  shares.
+
 ### BEHAVIOUR: PIGL inverted jointly over each country's pops at within-pop dispersion (ADR 0094)
 
 - Every pop spends at its country's within-pop log income dispersion s_w, s_w^2 = max(0, s_nat^2 -
