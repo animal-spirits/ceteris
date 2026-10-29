@@ -19,7 +19,7 @@ Phase P1 (World and map) of eleven is complete; there is no economics yet.
   desktop app reads the pack from disk through `pack://`. ADR 0011 records the decision to
   rewrite the map in Rust.
 
-The data licence audit is in `python/ceteris/packs/sources.toml` (ADR 0005).
+The data licence audit is in `crates/ceteris-pack/config/sources.toml` (ADR 0005).
 
 ## Layout
 
@@ -34,16 +34,14 @@ crates/
                 province markets and trade kernel; production, labour, demand and
                 the monthly economic tick
   ceteris-pack/ fetch, licence manifest check, source readers, the pack build and the
-                parity comparison
+                table comparison; config/ holds the pack configuration: pinned sources,
+                licence manifest, 2000 borders, chokepoints
   ceteris-geos-coverage/
                 GEOS coverage simplification for the owner-side map build
   ceteris-reference/, ceteris-calibrate/
                 independent reference model; steady-state calibration and gravity
   ceteris-cli/  the `ceteris` binary: export, run, pack, reference, calibrate
 app/            Tauri desktop app: TypeScript map (MapLibre, React) over the Rust core
-python/ceteris/packs/
-                pack configuration: pinned sources, licence manifest, 2000 borders,
-                chokepoints (the build is the `ceteris-pack` crate)
 tests/golden/   stored hashes of golden scenarios
 ```
 

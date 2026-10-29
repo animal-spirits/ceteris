@@ -51,8 +51,8 @@
 //! structural gravity on 2000 BACI and the pack's least-cost costs (`--pack`, default
 //! `data/packs/2000`; the sources from the fetch cache), printing the table of estimates, the
 //! sample counts and any stop rule that fires; it exits 1 when one fires. `--write` writes the
-//! estimates as TOML into `--out` (default `python/ceteris/packs/gravity_2000.toml`, beside the
-//! pack configuration) when no stop rule fires.
+//! estimates as TOML into `--out` (default `crates/ceteris-pack/config/gravity_2000.toml`, beside
+//! the pack configuration) when no stop rule fires.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -602,7 +602,7 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
-    let out = out.unwrap_or_else(|| root.join("python/ceteris/packs/gravity_2000.toml"));
+    let out = out.unwrap_or_else(|| root.join(sources::CONFIG_DIR).join("gravity_2000.toml"));
     let est = gravity::estimate(&pack, &root.join(fetch::CACHE_DIR))?;
     println!("{}", gravity::report(&est));
     println!("{}", est.notes.json().pretty());

@@ -1,5 +1,5 @@
 # Files the pack pipeline downloads (Section 16.1). Each names its manifest source.
-# fetch.py verifies sha256 and size; `python -m ceteris.packs.fetch --record` fills them
+# `ceteris pack fetch` verifies sha256 and size; `ceteris pack fetch --record` fills them
 # for a new entry, which must then be reviewed and committed. An entry with manual = true is
 # saved into the cache by hand (its host rejects scripted downloads); fetch only verifies it. An
 # entry with optional = true is kept for later phases: fetch skips it unless it is in the cache.
@@ -345,7 +345,7 @@ name = "kummu_gdp_ppp_2000_5arcmin.tif"
 optional = true
 manual = true
 derived_from = "GDP_PPP_1990_2015_5arcmin_v2.nc"
-command = "uv run --project python --locked python scripts/convert_kummu.py"
+command = "uv run scripts/convert_kummu.py"
 sha256 = "7fa7b4be4fe7d12ecfb5000bc52728712f560f7ccc8f8d1173471294f4ad0210"
 bytes = 5087873
 url = "https://datadryad.org/dataset/doi:10.5061/dryad.dk1j0"
