@@ -4,7 +4,7 @@ Status: accepted (owner, 2026-10-30: PPP default for cross-country levels, chain
 yearly GEKS-Fisher PPP, true values in seat play as a difficulty setting)
 Date: 2026-10-30
 Design sections: 14.1, 20.1, 20.2; ADRs 0065, 0098, 0137, 0155, 0161, 0188, 0191, 0212, 0238, 0239, 0240, 0241
-Phase: P3 (registry, numeraire transforms, headline set); P5a (currency and PPP transforms, money rows); 2.0+ (source stage, seat dashboards, objectives)
+Phase: P3 (registry, numeraire transforms, headline set); 1.x (user-defined indicators); P5a (currency and PPP transforms, money rows); 2.0+ (source stage, seat dashboards, objectives)
 
 ## Context
 
@@ -85,6 +85,15 @@ rejected by the unit checker, not hidden.
   (0188) that reads an indicator replays bit for bit.
 - **Retention.** Transforms read 0212 history. The headline set is retained monthly for every
   branch, as if it were a declared outcome metric (14.1); other series recompute from snapshots.
+
+### User-defined indicators (1.x)
+
+Owner, 2026-10-30: in a 1.x minor, not P3. A user saves a named formula over registry indicators:
+arithmetic and ratios, weighted sums and composite indices, price indices on a chosen basket,
+quantiles and headcounts from pop income distributions (own poverty line or equivalence scale),
+and aggregates over a saved peer set. Formulas are unit-checked, stored as text in the run,
+shareable, and usable wherever a registry indicator is (columns, map modes, peer radar, `:when`
+rules). They write no state. P3 ships transforms only.
 
 ### Default units
 
