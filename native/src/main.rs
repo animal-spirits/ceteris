@@ -5,6 +5,7 @@ use std::rc::Rc;
 use ceteris_app::bench::Bench;
 use ceteris_app::camera::Camera;
 use ceteris_app::fill::Fill;
+use ceteris_app::labels::Anchors;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes;
 use ceteris_app::web::{Counties, Provinces};
@@ -23,6 +24,9 @@ struct State {
     fills: Option<(Fill, Option<Fill>)>,
     provinces: Provinces,
     counties: Option<Counties>,
+    anchors: Anchors,
+    /// The camera and viewport the labels were placed for.
+    labelled: Option<(Camera, [f64; 2])>,
     style: Style,
     map: Option<Map>,
     camera: Option<Camera>,
@@ -55,6 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .select()?;
     let app = AppWindow::new()?;
     let state = Rc::new(RefCell::new(State {
+        anchors: Anchors::new(&fill, &provinces),
+        labelled: None,
         fills: Some((fill, county_fill)),
         provinces,
         counties,
@@ -147,6 +153,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .camera
                     .get_or_insert_with(|| Camera::fit(viewport[0], viewport[1]));
                 let pick = s.pick.take();
+                if s.labelled != Some((camera, viewport)) {
+                    s.labelled = Some((camera, viewport));
+                    let em = 12.0 * s.scale_factor;
+                    let k = s.scale_factor as f32;
+                    let labels: Vec<MapLabel> = s
+                        .anchors
+                        .place(&camera, viewport, em)
+                        .into_iter()
+                        .map(|l| MapLabel {
+                            text: l.text.into(),
+                            x: l.at[0] as f32 / k,
+                            y: l.at[1] as f32 / k,
+                            country: l.country,
+                        })
+                        .collect();
+                    app.set_labels(std::rc::Rc::new(slint::VecModel::from(labels)).into());
+                }
                 let State {
                     map,
                     bench,
