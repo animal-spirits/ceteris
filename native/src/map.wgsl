@@ -1,12 +1,11 @@
 // Fills coloured per feature from a texture (ADR 0010); feature ids go to a second target for
-// picking and borders. Flat: instance k draws the world shifted by (first + k) in x, so the map
-// wraps. Globe: an orthographic sphere seen from above the centre; the far side is discarded.
+// picking and borders. The map is an orthographic globe seen from above the centre (ADR 0250);
+// the far side is discarded.
 
 struct View {
+    // Longitude and latitude, radians.
     centre: vec2f,
     k: vec2f,
-    first: f32,
-    globe: u32,
     mix: f32,
     sea: vec4f,
     paper: vec4f,
@@ -39,24 +38,18 @@ fn lon_lat(m: vec2f) -> vec2f {
 }
 
 @vertex
-fn vs(@location(0) xy: vec2f, @location(1) feature: u32, @builtin(instance_index) copy: u32) -> VsOut {
+fn vs(@location(0) xy: vec2f, @location(1) feature: u32) -> VsOut {
     var out: VsOut;
-    if view.globe == 0u {
-        let d = xy + vec2f(view.first + f32(copy), 0.0) - view.centre;
-        out.pos = vec4f(d * view.k, 0.0, 1.0);
-        out.facing = 1.0;
-    } else {
-        let p = lon_lat(xy);
-        let c = lon_lat(view.centre);
-        let dl = p.x - c.x;
-        let x = cos(p.y) * sin(dl);
-        let y = sin(p.y);
-        let z = cos(p.y) * cos(dl);
-        let yr = y * cos(c.y) - z * sin(c.y);
-        let zr = y * sin(c.y) + z * cos(c.y);
-        out.pos = vec4f(vec2f(x, yr) * view.k, 0.0, 1.0);
-        out.facing = zr;
-    }
+    let p = lon_lat(xy);
+    let c = view.centre;
+    let dl = p.x - c.x;
+    let x = cos(p.y) * sin(dl);
+    let y = sin(p.y);
+    let z = cos(p.y) * cos(dl);
+    let yr = y * cos(c.y) - z * sin(c.y);
+    let zr = y * sin(c.y) + z * cos(c.y);
+    out.pos = vec4f(vec2f(x, yr) * view.k, 0.0, 1.0);
+    out.facing = zr;
     let texel = vec2u(feature % TEX_WIDTH, feature / TEX_WIDTH);
     out.colour = mix(textureLoad(colours, texel, 0), textureLoad(next_colours, texel, 0), view.mix);
     out.id = feature + 1u;
@@ -90,12 +83,11 @@ fn vs_screen(@builtin(vertex_index) i: u32) -> ScreenOut {
     return ScreenOut(vec4f(ndc, 0.0, 1.0), ndc);
 }
 
-// Background: on the globe, sea inside the disc and paper outside; flat, all sea.
+// Background: sea inside the disc and paper outside.
 @fragment
 fn fs_bg(in: ScreenOut) -> FsOut {
     let r = in.ndc / view.k;
-    let outside = view.globe == 1u && dot(r, r) > 1.0;
-    return FsOut(select(view.sea, view.paper, outside), vec2u(0u));
+    return FsOut(select(view.sea, view.paper, dot(r, r) > 1.0), vec2u(0u));
 }
 
 // Borders from the id target: where neighbouring pixels differ in country (both sides, so two

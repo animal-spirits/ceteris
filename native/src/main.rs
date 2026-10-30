@@ -307,9 +307,7 @@ impl State {
             Command::ZoomReset => {
                 let v = self.viewport;
                 if let Some(cam) = self.camera.as_mut() {
-                    let globe = cam.globe;
                     *cam = Camera::fit(v[0], v[1]);
-                    cam.set_globe(v, globe);
                 }
             }
         }
@@ -471,17 +469,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             s.freight.request(p);
         }
         s.paint(&app);
-    });
-
-    let s = state.clone();
-    let weak = app.as_weak();
-    app.on_globe(move |on| {
-        let mut s = s.borrow_mut();
-        let viewport = s.viewport;
-        if let Some(c) = s.camera.as_mut() {
-            c.set_globe(viewport, on);
-        }
-        weak.upgrade().inspect(|a| a.window().request_redraw());
     });
 
     let s = state.clone();
