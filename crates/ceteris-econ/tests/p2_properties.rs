@@ -861,11 +861,15 @@ fn buyers_pay_the_ces_index() {
 
 /// ADR 0200: over 120 ticks of the fixture from the data state, every tick, what T2b created
 /// less what it destroyed is its selection term less its melt (the invariant `end_tick`
-/// checks), and selection is not idle: somewhere it adds or takes more than rounding.
+/// checks), and selection is not idle. Net selection per destination is zero where Gamma is
+/// fixed (q_d = 1 / alpha_d), so the net term only moves with the prices; per arrival slot it
+/// is not zero there, since spending is split over slots by value: from tick 1 some slot's
+/// arrivals differ from its surviving units by more than 1e-3 of the destination's arrivals.
 #[test]
 fn goods_invariant_holds_with_selection() {
     let mut sim = sim_of(world(EconParams::default()));
     let mut largest = 0.0f64;
+    let mut per_slot = 0.0f64;
     for tick in 1..=120 {
         sim.step().unwrap_or_else(|v| panic!("{v}"));
         let sc = &sim.world().scratch;
@@ -881,11 +885,24 @@ fn goods_invariant_holds_with_selection() {
             );
             assert_eq!(due, r.selected - r.lost);
             largest = largest.max(r.selected.abs() / scale.max(1.0));
+            if tick == 1 {
+                for d in 0..r.paid.len() {
+                    let total: f64 = r.arrive.iter().map(|a| a[d][0] + a[d][1]).sum();
+                    for (a, s) in r.arrive.iter().zip(&r.survived) {
+                        let gap = (a[d][0] + a[d][1] - s[d]).abs();
+                        per_slot = per_slot.max(gap / total.max(f64::MIN_POSITIVE));
+                    }
+                }
+            }
         }
     }
     assert!(
         largest > 1e-6,
         "selection never moved more than {largest} of the units"
+    );
+    assert!(
+        per_slot > 1e-3,
+        "no slot's arrivals differ from its surviving units by more than {per_slot}"
     );
 }
 
@@ -893,9 +910,10 @@ fn goods_invariant_holds_with_selection() {
 /// multiplier is 1, so buyers pay their own market's price and selection adds nothing, every
 /// tick. The pre-ADR 0200 build's state hash is not reproduced bit for bit: Gamma P_d is
 /// p_min exp(-ln Phi / theta), which differs from 1 / (1 / p_d) in the last bits (at tick 120
-/// the states agree to 3.4e-12 relative, money rounding to minor units included).
+/// the states agree to 3.4e-12 relative, money rounding to minor units included). PLAN B2a
+/// names this test `selection_off_reproduces_the_status_quo`.
 #[test]
-fn selection_off_reproduces_the_status_quo() {
+fn autarky_has_no_selection() {
     let mut inputs = small_world();
     inputs.network = Network {
         province_country: inputs.network.province_country.clone(),

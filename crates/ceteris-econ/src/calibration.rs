@@ -154,7 +154,8 @@ impl EconInputs {
     /// Reads the calibration tables in `dir` (ADR 0089) into these inputs, which must be the
     /// uncalibrated world the tables were solved from: A, VA0, L0, a_VA, the coefficients
     /// (both the putty-clay vintage and the 2000 column that S09 FixedLeontief reads), w0, the
-    /// PIGL weights, the selection constants Gamma (ADR 0200), and the steady state a world starts from ([`EconInputs::steady`]).
+    /// PIGL weights, the selection constants Gamma (ADR 0200), and the steady state a world
+    /// starts from ([`EconInputs::steady`]).
     pub fn calibrate(&mut self, dir: &Path) -> Result<(), PackError> {
         let ent_table = table(dir, "econ_calib.arrow")?;
         let want = hex(&static_digest(
