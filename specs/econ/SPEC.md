@@ -35,7 +35,7 @@ investment, finance, the state and politics are later phases.
 | Final demand split into households, government, investment | One final demander per pop, with country shares from all ICIO final demand | No state or investment in P2 |
 | Observed 2000 trade imbalances | Balanced trade: pops spend their income each month | Deficits need finance (P5) |
 | Agglomeration in productivity (A5, P09) | Off by default | Ablation rule: on only once it improves a test |
-| Buyers face posted prices (8.6, 7.3) | Traded goods are bought at the delivered unit price q_d = 1 / alpha_d of the buyer's province (trade SPEC, Sourcing), in household demand, input orders and the value-added price (owner decision, 2026-10-24) | Destination sourcing gives no single posted price at a destination; at the CES index P_d an order of a unit delivers fewer than one |
+| Buyers face posted prices (8.6, 7.3) | Traded goods are bought at the buyer price q_d = Gamma_d P_d of the buyer's province, the CES index times a selection constant per cell fixed at the calibration point (trade SPEC, Sourcing; ADR 0200, owner ruling 2026-10-30), in household demand, input orders and the value-added price | Destination sourcing gives no single posted price at a destination; with selection on trade links (Eaton-Kortum) every source delivers at the index, and Gamma keeps q_d at the calibrated point where 1 / alpha_d put it before ADR 0200 (owner decision, 2026-10-24) |
 | Inventory coverage at the market (7.3) | Enterprises order inputs up to an inventory position (stock plus goods on order) of (1 + cover + L) months of capacity use, cover = 1, L the expected months in transit (owner decision, 2026-10-24) | Goods paid at dispatch and delivered after transit must be counted, and the target must hold them: a two-month position cannot hold a month in transit |
 
 ## Goods (energy-forward, owner choice)
@@ -150,7 +150,8 @@ network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arriv
 `ceteris calibrate --pack DIR`, Calibration below), keyed by pack province:
 `econ_calib.arrow` per enterprise (A, VA0, L0, a_VA, own price, output, sales, profit, coef and
 input stock per good; the summary in its `calibration` metadata), `econ_calib_cells.arrow` per
-(province, good) (posted and buyer prices, lead, Q, D by buyer class, sales, merchant stock),
+(province, good) (posted and buyer prices, the selection constant Gamma of ADR 0200, lead, Q, D by
+buyer class, sales, merchant stock),
 `econ_calib_provinces.arrow` (w0, employment, income), `econ_calib_pops.arrow` per (province,
 education) (money at the start of a tick, income, wage), `econ_calib_pipeline.arrow` (goods in
 flight by buyer, good and ticks ahead) and `econ_calib_countries.arrow` (u*, rebate, PIGL
@@ -158,7 +159,7 @@ weights). Every table carries `calibration_format` in its schema metadata. Insta
 pack (copied next to the econ tables; their sha256 then joins `tests/golden/p2-pack.txt`), they are
 read by `EconInputs::from_pack` (`EconInputs::calibrate`, `calibration.rs`) into A, VA0, L0,
 a_VA, the coefficients (both S09 settings), w0, the PIGL weights and the initial state (State
-components): only at `calibration_format` 3 and only when the `static_digest` in the
+components): only at `calibration_format` 5 (5 since ADR 0200 added `gamma`) and only when the `static_digest` in the
 `calibration` metadata is that of the uncalibrated inputs under default parameters
 (`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack build,
 another format or other coefficients stop the load with a `PackError`.
@@ -211,7 +212,11 @@ rho = (sigma_FL - 1) / sigma_FL                                    (P08)
 sigma_FL = 1 uses the Cobb-Douglas limit VA = A VA0 (L/L0)^s_L. Traded inputs M_k come from the
 enterprise's input stock, bought at earlier ticks and delivered after transit; a shortfall caps Y
 in the tick the stock runs out, so a traded shortage reaches its users with their stocks and
-transit as the lag. Local inputs (goods 7 to 9) come from this tick's local output first and the
+transit as the lag. Units are delivered units (ADR 0200): an origin's output leaves in shipped units
+at coef_k per unit, and on route r each shipped unit arrives as s_r delivered units (trade SPEC,
+Sourcing), so the origin's best producers, which make what d buys from it, use 1 / s_r of the
+cell's average inputs per delivered unit. The production equations do not change; the dispatch
+books the difference as the selection term. Local inputs (goods 7 to 9) come from this tick's local output first and the
 enterprise's stock second, in the same-tick chain (ADR 0020, `local.rs`), run per province:
 
 ```
@@ -278,13 +283,13 @@ that the chain draws only in a shortage). Where L = 0 everywhere this is the two
 decisions, 2026-10-24): planning on output cut by a short input would cut the next order and the
 next output with it, a ratchet that emptied the fixture economy from the data state; and a fixed
 target that counts goods on order cannot hold a month in transit. Traded inputs are bought at the
-delivered unit price q_k, spend = order_k q_k, so the units ordered are the units that arrive. At a
+buyer price q_k (ADR 0200), spend = order_k q_k, so the units ordered are the units that arrive. At a
 steady state inputs do not bind, Y_cap = Y, local stocks stay at their target and their orders are
 zero, so the steady state (and the GE reference) is that of the lagged rule.
 
 **Labour target.** With value-added price p_VA = (p_ig - sum_k coef_k q_ik) / a_VA, the own
 (origin or province market) price at current prices and the buyer prices q_ik of last tick's
-E3 (the delivered unit price of traded inputs, the posted price of local ones), the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
+E3 (the buyer price of traded inputs, the posted price of local ones), the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
 
 ```
 q  = w L0 / (p_VA A VA0 s_L)
@@ -587,7 +592,14 @@ overflow does not (that is an error): the fixture's scaling at border frictions 
 and 1.2 overflowed this way after 182 sweeps where plain sweeps converge. Scalings that converged
 before take the same path. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
-the index is 1. q_d, the arrival slots and the lead follow from sourcing.
+the index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
+delivered unit price of the physical arrivals, at every pass (`Model::physical`), and the
+selection constant of ADR 0200, Gamma_d,g = q_d / P_d at the calibrated prices (1 where no origin
+is reachable), is written to `econ_calib_cells.arrow` (`gamma`), so a calibrated world's buyer
+price Gamma P_d is the calibrated q_d. The export carries every world's Gamma in `provinces`
+(`gamma_0` to `gamma_9`, export format 13), which the GE reference reads. The arrival slots split each destination's spending by
+value over its routes' slots and divide by q_d: every unit of spending arrives as 1 / q_d units
+(stage 1 values do not depend on them; the lead and the pipeline do, `steady_state_unchanged_by_selection`).
 
 **Stage 3, technology.** coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices,
 so input coefficients differ across enterprises of a country), a_VA = 1 - sum_k a_kg (cost
@@ -675,6 +687,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 |---|---|---|---|
 | Money | Sum of balances zero; every flow tagged | exact | `Ledger::check`, every tick |
 | Goods | Created - destroyed = change in holdings (incl. transit) | 1e-9 relative; transit 1e-9 relative plus 1e-12 of the good's market turnover, since markets fill it by differences of their holdings | every tick |
+| Selection | What T2b creates less what it destroys, per traded good (selection at home purchases and in transit, the melt), equals `dispatch`'s selection term less its melt (ADR 0200; trade SPEC, Invariants) | 1e-9 of the good's delivered and shipped units, plus 1e-12 of its market turnover | every tick; `goods_invariant_holds_with_selection` (120 ticks of the fixture) |
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
 | Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 relative | every tick |

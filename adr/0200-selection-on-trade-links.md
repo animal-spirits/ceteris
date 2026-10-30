@@ -3,6 +3,7 @@
 Status: accepted (owner, 2026-10-28; built in pre-P3 branch B with ADR 0092, ADR 0207)
 Date: 2026-10-28
 Design sections: 4.6, 7.2, 8.3, 15.3, 15.5; ADRs 0015, 0016, 0026, 0089, 0095; trade SPEC (buyer price row)
+Amended: 2026-10-30 (normalization per cell; errata on the pow form), below
 Phase: P2 fix, ahead of the P3 shock cases
 
 ## Context
@@ -76,3 +77,54 @@ ADR 0089 steady state is then unchanged, and only counterfactuals move.
 
 Welfare results of trade counterfactuals become comparable with the quantitative trade
 literature. The 2000 calibration is unchanged. One float per active leg. No register entry.
+
+## Amendment (2026-10-30): Gamma per cell, and errata
+
+Owner ruling 2026-10-30: option A.
+
+**Why.** The Normalization above asks for two things that one Gamma per good cannot give together.
+On the calibrated fixture, at the calibrated prices, the Gamma that keeps today's buyer price,
+q_d / P_d, varies across destinations by up to 30% within a good (good 0: 1.305 to 1.323, and
+1.023 at province 24; good 3: 2.218 to 2.238, and 1.969), and s_dd = p_d / (Gamma P_d) varies by
+a factor up to 4 (good 2: 0.35 to 1.43 at Gamma 1). A Gamma per cell chosen for s_dd = 1 sets the
+data state's buyer price to 1 rather than 1 / alpha_d, which moves stage 3's coefficients, so it
+recalibrates rather than leaves the steady state unchanged.
+
+**Decision, as amended.** Buyers pay q_d = Gamma_d,g P_d with one constant per (province, traded
+good), fixed at the calibration point so that q_d there equals the buyer price before this ADR,
+the delivered unit price of the physical arrivals 1 / alpha_d. In the data state Gamma is
+1 / (alpha_d P_d) at prices 1; a calibrated world reads it from the calibration tables (column
+`gamma` of `econ_calib_cells.arrow`, calibration format 5), where it is q_d / P_d at the calibrated
+prices. Gamma is 1 where no origin is reachable. s_dd is not 1. Away from the calibration point q_d
+moves with P_d alone, so d ln q_d = d ln P_d, and the ACR welfare formula holds exactly.
+
+The selection multiplier of a route r from o to d is
+
+```latex
+s_r = \frac{c_r}{q_d}, \qquad c_r = p_o (1 + t_r) \tau_r
+```
+
+with c_r the physical delivered cost of the route (tariff and physical loss). A shipped unit
+arrives as s_r delivered units, so every route delivers X_r / q_d units: a unit of spending buys
+1 / q_d units whatever its origin. The kernel cost also carries the time cost, the border
+friction nu and the gateway masses, which melt nothing, so s_r is below 1 on a route whose
+physical cost is below q_d, and the selection term there is negative.
+
+**Normalization, as amended.** The 2000 calibration is unchanged in values: stage 1 (output value,
+spending, r, rebates) does not depend on Gamma, since the calibration prices buyers at 1 / alpha_d
+at every pass and Gamma follows. What moves is the split of arrivals over slots: by value rather
+than by physical units, so the lead L_d and the steady-state pipeline move and the fixture
+calibration is re-blessed (amounts in As built).
+
+**Errata.** (1) The pow form s_od = Gamma^-1 (K_od / pi_od)^(1/theta) is not c_od / P_d: with
+pi_od = K_od p_o^-theta / Phi_d it is p_o / (Gamma P_d), which leaves out the trade cost. The
+identity alpha_d = sum_o pi_od s_od / c_od = 1 / q_d holds for s = c / q with c the physical
+delivered cost. (2) No pow is needed, per leg or per route: the dispatch carries value by arrival
+slot through the gateways and divides by q_d at the destination, and the cost per active leg is
+one multiply-add for the value by lag. Migration's "one powf per leg per tick" does not apply.
+
+**Tests, as amended.** "Two-country toy": with Gamma fixed per cell, the change in q_d equals
+lambda_dd'^(-1/theta) times the change in the home price (the ACR identity), to 1e-12. "With all
+links at s = 1 (autarky toy), hashes equal the status quo." "steady_state_unchanged_by_selection"
+checks stage 1's values at 1e-12 and reports the move of the lead and the pipeline.
+
