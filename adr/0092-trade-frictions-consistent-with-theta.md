@@ -84,6 +84,12 @@ estimate +- 2 pair-clustered s.e.) class 0 2.91 against 2.221 to 2.566, class 1 
 2.993 to 4.021, class 2 7.68 against 7.231 to 7.998 (pass), class 3 16.91 against 9.686 to 15.086.
 Only class 2 passes. Before the fit (every nu 0.3) distance was -0.433.
 
+Note (owner ruling 2026-10-30, ADR 0247 As built): the bulk freight rate is now on by default for
+class 3 (P154 0.026, P155 0.40). With it, class 3's share at nu 0 is 0.3037, above its target, so
+the fit has a root (nu 0.0078 on scratch pack `b2/pack-bulk`, task b2-1b) and the clamp no
+longer applies to class 3. The clamp stays the general rule for any class whose target is above
+its share at nu 0.
+
 ## Consequences
 
 - The border effect is consistent with each class's theta. Food trade across borders falls to

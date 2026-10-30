@@ -1,7 +1,8 @@
 # 0247. Bulk freight rate per theta class
 
 Status: proposed (owner ruling 1B, 2026-10-30: add a bulk freight rate for class 3 inside pre-P3
-B2, then refit nu); built and off by default: the ablation test failed on criterion 3 (As built)
+B2, then refit nu); built, and on by default for class 3 by owner ruling (2026-10-30): criterion 3
+of the ablation test was ill-posed (As built)
 Date: 2026-10-30
 Design sections: 5.3 (maritime container, bulk and tanker; freight rates), 5.4, 15.7 (ablation),
 17.1 (P04; new P154, P155), 21.2 item 7; amends ADR 0022 (P04 mode costs); ADR 0092 (nu per
@@ -32,7 +33,10 @@ class); trade SPEC Leg factors, Parameters
 
 ## Decision
 
-Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test fails.
+Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test fails. The
+test's criterion 3 failed, but it was ill-posed (As built); by owner ruling (2026-10-30, "Do the
+recommended") the rate is on by default: P154 0.026 and P155 0.40 for class 3, 1 for classes 0
+to 2.
 
 - **Mechanism.** Two per-class multipliers in `TradeParams`: `bulk_sea[c]` (P154) on the sea
   cost per tonne-km (P04c, sea and canal edges) and `bulk_port[c]` (P155) on the port handling fees
@@ -95,13 +99,14 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
   3. H2's distance elasticity stays inside -1.1 to -0.7 with the rate on.
 
   If 2 or 3 fails, the rate stays off by default (P154 and P155 at 1 for every class), class 3
-  is clamped at nu = 0 and the miss is recorded in ADR 0092. Nothing is tuned to pass.
+  is clamped at nu = 0 and the miss is recorded in ADR 0092. Nothing is tuned to pass. (Owner
+  ruling 2026-10-30: criterion 3 was ill-posed and the rate is on; see As built.)
 
 ## Consequences
 
 - With the rate on, class 3's sea cost per tonne-km is 1/38 of P04c's and its port fees 0.40
-  of P04m's, and the class can trade two-way, as ICIO says it does in 2000. Off (the default),
-  nothing changes.
+  of P04m's, and the class can trade two-way, as ICIO says it does in 2000. This is the default
+  (owner ruling 2026-10-30). With P154 and P155 at 1 for every class (off), nothing changes.
 - A second shortest-path pass over all sources at load, on a repriced copy of the graph (pack
   load time; the kernel and the tick are unchanged).
 - The export's legs table carries the bulk costs and hours (export format 12); the reference
@@ -109,6 +114,11 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
 - Pipelines, the other bulk mode for crude and gas, are still not built (DESIGN 5.3, P8).
 - ADR 0017's route choice does not see the bulk rate; a network with route taus and bulk legs is
   rejected.
+- A network built without a graph (the fixture, hand-built test networks) has no repriced paths.
+  The fixture builds its bulk legs itself: its sea crossings at P154 times its sea cost per
+  tonne-km; it has no ports, so P155 has nothing to scale. Hand-built test networks without bulk
+  legs, and the fixture's unreachable-island variant (route taus), run with the rate off
+  (`TradeParams::bulk_off`).
 
 ## As built
 
@@ -138,11 +148,20 @@ the network is built once at load, so a run cannot change the rate on its own.
 3. H2 distance is outside -1.1 to -0.7 with the rate on (-0.463), and the rate moves it further
    from the band than off (-0.509). **Fail.**
 
-By the criterion, the rate stays off by default: P154 and P155 are 1 for every class, and class
-3 is clamped at nu = 0 with the miss recorded in ADR 0092 (Amendment 2026-10-30). The sourced
-values stay in the register for a later decision. The distance elasticity is outside the band
-with the rate off as well: the miss comes from the leg costs and the masses (ADR 0092, As
-built), not from this rate.
+By the criterion as written, the rate would stay off by default, and it did from 2026-10-30
+(task b2-1b) until the owner ruling below: P154 and P155 at 1 for every class, class 3 clamped at
+nu = 0 (ADR 0092, Amendment 2026-10-30).
+
+**Criterion 3 was ill-posed.** It assumed the distance elasticity was inside -1.1 to -0.7 before
+the rate. It was not: -0.509 with the rate off, -0.463 with it on. The miss comes from the leg
+costs and the masses (ADR 0092, As built), not from this rate, so the rate cannot be blamed for
+it. Criteria 1 and 2 pass. The numbers above stand as measured.
+
+**Owner ruling (2026-10-30, "Do the recommended"):** the rate is on by default. P154 is 0.026 and
+P155 0.40 for class 3, 1 for classes 0 to 2 (`TradeParams::default`, pre-P3 task B2c). Class 3
+has a root with the rate on (nu 0.0078 on the scratch pack of task b2-1b), so ADR 0092's clamp
+no longer applies to it; the clamp stays the general rule. The H2 distance miss stays open as a
+P2 gate question (B8). Status stays proposed.
 
 H2 per class at the fitted nu, both runs: classes 0 (2.393, pair-clustered s.e. 0.086, band 2.221
 to 2.566 against theta 2.91) and 1 (3.507, 0.257, 2.993 to 4.021 against 4.14) miss; class 2 (7.61,
