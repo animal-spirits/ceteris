@@ -1,0 +1,40 @@
+// Flat controls built only from tokens (ADR 0137).
+import { Tokens } from "tokens.slint";
+
+export component Toggle inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    // Checkable toggles flip on click; plain buttons only report it.
+    in property <bool> checkable: true;
+    callback clicked();
+    min-width: label.preferred-width + 2 * Tokens.pad;
+    min-height: label.preferred-height + Tokens.pad;
+    horizontal-stretch: 0;
+    background: root.checked ? Tokens.ink : touch.has-hover ? Tokens.rule : transparent;
+    border-color: Tokens.rule;
+    border-width: Tokens.hairline;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-checkable: root.checkable;
+    accessible-checked: root.checked;
+    accessible-action-default => { touch.clicked(); }
+    label := Text {
+        text: root.text;
+        color: root.checked ? Tokens.paper : Tokens.ink;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if root.checkable {
+                root.checked = !root.checked;
+            }
+            root.clicked();
+        }
+    }
+}
+
+export component Action inherits Toggle {
+    checkable: false;
+}

@@ -29,6 +29,10 @@ pub struct Style {
     /// Fill with county colours instead of province colours.
     pub county_fill: bool,
     pub county_borders: bool,
+    /// Provinces outlined in ink, outlined in paper, and lightened under the pointer.
+    pub selected: Option<u32>,
+    pub origin: Option<u32>,
+    pub hover: Option<u32>,
 }
 
 /// The features under a pixel; ids index the pack's tables.
@@ -409,6 +413,7 @@ impl Map {
         } else {
             (viewport[0] / (2.0 * camera.scale)).ceil() as i32 + 1
         };
+        let id = |p: Option<u32>| p.map_or(0, |p| p + 1);
         let rgba = |c: [u8; 3]| c.into_iter().chain([255]).map(|v| f32::from(v) / 255.0);
         let uniform: Vec<u8> = [cx, cy, kx, ky, -(reach as f32)]
             .iter()
@@ -421,8 +426,16 @@ impl Map {
                     .chain(rgba(INK))
                     .flat_map(f32::to_le_bytes),
             )
-            .chain(u32::from(style.county_borders).to_le_bytes())
-            .chain([0; 12])
+            .chain(
+                [
+                    u32::from(style.county_borders),
+                    id(style.selected),
+                    id(style.origin),
+                    id(style.hover),
+                ]
+                .into_iter()
+                .flat_map(u32::to_le_bytes),
+            )
             .collect();
         queue.write_buffer(&self.view_buffer, 0, &uniform);
 

@@ -223,6 +223,7 @@ fn borders_follow_ids_and_counties_pick() {
     let style = Style {
         county_fill: false,
         county_borders: true,
+        ..Style::default()
     };
     for (countries, edge_strength) in [([0, 0], 0.35), ([0, 1], 0.85)] {
         let mut map = Map::new(&device, &queue, &provinces, Some(&counties), &countries);
@@ -268,10 +269,48 @@ fn county_fill_replaces_province_colours() {
     let style = Style {
         county_fill: true,
         county_borders: false,
+        ..Style::default()
     };
     let target = map
         .render(&device, &queue, [100, 100], &camera, style, None)
         .expect("allocates");
     assert_eq!(read_pixel(&device, &queue, &target, 20, 50), BLUE);
     assert_eq!(read_pixel(&device, &queue, &target, 40, 50), RED);
+}
+
+#[test]
+fn selection_and_origin_outline_inside_the_edge_and_hover_lightens() {
+    let Some((device, queue)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
+    map.set_colours(&queue, Layer::Provinces, &[RED, BLUE]);
+    let camera = Camera::fit(100.0, 100.0);
+    let style = Style {
+        selected: Some(0),
+        origin: Some(1),
+        hover: Some(0),
+        ..Style::default()
+    };
+    let target = map
+        .render(&device, &queue, [100, 100], &camera, style, None)
+        .expect("allocates");
+    // Feature 0 spans pixels 10 to 39: two pixels inside its left edge are ink, the third is not.
+    let ink = [INK[0], INK[1], INK[2], 255];
+    assert_eq!(read_pixel(&device, &queue, &target, 10, 50), ink);
+    assert_eq!(read_pixel(&device, &queue, &target, 11, 50), ink);
+    let hovered = read_pixel(&device, &queue, &target, 25, 50);
+    let lightened = |base: u8, paper: u8| (0.3 * f32::from(paper) + 0.7 * f32::from(base)).round();
+    for c in 0..3 {
+        assert!(
+            (f32::from(hovered[c]) - lightened(RED[c], PAPER[c])).abs() <= 2.0,
+            "{hovered:?}"
+        );
+    }
+    assert_eq!(
+        read_pixel(&device, &queue, &target, 61, 50),
+        [PAPER[0], PAPER[1], PAPER[2], 255]
+    );
+    assert_eq!(read_pixel(&device, &queue, &target, 75, 50), BLUE);
 }

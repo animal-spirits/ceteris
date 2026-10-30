@@ -35,11 +35,26 @@ comparing runs.
 - **Workspace.** Its own cargo workspace in `native/` (owner, 2026-10-29), as `app/src-tauri`
   is, so Slint and wgpu stay out of the core's lockfile, CI and `cargo deny`. It reaches the
   core by path dependencies. At stage 3 it moves to `app/`.
-- **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, borders),
-  `labels` (anchors and placement), `ui` (`.slint` files compiled in by `slint-build`), `sim` (sim thread, view
-  publishing, ring), `commands` (registry and keymap). Arrow tables are read through `ceteris-geo`
-  and `ceteris-econ`. The `.fill` reader is the app's own (`fill.rs`, a few lines against the
-  format of `ceteris_pack::geo::fills`), so the app does not link the pack builder.
+- **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, borders,
+  selection marks), `labels` (anchors and placement), `modes` (colour per feature and legend),
+  `ramps` (the 0221 check), `inspect` (inspector rows), `freight` (least-cost trees on a worker
+  thread), `ui` (`.slint` files compiled in by `slint-build`, flat controls in `widgets.slint`),
+  `sim` (sim thread, view publishing, ring), `commands` (registry and keymap). Arrow tables are
+  read through `ceteris-geo` and `ceteris-econ`. The `.fill` reader is the app's own (`fill.rs`,
+  a few lines against the format of `ceteris_pack::geo::fills`), so the app does not link the
+  pack builder.
+- **Freight cost.** A worker thread loads `ceteris_geo::pack::Pack` at start (about 10 ms on
+  the 2000 pack), checks its provinces match `web/provinces.json`, and answers origins with
+  `PathCache` trees (about 7 ms each); only the latest origin is computed. A failure shows in
+  the error banner and leaves the other modes working.
+- **Look.** Tokens are Slint globals and `tokens.rs` for the shader. Fonts are bundled from
+  `ui/fonts/` (OFL): Source Serif 4 for map labels and headings, IBM Plex Sans Condensed for
+  panels, IBM Plex Mono for numbers. Controls are flat token-built toggles, not the std
+  widgets' accent style. The dark (slate) theme waits for its token values, which 0137 names
+  but does not give.
+- **UI scale.** `Tokens.scale` (85 to 200%, View menu) multiplies type, spacing and map
+  labels; panels cap at half the window so the legend and inspector never overlap. It is not
+  yet saved or read from the macOS text size; both arrive with the user config (step 5).
 - **Frame.** Slint's rendering notifier (`BeforeRendering`) runs the map pass into a texture
   the size of the map viewport and hands it to an `Image`. Picking renders feature ids into an
   R32Uint target and reads back one pixel on pointer move.
@@ -59,7 +74,7 @@ comparing runs.
 | Read-only view | Running N ticks in the app and headless gives the same state hash | `tests/sim_hash.rs` |
 | Run-ahead neutrality | Ring on and off give the same hash at every tick (0208) | `tests/sim_hash.rs` |
 | Picking | The id under a pixel is the feature whose triangle covers it | `tests/picking.rs`, offscreen |
-| Ramps | Adjacent classes stay apart under simulated CVD; sequential lightness monotonic (0221) | `tests/ramps.rs` |
+| Ramps | Adjacent classes at least 5 CIEDE2000 apart under normal vision and simulated protanopia, deuteranopia and tritanopia (Machado et al. 2009, severity 1); sequential lightness monotonic (0221) | `ramps.rs`, `modes.rs` unit tests |
 
 ## Parameters
 
@@ -75,7 +90,9 @@ n/a: the app computes nothing the core does not.
 - Offscreen wgpu tests (no window): fill pipeline renders the fixture's provinces; picking;
   projection round trips (screen to lon/lat to screen) on flat and globe.
 - Sim tests as in Invariants, on the econ fixture.
-- Ramp check in CI.
+- Ramp check in CI (unit tests in the `native` job). The political palette is categorical and
+  not yet gated: two of its eight slots come within 4.7 under protanopia. The flag-hue country
+  colours (art direction, 0137) replace it.
 - Slint panel tests with Slint's testing backend: the inspector shows the fields of a picked
   province; every panel renders at 200% without clipping.
 - Benchmark (owner's Mac, `CETERIS_BENCH=1` as in the Tauri app): frame time over a scripted
