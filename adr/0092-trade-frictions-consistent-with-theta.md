@@ -109,13 +109,24 @@ pack, H2 and the gateway count) wait until the full pack calibrates again:
   cross-border share over the ICIO economies. The model's share is the value the destinations of
   those countries buy from other countries over all they buy, at origin prices. Each evaluation
   is ADR 0089's stage 2 at stage 1's spending of the data state, held for every trial (controller
-  ruling, 2026-10-29), so the four classes are independent 1-D roots; Brent's method per class to
-  1e-9 in nu over [0, 10], the classes sharing each evaluation. On the fixture, targets made at
-  nu 0.15, 0.6, 0.35 and 1.2 are recovered to 1e-8 in 23 evaluations. The shares the calibrated
+  ruling, 2026-10-29), so the four classes are independent 1-D roots. Brent's method per class
+  narrows its bracket to 1e-9 in nu over [0, 10] on the computed shares, the classes sharing each
+  evaluation and every scaling starting from the one at nu 0. The root is known only to the
+  scaling's noise in the share over the share's slope: on the fixture, targets made at nu 0.15,
+  0.6, 0.35 and 1.2 come back within 2e-10 for classes 0 to 2 and 6.8e-9 for class 3, whose
+  share moves by only 2.7e-7 per unit nu (noise about 1e-15 in the share, so about 4e-9 in nu),
+  in 19 evaluations. The fixture test checks the shares relative to the target (1e-6), not the
+  PLAN's absolute 1e-6, which class 3's flat share would pass for any nu from 0 to about 4. The shares the calibrated
   steady state reaches, with stage 1 no longer at the data state, are printed after the
   calibration (the coupled check).
 - H2 per class: theta_c within 2 pair-clustered standard errors of the class's PPML estimate
-  (controller ruling, 2026-10-29). The kernel-control regression is not built yet.
+  (controller ruling, 2026-10-29). The kernel-control regression is not built yet; it is on the
+  B8 list.
+- Interfaces as built (they differ from the PLAN): `fit_border_nu(inp, target, icio, limits,
+  progress) -> Result<Fit, _>`, without `u_star` (stage 1 at the data state does not use it),
+  with the ICIO flags and returning the shares and the evaluation count with the nu;
+  `target_shares(pack, theta_class) -> Result<([f64; 4], Vec<bool>), String>`, which also returns
+  the ICIO flag of every pack country.
 - ICIO 2000 targets on the 2000 pack (80 ICIO economies): 0.154 (food; chemicals and metals),
   0.309 (machinery, electronics and vehicles), 0.139 (agriculture; light manufacturing), 0.296
   (crude oil, gas and refined fuels; coal and other mining).

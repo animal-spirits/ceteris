@@ -512,11 +512,22 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    from other countries over all they buy, at origin prices. Each evaluation is stage 2 at stage
    1's spending of the data state (r = 1, no rebates, the data state's buyer prices and PIGL
    weights), held across trials, so each class's share depends on its own nu only and falls as it
-   rises; the four roots are found by Brent's method per class to 1e-9 in nu over [0, 10] (the
-   upper end halved where the scaling fails there), the classes sharing each evaluation and each
-   scaling starting from the last one's weights (23 evaluations on the fixture,
-   `nu_fit_matches_cross_border_share`). A target outside the shares at the bracket's ends stops
-   the calibration, naming the class. The stages then run at the fitted nu (crossing factors and
+   rises; the four roots are found by Brent's method per class, its bracket narrowed to 1e-9 in
+   nu over [0, 10] (the upper end halved where the scaling fails there, on a scaling failure
+   only), the classes sharing each evaluation and every scaling starting from the scaling at nu
+   0, so the result does not depend on the order of the evaluations (19 evaluations on the
+   fixture, `nu_fit_matches_cross_border_share`). The root itself is resolved only to the
+   scaling's noise in the share over the share's slope: on the fixture 6.8e-9 for class 3, whose
+   share moves by 2.7e-7 per unit nu, and 2e-10 or better for the others. That test checks the
+   shares relative to their target (1e-6), a deviation from the PLAN's absolute 1e-6, which class
+   3's flat share passes for any nu from 0 to about 4. A target outside the shares at the
+   bracket's ends stops the calibration, naming the class (`nu_fit_is_monotone_and_bracketed`,
+   both ends). Interfaces as built: `border::fit_border_nu(inp, target, icio, limits, progress)
+   -> Result<Fit, CalibrationError>` (no `u_star`, which stage 1 at the data state does not use;
+   the ICIO flags; the shares and the evaluation count with the nu) and
+   `border::target_shares(pack, theta_class) -> Result<([f64; 4], Vec<bool>), String>` (also the
+   ICIO flag of every pack country), in place of the PLAN's `fit_border_nu(inp, u_star, target,
+   limits) -> [f64; 4]` and `target_shares(pack) -> [f64; 4]`. The stages then run at the fitted nu (crossing factors and
    arrival shares rescaled, base buyer prices recomputed), the calibration tables record it
    (`econ_calib.arrow` metadata `border_nu`, calibration format 4), and `EconInputs::calibrate`
    reads it into `EconInputs::border_nu`, from which `EconInputs::trade_params` builds the trade

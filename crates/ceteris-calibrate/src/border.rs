@@ -18,12 +18,14 @@ use ceteris_reference::model::Model;
 use crate::steady::{self, CalibrationError, Limits};
 use crate::write::Table;
 
-/// Theta classes (`ceteris_trade::N_CLASSES`).
-pub const N_CLASSES: usize = 4;
+pub use ceteris_trade::N_CLASSES;
 /// The bracket of nu searched: no friction, and a friction ten times the good's value, which cuts
 /// the frictionless kernel to 9e-4 at theta 2.91 and 2e-18 at 16.91.
 pub const NU_MAX: f64 = 10.0;
-/// The fit ends when every class's root is known to this in nu.
+/// Brent ends when every class's bracket is this narrow in nu on the computed shares. The root
+/// itself is known only to the scaling's noise in the share over the share's slope in nu: on the
+/// fixture about 7e-9 for class 3, whose share moves by 2.7e-7 per unit nu (the scaling stops
+/// at 1e-13, which leaves about 1e-15 in that share), and 2e-10 or better for the others.
 pub const NU_TOL: f64 = 1e-9;
 /// Halvings of the upper end of a class's bracket where the scaling fails there.
 pub const MAX_HALVINGS: usize = 10;
@@ -163,20 +165,37 @@ pub fn target_shares(
     Ok((target, flag))
 }
 
-/// Shares of every class at border frictions `nu`, stage 2 at `spend` and `supply` (P, G);
-/// `start` warms the scaling and is replaced by its solution.
+/// Why an evaluation of the shares failed: the scaling of stage 2 (it did not converge or left
+/// f64), which a smaller nu may cure, or anything else.
+enum Failure {
+    Scaling(CalibrationError),
+    Other(CalibrationError),
+}
+
+impl From<Failure> for CalibrationError {
+    fn from(f: Failure) -> Self {
+        match f {
+            Failure::Scaling(e) | Failure::Other(e) => e,
+        }
+    }
+}
+
+/// Shares of every class at border frictions `nu`, stage 2 at `spend` and `supply` (P, G), the
+/// scaling started from `start`; and the scaling's log weights.
 fn shares_at(
     inp: &Inputs,
     nu: &[f64; N_CLASSES],
     spend: &Mat,
     supply: &Mat,
     icio: &[bool],
-    start: &mut Option<Mat>,
+    start: Option<&Mat>,
     limits: Limits,
-) -> Result<[f64; N_CLASSES], CalibrationError> {
-    let at = at_border_nu(inp, nu)?;
-    let m = Model::new(&at)?;
-    let scaling = steady::sinkhorn_limited(&m, spend, supply, start.as_ref(), limits.max_sweeps)?;
+) -> Result<([f64; N_CLASSES], Mat), Failure> {
+    let other = |e: String| Failure::Other(e.into());
+    let at = at_border_nu(inp, nu).map_err(other)?;
+    let m = Model::new(&at).map_err(other)?;
+    let scaling = steady::sinkhorn_limited(&m, spend, supply, start, limits.max_sweeps)
+        .map_err(Failure::Scaling)?;
     let (n_p, n_g) = (at.n_provinces(), at.n_goods());
     let lw = &scaling.log_weight;
     let mut top = vec![f64::NEG_INFINITY; n_g];
@@ -194,8 +213,8 @@ fn shares_at(
             1.0
         }
     });
-    *start = Some(scaling.log_weight);
-    Ok(cross_border_shares(&at, &price, spend, icio)?)
+    let share = cross_border_shares(&at, &price, spend, icio).map_err(other)?;
+    Ok((share, scaling.log_weight))
 }
 
 /// The cross-border share of every class at border frictions `nu`, over the countries flagged
@@ -207,7 +226,7 @@ pub fn data_state_shares(
     limits: Limits,
 ) -> Result<[f64; N_CLASSES], CalibrationError> {
     let (spend, supply) = steady::data_state_spending(inp, limits)?;
-    shares_at(inp, nu, &spend, &supply, icio, &mut None, limits)
+    Ok(shares_at(inp, nu, &spend, &supply, icio, None, limits)?.0)
 }
 
 /// Brent's method (Brent 1973, `zeroin`) on one bracket, driven from outside: [`Brent::next`]
@@ -306,8 +325,10 @@ impl Brent {
 /// countries flagged `icio`, at the stage 1 spending of the data state of `inp`. Each class's
 /// share falls as its nu rises; a target outside the shares at nu 0 and the bracket's upper end
 /// ([`NU_MAX`], lower where the scaling fails there) is an error naming the class. A class with a
-/// NaN target (no ICIO use) keeps the inputs' nu. Brent's method per class, to [`NU_TOL`] in nu;
-/// the classes share each evaluation, and each scaling starts from the last one's weights.
+/// NaN target (no ICIO use) keeps the inputs' nu. Brent's method per class, its bracket to
+/// [`NU_TOL`] in nu (the root's resolution is coarser where a class's share is flat, see
+/// [`NU_TOL`]); the classes share each evaluation, and every scaling starts from the scaling at
+/// nu 0, so the fit does not depend on the order of its evaluations.
 pub fn fit_border_nu(
     inp: &Inputs,
     target: &[f64; N_CLASSES],
@@ -325,15 +346,27 @@ pub fn fit_border_nu(
     let (spend, supply) = steady::data_state_spending(inp, limits)?;
     let own: [f64; N_CLASSES] = std::array::from_fn(|c| inp.border_nu[c]);
     let fitted: Vec<usize> = (0..N_CLASSES).filter(|&c| !target[c].is_nan()).collect();
-    let mut start = None;
     let mut evaluations = 0;
-    let mut shares = |nu: &[f64; N_CLASSES]| -> Result<[f64; N_CLASSES], CalibrationError> {
+    let at = |nu: &[f64; N_CLASSES]| -> [f64; N_CLASSES] {
+        std::array::from_fn(|c| if fitted.contains(&c) { nu[c] } else { own[c] })
+    };
+    // Every scaling starts from that at nu 0, so an evaluation depends on nu alone, not on the
+    // path of the search.
+    evaluations += 1;
+    let (at_zero, start) = shares_at(
+        inp,
+        &at(&[0.0; N_CLASSES]),
+        &spend,
+        &supply,
+        icio,
+        None,
+        limits,
+    )?;
+    let mut shares = |nu: &[f64; N_CLASSES]| {
         evaluations += 1;
-        let nu = std::array::from_fn(|c| if fitted.contains(&c) { nu[c] } else { own[c] });
-        shares_at(inp, &nu, &spend, &supply, icio, &mut start, limits)
+        shares_at(inp, &at(nu), &spend, &supply, icio, Some(&start), limits).map(|s| s.0)
     };
     // f = share - target, falling in nu
-    let at_zero = shares(&[0.0; N_CLASSES])?;
     let mut hi = [NU_MAX; N_CLASSES];
     let mut brent: Vec<Option<Brent>> = vec![None; N_CLASSES];
     // The upper end, one class at a time: where the scaling fails there (its log-domain weights
@@ -346,7 +379,7 @@ pub fn fit_border_nu(
             nu[c] = hi[c];
             match shares(&nu) {
                 Ok(share) => break share[c] - target[c],
-                Err(e) if halvings < MAX_HALVINGS => {
+                Err(Failure::Scaling(e)) if halvings < MAX_HALVINGS => {
                     progress(&format!(
                         "class {c}: no scaling at nu {} ({e}); halving",
                         hi[c]
@@ -354,7 +387,9 @@ pub fn fit_border_nu(
                     hi[c] *= 0.5;
                     halvings += 1;
                 }
-                Err(e) => return Err(format!("class {c}: {e}").into()),
+                Err(Failure::Scaling(e) | Failure::Other(e)) => {
+                    return Err(format!("class {c}: {e}").into());
+                }
             }
         };
         let f_lo = at_zero[c] - target[c];
