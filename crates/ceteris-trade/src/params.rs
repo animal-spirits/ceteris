@@ -81,14 +81,15 @@ pub struct TradeParams {
     /// `Network::route_taus` stays `None`.
     pub theta_r: f64,
     /// P154 bulk freight rate (ADR 0247): multiplier on the sea cost per tonne-km (P04c, sea and
-    /// canal edges) for the legs of each theta class. 1 for classes 0 to 2; class 3 (fuels and
-    /// mining) 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
-    /// km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC, Parameters) over
-    /// P04c. It reaches the kernel only through `Network::bulk`.
+    /// canal edges) for the legs of each theta class. Default 1 for every class: the rate is off,
+    /// since ADR 0247's ablation test failed on H2 distance. The sourced value for class 3
+    /// (fuels and mining) is 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne
+    /// against sea km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC,
+    /// Parameters) over P04c. It reaches the kernel only through `Network::bulk`.
     pub bulk_sea: [f64; N_CLASSES],
     /// P155 bulk freight rate (ADR 0247): multiplier on the listed and minor port fees (P04m)
-    /// per theta class. 1 for classes 0 to 2; class 3 0.40, half the fixed part of the same
-    /// rates over the listed-port fee.
+    /// per theta class. Default 1 for every class (off, as P154); the sourced value for class 3
+    /// is 0.40, half the fixed part of the same rates over the listed-port fee.
     pub bulk_port: [f64; N_CLASSES],
 }
 
@@ -146,8 +147,8 @@ impl Default for TradeParams {
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
-            bulk_sea: [1.0, 1.0, 1.0, 0.026],
-            bulk_port: [1.0, 1.0, 1.0, 0.40],
+            bulk_sea: [1.0; N_CLASSES],
+            bulk_port: [1.0; N_CLASSES],
         }
     }
 }
