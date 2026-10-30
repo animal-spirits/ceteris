@@ -278,3 +278,35 @@ The regressions are:
   limit on the last pass's map alone;
 - `near_singular_cycle_keeps_its_limit`, a loop gain of 1 - 1e-15, within the problem's
   conditioning.
+
+## Amendment (2026-10-30): bounded descent and the Leontief tolerance of local draws
+
+**Bounded descent.** "Lowers it by rounding units until the fit holds" had no bound. Where the
+closed form puts the root above a piece on which U is flat, the evaluated fit fails by rounding
+along the whole piece, and the descent walks it one unit at a time. On the installed pack,
+frictionless, under the B6 split rule, a province's construction producer had no capacity
+(R = 0) and a user sat at its stock threshold, so good 8's root came out at 1 with the fit
+holding only below 0.9776. That is about 2e14 units: one tick ran over 40 minutes, and the pass
+cap did not bound it, since the walk is inside a single step. The step now descends at most 8
+units, then bisects the bit patterns of [0, x]: at most 64 more evaluations. The result is the
+same, the largest f64 at most the root at which the good fits as evaluated. The evaluated fit
+is monotone in the fill: each need is a product of a min over the fills, and rounded products,
+maxima and sums are monotone; the producer's output does not depend on its own good. 0 always
+fits, and positive f64 order as their bits. No golden moves. Regression:
+`local::tests::a_root_above_a_flat_piece_descends_in_bounded_work`, the captured province.
+
+**Leontief tolerance of local draws.** "That is the Leontief invariant's own tolerance" was not
+so. The invariant compared each user's use with 1e-12 of its own coef Y, but two roundings of
+the good's flows land on single users:
+- where the passes stop short, a good is short by at most FIT = 1e-12 of U + R. With
+  U <= R (1 + 2 FIT), the users miss up to 2 FIT (1 + FIT) R together, pro rata. Relative to one
+  user's need that is up to 2e-12: the 1.1e-12 to 2e-12 breaches under the B6 rule;
+- the users draw from the market account one after the other. Each draw rounds its balance by
+  at most eps / 2 of what it held, about the units drawn D, since the market cap binds only
+  where it ends near empty. With the split's own sum, that is up to 2 (N_GOODS + 1) roundings,
+  and the last user absorbs them. The proptest seed of `conservation_over_120_ticks` (tick 43,
+  enterprise 41, good 7) misses 1.8e-31 of a need of 1.5e-22, which is 1.6e-17 of D = 1.1e-14.
+
+The invariant now allows, for a local good, 1e-12 of max(coef Y, available) plus
+(2 FIT (1 + FIT) + 2 (N_GOODS + 1) eps) D, where D is the units of the good drawn at the
+province market that tick (about 2.005e-12 D). Traded inputs keep 1e-12.

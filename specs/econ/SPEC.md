@@ -251,9 +251,12 @@ max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock 
 ```
 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
-lowers its root by rounding units until it does), except where the passes stop at what f64
-resolves: there a good may be short by rounding, at most about 9e-13 of its flows, which the
-split shares pro rata within the Leontief invariant. That holds by construction: each good fit
+lowers its root to the largest f64 at which it does: 8 units in the last place one at a time,
+then a bisection of the bit patterns of [0, x], at most 64 evaluations, which gives the same
+fill since the evaluated fit is monotone in it; ADR 0093, amendment of 2026-10-30), except where
+the passes stop at what f64 resolves: there a good may be short by rounding, at most about
+9e-13 of its flows, which the split shares pro rata within the Leontief invariant's allowance
+for local draws (Invariants). That holds by construction: each good fit
 at its own step in the last pass, its R fell later in the pass by at most the relative fall of
 its producer's binding fill (below the margin), and other falls only lower its U. No clearing
 step is needed. The draws are
@@ -262,7 +265,14 @@ household demand under every S11 setting (the chain runs before E3); at T3 the r
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
 services at 0.3 and construction and services each other at 0.2 it binds in 415 of 3,000 province
-ticks over 120 ticks and settles in at most 6 passes (`local_chain_terminates_on_cycles`). On
+ticks over 120 ticks and ends within the pass cap without a stall
+(`local_chain_terminates_on_cycles`). The cap, not a smaller count, bounds the passes: two set up
+a cycle, a jump to its fixed point takes a confirming pass, and the last changes nothing; each
+kink the fall crosses (a user's stock threshold, a switch of its binding fill) costs a pass, and
+each jump stopped by its doubling short of one costs another. The most is 11 passes, province 5
+at tick 79, after ADR 0200 (6 before): utilities and construction, inputs of each other with no
+stocks but residues of 1e-45 to 5e-12 from earlier collapses, fall at a loop gain of 0.7 to 0.9
+per pass to 0, crossing the four residue thresholds one by one. On
 1,000,000 random small provinces with coefficients up to 0.6, all but 129 settle within 12
 passes, the most take 257 and none takes more than 0.3 ms; over five other families of 1,000,000
 (higher coefficients, no stocks, up to 10 enterprises, scarce stocks, near-balanced markets) 7
@@ -690,7 +700,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Selection | What T2b creates less what it destroys, per traded good (selection at home purchases and in transit, the melt), equals `dispatch`'s selection term less its melt (ADR 0200; trade SPEC, Invariants) | 1e-9 of the good's delivered and shipped units, plus 1e-12 of its market turnover | every tick; `goods_invariant_holds_with_selection` (120 ticks of the fixture) |
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |
-| Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 relative | every tick |
+| Leontief | Inputs used = coef_k Y, traded from stock, local through the same-tick chain | 1e-12 of max(coef_k Y, available); a local good also 2.005e-12 of D_k, the units of k drawn at the province market that tick: where the passes stop short a good misses up to 2 FIT (1 + FIT) of its draws, pro rata, and the draws from the market account round its balance up to 2 (N_GOODS + 1) times, which the last user absorbs (ADR 0093, amendment of 2026-10-30) | every tick; `conservation_over_120_ticks` seed of tick 43, good 7 |
 | Local fit | Each local good's uncovered need at most what its producer leaves, U_k <= R_k (exact where the passes end on a pass that changes nothing; to 1e-12 of the flows where they stop at what f64 resolves, ADR 0093 bounded work, seed 7778631857305059895) | 1e-12 of U_k + R_k | `fits_up_to_rounding` in the fill tests of `p2_properties.rs` |
 | Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
