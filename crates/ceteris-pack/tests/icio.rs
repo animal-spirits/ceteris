@@ -464,14 +464,6 @@ fn oil_and_gas_from_rents_produce_with_the_world_column() {
 }
 
 #[test]
-fn rents_below_the_donor_split_leave_oil_and_gas_as_the_donor() {
-    // 0.01 of GDP times 2 is 20, below the donor's 60 of the 150 (4 of 10): Albania in 2000.
-    let got = oil(&with_rents(0.01, 0.0));
-    assert_eq!(got.table.va, one("XXX", &wdi(), &obs()).table.va);
-    assert_eq!(got.table.io, donors()["BBB"].io);
-}
-
-#[test]
 fn without_rents_oil_and_gas_keep_the_donor_column() {
     let got = one("XXX", &wdi(), &obs());
     assert_eq!(got.table.io, donors()["BBB"].io);

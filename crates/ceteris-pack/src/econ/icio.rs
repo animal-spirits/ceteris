@@ -334,38 +334,25 @@ fn oil_gas_apart(
     groups
 }
 
-/// VA by good (million USD), its basis, and whether rents set crude oil and gas, from what WDI
-/// and the population give for this country.
-fn value_added(donor: &CountryIo, l: &Level) -> ([f64; N_GOODS], Basis, bool) {
+/// VA by good (million USD) and its basis, from what WDI and the population give for this country.
+fn value_added(donor: &CountryIo, l: &Level) -> ([f64; N_GOODS], Basis) {
     if l.gdp > 0.0 {
         let gdp = l.gdp / 1e6;
-        let by_shares = |shares: &[(f64, Vec<usize>)]| {
-            shares
-                .iter()
-                .map(|(t, g)| split(gdp * t, g, donor))
-                .fold([0.0; N_GOODS], add)
-        };
-        let (shares, basis) = groups(l.shares, l.ratio);
-        let va = by_shares(&shares);
-        // Rents are a lower bound on VA (VA pays labour and capital too): they only raise the
-        // donor's crude oil and gas (ADR 0256).
+        let (mut shares, basis) = groups(l.shares, l.ratio);
         if let Some(r) = l.shares.rents {
-            let from_rents = by_shares(&oil_gas_apart(shares, r * l.oil_gas_ratio, l.oil_gas_cap));
-            if from_rents[OIL_GAS] > va[OIL_GAS] {
-                return (from_rents, basis, true);
-            }
+            shares = oil_gas_apart(shares, r * l.oil_gas_ratio, l.oil_gas_cap);
         }
-        return (va, basis, false);
+        let va = shares
+            .iter()
+            .map(|(t, g)| split(gdp * t, g, donor))
+            .fold([0.0; N_GOODS], add);
+        return (va, basis);
     }
     if l.people > 0.0 {
         let per_person = pairwise_sum(&donor.va) / l.donor_people * l.scale.unwrap_or(1.0);
-        return (
-            split(l.people * per_person, &ALL, donor),
-            Basis::Donor,
-            false,
-        );
+        return (split(l.people * per_person, &ALL, donor), Basis::Donor);
     }
-    ([0.0; N_GOODS], Basis::None, false)
+    ([0.0; N_GOODS], Basis::None)
 }
 
 /// The settings `impute` takes as constants in the pack build.
@@ -405,9 +392,8 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// no share, GDP times the ICIO median VA over GDP (wdi_gdp). Where WDI has oil or gas rents,
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
 /// its group (all of industry where industry less manufacturing is too small) and at most the
-/// largest ICIO share of crude oil and gas in industry of it (ADR 0249), when that is more than
-/// the donor's split gives, and then produced with the ICIO world crude oil and gas inputs per
-/// unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
+/// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
+/// world crude oil and gas inputs per unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
@@ -505,9 +491,10 @@ pub fn impute(
             oil_gas_cap,
             scale: level.map(|x| x / ranking.gdp_per_capita[&name]),
         };
-        let (va, basis, from_rents) = value_added(d, &level);
+        let (va, basis) = value_added(d, &level);
         // Crude oil and gas set by rents produces with the ICIO world technology, not the
         // donor's, which may have next to no such sector (ADR 0256).
+        let from_rents = gdp > 0.0 && shares.rents.is_some();
         let mut io = d.io;
         if from_rents {
             for (k, row) in io.iter_mut().enumerate() {
