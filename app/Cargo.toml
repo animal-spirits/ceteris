@@ -20,9 +20,20 @@ ceteris-geo = { path = "../crates/ceteris-geo" }
 ceteris-trade = { path = "../crates/ceteris-trade" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tracy-client = { version = "0.18", optional = true }
+
+[features]
+# Tracy zones on the UI and sim threads, frame marks, and plots of the map passes' GPU time;
+# connect a Tracy profiler that speaks tracy-client 0.18's protocol to the running app.
+profile = ["dep:tracy-client"]
 
 [build-dependencies]
 slint-build = "=1.18.1"
 
 [dev-dependencies]
 pollster = "0.4"
+
+# This workspace does not inherit the root workspace's profile; the sim it links needs the same.
+[profile.release]
+lto = "fat"
+codegen-units = 1

@@ -2,10 +2,12 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
+use std::thread::JoinHandle;
 use std::time::Instant;
 
 use ceteris_app::bench::Bench;
 use ceteris_app::camera::Camera;
+use ceteris_app::chunks::Chunks;
 use ceteris_app::clock::{self, Clock};
 use ceteris_app::commands::{self, Command};
 use ceteris_app::econ::{self, View};
@@ -17,11 +19,12 @@ use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes::{self, Mode};
 use ceteris_app::sim::Runner;
 use ceteris_app::web::{Counties, Provinces};
+use ceteris_app::zone;
 use ceteris_core::sim::Sim;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_trade::TradeParams;
 use slint::platform::Key;
-use slint::{Color, ModelRc, VecModel};
+use slint::{Color, Model, ModelRc, VecModel};
 
 slint::include_modules!();
 
@@ -69,12 +72,39 @@ fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
     Rc::new(VecModel::from(items)).into()
 }
 
+/// Brings `model` to `rows`, changing only rows that differ, so Slint keeps the items of
+/// unchanged rows.
+fn sync<T: Clone + PartialEq + 'static>(model: &VecModel<T>, rows: Vec<T>) {
+    let n = model.row_count();
+    for (i, row) in rows.iter().enumerate().take(n) {
+        if model.row_data(i).as_ref() != Some(row) {
+            model.set_row_data(i, row.clone());
+        }
+    }
+    for i in (rows.len()..n).rev() {
+        model.remove(i);
+    }
+    for row in rows.into_iter().skip(n) {
+        model.push(row);
+    }
+}
+
+/// The fills and their chunks, built on a worker while the window starts.
+type Prepared = (
+    Arc<Fill>,
+    Option<Arc<Fill>>,
+    JoinHandle<(Chunks, Option<Chunks>)>,
+);
+
 struct State {
     /// Taken when the map uploads them.
-    fills: Option<(Fill, Option<Fill>)>,
+    fills: Option<Prepared>,
     provinces: Provinces,
     counties: Option<Counties>,
-    anchors: Anchors,
+    /// Built on a worker; labels show once they arrive.
+    anchors: Option<Anchors>,
+    anchoring: Option<JoinHandle<Anchors>>,
+    labels: Rc<VecModel<MapLabel>>,
     /// The camera and viewport the labels were placed for.
     labelled: Option<(Camera, [f64; 2])>,
     style: Style,
@@ -107,6 +137,34 @@ struct State {
 }
 
 impl State {
+    /// Places the labels for the current camera unless they already are; true if they moved.
+    /// Called where the camera changes, so labels and map show the same frame.
+    fn place_labels(&mut self) -> bool {
+        let (Some(camera), Some(anchors)) = (self.camera, self.anchors.as_ref()) else {
+            return false;
+        };
+        let viewport = self.viewport;
+        if self.labelled == Some((camera, viewport)) {
+            return false;
+        }
+        zone!("labels");
+        self.labelled = Some((camera, viewport));
+        let em = 12.0 * self.scale_factor * self.ui_scale;
+        let k = self.scale_factor as f32;
+        let placed = anchors
+            .place(&camera, viewport, em)
+            .into_iter()
+            .map(|l| MapLabel {
+                text: l.text.into(),
+                x: l.at[0] as f32 / k,
+                y: l.at[1] as f32 / k,
+                country: l.country,
+            })
+            .collect();
+        sync(&self.labels, placed);
+        true
+    }
+
     fn physical(&self, x: f32, y: f32) -> [f64; 2] {
         [
             f64::from(x) * self.scale_factor,
@@ -127,6 +185,7 @@ impl State {
 
     /// Recolours the map for the current mode and refreshes the legend.
     fn paint(&mut self, app: &AppWindow) {
+        zone!("paint");
         let costs = (self.mode == Mode::Cost)
             .then(|| self.costs().map(|c| &c.cost[..]))
             .flatten();
@@ -209,6 +268,7 @@ impl State {
 impl State {
     /// Takes views from the ring, advances the clock and shows the date (ADR 0208).
     fn present(&mut self, app: &AppWindow) {
+        zone!("present");
         let now = Instant::now();
         let seconds = self
             .last_frame
@@ -239,14 +299,14 @@ impl State {
         };
         let ready = self.current.is_some();
         app.set_running(ready);
-        app.set_date(
-            if ready {
-                self.clock.date()
-            } else {
-                "loading the economy".into()
-            }
-            .into(),
-        );
+        let date = if ready {
+            self.clock.date()
+        } else {
+            "loading the economy".into()
+        };
+        if app.get_date() != date.as_str() {
+            app.set_date(date.into());
+        }
         app.set_tick(self.current.as_ref().map_or(0, |v| v.tick as i32));
         app.set_playing(self.clock.playing);
         app.set_speed(i32::from(self.clock.speed));
@@ -311,6 +371,7 @@ impl State {
                 }
             }
         }
+        self.place_labels();
         // Keep the frame clock from counting the paused time.
         self.last_frame = None;
         app.window().request_redraw();
@@ -334,9 +395,11 @@ fn mode(app: &AppWindow) -> Mode {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "profile")]
+    tracy_client::Client::start();
     let pack = pack_dir();
     let dir = pack.join("web");
-    let fill = Fill::read(&dir.join("provinces.fill"))?;
+    let fill = Arc::new(Fill::read(&dir.join("provinces.fill"))?);
     let provinces = Provinces::read(&dir.join("provinces.json"))?;
     // Counties are optional: a pack built without them still opens.
     let county_fill = Fill::read(&dir.join("counties.fill"));
@@ -345,10 +408,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Ok(_), Ok(_)) => None,
         (Err(e), _) | (_, Err(e)) => Some(format!("counties not found, rebuild the pack: {e}")),
     };
+    let county_fill = county_fill.ok().map(Arc::new);
+    // Both run while the window and the GPU device start.
+    let chunking = {
+        let (p, c) = (fill.clone(), county_fill.clone());
+        std::thread::spawn(move || (Chunks::new(&p), c.as_deref().map(Chunks::new)))
+    };
+    let anchoring = {
+        let (f, p) = (fill.clone(), provinces.clone());
+        std::thread::spawn(move || Anchors::new(&f, &p))
+    };
     let bench = std::env::var_os("CETERIS_BENCH").map(|_| Bench::new());
 
+    // Timestamp queries time the map passes for the benchmark and Tracy.
+    let wgpu_config = if bench.is_some() || cfg!(feature = "profile") {
+        let mut settings = slint::wgpu_30::WGPUSettings::default();
+        settings.device_required_features = slint::wgpu_30::wgpu::Features::TIMESTAMP_QUERY;
+        slint::wgpu_30::WGPUConfiguration::Automatic(settings)
+    } else {
+        slint::wgpu_30::WGPUConfiguration::default()
+    };
     slint::BackendSelector::new()
-        .require_wgpu_30(slint::wgpu_30::WGPUConfiguration::default())
+        .require_wgpu_30(wgpu_config)
         .select()?;
     let app = AppWindow::new()?;
     if let Some(e) = county_error {
@@ -367,15 +448,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         waker(&app),
     );
+    let labels = Rc::new(VecModel::default());
+    app.set_labels(labels.clone().into());
     let state = Rc::new(RefCell::new(State {
-        anchors: Anchors::new(&fill, &provinces),
+        anchors: None,
+        anchoring: Some(anchoring),
+        labels,
         labelled: None,
-        fills: Some((fill, county_fill.ok())),
+        fills: Some((fill, county_fill, chunking)),
         provinces,
         counties: counties.ok(),
-        // The benchmark recolours counties, so it shows them.
+        // The benchmark recolours counties, so it shows them, unless asked for the default
+        // view (`CETERIS_BENCH=default`).
         style: Style {
-            county_fill: bench.is_some(),
+            county_fill: bench.is_some()
+                && std::env::var_os("CETERIS_BENCH").is_none_or(|v| v != "default"),
             ..Style::default()
         },
         map: None,
@@ -409,6 +496,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(c) = s.camera.as_mut() {
             c.pan(dx, dy);
         }
+        s.place_labels();
         weak.upgrade().inspect(|a| a.window().request_redraw());
     });
     let s = state.clone();
@@ -419,6 +507,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(c) = s.camera.as_mut() {
             c.zoom_at(viewport, px, (f64::from(delta) / 240.0).exp2());
         }
+        s.place_labels();
         weak.upgrade().inspect(|a| a.window().request_redraw());
     });
     for click in [true, false] {
@@ -526,17 +615,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s = state.borrow_mut();
         match rendering {
             slint::RenderingState::RenderingSetup => {
-                let (fill, counties) = s.fills.take().expect("setup runs once");
-                s.map = Some(Map::new(
+                let (fill, counties, chunking) = s.fills.take().expect("setup runs once");
+                let (chunks, county_chunks) = chunking.join().expect("chunking does not panic");
+                s.map = Some(Map::with_chunks(
                     device,
                     queue,
-                    &fill,
-                    counties.as_ref(),
+                    (&fill, chunks),
+                    counties.as_deref().zip(county_chunks),
                     &s.provinces.country,
                 ));
             }
             slint::RenderingState::BeforeRendering => {
+                zone!("before rendering");
                 s.present(&app);
+                if s.anchoring.as_ref().is_some_and(JoinHandle::is_finished) {
+                    let anchors = s.anchoring.take().map(JoinHandle::join);
+                    s.anchors = anchors.and_then(Result::ok);
+                }
+                if s.anchoring.is_some() {
+                    app.window().request_redraw();
+                }
                 match s.freight.poll() {
                     Some(Ok(costs)) => {
                         s.costs = Some(costs);
@@ -550,26 +648,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let viewport = s.physical(app.get_map_width(), app.get_map_height());
                 s.viewport = viewport.map(|v| v.round().max(1.0));
                 let viewport = s.viewport;
-                let camera = *s
+                let mut camera = *s
                     .camera
                     .get_or_insert_with(|| Camera::fit(viewport[0], viewport[1]));
-                if s.labelled != Some((camera, viewport)) {
-                    s.labelled = Some((camera, viewport));
-                    let em = 12.0 * s.scale_factor * s.ui_scale;
-                    let k = s.scale_factor as f32;
-                    let labels = s
-                        .anchors
-                        .place(&camera, viewport, em)
-                        .into_iter()
-                        .map(|l| MapLabel {
-                            text: l.text.into(),
-                            x: l.at[0] as f32 / k,
-                            y: l.at[1] as f32 / k,
-                            country: l.country,
-                        })
-                        .collect();
-                    app.set_labels(model(labels));
-                    // Text changes made while rendering show on the next frame.
+                // The benchmark moves the real camera, so its frames include label placement.
+                if let State {
+                    bench: Some(b),
+                    map: Some(m),
+                    ..
+                } = &mut *s
+                {
+                    camera = b.frame(m, queue, viewport, camera);
+                    s.camera = Some(camera);
+                }
+                // Placed here only when the camera did not move through a callback: the first
+                // frame, a resize, a UI scale change, anchors arriving. Text changes made while
+                // rendering show on the next frame.
+                if s.place_labels() {
                     app.window().request_redraw();
                 }
                 let State {
@@ -589,10 +684,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(fill) = next_fill.take() {
                     map.set_next_colours(queue, &fill);
                 }
-                let camera = match bench.as_mut() {
-                    Some(b) => b.frame(map, queue, viewport, camera),
-                    None => camera,
-                };
                 let pick = if map.pick_pending() {
                     None
                 } else {
@@ -614,6 +705,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Err(e) => eprintln!("map texture: {e}"),
                     }
                 }
+                if let (Some(b), Some(t)) = (bench.as_mut(), map.gpu_times()) {
+                    b.gpu(t);
+                }
                 if let Some(picked) = map.poll_pick(device) {
                     let click = s.picking.take().unwrap_or(false);
                     s.picked(&app, picked, click);
@@ -623,6 +717,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             slint::RenderingState::AfterRendering => {
+                #[cfg(feature = "profile")]
+                tracy_client::frame_mark();
                 if let Some(b) = s.bench.take_if(|b| b.done()) {
                     b.report();
                     let _ = slint::quit_event_loop();
