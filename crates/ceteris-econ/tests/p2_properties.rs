@@ -9,7 +9,7 @@ use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_i
 use ceteris_econ::inputs::EconInputs;
 use ceteris_econ::local::{self, Province};
 use ceteris_econ::params::Technology;
-use ceteris_econ::production::{rho, value_added};
+use ceteris_econ::production::{labour_for_value_added, rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
     DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, WRITE_OFF, active_cells,
@@ -59,12 +59,13 @@ proptest! {
 }
 
 /// The case `conservation_over_120_ticks` shrank to after the main merge (frictionless, prices
-/// scaled 0.5 to 2), kept as a named test: province 10's local chain collapses, an origin with no
-/// output is clipped up every tick, frictionless E1 moves all of the province's labour to that
-/// enterprise at its posted price, and wages paid from debt overflow the ledger at tick 91.
+/// scaled 0.5 to 2): province 10's local chain collapses and an origin with no output is clipped
+/// up every tick. Before ADR 0266, frictionless E1 moved all of the province's labour to that
+/// enterprise at its posted price, and wages paid from debt overflowed the ledger at tick 91.
+/// Capped at the labour its inputs allow, it hires none of it, and the world price index stays
+/// within the nominal scale of ADR 0106 (about 1e4).
 #[test]
-#[ignore = "known defect: E1 hires labour it cannot equip; see ovf-diagnosis (owner decision pending)"]
-fn frictionless_labour_spiral_overflows_the_ledger() {
+fn frictionless_labour_spiral_is_bounded() {
     const FACTORS: [f64; 25 * N_GOODS] = [
         0.5,
         0.5,
@@ -322,8 +323,13 @@ fn frictionless_labour_spiral_overflows_the_ledger() {
         *p *= f;
     }
     let mut sim = sim_of(w);
-    let run = sim.run_until(120);
-    assert!(run.is_ok(), "{}", run.unwrap_err());
+    let mut highest = 0.0f64;
+    for _ in 0..120 {
+        let step = sim.step();
+        assert!(step.is_ok(), "{}", step.unwrap_err());
+        highest = highest.max(sim.world().world_price_index());
+    }
+    assert!(highest < 1e4, "world price index reached {highest}");
     let w = sim.world();
     assert!(w.markets.price.iter().all(|p| p.is_finite() && *p > 0.0));
     let acc = &w.layout().accounts;
@@ -333,6 +339,33 @@ fn frictionless_labour_spiral_overflows_the_ledger() {
     for a in acc.market.iter().chain(&acc.rebate).chain(&acc.dividend) {
         assert_eq!(w.ledger.money(*a), 0);
     }
+}
+
+/// ADR 0266: 40 frictionless runs of 120 ticks from prices scaled 0.5 to 2 per cell (drawn
+/// with proptest's fixed default seed) neither panic nor leave the nominal scale of ADR 0106
+/// (about 1e4): the largest world price index is 18.0; before the input cap it was 4.6e3.
+#[test]
+fn frictionless_price_sweep_stays_bounded() {
+    use proptest::strategy::ValueTree;
+    use proptest::test_runner::{Config, TestRunner};
+    let mut runner = TestRunner::new(Config::default());
+    let mut highest = 0.0f64;
+    for case in 0..40 {
+        let factors = proptest::collection::vec(0.5f64..2.0, 25 * N_GOODS)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current();
+        let mut w = world(EconParams::frictionless());
+        for (p, f) in w.markets.price.iter_mut().zip(&factors) {
+            *p *= f;
+        }
+        let mut sim = sim_of(w);
+        for _ in 0..120 {
+            sim.step().unwrap_or_else(|v| panic!("case {case}: {v}"));
+            highest = highest.max(sim.world().world_price_index());
+        }
+    }
+    assert!(highest < 1e4, "world price index reached {highest}");
 }
 
 #[test]
@@ -938,11 +971,31 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
 }
 
 /// ADR 0089: the frictionless wage clears labour at the natural rate, sum_g L*_ig(w) =
-/// (1 - u*_i) L^s_i, so unemployment is u* in every province at every tick.
+/// (1 - u*_i) L^s_i, so unemployment is u* in every province at every tick unless enterprises
+/// held to the labour their inputs allow (ADR 0266) leave more unemployed; it is never below u*.
+/// On the fixture that happens in province 24 at tick 1, whose one month of input stocks the
+/// first tick used up, with its orders still in transit: no enterprise there hires. At tick 0 every enterprise is at its cap (one month of stocks is base output), which clears
+/// at u* exactly.
 #[test]
 fn frictionless_unemployment_is_the_natural_rate() {
     let mut sim = sim_of(world(EconParams::frictionless()));
+    let mut rationed = Vec::new();
     for tick in 0..24 {
+        let mut probe = sim.world().clone();
+        probe.begin_tick();
+        systems::deliver(&mut probe);
+        let caps: Vec<f64> = {
+            let (inp, lay) = (probe.inputs(), probe.layout());
+            let r = rho(probe.params().sigma_fl);
+            (0..inp.n_enterprises())
+                .map(|e| {
+                    let ent = &inp.enterprises;
+                    let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
+                    let va = lay.a_va[e] * systems::input_output(&probe, e);
+                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                })
+                .collect()
+        };
         sim.step().unwrap();
         let w = sim.world();
         let (inp, lay) = (w.inputs(), w.layout());
@@ -951,11 +1004,19 @@ fn frictionless_unemployment_is_the_natural_rate() {
             let u = 1.0 - l / lay.labour_supply[i];
             let u_star = inp.countries.u_star[inp.country_of(i)];
             assert!(
-                (u - u_star).abs() <= 1e-10,
-                "tick {tick} province {i}: unemployment {u}, u* {u_star}"
+                u >= u_star - 1e-10,
+                "tick {tick} province {i}: {u} below u* {u_star}"
             );
+            if u > u_star + 1e-10 {
+                assert!(
+                    lay.enterprises(i).any(|e| w.employment[e] >= caps[e]),
+                    "tick {tick} province {i}: unemployment {u}, u* {u_star}, no one held"
+                );
+                rationed.push((tick, i));
+            }
         }
     }
+    assert_eq!(rationed, [(1, 24)]);
 }
 
 /// Capacity output VA(L) / a_VA of enterprise `e` at its current employment.
@@ -2475,11 +2536,14 @@ fn near_singular_cycle_keeps_its_limit() {
 }
 
 /// ADR 0093, Amendment: at every province tick of the fixture's default run (60 ticks) and of
-/// the cycle fixture (120 ticks), every good fits at the exact fills (to 1e-12 of its flows) and
-/// they equal the fill iteration run to convergence (1e-12) wherever it converges. Where a fill
-/// collapses below 1e-200 the bisection iteration underflows good by good and gives no limit to
-/// compare with, so the bound on the compared ticks is coverage, not model: at least 400 of the
-/// binding province ticks (410 of 415 with the gateway masses; 411 of 413 before them).
+/// the cycle fixture (120 ticks, default and frictionless), every good fits at the exact fills
+/// (to 1e-12 of its flows) and they equal the fill iteration run to convergence (1e-12)
+/// wherever it converges. Where a fill collapses below 1e-200 the bisection iteration underflows
+/// good by good and gives no limit to compare with, so the bound on the compared ticks is
+/// coverage, not model: at least 340 of the binding province ticks (351 of 351: 285 default, 66
+/// frictionless). Since enterprises hire only what their local inputs allow (ADR 0266) the chain
+/// binds less: the default cycle run alone had 410 of 415 before, 285 of 285 after, all in its
+/// first 60 ticks, so the frictionless run was added to keep the coverage.
 #[test]
 fn exact_fill_equals_converged_iteration() {
     let cycles = [
@@ -2488,12 +2552,12 @@ fn exact_fill_equals_converged_iteration() {
         (CONSTRUCTION, SERVICES, 0.2),
     ];
     let (mut bound, mut compared_bound) = (0, 0);
-    for (inputs, ticks) in [(small_world(), 60), (fixture_with(&cycles), 120)] {
-        let mut sim = EconWorld::sim(
-            Arc::new(inputs),
-            EconParams::default(),
-            TradeParams::default(),
-        );
+    for (inputs, ticks, params) in [
+        (small_world(), 60, EconParams::default()),
+        (fixture_with(&cycles), 120, EconParams::default()),
+        (fixture_with(&cycles), 120, EconParams::frictionless()),
+    ] {
+        let mut sim = EconWorld::sim(Arc::new(inputs), params, TradeParams::default());
         for tick in 0..ticks {
             let mut probe = sim.world().clone();
             probe.begin_tick();
@@ -2515,7 +2579,7 @@ fn exact_fill_equals_converged_iteration() {
         }
     }
     println!("chain bound in {bound} province ticks, {compared_bound} compared");
-    assert!(compared_bound >= 400, "{compared_bound} of {bound}");
+    assert!(compared_bound >= 340, "{compared_bound} of {bound}");
 }
 
 /// S11 Proportional: one fill ratio for both classes at every short origin market.
@@ -2824,7 +2888,8 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
     w.end_tick(1).unwrap();
 }
 
-/// A run with write-offs is identical at 1 and 4 threads.
+/// A run with write-offs is identical at 1 and 4 threads. Default settings: frictionless, the
+/// same prices fire none once enterprises hire only what their inputs allow (ADR 0266).
 #[test]
 fn write_off_runs_are_thread_independent() {
     let run = |threads: usize| {
@@ -2833,7 +2898,7 @@ fn write_off_runs_are_thread_independent() {
             .build()
             .unwrap();
         pool.install(|| {
-            let mut w = world(EconParams::frictionless());
+            let mut w = world(EconParams::default());
             for (c, p) in w.markets.price.iter_mut().enumerate() {
                 *p *= if c % 3 == 0 { 0.2 } else { 3.0 };
             }
