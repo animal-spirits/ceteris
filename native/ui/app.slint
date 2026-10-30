@@ -3,6 +3,14 @@ import { Tokens } from "tokens.slint";
 
 export { Tokens }
 
+export struct MapLabel {
+    text: string,
+    // Centre, in logical pixels of the map area.
+    x: length,
+    y: length,
+    country: bool,
+}
+
 component About inherits Rectangle {
     callback close();
     background: Tokens.paper;
@@ -41,6 +49,7 @@ export component AppWindow inherits Window {
     // The map pass renders into this texture each frame (ADR 0088).
     in property <image> map-texture;
     in property <string> status;
+    in property <[MapLabel]> labels;
     in-out property <bool> about-open;
     out property <length> map-width: map.width;
     out property <length> map-height: map.height;
@@ -67,6 +76,19 @@ export component AppWindow inherits Window {
         width: 100%;
         height: 100%;
         image-fit: fill;
+
+        for item in root.labels: Text {
+            x: item.x - self.width / 2;
+            y: item.y - self.height / 2;
+            text: item.text;
+            color: Tokens.ink;
+            font-size: item.country ? 12px : 11px;
+            font-weight: item.country ? 600 : 400;
+            letter-spacing: item.country ? 1.5px : 0px;
+            stroke: Tokens.paper;
+            stroke-width: 2px;
+            stroke-style: outside;
+        }
 
         property <length> last-x;
         property <length> last-y;

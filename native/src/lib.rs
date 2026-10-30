@@ -3,6 +3,7 @@
 pub mod bench;
 pub mod camera;
 pub mod fill;
+pub mod labels;
 pub mod map;
 pub mod modes;
 pub mod tokens;

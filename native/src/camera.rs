@@ -42,6 +42,31 @@ impl Camera {
         ]
     }
 
+    /// Where a world point lands on screen, in physical pixels; `None` on the far side of the
+    /// globe. Flat, the copy of the point nearest the centre is used.
+    pub fn project(&self, viewport: [f64; 2], xy: [f64; 2]) -> Option<[f64; 2]> {
+        let half = [viewport[0] / 2.0, viewport[1] / 2.0];
+        if !self.globe {
+            let dx = (xy[0] - self.centre[0] + 0.5).rem_euclid(1.0) - 0.5;
+            return Some([
+                half[0] + dx * self.scale,
+                half[1] + (xy[1] - self.centre[1]) * self.scale,
+            ]);
+        }
+        let lon_lat = |m: [f64; 2]| {
+            let y = std::f64::consts::PI * (1.0 - 2.0 * m[1]);
+            [(m[0] - 0.5) * std::f64::consts::TAU, y.sinh().atan()]
+        };
+        let [lon, lat] = lon_lat(xy);
+        let [lon0, lat0] = lon_lat(self.centre);
+        let dl = lon - lon0;
+        let (x, y, z) = (lat.cos() * dl.sin(), lat.sin(), lat.cos() * dl.cos());
+        let yr = y * lat0.cos() - z * lat0.sin();
+        let zr = y * lat0.sin() + z * lat0.cos();
+        let r = self.scale / std::f64::consts::TAU;
+        (zr > 0.0).then(|| [half[0] + x * r, half[1] - yr * r])
+    }
+
     pub fn pan(&mut self, dx: f64, dy: f64) {
         self.centre[0] = (self.centre[0] - dx / self.scale).rem_euclid(1.0);
         self.centre[1] = (self.centre[1] - dy / self.scale).clamp(0.0, 1.0);
@@ -100,6 +125,27 @@ mod tests {
         assert!(((w[0] - moved[0]).rem_euclid(1.0)).min((moved[0] - w[0]).rem_euclid(1.0)) < 1e-12);
         c.pan(1e6, 0.0);
         assert!((0.0..1.0).contains(&c.centre[0]));
+    }
+
+    #[test]
+    fn project_inverts_screen_to_world_on_the_flat_map() {
+        let mut c = Camera::fit(VIEW[0], VIEW[1]);
+        c.zoom_at(VIEW, [100.0, 500.0], 2.0);
+        let px = [233.0, 411.0];
+        let back = c.project(VIEW, c.screen_to_world(VIEW, px)).unwrap();
+        assert!((back[0] - px[0]).abs() < 1e-9 && (back[1] - px[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn globe_puts_the_centre_mid_screen_and_hides_the_far_side() {
+        let mut c = Camera::fit(VIEW[0], VIEW[1]);
+        c.set_globe(VIEW, true);
+        c.centre = [0.3, 0.4];
+        let mid = c.project(VIEW, [0.3, 0.4]).unwrap();
+        assert!((mid[0] - 400.0).abs() < 1e-9 && (mid[1] - 300.0).abs() < 1e-9);
+        assert!(c.project(VIEW, [0.8, 0.6]).is_none());
+        // North is up.
+        assert!(c.project(VIEW, [0.3, 0.3]).unwrap()[1] < 300.0);
     }
 
     #[test]
