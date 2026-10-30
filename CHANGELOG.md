@@ -12,15 +12,18 @@
 - The fixture builds its own bulk legs: its six sea crossings at P154 times its sea cost per
   tonne-km (it has no ports, so P155 scales nothing); every other leg is unchanged.
   `TradeParams::bulk_off` gives the rate off, for networks without bulk legs: hand-built test
-  networks, the autarky world and `fixture::unreachable_island` (route taus exclude bulk legs).
+  networks, the autarky world and `fixture::unreachable_island` (route taus exclude bulk legs,
+  so it folds class 3's bulk legs into its route taus: its kernel is the default fixture's but
+  for the cut).
 
 Goldens re-blessed:
 
 - `tests/golden/p2-fixture/`: only class 3 moves. `legs` gains the bulk costs and hours (NaN
   before), `kernel_crossing` changes for goods 1 and 2 only (k up to 2.6e4 times for coal on
   the sea lanes, inv_loss by up to 82%), in `provinces` `base_price_1` and `base_price_2`
-  fall by up to 12% and 45%, and `gamma_1` and `gamma_2` move by up to 1.9e-4; `params.json` the bulk fields
-  and the static digest. Every other value is bit for bit the same.
+  fall by up to 12% and 45%, and `gamma_1` and `gamma_2` move by up to 1.9e-4; `params.json`
+  sets the class-3 bulk fields, and the static digest changes. Every other value is bit for bit
+  the same.
 - `tests/golden/p2-fixture/calibration/`: goods 1 and 2 move by up to 1.4% in price and output;
   coal's input coefficient and stock (`coef_2`, `stock_2`) by up to 80%, in units, since its
   delivered price falls by up to 44%; the pipeline by up to 80% (coal). Every other good moves
