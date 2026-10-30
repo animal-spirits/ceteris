@@ -29,6 +29,15 @@ pub const MINOR_PER_UNIT: f64 = 1e4;
 const LABOUR_TOLERANCE: f64 = 1e-12;
 /// Relative tolerance of input use against coef_k Y (spec Invariants, Leontief).
 const LEONTIEF_TOLERANCE: f64 = 1e-12;
+/// What a user of a local good may miss of coef_k Y beyond [`LEONTIEF_TOLERANCE`], relative to
+/// the units of the good drawn at its province market this tick, D (spec Invariants, Leontief).
+/// Where the chain's passes stop short, a good is short by at most [`crate::local::FIT`] of its
+/// flows U + R, with U <= R (1 + 2 FIT) and R <= D, shared among its users pro rata; and the
+/// users draw from the market account one after the other, each draw rounding its balance by at
+/// most eps / 2 of D (the draws bind only where the market ends near empty, so it held about D),
+/// up to 2 (N_GOODS + 1) roundings with the split's sum, which the last user absorbs.
+const LOCAL_DRAW_TOLERANCE: f64 = 2.0 * crate::local::FIT * (1.0 + crate::local::FIT)
+    + 2.0 * (N_GOODS as f64 + 1.0) * f64::EPSILON;
 /// Relative tolerance of dispatched units against origin sales (trade SPEC Invariants,
 /// Dispatch mass).
 const DISPATCH_TOLERANCE: f64 = 1e-12;
@@ -1315,7 +1324,8 @@ impl State for EconWorld {
     /// 1e-9 of its shipped and delivered units plus the transit rounding; ADR 0200), gateway
     /// clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
-    /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
+    /// coef_k Y and what was available: the stock, and this tick's draws of a local good; a
+    /// local good also [`LOCAL_DRAW_TOLERANCE`] of its province's draws),
     /// dispatch mass (units dispatched = origin sales, 1e-12)
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
     /// its recorded income, exact in minor units).
@@ -1444,14 +1454,22 @@ impl State for EconWorld {
 
         let sc = &self.scratch;
         for e in 0..inp.n_enterprises() {
-            for k in 0..N_GOODS {
+            let province = inp.enterprises.province[e] as usize;
+            for (k, &traded) in TRADED.iter().enumerate() {
                 let want = lay.coef[e][k] * sc.produced[e];
                 let (used, before) = (
                     sc.input_used[e * N_GOODS + k],
                     sc.input_before[e * N_GOODS + k],
                 );
+                let drawn = if traded {
+                    0.0
+                } else {
+                    sc.drawn[province * N_GOODS + k]
+                };
                 let gap = (used - want).abs();
-                if gap.is_nan() || gap > LEONTIEF_TOLERANCE * want.max(before) {
+                let tolerance =
+                    LEONTIEF_TOLERANCE * want.max(before) + LOCAL_DRAW_TOLERANCE * drawn;
+                if gap.is_nan() || gap > tolerance {
                     let detail = format!("enterprise {e} used {used} of good {k}, a Y = {want}");
                     return fail("leontief", detail);
                 }
