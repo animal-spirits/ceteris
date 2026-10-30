@@ -72,7 +72,7 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "4";
+pub const FORMAT: &str = "5";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -194,6 +194,9 @@ pub struct Steady {
     pub price: Mat,
     /// (P, G) buyer price q of traded goods, the local price of local goods.
     pub consumer: Mat,
+    /// (P, G) selection constant Gamma = q / P_d of traded goods at the calibrated prices
+    /// (ADR 0200), 1 for local goods and where no origin is reachable.
+    pub gamma: Mat,
     /// (P, G) expected months in transit of traded goods.
     pub lead: Mat,
     /// SLOTS + 1 matrices (P, G): units arriving per unit spent, by arrival slot.
@@ -500,58 +503,46 @@ pub fn sinkhorn_limited(
 
 /// SLOTS + 1 matrices (P, G): units arriving at each destination per unit spent, by arrival
 /// slot: 0 home, 1 a domestic leg, 1 + lag a crossing (as `world::delivered_prices` reads
-/// `Sourced::arrive`).
-pub fn arrivals(m: &Model, price: &Mat, src: &Sourcing) -> Vec<Mat> {
+/// `Sourced::arrive`). Every unit of spending arrives as 1 / q_d units whatever its route
+/// (ADR 0200), so each slot holds its routes' share of the spending times `src.alpha`.
+pub fn arrivals(m: &Model, src: &Sourcing) -> Vec<Mat> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
     let (dom, acc, cro) = (&inp.domestic, &inp.access, &inp.crossing);
     let (wf, phi) = (&src.w, &src.phi);
-    let pf = model::good_major(price);
-    let per_price: Vec<f64> = wf
-        .iter()
-        .zip(&pf)
-        .map(|(&w, &p)| divide_where(w, p, w > 0.0, 0.0))
-        .collect();
-    let times =
-        |a: &[f64], b: &[f64]| -> Vec<f64> { a.iter().zip(b).map(|(x, y)| x * y).collect() };
+    let alpha = model::good_major(&src.alpha);
     let zeros = |a: &[f64]| -> Vec<f64> { a.iter().map(|k| 0.0 * k).collect() };
-    let arriving = times(&times(&cro.k, &cro.inv_duty), &cro.inv_loss);
-    let (dom_arrive, acc_arrive) = (times(&dom.k, &dom.inv_tau), times(&acc.k, &acc.inv_tau));
-    let (dom_zero, acc_zero, cro_zero) = (zeros(&dom.k), zeros(&acc.k), zeros(&cro.k));
+    let (acc_zero, cro_zero) = (zeros(&acc.k), zeros(&cro.k));
+    let dom_zero = zeros(&dom.k);
 
-    let mut out = vec![per_price.clone()];
+    let mut out = vec![wf.clone()];
     let domestic = m.origin_sums(
-        &per_price,
+        wf,
         Factors {
-            dom: &dom_arrive,
+            dom: &dom.k,
             acc: &acc_zero,
             cro: &cro_zero,
         },
     );
-    out.push(
-        domestic
-            .iter()
-            .zip(&per_price)
-            .map(|(s, p)| s - p)
-            .collect(),
-    );
-    out.extend((1..SLOTS).map(|_| vec![0.0; per_price.len()]));
+    out.push(domestic.iter().zip(wf).map(|(s, w)| s - w).collect());
+    out.extend((1..SLOTS).map(|_| vec![0.0; wf.len()]));
     for lag in 0..SLOTS {
-        let k: Vec<f64> = arriving
+        let k: Vec<f64> = cro
+            .k
             .iter()
             .zip(&cro.lag)
             .map(|(&a, &l)| if l == lag { a } else { 0.0 })
             .collect();
         let crossing = m.origin_sums(
-            &per_price,
+            wf,
             Factors {
                 dom: &dom_zero,
-                acc: &acc_arrive,
+                acc: &acc.k,
                 cro: &k,
             },
         );
         for (i, o) in out[1 + lag].iter_mut().enumerate() {
-            *o += crossing[i] - per_price[i];
+            *o += crossing[i] - wf[i];
         }
     }
     out.iter()
@@ -559,7 +550,8 @@ pub fn arrivals(m: &Model, price: &Mat, src: &Sourcing) -> Vec<Mat> {
             let v: Vec<f64> = slot
                 .iter()
                 .zip(phi)
-                .map(|(&a, &f)| divide_where(a, f, f > 0.0, 0.0))
+                .zip(&alpha)
+                .map(|((&a, &f), &x)| divide_where(a, f, f > 0.0, 0.0) * x)
                 .collect();
             model::cells(&v, n_p, n_g)
         })
@@ -1076,7 +1068,7 @@ pub fn calibrate_from(
         .coverage
         .as_ref()
         .ok_or("the inputs carry no coverage")?;
-    let m = Model::new(inp)?;
+    let m = Model::physical(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let (ep, eg) = (&inp.ent_province, &inp.ent_good);
     let n_e = eg.len();
@@ -1296,7 +1288,7 @@ pub fn calibrate_from(
         .map(|p| bill[p] / ((1.0 - u_star[c[p]]) * inp.labour_supply[p]))
         .collect();
     let mask = |g: usize| if traded[g] { 1.0 } else { 0.0 };
-    let arrive: Vec<Mat> = arrivals(&m, &price, &src)
+    let arrive: Vec<Mat> = arrivals(&m, &src)
         .into_iter()
         .map(|a| Mat::from_fn(n_p, n_g, |p, g| a[(p, g)] * mask(g)))
         .collect();
@@ -1366,6 +1358,14 @@ pub fn calibrate_from(
                 0.0
             }
         }),
+        gamma: Mat::from_fn(n_p, n_g, |p, g| {
+            let (q, ces) = (src.index[(p, g)], src.ces[(p, g)]);
+            if traded[g] && q.is_finite() && ces.is_finite() {
+                q / ces
+            } else {
+                1.0
+            }
+        }),
         consumer: q,
         lead,
         arrive,
@@ -1428,6 +1428,7 @@ pub fn reference_inputs(inp: &Inputs, s: &Steady) -> Inputs {
     out.calibrated_coef = Some(s.coef.clone());
     out.calibrated_a_va = Some(s.a_va.clone());
     out.calibrated_weights = Some(s.weights.clone());
+    out.gamma = Some(s.gamma.clone());
     out
 }
 

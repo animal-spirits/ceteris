@@ -50,7 +50,8 @@ pub struct Fit {
 /// The inputs with every crossing at the border friction `nu` of its good's class in place of
 /// the inputs' own (`Inputs::border_nu`): K scaled by ((1 + nu) / (1 + nu_0))^-theta, the share of
 /// units arriving by (1 + nu_0) / (1 + nu), and the base buyer prices (sourcing at prices 1)
-/// recomputed; the inputs as they are at their own nu.
+/// and their selection constants Gamma (ADR 0200) recomputed; the inputs as they are at their
+/// own nu.
 pub fn at_border_nu(inp: &Inputs, nu: &[f64; N_CLASSES]) -> Result<Inputs, String> {
     if inp.border_nu.len() != N_CLASSES {
         return Err(format!(
@@ -77,12 +78,18 @@ pub fn at_border_nu(inp: &Inputs, nu: &[f64; N_CLASSES]) -> Result<Inputs, Strin
     }
     out.border_nu = nu.to_vec();
     let ones = Mat::filled(out.n_provinces(), out.n_goods(), 1.0);
-    let index = Model::new(&out)?.sourcing(&ones).index;
+    let src = Model::physical(&out)?.sourcing(&ones);
+    let mut gamma = Mat::filled(out.n_provinces(), out.n_goods(), 1.0);
     for p in 0..out.n_provinces() {
         for g in (0..out.n_goods()).filter(|&g| out.traded[g]) {
-            out.base_price[(p, g)] = index[(p, g)];
+            let (q, ces) = (src.index[(p, g)], src.ces[(p, g)]);
+            out.base_price[(p, g)] = q;
+            if q.is_finite() && ces.is_finite() {
+                gamma[(p, g)] = q / ces;
+            }
         }
     }
+    out.gamma = Some(gamma);
     Ok(out)
 }
 

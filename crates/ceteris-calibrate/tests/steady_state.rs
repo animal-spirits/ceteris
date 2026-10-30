@@ -333,6 +333,75 @@ fn closed_forms_zero_the_reference_residual() {
     }
 }
 
+/// ADR 0200 (Amendment 2026-10-30): with buyers at Gamma P_d, Gamma = q / P_d per cell from
+/// the calibration, the calibrated point is the same steady state as with buyers at the
+/// delivered unit price of the physical arrivals: buyer prices, spending, incomes, value added,
+/// orders and tariffs (stage 1's values) agree to 1e-12.
+#[test]
+fn steady_state_unchanged_by_selection() {
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let reference = steady::reference_inputs(inp, s);
+        let x = steady::reference_point(inp, s);
+        let selection = Model::new(&reference).unwrap();
+        let physical = Model::physical(&reference).unwrap();
+        let on = model::evaluate(&x, &selection, &reference.ent_a);
+        let off = model::evaluate(&x, &physical, &reference.ent_a);
+        let finite = |m: &Mat| -> Vec<f64> {
+            m.data
+                .iter()
+                .map(|&v| if v.is_finite() { v } else { 0.0 })
+                .collect()
+        };
+        let src = selection.sourcing(&on.price);
+        for (i, &g) in s.gamma.data.iter().enumerate() {
+            let (q, ces) = (s.consumer.data[i], src.ces.data[i]);
+            if q.is_finite() && ces.is_finite() && inp.traded[i % inp.n_goods()] {
+                allclose(w.name, &[g * ces], &[q], 1e-12, 0.0);
+            }
+        }
+        allclose(
+            w.name,
+            &finite(&on.consumer_price),
+            &finite(&s.consumer),
+            1e-12,
+            0.0,
+        );
+        allclose(
+            w.name,
+            &finite(&on.consumer_price),
+            &finite(&off.consumer_price),
+            1e-12,
+            0.0,
+        );
+        allclose(w.name, &on.spend.data, &off.spend.data, 1e-12, 0.0);
+        allclose(w.name, &on.income, &off.income, 1e-12, 0.0);
+        allclose(w.name, &on.value_added, &off.value_added, 1e-12, 0.0);
+        allclose(w.name, &on.output, &off.output, 1e-12, 0.0);
+        allclose(
+            w.name,
+            &on.flows.orders.data,
+            &off.flows.orders.data,
+            1e-12,
+            0.0,
+        );
+        allclose(
+            w.name,
+            &on.flows.tariff.data,
+            &off.flows.tariff.data,
+            1e-12,
+            0.0,
+        );
+        allclose(
+            w.name,
+            &on.flows.arrive.data,
+            &off.flows.arrive.data,
+            1e-12,
+            0.0,
+        );
+    }
+}
+
 /// Local goods at p = 1: output solves each province's Leontief system against household and
 /// intermediate local demand.
 #[test]

@@ -97,7 +97,15 @@ fn ship(w: &EconWorld, g: usize, spend: &[[f64; 2]], out: &mut Sourced) {
     let cells = || (0..np).map(|o| o * N_GOODS + g);
     let price: Vec<f64> = cells().map(|c| w.markets.price[c]).collect();
     let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
-    source(&w.kernel, g, &price, &active, spend, out);
+    source(
+        &w.kernel,
+        g,
+        &price,
+        &active,
+        &w.layout.gamma[g],
+        spend,
+        out,
+    );
     dispatch(&w.kernel, g, &price, &vec![[1.0; 2]; np], out);
 }
 

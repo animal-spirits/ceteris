@@ -1,6 +1,7 @@
 //! The calibrated steady state of ADR 0089 (`specs/econ/SPEC.md`, Calibration): the tables
 //! `ceteris calibrate` writes, read into the static inputs (A, VA0, L0,
-//! a_VA, the coefficients, w0 and the PIGL weights) and into the state a world starts from
+//! a_VA, the coefficients, w0, the PIGL weights and the selection constants Gamma of ADR 0200)
+//! and into the state a world starts from
 //! ([`Steady`]: prices, stocks, the pipeline, money and the last D, Q and sales).
 //!
 //! Tables are keyed by pack province (`ProvinceData::pack`; the province itself for a
@@ -24,7 +25,7 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "4";
+pub const FORMAT: &str = "5";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -152,8 +153,8 @@ impl EconInputs {
 
     /// Reads the calibration tables in `dir` (ADR 0089) into these inputs, which must be the
     /// uncalibrated world the tables were solved from: A, VA0, L0, a_VA, the coefficients
-    /// (both the putty-clay vintage and the 2000 column that S09 FixedLeontief reads), w0 and
-    /// the PIGL weights, and the steady state a world starts from ([`EconInputs::steady`]).
+    /// (both the putty-clay vintage and the 2000 column that S09 FixedLeontief reads), w0, the
+    /// PIGL weights, the selection constants Gamma (ADR 0200), and the steady state a world starts from ([`EconInputs::steady`]).
     pub fn calibrate(&mut self, dir: &Path) -> Result<(), PackError> {
         let ent_table = table(dir, "econ_calib.arrow")?;
         let want = hex(&static_digest(
@@ -268,6 +269,13 @@ impl EconInputs {
             .zip(&active)
             .map(|(p, &on)| if on { p } else { 1.0 })
             .collect();
+        let gamma = f64s(&cells, "gamma")?;
+        if let Some(c) = gamma.iter().position(|&x| !(x > 0.0 && x.is_finite())) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has selection constant {}",
+                gamma[c]
+            )));
+        }
 
         let pops = table(dir, "econ_calib_pops.arrow")?;
         let pop_keys = keys(&pops, "edu")?;
@@ -302,6 +310,7 @@ impl EconInputs {
             pipeline.push((buyer as u32, good[r], ahead[r], units[r]));
         }
 
+        self.provinces.gamma = gamma.as_chunks::<N_GOODS>().0.to_vec();
         self.border_nu = Some(border_nu);
         self.steady = Some(std::sync::Arc::new(Steady {
             price,

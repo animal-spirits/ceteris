@@ -50,6 +50,12 @@ pub struct ProvinceData {
     /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
     /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
     pub base_price: Vec<[f64; N_GOODS]>,
+    /// Selection constant Gamma of every good at the province (ADR 0200): buyers of a traded
+    /// good pay Gamma times the CES index P_d. Fixed where the world is calibrated, so that the
+    /// buyer price there is the delivered unit price of the physical arrivals: the data state's
+    /// `base_price / P_d` at prices 1 ([`EconInputs::set_base_prices`]), or the calibration
+    /// tables' value. 1 for local goods and where no origin is reachable.
+    pub gamma: Vec<[f64; N_GOODS]>,
 }
 
 /// Pops, one per (province, education level), sorted by province.
@@ -155,10 +161,11 @@ impl EconInputs {
         self.enterprises.coef[e][k]
     }
 
-    /// Fills `ProvinceData::base_price` from sourcing at prices 1 over the kernel of this
-    /// network under `trade` (`world::delivered_prices`, the price index of the data state).
+    /// Fills `ProvinceData::base_price` and `ProvinceData::gamma` from sourcing at prices 1
+    /// over the kernel of this network under `trade` ([`crate::world::base_delivered_prices`]).
     pub fn set_base_prices(&mut self, trade: &TradeParams) {
-        self.provinces.base_price = crate::world::base_delivered_prices(self, trade);
+        (self.provinces.base_price, self.provinces.gamma) =
+            crate::world::base_delivered_prices(self, trade);
     }
 
     /// Fills every enterprise's 2000 column with [`EconInputs::cost_share_column`], its
@@ -314,7 +321,10 @@ impl EconInputs {
 
         let p = &self.provinces;
         assert!(
-            p.population.len() == np && p.w0.len() == np && p.base_price.len() == np,
+            p.population.len() == np
+                && p.w0.len() == np
+                && p.base_price.len() == np
+                && p.gamma.len() == np,
             "province columns disagree in length; fill base prices with set_base_prices"
         );
         assert!(
@@ -322,6 +332,12 @@ impl EconInputs {
                 .iter()
                 .all(|q| q.iter().all(|&x| x > 0.0 && !x.is_nan())),
             "base delivered prices must be positive"
+        );
+        assert!(
+            p.gamma
+                .iter()
+                .all(|g| g.iter().all(|&x| x > 0.0 && x.is_finite())),
+            "selection constants must be positive and finite"
         );
         assert_eq!(
             p.country, self.network.province_country,
@@ -452,6 +468,7 @@ impl EconInputs {
             w0,
             pack,
             base_price,
+            gamma,
         } = provinces;
         let PopData {
             province: pop_province,
@@ -492,6 +509,7 @@ impl EconInputs {
         e.f64s(population);
         e.f64s(w0);
         e.f64s(base_price.as_flattened());
+        e.f64s(gamma.as_flattened());
         e.u32s(pop_province);
         e.count(edu.len());
         edu.iter().for_each(|&b| e.u8(b));

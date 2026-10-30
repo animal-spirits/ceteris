@@ -173,6 +173,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
             ),
             named("price", flat(&s.price)),
             named("consumer_price", flat(&s.consumer)),
+            named("gamma", flat(&s.gamma)),
             named("lead", flat(&s.lead)),
             named("supply", flat(&s.supply)),
             named("demand", flat(&s.supply)),
@@ -460,15 +461,19 @@ pub fn read_reference(
 
     let cells = read("econ_calib_cells.arrow")?;
     let at = rows(&cells, "good")?;
-    let cell_price = cells.f64("price")?;
     let n_p = inp.n_provinces();
-    let price: Vec<f64> = (0..n_p * n_g)
-        .map(|i| {
-            at.get(&(pack_province[i / n_g], i % n_g))
-                .map(|&r| cell_price[r])
-                .ok_or_else(|| missing("a cell"))
-        })
-        .collect::<Result<_, _>>()?;
+    let cell = |name: &str| -> Result<Vec<f64>, String> {
+        let v = cells.f64(name)?;
+        (0..n_p * n_g)
+            .map(|i| {
+                at.get(&(pack_province[i / n_g], i % n_g))
+                    .map(|&r| v[r])
+                    .ok_or_else(|| missing("a cell"))
+            })
+            .collect()
+    };
+    let price = cell("price")?;
+    let gamma = cell("gamma")?;
 
     let mut reference = inp.clone();
     reference.ent_a = col("a")?;
@@ -479,6 +484,11 @@ pub fn read_reference(
     reference.calibrated_coef = Some(coef);
     reference.calibrated_a_va = Some(col("a_va")?);
     reference.calibrated_weights = Some(weights);
+    reference.gamma = Some(Mat {
+        rows: n_p,
+        cols: n_g,
+        data: gamma,
+    });
     let mut x: Vec<f64> = inp.active_cells().iter().map(|&i| price[i].ln()).collect();
     x.extend(w0.iter().map(|w| w.ln()));
     Ok((reference, x))

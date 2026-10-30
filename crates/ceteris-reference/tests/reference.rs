@@ -276,7 +276,7 @@ fn load_rejects_another_export_format() {
     std::fs::write(dir.join("params.json"), r#"{"format": "9"}"#).unwrap();
     let err = io::load(&dir).unwrap_err();
     std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(err, "export format 9, expected 12");
+    assert_eq!(err, "export format 9, expected 13");
 }
 
 /// Flows of the form a_o K_od b_d are recovered from their own marginals.

@@ -18,7 +18,7 @@ use ceteris_econ::world::{
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{N_GOODS, Rationing, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{N_GOODS, Network, Rationing, Sourced, TradeParams, dispatch, source};
 use proptest::prelude::*;
 
 fn world(params: EconParams) -> EconWorld {
@@ -432,13 +432,21 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
                 let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
                 let spend: Vec<[f64; 2]> = cells().map(|c| w.scratch.class_spend[c]).collect();
                 let fill: Vec<[f64; 2]> = cells().map(|c| w.scratch.fill[c]).collect();
-                source(&kernel, g, &price, &active, &spend, &mut sourced);
+                source(
+                    &kernel,
+                    g,
+                    &price,
+                    &active,
+                    &lay.gamma[g],
+                    &spend,
+                    &mut sourced,
+                );
                 dispatch(&kernel, g, &price, &fill, &mut sourced);
                 for d in 0..np {
                     for c in [INTERMEDIATE, HOUSEHOLD] {
                         assert!(sourced.paid_by_class[d][c] <= spend[d][c] * (1.0 + 1e-12));
                     }
-                    home_value += price[d] * (sourced.arrive[0][d][0] + sourced.arrive[0][d][1]);
+                    home_value += price[d] * (sourced.home[d][0] + sourced.home[d][1]);
                     let row = |e: usize| w.scratch.ent_spend[e * N_GOODS + g];
                     let paid = |c: usize, x: f64| {
                         if x > 0.0 {
@@ -798,11 +806,12 @@ fn input_orders_plan_on_capacity_output() {
     }
 }
 
-/// Buyers price a traded good at the delivered unit price q_d = 1 / alpha_d: spending q_d at
-/// any destination, sourced at the current prices and fully filled, delivers one unit, and
-/// the lead is the mean arrival slot of those units. Local goods keep their posted price.
+/// Buyers pay the CES index (ADR 0200): a traded good's buyer price is q_d = Gamma_d P_d, and
+/// spending q_d at any destination, sourced at the current prices and fully filled, delivers
+/// one unit whatever the origins; the lead is the mean arrival slot of those units. Local goods
+/// keep their posted price.
 #[test]
-fn buyers_price_traded_goods_at_the_delivered_unit_price() {
+fn buyers_pay_the_ces_index() {
     let mut sim = sim_of(world(EconParams::default()));
     sim.run_until(5).unwrap();
     let mut w = sim.world().clone();
@@ -828,8 +837,10 @@ fn buyers_price_traded_goods_at_the_delivered_unit_price() {
             assert!(q.is_finite() && q > 0.0);
             let mut spend = vec![[0.0; 2]; np];
             spend[d] = [0.0, q];
-            source(&kernel, g, &price, &active, &spend, &mut sourced);
+            let gamma = &w.layout().gamma[g];
+            source(&kernel, g, &price, &active, gamma, &spend, &mut sourced);
             dispatch(&kernel, g, &price, &vec![[1.0; 2]; np], &mut sourced);
+            assert_eq!(q, gamma[d] * sourced.price_index[d]);
             let units: Vec<f64> = sourced.arrive.iter().map(|a| a[d][HOUSEHOLD]).collect();
             let total: f64 = units.iter().sum();
             assert!(
@@ -839,8 +850,6 @@ fn buyers_price_traded_goods_at_the_delivered_unit_price() {
             );
             let lead: f64 = units.iter().enumerate().map(|(s, x)| s as f64 * x).sum();
             assert!((lead - w.scratch.lead[d * N_GOODS + g]).abs() < 1e-12);
-            // q_d is at least the cheapest delivered cost, so above the CES index P_d
-            assert!(q >= sourced.price_index[d] * (1.0 - 1e-12));
             leads += usize::from(lead > 1.0);
         }
     }
@@ -848,6 +857,96 @@ fn buyers_price_traded_goods_at_the_delivered_unit_price() {
         leads > 0,
         "no destination waits more than a month on average"
     );
+}
+
+/// ADR 0200: over 120 ticks of the fixture from the data state, every tick, what T2b created
+/// less what it destroyed is its selection term less its melt (the invariant `end_tick`
+/// checks), and selection is not idle: somewhere it adds or takes more than rounding.
+#[test]
+fn goods_invariant_holds_with_selection() {
+    let mut sim = sim_of(world(EconParams::default()));
+    let mut largest = 0.0f64;
+    for tick in 1..=120 {
+        sim.step().unwrap_or_else(|v| panic!("{v}"));
+        let sc = &sim.world().scratch;
+        for (g, r) in sc.sourced.iter().enumerate() {
+            let (made, due, scale) = (
+                sc.dispatch_made[g],
+                sc.dispatch_due[g],
+                sc.dispatch_scale[g],
+            );
+            assert!(
+                (made - due).abs() <= 1e-9 * scale.max(1.0),
+                "tick {tick} good {g}: made {made}, due {due}"
+            );
+            assert_eq!(due, r.selected - r.lost);
+            largest = largest.max(r.selected.abs() / scale.max(1.0));
+        }
+    }
+    assert!(
+        largest > 1e-6,
+        "selection never moved more than {largest} of the units"
+    );
+}
+
+/// ADR 0200: in autarky (no legs: every province buys only at home) every route's selection
+/// multiplier is 1, so buyers pay their own market's price and selection adds nothing, every
+/// tick. The pre-ADR 0200 build's state hash is not reproduced bit for bit: Gamma P_d is
+/// p_min exp(-ln Phi / theta), which differs from 1 / (1 / p_d) in the last bits (at tick 120
+/// the states agree to 3.4e-12 relative, money rounding to minor units included).
+#[test]
+fn selection_off_reproduces_the_status_quo() {
+    let mut inputs = small_world();
+    inputs.network = Network {
+        province_country: inputs.network.province_country.clone(),
+        ..Network::default()
+    };
+    inputs.set_base_prices(&TradeParams::default());
+    inputs.set_coefficients();
+    inputs.set_base_point(&EconParams::default().edu_eff);
+    let gamma = inputs.provinces.gamma.clone();
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
+    for tick in 1..=120 {
+        sim.step().unwrap_or_else(|v| panic!("{v}"));
+        // buyer prices at this tick's posted prices (the world refreshes them at E3)
+        let mut now = sim.world().clone();
+        now.refresh_price_index();
+        let w = sim.world();
+        for (cell, &q) in now.price_index.iter().enumerate() {
+            let (d, g) = (cell / N_GOODS, cell % N_GOODS);
+            if !TRADED[g] || !q.is_finite() {
+                continue;
+            }
+            assert!(
+                w.markets.active[cell],
+                "tick {tick} cell {cell}: buys abroad"
+            );
+            assert!(
+                (gamma[d][g] - 1.0).abs() <= 4.0 * f64::EPSILON,
+                "{}",
+                gamma[d][g]
+            );
+            let p = w.markets.price[cell];
+            assert!(
+                (q - p).abs() <= 4.0 * f64::EPSILON * p,
+                "tick {tick} cell {cell}: {q} vs {p}"
+            );
+        }
+        let sc = &w.scratch;
+        for (g, r) in sc.sourced.iter().enumerate() {
+            assert_eq!(r.lost, 0.0);
+            let scale = sc.dispatch_scale[g].max(1.0);
+            assert!(
+                r.selected.abs() <= 1e-14 * scale,
+                "tick {tick} good {g}: {}",
+                r.selected
+            );
+        }
+    }
 }
 
 const COAL: usize = 2;

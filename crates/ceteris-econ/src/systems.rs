@@ -33,7 +33,7 @@ use crate::local::{self, LOCAL};
 use crate::production::{labour_target, labour_target_uncapped, rho, value_added};
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, WAGE, WRITE_OFF, to_minor, to_numeraire,
+    TRADE, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -375,7 +375,7 @@ pub fn cap_output(w: &mut EconWorld) {
 /// E3: refreshes the buyer prices at the current prices, then posts demand on top of the
 /// local goods drawn at E2, which count as demand at their province markets. Households
 /// spend their whole money balance with PIGL across categories and CES within them
-/// (`Layout::pop_demand`, ADR 0021) at the delivered unit price q_d of traded goods and the
+/// (`Layout::pop_demand`, ADR 0021) at the buyer price q_d of traded goods (ADR 0200) and the
 /// posted price of local goods. Enterprises order up to an inventory
 /// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_cap` of each input k:
 /// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
@@ -485,7 +485,15 @@ pub fn source(w: &mut EconWorld) {
                 s
             }));
             col.gather(&markets.price, &markets.active, g);
-            source_good(kernel, g, &col.price, &col.active, &col.spend, sourced);
+            source_good(
+                kernel,
+                g,
+                &col.price,
+                &col.active,
+                &lay.gamma[g],
+                &col.spend,
+                sourced,
+            );
         });
     for (g, (sourced, col)) in sc.sourced.iter().zip(&sc.columns).enumerate() {
         for o in 0..np {
@@ -628,6 +636,7 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
                 buyer: b.index,
                 household: b.class == HOUSEHOLD,
                 home: r.arrive[0][d][b.class] * share,
+                home_shipped: r.home[d][b.class] * share,
                 slots,
             });
             let amount = to_minor(r.paid_by_class[d][b.class] * share);
@@ -645,9 +654,12 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
 }
 
 /// T2b: ships the filled orders of every traded good (`ceteris_trade::dispatch`). Home
-/// purchases go straight from the market to their buyers (pops consume them); shipments
-/// enter the transit account (iceberg and border losses destroyed) and each buyer's
-/// pipeline, due at t + slot. Each buyer pays its filled spending, origin price times
+/// purchases go straight from the market to their buyers (pops consume them), the shipped
+/// units turned into delivered units by selection (ADR 0200: created or destroyed at the
+/// buyer); shipments enter the transit account and each buyer's pipeline, due at t + slot, in
+/// delivered units, so the transit account is brought to the pipeline: what the losses melt is
+/// destroyed and what selection adds is created. Both are tallied per good for the selection
+/// invariant (`Scratch::dispatch_made`). Each buyer pays its filled spending, origin price times
 /// (1 + t) per shipped unit, to its destination market, rounded half to even per buyer and
 /// good; the market passes it on: domestic legs to the origin market, international legs
 /// through the gateways of both countries (rounded per leg, gateway splits cumulatively, so
@@ -696,6 +708,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
         let transit = acc.transit[g];
+        let mut made = 0.0;
         let mut first = 0;
         for d in 0..np {
             let (cell, market) = (d * N_GOODS + g, acc.market[d]);
@@ -703,11 +716,21 @@ pub fn dispatch(w: &mut EconWorld) {
             // buyers at d: home purchases now, shipments into the pipeline
             let end = legs.order_ends[d] as usize;
             for o in &legs.orders[first..end] {
-                let home = o.home.min(w.ledger.goods(market, g));
-                if home > 0.0 {
-                    w.ledger.ship(market, o.account, g, home);
+                let shipped = o.home_shipped.min(w.ledger.goods(market, g));
+                if shipped > 0.0 {
+                    w.ledger.ship(market, o.account, g, shipped);
+                    let home = if shipped == o.home_shipped {
+                        o.home
+                    } else {
+                        o.home * (shipped / o.home_shipped)
+                    };
+                    adjust_stock(&mut w.ledger, o.account, g, home - shipped);
+                    made += home - shipped;
                     if o.household {
-                        w.ledger.destroy(o.account, g, home);
+                        // pops hold nothing between purchases, so they consume what they hold:
+                        // `home` itself can differ from it by the rounding of the adjustment
+                        let held = w.ledger.goods(o.account, g);
+                        w.ledger.destroy(o.account, g, held);
                     }
                 }
                 for (slot, &units) in o.slots.iter().enumerate() {
@@ -726,12 +749,18 @@ pub fn dispatch(w: &mut EconWorld) {
 
         // the buyers' payments, then the legs
         w.ledger.post(&legs.entries, &mut w.scratch.post);
+        w.scratch.dispatch_made[g] = made;
+        w.scratch.dispatch_due[g] = r.selected - r.lost;
+        w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
+            + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
-    // the losses take what each transit account holds beyond the goods now in flight
+    // each transit account is brought to the goods now in flight: the losses melt what it
+    // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();
     for (g, &transit) in acc.transit.iter().enumerate() {
-        let lost = (w.ledger.goods(transit, g) - in_flight[g]).max(0.0);
-        w.ledger.destroy(transit, g, lost);
+        let change = in_flight[g] - w.ledger.goods(transit, g);
+        adjust_stock(&mut w.ledger, transit, g, change);
+        w.scratch.dispatch_made[g] += change;
     }
     w.scratch.sourced = sourced;
     w.scratch.payments = payments;

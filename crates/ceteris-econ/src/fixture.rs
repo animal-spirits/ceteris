@@ -216,6 +216,7 @@ pub fn small_world() -> EconInputs {
             w0: Vec::new(),
             pack: Vec::new(),
             base_price: Vec::new(),
+            gamma: Vec::new(),
         },
         pops,
         enterprises: ent,

@@ -13,7 +13,7 @@
 //! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
-//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable) |
+//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable), gamma_0 to gamma_9 f64 (`ProvinceData::gamma`: selection constant of ADR 0200, buyers pay Gamma P_d) |
 //! | `pack_provinces` | province u32, pack u32 (`ProvinceData::pack`); written only for a world loaded from a pack, which the calibration keys by pack province |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
@@ -78,8 +78,9 @@ use crate::world::{
 /// 11: `gateways` has `mass` and the crossings' k carry the gateway masses, and `params.json`
 /// `border_nu` is a list, one per theta class (ADR 0092). 12: `legs` has `bulk_cost_per_t` and
 /// `bulk_hours`, and `params.json` has `bulk_sea` (P154), `bulk_port` (P155) and the network's
-/// `bulk_classes` (ADR 0247).
-pub const EXPORT_FORMAT: &str = "12";
+/// `bulk_classes` (ADR 0247). 13: `provinces` has the selection constants `gamma_g`, and
+/// `run_prices.price_index` is the buyer price Gamma P_d (ADR 0200).
+pub const EXPORT_FORMAT: &str = "13";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -285,6 +286,9 @@ pub fn write_inputs(
             &format!("base_price_{g}"),
             p.base_price.iter().map(|q| q[g]),
         ));
+    }
+    for g in 0..N_GOODS {
+        columns.push(f64s(&format!("gamma_{g}"), p.gamma.iter().map(|x| x[g])));
     }
     write_table(dir, "provinces", columns)?;
     if !p.pack.is_empty() {
@@ -589,7 +593,7 @@ fn params_json(
 ///
 /// | file | columns |
 /// |---|---|
-/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (the delivered unit price q_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
+/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (the buyer price q_d = Gamma P_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
 /// | `run_wages` | province u32, wage f64, clip_ticks u32 (ticks the wage step clip bound) |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
 /// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |

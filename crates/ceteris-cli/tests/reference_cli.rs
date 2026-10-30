@@ -214,13 +214,19 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
             check("inv_duty", cro.inv_duty[j], 1.0 / duty);
         }
     }
-    let m = Model::new(inp).unwrap();
-    let q = m
-        .sourcing(&Mat::filled(inp.n_provinces(), inp.n_goods(), 1.0))
-        .index;
+    // the buyer price at prices 1, Gamma P_d with the exported Gamma (ADR 0200), and the
+    // delivered unit price of the physical arrivals are both the exported base price
+    let ones = Mat::filled(inp.n_provinces(), inp.n_goods(), 1.0);
+    let q = Model::new(inp).unwrap().sourcing(&ones).index;
+    let physical = Model::physical(inp).unwrap().sourcing(&ones).index;
     for p in 0..inp.n_provinces() {
         for g in (0..inp.n_goods()).filter(|&g| inp.traded[g]) {
             check("base price", inp.base_price[(p, g)], q[(p, g)]);
+            check(
+                "physical base price",
+                inp.base_price[(p, g)],
+                physical[(p, g)],
+            );
         }
     }
     worst
