@@ -13,10 +13,11 @@ Unity province sells about Sudan's whole pop money each tick; COG, GNQ and GAB t
 Africa's 0.184, TKM, AZE and UZB Ukraine's 0.34. A fresh build of main fails V1 on the split pack
 (seed 20, Tirane, 1.879e-2) and Sudan drifts at seed 21.
 
-Albania fails V1 for another reason (gaps 1.0 to 1.3 percent at seeds 20 to 22, Lezhe and
-Elbasan good 2). Its rents are 1.1 percent of GDP, so 0249 cut its crude oil and gas VA from the
-donor's 71 to 38 million USD, a quarter of the output of its one oil province (Fier). With the
-donor split restored for Albania alone, V1 passes at seed 20.
+Albania fails V1 for another reason, open here (gaps 1.0 to 1.3 percent at seeds 20 to 22,
+Lezhe and Elbasan good 2). Its rents (1.1 percent of GDP) give 38 million USD of crude oil and gas
+VA against the 71 of its donor's (Ukraine's) split, a quarter of the output of its one oil
+province (Fier). 2000 production (about 6,000 to 7,000 barrels a day) fits the rents figure; the
+owner kept it (2026-10-30), and why V1 does not reconverge there is a separate finding.
 
 ## Options
 
