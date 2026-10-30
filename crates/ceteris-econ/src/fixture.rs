@@ -14,9 +14,7 @@
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{
-    BulkLegs, Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass,
-};
+use ceteris_trade::{BulkLegs, Leg, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -268,49 +266,15 @@ pub const ISLAND_USER: usize = 4;
 /// the default rate but for the cut.
 pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
     let mut inputs = small_world();
-    let bulk = inputs.network.bulk.take();
+    inputs.fold_bulk_into_route_taus(trade);
     let island_port = (2 * MAINLAND) as u32;
-    let weight = inputs.weight;
-    let on_bulk = |g: usize| {
-        bulk.as_ref()
-            .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
-    };
-    let factors = |base: &[Leg],
-                   bulk: Option<&Vec<Leg>>,
-                   crossings: bool|
-     -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
-        let mut taus = Vec::with_capacity(base.len());
-        let mut hours = Vec::with_capacity(base.len());
-        for (i, b) in base.iter().enumerate() {
-            let cut = crossings && (b.from == island_port || b.to == island_port);
-            let leg = |g: usize| bulk.filter(|_| on_bulk(g)).map_or(b, |legs| &legs[i]);
-            taus.push(std::array::from_fn(|g| {
-                if cut && g == UNREACHABLE {
-                    f64::INFINITY
-                } else {
-                    // the kernel's least-cost factor, so every other leg is unchanged
-                    let l = leg(g);
-                    1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
-                }
-            }));
-            hours.push(std::array::from_fn(|g| leg(g).hours));
+    let crossings = &inputs.network.crossings;
+    let taus = inputs.network.route_taus.as_mut().expect("just folded");
+    for (b, t) in crossings.iter().zip(&mut taus.crossings) {
+        if b.from == island_port || b.to == island_port {
+            t[UNREACHABLE] = f64::INFINITY;
         }
-        (taus, hours)
-    };
-    let net = &inputs.network;
-    let (domestic, domestic_hours) =
-        factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic), false);
-    let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access), false);
-    let (crossings, crossing_hours) =
-        factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings), true);
-    inputs.network.route_taus = Some(LegTaus {
-        domestic,
-        access,
-        crossings,
-        domestic_hours,
-        access_hours,
-        crossing_hours,
-    });
+    }
     let island = &mut inputs.countries.io[MAINLAND];
     for g in (0..N_GOODS).filter(|&g| g != ISLAND_USER) {
         island[UNREACHABLE * N_GOODS + g] = 0.0;
