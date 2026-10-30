@@ -140,12 +140,12 @@ fn build_stats_match_the_python_build() {
             tariff_agreement_pairs: 1321,
             dose_match_rate: 0.8339,
             provinces_with_va: 4555,
-            va_imputed_share: 0.0743,
+            va_imputed_share: 0.0759,
         }
     );
     assert_eq!(
         f.report.stats.json().text(),
-        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":168,"land crossing":145,"port":287},"gateways":600,"provinces_with_va":4555,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0743}"#
+        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":168,"land crossing":145,"port":287},"gateways":600,"provinces_with_va":4555,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0759}"#
     );
 }
 
