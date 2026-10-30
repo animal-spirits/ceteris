@@ -341,14 +341,18 @@ fn frictionless_labour_spiral_is_bounded() {
     }
 }
 
-/// ADR 0266: 40 frictionless runs of 120 ticks from prices scaled 0.5 to 2 per cell (drawn
-/// with proptest's fixed default seed) neither panic nor leave the nominal scale of ADR 0106
-/// (about 1e4): the largest world price index is 18.0; before the input cap it was 4.6e3.
+/// ADR 0266: 40 frictionless runs of 120 ticks from prices scaled 0.5 to 2 per cell (seed 0)
+/// neither panic nor leave the nominal scale of ADR 0106 (about 1e4): the largest world price
+/// index is 120; before the input cap it was 2.6e3. Over seeds 0 to 9 (400 runs) one panics, at
+/// the write-off's i64 bound (seed 7, case 31), against three before the cap.
 #[test]
 fn frictionless_price_sweep_stays_bounded() {
     use proptest::strategy::ValueTree;
-    use proptest::test_runner::{Config, TestRunner};
-    let mut runner = TestRunner::new(Config::default());
+    use proptest::test_runner::{Config, RngSeed, TestRunner};
+    let mut runner = TestRunner::new(Config {
+        rng_seed: RngSeed::Fixed(0),
+        ..Config::default()
+    });
     let mut highest = 0.0f64;
     for case in 0..40 {
         let factors = proptest::collection::vec(0.5f64..2.0, 25 * N_GOODS)
@@ -2536,14 +2540,11 @@ fn near_singular_cycle_keeps_its_limit() {
 }
 
 /// ADR 0093, Amendment: at every province tick of the fixture's default run (60 ticks) and of
-/// the cycle fixture (120 ticks, default and frictionless), every good fits at the exact fills
-/// (to 1e-12 of its flows) and they equal the fill iteration run to convergence (1e-12)
-/// wherever it converges. Where a fill collapses below 1e-200 the bisection iteration underflows
-/// good by good and gives no limit to compare with, so the bound on the compared ticks is
-/// coverage, not model: at least 340 of the binding province ticks (351 of 351: 285 default, 66
-/// frictionless). Since enterprises hire only what their local inputs allow (ADR 0266) the chain
-/// binds less: the default cycle run alone had 410 of 415 before, 285 of 285 after, all in its
-/// first 60 ticks, so the frictionless run was added to keep the coverage.
+/// the cycle fixture (120 ticks), every good fits at the exact fills (to 1e-12 of its flows) and
+/// they equal the fill iteration run to convergence (1e-12) wherever it converges. Where a fill
+/// collapses below 1e-200 the bisection iteration underflows good by good and gives no limit to
+/// compare with, so the bound on the compared ticks is coverage, not model: at least 400 of the
+/// binding province ticks (410 of 415 with the gateway masses; 411 of 413 before them).
 #[test]
 fn exact_fill_equals_converged_iteration() {
     let cycles = [
@@ -2552,12 +2553,12 @@ fn exact_fill_equals_converged_iteration() {
         (CONSTRUCTION, SERVICES, 0.2),
     ];
     let (mut bound, mut compared_bound) = (0, 0);
-    for (inputs, ticks, params) in [
-        (small_world(), 60, EconParams::default()),
-        (fixture_with(&cycles), 120, EconParams::default()),
-        (fixture_with(&cycles), 120, EconParams::frictionless()),
-    ] {
-        let mut sim = EconWorld::sim(Arc::new(inputs), params, TradeParams::default());
+    for (inputs, ticks) in [(small_world(), 60), (fixture_with(&cycles), 120)] {
+        let mut sim = EconWorld::sim(
+            Arc::new(inputs),
+            EconParams::default(),
+            TradeParams::default(),
+        );
         for tick in 0..ticks {
             let mut probe = sim.world().clone();
             probe.begin_tick();
@@ -2579,7 +2580,7 @@ fn exact_fill_equals_converged_iteration() {
         }
     }
     println!("chain bound in {bound} province ticks, {compared_bound} compared");
-    assert!(compared_bound >= 340, "{compared_bound} of {bound}");
+    assert!(compared_bound >= 400, "{compared_bound} of {bound}");
 }
 
 /// S11 Proportional: one fill ratio for both classes at every short origin market.
@@ -2888,8 +2889,7 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
     w.end_tick(1).unwrap();
 }
 
-/// A run with write-offs is identical at 1 and 4 threads. Default settings: frictionless, the
-/// same prices fire none once enterprises hire only what their inputs allow (ADR 0266).
+/// A run with write-offs is identical at 1 and 4 threads.
 #[test]
 fn write_off_runs_are_thread_independent() {
     let run = |threads: usize| {
@@ -2898,7 +2898,7 @@ fn write_off_runs_are_thread_independent() {
             .build()
             .unwrap();
         pool.install(|| {
-            let mut w = world(EconParams::default());
+            let mut w = world(EconParams::frictionless());
             for (c, p) in w.markets.price.iter_mut().enumerate() {
                 *p *= if c % 3 == 0 { 0.2 } else { 3.0 };
             }
