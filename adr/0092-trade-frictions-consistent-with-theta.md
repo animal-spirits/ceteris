@@ -3,6 +3,7 @@
 Status: proposed (owner chose the options, 2026-10-25); partly built, see As built
 Date: 2026-10-25
 Design sections: 5.4, 8.3, 15.2, 18 (H2), 17 (P01, P05); trade SPEC Two-level kernel, Parameters; econ SPEC Goods; ADRs 0018, 0022, 0023
+Amended by ADR 0264 (proposed, 2026-10-30): H2 distance is a reported diagnostic; H2 per class is gated with the model's country-pair kernel as the cost control.
 
 ## Context
 
@@ -60,6 +61,9 @@ Petroleum: (i) keep in good 5; (ii) move into good 1; (iii) a new good.
 - Gateway invariance: duplicating a gateway with m split in half leaves every flow unchanged
   (1e-12).
 - H2: distance coefficient in -1.1 to -0.7 (unchanged); per class within 2 s.e. of PPML.
+  Amended by ADR 0264: the distance coefficient is reported against -1.1 to -0.7, not gated;
+  per class the PPML controls for the model's country-pair kernel net of tariffs instead of ln
+  distance, within max(2 s.e., 1% of theta_c).
 - Pack: good 1 and good 5 totals equal the ICIO aggregation with C19 moved; econ golden hashes
   regenerated.
 

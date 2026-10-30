@@ -6,7 +6,7 @@ H2 distance -0.753 (s.e. 0.016), H2 per class 1.75, 3.72 and 9.52, all in their 
 violation; 1 vs 8 threads identical; tick about 34 ms and `source_dispatch` 7.9 ms against the re-budgeted
 35 ms and 8 ms. Numbers and commands: P2 gate, Measured
 Phase: P2
-Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012, 0014 to 0016, 0018 to 0023, 0089 and 0112
+Design sections: 3.2, 3.3, 3.4, 4.2, 4.4, 4.6, 6.1, 7.1, 7.2, 7.3, 8.6, 8.7, 9.1, 15.3 (V0, V1), 16, 17, 18 (H1, H2), 19.2, 19.4, 20, 21.1 (P2); ADRs 0012, 0014 to 0016, 0018 to 0023, 0089, 0112 and 0264
 
 ## Purpose
 
@@ -913,19 +913,24 @@ the radius on p. 9, footnote 10 p. 7).
 - H2: PPML of simulated country-pair trade (traded goods; the origin value of the shipped units,
   `run_flows.value`, which is what the exporter receives and excludes the tariff; steady state of the default
   run) on ln distance (CEPII population-weighted) and contiguity, with exporter and importer
-  effects, excluding domestic pairs: distance coefficient in -1.1 to -0.7. H2 blocks the gate
-  (owner decision). Nothing is fitted to it: costs come from P04 and the literature time cost
-  P43. If it misses, work stops and the miss is reported to the owner before any parameter
-  moves; any change then goes through the register.
-- H2 per theta class (ADR 0018): PPML of each class's simulated country-pair trade, valued at what
-  the importer pays (`run_flows.value` times 1 + t), on ln(1 +
-  tariff) and ln distance with exporter and importer effects (`ppml.trade_elasticity` for a
-  one-good class; `ppml.hdfe` on (pair, good) rows with exporter x good and importer x good
-  effects for a class of several goods) recovers
-  the class's own theta_c (ADR 0092, replacing the prior bands of ADR 0023): theta_c lies within 2
-  pair-clustered standard errors of the class's PPML estimate. If a class misses, work stops and
-  the estimates go to the owner, as for H2. Not yet run with the gateway masses and the fitted
-  nu (pre-P3 B8).
+  effects, excluding domestic pairs: the distance coefficient is reported against the data's -1.1
+  to -0.7 and fails the test only when not finite or not negative (ADR 0264; it blocked the gate
+  until then). Nothing is fitted to it: costs come from P04 and the literature time cost P43.
+  With iceberg leg costs each class's coefficient is about -0.09 theta_c, against about -0.8 in
+  the data; the log-distance leg cost that ADR 0022 says the data prefer is scheduled for P9.
+- H2 per theta class (ADRs 0018, 0092 and 0264): PPML of each class's simulated country-pair
+  trade, valued at what the importer pays (`run_flows.value` times 1 + t), on ln(1 + tariff) and
+  the ln of the model's country-pair kernel net of tariffs at the calibrated point
+  (`model::ln_country_kernel`, province legs weighted by the sourcing weights w_o and E_d /
+  Phi_d), with exporter x good and importer x good effects over the foreign pairs a crossing
+  links (`ppml::class_tariff_fit`), recovers the class's own theta_c: theta_c lies within max(2
+  pair-clustered standard errors, 1% of theta_c) of the class's estimate. The regression is
+  nearly an identity with the model's kernel as the control, so the s.e. stops measuring
+  sampling error and the tolerance is V1's 1%. At the reference equilibrium the
+  regression is exact (`kernel_controlled_tariff_regression_recovers_theta_per_class`, fixture
+  with tariffs per pair, 1e-6). If a class misses, work stops and the estimates go to the owner.
+  The earlier control, ln distance (CEPII population-weighted), is printed as a diagnostic: it
+  leaves the costs the model puts on near agreement partners in the tariff coefficient.
 - 100 years (1,200 ticks) of the default run on the full pack without violation.
 - Budgets (19.2, M4 Pro): demand 10 ms, production and labour 12 ms, markets 2 ms, trade 30 ms
   per tick; criterion benchmarks in CI with the 20% regression gate.
