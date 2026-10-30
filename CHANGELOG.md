@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### BEHAVIOUR: bulk freight rate on for theta class 3 by default (ADR 0247, owner ruling 2026-10-30)
+
+- P154 0.026 and P155 0.40 for class 3 (goods 1 and 2), 1 for classes 0 to 2, in
+  `TradeParams::default`. ADR 0247's criterion 3 was ill-posed (H2 distance was outside its band
+  before the rate, -0.509 off, -0.463 on); criteria 1 and 2 pass. Class 3 now has a border
+  friction root on the pack (nu 0.0078 on the B2 scratch pack), so ADR 0092's clamp no longer
+  applies to it.
+- The fixture builds its own bulk legs: its six sea crossings at P154 times its sea cost per
+  tonne-km (it has no ports, so P155 scales nothing); every other leg is unchanged.
+  `TradeParams::bulk_off` gives the rate off, for networks without bulk legs: hand-built test
+  networks, the autarky world and `fixture::unreachable_island` (route taus exclude bulk legs).
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: only class 3 moves. `legs` gains the bulk costs and hours (NaN
+  before), `kernel_crossing` changes for goods 1 and 2 only (k up to 2.6e4 times for coal on
+  the sea lanes, inv_loss by up to 82%), in `provinces` `base_price_1` and `base_price_2`
+  fall by up to 12% and 45%, and `gamma_1` and `gamma_2` move by up to 1.9e-4; `params.json` the bulk fields
+  and the static digest. Every other value is bit for bit the same.
+- `tests/golden/p2-fixture/calibration/`: goods 1 and 2 move by up to 1.4% in price and output;
+  coal's input coefficient and stock (`coef_2`, `stock_2`) by up to 80%, in units, since its
+  delivered price falls by up to 44%; the pipeline by up to 80% (coal). Every other good moves
+  by 1e-5 or less, through the general equilibrium.
+- `tests/golden/p2-fixture/reference/`: the frictionless GE equilibrium moves with the cheaper
+  coal and oil crossings: cross-border coal flows by up to 9.8 times, oil 47%, other goods 2.6%
+  or less; prices by up to 1.3%, wages 0.75%.
+- `tests/golden/p2-econ.txt`: every hash (the inputs digest carries the fixture's bulk legs).
+  `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move; `p2-pack.txt` waits for the pack
+  rebuild (pre-P3 B8).
+
 ### BEHAVIOUR: buyers pay the CES index with selection on trade links (ADR 0200)
 
 - Buyers of a traded good pay q_d = Gamma_d,g P_d, the CES index times a selection constant per

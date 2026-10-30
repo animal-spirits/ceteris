@@ -1,6 +1,6 @@
 {
   "format": "13",
-  "static_digest": "d108937f705a2f0f839cb6310917edb4c0e46d5318f72d9927b7ad8f9cb06855",
+  "static_digest": "ad307c83ffe25d1c6e5aa0217a20d1c3d41e14a858b2ffff0d310230ec2b3074",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -61,8 +61,8 @@
     "expectation_gain": 0.006,
     "border_nu": [0.3, 0.3, 0.3, 0.3],
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0],
-    "bulk_sea": [1.0, 1.0, 1.0, 1.0],
-    "bulk_port": [1.0, 1.0, 1.0, 1.0],
-    "bulk_classes": [false, false, false, false]
+    "bulk_sea": [1.0, 1.0, 1.0, 0.026],
+    "bulk_port": [1.0, 1.0, 1.0, 0.4],
+    "bulk_classes": [false, false, false, true]
   }
 }
