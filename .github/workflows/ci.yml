@@ -16,6 +16,8 @@ jobs:
   # paused until hosted runners return. Target dirs sit outside the checkout so they survive
   # the clean checkout between runs.
   rust:
+    # Fork pull requests never reach the self-hosted runner.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, ARM64, ceteris]
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rust
