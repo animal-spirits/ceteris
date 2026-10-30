@@ -139,6 +139,10 @@ province with VA but no labour force, or a country with enterprises but no pops,
 are least-cost paths on the graph, run in parallel from every province and gateway, each keeping
 only its own country's provinces and gateways (from a province) or other countries' gateways
 (from a gateway): domestic, access and crossing legs, all gateway pairs of different countries.
+Where a theta class has a bulk freight rate (P154, P155, ADR 0247), the same runs on a copy of
+the graph repriced at that rate give the bulk legs (`Network.bulk`: same endpoints, the bulk
+paths' cost per tonne and hours), which the class's goods use; the export's `legs` table carries
+them as `bulk_cost_per_t` and `bulk_hours` (NaN without bulk legs; export format 12).
 `network_from_graph` is that step alone, and `EconWorld::set_network` installs a rebuilt
 network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
 

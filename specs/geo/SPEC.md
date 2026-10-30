@@ -142,6 +142,10 @@ ordering is imposed (5.3).
 
 Sea circuity is 1.0 because paths already follow the hexagonal sea grid.
 
+`TransportParams::bulk(sea, port)` returns these parameters with P04c sea times `sea` and the
+listed and minor port fees of P04m times `port`; the bulk freight rate of a theta class (P154,
+P155, ADR 0247; trade SPEC, Leg factors) prices its legs on a graph repriced with it.
+
 ## Equilibrium nesting
 
 n/a in P1: costs feed the trade solver in P2, where tau = 1 + c / p maps them to the GE

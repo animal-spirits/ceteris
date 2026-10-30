@@ -1,0 +1,107 @@
+# 0247. Bulk freight rate per theta class
+
+Status: proposed (owner ruling 1B, 2026-10-30: add a bulk freight rate for class 3 inside pre-P3
+B2, then refit nu); ablation result under As built
+Date: 2026-10-30
+Design sections: 5.3 (maritime container, bulk and tanker; freight rates), 5.4, 15.7 (ablation),
+17.1 (P04; new P154, P155), 21.2 item 7; amends ADR 0022 (P04 mode costs); ADR 0092 (nu per
+class); trade SPEC Leg factors, Parameters
+
+## Context
+
+- Class 3 (goods 1 and 2: crude oil, gas and refined fuels; coal and other mining; theta 16.91)
+  cannot reach its ICIO 2000 cross-border share at any border friction nu >= 0 on the 2000 pack:
+  0.2007 at nu 0 against a target of 0.2964, so ADR 0092's fit has no root for it (pre-P3 B2).
+- The diagnosis (`.superpowers/sdd/PLAN-pre-p3-rust/class3-diagnosis.md`) found the cause in leg
+  cost times theta, not in a basis or data error. Every good is shipped at P04's general-cargo
+  sea rate (0.008 USD per tonne-km) and port fees (8 USD/t at a listed port, 20 at a minor one).
+  At class 3's weight per value, that makes crossings cost tau - 1 of about 0.8 (good 1) and 3
+  (good 2). At theta 16.91, the border is shut to everything but net imports.
+- In 2000, crude oil, coal and ores did not move at general-cargo rates. They moved in tankers
+  and bulk carriers at rates per tonne an order of magnitude below the P04 sea prior. DESIGN
+  5.3 lists maritime transport as "container, bulk, tanker", with freight rates as a cost
+  driver; the code had only one sea rate.
+
+## Options
+
+1. Clamp class 3 at nu = 0 and record the miss (ADR 0092 amendment, no new mechanism).
+2. Lower class 3's theta. Rejected: P01 is Caliendo and Parro under ADR 0101, and even class
+   2's theta (7.68) leaves the nu-0 share at 0.274.
+3. A bulk freight rate: per-class multipliers on the sea cost per tonne-km and on the port fee,
+   sourced from 2000 tanker and dry-bulk rates.
+
+## Decision
+
+Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test fails.
+
+- **Mechanism.** Two per-class multipliers in `TradeParams`: `bulk_sea[c]` (P154) on the sea
+  cost per tonne-km (P04c, sea and canal edges) and `bulk_port[c]` (P155) on the port handling fees
+  (P04m, listed and minor ports). They are 1 for classes 0 to 2. Rail, road, air, the canal
+  fee, the hours and P43 are unchanged.
+- **Legs.** A class with multipliers other than 1 is routed on its own least-cost paths: the
+  transport graph is repriced at the bulk rates and the same legs (same endpoints, same
+  reachability) get their cost per tonne and hours from those paths (`Network.bulk`,
+  `ceteris_econ::EconInputs::network_from_graph`). Everything downstream of the leg factor
+  `tau = 1 + c w_g + lambda_g T` is unchanged. All classes that use the bulk rate share one pair
+  of multipliers (only class 3 does).
+- **Values (sourced, not fitted to the share target).** A least-squares line through the
+  2000 voyage rates per tonne that UNCTAD's Review of Maritime Transport quotes for class-3
+  cargoes, against the routes' sea-lane km on the pack's own graph (so the per-km slope prices
+  the same km the model charges):
+
+  ```
+  rate_r = F + s * km_r,     bulk_sea = s / 0.008,     bulk_port = (F / 2) / 8
+  ```
+
+  F is the fixed part of a voyage rate, paid once per end (two port calls); 8 USD/t is P04m's
+  listed-port fee. The routes, each the mean of the 2000 quotes the reports give:
+
+  | Route (cargo, ship) | Source | 2000 quotes, USD/t | Mean | Pack sea km |
+  |---|---|---|---|---|
+  | Brazil (Tubarao) to Europe (Rotterdam), iron ore, Capesize | RMT 2001 para. 96 p. 54; RMT 2002 ch. VII p. 107 | 6.15, 7.95; 7.50, 8.70 | 7.575 | 10,273 |
+  | Australia (Port Hedland) to Europe, iron ore, Capesize | RMT 2001 para. 96 p. 54 | 8.50, 10.70 | 9.60 | 19,136 |
+  | South Africa (Richards Bay) to Antwerp-Rotterdam-Amsterdam, coal, Capesize | RMT 2001 para. 96 p. 54 | 7.60, 10.10 | 8.85 | 14,125 |
+  | East Coast North America (Hampton Roads) to ARA, coal, Capesize | RMT 2001 para. 96 p. 54 | 5.90, 7.70 | 6.80 | 7,097 |
+  | Brazil (Tubarao) to China (Beilun), iron ore | RMT 2002 ch. VII p. 107 | 11.50, 13.50 | 12.50 | 21,087 |
+  | Puerto Bolivar (Colombia) to Northern Europe, coal, Capesize | RMT 2002 ch. VII p. 108 | 7.70, 8.40 | 8.05 | 8,455 |
+  | Curacao to Houston, dirty, 70,000-100,000 t tanker | RMT 2001 para. 82 p. 51 | 4.70, 13.20 | 8.95 | 3,840 |
+  | Curacao to Houston, clean products, 25,000-35,000 dwt tanker | RMT 2002 ch. VII p. 107 | 7.50 (March) | 7.50 | 3,840 |
+
+  Sources: UNCTAD, *Review of Maritime Transport 2001* (UNCTAD/RMT/2001), chapter IV, sections
+  A(b) and B(b); UNCTAD, *Review of Maritime Transport 2002* (UNCTAD/RMT/2002), chapter VII,
+  Latin America. Each route takes the 2000 quotes as given (start and end of the year, or the
+  months named), averaged. Grain routes are left out (class 2). Every class-3 rate in USD per tonne
+  for 2000 that the two reports give is in the table. Sea km: least-cost sea path between the
+  ports nearest the named terminals, sea and canal edges only (P04 circuity 1).
+
+  Fit (8 routes): F = 6.45 USD/t (s.e. 0.89), s = 2.08e-4 USD per tonne-km (s.e. 7.0e-5).
+  **P154 bulk_sea = 0.026** (2.08e-4 / 0.008), **P155 bulk_port = 0.40** (3.22 / 8), for class
+  3; 1 for classes 0 to 2. Sensitivity: the six dry-bulk routes alone give 0.041 and 0.28.
+  The quoted rates are port to port: what they include at the terminals (cargo handling) is not
+  stated, so the bulk port fee is the rate's fixed part only.
+- **Ablation test (DESIGN 15.7, falsification branch; owner criterion, 2026-10-30).** With no
+  holdout scoring before P3, the rate is compared off (multipliers 1, the code before this ADR)
+  against on:
+  1. off, the class-3 nu fit has no root; on, it has one;
+  2. H2's class-3 elasticity is inside its band (theta_3 within 2 pair-clustered s.e. of the
+     class-3 PPML estimate) on, and outside it off;
+  3. H2's distance elasticity stays inside -1.1 to -0.7 with the rate on.
+
+  If 2 or 3 fails, the rate stays off by default (P154 and P155 at 1 for every class), class 3
+  is clamped at nu = 0 and the miss is recorded in ADR 0092. Nothing is tuned to pass.
+
+## Consequences
+
+- Class 3's international legs cost about a tenth of what they cost before, and the class can
+  trade two-way, as ICIO says it does in 2000.
+- A second shortest-path pass over all sources at load, on a repriced copy of the graph (pack
+  load time; the kernel and the tick are unchanged).
+- The export's legs table carries the bulk costs and hours (export format 12); the reference
+  reads the kernel factors and needs no change.
+- Pipelines, the other bulk mode for crude and gas, are still not built (DESIGN 5.3, P8).
+- ADR 0017's route choice does not see the bulk rate; a network with route taus and bulk legs is
+  rejected.
+
+## As built
+
+Pending (pre-P3 B2, task b2-1b).
