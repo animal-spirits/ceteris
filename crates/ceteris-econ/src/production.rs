@@ -17,6 +17,31 @@ pub fn value_added(a: f64, va0: f64, l0: f64, s_l: f64, rho: f64, l: f64) -> f64
     a * va0 * libm::pow((1.0 - s_l) + s_l * libm::pow(x, rho), 1.0 / rho)
 }
 
+/// dVA/dL of [`value_added`] at employment `l` > 0.
+pub fn marginal_value_added(a: f64, va0: f64, l0: f64, s_l: f64, rho: f64, l: f64) -> f64 {
+    let x = l / l0;
+    if rho.abs() < RHO_CD {
+        return a * va0 * s_l * libm::pow(x, s_l - 1.0) / l0;
+    }
+    let bracket = (1.0 - s_l) + s_l * libm::pow(x, rho);
+    a * va0 * libm::pow(bracket, 1.0 / rho - 1.0) * s_l * libm::pow(x, rho - 1.0) / l0
+}
+
+/// The inverse of [`value_added`]: the least employment at which VA reaches `va`, infinite where
+/// no employment does (rho < 0, `va` at or above the asymptote A VA0 (1 - s_L)^(1/rho)) and 0
+/// where none is needed (rho > 0, `va` at or below VA(0) = A VA0 (1 - s_L)^(1/rho)).
+pub fn labour_for_value_added(va: f64, a: f64, va0: f64, l0: f64, s_l: f64, rho: f64) -> f64 {
+    let z = va / (a * va0);
+    if rho.abs() < RHO_CD {
+        return l0 * libm::pow(z, 1.0 / s_l);
+    }
+    let bracket = (libm::pow(z, rho) - (1.0 - s_l)) / s_l;
+    if bracket <= 0.0 {
+        return if rho < 0.0 { f64::INFINITY } else { 0.0 };
+    }
+    l0 * libm::pow(bracket, 1.0 / rho)
+}
+
 /// Profit-maximizing employment of one enterprise at value-added price `p_va` and wage `w`
 /// (closed form of p_VA dVA/dL = w), [`labour_target_uncapped`] capped at `l_supply`: one
 /// enterprise cannot hire more than the province has.
@@ -104,6 +129,59 @@ mod tests {
             let r = rho(sigma);
             let va = value_added(A, VA0, L0, S_L, r, L0);
             assert!((va - A * VA0).abs() < 1e-10, "sigma {sigma}: {va}");
+        }
+    }
+
+    #[test]
+    fn labour_for_value_added_inverts_value_added() {
+        for sigma in [0.5, 0.8, 1.0, 1.2] {
+            let r = rho(sigma);
+            for l in [0.0, 1e-3, 7.0, L0, 3.0 * L0, 1e4] {
+                let va = value_added(A, VA0, L0, S_L, r, l);
+                let back = labour_for_value_added(va, A, VA0, L0, S_L, r);
+                assert!(
+                    (back - l).abs() <= 1e-9 * l.max(1.0),
+                    "sigma {sigma}: L {l}, VA {va}, back {back}"
+                );
+            }
+        }
+        // rho < 0: VA beyond its asymptote needs infinite labour
+        let ceiling = A * VA0 * libm::pow(1.0 - S_L, 1.0 / rho(0.8));
+        assert_eq!(
+            labour_for_value_added(ceiling * 1.01, A, VA0, L0, S_L, rho(0.8)),
+            f64::INFINITY
+        );
+        // rho > 0: VA up to VA(0) needs no labour
+        let floor = value_added(A, VA0, L0, S_L, rho(1.2), 0.0);
+        assert_eq!(
+            labour_for_value_added(floor * 0.5, A, VA0, L0, S_L, rho(1.2)),
+            0.0
+        );
+        assert_eq!(
+            labour_for_value_added(f64::INFINITY, A, VA0, L0, S_L, 0.0),
+            f64::INFINITY
+        );
+    }
+
+    /// The marginal product is the numerical derivative, and the profit-maximizing target at
+    /// the wage p_VA dVA/dL(L) is L.
+    #[test]
+    fn marginal_value_added_is_the_wage_that_targets_l() {
+        for sigma in [0.5, 0.8, 1.0, 1.2] {
+            let r = rho(sigma);
+            for l in [3.0, L0, 4.0 * L0] {
+                let h = 1e-5 * l;
+                let numeric = (value_added(A, VA0, L0, S_L, r, l + h)
+                    - value_added(A, VA0, L0, S_L, r, l - h))
+                    / (2.0 * h);
+                let mpl = marginal_value_added(A, VA0, L0, S_L, r, l);
+                assert!(((mpl - numeric) / mpl).abs() < 1e-8, "sigma {sigma} L {l}");
+                let back = labour_target_uncapped(1.7, 1.7 * mpl, A, VA0, L0, S_L, r);
+                assert!(
+                    ((back - l) / l).abs() < 1e-10,
+                    "sigma {sigma} L {l}: {back}"
+                );
+            }
         }
     }
 

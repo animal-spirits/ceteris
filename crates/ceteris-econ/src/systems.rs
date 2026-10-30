@@ -30,7 +30,10 @@ use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch as dispatch_good, source 
 use crate::inputs::EconInputs;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local::{self, LOCAL};
-use crate::production::{labour_target, labour_target_uncapped, rho, value_added};
+use crate::production::{
+    labour_for_value_added, labour_target, labour_target_uncapped, marginal_value_added, rho,
+    value_added,
+};
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
     TRADE, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
@@ -195,11 +198,39 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
     (p_g - inputs) / a_va
 }
 
+/// The output enterprise `e`'s inputs allow at E1 (ADR 0266): of each input k it uses, what it
+/// can have over coef_k. A traded input is its stock after T1. A local input is its stock plus
+/// the province's last output of the good (the market's Q of the last same-tick chain), the
+/// most this tick's chain can give it if output holds; its own good is left out, since its own
+/// output serves it first. Infinite where it uses no input.
+pub fn input_output(w: &EconWorld, e: usize) -> f64 {
+    let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
+    let (i, own) = (
+        w.inputs.enterprises.province[e] as usize,
+        usize::from(w.inputs.enterprises.good[e]),
+    );
+    let mut y = f64::INFINITY;
+    for k in (0..N_GOODS).filter(|&k| k != own) {
+        let a = lay.coef[e][k];
+        if a > 0.0 {
+            let chain = if TRADED[k] {
+                0.0
+            } else {
+                w.markets.supply[i * N_GOODS + k]
+            };
+            y = y.min((w.ledger.goods(account, k) + chain) / a);
+        }
+    }
+    y
+}
+
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
-/// current wage, then the wage (wage rule on expected inflation and excess demand against the
-/// natural rate u*, or when frictionless the wage at which labour demand is (1 - u*) L^s, ADR
-/// 0089), employment toward L* and employed pops.
+/// current wage, each capped at the labour that produces the output its inputs allow
+/// ([`input_output`], ADR 0266), then the wage (wage rule on expected inflation and excess
+/// demand against the natural rate u*, or when frictionless the wage at which the capped
+/// labour demand is (1 - u*) L^s, ADR 0089), employment toward L* and employed pops.
 pub fn labour(w: &mut EconWorld) {
+    let world = &*w;
     let (inp, lay, params) = (&*w.inputs, &*w.layout, &w.params);
     let c_max = w.trade.c_max;
     let r = rho(params.sigma_fl);
@@ -221,28 +252,71 @@ pub fn labour(w: &mut EconWorld) {
                     value_added_price(p[g], |k| lay.coef[e][k], p_in, lay.a_va[e])
                 })
                 .collect();
-            let target = |e: usize, p_va: f64, w: f64| {
-                let ent = &inp.enterprises;
-                labour_target(p_va, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
-            };
+            let ent = &inp.enterprises;
+            let equipped: Vec<f64> = ents
+                .clone()
+                .map(|e| {
+                    let va = lay.a_va[e] * input_output(world, e);
+                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                })
+                .collect();
             let targets = |w: f64| -> Vec<f64> {
                 ents.clone()
-                    .zip(&p_va)
-                    .map(|(e, &pv)| target(e, pv, w))
+                    .zip(p_va.iter().zip(&equipped))
+                    .map(|(e, (&pv, &cap))| {
+                        labour_target(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                            .min(cap)
+                    })
                     .collect()
             };
             let w0 = wage[i];
             let (w1, t, clipped) = if params.frictionless {
-                let demand = |w: f64| -> f64 {
-                    let ent = &inp.enterprises;
-                    ents.clone()
-                        .zip(&p_va)
-                        .map(|(e, &pv)| {
-                            labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
-                        })
-                        .sum()
+                let natural = (1.0 - u_star) * supply;
+                let free = |e: usize, pv: f64, w: f64| {
+                    labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
                 };
-                let w1 = frictionless_wage(w0, (1.0 - u_star) * supply, demand);
+                let hiring = || {
+                    ents.clone()
+                        .zip(p_va.iter().zip(&equipped))
+                        .filter(|&(_, (&pv, &cap))| pv > 0.0 && cap > 0.0)
+                };
+                let demand = |w: f64| -> f64 {
+                    ents.clone().zip(&p_va).map(|(e, &pv)| free(e, pv, w)).sum()
+                };
+                let w1 = frictionless_wage(w0, natural, demand);
+                // Where no input cap binds at the wage that clears without them, it clears with
+                // them: the search on the capped demand would find it too, but by another path
+                // and so to other bits. Else the wage clears on the capped targets.
+                let unbound = ents
+                    .clone()
+                    .zip(p_va.iter().zip(&equipped))
+                    .all(|(e, (&pv, &cap))| pv <= 0.0 || free(e, pv, w1) < cap);
+                let w1 = if unbound {
+                    w1
+                } else {
+                    let demand = |w: f64| -> f64 {
+                        ents.clone()
+                            .zip(p_va.iter().zip(&equipped))
+                            .map(|(e, (&pv, &cap))| free(e, pv, w).min(cap))
+                            .sum()
+                    };
+                    let w1 = frictionless_wage(w0, natural, demand);
+                    // Rationed: every enterprise that would hire is at its input cap, so demand
+                    // is flat around w1 and every wage up to the lowest marginal value product
+                    // at the caps clears; the last wage is kept where it does, else the
+                    // highest that does is taken (ADR 0266).
+                    let interior = hiring()
+                        .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
+                    let top = hiring()
+                        .map(|(e, (&pv, &cap))| {
+                            pv * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, cap)
+                        })
+                        .reduce(f64::min);
+                    match top {
+                        Some(top) if !interior => top.min(w0),
+                        _ => w1,
+                    }
+                };
                 (w1, targets(w1), false)
             } else {
                 let t = targets(w0);
@@ -1057,6 +1131,104 @@ mod tests {
         assert_eq!(target, 0.0);
         let b = |k: usize| if k == 3 { 0.0 } else { a(k) };
         assert!((value_added_price(2.0, b, &index, 0.6) - 1.8 / 0.6).abs() < 1e-15);
+    }
+
+    /// ADR 0266: an enterprise with no stock of a traded input it uses, or without a local
+    /// input in stock or in its province's last output, hires no one; with inputs to spare
+    /// every target, and so the wage and employment, are the same whatever the stocks.
+    #[test]
+    fn labour_is_capped_at_what_inputs_allow() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let inputs = Arc::new(small_world());
+        for params in [EconParams::frictionless(), EconParams::default()] {
+            let fresh = EconWorld::new(Arc::clone(&inputs), params.clone(), TradeParams::default());
+            let lay = Arc::clone(&fresh.layout);
+            let e = (0..fresh.inputs.n_enterprises())
+                .find(|&e| (0..N_GOODS).any(|k| TRADED[k] && lay.coef[e][k] > 0.0))
+                .expect("an enterprise using a traded input");
+            let with_stocks = |factor: f64| {
+                let mut w = fresh.clone();
+                for (u, &account) in lay.accounts.enterprise.iter().enumerate() {
+                    for k in (0..N_GOODS).filter(|&k| lay.coef[u][k] > 0.0) {
+                        let held = w.ledger.goods(account, k);
+                        w.ledger.create(account, k, held * (factor - 1.0));
+                    }
+                }
+                w
+            };
+            let ample = |factor: f64| {
+                let mut w = with_stocks(factor);
+                labour(&mut w);
+                (w.wage, w.employment)
+            };
+            let (wage, employment) = ample(100.0);
+            assert!(employment[e] > 0.0);
+            let (wage_more, employment_more) = ample(1e4);
+            assert_eq!(wage, wage_more);
+            assert_eq!(employment, employment_more);
+
+            let mut w = with_stocks(100.0);
+            let account = lay.accounts.enterprise[e];
+            for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
+                let held = w.ledger.goods(account, k);
+                w.ledger.destroy(account, k, held);
+            }
+            assert_eq!(input_output(&w, e), 0.0);
+            let prev = w.employment[e];
+            labour(&mut w);
+            assert_eq!(w.employment[e], prev + params.eta * (0.0 - prev));
+
+            // a local input: its stock plus the province's last output of it
+            let mut w = with_stocks(100.0);
+            let i = w.inputs.enterprises.province[e] as usize;
+            let own = usize::from(w.inputs.enterprises.good[e]);
+            let k = LOCAL
+                .into_iter()
+                .find(|&k| k != own && lay.coef[e][k] > 0.0)
+                .expect("a local input");
+            let held = w.ledger.goods(account, k);
+            w.ledger.destroy(account, k, held);
+            w.markets.supply[i * N_GOODS + k] = 0.0;
+            assert_eq!(input_output(&w, e), 0.0);
+            labour(&mut w);
+            assert_eq!(w.employment[e], prev + params.eta * (0.0 - prev));
+            w.markets.supply[i * N_GOODS + k] = 2.0 * lay.coef[e][k];
+            assert_eq!(input_output(&w, e), 2.0);
+        }
+    }
+
+    /// ADR 0266: the fixture's data state holds one month of base inputs, so every enterprise
+    /// is at its cap L0, and frictionless labour demand is flat at (1 - u*) L^s below the
+    /// lowest marginal value product at the caps, w_top, which there is w0. The wage stays where
+    /// it clears (not at the bottom of the flat stretch, near 1e-58) and comes down to w_top
+    /// from above it.
+    #[test]
+    fn rationed_frictionless_wage_is_the_last_one_that_clears() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let fresh = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::frictionless(),
+            TradeParams::default(),
+        );
+        let (w0, l0) = (fresh.wage.clone(), fresh.employment.clone());
+        let close = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(x, y)| (x / y - 1.0).abs() < 1e-9);
+        let mut w = fresh.clone();
+        labour(&mut w);
+        assert!(close(&w.wage, &w0), "{:?} vs {w0:?}", w.wage);
+        assert!(close(&w.employment, &l0));
+        let mut w = fresh.clone();
+        w.wage.iter_mut().for_each(|x| *x *= 2.0);
+        labour(&mut w);
+        assert!(close(&w.wage, &w0), "{:?} vs {w0:?}", w.wage);
+        assert!(close(&w.employment, &l0));
     }
 
     #[test]
