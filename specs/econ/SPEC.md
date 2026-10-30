@@ -739,6 +739,30 @@ above rounding is no larger in its second half than in its first (controller rul
 of the former joint inversion (`reference/reduced.py`) and its JAX twin were deleted with the
 Python reference (ADR 0113).
 
+### Benchmark (`ceteris_calibrate::benchmark`, ADRs 0200, 0207)
+
+A calibrated pack runs frictionless from its steady state under the shocks of
+`ceteris_calibrate::shock` and is reduced to country aggregates (`Outcome`). Welfare is
+d ln I_c - sum_g Omega_cg d ln q_cg, I_c pop income and q_cg the population-weighted mean of the
+provinces' buyer prices; lambda_cg is the home share of absorption by value at origin prices over
+the flow window. Two ACR predictions sit beside it:
+
+- `acr`: -sum over traded g of Omega_cg / theta_g d ln lambda_cg (Arkolakis, Costinot and
+  Rodriguez-Clare 2012), with no input-output linkages.
+- `acr_io`: d ln W_c = -Omega_c' (I - A_c')^-1 diag(1/theta) d ln lambda_c, Costinot and
+  Rodriguez-Clare (2014, Handbook of International Economics vol. 4 ch. 4, section 3.4, eq. (28)
+  of NBER WP 18896 under perfect competition, delta_k = 0, where the adjusted Leontief inverse is
+  the plain one; Caliendo and Parro 2015). A_c holds the country's cost shares, a_kg of input k in
+  sector g (`Countries::io`, which the calibrated coefficients reproduce at the calibrated
+  prices); d ln lambda is 0 for local goods, which pass input cost changes on through the
+  inverse. With one good using itself at cost share a the change is 1 / (1 - a) times `acr`
+  (fn. 20 there). The model has Leontief intermediates, so its welfare follows `acr_io`.
+
+A good bought at home in one run only makes the country's ACR NaN in both forms. ADR 0207's
+criterion grades `acr_io` (ADR 0265): under every crossing tau x 1.1, every ICIO country with
+|ACR| above 1e-4 has its sign, the median model / ACR ratio is in [0.8, 1.25] and the correlation
+across countries is at least 0.9; `acr` stays reported. C7 asserts it at B8 on the final pack.
+
 ## GE reference model (`ceteris-reference`)
 
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every

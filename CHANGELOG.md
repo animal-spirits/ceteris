@@ -12,6 +12,13 @@
 - The comparative-statics example of 28 October (90a6940) moves to
   `crates/ceteris-calibrate/examples/shock.rs` as a wrapper over both, with its four CSVs.
 - Benchmark shock files in `crates/ceteris-calibrate/tests/data/benchmark/`. No behaviour moves.
+- `benchmark::acr_io`: the ACR prediction with input-output linkages, -Omega' (I - A')^-1
+  diag(1/theta) d ln lambda (Costinot and Rodriguez-Clare 2014; Caliendo and Parro 2015), A the
+  country's cost shares; ADR 0265 (proposed) makes it ADR 0207's ACR criterion, which C7
+  asserts at B8. `acr` and `acr_io` give NaN, not +inf, where a home share vanishes in
+  one run only. Hard Brexit adds a tariff only up to the EU common external tariff (CYP, HRV,
+  MLT and ROU already met it with GBR in 2000). `EconInputs::fold_bulk_into_route_taus` is the
+  one fold of the bulk legs, used by the shocks and `fixture::unreachable_island`.
 
 ### BEHAVIOUR: per-market price gain, capped at half each market's stability limit (ADR 0263)
 
