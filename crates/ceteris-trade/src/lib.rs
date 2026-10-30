@@ -13,7 +13,7 @@ pub mod source;
 pub use goods::N_GOODS;
 pub use kernel::{Access, Kernel};
 pub use market::{Markets, Rationing};
-pub use network::{Leg, LegTaus, Network, Wedges, equal_gateway_mass};
+pub use network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
 pub use params::{N_CLASSES, TradeParams};
 pub use pipeline::Pipeline;
 pub use source::{Sourced, dispatch, source};

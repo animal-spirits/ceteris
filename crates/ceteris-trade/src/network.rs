@@ -2,6 +2,7 @@
 //! produced from `ceteris-geo` path costs, and the tariff wedges on gateway crossings.
 
 use crate::goods::N_GOODS;
+use crate::params::N_CLASSES;
 
 /// A least-cost path summary between two nodes. `cost_per_t` is USD per tonne at the
 /// reference price level, `hours` the travel time along the same path.
@@ -29,6 +30,9 @@ pub struct Leg {
 ///
 /// `route_taus`, when present, replaces the least-cost leg factors (S05) with route-choice
 /// factors (ADR 0017).
+///
+/// `bulk`, when present, gives the theta classes it names their own least-cost legs at the bulk
+/// freight rate (ADR 0247).
 #[derive(Clone, Debug, Default)]
 pub struct Network {
     pub province_country: Vec<u16>,
@@ -38,6 +42,19 @@ pub struct Network {
     pub access: Vec<Leg>,
     pub crossings: Vec<Leg>,
     pub route_taus: Option<LegTaus>,
+    pub bulk: Option<BulkLegs>,
+}
+
+/// Least-cost legs at the bulk freight rate (P154, P155, ADR 0247), for the goods of the theta
+/// classes in `classes`: the same endpoints in the same order as the base lists of
+/// [`Network`], with the cost per tonne and hours of the least-cost path on the graph repriced
+/// at that rate.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BulkLegs {
+    pub classes: [bool; N_CLASSES],
+    pub domestic: Vec<Leg>,
+    pub access: Vec<Leg>,
+    pub crossings: Vec<Leg>,
 }
 
 /// Route-choice leg factors per good (ADR 0017, `ceteris_geo::route_choice`) and the

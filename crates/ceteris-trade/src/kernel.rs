@@ -528,6 +528,29 @@ fn validate(net: &Network, np: usize, ng: usize) {
             "negative leg cost: {l:?}"
         );
     }
+    if let Some(b) = &net.bulk {
+        assert!(
+            net.route_taus.is_none(),
+            "route taus and bulk legs together (ADR 0247)"
+        );
+        for (name, bulk, base) in [
+            ("domestic", &b.domestic, &net.domestic),
+            ("access", &b.access, &net.access),
+            ("crossing", &b.crossings, &net.crossings),
+        ] {
+            assert_eq!(bulk.len(), base.len(), "bulk {name} legs: count");
+            for (x, y) in bulk.iter().zip(base) {
+                assert!(
+                    (x.from, x.to) == (y.from, y.to),
+                    "bulk {name} leg {x:?} against base {y:?}"
+                );
+                assert!(
+                    x.cost_per_t >= 0.0 && x.hours >= 0.0,
+                    "negative bulk leg cost: {x:?}"
+                );
+            }
+        }
+    }
     if let Some(rt) = &net.route_taus {
         let lists = [
             (
@@ -584,6 +607,12 @@ fn good_kernel(
 ) -> GoodKernel {
     let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
     let rt = net.route_taus.as_ref();
+    let (domestic, access, crossing_legs) = match &net.bulk {
+        Some(b) if b.classes[usize::from(p.theta_class[g])] => {
+            (&b.domestic, &b.access, &b.crossings)
+        }
+        _ => (&net.domestic, &net.access, &net.crossings),
+    };
     let k_of = |total: f64| libm::pow(total, -theta);
     let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
         let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
@@ -614,7 +643,7 @@ fn good_kernel(
             lag: (hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8,
         }
     };
-    let crossings = Csr::from_legs(ng, &net.crossings, crossing);
+    let crossings = Csr::from_legs(ng, crossing_legs, crossing);
     let mut links = vec![false; ng * nc];
     for a in 0..ng {
         for e in crossings.row(a).iter().filter(|e| e.k > 0.0) {
@@ -622,10 +651,8 @@ fn good_kernel(
         }
     }
     GoodKernel {
-        domestic: Csr::from_legs(np, &net.domestic, |i, l| {
-            plain(rt.map(|r| &r.domestic), i, l)
-        }),
-        access: Csr::from_legs(np, &net.access, |i, l| plain(rt.map(|r| &r.access), i, l)),
+        domestic: Csr::from_legs(np, domestic, |i, l| plain(rt.map(|r| &r.domestic), i, l)),
+        access: Csr::from_legs(np, access, |i, l| plain(rt.map(|r| &r.access), i, l)),
         crossings,
         links,
     }
@@ -635,7 +662,7 @@ fn good_kernel(
 mod tests {
     use super::*;
     use crate::goods::{N_GOODS, tariff_group};
-    use crate::network::{Leg, LegTaus, Network, Wedges, equal_gateway_mass};
+    use crate::network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
     use crate::params::TradeParams;
 
     const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
@@ -794,6 +821,89 @@ mod tests {
         // same legs, the other theta: the factors differ
         let e = k.good(0).domestic.entries[0];
         assert_ne!(e.k, libm::pow(1.0 / e.inv_tau, -8.0));
+    }
+
+    /// ADR 0247: goods of a class with bulk legs take the bulk legs' cost and hours on every leg
+    /// list; the other goods keep the base legs. Bulk legs equal to the base legs change nothing.
+    #[test]
+    fn bulk_legs_price_the_bulk_classes() {
+        let p = TradeParams::default();
+        let base = world(&mut Rng(9));
+        let mut rng = Rng(21);
+        let redraw = |legs: &[Leg], rng: &mut Rng| -> Vec<Leg> {
+            legs.iter().map(|l| rng.leg(l.from, l.to)).collect()
+        };
+        let mut classes = [false; crate::params::N_CLASSES];
+        classes[3] = true;
+        let net = Network {
+            bulk: Some(BulkLegs {
+                classes,
+                domestic: redraw(&base.domestic, &mut rng),
+                access: redraw(&base.access, &mut rng),
+                crossings: redraw(&base.crossings, &mut rng),
+            }),
+            ..base.clone()
+        };
+        let bulk = net.bulk.as_ref().unwrap();
+        let wedges = Wedges::none(2);
+        let k = Kernel::build(&net, &W, &wedges, &p);
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            let on = p.theta_class[g] == 3;
+            let pick = |b: &Vec<Leg>, n: &Vec<Leg>| if on { b.clone() } else { n.clone() };
+            let gk = k.good(g);
+            for (csr, legs) in [
+                (&gk.domestic, pick(&bulk.domestic, &net.domestic)),
+                (&gk.access, pick(&bulk.access, &net.access)),
+            ] {
+                for l in &legs {
+                    let tau = leg_tau(&p, g, l);
+                    assert_eq!(entry(csr, l).inv_tau, 1.0 / tau, "good {g}");
+                }
+            }
+            let nu = 1.0 + p.border_nu_of(g);
+            for l in &pick(&bulk.crossings, &net.crossings) {
+                let e = crossing(&gk.crossings, l);
+                assert_eq!(e.inv_loss, 1.0 / (leg_tau(&p, g, l) * nu), "good {g}");
+                let lag = (l.hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8;
+                assert_eq!(e.lag, lag, "good {g}");
+            }
+        }
+        let same = Network {
+            bulk: Some(BulkLegs {
+                classes,
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings: base.crossings.clone(),
+            }),
+            ..base.clone()
+        };
+        let (a, b) = (
+            Kernel::build(&base, &W, &wedges, &p),
+            Kernel::build(&same, &W, &wedges, &p),
+        );
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            assert_eq!(a.good(g).crossings.entries, b.good(g).crossings.entries);
+            assert_eq!(a.good(g).domestic.entries, b.good(g).domestic.entries);
+            assert_eq!(a.good(g).access.entries, b.good(g).access.entries);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "bulk crossing leg")]
+    fn bulk_legs_must_match_the_base_legs() {
+        let base = world(&mut Rng(9));
+        let mut crossings = base.crossings.clone();
+        crossings.swap(0, 1);
+        let net = Network {
+            bulk: Some(BulkLegs {
+                classes: [false, false, false, true],
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings,
+            }),
+            ..base
+        };
+        Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
     }
 
     /// ADR 0092: each good's crossings carry its theta class's border friction.

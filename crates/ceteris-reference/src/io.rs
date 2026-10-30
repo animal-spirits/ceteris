@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "11";
+pub const EXPORT_FORMAT: &str = "12";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]

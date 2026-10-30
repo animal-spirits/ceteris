@@ -117,7 +117,8 @@ fn relative(got: f64, want: f64) -> f64 {
 
 /// The reference routes on the kernel Rust exports, and that kernel is the spec's: every crossing
 /// factor rebuilt from the legs, tariffs and gateway masses as
-/// K_ab = m_a m_b (tau (1 + nu_c) (1 + t))^-theta, nu_c of the good's theta class (ADR 0092), with
+/// K_ab = m_a m_b (tau (1 + nu_c) (1 + t))^-theta, nu_c of the good's theta class (ADR 0092), tau
+/// from the bulk legs for a class with a bulk freight rate (ADR 0247), with
 /// 1 / (tau (1 + nu)) and 1 / (1 + t), to 1e-12; and the reference's delivered prices at prices 1
 /// are Rust's base prices to 1e-12. Returns the largest relative difference.
 fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
@@ -138,6 +139,12 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
             .collect()
     };
     let (border_nu, class) = (list("border_nu"), list("theta_class"));
+    let bulk_class: Vec<bool> = params["trade"]["bulk_classes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_bool().unwrap())
+        .collect();
     let gc = &inp.gateway_country;
     let n_c = inp.n_countries();
     let mut rate = vec![0.0; n_c * n_c * 2];
@@ -162,6 +169,10 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
         pick_f(floats(&legs, "cost_per_t")),
         pick_f(floats(&legs, "hours")),
     );
+    let (bulk_cost, bulk_hours) = (
+        pick_f(floats(&legs, "bulk_cost_per_t")),
+        pick_f(floats(&legs, "bulk_hours")),
+    );
     let leg_at: BTreeMap<(usize, usize), usize> = a
         .iter()
         .zip(&b)
@@ -182,8 +193,15 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
     };
     for g in (0..inp.n_goods()).filter(|&g| inp.traded[g]) {
         let nu = border_nu[class[g] as usize];
+        // ADR 0247: goods of a class with bulk legs are priced on them
+        let (cost, hours) = if bulk_class[class[g] as usize] {
+            (&bulk_cost, &bulk_hours)
+        } else {
+            (&cost, &hours)
+        };
         for j in (0..cro.good.len()).filter(|&j| cro.good[j] == g) {
             let i = leg_at[&(cro.row[j], cro.col[j])];
+            assert!(cost[i].is_finite(), "good {g}: no leg cost at crossing {i}");
             let tau = 1.0 + cost[i] * weight[g] + time_cost[g] * hours[i] / 24.0;
             let duty = 1.0 + rate[(gc[b[i]] * n_c + gc[a[i]]) * 2 + group[g]];
             let m = inp.gateway_mass[a[i]] * inp.gateway_mass[b[i]];
