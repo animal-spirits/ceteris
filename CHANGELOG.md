@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### BEHAVIOUR: calibration passes mixed in relative units
+
+- The Anderson mixing of the calibration passes holds the rebates and the PIGL scales relative to
+  their block's largest magnitude, the units `change` measures them in, instead of in money: its
+  least squares weighed the rebates' residual (about 1e7) against the prices' (about 1) and fitted
+  the rebates alone. On the full pack with the B1 tables the passes wandered for 100 passes; the
+  pass map itself cycles there. No equation or fixed point changes.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: every table moves by at most 3.0e-12 relative (the
+  pipeline units; prices and coefficients by at most 6e-13), and the fixture now settles in 24
+  passes instead of 21. The fixed point is the same to the 1e-12 the passes stop at; the
+  different path ends at a different point inside that tolerance.
+- `tests/golden/p2-econ.txt`, the fixture export and reference, `p0-toy.txt`, `p1-geo.txt`,
+  `p1-pack.txt` and `p2-pack.txt` do not move.
+
 ### BEHAVIOUR: gateway masses and the border friction per theta class (ADR 0092)
 
 - Every gateway carries a mass, its share of its country's 2000 trade throughput (1/k for a
