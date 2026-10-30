@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
     Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, impute, impute_pack, median_va_over_gdp,
-    oil_gas_va_over_rents, sector_shares,
+    oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
@@ -316,6 +316,29 @@ fn with_rents(oil: f64, gas: f64) -> Wdi {
     }
 }
 
+/// `donors()` with donor CCC (not XXX's) at crude oil and gas 40 of its industry VA of 49, total
+/// VA still 100: the largest share of oil and gas in industry is 40 / 49.
+fn oil_donors() -> BTreeMap<String, CountryIo> {
+    let mut icio = donors();
+    let c = icio.get_mut("CCC").unwrap();
+    c.va = [10.0, 40.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 41.0];
+    c.output = c.va.map(|v| v / 0.7);
+    icio
+}
+
+fn oil(wdi: &Wdi) -> Economy {
+    run(&[("XXX", "XXX")], &oil_donors(), wdi, &obs(), &PLAIN)["XXX"].clone()
+}
+
+#[test]
+fn oil_gas_most_of_industry_is_the_largest_icio_share() {
+    assert!(approx(
+        oil_gas_most_of_industry(&oil_donors()),
+        40.0 / 49.0,
+        1e-12
+    ));
+}
+
 #[test]
 fn oil_gas_va_over_rents_sums_the_icio_economies_with_a_rent() {
     assert!(approx(
@@ -327,7 +350,7 @@ fn oil_gas_va_over_rents_sums_the_icio_economies_with_a_rent() {
 
 #[test]
 fn oil_and_gas_rents_set_crude_oil_and_gas_out_of_its_group() {
-    let got = one("XXX", &with_rents(0.05, 0.01), &obs());
+    let got = oil(&with_rents(0.05, 0.01));
     // 0.06 of GDP times 2: 120 of the 150 of industry other than manufacturing; the other 30 over
     // goods 2, 7, 8 as the donor (1, 3, 2).
     assert!(approx(got.table.va[1], 120.0, 1e-12));
@@ -344,7 +367,7 @@ fn oil_and_gas_above_their_group_take_from_manufacturing() {
     // 0.2 of GDP exceeds the 0.15 of industry other than manufacturing, so all industry (0.35)
     // is one group: oil and gas 200, the other 150 over goods 2 to 8 as the donor (1, 6, 2, 1, 1,
     // 3, 2) / 16.
-    let got = one("XXX", &with_rents(0.1, 0.0), &obs());
+    let got = oil(&with_rents(0.1, 0.0));
     assert!(approx(got.table.va[1], 200.0, 1e-12));
     let want: Vec<f64> = DONOR_VA[2..9].iter().map(|v| 150.0 * v / 16.0).collect();
     assert!(all_close(&got.table.va[2..9], &want, 1e-12));
@@ -352,10 +375,14 @@ fn oil_and_gas_above_their_group_take_from_manufacturing() {
 }
 
 #[test]
-fn oil_and_gas_take_at_most_all_of_industry() {
-    let got = one("XXX", &with_rents(0.2, 0.0), &obs());
-    assert!(approx(got.table.va[1], 350.0, 1e-12));
-    assert!((2..9).all(|g| got.table.va[g] == 0.0));
+fn oil_and_gas_take_at_most_the_largest_icio_share_of_industry() {
+    // Turkmenistan in 2000: rents above all of industry. Oil and gas 350 * 40 / 49; the rest
+    // over goods 2 to 8 as the donor, so electricity and construction keep a producer.
+    let got = oil(&with_rents(0.2, 0.0));
+    let rest = 350.0 * 9.0 / 49.0;
+    assert!(approx(got.table.va[1], 350.0 * 40.0 / 49.0, 1e-12));
+    let want: Vec<f64> = DONOR_VA[2..9].iter().map(|v| rest * v / 16.0).collect();
+    assert!(all_close(&got.table.va[2..9], &want, 1e-12));
 }
 
 #[test]
@@ -368,7 +395,7 @@ fn oil_and_gas_with_no_sector_share_come_out_of_the_median_level() {
         services: zero,
         ..with_rents(0.1, 0.0)
     };
-    let got = one("XXX", &w, &obs());
+    let got = oil(&w);
     // Venezuela in 2000: 200 of the 800, the other 600 over the other goods as the donor.
     assert!(approx(total(&got.table.va), 800.0, 1e-12));
     assert!(approx(got.table.va[1], 200.0, 1e-12));
@@ -377,7 +404,7 @@ fn oil_and_gas_with_no_sector_share_come_out_of_the_median_level() {
 
 #[test]
 fn a_donor_without_oil_and_gas_still_gives_oil_and_gas_output() {
-    let mut icio = donors();
+    let mut icio = oil_donors();
     let b = icio.get_mut("BBB").unwrap();
     (b.va[1], b.output[1]) = (0.0, 0.0);
     for row in &mut b.io {
@@ -946,7 +973,9 @@ fn real_venezuela_is_not_left_empty() {
 }
 
 /// Economies whose WDI 2000 lacks one of agriculture, industry or services.
-const PARTIAL_SHARES: [&str; 8] = ["BMU", "ERI", "KEN", "KWT", "LBY", "MAC", "MDG", "PNG"];
+const PARTIAL_SHARES: [&str; 9] = [
+    "BMU", "ERI", "KEN", "KWT", "LBY", "MAC", "MDG", "PNG", "TUV",
+];
 
 #[test]
 fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
@@ -959,7 +988,7 @@ fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
         let partial = have.iter().any(Option::is_some) && have.iter().any(Option::is_none);
         if c.va_basis != Basis::Icio && gdp > 0.0 && partial {
             scope.push(code.as_str());
-            // All eight have less than the median in the shares there are.
+            // All nine have less than the median in the shares there are.
             assert!(
                 approx(total(&c.table.va) * 1e6, gdp * ratio, 1e-9),
                 "{code}"

@@ -6,11 +6,11 @@
 
 - Outside ICIO, a missing agriculture, industry or services share no longer drops its VA: the
   goods it covers take GDP times the ICIO median VA over GDP less the known shares. Kuwait goes
-  from 0.14 to about 35 bn USD (GDP 37.7 bn); BMU, ERI, KEN, LBY, MAC, MDG and PNG rise to the
-  median too.
+  from 0.14 to about 35 bn USD (GDP 37.7 bn); BMU, ERI, KEN, LBY, MAC, MDG, PNG and TUV rise to
+  the median too.
 - Where WDI has oil or gas rents (two new WDI series), crude oil and gas VA is GDP times the
-  rents times the ICIO ratio of crude oil and gas VA to rents, out of its group, instead of the
-  donor's split (LBY, DZA, VEN, KWT had near-zero oil).
+  rents times the ICIO ratio of crude oil and gas VA to rents, out of its group and at most the
+  largest ICIO share of oil and gas in industry, instead of the donor's split (LBY, DZA, VEN, KWT had near-zero oil).
 - `econ_countries`, `econ_io`, `econ_provinces` and the calibration tables move; the
   `tests/golden/p2-pack.txt` digests are re-blessed from the owner-side pack build.
 
