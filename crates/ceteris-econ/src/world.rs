@@ -246,6 +246,12 @@ pub struct Scratch {
     pub dispatch_made: Vec<f64>,
     pub dispatch_due: Vec<f64>,
     pub dispatch_scale: Vec<f64>,
+    /// Per enterprise, the traded inputs whose cap cut its labour target at E1, a bit per good
+    /// (`systems::scarcest_inputs`), and the employment E1 would have allocated on targets
+    /// without the input cap (its employment where no cap binds in its province); E3 orders
+    /// those inputs on the output at that employment (ADR 0266).
+    pub short: Vec<u16>,
+    pub notional: Vec<f64>,
 }
 
 impl Scratch {
@@ -278,6 +284,8 @@ impl Scratch {
             dispatch_made: vec![0.0; n_traded],
             dispatch_due: vec![0.0; n_traded],
             dispatch_scale: vec![0.0; n_traded],
+            short: vec![0; n_ent],
+            notional: vec![0.0; n_ent],
         }
     }
 }

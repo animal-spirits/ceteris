@@ -199,17 +199,14 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
 }
 
 /// The output enterprise `e`'s traded inputs allow at E1 (ADR 0266): the least, over the
-/// traded inputs k it uses other than its own good, of its stock after T1 over coef_k;
+/// traded inputs k it uses, its own good included, of its stock after T1 over coef_k;
 /// infinite where it uses none. Local inputs set no cap: the same-tick chain bounds their use
 /// within the tick, and a bound from last tick's chain either rehires a cut enterprise every
-/// other tick or holds a province whose local goods all fell to zero there for good. Its own
-/// good sets none for the same reason: a stock short of its own output's input cuts the output
-/// that refills it, and the fixture's default run then inflates until the ledger overflows.
+/// other tick or holds a province whose local goods all fell to zero there for good.
 pub fn input_output(w: &EconWorld, e: usize) -> f64 {
     let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
     let mut y = f64::INFINITY;
-    let own = usize::from(w.inputs.enterprises.good[e]);
-    for k in (0..N_GOODS).filter(|&k| TRADED[k] && k != own) {
+    for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
         let a = lay.coef[e][k];
         if a > 0.0 {
             y = y.min(w.ledger.goods(account, k) / a);
@@ -218,11 +215,28 @@ pub fn input_output(w: &EconWorld, e: usize) -> f64 {
     y
 }
 
+/// The traded inputs that set enterprise `e`'s [`input_output`], a bit per good: those whose
+/// stock over coef_k is within [`SCARCEST`] (relative) of the least.
+pub fn scarcest_inputs(w: &EconWorld, e: usize) -> u16 {
+    let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
+    let y = input_output(w, e);
+    (0..N_GOODS)
+        .filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0)
+        .filter(|&k| w.ledger.goods(account, k) / lay.coef[e][k] <= y * (1.0 + SCARCEST))
+        .fold(0, |bits, k| bits | 1 << k)
+}
+
+/// Relative rounding within which a traded input ties for the scarcest (ADR 0266): the data
+/// state holds one month of every input, so their ratios agree only to the last bits.
+pub const SCARCEST: f64 = 1e-9;
+
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
 /// current wage, each capped at the labour that produces the output its inputs allow
 /// ([`input_output`], ADR 0266), then the wage (wage rule on expected inflation and excess
 /// demand against the natural rate u*, or when frictionless the wage at which the capped
-/// labour demand is (1 - u*) L^s, ADR 0089), employment toward L* and employed pops.
+/// labour demand is (1 - u*) L^s, ADR 0089), employment toward L* and employed pops. For E3 it
+/// keeps, per enterprise, the traded inputs whose cap cut its target (`Scratch::short`) and
+/// the employment it would have without the caps (`Scratch::notional`).
 pub fn labour(w: &mut EconWorld) {
     let world = &*w;
     let (inp, lay, params) = (&*w.inputs, &*w.layout, &w.params);
@@ -230,7 +244,8 @@ pub fn labour(w: &mut EconWorld) {
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
     let (index, pi) = (&w.price_index, w.expected_inflation);
-    let results: Vec<(f64, Vec<f64>, bool)> = (0..inp.n_provinces())
+    type PerProvince = (f64, Vec<f64>, bool, Vec<f64>, Vec<u16>);
+    let results: Vec<PerProvince> = (0..inp.n_provinces())
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
@@ -319,11 +334,40 @@ pub fn labour(w: &mut EconWorld) {
                 (wage_step(w0, excess, u_star, pi, params, c_max), t, clipped)
             };
             let mut l = vec![0.0; t.len()];
-            allocate(&t, &prev[ents], params.eta, supply, &mut l);
-            (w1, l, clipped)
+            allocate(&t, &prev[ents.clone()], params.eta, supply, &mut l);
+            // the wage the targets were set at
+            let wt = if params.frictionless { w1 } else { w0 };
+            let free: Vec<f64> = ents
+                .clone()
+                .zip(&p_va)
+                .map(|(e, &pv)| {
+                    labour_target(pv, wt, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                })
+                .collect();
+            let short: Vec<u16> = ents
+                .clone()
+                .zip(free.iter().zip(&equipped))
+                .map(|(e, (&f, &cap))| {
+                    if f > cap {
+                        scarcest_inputs(world, e)
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let notional = if short.iter().any(|&s| s != 0) {
+                let mut n = vec![0.0; t.len()];
+                allocate(&free, &prev[ents], params.eta, supply, &mut n);
+                n
+            } else {
+                l.clone()
+            };
+            (w1, l, clipped, notional, short)
         })
         .collect();
-    for (i, (w1, l, clipped)) in results.into_iter().enumerate() {
+    for (i, (w1, l, clipped, notional, short)) in results.into_iter().enumerate() {
+        w.scratch.notional[lay.enterprises(i)].copy_from_slice(&notional);
+        w.scratch.short[lay.enterprises(i)].copy_from_slice(&short);
         w.wage[i] = w1;
         w.wage_clip_ticks[i] += u32::from(clipped);
         w.employment[lay.enterprises(i)].copy_from_slice(&l);
@@ -445,15 +489,17 @@ pub fn cap_output(w: &mut EconWorld) {
 /// spend their whole money balance with PIGL across categories and CES within them
 /// (`Layout::pop_demand`, ADR 0021) at the buyer price q_d of traded goods (ADR 0200) and the
 /// posted price of local goods. Enterprises order up to an inventory
-/// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_cap` of each input k:
-/// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
-/// capacity output at this tick's employment and L the expected months in transit of the
-/// input to the province (0 for local goods), so where L = 0 this is a fixed two-month
-/// rule. Owner decisions, 2026-10-24: planning on realized output Y, which a short input
-/// caps, let one shortage cut the next order and the next output; a fixed target that counts
-/// goods on order cannot hold a month in transit. Traded orders are spending, units times
-/// q_d, so the units ordered are the units that arrive; local orders are units at the
-/// province market.
+/// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_plan,k` of each input k:
+/// orders `(target - stock_k - on_order_k)`, at least zero, where L is the expected months in
+/// transit of the input to the province (0 for local goods), so where L = 0 this is a fixed
+/// two-month rule. Y_plan,k is VA(L_notional) / a_VA, the output E1's employment without the
+/// input cap would give, for a traded input whose cap cut the enterprise's labour at E1
+/// (`Scratch::short`), and VA(L) / a_VA at this tick's employment for every other input
+/// (effective demand, Benassy 1975; owner decision 2026-10-30T22:43Z, ADR 0266). Owner
+/// decisions, 2026-10-24: planning on realized output Y, which a short input caps, let one
+/// shortage cut the next order and the next output; a fixed target that counts goods on order
+/// cannot hold a month in transit. Traded orders are spending, units times q_d, so the units
+/// ordered are the units that arrive; local orders are units at the province market.
 pub fn demand(w: &mut EconWorld) {
     w.refresh_price_index();
     let (inp, lay) = (&*w.inputs, &*w.layout);
@@ -485,6 +531,7 @@ pub fn demand(w: &mut EconWorld) {
             }
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
+    let (short, notional) = (&sc.short, &sc.notional);
     sc.ent_order
         .par_chunks_mut(N_GOODS)
         .zip(sc.ent_spend.par_chunks_mut(N_GOODS))
@@ -493,15 +540,26 @@ pub fn demand(w: &mut EconWorld) {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
             let (prices, s_l) = (row(i), inp.countries.s_l[inp.country_of(i)]);
-            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, w.employment[e]);
-            let capacity = va / lay.a_va[e];
+            let output =
+                |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+            let capacity = output(w.employment[e]);
+            let free = if short[e] != 0 {
+                output(notional[e])
+            } else {
+                capacity
+            };
             for k in 0..N_GOODS {
                 let a = lay.coef[e][k];
                 let order = if a > 0.0 {
                     let held = ledger.goods(acc.enterprise[e], k);
                     let on_order = pipeline.on_order(n_pops + e, k);
                     let target = 1.0 + COVER + lead[i * N_GOODS + k];
-                    (target * a * capacity - held - on_order).max(0.0)
+                    let plan = if short[e] & 1 << k != 0 {
+                        free
+                    } else {
+                        capacity
+                    };
+                    (target * a * plan - held - on_order).max(0.0)
                 } else {
                     0.0
                 };
@@ -1127,8 +1185,8 @@ mod tests {
         assert!((value_added_price(2.0, b, &index, 0.6) - 1.8 / 0.6).abs() < 1e-15);
     }
 
-    /// ADR 0266: an enterprise with no stock of a traded input it uses hires no one; local
-    /// inputs set no cap; with inputs to spare every target, and so the wage and employment,
+    /// ADR 0266: an enterprise with no stock of the traded inputs it uses, its own good
+    /// included, hires no one; local inputs set no cap; with inputs to spare every target, and so the wage and employment,
     /// are the same whatever the stocks.
     #[test]
     fn labour_is_capped_at_what_inputs_allow() {
@@ -1142,10 +1200,7 @@ mod tests {
             let fresh = EconWorld::new(Arc::clone(&inputs), params.clone(), TradeParams::default());
             let lay = Arc::clone(&fresh.layout);
             let e = (0..fresh.inputs.n_enterprises())
-                .find(|&e| {
-                    let own = usize::from(fresh.inputs.enterprises.good[e]);
-                    (0..N_GOODS).any(|k| TRADED[k] && k != own && lay.coef[e][k] > 0.0)
-                })
+                .find(|&e| (0..N_GOODS).any(|k| TRADED[k] && lay.coef[e][k] > 0.0))
                 .expect("an enterprise using a traded input");
             let with_stocks = |factor: f64| {
                 let mut w = fresh.clone();
@@ -1171,7 +1226,7 @@ mod tests {
             let mut w = with_stocks(100.0);
             let account = lay.accounts.enterprise[e];
             let own = usize::from(w.inputs.enterprises.good[e]);
-            for k in (0..N_GOODS).filter(|&k| TRADED[k] && k != own && lay.coef[e][k] > 0.0) {
+            for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
                 let held = w.ledger.goods(account, k);
                 w.ledger.destroy(account, k, held);
             }
@@ -1191,7 +1246,7 @@ mod tests {
             w.ledger.destroy(account, k, held);
             w.markets.supply[i * N_GOODS + k] = 0.0;
             let traded = (0..N_GOODS)
-                .filter(|&g| TRADED[g] && g != own && lay.coef[e][g] > 0.0)
+                .filter(|&g| TRADED[g] && lay.coef[e][g] > 0.0)
                 .map(|g| w.ledger.goods(account, g) / lay.coef[e][g])
                 .fold(f64::INFINITY, f64::min);
             assert_eq!(input_output(&w, e), traded);
@@ -1228,6 +1283,78 @@ mod tests {
         labour(&mut w);
         assert!(close(&w.wage, &w0), "{:?} vs {w0:?}", w.wage);
         assert!(close(&w.employment, &l0));
+    }
+
+    /// ADR 0266, owner decision 2026-10-30T22:43Z (Benassy 1975): an enterprise whose labour is
+    /// cut by a short traded input k orders k on its notional output, VA(L_notional) / a_VA, and
+    /// every other input on its constrained output, VA(L) / a_VA at this tick's employment.
+    /// L_notional is the employment E1 gives the same world with k to spare.
+    #[test]
+    fn short_input_is_ordered_on_notional_output_and_the_rest_on_constrained_output() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let mut w = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams::default(),
+        );
+        let lay = Arc::clone(&w.layout);
+        let coef = lay.coef.clone();
+        let used = |e: usize| {
+            let row = coef[e];
+            (0..N_GOODS).filter(move |&k| row[k] > 0.0)
+        };
+        let e = (0..w.inputs.n_enterprises())
+            .find(|&e| used(e).filter(|&k| TRADED[k]).count() >= 2)
+            .expect("an enterprise using two traded inputs");
+        let k = used(e).find(|&k| TRADED[k]).expect("a traded input");
+        // a month and a half of every input, and half a month of k
+        for (u, &account) in lay.accounts.enterprise.iter().enumerate() {
+            for g in used(u) {
+                let held = w.ledger.goods(account, g);
+                w.ledger.create(account, g, 0.5 * held);
+            }
+        }
+        let mut spare = w.clone();
+        labour(&mut spare);
+        assert!(spare.scratch.short.iter().all(|&s| s == 0));
+        let account = lay.accounts.enterprise[e];
+        let held = w.ledger.goods(account, k);
+        w.ledger.destroy(account, k, held * 2.0 / 3.0);
+        labour(&mut w);
+        assert_eq!(w.scratch.short[e], 1 << k);
+        assert_eq!(w.scratch.notional[e], spare.employment[e]);
+        assert!(w.employment[e] < 0.99 * spare.employment[e]);
+
+        produce(&mut w);
+        demand(&mut w);
+        let ent = &w.inputs.enterprises;
+        let i = ent.province[e] as usize;
+        let s_l = w.inputs.countries.s_l[w.inputs.country_of(i)];
+        let r = rho(w.params.sigma_fl);
+        let output = |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+        let (notional, constrained) = (output(spare.employment[e]), output(w.employment[e]));
+        let mut others = 0;
+        for g in used(e) {
+            let plan = if g == k { notional } else { constrained };
+            let target = 1.0 + COVER + w.scratch.lead[i * N_GOODS + g];
+            let held = w.ledger.goods(account, g);
+            let on_order = w.pipeline.on_order(w.inputs.n_pops() + e, g);
+            let want = (target * lay.coef[e][g] * plan - held - on_order).max(0.0);
+            let got = w.scratch.ent_order[e * N_GOODS + g];
+            assert!(
+                (got - want).abs() <= 1e-12 * want.max(1.0),
+                "good {g}: order {got}, want {want}"
+            );
+            others += usize::from(g != k && want > 0.0);
+        }
+        assert!(
+            others > 0,
+            "no other input ordered: the test checks nothing there"
+        );
     }
 
     #[test]

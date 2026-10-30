@@ -9,7 +9,7 @@ use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_i
 use ceteris_econ::inputs::EconInputs;
 use ceteris_econ::local::{self, Province};
 use ceteris_econ::params::Technology;
-use ceteris_econ::production::{labour_for_value_added, rho, value_added};
+use ceteris_econ::production::{labour_for_value_added, marginal_value_added, rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
     DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, WRITE_OFF, active_cells,
@@ -62,8 +62,10 @@ proptest! {
 /// scaled 0.5 to 2): province 10's local chain collapses and an origin with no output is clipped
 /// up every tick. Before ADR 0266, frictionless E1 moved all of the province's labour to that
 /// enterprise at its posted price, and wages paid from debt overflowed the ledger at tick 91.
-/// Capped at the labour its inputs allow, it hires none of it, and the world price index stays
-/// within the nominal scale of ADR 0106 (about 1e4).
+/// Capped at the labour its inputs allow, it hires none of it: the world price index reaches 1.55
+/// over 120 ticks. The bound, 3, is about twice that: it leaves room for the drift of a case
+/// that starts with every price scaled by 0.5 to 2, and fails on a return of the spiral (9e3
+/// at tick 91 before the cap) well before the nominal scale of ADR 0106 (about 1e4).
 #[test]
 fn frictionless_labour_spiral_is_bounded() {
     const FACTORS: [f64; 25 * N_GOODS] = [
@@ -329,7 +331,7 @@ fn frictionless_labour_spiral_is_bounded() {
         assert!(step.is_ok(), "{}", step.unwrap_err());
         highest = highest.max(sim.world().world_price_index());
     }
-    assert!(highest < 1e4, "world price index reached {highest}");
+    assert!(highest < 3.0, "world price index reached {highest}");
     let w = sim.world();
     assert!(w.markets.price.iter().all(|p| p.is_finite() && *p > 0.0));
     let acc = &w.layout().accounts;
@@ -343,8 +345,10 @@ fn frictionless_labour_spiral_is_bounded() {
 
 /// ADR 0266: 40 frictionless runs of 120 ticks from prices scaled 0.5 to 2 per cell (seed 0)
 /// neither panic nor leave the nominal scale of ADR 0106 (about 1e4): the largest world price
-/// index is 120; before the input cap it was 2.6e3. Over seeds 0 to 9 (400 runs) one panics, at
-/// the write-off's i64 bound (seed 7, case 31), against three before the cap.
+/// index is 324; before the input cap it was 2.6e3 (120 with the cap but the own good left out
+/// of it and E3 ordering every input on capacity output). Over seeds 0 to 9 (400 runs) none
+/// panics and the highest is 1.9e3, against three panics before the cap and one (seed 7, case
+/// 31, the write-off's i64 bound) before the split order rule of ADR 0266.
 #[test]
 fn frictionless_price_sweep_stays_bounded() {
     use proptest::strategy::ValueTree;
@@ -977,9 +981,17 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
 /// ADR 0089: the frictionless wage clears labour at the natural rate, sum_g L*_ig(w) =
 /// (1 - u*_i) L^s_i, so unemployment is u* in every province at every tick unless enterprises
 /// held to the labour their inputs allow (ADR 0266) leave more unemployed; it is never below u*.
-/// On the fixture that happens in province 24 at tick 1, whose one month of input stocks the
-/// first tick used up, with its orders still in transit: no enterprise there hires. At tick 0 every enterprise is at its cap (one month of stocks is base output), which clears
-/// at u* exactly.
+/// At tick 0 every enterprise is at its cap (one month of stocks is base output), which clears
+/// at u* exactly. On the fixture more are unemployed in two places:
+///
+/// - Province 24 at tick 1, whose one month of input stocks the first tick used up, with its
+///   orders still in transit: every cap is 0, no enterprise would hire, demand is 0 at every
+///   wage, and the wage halves (the no-root bound of the frictionless search).
+/// - Province 20 at ticks 8 and 9, where every enterprise that would hire is held by its stock
+///   of good 2, under a month of use, and the caps sum below (1 - u*) L^s: no wage clears, and
+///   the rationed rule sets min(w_{t-1}, w_top), w_top the lowest p_VA dVA/dL at the caps (it
+///   cuts the wage at tick 8 and keeps it at tick 9). This appeared once the cap counted each
+///   enterprise's own good and E3 ordered the short input on notional output (ADR 0266).
 #[test]
 fn frictionless_unemployment_is_the_natural_rate() {
     let mut sim = sim_of(world(EconParams::frictionless()));
@@ -988,6 +1000,19 @@ fn frictionless_unemployment_is_the_natural_rate() {
         let mut probe = sim.world().clone();
         probe.begin_tick();
         systems::deliver(&mut probe);
+        let p_va: Vec<f64> = {
+            let (inp, lay) = (probe.inputs(), probe.layout());
+            (0..inp.n_enterprises())
+                .map(|e| {
+                    let i = inp.enterprises.province[e] as usize;
+                    let row = i * N_GOODS..(i + 1) * N_GOODS;
+                    let g = usize::from(inp.enterprises.good[e]);
+                    let p = probe.markets.price[row.start + g];
+                    let index = &probe.price_index[row];
+                    systems::value_added_price(p, |k| lay.coef[e][k], index, lay.a_va[e])
+                })
+                .collect()
+        };
         let caps: Vec<f64> = {
             let (inp, lay) = (probe.inputs(), probe.layout());
             let r = rho(probe.params().sigma_fl);
@@ -1017,10 +1042,27 @@ fn frictionless_unemployment_is_the_natural_rate() {
                     "tick {tick} province {i}: unemployment {u}, u* {u_star}, no one held"
                 );
                 rationed.push((tick, i));
+                let ent = &inp.enterprises;
+                let s_l = inp.countries.s_l[inp.country_of(i)];
+                let r = rho(w.params().sigma_fl);
+                let top = lay
+                    .enterprises(i)
+                    .filter(|&e| p_va[e] > 0.0 && caps[e] > 0.0)
+                    .map(|e| {
+                        p_va[e]
+                            * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, caps[e])
+                    })
+                    .reduce(f64::min);
+                let (before, after) = (probe.wage[i], w.wage[i]);
+                let want = top.map_or(0.5 * before, |top| top.min(before));
+                assert!(
+                    (after / want - 1.0).abs() <= 1e-12,
+                    "tick {tick} province {i}: wage {after}, want {want} (last {before})"
+                );
             }
         }
     }
-    assert_eq!(rationed, [(1, 24)]);
+    assert_eq!(rationed, [(1, 24), (8, 20), (9, 20)]);
 }
 
 /// Capacity output VA(L) / a_VA of enterprise `e` at its current employment.
@@ -1039,10 +1081,28 @@ fn capacity(w: &EconWorld, e: usize) -> f64 {
     va / lay.a_va[e]
 }
 
+/// Output VA(L) / a_VA of enterprise `e` at employment `l`.
+fn output_at(w: &EconWorld, e: usize, l: f64) -> f64 {
+    let (inp, lay) = (w.inputs(), w.layout());
+    let ent = &inp.enterprises;
+    let c = inp.country_of(ent.province[e] as usize);
+    let s_l = inp.countries.s_l[c];
+    value_added(
+        ent.a[e],
+        ent.va0[e],
+        ent.l0[e],
+        s_l,
+        rho(w.params().sigma_fl),
+        l,
+    ) / lay.a_va[e]
+}
+
 /// The order rule of E3 for every enterprise and input: up to an inventory position of
-/// (1 + COVER + L) coef_k Y_cap, L the expected months in transit to the province,
-/// (target - stock - on order) at least zero; returns the orders that bind at zero only
-/// because of goods on order.
+/// (1 + COVER + L) coef_k Y_plan, L the expected months in transit to the province,
+/// (target - stock - on order) at least zero, where Y_plan is the output at E1's notional
+/// employment for a traded input whose cap cut the enterprise's labour and capacity output
+/// VA(L) / a_VA otherwise (ADR 0266); returns the orders that bind at zero only because of
+/// goods on order.
 fn assert_order_rule(w: &EconWorld) -> usize {
     let (inp, lay) = (w.inputs(), w.layout());
     let mut held_back = 0;
@@ -1054,7 +1114,12 @@ fn assert_order_rule(w: &EconWorld) -> usize {
             let on_order = w.pipeline.on_order(inp.n_pops() + e, k);
             let lead = w.scratch.lead[i * N_GOODS + k];
             assert!(traded || lead == 0.0);
-            let gap = (1.0 + systems::COVER + lead) * a * capacity(w, e) - stock;
+            let plan = if w.scratch.short[e] & 1 << k != 0 {
+                output_at(w, e, w.scratch.notional[e])
+            } else {
+                capacity(w, e)
+            };
+            let gap = (1.0 + systems::COVER + lead) * a * plan - stock;
             let want = if a > 0.0 {
                 (gap - on_order).max(0.0)
             } else {
@@ -1118,10 +1183,14 @@ fn input_orders_count_goods_on_order() {
     }
 }
 
-/// Input orders plan on capacity output VA(L) / a_VA at this tick's employment, not on output
-/// cut by a short input (owner decision, 2026-10-24), less the goods already on order.
+/// Input orders plan on output before a short input cuts it, less the goods already on order:
+/// not on realized output (owner decision, 2026-10-24). The traded input whose cap cut the
+/// enterprise's labour at E1 is ordered on the output of its notional employment, every other
+/// input on capacity output VA(L) / a_VA at this tick's employment (effective demand, Benassy
+/// 1975; owner decision 2026-10-30T22:43Z, ADR 0266). Starved of every input, enterprise 0 is
+/// cut by its scarcest traded inputs, and only those are planned on notional output.
 #[test]
-fn input_orders_plan_on_capacity_output() {
+fn input_orders_plan_on_notional_output_for_the_short_input() {
     let mut w = world(EconParams::default());
     // starve enterprise 0 of every input, so its output is cut far below capacity
     let account = w.layout().accounts.enterprise[0];
@@ -1135,12 +1204,26 @@ fn input_orders_plan_on_capacity_output() {
         w.begin_tick();
         systems::deliver(&mut w);
         systems::labour(&mut w);
+        let n = w.inputs().n_enterprises();
+        for e in (0..n).filter(|&e| w.scratch.short[e] != 0) {
+            assert_eq!(
+                w.scratch.short[e],
+                systems::scarcest_inputs(&w, e),
+                "enterprise {e}"
+            );
+        }
         systems::produce(&mut w);
         systems::demand(&mut w);
-        let binding = (0..w.inputs().n_enterprises())
+        let binding = (0..n)
             .filter(|&e| w.output[e] < 0.9 * capacity(&w, e))
             .count();
         assert!(tick > 0 || binding > 0, "no enterprise was input-bound");
+        assert!(
+            tick > 0 || w.scratch.short[0] != 0,
+            "enterprise 0 was not held by an input"
+        );
+        let all = (0..N_GOODS).filter(|&k| TRADED[k] && w.layout().coef[0][k] > 0.0);
+        assert!(tick > 0 || all.fold(0u16, |b, k| b | 1 << k) == w.scratch.short[0]);
         assert_order_rule(&w);
         systems::source(&mut w);
         systems::clear(&mut w);
@@ -1537,10 +1620,10 @@ fn kink_bound(p: &Province) -> usize {
 /// stall, and every local input used equals coef Y (the Leontief invariant, exactly, at every
 /// tick).
 ///
-/// The most is 6 passes (province 5 at tick 79, where the kink bound allows 21): a collapse of
-/// utilities and construction, inputs of each other with no stocks but residues of earlier
-/// collapses, at a loop gain of 0.7 to 0.9 per pass, the fall to 0 crossing the residue
-/// thresholds. Before the jump found the last whole cycle on the pieces (it returned the last
+/// The most is 4 passes (483 binding province ticks). Before ADR 0266's split order rule it was
+/// 6 passes (province 5 at tick 79, where the kink bound allows 21): a collapse of utilities and
+/// construction, inputs of each other with no stocks but residues of earlier collapses, at a
+/// loop gain of 0.7 to 0.9 per pass, the fall to 0 crossing the residue thresholds. Before the jump found the last whole cycle on the pieces (it returned the last
 /// point the doubling checked), a jump could stop short of a kink and cost passes no kink
 /// accounts for: 11 passes there at 13410ce. This bound does not tell that defect apart (the old
 /// jump also stays within it here), nor does [`chain_passes_within_their_kinks`]; the guard is
@@ -2544,7 +2627,8 @@ fn near_singular_cycle_keeps_its_limit() {
 /// they equal the fill iteration run to convergence (1e-12) wherever it converges. Where a fill
 /// collapses below 1e-200 the bisection iteration underflows good by good and gives no limit to
 /// compare with, so the bound on the compared ticks is coverage, not model: at least 400 of the
-/// binding province ticks (410 of 415 with the gateway masses; 411 of 413 before them).
+/// binding province ticks: 480 of 483 (534 of 547 before ADR 0266's split order rule, 410 of
+/// 415 before its input cap, 411 of 413 before the gateway masses).
 #[test]
 fn exact_fill_equals_converged_iteration() {
     let cycles = [
