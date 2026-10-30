@@ -1637,11 +1637,12 @@ mod tests {
             EconParams::default(),
             TradeParams::default(),
         );
-        // Gamma P_d reproduces 1 / alpha_d to rounding (ADR 0200)
+        // Gamma P_d reproduces 1 / alpha_d to two roundings, within about f64::EPSILON
+        // relative; twice that allowed (ADR 0200, As built)
         let base = inp.provinces.base_price.as_flattened();
         for (cell, (&q, &b)) in w.price_index.iter().zip(base).enumerate() {
             assert!(
-                q == b || (q - b).abs() <= 4e-16 * b,
+                q == b || (q - b).abs() <= 2.0 * f64::EPSILON * b,
                 "cell {cell}: {q} vs {b}"
             );
         }
