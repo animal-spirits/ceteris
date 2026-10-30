@@ -10,7 +10,6 @@ use std::path::Path;
 
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{CellOwner, cell_of, pixel_centre};
-use ceteris_pack::sources;
 use common::cached;
 use h3o::Resolution;
 
@@ -98,7 +97,7 @@ fn pixel_cells_match_python_on_border_windows() {
         }
     }
 
-    let cells = sources::workspace_root().join("data/packs/2000/cells.arrow");
+    let cells = common::pack_dir().join("cells.arrow");
     if !cells.exists() {
         eprintln!("skipping owners: no {}", cells.display());
         return;

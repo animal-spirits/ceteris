@@ -48,11 +48,6 @@ pub fn area_km2(geom: &MultiPolygon) -> f64 {
     total
 }
 
-pub fn crosses_antimeridian(geom: &MultiPolygon) -> bool {
-    geom.bounding_rect()
-        .is_some_and(|r| r.min().x < -170.0 && r.max().x > 170.0)
-}
-
 /// Transport anchor: centroid of the largest part, or a point inside it if the centroid falls
 /// outside. None for a geometry without parts.
 pub fn anchor(geom: &MultiPolygon) -> Option<(f64, f64)> {
@@ -197,18 +192,6 @@ mod tests {
             let donut = Polygon::new(outer.exterior().clone(), vec![ring]);
             assert_eq!(area_km2(&MultiPolygon(vec![donut])), whole - small);
         }
-    }
-
-    #[test]
-    fn antimeridian_crossing_needs_both_far_sides() {
-        let both = MultiPolygon(vec![
-            square(178.0, 60.0, 180.0, 62.0),
-            square(-180.0, 60.0, -177.0, 62.0),
-        ]);
-        assert!(crosses_antimeridian(&both));
-        assert!(!crosses_antimeridian(&MultiPolygon(vec![square(
-            160.0, 0.0, 179.0, 1.0
-        )])));
     }
 
     #[test]

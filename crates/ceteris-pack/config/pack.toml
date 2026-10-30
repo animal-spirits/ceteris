@@ -10,9 +10,6 @@ county_res = 6
 # Sea zones are the sea grid's parents at this resolution (ADR 0007).
 sea_zone_res = 1
 
-# Provinces larger than this are split (ADR 0006).
-split_area_km2 = 250_000
-
 # Development slice for P1 to P3 (Section 21): European economies, 2000 vintage codes.
 dev_slice = [
     "ALB", "AND", "AUT", "BEL", "BGR", "BIH", "BLR", "CHE", "CYP", "CZE", "DEU", "DNK",
