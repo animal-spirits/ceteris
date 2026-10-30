@@ -223,13 +223,14 @@ fn bench(c: &mut Criterion) {
         });
     }
     let (rationing, pi) = (w.params().rationing, w.expected_inflation);
+    let gain = w.layout().price_gain.clone();
     g.bench_function("clear_reprice", |b| {
         b.iter_batched(
             || markets.clone(),
             |mut m| {
                 m.clear(rationing, &mut fill);
                 m.clear_local(&mut spoiled);
-                m.reprice(&trade, pi);
+                m.reprice(&trade, &gain, pi);
                 m
             },
             BatchSize::LargeInput,

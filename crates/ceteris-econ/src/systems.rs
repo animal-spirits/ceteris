@@ -838,7 +838,8 @@ fn trade_legs(
 /// without a market keep their price, which nothing reads), then the update of expected
 /// inflation from the world price index (ADR 0019).
 pub fn reprice(w: &mut EconWorld) {
-    w.markets.reprice(&w.trade, w.expected_inflation);
+    w.markets
+        .reprice(&w.trade, &w.layout.price_gain, w.expected_inflation);
     w.update_expectation();
 }
 

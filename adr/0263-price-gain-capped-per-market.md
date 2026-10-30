@@ -76,7 +76,10 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
   `demand_elasticity`, `supply_elasticity`; calibration format 6), read into
   `EconInputs::market_elasticity` (in the inputs digest), and combined with the run's eta in
   `EconWorld::new` (`TradeParams::price_gain`); P03d is `TradeParams::gain_share`, in the static
-  digest when the inputs carry a calibration. A world started from the data state has no
-  calibration and runs kappa1 in every market, so its hashes do not move.
+  digest when the inputs carry a calibration. Inputs without a calibration (the generated
+  fixture, an uncalibrated pack) run kappa1 in every market and keep their digest, so their
+  hashes do not move; a data-state start of calibrated inputs keeps the calibrated gains.
+- On the calibrated fixture no cell is capped in either mode (largest J 12.5 at eta 0.3, 13.8 at
+  eta 1), so its runs do not move either; only the calibration tables gain the two columns.
 - Pi_cell is computed per leg with squared leg factors (the study's form): a pair joined by
   several routes leaves out the cross terms between them.

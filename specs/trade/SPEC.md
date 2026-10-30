@@ -260,7 +260,7 @@ dlnp = pi^e + clip( kappa1_cell (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_
 ```
 
 kappa1_cell is kappa1 (P03a) capped per market at the share m (P03d) of its stability limit (ADR
-0263; Stability region, Per-market gain): kappa1 itself in every market of a world without a
+0263; Stability region, Per-market gain): kappa1 itself in every market of inputs without a
 calibration.
 
 The clip bounds the gap terms only (ADR 0106): expected inflation passes through unclipped, so a
@@ -414,8 +414,9 @@ the largest over the cell's enterprises of s_L sigma_FL / ((1 - s_L) a_VA) (ADR 
 enterprise maximum, which the ADR's numbers rest on). The calibration computes E_cell and eps_cell
 at the calibrated prices and spending (`ceteris_calibrate::elasticity`) and writes them to
 `econ_calib_cells.arrow` (calibration format 6); `EconWorld::new` combines them with the run's
-eta, once, and the gain stays fixed for the run (`EconWorld::set_network` keeps it). A world
-started from the data state has no calibration and runs kappa1 in every market. In the default
+eta, once, and the gain stays fixed for the run (`EconWorld::set_network` keeps it). Inputs
+without a calibration (the generated fixture, an uncalibrated pack) run kappa1 in every market;
+a data-state start of calibrated inputs keeps their gains, as it keeps their coefficients. In the default
 mode no cell is capped (J at most 16.9 on the 0256 pack; on the fixture
 `no_cell_capped_in_the_default_mode`); frictionless it slows the traded cells above 20 (298 on
 the 0256 pack) and removes the São Tomé cycle below. J2 bounds one market only: coupled modes

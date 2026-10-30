@@ -1093,3 +1093,106 @@ fn nu_fit_is_monotone_and_bracketed() {
         "{err}"
     );
 }
+
+/// ADR 0263: E of each traded origin against the finite difference of its orders in its own
+/// price, at the calibrated point with buyers at Gamma P_d who keep their delivered units fixed
+/// (Leontief, so each destination's spending moves with its buyer price), by central
+/// differences. Where a pair is joined by several routes E leaves out the cross terms between
+/// them: the fixture has none that matter, and E holds there to the finite difference's
+/// precision (1.4e-10 relative); on the pack the gap is reported.
+#[test]
+fn own_price_elasticity_matches_finite_difference() {
+    const H: f64 = 1e-6;
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let reference = steady::reference_inputs(inp, s);
+        let m = Model::new(&reference).unwrap();
+        let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+        let spend = Mat::from_fn(n_p, n_g, |p, g| {
+            if inp.traded[g] {
+                s.spend_int[(p, g)] + s.spend_hh[(p, g)]
+            } else {
+                0.0
+            }
+        });
+        let orders = |price: &Mat| {
+            let src = m.sourcing(price);
+            let fixed_units = Mat::from_fn(n_p, n_g, |p, g| {
+                let q = src.index[(p, g)];
+                if q.is_finite() {
+                    spend[(p, g)] * q / s.consumer[(p, g)]
+                } else {
+                    0.0
+                }
+            });
+            m.flows(price, &fixed_units, &src).orders
+        };
+        let base = orders(&s.price);
+        let (mut worst, mut n) = (0.0f64, 0);
+        for p in 0..n_p {
+            for g in (0..n_g).filter(|&g| inp.traded[g] && inp.active[p][g]) {
+                if base[(p, g)] <= 0.0 {
+                    continue;
+                }
+                let at = |h: f64| {
+                    let mut price = s.price.clone();
+                    price[(p, g)] *= h.exp();
+                    orders(&price)[(p, g)]
+                };
+                let fd = -(at(H) / at(-H)).ln() / (2.0 * H);
+                let e = s.demand_elasticity[(p, g)];
+                assert!(
+                    e >= 0.0 && e <= inp.theta[g] + 1.0,
+                    "{} p{p} g{g}: E {e}",
+                    w.name
+                );
+                worst = worst.max((e - fd).abs() / fd.abs().max(1.0));
+                n += 1;
+            }
+        }
+        eprintln!(
+            "{}: E against the finite difference, {n} cells, worst {worst:.3e}",
+            w.name
+        );
+        assert!(n > 0, "{}", w.name);
+        if w.pack_province.is_none() {
+            assert!(worst < 1e-8, "{}: worst {worst:e}", w.name);
+        }
+    }
+}
+
+/// ADR 0263 (As built): eps of a cell is the largest s_L sigma_FL / ((1 - s_L) a_VA) of its
+/// enterprises, 0 where none produces; local cells take sigma (P06) as E.
+#[test]
+fn supply_elasticity_is_the_enterprise_maximum() {
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let s_l = inp.ent_s_l();
+        let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+        let mut of_cell = vec![Vec::new(); n_p * n_g];
+        for e in 0..inp.ent_good.len() {
+            let x = s_l[e] * inp.sigma_fl / ((1.0 - s_l[e]) * s.a_va[e]);
+            of_cell[inp.ent_province[e] * n_g + inp.ent_good[e]].push(x);
+        }
+        for (c, xs) in of_cell.iter().enumerate() {
+            let eps = s.supply_elasticity.data[c];
+            if xs.is_empty() {
+                assert_eq!(eps, 0.0, "{} cell {c}", w.name);
+            } else {
+                assert!(
+                    xs.contains(&eps) && xs.iter().all(|&x| x <= eps),
+                    "{} cell {c}",
+                    w.name
+                );
+            }
+            let (p, g) = (c / n_g, c % n_g);
+            if inp.active[p][g] && !inp.traded[g] {
+                assert_eq!(
+                    s.demand_elasticity.data[c], inp.sigma_demand,
+                    "{} cell {c}",
+                    w.name
+                );
+            }
+        }
+    }
+}
