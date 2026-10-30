@@ -1,9 +1,9 @@
 # 0126. Public benchmarks: CeterisBench and an agent gym
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 12.5, 12.6, 14.4, 15.5, 23.4; ADR 0065
-Phase: P9 (CeterisBench), P10 (agent gym)
+Phase: P9 (CeterisBench), 2.0-alpha (agent gym, ADR 0239)
 
 ## Context
 

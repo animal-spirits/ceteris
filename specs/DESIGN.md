@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. The data pipeline, the reference model and calibration are Rust crates driven by the `ceteris` CLI (ADR 0113). The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. The app is fully native Rust, Slint panels over a wgpu globe, with no React, webview or Tauri (ADR 0088). The data pipeline, the reference model and calibration are Rust crates driven by the `ceteris` CLI (ADR 0113). The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -43,7 +43,7 @@ The product is a laboratory first and a game second: a living world map where th
 | Observer | Watches; no control | What does the world look like in 2060 under baseline dynamics? |
 | God mode (ex ante) | Edits initial state or parameters, then runs an ensemble | What if China never joins the WTO, or the trade elasticity were 8 instead of 5? |
 | God mode (ex post) | Pauses at tick t, edits anything, forks a branch | What if Lehman is rescued in September 2008, given everything up to then? |
-| Steward (later) | Controls one state's policy levers; AI runs the rest | Can Brazil raise its growth rate with a different tariff and infrastructure policy? |
+| Steward (2.0, ADR 0239) | Controls one state's policy levers; AI runs the rest | Can Brazil raise its growth rate with a different tariff and infrastructure policy? |
 | Batch / scripted | The `ceteris` CLI runs experiment grids headless from scenario files | Distribution of 2030 outcomes across 64 seeds under three tariff regimes |
 
 ### 2.2 Era choice
@@ -52,7 +52,7 @@ The start is **1 January 2000**. The engine stays era-agnostic (goods, instituti
 
 - **Data replaces judgment.** OECD ICIO input-output tables and CEPII BACI trade flows start in 1995; gridded population, subnational GDP, V-Dem, UCDP conflict events and UN demographic data all cover 2000. Few hand-made decisions are needed.
 - **A long out-of-sample window.** 2000-2024 contains China's WTO accession, the commodity supercycle, the 2008 financial crisis, the euro crisis, the Arab Spring, COVID, the 2022 energy shock and sanctions, and the 2018 and 2025 tariff rounds: natural tests of whether the model responds like the world did.
-- **Open-ended future.** From 2025 onward the model runs without a script, so long-run stability, demography and climate feedback become first-class requirements.
+- **Open-ended future.** The model runs without a script from the first tick (ADR 0241), so the problem after 2024 is the same as after 2000, and long-run stability, demography and climate feedback become first-class requirements (climate feedback from 1.1, ADR 0207).
 
 ### 2.3 In scope
 
@@ -64,7 +64,7 @@ Economy (production, consumption, input-output, trade, transport, money, banking
 - Named technologies; technology is sector productivity (decision of 23 Oct 2026).
 - LLM-driven leaders (deferred), tactical battle maps, 3D graphics, multiplayer, cloud hosting.
 - Scripted events and historical railroading: post-2000 history is a validation target, not a script.
-- Endogenous politics, borders and war (P6, P7), which are 2.0 (ADR 0136). In 1.x, institutions are 2000 data, borders are fixed, and policy comes from estimated reaction functions or the historical policy tape.
+- Endogenous politics, borders and war (P6, P7), which are 2.0 (ADR 0136). In 1.x, institutions are 2000 data, borders are fixed, and policy comes from estimated reaction functions; the historical policy tape is the policy family of optional replay (ADRs 0210, 0241).
 
 ### 2.5 Design principles
 
@@ -172,7 +172,7 @@ The map client sends edits straight into the systems pipeline and reads results 
 
 ### 4.4 Monthly tick pipeline
 
-1. Apply scheduled interventions and exogenous shock tape for tick t.
+1. Apply scheduled interventions (including any replay) for tick t.
 2. Observation update: agents receive lagged, noisy signals of prices, wages and threats.
 3. Demography: births, deaths, aging (annual components on their month).
 4. Labour market: vacancies, matching, wages, occupational switching.
@@ -233,7 +233,7 @@ Provinces are first-level administrative regions from Natural Earth (public doma
 
 Nodes are province centroids, ports, airports and sea-lane waypoints. Edges carry one or more modes, each with a per-ton-km cost, speed, capacity and risk that depend on investment and fuel prices.
 
-The 2000 graph has 4,796 province anchors, 2,757 rail nodes, 2,284 ports (1,001 listed, 1,283 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack.
+The 2000 graph has 4,796 province anchors, 2,757 rail nodes, 2,284 ports (1,001 listed, 1,283 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack. Chokepoints carry closure hazards and coastal provinces a piracy hazard (ADR 0242).
 
 | Mode | Edge existence | Cost driver | Notes |
 | --- | --- | --- | --- |
@@ -396,7 +396,7 @@ Because growth depends on research effort, a shrinking or aging world population
 
 - **Learning by doing in energy.** Renewable generation and storage-intensive sectors follow Wright's law: unit costs fall with cumulative global output, the pattern documented for solar, wind and batteries by Way et al. (2022). This captures the energy transition without naming technologies.
 
-Initial productivity gaps are backed out from 2000 output, inputs and prices; frontier growth rates per sector are calibrated to productivity accounts.
+Initial productivity gaps are backed out from 2000 output, inputs and prices; frontier growth rates per sector are calibrated to productivity accounts. A share of frontier growth arrives as fat-tailed sector jumps with the same mean (ADR 0242).
 
 ### 7.6 Structural change
 
@@ -506,7 +506,7 @@ Each economy has households, non-financial enterprises, banks, government, centr
 | Monetary union | Euro area, CFA franc zones | One central bank for many states, no national devaluation |
 | Dollarization | Ecuador, Panama | No independent monetary policy |
 
-Regimes are initialized from the de facto classification of Ilzetzki, Reinhart and Rogoff and can change by law (abandoning a peg, joining or leaving a union). Floating exchange rates are cleared in one place, the global demand system of 9.9: current-account and income flows enter it as net currency demand absorbed by financiers with limited risk-bearing capacity (Gabaix and Maggiori 2015 is that special case), and central banks intervene from reserves as one more investor class.
+Regimes are initialized from the de facto classification of Ilzetzki, Reinhart and Rogoff and change through transition hazards on inflation, reserve cover and recent peg breaks; entering or leaving a monetary union stays at t0 until 2.0 (ADR 0242). Floating exchange rates are cleared in one place, the global demand system of 9.9: current-account and income flows enter it as net currency demand absorbed by financiers with limited risk-bearing capacity (Gabaix and Maggiori 2015 is that special case), and central banks intervene from reserves as one more investor class.
 
 ### 9.3 Banks and asset markets
 
@@ -615,13 +615,13 @@ Contagion runs through four channels, all resolved inside the monthly fixed-poin
 3. Funding runs: uninsured and wholesale funders withdraw past a threshold (Diamond and Dybvig 1983), with seeded noise keyed by the rules of 14.4 so ensembles show run probabilities, not certainties.
 4. The sovereign-bank loop: home-biased holdings of own-government debt tie bank capital to sovereign spreads and bailouts to public debt (Brunnermeier et al. 2016; Farhi and Tirole 2018).
 
-Safety-net levers in the state and central-bank action space: lender-of-last-resort lending against haircut collateral, deposit insurance limits, guarantees, recapitalization, bail-in or resolution, asset purchases, swap lines, and macroprudential tools (countercyclical capital buffer, LTV and DTI caps). Their costs feed the fiscal state (9.6) and spreads (9.4). These levers make the scenarios 'Lehman rescued' and 'the euro without a lender of last resort' plain decision overrides (14.2).
+Safety-net levers in the state and central-bank action space: lender-of-last-resort lending against haircut collateral, deposit insurance limits, guarantees, recapitalization, bail-in or resolution, asset purchases, swap lines, and macroprudential tools (countercyclical capital buffer, LTV and DTI caps). Their costs feed the fiscal state (9.6) and spreads (9.4). These levers make the scenarios 'Lehman rescued' and 'the euro without a lender of last resort' plain decision overrides (14.2). Levers without a 0210 rule hold their t0 values and move through tightening and loosening hazards driven by simulated crises and the credit gap (ADR 0242).
 
 ### 9.12 Global financial cycle, the dollar and capital controls
 
 One global risk-appetite state, an analogue of the VIX, correlates every market, so stress spreads across borders the way the global financial cycle does (Rey 2013; Miranda-Agrippino and Rey 2020).
 
-- **Risk appetite.** Its innovations follow a stochastic-volatility process with fat tails, drawn on the shock tape like weather. Its level responds endogenously to US monetary policy and to intermediary losses, and it scales the return sensitivity of every investor class in 9.9. Crises themselves stay endogenous (13.6).
+- **Risk appetite.** Its innovations follow a stochastic-volatility process with fat tails, drawn from the run's random streams like weather and written to its event log (ADR 0241). Its level responds endogenously to US monetary policy and to intermediary losses, and it scales the return sensitivity of every investor class in 9.9. Crises themselves stay endogenous (13.6).
 - **Dollar centrality.** Dollar invoicing, dollar debt of emerging-market sovereigns and firms, and reserve-manager demand for Treasuries give the dollar a convenience yield, so it appreciates in stress. Fed swap lines are a lever that relieves dollar funding of foreign banks.
 - **Capital flows.** Gross flows emerge from portfolio rebalancing in 9.9; nothing is scripted. Sudden stops (Calvo 1998) and flow surges and retrenchments (Forbes and Warnock 2012) are validation targets, not mechanisms.
 - **Capital controls and sanctions.** Controls are taxes or caps on foreign classes' weights in a state's assets, initialized from the capital-control measures of Fernandez et al. (2016). Sanctions, reserve freezes and payment-system exclusion (11.8) set eligibility to zero.
@@ -812,19 +812,21 @@ LLM agents are an active research area for economic simulation, from EconAgent (
 
 ### 12.6 Steward mode
 
-In Steward mode the user replaces Tier 1a for one state. The same action space is exposed through the UI, so anything the user can do, the AI can do, and vice versa.
+Steward mode lands in 2.0-alpha; 1.x exposes no seat (ADR 0239). In Steward mode the user replaces Tier 1a for one state. The same action space is exposed through the UI, so anything the user can do, the AI can do, and vice versa.
 
 ## 13. Climate, Shocks and Stochastic Processes
 
-Climate is an endogenous feedback loop (the economy emits, temperature responds, damages hit the economy), while other exogenous shocks sit on a shock tape that can be replayed from 2000-2024 history, drawn stochastically, or edited, and is held fixed across branches.
+Climate is an endogenous feedback loop (the economy emits, temperature responds, damages hit the economy). After t0 a default run is calendar-blind: every other event comes from a hazard on simulated state, drawn by thinning on uniforms that branches share (ADRs 0241, 0242). Observed history enters only as an optional set of interventions.
 
-### 13.1 Shock tape modes
+### 13.1 Default runs and replay history
 
-| Mode | Content | Use |
+| Use | Content | Purpose |
 | --- | --- | --- |
-| Historical | Observed weather 2000-2024, pandemic seeding (SARS 2003, H1N1 2009, COVID 2020), major disasters, chokepoint disruptions | Out-of-sample validation |
-| Stochastic | Draws from fitted generators, with climate-shifted weather after 2024 | Ensembles, open-ended futures |
-| Scripted | User edits on top of either | Counterfactuals ('no COVID', 'Suez closed for a year') |
+| Default | Hazards and fitted generators only, with climate-shifted weather once climate is on; commitments in force at t0 (tariff phase-ins, euro banknotes, projects under construction) are state with completion hazards | Ensembles, open-ended futures, unconditional scorecard |
+| Replay | `replay-2000-2024`, applied whole or by family (shocks, policy): observed weather, pandemic seedings, disasters, chokepoint closures, policy and regime changes, named projects, discoveries | Calibration, natural experiments (15.5), conditional scorecard |
+| Edits | User interventions on either | Counterfactuals ('no COVID', 'Suez closed for a year') |
+
+Replay is a set of interventions (14.2), logged like any user edit, and never part of a default run (ADR 0241).
 
 ### 13.2 Climate emulator
 
@@ -840,11 +842,11 @@ Validation: 2000-2024 emissions by country and global temperature; beyond 2024, 
 
 ### 13.3 Disease
 
-Each pathogen class runs as a metapopulation SEIR model on the transport and air-travel network, so pandemics travel along trade, travel and migration routes. Health spending, vaccination and non-pharmaceutical interventions (lockdowns, border closures) are policy levers whose economic effects run through labour supply, sector demand and trade, as in the COVID application of Poledna et al. (2023).
+Pandemics start from a per-province zoonotic spillover hazard on livestock, forest edge, density and wildlife trade, with traits drawn from a prior over past pathogens; non-pharmaceutical interventions and vaccine arrival follow fitted rules (ADR 0242). Each pathogen class runs as a metapopulation SEIR model on the transport and air-travel network, so pandemics travel along trade, travel and migration routes. Health spending, vaccination and non-pharmaceutical interventions (lockdowns, border closures) are policy levers whose economic effects run through labour supply, sector demand and trade, as in the COVID application of Poledna et al. (2023).
 
 ### 13.4 Disasters and resources
 
-Earthquakes, tropical cyclones and floods are drawn from hazard maps (with climate-scaled frequencies for weather extremes) and destroy capital and housing in affected provinces. Resource discoveries and extraction-technology gains (for example the shale boom) appear as productivity and reserve shocks in the energy-mining sectors.
+Earthquakes, tropical cyclones and floods are drawn from hazard maps (with climate-scaled frequencies for weather extremes) and destroy capital and housing in affected provinces. Resource discoveries and extraction-technology gains (for example the shale boom) come from exploration on simulated prices (ADR 0178) and appear as productivity and reserve shocks in the energy-mining sectors.
 
 ### 13.5 Political hazards
 
@@ -852,7 +854,7 @@ Leader death uses age-specific mortality; assassinations and terror attacks have
 
 ### 13.6 Endogenous vs exogenous
 
-Financial crises, recessions, protest waves, wars and famines are endogenous outcomes and never sit on the tape. Users can still force them as interventions (Section 14), which is recorded as such.
+Financial crises, recessions, protest waves, wars and famines are endogenous outcomes and never sit in replay. Users can still force them as interventions (Section 14), which is recorded as such.
 
 ## 14. Counterfactual Engine: Ex Ante and Ex Post Interventions
 
@@ -862,7 +864,7 @@ Every experiment is a branch: a parent run plus an ordered list of timed edits, 
 
 | Object | Definition |
 | --- | --- |
-| Scenario | Data pack version + initial state + parameter vector + shock tape |
+| Scenario | Data pack version + initial state + parameter vector + optional replay set (ADR 0241) |
 | Branch | Scenario + ordered interventions \[(tick, edit)\], with a parent branch and fork tick |
 | Run | Branch x seed |
 | Ensemble | Branch x K seeds (default K = 32) |
@@ -877,7 +879,7 @@ Every experiment is a branch: a parent run plus an ordered list of timed edits, 
 | Policy (in-world) | The United States does not impose the 2018 steel and aluminium tariffs | Ex post (as a forced decision) |
 | Event injection | Declare war; assassinate a ruler; discover gold in a province | Ex post |
 | Decision override | Force a state AI's choice at one decision point, or lock a law | Ex post |
-| Shock tape | Remove COVID; add a multi-year US Midwest drought | Ex ante (tape) |
+| Event or replay | Remove the run's pandemic; add a multi-year US Midwest drought | Ex ante or ex post |
 | Module switch | Walrasian vs inventory pricing; Tier 1a vs Tier 2 AI | Ex ante |
 
 In-world edits are distinguished from god-mode edits in the log, because only in-world edits are things an agent could have done.
@@ -927,7 +929,7 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 | --- | --- | --- |
 | Modular calibration | Each module against its own targets, others held at data | Essential on one laptop |
 | Method of simulated moments | Moments with clear targets (trade shares, unemployment, spreads, fertility) | Common random numbers across draws |
-| Neural posterior estimation / ABC-SMC | Joint posterior of behavioural parameters | Simulation-based inference for ABMs as in Dyer et al. (2024); sbi toolkit (PyTorch, runs on Apple MPS) |
+| Neural posterior estimation / ABC-SMC | Joint posterior of behavioural parameters | Simulation-based inference for ABMs as in Dyer et al. (2024), in Rust in `ceteris-calibrate` (ADR 0113) |
 | History matching with GP emulators | Ruling out implausible regions first | A few hundred runs |
 | Gradient-based variational inference | Behavioural parameters, through forward-mode derivatives of the Rust core (ADR 0096) | Same code as the golden runs; in Hamid et al. (2025) gradient-based variational inference reached in 300 evaluations a loss ABC had not reached in 30,000 |
 | Direct structural estimation | Parameters whose estimating equation the model nests: theta\_g, border frictions (P05) and mode cost ratios (P04) by PPML gravity on BACI; migration dispersion (P16) by PPML on bilateral migration flows; Koijen-Yogo demand elasticities by their instrument | Outside the simulation (ADR 0022); frees the run budget for behavioural parameters |
@@ -963,7 +965,7 @@ Forecasts are scored with proper scoring rules (CRPS) and interval coverage: a 9
 
 ### 15.5 Natural-experiment replication
 
-The model is fed each historical shock and its response is compared with the published empirical estimate:
+Each episode runs as a subset of replay (ADR 0241): the model is fed the historical shock and its response is compared with the published empirical estimate:
 
 | Episode | Model test | Empirical benchmark |
 | --- | --- | --- |
@@ -987,7 +989,7 @@ Accuracy comes first from how the model is fed and judged, second from targeted 
 - **Posterior ensembles.** Ensemble members draw parameters from the posterior, so reported uncertainty includes parameter uncertainty, not only shock noise.
 - **Model discrepancy.** Calibration includes an explicit discrepancy term (Kennedy and O'Hagan 2001) so parameters do not absorb structural error.
 - **Stacking across structural switches.** Plausible module alternatives (17.2) run side by side and are weighted by out-of-sample skill (Bayesian stacking).
-- **Historical policy tape.** In validation, actual policy rates and fiscal decisions can be fed exogenously, separating economic-mechanism error from state-AI policy error.
+- **Two-way scorecard.** Validation runs from each origin with replay off (unconditional) and on (conditional); replay with and without its policy family separates economic-mechanism error from policy-rule error (ADRs 0210, 0241).
 
 **Targets: micro facts over macro paths**
 
@@ -1046,7 +1048,7 @@ The 2000 pack is built from pinned sources; each is listed with its licence, evi
 | UCDP (including GED) | Conflict events, georeferenced | Conflict targets | CC BY 4.0 | Bundle extracts |
 | Correlates of War; military spending series | Capabilities, alliances, spending | War module | Free with citation | Fetch |
 | Global Energy Monitor trackers | Power plants, mines, pipelines | Energy assets | CC BY 4.0 | Bundle |
-| ERA5 reanalysis | Weather 2000-2024 | Historical shock tape | Copernicus licence (attribution) | Fetch, bundle aggregates |
+| ERA5 reanalysis | Weather 2000-2024 | Replay history (ADR 0241) | Copernicus licence (attribution) | Fetch, bundle aggregates |
 | FaIR | Climate emulator (software) | Climate module | Apache 2.0 | Dependency |
 | Disaster databases (e.g. EM-DAT) | Disaster events | Validation only | Restricted | User fetches; never bundled |
 
@@ -1067,6 +1069,7 @@ The register lists every parameter that is not pinned by data, with its prior an
 | P03a | Price adjustment speed kappa1 | Markets | 0.05 to 0.5 per month, start 0.05 | Price volatility and autocorrelation | Free |
 | P03b | Inventory term kappa2 of the price rule | Markets | 0.05 to 0.5 per month when on; start 0 (off) | Price volatility and autocorrelation; stability region (ADR 0019) | Free |
 | P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move; binding ticks counted per province | Free |
+| P03d | Share m of each market's stability limit used by its price gain (ADR 0263) | Markets | 0 to 1, start 0.5 | Frictionless stability (V1); per-market speed | Free |
 | P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
 | P05 | Non-tariff border frictions | Trade | Log-uniform | Gravity border effects | Calibrated |
 | P06 | Goods substitution sigma within a PIGL category | Demand | 0.3 to 0.9, start 0.6 | Comin-Lashkari-Mestieri (2021) | Literature |
@@ -1136,7 +1139,7 @@ Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 
 | S04 | Expectations | Heuristic switching / adaptive only / perfect foresight (reference) |
 | S05 | Trade costs | Route choice / least-cost path; per-unit + iceberg / iceberg only |
 | S06 | State AI | Tier 1a / 1b / 2 |
-| S07 | Shock tape | Historical / stochastic / scripted |
+| S07 | Replay (ADR 0241) | Off / shocks / policy / all |
 | S08 | System order within tick | Fixed / randomized (sensitivity) |
 | S09 | Intermediate technology | Putty-clay vintages / fixed 2000 Leontief coefficients |
 | S10 | Climate damages | Level effects / growth effects |
@@ -1175,8 +1178,8 @@ A Rust core gives deterministic, parallel speed; Rust crates also own the data p
 | Simulation core | Rust, plain structure-of-arrays, rayon for parallelism | Determinism control, speed, memory safety for a long-lived codebase |
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
-| App shell | Today Tauri 2: Rust core in-process, raw buffers to the UI over IPC, pack files through pack://. Target: one native Rust process, winit window, Slint panels, core columns read directly (ADR 0088) | One native macOS app, no server |
-| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADR 0088; stage 1 of ADR 0011 becomes a native spike instead of the hybrid) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
+| App shell | One native Rust process: winit window, Slint panels, the economy on a sim thread publishing views through a run-ahead ring (ADRs 0088, 0208) | One native macOS app, no server |
+| Map UI | wgpu globe drawn into a texture shown in Slint: fills coloured from a per-feature texture, borders from an id target, labels as Slint text (ADRs 0010, 0088, 0244); globe only, with Equal Earth for flat exports (ADR 0250) 120 fps on the owner's Mac (frame p50 8.33 ms); a full province recolour uploads in 0.06 ms |
 | Pipeline, reference model, calibration | Rust crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate`, driven by the `ceteris` CLI; GEOS only on the owner-side map build (ADR 0113) | One toolchain; the restricted part of the pack builds on the user's machine with no Python runtime |
 | Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow and Parquet outputs | No bindings to maintain; runs are driven by scenario files |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
@@ -1225,7 +1228,7 @@ ceteris/
     ceteris-reference/    GE hat-algebra reference model
     ceteris-calibrate/    calibration, estimation, SBI, MSM, emulators
     ceteris-cli/          the ceteris binary: pack, reference, calibrate, runs, branch and ensemble runners
-  app/                    Tauri shell (Rust) + TypeScript map UI, until the native app reaches parity (ADR 0088)
+  app/                    native app (winit, Slint, wgpu), its own cargo workspace (ADR 0088)
   tests/golden/           golden runs with state hashes
 ```
 
@@ -1302,7 +1305,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 
 ## 20. Interface and Visualization
 
-The interface is a Paradox-style map with time controls, plus two things Paradox games lack: a branch manager for comparing histories and an explainer that decomposes any number into its causes.
+The interface is a Paradox-style map with time controls, plus two things Paradox games lack: a branch manager for comparing histories and an explainer that decomposes any number into its causes. 1.0 has one neutral chrome; narration, country flavour and seat chrome come after 1.0 (ADR 0240).
 
 ### 20.1 Map modes
 
@@ -1340,7 +1343,7 @@ Eleven phases take the project from an empty repository to a calibrated, playabl
 
 Each phase starts only when the previous gate passes; the highlighted workbench phase is where the project first becomes useful for experiments. Phases run in the order P0-P2, pre-P3, App shell, P3, P4, P5a, P5b, P8, P9, R, then P6, P7, P10; numbers are kept, and the order follows the major-version rule of ADR 0136 and the 1.0 phase plan of ADR 0207. Each phase builds only what its gate and the 2011-2024 scorecard need; other mechanisms land after 1.0 as minors behind a flag (ADR 0207 lists them).
 
-**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is 1.0 at the end of R: a calibrated, validated economic world (P0-P5, P8, P9), not an earlier partial build. 1.0 runs with the climate emulator and damages off; they arrive as 1.1 (ADR 0207). P6 is 2.0-alpha, P7 2.0-beta, and P10 lands as 1.3 (Steward mode for economic levers) and 2.x (full Steward mode and Tier 1b).
+**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is 1.0 at the end of R: a calibrated, validated economic world (P0-P5, P8, P9), not an earlier partial build. 1.0 runs with the climate emulator and damages off; they arrive as 1.1 (ADR 0207). P6 is 2.0-alpha, P7 2.0-beta, and P10 lands with 2.0-alpha (Steward mode for economic levers) and 2.x (full Steward mode and Tier 1b); 1.x has no seats (ADR 0239).
 
 ### 21.1 Phases and acceptance criteria
 
@@ -1359,20 +1362,20 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
      - Gate decision (owner, 26 Oct 2026): V1 is the run from the perturbed steady state; the run from the shocked data state is a stress test (xfail(strict)), and ADR 0090's price rule is redesigned after the gate.
    - **Pre-P3** (ADR 0207): the Rust migration (ADR 0113), the economics review and audit branches with ADR 0200 built beside ADR 0092, P3 prerequisites and ensemble lanes. Accept: the P2 gate on the recalibrated pack, and the trade benchmark rerun with openness within 1.5 times the ICIO shares, the ACR formula holding and a x10 border shock converging.
    - **App shell** (ADR 0207): ADR 0088 stages 1 and 2, the wgpu map at parity with P1 and a Slint panel host. Accept: ADR 0088's exit criteria.
-4. **P3 Counterfactual workbench.** Branches, interventions (all types in 14.2), common random numbers, ensembles, difference maps, fan charts, CLI and scenario files with Arrow exports (ADR 0113).
-   - Accept: null intervention reproduces parent; a tariff intervention yields paired effects with tighter intervals under CRN than with independent seeds.
+4. **P3 Counterfactual workbench.** Branches, interventions (all types in 14.2), common random numbers, ensembles, difference maps, fan charts, CLI and scenario files with Arrow exports (ADR 0113), the replay loader (ADR 0241).
+   - Accept: null intervention reproduces parent; relabelling the start year leaves the golden hash unchanged (ADR 0241); a tariff intervention yields paired effects with tighter intervals under CRN than with independent seeds.
 5. **P4 Population.** Demography with Brass mortality and fertility, education, occupational mobility, migration with dynamic discrete choice, and the detrended calibration that replaces the steady state once population grows. Culture and religion stay at their 2000 shares until P6 (ADR 0207).
    - Accept: fertility, mortality and urbanization within tolerance of UN data for 2000-2010; population conservation holds.
 6. **P5 Money, finance and state**, in two gates (ADR 0207).
    - **P5a Money and fiscal.** Currencies and regimes, central banks with policy rules, taxes with fiscal capacity, budgets, SFC matrices, and the quarterly investment step (7.4, ADRs 0202, 0204). Accept: SFC matrices close every tick; a policy-rate shock moves credit, output, inflation and the exchange rate with plausible signs and lags.
-   - **P5b Banks, debt and flows.** Banks, housing and equity prices, sovereign bonds and default, IMF, portfolio capital flows, and the sequence-space HANK reference in Rust (ADR 0025). Accept: responses within tolerance of the HANK reference given matched intertemporal MPCs; spreads respond to debt and stress.
+   - **P5b Banks, debt and flows.** Banks, housing and equity prices, sovereign bonds and default, IMF, portfolio capital flows, the sequence-space HANK reference in Rust (ADR 0025), and regime and prudential hazards (ADR 0242). Accept: responses within tolerance of the HANK reference given matched intertemporal MPCs; spreads respond to debt and stress.
 7. **P6 Politics and institutions.** Institution vector, interest groups, parties and elections, contest function, policy mechanisms, laws with momentum, legitimacy, ideology dynamics, unrest, reform, repression, revolution, coups, secession.
    - Accept: regime transitions, coups and protest waves at plausible frequencies; simulated 2000-2010 elections track vote shares; crisis-voting event study (H7) runs end to end.
 8. **P7 Diplomacy and war.** Relations, treaties, crisis bargaining, alliances, nuclear deterrence, forces, daily combat, logistics, occupation, war economy, peace terms, sanctions, civil conflict.
    - Accept: interstate and civil conflict onset frequencies within COW and UCDP ranges in ensembles; conflicts visibly move prices, debt and populations.
-9. **P8 Growth, energy and climate.** Frontier productivity growth, catch-up, learning curves in energy, structural change, emissions. Endogenous infrastructure, the climate emulator and damages are minors after 1.0 (climate in 1.1, ADR 0207).
+9. **P8 Growth, energy and climate.** Frontier productivity growth with technology jumps, catch-up, learning curves in energy, structural change, emissions; pandemic and chokepoint hazards (ADR 0242). Endogenous infrastructure, the climate emulator and damages are minors after 1.0 (climate in 1.1, ADR 0207).
    - Accept: 2000-2010 growth, sector shares and emissions within tolerance; open-ended runs to 2150 stay numerically stable.
-10. **P9 Calibration and hindcast.** Pre-registration, a joint check of the block calibrations made at each gate, SBI, emulators and Sobol analysis in Rust, 2011-2024 out-of-sample validation, natural-experiment replication.
+10. **P9 Calibration and hindcast.** Pre-registration, a joint check of the block calibrations made at each gate, SBI, emulators and Sobol analysis in Rust, hazard fits outside the simulation (ADR 0242), 2011-2024 out-of-sample validation with replay off and on (ADR 0241), natural-experiment replication.
     - Accept: out-of-sample scorecard (15.4) and natural-experiment table (15.5) published with CRPS and coverage; robustness across structural switches documented.
     - **R Release** (ADR 0207): the user-side fetch and build of the pack, including manual sources, a signed macOS build, hashes checked across architectures, a minimum pedia. Accept: a clean machine builds the pack and reproduces the published 1.0 hashes.
 11. **P10 AI layers and Steward mode.** Learned state policies and playable single-state control; LLM leaders are deferred beyond v1.
@@ -1404,7 +1407,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Trade solver misses the laptop budget at province level | Medium | One gravity normalization per tick (ADR 0016), gateway-factorized kernel, tunable gateway counts, Metal fallback |
 | Open-ended runs drift or explode (debt spirals, price drift, demographic collapse) | Medium | Stabilizing policy rules, stability tests to 2150, balanced-growth checks in CI |
 | Numerical instability (price oscillation, bank-run cascades) | Medium | Clipped adjustments, stability tests on adjustment speeds, Walrasian fallback switch |
-| Railroading toward known post-2000 history | Medium | No date-triggered events; historical shocks enter only as exogenous tape items; LLM tier deferred |
+| Railroading toward known post-2000 history | Medium | Calendar-blind default runs: events come from hazards on simulated state; history enters only as optional replay (ADRs 0241, 0242); LLM tier deferred |
 | Dataset licences restrict redistribution | Medium | Bundle-or-fetch policy, licence manifest, P0 audit |
 | Determinism broken by parallelism or library updates | Medium | Fixed reductions, pinned toolchains, hash checks in CI |
 | Scope creep toward a full game | Medium | Non-goals list (2.4); features must serve experiments |
@@ -1415,12 +1418,12 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | --- | --- | --- |
 | Scenario | Modern start, 1 Jan 2000 (supersedes 1836) | Data replaces judgment; 2011-2024 is the out-of-sample window |
 | Start-year flexibility | Pipeline builds packs for any year 1995-2022 | Rolling-origin validation (2000, 2005, 2010, 2015) |
-| Horizon | Open-ended | Climate, demography and long-run stability are first-class requirements |
+| Horizon | Open-ended | Demography and long-run stability are first-class requirements; climate joins them in 1.1 (ADR 0207) |
 | Map scope | Global, full globe from P2 (ADR 0012) | dev\_slice kept in the pack for ad hoc fast runs; no gate depends on it |
 | Provinces | Natural Earth first-level regions at 2000 borders, oversized ones split along county borders, 4,796 | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
-| App | Tauri desktop app today; moving to a fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
+| App | Fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
 | Core language | Rust from the start | Pipeline, reference model and calibration in Rust too (ADR 0113); no Python in the build, release or test path |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |
@@ -1444,7 +1447,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 
 ## 23. Beyond v1: World Builder and Strategy-Game Depth
 
-Version 1 is a calibrated economic laboratory; this section specifies what turns it into a world builder and a Paradox-depth strategy game without weakening that laboratory. Nothing here is scheduled before 1.0, and every item lands behind a feature flag (roadmap, release process). Version numbers follow ADR 0136: a major relaxes one ceteris paribus, and everything else is a minor.
+Version 1 is a calibrated economic laboratory; this section specifies what turns it into a world builder and a Paradox-depth strategy game without weakening that laboratory. Nothing here is scheduled before 1.0, and every item lands behind a feature flag (roadmap, release process). Version numbers follow ADR 0136: a major relaxes one ceteris paribus, and everything else is a minor. Seats, scoring, narration and flavour are 2.0 or later (ADRs 0239, 0240); 1.x minors are simulator, lab, editor and view work.
 
 The gaps fall in three groups: building worlds other than the real 2000 start (23.2-23.3), giving the player something to do and be judged on (23.4), and adding the discrete texture of characters, commands, actions and stories that aggregate mechanisms lack (23.5-23.8).
 
@@ -1514,7 +1517,7 @@ Pre-1995 packs are extended-profile until a historical hindcast exists to score 
 
 ### 23.4 Player loop
 
-The player is scored by how much better their state does than the AI would have done with the same world and the same luck. The engine already computes exactly that: a paired effect under common random numbers (14.4-14.5), with the Tier 1a run as the baseline branch.
+The player loop lands in 2.0-alpha with Steward mode (ADR 0239). The player is scored by how much better their state does than the AI would have done with the same world and the same luck. The engine already computes exactly that: a paired effect under common random numbers (14.4-14.5), with the Tier 1a run as the baseline branch.
 
 **Objectives.** At start the player picks or writes an objective as a weighted outcome vector over the state's own metrics, for example real income of the bottom 40%, debt to GDP, regime survival, territorial control or emissions. Presets cover common ambitions (catch up to the frontier, survive a hostile neighbour, keep the peg). The weights are fixed at start and shown on the scoreboard.
 
@@ -1640,13 +1643,16 @@ The rollout budget is set so the strategic layer stays within 10% of the tick bu
 
 ### 23.9 Placement in the roadmap
 
-The first additions ride on 1.3 Steward mode, the consistency solver follows in 1.4, and most game depth arrives with 2.0 politics and war; pre-1995 eras enter the lab at 3.0. Releases follow the roadmap's After 1.0 table, its versioning rules and ADR 0136; a 2.x or 3.x label below on an extended-profile item means its dependencies land then, and the item ships as a minor.
+The first addition in this section is the consistency solver in 1.4 (climate, 1.1, is outside it); seats, scoring and most game depth arrive with 2.0 politics and war (ADR 0239); pre-1995 eras enter the lab at 3.0. Releases follow the roadmap's After 1.0 table, its versioning rules and ADR 0136; a 2.x or 3.x label below on an extended-profile item means its dependencies land then, and the item ships as a minor.
 
 | Item | Section | Release | Depends on | Profile |
 | --- | --- | --- | --- | --- |
-| Objectives, score against the AI baseline, Ironman | 23.4 | 1.3 | Steward mode, ensembles | Lab and extended |
+| Objectives, score against the AI baseline, Ironman | 23.4 | 2.0-alpha | Steward mode, ensembles | Lab and extended |
+| Steward mode and office seats (ADR 0237) | 12.6, 23.4 | 2.0-alpha | P6 | Lab and extended |
+| Planned-economy seat (ADR 0237) | 23.4 | 2.0-alpha or later | Steward mode, ADRs 0084, 0206 | Lab and extended |
+| Firm seat (ADR 0237) | 23.4 | 2.0-alpha or later | Steward mode | Extended |
 | Event cards, chronicle, outliner, alerts | 23.8 | 1.3 | Event log | View only |
-| Policy catalog: labour, social, health, education, markets, finance | 23.7 | 1.3 | Steward action space | Lab |
+| Policy catalog: labour, social, health, education, markets, finance | 23.7 | 1.3 | God-mode edits (14.2) | Lab |
 | Consistency solver and editors | 23.2 | 1.4 | P2, P4, P5 complete | Lab and extended |
 | Mod manifest (data and parameters only) | 23.3 | 1.4 | Solver | Extended |
 | Policy catalog: property, citizenship, information | 23.7 | 2.0-alpha | P6 legislative process | Lab if it passes pattern tests |

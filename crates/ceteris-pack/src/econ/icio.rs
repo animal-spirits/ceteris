@@ -134,13 +134,59 @@ pub fn median_va_over_gdp(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 
     .unwrap_or(f64::NAN)
 }
 
-/// A country's VA shares of GDP: agriculture, industry, manufacturing, services.
+/// ICIO crude oil and gas VA over WDI oil and gas rents, summed over the ICIO economies with GDP
+/// and a rent.
+pub fn oil_gas_va_over_rents(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 {
+    let (va, rents): (Vec<f64>, Vec<f64>) = icio
+        .iter()
+        .filter_map(|(k, c)| {
+            let r = rents(wdi, k)?;
+            Some((c.va[OIL_GAS] * 1e6, wdi.gdp.get(k)? * r))
+        })
+        .unzip();
+    pairwise_sum(&va) / pairwise_sum(&rents)
+}
+
+/// The largest share of crude oil and gas in the VA of goods 1 to 8 among the ICIO economies.
+pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
+    icio.values()
+        .map(|c| c.va[OIL_GAS] / pairwise_sum(&c.va[1..9]))
+        .filter(|x| x.is_finite())
+        .fold(0.0, f64::max)
+}
+
+/// Inputs per unit of crude oil and gas output over all ICIO economies, weighted by their crude
+/// oil and gas output.
+pub fn world_oil_gas_column(icio: &BTreeMap<String, CountryIo>) -> [f64; N_GOODS] {
+    let output: Vec<f64> = icio.values().map(|c| c.output[OIL_GAS]).collect();
+    let total = pairwise_sum(&output);
+    std::array::from_fn(|k| {
+        let inputs: Vec<f64> = icio
+            .values()
+            .zip(&output)
+            .map(|(c, x)| c.io[k][OIL_GAS] * x)
+            .collect();
+        pairwise_sum(&inputs) / total
+    })
+}
+
+/// Oil plus natural gas rents over GDP, with a missing one as zero; None when both are missing.
+fn rents(wdi: &Wdi, code: &str) -> Option<f64> {
+    match (wdi.oil_rents.get(code), wdi.gas_rents.get(code)) {
+        (None, None) => None,
+        (o, g) => Some(o.unwrap_or(&0.0) + g.unwrap_or(&0.0)),
+    }
+}
+
+/// A country's VA shares of GDP: agriculture, industry, manufacturing, services; and its oil and
+/// gas rents over GDP.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SectorShares {
     pub agriculture: Option<f64>,
     pub industry: Option<f64>,
     pub manufacturing: Option<f64>,
     pub services: Option<f64>,
+    pub rents: Option<f64>,
 }
 
 /// GDP (USD) of the parts and their GDP-weighted VA shares of GDP.
@@ -151,23 +197,28 @@ pub fn sector_shares(wdi: &Wdi, ps: &[String]) -> (f64, SectorShares) {
     let have: Vec<&String> = ps.iter().filter(|p| wdi.gdp.contains_key(*p)).collect();
     let gdp = py_sum(have.iter().map(|p| wdi.gdp[*p]));
     let weights: Vec<f64> = have.iter().map(|p| wdi.gdp[*p]).collect();
-    let share = |series: &BTreeMap<String, f64>| -> Option<f64> {
+    let weighted = |value: &dyn Fn(&str) -> Option<f64>| -> Option<f64> {
         if have.is_empty() {
             return None;
         }
-        let values: Option<Vec<f64>> = have.iter().map(|p| series.get(*p).copied()).collect();
+        let values: Option<Vec<f64>> = have.iter().map(|p| value(p)).collect();
         let products: Vec<f64> = values?.iter().zip(&weights).map(|(v, w)| v * w).collect();
         Some(pairwise_sum(&products) / pairwise_sum(&weights))
     };
+    let share = |series: &BTreeMap<String, f64>| weighted(&|p| series.get(p).copied());
     let mut s = SectorShares {
         agriculture: share(&wdi.agriculture),
         industry: share(&wdi.industry),
         manufacturing: share(&wdi.manufacturing),
         services: share(&wdi.services),
+        rents: weighted(&|p| rents(wdi, p)),
     };
     let positive = py_sum([s.agriculture, s.industry, s.services].map(|x| x.unwrap_or(0.0)));
     if positive <= 0.0 {
-        s = SectorShares::default();
+        s = SectorShares {
+            rents: s.rents,
+            ..SectorShares::default()
+        };
     }
     if let (Some(m), Some(i)) = (s.manufacturing, s.industry)
         && m > i
@@ -177,11 +228,16 @@ pub fn sector_shares(wdi: &Wdi, ps: &[String]) -> (f64, SectorShares) {
     (gdp, s)
 }
 
-/// `total` over `goods` by the donor's VA proportions (zero elsewhere).
+/// `total` over `goods` by the donor's VA proportions (zero elsewhere); a single good takes it all,
+/// even where the donor has none.
 fn split(total: f64, goods: &[usize], donor: &CountryIo) -> [f64; N_GOODS] {
+    let mut va = [0.0; N_GOODS];
+    if let [g] = goods {
+        va[*g] = total;
+        return va;
+    }
     let picked: Vec<f64> = goods.iter().map(|&g| donor.va[g]).collect();
     let sum = pairwise_sum(&picked);
-    let mut va = [0.0; N_GOODS];
     for &g in goods {
         va[g] = total * donor.va[g] / sum;
     }
@@ -193,6 +249,7 @@ fn add(a: [f64; N_GOODS], b: [f64; N_GOODS]) -> [f64; N_GOODS] {
 }
 
 const ALL: [usize; N_GOODS] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const OIL_GAS: usize = 1;
 
 /// What the imputation of one country's VA reads besides the donor.
 struct Level {
@@ -200,43 +257,97 @@ struct Level {
     shares: SectorShares,
     people: f64,
     donor_people: f64,
+    /// ICIO median VA over GDP.
     ratio: f64,
+    /// ICIO crude oil and gas VA over rents.
+    oil_gas_ratio: f64,
+    /// Largest ICIO share of crude oil and gas in its group.
+    oil_gas_cap: f64,
     scale: Option<f64>,
+}
+
+/// VA shares of GDP by group of goods, and their basis. With all of agriculture, industry and
+/// services the shares are WDI's; with one missing, the goods WDI does not cover take the ICIO
+/// median VA over GDP less the shares there are (at least zero).
+fn groups(s: SectorShares, ratio: f64) -> (Vec<(f64, Vec<usize>)>, Basis) {
+    let mut known = Vec::new();
+    if let Some(a) = s.agriculture {
+        known.push((a, GROUPS[0].to_vec()));
+    }
+    match (s.industry, s.manufacturing) {
+        (Some(i), Some(m)) => {
+            known.push((i - m, GROUPS[1].to_vec()));
+            known.push((m, GROUPS[2].to_vec()));
+        }
+        (Some(i), None) => known.push((i, (1..9).collect())),
+        (None, Some(m)) => known.push((m, GROUPS[2].to_vec())),
+        (None, None) => {}
+    }
+    if let Some(v) = s.services {
+        known.push((v, GROUPS[3].to_vec()));
+    }
+    if s.agriculture.is_some() && s.industry.is_some() && s.services.is_some() {
+        let basis = if s.manufacturing.is_some() {
+            Basis::Wdi
+        } else {
+            Basis::WdiGdp
+        };
+        return (known, basis);
+    }
+    let rest: Vec<usize> = ALL
+        .into_iter()
+        .filter(|g| !known.iter().any(|(_, goods)| goods.contains(g)))
+        .collect();
+    let have = py_sum(known.iter().map(|(t, _)| *t));
+    known.push(((ratio - have).max(0.0), rest));
+    (known, Basis::WdiGdp)
+}
+
+/// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most `cap` of the
+/// group's, so the group's local goods keep a producer.
+/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups count as one
+/// (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
+fn oil_gas_apart(
+    mut groups: Vec<(f64, Vec<usize>)>,
+    share: f64,
+    cap: f64,
+) -> Vec<(f64, Vec<usize>)> {
+    let Some(i) = groups.iter().position(|(_, g)| g.contains(&OIL_GAS)) else {
+        return groups;
+    };
+    if share > cap * groups[i].0
+        && let Some(m) = groups.iter().position(|(_, g)| g == GROUPS[2])
+    {
+        let (t, goods) = groups.remove(m);
+        let i = if m < i { i - 1 } else { i };
+        groups[i].0 += t;
+        groups[i].1.extend(goods);
+        groups[i].1.sort_unstable();
+    }
+    let g = groups
+        .iter_mut()
+        .find(|(_, goods)| goods.contains(&OIL_GAS))
+        .expect("found above");
+    let take = share.min(cap * g.0);
+    g.0 -= take;
+    g.1.retain(|&x| x != OIL_GAS);
+    groups.push((take, vec![OIL_GAS]));
+    groups
 }
 
 /// VA by good (million USD) and its basis, from what WDI and the population give for this country.
 fn value_added(donor: &CountryIo, l: &Level) -> ([f64; N_GOODS], Basis) {
-    let s = l.shares;
-    let available: Vec<f64> = [s.agriculture, s.industry, s.services]
-        .into_iter()
-        .flatten()
-        .collect();
-    if l.gdp > 0.0 && !available.is_empty() {
-        let gdp = l.gdp / 1e6;
-        if let (Some(agr), Some(ind), Some(srv)) = (s.agriculture, s.industry, s.services) {
-            if let Some(man) = s.manufacturing {
-                let va = [agr, ind - man, man, srv]
-                    .iter()
-                    .zip(GROUPS)
-                    .map(|(t, g)| split(gdp * t, g, donor))
-                    .fold([0.0; N_GOODS], add);
-                return (va, Basis::Wdi);
-            }
-            let va = add(
-                add(
-                    split(gdp * agr, &[0], donor),
-                    split(gdp * ind, &[1, 2, 3, 4, 5, 6, 7, 8], donor),
-                ),
-                split(gdp * srv, &[9], donor),
-            );
-            return (va, Basis::WdiGdp);
-        }
-        return (split(gdp * py_sum(available), &ALL, donor), Basis::WdiGdp);
-    }
     if l.gdp > 0.0 {
-        // WDI has GDP but no usable share: the median VA over GDP of the ICIO economies, split as
-        // the donor's VA.
-        return (split(l.gdp / 1e6 * l.ratio, &ALL, donor), Basis::WdiGdp);
+        let gdp = l.gdp / 1e6;
+        let (mut shares, basis) = groups(l.shares, l.ratio);
+        if let Some(r) = l.shares.rents {
+            shares = oil_gas_apart(shares, r * l.oil_gas_ratio, l.oil_gas_cap);
+        }
+        let va = shares
+            .iter()
+            .map(|(t, g)| split(gdp * t, g, donor))
+            .fold([0.0; N_GOODS], add);
+        return (va, basis);
     }
     if l.people > 0.0 {
         let per_person = pairwise_sum(&donor.va) / l.donor_people * l.scale.unwrap_or(1.0);
@@ -277,8 +388,13 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// economies with WDI GDP and population can donate.
 ///
 /// VA by good: WDI GDP times the sector shares, each group split over its goods by the donor's
-/// VA (wdi); with a share missing, GDP times the shares there are (wdi_gdp); with no share, GDP
-/// times the ICIO median VA over GDP (wdi_gdp); with no GDP, population (WDI, else the WorldPop
+/// VA (wdi); with one of agriculture, industry or services missing, the shares there are and GDP
+/// times the ICIO median VA over GDP less them over the goods they do not cover (wdi_gdp); with
+/// no share, GDP times the ICIO median VA over GDP (wdi_gdp). Where WDI has oil or gas rents,
+/// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
+/// its group (all of industry where industry less manufacturing is too small) and at most the
+/// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
+/// world crude oil and gas inputs per unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
@@ -300,6 +416,10 @@ pub fn impute(
     let by_wdi = ranked_by(obs, &wdi.income);
     let by_maddison = ranked_by(obs, &wdi.maddison);
     let ratio = median_va_over_gdp(icio, wdi);
+    let oil_gas_ratio = oil_gas_va_over_rents(icio, wdi);
+    let oil_gas_cap = oil_gas_most_of_industry(icio);
+    let oil_gas_column = world_oil_gas_column(icio);
+    let oil_gas_inputs = py_sum(oil_gas_column);
     let mut out = BTreeMap::new();
     for (code, sovereign) in countries {
         let own = iso.get(code).unwrap_or(code);
@@ -368,14 +488,28 @@ pub fn impute(
             people,
             donor_people: obs.population[&name],
             ratio,
+            oil_gas_ratio,
+            oil_gas_cap,
             scale: level.map(|x| x / ranking.gdp_per_capita[&name]),
         };
         let (va, basis) = value_added(d, &level);
+        // Crude oil and gas set by rents produces with the ICIO world technology, not the
+        // donor's, which may have next to no such sector (ADR 0256).
+        let from_rents = gdp > 0.0 && shares.rents.is_some();
+        let mut io = d.io;
+        if from_rents {
+            for (k, row) in io.iter_mut().enumerate() {
+                row[OIL_GAS] = oil_gas_column[k];
+            }
+        }
         let output = std::array::from_fn(|g| {
-            let per_va = if d.va[g] > 0.0 {
+            // A good the donor lacks has no inputs (its io column is zero).
+            let per_va = if g == OIL_GAS && from_rents {
+                1.0 / (1.0 - oil_gas_inputs)
+            } else if d.va[g] > 0.0 {
                 d.output[g] / d.va[g]
             } else {
-                0.0
+                1.0
             };
             va[g] * per_va
         });
@@ -385,7 +519,7 @@ pub fn impute(
                 table: CountryIo {
                     output,
                     va,
-                    io: d.io,
+                    io,
                     final_demand_shares: d.final_demand_shares,
                     coal_share: d.coal_share,
                 },

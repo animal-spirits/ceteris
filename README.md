@@ -15,9 +15,9 @@ Phase P1 (World and map) of eleven is complete; there is no economics yet.
   from a chosen origin over road, rail, sea and air.
 - County layer (ADR 0009): 53,084 counties from geoBoundaries, nested in provinces and
   drawn from zoom 4; oversized provinces are split along county borders.
-- Map (ADR 0010): provinces are coloured by a GPU fill layer on a flat map or a globe; the
-  desktop app reads the pack from disk through `pack://`. ADR 0011 records the decision to
-  rewrite the map in Rust.
+- Map (ADRs 0010, 0088, 0250): a native desktop app (winit, Slint panels, a wgpu globe
+  drawn into a texture) colours provinces from a per-feature texture and runs the economy
+  on a sim thread.
 
 The data licence audit is in `crates/ceteris-pack/config/sources.toml` (ADR 0005).
 
@@ -41,7 +41,7 @@ crates/
   ceteris-reference/, ceteris-calibrate/
                 independent reference model; steady-state calibration and gravity
   ceteris-cli/  the `ceteris` binary: export, run, pack, reference, calibrate
-app/            Tauri desktop app: TypeScript map (MapLibre, React) over the Rust core
+app/            native desktop app (Slint, wgpu), its own cargo workspace
 tests/golden/   stored hashes of golden scenarios
 ```
 
@@ -65,21 +65,13 @@ Then:
 
 ```
 cargo test --workspace
-cd app && npm install && npm run tauri dev
+cd app && cargo run --release
 ```
 
-To work on the map in a browser instead, run the development engine and Vite:
-
-```
-cargo run --release -p ceteris-geo --example engine
-cd app && npm run dev
-```
-
-To benchmark the map inside the desktop app's own webview (frame times over a camera
-flight, and the cost of recolouring every county from the core), run
-`CETERIS_BENCH=1 cargo run --release` in `app/src-tauri`. The window comes to the front,
-results print as a `CETERIS_BENCH` JSON line, and the app exits. The display must be awake:
-a sleeping display stops the webview from rendering.
+The app reads `data/packs/2000` unless `CETERIS_PACK` names another pack. To benchmark the
+map (frame times over a camera flight, and the cost of recolouring every county), run
+`CETERIS_BENCH=1 cargo run --release` in `app/`. Results print and the app exits. The display
+must be awake: a sleeping display stops vsync.
 
 Other entry points: `cargo run --release -p ceteris-geo --example costs -- NLD-3485 CHN-1819`
 prints least costs from a province; `cargo bench -p ceteris-core -p ceteris-geo` runs the

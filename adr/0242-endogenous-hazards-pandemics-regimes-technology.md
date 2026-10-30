@@ -1,6 +1,6 @@
 # 0242. Endogenous hazards: pandemics, policy regimes and technology jumps
 
-Status: proposed (owner chose the options, 2026-10-29)
+Status: accepted (owner, 2026-10-29)
 Date: 2026-10-29
 Design sections: 5.3, 7.5, 9.2, 9.11, 13.3, 13.4, 17; ADRs 0051, 0178, 0179, 0210, 0229, 0233, 0241
 Phase: P5b (regime and prudential hazards), P8 (pandemics, chokepoints, technology jumps), P9 (fits)

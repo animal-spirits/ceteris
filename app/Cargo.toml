@@ -1,0 +1,39 @@
+[package]
+name = "ceteris-app"
+description = "Ceteris Paribus native desktop app: Slint panels over a wgpu map (ADR 0088)"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace: Slint and wgpu stay out of the core's lockfile, CI and licence check.
+[workspace]
+
+[dependencies]
+# Pinned together: `unstable-wgpu-30` can change in Slint minor releases (ADR 0088).
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "accessibility"] }
+
+ceteris-core = { path = "../crates/ceteris-core" }
+ceteris-econ = { path = "../crates/ceteris-econ" }
+ceteris-geo = { path = "../crates/ceteris-geo" }
+ceteris-trade = { path = "../crates/ceteris-trade" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracy-client = { version = "0.18", optional = true }
+
+[features]
+# Tracy zones on the UI and sim threads, frame marks, and plots of the map passes' GPU time;
+# connect a Tracy profiler that speaks tracy-client 0.18's protocol to the running app.
+profile = ["dep:tracy-client"]
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[dev-dependencies]
+pollster = "0.4"
+
+# This workspace does not inherit the root workspace's profile; the sim it links needs the same.
+[profile.release]
+lto = "fat"
+codegen-units = 1

@@ -1,9 +1,9 @@
 # 0237. Seat registry: office, firm and planned-economy seats
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (seats and scoring to 2.0-alpha): read 1.3 below as 2.0-alpha
 Date: 2026-10-29
 Design sections: 2.1, 12.6, 23.4, 23.9; ADRs 0084, 0126, 0130, 0136, 0160, 0162, 0195, 0203, 0206, 0210
-Phase: 1.3 (registry, Steward, office seats); 1.x after 1.3 (planned-economy seat, trade-core seats); extended profile (firm seat)
+Phase: 2.0-alpha (registry, Steward, office seats); 2.0-alpha or later (planned-economy seat, trade-core seats); extended profile (firm seat); ADR 0239
 
 ## Context
 

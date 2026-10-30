@@ -397,6 +397,16 @@ The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.125 / 0.054 | 0.055 / 0.008 | 0.019 / 0.061 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.203 / 0.074 | 0.056 / 0.050 | 0.020 / 0.113 |
 
+Per-market gain (ADR 0263, accepted; code after the pre-P3 B branch). Each cell's gain is
+kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with m = P03d (start 0.5, so
+J_ref 20 at kappa1 0.05), J_cell = E_cell + eta eps_cell / (2 - eta) at the run's eta. E_cell =
+1 + theta_g - (theta_g + 1) Pi_cell (local cells sigma), eps_cell the output-weighted mean of
+s_L sigma_FL / ((1 - s_L) a_VA) over the cell's enterprises. J is computed from the pack at
+calibration and fixed for the run. In the default mode no cell is capped (J at most 16.9 on the
+0256 pack); frictionless it slows the 298 traded cells above 20 and removes the São Tomé cycle
+below. J2 bounds one market only: coupled modes across goods (Albania g5 to g1 and g2) are not
+covered.
+
 In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
 outside for light manufacturing: J2 fails for the two light-manufacturing enterprises of São Tomé
 and Príncipe (eps 30.4 against 2 / kappa1 - theta - 1 = 28.4; no other enterprise of any good is
@@ -474,6 +484,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
 | P03c | Price and wage step clip c_max, on the gap terms only (pi^e passes through, ADR 0106) | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
+| P03d | Share m of each market's J2 limit that its gain may use (ADR 0263) | 0 to 1, start 0.5: kappa1_cell = kappa1 min(1, 2 m / (kappa1 J_cell)) | Free |
 | P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P154 | Bulk freight rate: multiplier on the sea cost per tonne-km per theta class, `TradeParams::bulk_sea` (ADR 0247) | 1, 1, 1 and 0.026 (class 3), on by default (owner ruling 2026-10-30; ADR 0247, As built): the slope s = 2.05e-4 USD per tonne-km (s.e. 7.0e-5) of a least-squares line through the 2000 voyage rates per tonne of class-3 cargoes in UNCTAD's Review of Maritime Transport 2001 (ch. IV, paras. 82 and 96, pp. 51 and 54) and 2002 (ch. VII, pp. 107 to 108), eight routes (iron ore and coal in Capesize bulk carriers, crude and products in tankers) against their sea km on the pack graph (Port Hedland to Rotterdam round the Cape, 19,450 km: no loaded Capesize transited Suez in 2000; no route canal-routed, so no canal fee netted), over P04c's 0.008; dry-bulk routes alone 0.039. Not fitted to the cross-border share | Literature |

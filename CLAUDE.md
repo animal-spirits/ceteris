@@ -1,8 +1,8 @@
 # Ceteris Paribus
 
 Deterministic, forkable, agent-based world simulator from 1 January 2000. Rust workspace
-(`crates/`), Tauri desktop app (`app/`); the pack pipeline, reference model and calibration
-are Rust crates (ADR 0113).
+(`crates/`), native desktop app (`app/`, Slint and wgpu); the pack pipeline, reference model
+and calibration are Rust crates (ADR 0113).
 
 ## Where things are
 
@@ -47,8 +47,7 @@ cargo deny check licenses
 
 Pack-dependent tests read the pack from `CETERIS_PACK`. The pack is built owner-side (GEOS 3.15,
 tippecanoe): `cargo run --release --features ceteris-cli/geos --bin ceteris -- pack build`.
-App: `cd app && npm run build`; `app/src-tauri` is a separate cargo workspace (fmt, clippy,
-test there too).
+App: `app/` is a separate cargo workspace (fmt, clippy, test there too).
 
 ## Commits
 

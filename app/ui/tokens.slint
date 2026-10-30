@@ -1,0 +1,18 @@
+// Modern Atlas tokens (ADR 0137), shared with the map shader through `src/tokens.rs`.
+// Light (paper) theme; the dark (slate) set arrives with the panels.
+export global Tokens {
+    out property <color> paper: #EDEFEA;
+    out property <color> ink: #1C292F;
+    out property <color> sea: #BCD1DB;
+    out property <color> rule: #1C292F33;
+    out property <color> edit: #AE2459;
+    out property <color> fork: #5E45A3;
+    out property <length> hairline: 1px;
+    // UI scale, 0.85 to 2 (ADR 0221); body text never below 11px at 1.
+    in-out property <float> scale: 1;
+    out property <length> pad: 8px * scale;
+    out property <length> body-size: 13px * scale;
+    out property <string> sans: "IBM Plex Sans Condensed";
+    out property <string> serif: "Source Serif 4";
+    out property <string> mono: "IBM Plex Mono";
+}
