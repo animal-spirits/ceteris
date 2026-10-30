@@ -23,7 +23,7 @@ Outputs go to `data/packs/2000/` (not in git).
 
 | Table | Rows | Content |
 |---|---|---|
-| `provinces.arrow` | 4,796 | id, name, 2000 country and sovereign, current country, anchor lon/lat, area, elevation mean and spread, TRI, terrain class, coastal, dev-slice flag, cell, port and airport counts, rail flag, mineral site counts by group |
+| `provinces.arrow` | 4,594 | id, name, 2000 country and sovereign, current country, anchor lon/lat, area, elevation mean and spread, TRI, terrain class, coastal, dev-slice flag, cell, port and airport counts, rail flag, mineral site counts by group |
 | `countries.arrow` | 242 | code, name, sovereign, map colour slot |
 | `cells.arrow` | 78,483 | H3 cell (resolution 4, finer for provinces too small to own a resolution-4 centre), province, area, elevation mean and spread, TRI |
 | `nodes.arrow` | 40,534 | kind, province (u32::MAX for sea), lon/lat, label, sea zone |
@@ -161,9 +161,8 @@ reference model's iceberg factors.
 - Measurement: `cargo run -p ceteris-geo --release --example route_choice_radius` prints, per
   traded good, the smallest theta_r with radius below 0.99, the radius at the ends of the P44
   prior and the time of all gateway and domestic solves (MIGRATION Task 4 report).
-- Pipeline (`ceteris-pack`, proptest): spherical area, antimeridian unwrap and wrap, split counts,
-  bisection balance (by count and by weight) and determinism, county level choice, county
-  splits, neighbour colouring, terrain classes, 2000 remapping, pack table invariants.
+- Pipeline (`ceteris-pack`, proptest): spherical area, county level choice, neighbour
+  colouring, terrain classes, 2000 remapping, pack table invariants.
 - Golden: `tests/golden/p1-geo.txt` (cost and hour bits from eight probe provinces) and
   `tests/golden/p1-pack.txt` (table hashes). Bless with `CETERIS_BLESS=1`.
 - Benchmark: `dijkstra_grid_40k` (criterion), a 40,000-node grid the size of the pack graph.
@@ -179,7 +178,8 @@ reference model's iceberg factors.
   tunnels across straits are not modelled.
 - MRDS is about 89% United States sites: the resource mode shows coverage, not endowment.
 - Natural Earth mixes administrative levels (232 units in the United Kingdom, 193 in
-  Slovenia, 16 in Germany); merging small units and population-based splitting wait for
-  gridded population in P4. County granularity is uneven too (ADR 0009).
+  Slovenia, 16 in Germany); regions are kept whole (ADR 0251);
+  merging small units or population-based splitting would be a new ADR. County granularity
+  is uneven too (ADR 0009).
 - Whether the production app's asset protocol serves the HTTP Range requests PMTiles needs.
 - Trees cover all nodes (650 KB each); restrict to provinces and gateways when P2 warms 600.

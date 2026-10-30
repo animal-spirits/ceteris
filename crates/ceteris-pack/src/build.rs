@@ -42,14 +42,6 @@ pub fn resolution(config: &toml::Table, key: &str) -> Result<Resolution, String>
         .ok_or_else(|| format!("pack.toml: {key} = {r}"))
 }
 
-/// The area above which `pack.toml` splits a province.
-pub fn split_area_km2(config: &toml::Table) -> Result<f64, String> {
-    config
-        .get("split_area_km2")
-        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
-        .ok_or_else(|| "pack.toml: no split_area_km2".to_owned())
-}
-
 /// 0 plains, 1 plateau, 2 hills, 3 mountains. TRI is at the 1.85 km ETOPO pixel scale.
 pub fn terrain_class(elev_mean_m: f64, tri_m: f64) -> u8 {
     if tri_m >= 150.0 {
@@ -229,7 +221,7 @@ mod full {
 
     use super::{
         Sampled, cell_columns, colour_countries, country_names, resolution, round_int, sample,
-        sample_counties, split_area_km2, terrain_class,
+        sample_counties, terrain_class,
     };
     use crate::econ::build::BuildReport;
     use crate::geo::counties::Clipped;
@@ -359,7 +351,6 @@ mod full {
         config: &toml::Table,
         centres: &Centres,
     ) -> Result<World, String> {
-        let split_area = split_area_km2(config)?;
         let dev_slice: BTreeSet<&str> = config
             .get("dev_slice")
             .and_then(toml::Value::as_array)
@@ -369,17 +360,10 @@ mod full {
             .collect();
 
         let units = counties::load(root)?;
-        let provs = provinces::build(
-            &cache.join(ADMIN1),
-            &cache.join(ADMIN0),
-            split_area,
-            resolution(config, "land_res")?,
-            &units,
-            centres,
-        )?;
+        let provs = provinces::build(&cache.join(ADMIN1), &cache.join(ADMIN0))?;
         let n = provs.len();
         // Counties: each in the province it overlaps most, clipped to it (ADR 0009).
-        let clipped = counties::clip(&units, &provs, split_area)?;
+        let clipped = counties::clip(&units, &provs)?;
         let cty = &clipped.counties;
         let cgeoms = cty
             .iter()
@@ -673,14 +657,6 @@ mod full {
             .iter()
             .map(|p| p.area_km2)
             .fold(f64::NEG_INFINITY, f64::max);
-        let split = |rule: &str| {
-            provs
-                .iter()
-                .filter(|p| p.split_rule == rule)
-                .map(|p| p.id.split('.').next().unwrap_or_default())
-                .collect::<BTreeSet<_>>()
-                .len()
-        };
         let fill = |name: &str| {
             let f = written
                 .fills
@@ -708,8 +684,6 @@ mod full {
             ("edges", count(w.t.graph.edges.len())),
             ("sea_zones", count(w.t.zones.len())),
             ("largest_province_km2", Json::Int(round_int(largest)?)),
-            ("split_by_counties", count(split("counties"))),
-            ("split_by_voronoi", count(split("voronoi"))),
             ("counties", count(c.counties.len())),
             ("counties_unassigned", count(c.unassigned)),
             (

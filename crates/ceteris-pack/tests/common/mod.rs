@@ -195,10 +195,18 @@ pub fn write_rows(path: &Path, sheets: &[(&str, Vec<Row>)]) -> PathBuf {
     write_xlsx(path, &[], &refs)
 }
 
+/// The pack the tests read: `$CETERIS_PACK`, else `data/packs/2000` in the repository.
+pub fn pack_dir() -> PathBuf {
+    std::env::var_os("CETERIS_PACK").map_or_else(
+        || sources::workspace_root().join("data/packs/2000"),
+        PathBuf::from,
+    )
+}
+
 /// A table of the built 2000 pack, or None (with a note) when it has not been built: data tests
 /// skip without it.
 pub fn pack_table(name: &str) -> Option<PathBuf> {
-    let path = sources::workspace_root().join("data/packs/2000").join(name);
+    let path = pack_dir().join(name);
     if path.exists() {
         Some(path)
     } else {
