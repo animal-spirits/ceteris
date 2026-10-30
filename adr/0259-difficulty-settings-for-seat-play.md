@@ -1,6 +1,7 @@
 # 0259. Difficulty settings for seat play
 
-Status: proposed; owner rulings 2026-10-30 noted inline
+Status: accepted (owner, 2026-10-30: rivals at profile default, baseline mirrors the seat,
+market-learning rung dropped, no replay in seat play)
 Date: 2026-10-30
 Design sections: 23.4, 23.8; ADRs 0065, 0129, 0153, 0161, 0198, 0199, 0237, 0238, 0239, 0241, 0242, 0258
 Phase: 2.0-alpha (with Steward and office seats, ADR 0239)
@@ -73,7 +74,6 @@ Consequences of the line:
 | | Plan lock | none; lever schedules commit for 12 months |
 | Seat and start | Seat (0237) | any registered seat |
 | | Start origin | 2000; 2005; 2010 packs (0241) |
-| | Replay (0241) | off; shocks family |
 | | Objective (23.4, 0161, 0198) | presets; custom vector |
 | Time | Pause | free; at decision points and event cards only; none |
 | | Speed floor | none; minimum game speed while unpaused |
@@ -83,9 +83,9 @@ Consequences of the line:
 | | Branch, undo and god-mode (14.2) | off under Ironman; on in sandbox |
 | | Mandate loss (0198) | continue as successor or opposition; run ends |
 
-Replay in seat play is the shocks family only, plus the policy family for other states. The
-seat's own state never runs its historical policy tape: the player holds those levers. A
-replay run is a foresight setting: the player may know 2008 is coming and the baseline does not.
+No replay in seat play (owner, 2026-10-30). Seat runs are always calendar-blind (0241); replay
+stays a lab instrument. History does not repeat, so the player's knowledge of 2000-2024 gives no
+foresight.
 
 ### The baseline mirrors the seat (owner, 2026-10-30)
 
@@ -94,9 +94,8 @@ information and friction settings: it reads the same sources, lags, coverage and
 and obeys the same order calendar, budget and plan lock. Seat, origin, objective and seeds
 (common random numbers) are the player's. Time and assist settings do not apply to an AI. The
 score therefore measures decision skill on equal terms, and one baseline ensemble serves every
-run with the same (pack, seat, origin, replay, information, friction) vector. True values reach
-the baseline only when the player has them on; no other actor reads them. Replay stays the one
-asymmetry: the baseline does not know history.
+run with the same (pack, seat, origin, information, friction) vector. True values reach
+the baseline only when the player has them on; no other actor reads them.
 
 ### Presets, custom, ascension
 
@@ -112,7 +111,7 @@ asymmetry: the baseline does not know history.
 
 ### Scores across settings
 
-Scores compare only within an equal settings vector, with replay and origin part of the vector.
+Scores compare only within an equal settings vector, with origin part of the vector.
 Each vector gets a measured difficulty: the mean score, against the baseline, of the scripted
 players of the 0198 audit under that vector, computed in the same audit. The number is shown
 beside the preset name; it is measured, never asserted, and no setting is tuned to hit it.
