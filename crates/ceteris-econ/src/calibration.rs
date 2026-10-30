@@ -280,21 +280,7 @@ impl EconInputs {
             )));
         }
 
-        let market_elasticity = MarketElasticity {
-            demand: f64s(&cells, "demand_elasticity")?,
-            supply: f64s(&cells, "supply_elasticity")?,
-        };
-        for (name, v) in [
-            ("demand", &market_elasticity.demand),
-            ("supply", &market_elasticity.supply),
-        ] {
-            if let Some(c) = v.iter().position(|&x| !(x >= 0.0 && x.is_finite())) {
-                return Err(err(format!(
-                    "econ_calib_cells.arrow: cell {c} has {name} elasticity {}",
-                    v[c]
-                )));
-            }
-        }
+        let market_elasticity = market_elasticity(&cells)?;
 
         let pops = table(dir, "econ_calib_pops.arrow")?;
         let pop_keys = keys(&pops, "edu")?;
@@ -350,6 +336,24 @@ impl EconInputs {
         }));
         Ok(())
     }
+}
+
+/// The market elasticities E and eps of `econ_calib_cells.arrow` (ADR 0263), finite and not
+/// negative.
+fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError> {
+    let m = MarketElasticity {
+        demand: f64s(cells, "demand_elasticity")?,
+        supply: f64s(cells, "supply_elasticity")?,
+    };
+    for (name, v) in [("demand", &m.demand), ("supply", &m.supply)] {
+        if let Some(c) = v.iter().position(|&x| !(x >= 0.0 && x.is_finite())) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has {name} elasticity {}",
+                v[c]
+            )));
+        }
+    }
+    Ok(m)
 }
 
 #[cfg(test)]
@@ -416,6 +420,35 @@ mod tests {
         assert!(calibrated_digest(&batch(&[])).is_err());
         let t = batch(&[("calibration", r#"{"digest": "abc"}"#)]);
         assert!(calibrated_digest(&t).is_err());
+    }
+
+    #[test]
+    fn market_elasticities_must_be_finite_and_not_negative() {
+        let cells = |demand: f64, supply: f64| {
+            let schema = Arc::new(Schema::new(vec![
+                Field::new("demand_elasticity", DataType::Float64, false),
+                Field::new("supply_elasticity", DataType::Float64, false),
+            ]));
+            let column = |x: f64| Arc::new(Float64Array::from(vec![1.0, x])) as _;
+            RecordBatch::try_new(schema, vec![column(demand), column(supply)]).unwrap()
+        };
+        let m = market_elasticity(&cells(11.57, 0.0)).unwrap();
+        assert_eq!((m.demand, m.supply), (vec![1.0, 11.57], vec![1.0, 0.0]));
+        for (demand, supply, name) in [
+            (f64::NAN, 1.0, "demand"),
+            (-0.5, 1.0, "demand"),
+            (f64::INFINITY, 1.0, "demand"),
+            (1.0, f64::NAN, "supply"),
+            (1.0, -1e-12, "supply"),
+        ] {
+            let message = market_elasticity(&cells(demand, supply))
+                .unwrap_err()
+                .to_string();
+            assert!(
+                message.contains(&format!("cell 1 has {name} elasticity")),
+                "{message}"
+            );
+        }
     }
 
     #[test]
