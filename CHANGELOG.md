@@ -2,14 +2,18 @@
 
 ## Unreleased
 
-### BEHAVIOUR: bulk freight rate for theta class 3 (ADR 0247)
+### BEHAVIOUR: bulk freight rate per theta class, built and off; class 3 clamped at nu 0 (ADRs 0247, 0092)
 
-- Class 3 (crude oil, gas and refined fuels; coal and other mining) is shipped at a bulk freight
-  rate: its legs are least-cost paths on the graph repriced with the sea cost per tonne-km times
-  P154 (0.026) and the listed and minor port fees times P155 (0.40), from 2000 tanker and
-  dry-bulk voyage rates (UNCTAD Review of Maritime Transport 2001 and 2002). Classes 0 to 2 are
-  unchanged. A pack world builds the bulk legs at load (`Network::bulk`); they enter the inputs
-  digest, so a pack calibrated before this change no longer matches its calibration tables.
+- A theta class can be shipped at a bulk freight rate: its legs are least-cost paths on the
+  graph repriced with the sea cost per tonne-km times P154 and the listed and minor port fees
+  times P155 (`TransportParams::bulk`, `Network::bulk`, built at load where a class is off 1;
+  in the inputs digest only when present). The sourced class-3 values are 0.026 and 0.40, from
+  2000 tanker and dry-bulk voyage rates (UNCTAD Review of Maritime Transport 2001 and 2002).
+- Off by default (1 for every class): ADR 0247's ablation test failed on H2 distance (-0.463
+  with the rate on, band -1.1 to -0.7).
+- The border friction fit clamps a class at nu = 0 when its ICIO target is above its share at
+  nu 0, and reports it (`Fit::clamped`), instead of stopping (ADR 0092, Amendment 2026-10-30);
+  on the 2000 pack class 3 is clamped (target 0.2964, share 0.2007).
 - Export format 12: `legs` gains `bulk_cost_per_t` and `bulk_hours`, `params.json` gains
   `bulk_sea`, `bulk_port` and `bulk_classes`.
 

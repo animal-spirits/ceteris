@@ -61,8 +61,8 @@
     "expectation_gain": 0.006,
     "border_nu": [0.3, 0.3, 0.3, 0.3],
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0],
-    "bulk_sea": [1.0, 1.0, 1.0, 0.026],
-    "bulk_port": [1.0, 1.0, 1.0, 0.4],
+    "bulk_sea": [1.0, 1.0, 1.0, 1.0],
+    "bulk_port": [1.0, 1.0, 1.0, 1.0],
     "bulk_classes": [false, false, false, false]
   }
 }
