@@ -24,7 +24,7 @@ pub enum Layer {
 }
 
 /// What a frame shows beyond the fills.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Style {
     /// Fill with county colours instead of province colours.
     pub county_fill: bool,
@@ -33,6 +33,8 @@ pub struct Style {
     pub selected: Option<u32>,
     pub origin: Option<u32>,
     pub hover: Option<u32>,
+    /// How far province colours have moved towards the next tick's, 0 to 1.
+    pub mix: f32,
 }
 
 /// The features under a pixel; ids index the pack's tables.
@@ -49,6 +51,8 @@ struct Geometry {
     indices: u32,
     features: u32,
     colours: wgpu::Texture,
+    /// The next tick's colours, mixed in by `Style::mix` (ADR 0208).
+    next: wgpu::Texture,
     bind_group: wgpu::BindGroup,
 }
 
@@ -157,6 +161,10 @@ impl Map {
                 ),
                 entry(
                     1,
+                    texture(wgpu::TextureSampleType::Float { filterable: false }),
+                ),
+                entry(
+                    2,
                     texture(wgpu::TextureSampleType::Float { filterable: false }),
                 ),
             ],
@@ -295,6 +303,12 @@ impl Map {
                 fill.features,
                 wgpu::TextureFormat::Rgba8Unorm,
             );
+            let next = texture_2d(
+                device,
+                label,
+                fill.features,
+                wgpu::TextureFormat::Rgba8Unorm,
+            );
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(label),
                 layout: &fill_layout,
@@ -307,6 +321,12 @@ impl Map {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(
                             &colours.create_view(&Default::default()),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &next.create_view(&Default::default()),
                         ),
                     },
                 ],
@@ -332,6 +352,7 @@ impl Map {
                 indices: fill.index.len() as u32,
                 features: fill.features,
                 colours,
+                next,
                 bind_group,
             }
         };
@@ -384,6 +405,11 @@ impl Map {
         }
     }
 
+    /// Uploads the next tick's province colours, which `Style::mix` blends towards.
+    pub fn set_next_colours(&self, queue: &wgpu::Queue, rgba: &[[u8; 4]]) {
+        write_rows(queue, &self.provinces.next, rgba);
+    }
+
     /// Draws one frame at `size` physical pixels, and when `pick` is given starts reading the
     /// ids at that pixel. Returns the colour target when it was (re)allocated, so the caller
     /// hands the new one to Slint.
@@ -419,7 +445,8 @@ impl Map {
             .iter()
             .flat_map(|v| v.to_le_bytes())
             .chain(u32::from(camera.globe).to_le_bytes())
-            .chain([0; 8])
+            .chain(style.mix.to_le_bytes())
+            .chain([0; 4])
             .chain(
                 rgba(SEA)
                     .chain(rgba(PAPER))
