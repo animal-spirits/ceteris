@@ -23,7 +23,7 @@ them only as quantities offered to and demanded from each market.
 | Kernels per (theta class, weight class) (ADR 0018) | Kernels per traded good, each good at its theta class's value (4 classes, ADRs 0023 and 0101); `TradeParams.theta_class` carries the map | In P2 each good has its own weight w_g, so weight classes are goods and theta classes add no kernels while goods number 7 (ADR 0018, Mapping to P2 as built) |
 | Utilities, construction and services traded through demand frictions (7.1) | Not traded between provinces in P2 | Province-local markets; cross-province service frictions arrive with P8 |
 | Walrasian clearing mode (S01) | Deferred to P3 | V1 uses the stock-flow rule converging to the GE reference, which is the stronger test |
-| Buyers price goods at the posted price (8.2) | Buyers of a traded good price it at the delivered unit price q_d = 1 / alpha_d, the numeraire needed per arriving unit under the current sourcing shares, tariffs and iceberg losses included (owner decision, 2026-10-24) | A unit bought at the CES index P_d delivers fewer than one unit (P_d is below every delivered cost), so input orders at P_d never replace use; at q_d the units ordered are the units that arrive |
+| Buyers price goods at the posted price (8.2) | Buyers of a traded good pay q_d = Gamma_d,g P_d, the CES index P_d = p_min Phi_d^(-1/theta) times a constant per cell fixed at the calibration point, where it makes q_d the delivered unit price of the physical arrivals, 1 / alpha_d (ADR 0200; owner ruling 2026-10-30, option A). Every route carries the selection multiplier s_r = c_r / q_d, c_r = p_o (1 + t) tau_r its physical delivered cost, so a unit of spending arrives as 1 / q_d units whatever its origin | Eaton-Kortum: a destination buys from each origin only the goods that origin is best at, so the price paid does not depend on the source and is the index (ADR 0200). The earlier rule, q_d = 1 / alpha_d at every price (owner decision, 2026-10-24), priced each origin's goods at its average cost: a rise in a border cost could lower q_d, and the ACR welfare formula failed (benchmark of 2026-10-28). Gamma per cell keeps the ADR 0089 steady state, and d ln q_d = d ln P_d away from it |
 | Merchant stocks targeted by coverage (8.2) | Enterprises order up to an inventory position (stock plus goods on order) of (1 + cover + L) months of use, cover = 1, L the sourcing-weighted expected months in transit of the input (owner decision, 2026-10-24); see the econ SPEC | A fixed two-month position that counts goods on order cannot hold a month in transit: importers bound at the equilibrium and V1 failed on the island (MIGRATION Task 3) |
 | Rationing within the tick after Pichler et al. (2022): priority by default (households' essential consumption, then intermediate users by contract, then the rest), proportional and mixed as S11 (8.2, 17.2) | S11 is `EconParams.rationing`, shared between intermediate users (index 0) and households (index 1) of what a market has: S + Q at an origin market (T3), the output left after the same-tick chain at a local market (T3; econ SPEC, Production). With A available and orders D_int, D_hh, D = D_int + D_hh, every class is filled when D <= A; otherwise: **Proportional** fills both at A / D. **Mixed** fills intermediate users at min(1, A / D_int) and households at max(A - D_int, 0) / D_hh (1 without household orders). **Priority** (default) serves households' essential consumption first, then intermediate users pro rata, then the rest; P2 has no essential consumption levels (they arrive in P4), so their P2 value is 0 and Priority fills as Mixed (`mixed_rationing_matches_definition`). Inside the same-tick chain intermediate users of a local good are served before households under every setting: the chain runs at E2, before household demand is posted (ADR 0020, Mapping to P2 as built) | Sources. Pichler, Pangallo, del Rio-Chanona, Lafond and Farmer (2022, JEDC 144, 104527, Section 2.2.2, eqs. (15) to (17), p. 8) use proportional rationing only: industry j delivers O_ji x_j / d_j to industry i, households receive c^d_i x_i / d_i; for other rules they refer to Pichler and Farmer (2021). That paper (Economic Systems Research 34(3), 2022, 273-293; read as arXiv 2101.07818v2, Section 4.2) defines (a) strict proportional rationing (Algorithm 1, eqs. (7) to (11), p. 8: r_i = x_i^max / d_i for all customers) and (b) mixed proportional/priority rationing (Algorithm 2, eqs. (12) to (16), p. 9): intermediate customers are rationed pro rata on r_i = x_i^max / sum_j a_ij d_j (eq. 12), so final demand plays no part in the bottleneck, and final demand takes the residual f_i = max(x_i - sum_j a_ij x_j, 0) (eq. 15). Mixed above is (b) with x_i^max = A, Proportional is (a). Their (c), priority as largest customer first, is not built: DESIGN 8.2 names its own priority order |
 | Stock-flow price rule at kappa1 0.2, kappa2 0.1 (8.2) | Inventory term off by default (kappa2 = 0) and slower price speed (kappa1 = 0.05) (owner decisions 2026-10-24: kappa1 0.02 for stability, then 0.05 with expected inflation, MIGRATION Task 6) | The derived region (Stability region, below; ADR 0019) puts kappa1 0.2 outside for the theta-10.57 goods and kappa2 0.05 outside in the default mode. At kappa1 0.02 the world price level returns too slowly for the expectation loop: every P45 gain in the prior broke V1 (0.006: 1.02e-2) or the ledger (0.25 and up); at 0.05 with gain 0.006 V1 is 3.14e-5 and a small deviation decays by 0.99644 / 0.99676 per tick (frictionless / default; the blessed fixture after MIGRATION Task 8, reproduced by `p2_expectation_sweep.rs`; 2.4e-5 and 0.9963 / 0.9969 when measured at Task 6). Growth factor per tick of a small deviation from the fixture's GE equilibrium, ticks 300 to 600, at the per-good thetas (MIGRATION Task 6, pi^e = 0; frictionless / default): kappa1 0.02, kappa2 0: 0.9954 / 0.9954, the same with every crossing lag at 3; kappa1 0.05: 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756 (lag 3 the same); 0.2: 1.0000 / 1.0000 (oscillates, lag 3 the same). kappa2 0.05: kappa1 0.02: 0.9876 / ledger overflow (lag 3: 0.9881 / 0.9998); 0.05: 0.9738 / 1.0014; 0.1: 0.9999 / 0.9978; 0.2: 1.0000 / 1.0000. The stock integrates the gap and feeds the money and trade-balance loop (Task 7b) |
@@ -38,6 +38,7 @@ them only as quantities offered to and demanded from each market.
 | Clip ticks: ticks at which the price step clip bound | (province, good) | `u32` | ticks | zero |
 | Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the initial prices (the data state's, or the calibrated steady state's) |
 | Buyer price q_d (traded) or posted price (local) | (province, good) | `f64` | numeraire per arriving unit | sourcing at the initial posted prices (the data state's, or the calibrated steady state's) |
+| Selection constant Gamma_d,g (ADR 0200) | (province, traded good) | `f64` (`ProvinceData::gamma`; static) | | the data state's 1 / (alpha_d P_d) at prices 1, or the calibration tables' value at the calibrated prices; 1 where no origin is reachable |
 | Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
 | Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
@@ -149,15 +150,38 @@ prices (naive expectations, S04 adaptive-only in P2):
 
 ```
 X_od = E_d * K_od * w_o / Phi_d,      Phi_d = sum_o K_od * w_o,      w_o = (p_o / p_min)^-theta
-P_d  = p_min * Phi_d^(-1/theta)       (CES index, for information; not exported)
+P_d  = p_min * Phi_d^(-1/theta)       (CES index, tariff included)
 ```
 
 K carries the tariff on crossings, so X is what d pays: origin o is ordered X / (p_o (1 + t))
-units, d receives them over the route's physical tau. The home route (o = d, K = 1) is part of
-the sum. alpha_d = sum over routes of X / (E_d p_o (1 + t) tau) is the units arriving per unit of
-spending, and q_d = 1 / alpha_d the delivered unit price buyers use (owner decision,
-2026-10-24). The arrival slots of those units (0 home, 1 domestic or a lag-0 crossing, 2 to 4 a
-crossing with lag 1 to 3) weighted by units give the expected lead L_d,g in months.
+units and ships them, and its route melts them by the physical tau (iceberg, and the border loss
+on crossings). The home route (o = d, K = 1) is part of the sum. Buyers pay the CES index
+(ADR 0200, selection on trade links):
+
+```
+q_d = Gamma_d * P_d                   (buyer price, tariff included)
+s_r = p_o (1 + t) tau_r / q_d         (selection multiplier of route r from o to d)
+```
+
+A shipped unit arrives as s_r delivered units, so every route delivers X / q_d units and a unit of
+spending buys 1 / q_d units whatever the origin: in Eaton-Kortum a destination buys from a far
+origin only the goods that origin is best at, so the price paid is the same for every source.
+The gain is real output of the origin's best producers, which need 1 / s_r of the cell's
+average inputs per delivered unit (econ SPEC, Production); the dispatch books it as the
+selection term, delivered units less the units that survive the melt, beside the melt itself.
+It is negative on a route whose physical cost is below q_d (the kernel cost also carries the
+time cost, the border friction nu and the gateway masses, which melt nothing).
+
+Gamma_d,g is fixed per cell where the world was calibrated: there q_d equals the delivered unit
+price of the physical arrivals, 1 / alpha_d with alpha_d = sum over routes of X / (E_d p_o (1 + t)
+tau), the buyer price before ADR 0200. In the data state that is 1 / (alpha_d P_d) at prices 1
+(`world::base_delivered_prices`); a calibrated world reads it from the calibration tables (econ
+SPEC, Calibration). Away from that point q_d moves with P_d alone, so d ln q_d = d ln P_d and the
+ACR welfare formula holds exactly. No pow is needed: the dispatch carries value by arrival slot
+through the gateways and divides by q_d at the destination. (ADR 0200 first wrote s_od =
+Gamma^-1 (K_od / pi_od)^(1/theta); that is p_o / P_d, without the trade cost; errata in the ADR.)
+The arrival slots (0 home, 1 domestic or a lag-0 crossing, 2 to 4 a crossing with lag 1 to 3)
+weighted by delivered units, which is by value, give the expected lead L_d,g in months.
 
 **Low-rank evaluation.** International terms never materialize K_od. Backwards, on the origin
 weights:
@@ -420,6 +444,8 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | Invariant | Statement | Tolerance | Checked where |
 |---|---|---|---|
 | Goods | Ledger goods identity (core) with transport and spoilage tallies | 1e-9 relative | `Ledger::check`, every tick |
+| Selection | Goods the dispatch creates less those it destroys, per good, equal the selection term less the melt of `dispatch` (`Sourced::selected - Sourced::lost`, ADR 0200) | 1e-9 of the good's delivered and shipped units, plus 1e-12 of its market turnover | every tick (`EconWorld::end_tick`); `goods_invariant_holds_with_selection` |
+| Buyer price | Spending q_d at d, fully filled, delivers one unit; q_d = Gamma_d P_d | 1e-12 relative | `buyers_pay_the_ces_index` |
 | Gateway clearing | Each gateway's money and goods net to zero every tick | exact money, 1e-9 goods | every tick |
 | Sourcing | sum_o X_od = E_d for each reachable destination and good | 1e-12 relative | `source` unit and property tests |
 | Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 relative | every tick |
@@ -482,7 +508,11 @@ passes (15.692 to 17.171). No band was changed; the miss is for the owner.
   homogeneity of the shares per good at each good's theta; route-choice factors and hours used per good when the
   network carries them (`kernel_uses_route_taus_when_present`), factors below 1 rejected; kernel low-rank products against dense K on small
   worlds; sourcing against the dense route table and closed-form Eaton-Kortum shares, dispatch
-  conservation, unreachable destinations, extreme prices (proptest); pipeline slots and
+  conservation, unreachable destinations, extreme prices (proptest); selection (ADR 0200): the
+  two-country toy's welfare change equals the ACR formula lambda_dd'^(-1/theta)
+  (`two_country_welfare_equals_acr`), a higher tau on one link never lowers q_d
+  (`raising_tau_never_lowers_the_buyer_price`, proptest), a leg without flow adds no selection
+  term (`inactive_leg_has_no_selection_term`); pipeline slots and
   wraparound; origin clearing, rationing classes (`mixed_rationing_matches_definition`: S11 Mixed
   on a hand-computed two-class shortage, equal to Priority without essential consumption), price
   clip, zero-supply floor; expected
