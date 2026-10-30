@@ -412,7 +412,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         theta_r: _,
         // groups goods for kernel sharing; the dynamics read theta alone
         theta_class: _,
-        // reach the kernel only through Network.bulk, in the inputs digest
+        // reach the kernel only through Network.bulk, in the inputs digest; Kernel::build
+        // refuses values other than the ones the network was built with
         bulk_sea: _,
         bulk_port: _,
     } = trade;

@@ -259,6 +259,14 @@ impl Kernel {
     ) -> Kernel {
         let (np, ng) = (net.n_provinces(), net.n_gateways());
         validate(net, np, ng);
+        let (want, built) = (
+            p.bulk_rate(),
+            net.bulk.as_ref().map(|b| (b.classes, b.sea, b.port)),
+        );
+        assert!(
+            want == built,
+            "bulk freight rate {want:?} of the parameters against {built:?} of the network (ADR 0247)"
+        );
         if !net.crossings.is_empty() {
             let n_countries = wedges.n_countries();
             let max = net
@@ -827,7 +835,7 @@ mod tests {
     /// list; the other goods keep the base legs. Bulk legs equal to the base legs change nothing.
     #[test]
     fn bulk_legs_price_the_bulk_classes() {
-        let p = TradeParams::default();
+        let p = bulk_params(0.5, 0.25);
         let base = world(&mut Rng(9));
         let mut rng = Rng(21);
         let redraw = |legs: &[Leg], rng: &mut Rng| -> Vec<Leg> {
@@ -838,6 +846,8 @@ mod tests {
         let net = Network {
             bulk: Some(BulkLegs {
                 classes,
+                sea: 0.5,
+                port: 0.25,
                 domestic: redraw(&base.domestic, &mut rng),
                 access: redraw(&base.access, &mut rng),
                 crossings: redraw(&base.crossings, &mut rng),
@@ -871,6 +881,8 @@ mod tests {
         let same = Network {
             bulk: Some(BulkLegs {
                 classes,
+                sea: 0.5,
+                port: 0.25,
                 domestic: base.domestic.clone(),
                 access: base.access.clone(),
                 crossings: base.crossings.clone(),
@@ -878,7 +890,7 @@ mod tests {
             ..base.clone()
         };
         let (a, b) = (
-            Kernel::build(&base, &W, &wedges, &p),
+            Kernel::build(&base, &W, &wedges, &TradeParams::default()),
             Kernel::build(&same, &W, &wedges, &p),
         );
         for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
@@ -897,13 +909,52 @@ mod tests {
         let net = Network {
             bulk: Some(BulkLegs {
                 classes: [false, false, false, true],
+                sea: 0.5,
+                port: 0.25,
                 domestic: base.domestic.clone(),
                 access: base.access.clone(),
                 crossings,
             }),
             ..base
         };
-        Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
+        Kernel::build(&net, &W, &Wedges::none(2), &bulk_params(0.5, 0.25));
+    }
+
+    fn bulk_network(sea: f64, port: f64) -> Network {
+        let base = world(&mut Rng(9));
+        Network {
+            bulk: Some(BulkLegs {
+                classes: [false, false, false, true],
+                sea,
+                port,
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings: base.crossings.clone(),
+            }),
+            ..base
+        }
+    }
+
+    fn bulk_params(sea: f64, port: f64) -> TradeParams {
+        TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, sea],
+            bulk_port: [1.0, 1.0, 1.0, port],
+            ..TradeParams::default()
+        }
+    }
+
+    /// ADR 0247: P154 and P155 reach the kernel only through `Network::bulk`, so a run whose
+    /// multipliers differ from the ones the network was built with is refused.
+    #[test]
+    fn bulk_rate_must_match_the_network() {
+        let (net, wedges) = (bulk_network(0.5, 0.25), Wedges::none(2));
+        Kernel::build(&net, &W, &wedges, &bulk_params(0.5, 0.25));
+        let refused = |net: &Network, p: &TradeParams| {
+            std::panic::catch_unwind(|| Kernel::build(net, &W, &wedges, p)).is_err()
+        };
+        assert!(refused(&net, &TradeParams::default()));
+        assert!(refused(&net, &bulk_params(0.5, 0.5)));
+        assert!(refused(&world(&mut Rng(9)), &bulk_params(0.5, 0.25)));
     }
 
     /// ADR 0092: each good's crossings carry its theta class's border friction.

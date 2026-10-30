@@ -48,10 +48,13 @@ pub struct Network {
 /// Least-cost legs at the bulk freight rate (P154, P155, ADR 0247), for the goods of the theta
 /// classes in `classes`: the same endpoints in the same order as the base lists of
 /// [`Network`], with the cost per tonne and hours of the least-cost path on the graph repriced
-/// at that rate.
+/// at that rate. `sea` and `port` are the P154 and P155 multipliers the legs were built with;
+/// the kernel refuses parameters that give these classes another rate.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BulkLegs {
     pub classes: [bool; N_CLASSES],
+    pub sea: f64,
+    pub port: f64,
     pub domestic: Vec<Leg>,
     pub access: Vec<Leg>,
     pub crossings: Vec<Leg>,

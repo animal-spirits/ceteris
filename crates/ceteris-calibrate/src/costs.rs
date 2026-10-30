@@ -318,7 +318,9 @@ struct Access {
 /// (`EconInputs::network_from_graph`): domestic pairs by the least-cost path between provinces,
 /// and pairs of different countries by the cheapest chain of an access leg, a crossing leg
 /// between gateways and an access leg, over every gateway pair. Inside a province trade is
-/// costless (A2).
+/// costless (A2). These are the base legs: the bulk legs of a bulk freight rate (P154, P155,
+/// ADR 0247) are not built here, so for a bulk class the costs match the kernel only while the
+/// rate is off (the default).
 pub fn country_costs(pack: &Path, p: &Transport) -> Result<CountryCosts, String> {
     let read = |name: &str| Table::open(&pack.join(name));
     let (nodes, edges, gw, prov) = (
