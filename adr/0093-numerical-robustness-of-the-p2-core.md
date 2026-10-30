@@ -170,6 +170,11 @@ rounding from being extrapolated.
   The margin is three orders above that and still below the 1e-12 at which the fills are compared
   with the iteration. A jump is taken only where every good its cycle lowers falls resolvably
   over the cycle's first application.
+  - A fall below the margin is treated as no fall, whatever its source. Most are rounding, but a
+    real loop whose gain is within about 9e-13 of 1 falls that slowly too, and it is not followed.
+    Example: a two-good loop with no constant and gain 1 - 8e-13, whose exact limit is [0, 0, 1],
+    stays at [0.4999999999992, 0.9999999999984, 1] after 2 passes. The good left short is short
+    by 4e-13 of its flows, within the fit below.
 - **Cycles at once.** A jump follows the cycle's maps one cycle at a time for at most 64 cycles.
   It then takes 2^k cycles at once (the composed map squared k times, k up to 64), checked at
   those points.
@@ -178,8 +183,8 @@ rounding from being extrapolated.
   - A piece left between two checked points and entered again before the next is not seen.
   - All jumps of one `fills` call share a budget of 4,096 cycles and map applications. The
     work of a call is at most twice that (`local::WORK_BOUND`).
-- **At the resolution of f64.** A pass whose falls are all below the margin has reached what
-  f64 resolves. The fills then move to a fixed point g, clamped to [0, f], for the goods g
+- **At the resolution of f64.** A pass whose falls are all below the margin is taken to have
+  reached what f64 resolves (see the margin's caveat above). The fills then move to a fixed point g, clamped to [0, f], for the goods g
   would lower by more than the margin. The fixed point comes from the last passes, kept across
   jumps:
   - the last pass's map, wherever g lies;
@@ -195,6 +200,9 @@ rounding from being extrapolated.
     fall).
   - **Fit up to rounding.** Taken as they are, a good may be short by rounding, at most 1e-12 of
     its flows. That is the Leontief invariant's own tolerance, and the split shares it pro rata.
+    It holds by construction. Each good fit at its own step in the last pass. Later in that pass
+    its R fell by at most the relative fall of its producer's binding fill, below 9.1e-13, and
+    falls of other fills only lower its U. Every return of `fills` follows a pass.
     The tests check fit to 1e-12 of the flows (`fits_up_to_rounding`, in every fill test of
     `p2_properties.rs`).
   - Exact fit is not required, because it is not reachable there. Passes continued past this
@@ -203,21 +211,49 @@ rounding from being extrapolated.
     0.1 to rounding.
 - **Degenerate limits.** Where supply equals need at the limit (U = R at F = t), U - R vanishes
   linearly in F - t. Its rounding, eps times the gross flows, therefore decides whether a good
-  fits within eps times the gross flows over the slope of U - R of t: about 2e-12 on the
-  translated collapses. Neither the fill iteration nor anything else places the fills closer.
-  There the tests compare with the exact limit to that resolution, capped at 1e-11, and not with
-  the plain iteration, whose own result depends on rounding.
-  - Classification, from the province's construction: `translate` makes U - R of every good
-    homogeneous in F - t. The goods the original province's iteration takes to 0 have limit t,
-    and the goods it never cuts have limit 1. Any other good is checked for fit and for lying in
-    [t, 1].
-  - Every other province keeps the comparison with the plain iteration at 1e-12.
+  fits within about eps times the gross flows over the slope of U - R of t. The plain iteration's
+  own result there depends on rounding. So the tests compare with the exact limit, not with the
+  plain iteration.
+  - The bound is empirical. The test cap is 1e-11, and the worst observed over the 1,254 to
+    1,260 translated cases is 1.81e-12.
+  - The per-case formula has no bound where a good's U - R is about 0 along the ray. On seed
+    7252145407610438004 at 0.3, good 0's slope is 1.1e-12, which would give about 1e-3, yet the
+    other goods pin its fill within 1.03e-12 of t.
+  - Classification is a heuristic, read from the province's construction. It is not a logical
+    consequence. `translate` makes U - R of every good homogeneous in F - t, but the province is
+    not the original shifted:
+    - users with stock become fully covered;
+    - producers without local inputs get a constant;
+    - an extra user is added where needed.
+
+    The rule is: goods the original province's bisection iteration takes to 0 (below 1e-200
+    taken as 0) are given limit t, and goods it never cuts are given limit 1. It holds on the
+    sampled provinces. Any other good is checked only for fit and for lying in [t, 1], a loose
+    check.
+  - The 1e-200 threshold leaks into the classification. In seed 2172124891379086981, good 1
+    ends at 1.02e-200 in the original, a collapse, but is classified as neither.
+  - Every other province keeps the comparison with the plain iteration at 1e-12. That holds for
+    the proptest's family. On ill-conditioned provinces the plain iteration itself drifts by
+    about eps / (1 - gain): in the calibrated form it drifts by up to 1.4e-10 over thousands of
+    passes, which is the reference's error, not the fills'.
 - **Stalled falls.** After 256 passes, a fall that is still resolvable moves to the last pass's
-  fixed point g, clamped to [0, f], in the same way. At most 3 such moves are made.
-  - That is exact where a single map takes the fills to its limit. Since g is clamped to f and
-    F never rises, the passes that follow restore every fit.
-  - Where g is undefined, or would lower nothing, the stall is reported (`Fills::stalled`,
-    `Scratch::chain_stalled`), and the plain passes go on to the end.
+  fixed point g, in the same way. At most 3 such moves are made.
+  - g is used only where it lies in [0, f] up to the solve's rounding, and it is clamped there.
+  - That is exact where a single map takes the fills to its limit. Since F never rises, the
+    passes that follow restore every fit.
+  - Confirmation shows that g is stationary under the passes, not that it is their limit. TAIL
+    bounds the two- and three-pass moves. The one-pass move rests on the near-singularity of the
+    map that stalls.
+  - The stall is reported (`Fills::stalled`, `Scratch::chain_stalled`) where g is undefined, lies
+    outside [0, f], would lower nothing, or fails its confirmation. The plain passes then go on.
+- **Pass cap.** A call ends at 1,024 passes (`local::PASS_CAP`, four stall bounds; a jump's
+  confirming passes count) on a deterministic fallback, with the stall reported:
+  - the current fills, where every good fits to 1e-12 of its flows;
+  - else the goods that do not fit are set to 0, one at a time in good order, until every good
+    does. All fills 0 always fit, since no user of a local good then runs.
+
+  Before the cap, a reported stall left the passes unbounded. Five random provinces in 6,000,000
+  of P2 size ran 818 to 1,518 passes, all collapses crawling to the smallest normal f64.
 - **Zero, not subnormal.** A fill below the smallest normal f64 is 0: at a step, after its
   rounding descent, and wherever a jump lands.
 - **The role of a user at a step** follows from comparing its smallest other fill and its stock
@@ -226,6 +262,9 @@ rounding from being extrapolated.
 
 The regressions are:
 - `collapsing_provinces_settle_in_bounded_passes`, with pass and work bounds;
+- `stalled_provinces_end_within_the_pass_cap`: four stalled seeds (17368639463330687291,
+  15714615364009314852, 17705091116894527464, 14824132916395666595) and a cycle with 200 kinks
+  on its path, all within the cap, fitting and, for the four, reported;
 - `balanced_markets_keep_their_fills`, the calibrated form at 1e-12 against the iteration's
   limit;
 - `translated_collapses_stop_at_their_limit`:
