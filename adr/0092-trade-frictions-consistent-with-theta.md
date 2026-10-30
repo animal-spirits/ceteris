@@ -56,7 +56,7 @@ Petroleum: (i) keep in good 5; (ii) move into good 1; (iii) a new good.
 ## Tests
 
 - Calibration: at the solved nu_c, the simulated cross-border share matches ICIO per class
-  (1e-6).
+  (1e-6), for unclamped classes; a clamped class (Amendment 2026-10-30) sits at nu = 0.
 - Gateway invariance: duplicating a gateway with m split in half leaves every flow unchanged
   (1e-12).
 - H2: distance coefficient in -1.1 to -0.7 (unchanged); per class within 2 s.e. of PPML.
