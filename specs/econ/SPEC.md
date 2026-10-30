@@ -232,18 +232,23 @@ F = the limit of the fill iteration: from F = 1, passes over k = 7, 8, 9, each s
 solved exactly: each step is the root of a piecewise-linear U_k on its piece; a fill below the
 smallest normal f64 is 0; on its pieces a pass, and a cycle of up to three passes, is an affine
 map of the fills, and the passes jump to its fixed point where repeating it stays on the pieces,
-or ahead to the last cycle before it leaves them; passes stop when one changes nothing
+or ahead to the end of the last whole cycle on them, so that the next pass crosses a kink;
+passes stop when one changes nothing
 bounded work (ADR 0093, second amendment): a jump needs a resolvable fall (above 4,096 eps f per
 cycle), follows at most 64 cycles one at a time, then 2^k cycles at once (k <= 64) checked at
-those points, the shortages strictly; all jumps share 4,096 units of work per province and tick;
+those points, the shortages strictly, and where the passes leave the pieces between two checks,
+bisects the cycles between them (2^i cycles added for i = k - 2 down to 0 where the cycle from
+there stays on the pieces) and takes one whole cycle more; all jumps share 4,096 units of work
+per province and tick;
 a pass whose falls are all below the margin, or the 256th pass, moves the goods resolvably to
 the fixed point of the last pass's map (or, at a stop, of the last two or three passes' cycle
 within 9.3e-10 of f), inside [0, f] and confirmed by the cycle's passes; else stops (after a
 rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on; a
 fall below the margin is no fall whatever its source, so a real loop of gain within about
 9e-13 of 1 is not followed (gain 1 - 8e-13 stays at [0.4999999999992, 0.9999999999984, 1])
-pass cap: at 1,024 passes the fills are kept where every good fits to 1e-12 of its flows, else
-the goods that do not are set to 0 one at a time in good order; the stall is reported
+pass cap: no call runs more than 1,024 passes, a jump's confirming passes included: past 1,021
+(the cap less a jump's up to 3) the fills are kept where every good fits to 1e-12 of its flows,
+else the goods that do not are set to 0 one at a time in good order; the stall is reported
 degenerate limits (U = R at the limit): rounding of U - R decides the fit near the limit; the
 fills land within 1.81e-12 of it on the translated collapses (tests cap 1e-11; the per-case
 eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray)
@@ -266,19 +271,31 @@ household demand under every S11 setting (the chain runs before E3); at T3 the r
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
 services at 0.3 and construction and services each other at 0.2 it binds in 415 of 3,000 province
-ticks over 120 ticks and ends within the pass cap without a stall
-(`local_chain_terminates_on_cycles`). The cap, not a smaller count, bounds the passes: two set up
-a cycle, a jump to its fixed point takes a confirming pass, and the last changes nothing; each
-kink the fall crosses (a user's stock threshold, a switch of its binding fill) costs a pass, and
-each jump stopped by its doubling short of one costs another. The most is 11 passes, province 5
-at tick 79, after ADR 0200 (6 before): utilities and construction, inputs of each other with no
-stocks but residues of 1e-45 to 5e-12 from earlier collapses, fall at a loop gain of 0.7 to 0.9
-per pass to 0, crossing the four residue thresholds one by one. On
-1,000,000 random small provinces with coefficients up to 0.6, all but 129 settle within 12
-passes, the most take 257 and none takes more than 0.3 ms; over five other families of 1,000,000
-(higher coefficients, no stocks, up to 10 enterprises, scarce stocks, near-balanced markets) 7
-provinces stall, collapses crawling towards the smallest normal f64, and take up to the pass cap
-of 1,024 that bounds every call. In 200,000 provinces of the calibrated form (markets balanced at F = 1, one capacity
+ticks over 120 ticks, each within the passes its kinks allow, without a stall
+(`local_chain_terminates_on_cycles`). Where every jump applies (a resolvable fall per cycle, on
+pieces that repeat within 3 passes) the passes are at most 2 + 3 + 2K: one from F = 1, which
+cuts only the goods short there; at most two per kink the fall crosses (the pass across it, and
+one more where that pass straddles it so that its map does not repeat), since each jump from a
+cycle on its pieces ends at the limit or after the last whole cycle before the pieces change;
+and at the limit up to 3 confirming passes and the pass that changes nothing. K counts the
+users' stock thresholds inside (0, 1) (b < coef cap; each crossed at most once, as needs only
+fall), each local good beyond the first that starts to fall, and each pair of local goods some
+user takes both of (a switch of the binding fill, taken once per pair). The most is 6 passes,
+province 5 at tick 79, against a bound of 21: utilities and construction, inputs of each other
+with no stocks but residues from earlier collapses, fall at a loop gain of 0.7 to 0.9 per pass
+to 0 across the residue thresholds. Before a jump ahead found the last whole cycle (it ended at
+the doubling's last check), it could stop short of a kink and cost passes no kink accounts for:
+11 passes there at 13410ce, 7 for 4 on a fall of gain 0.995 to a kink 1,500 cycles on
+(`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`). Over 200,000 random small
+provinces of each of five families (the first below, higher coefficients, no stocks, up to 10
+enterprises, scarce stocks), 21 of the 1,000,000 take more passes than their kinks allow (140
+before): a fall below the margin per cycle, pieces that do not repeat within 3
+passes, or a collapse to 0 that only the stall rule ends (257 passes). On 1,000,000 random small
+provinces with coefficients up to 0.6, before that change, all but 129 settled within 12 passes,
+the most took 257 and none more than 0.3 ms (on 200,000 after it, all but 1, at 257); over five
+other families of 1,000,000 (higher coefficients, no stocks, up to 10 enterprises, scarce stocks,
+near-balanced markets) 7 provinces stall, collapses crawling towards the smallest normal f64,
+and take up to the pass cap of 1,024 that bounds every call. In 200,000 provinces of the calibrated form (markets balanced at F = 1, one capacity
 cut) the fills match the plain iteration to 1.4e-10 within 2 passes, the iteration itself
 drifting by rounding over thousands of passes (its error, not the fills'). Each tick the enterprise orders up to an inventory position (stock plus goods on order, the paid shipments in its pipeline):
 

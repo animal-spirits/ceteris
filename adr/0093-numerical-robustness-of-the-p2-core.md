@@ -317,3 +317,35 @@ that tick. Traded inputs keep 1e-12. A first version of this amendment scaled th
 by D as well (2 FIT (1 + FIT) D); that let a user whose need is below 2e-12 of its market's draws
 get nothing and pass, so the term is per user
 (`a_tiny_local_user_left_without_its_input_breaks_leontief`).
+
+**Jump ahead to the last whole cycle.** The first amendment has a jump that leaves the pieces
+"jump to the last whole cycle before that". The doubling (second amendment) instead ended at its
+last check, up to half the remaining cycles short, so the next passes stayed on the same pieces
+and a further jump was needed before the kink. The doubling now bisects the cycles between its
+last two checks (adding 2^i cycles for i from k - 2 down to 0 where the cycle from there stays on
+the pieces, the cycles that stay taken to be the first ones, as the doubling takes them) and
+then takes that whole cycle, at most 64 more units of the shared budget. The next pass crosses
+a kink, so where every jump applies the passes are at most 2 + 3 + 2K, K the kinks the fall can
+cross: users' stock thresholds inside (0, 1), local goods beyond the first that start to fall,
+and pairs of local goods some user takes both of (econ SPEC, Production; asserted per province
+tick in `local_chain_terminates_on_cycles`, at most 6 passes there against bounds of 12 and up).
+On a fall of gain 0.995 to a kink 1,500 cycles on, 7 passes become 4
+(`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`). On 200,000 random provinces of
+each of five families, 21 of 1,000,000 take more than their kinks allow, against 140 before:
+falls below the margin, pieces repeating over more than 3 passes, collapses only the stall rule
+ends. No golden moves: the chain does not bind on the golden runs. The cycle fixture's run
+moves from tick 22, where province 10's fills (about 5e-19) land 300 units in the last place
+apart, in 4 passes instead of 5, and the difference grows from there.
+
+Collapses take fewer passes, so `translated_collapses_sample`, which translates the collapses of
+12 or more passes, now finds 7 of 300,000 draws (43 before) and `translated_collapses_full` 62
+of 3,000,000 (420); their minimum case counts follow (21 and 186). A cut at 8 passes would take
+in seed 1122501757669556625, where the test's degenerate-limit heuristic is wrong about good 0
+(limit 1; the plain iteration and the fills, with either jump, give t).
+
+**Pass cap.** A jump's confirming passes (up to PERIOD = 3) came after the cap check, so a call
+could run 1,027 passes. The fallback now starts past 1,021, and no call runs more than 1,024.
+
+**Descent.** The step's bounded descent counts its fit evaluations (at most 8 + 1 + 64, asserted
+in debug builds and in its regression test), and asserts in debug builds that the good's
+producer does not take its own good, which the monotone fit rests on.
