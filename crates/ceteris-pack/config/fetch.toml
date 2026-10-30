@@ -289,6 +289,16 @@ sha256 = "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81"
 bytes = 142891
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv"
 
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.PETR.RT.ZS.zip"
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.PETR.RT.ZS?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.NGAS.RT.ZS.zip"
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.NGAS.RT.ZS?downloadformat=csv"
+
 # GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
 [[file]]
 source = "adb-kidb"
