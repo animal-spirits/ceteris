@@ -7,8 +7,10 @@
 //! so the price and wage rules' pi^e term leaves this solution unchanged.
 //!
 //! Destination d spends E_d on traded good g, households (each pop by PIGL across categories and
-//! CES within them, ADR 0021) at the delivered unit price q_d = 1 / alpha_d, alpha_d the units
-//! arriving per unit of spending, and enterprises a Y q_d, so arrivals replace use;
+//! CES within them, ADR 0021) at the buyer price q_d = Gamma_d P_d, P_d the CES index (ADR 0200,
+//! selection on trade links; `Inputs::gamma`), and enterprises a Y q_d; every unit of spending
+//! delivers 1 / q_d units, so arrivals replace use. Without Gamma ([`Model::physical`], the
+//! calibration's model) q_d is the delivered unit price of the physical arrivals, 1 / alpha_d;
 //! X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (theta per good, ADR 0018), K
 //! carrying the tariff on crossings. Origin o ships X_od / (p_o (1 + t)) units and receives p_o
 //! per unit, the importer's rebate account t p_o. Weights are relative to one p_min per good: Rust
@@ -67,6 +69,8 @@ pub struct Factors<'f> {
 /// The inputs with every derived quantity an evaluation uses, computed once.
 pub struct Model<'a> {
     pub inp: &'a Inputs,
+    /// Selection constants of the buyer price (ADR 0200); `None` for [`Model::physical`].
+    gamma: Option<&'a Mat>,
     /// (E, G) physical input coefficients.
     pub ent_inputs: Mat,
     pub ent_a_va: Vec<f64>,
@@ -96,16 +100,20 @@ pub struct Model<'a> {
     cro_duty: Vec<f64>,
 }
 
-/// Origin weights, Phi and delivered unit prices of every traded cell, as
+/// Origin weights, Phi, the CES index and the buyer prices of every traded cell, as
 /// `EconWorld::refresh_price_index`.
 pub struct Sourcing {
     /// Good-major (G * P): (p / p_min)^-theta_g of active traded origins, 0 elsewhere.
     pub w: Vec<f64>,
     /// Good-major (G * P).
     pub phi: Vec<f64>,
-    /// (P, G) q = 1 / alpha, infinite where no active origin is reachable.
+    /// (P, G) CES index P_d = p_min Phi_d^(-1/theta), infinite where no active origin is
+    /// reachable.
+    pub ces: Mat,
+    /// (P, G) buyer price q: Gamma P_d with selection (ADR 0200), else 1 / alpha_d of the
+    /// physical arrivals; infinite where no active origin is reachable.
     pub index: Mat,
-    /// (P, G) units arriving per unit of spending.
+    /// (P, G) units arriving per unit of spending, 1 / q.
     pub alpha: Mat,
 }
 
@@ -114,7 +122,7 @@ pub struct Flows {
     /// Origin units ordered.
     pub orders: Mat,
     pub home: Mat,
-    /// Destination units after every leg's loss.
+    /// Delivered units, 1 / q per unit paid.
     pub arrive: Mat,
     /// What each destination pays, its spending where it reaches an origin.
     pub paid: Mat,
@@ -191,7 +199,19 @@ pub fn max_abs(v: &[f64]) -> f64 {
 }
 
 impl<'a> Model<'a> {
+    /// The model of `inp`, buyers at Gamma P_d where the inputs carry Gamma (ADR 0200).
     pub fn new(inp: &'a Inputs) -> Result<Model<'a>, String> {
+        Model::with_gamma(inp, inp.gamma.as_ref())
+    }
+
+    /// The model of `inp` with buyers at the delivered unit price of the physical arrivals,
+    /// 1 / alpha_d, whatever Gamma the inputs carry: the calibration's, which fixes Gamma where
+    /// it settles.
+    pub fn physical(inp: &'a Inputs) -> Result<Model<'a>, String> {
+        Model::with_gamma(inp, None)
+    }
+
+    fn with_gamma(inp: &'a Inputs, gamma: Option<&'a Mat>) -> Result<Model<'a>, String> {
         let (n_p, n_n) = (inp.n_provinces(), inp.n_gateways());
         let (dom, acc, cro) = (&inp.domestic, &inp.access, &inp.crossing);
         let flat = |good: &[usize], at: &[usize], n: usize| -> Vec<usize> {
@@ -262,6 +282,7 @@ impl<'a> Model<'a> {
             cro_arrive,
             cro_duty,
             inp,
+            gamma,
         })
     }
 
@@ -389,13 +410,14 @@ impl<'a> Model<'a> {
         }
     }
 
-    /// Origin weights of active traded origins, Phi, alpha and the delivered unit price, at
-    /// posted prices (P, G).
+    /// Origin weights of active traded origins, Phi, the CES index, the buyer price and alpha,
+    /// at posted prices (P, G).
     pub fn sourcing(&self, price: &Mat) -> Sourcing {
         let inp = self.inp;
         let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
         let p = good_major(price);
         let mut w = vec![0.0; n_g * n_p];
+        let mut p_low = vec![f64::INFINITY; n_g];
         for g in 0..n_g {
             let act = |i: usize| inp.traded[g] && inp.active[i][g];
             // numpy's min: NaN wins.
@@ -410,6 +432,7 @@ impl<'a> Model<'a> {
             for i in (0..n_p).filter(|&i| act(i)) {
                 w[g * n_p + i] = (p[g * n_p + i] / p_min).powf(-inp.theta[g]);
             }
+            p_low[g] = p_min;
         }
         let phi = self.origin_sums(&w, self.gross());
         let per_price: Vec<f64> = w
@@ -418,16 +441,41 @@ impl<'a> Model<'a> {
             .map(|(&w, &p)| if w > 0.0 { w / p } else { 0.0 })
             .collect();
         let arrive = self.origin_sums(&per_price, self.arriving());
-        let alpha: Vec<f64> = arrive
-            .iter()
-            .zip(&phi)
-            .map(|(&a, &f)| if f > 0.0 { a / f } else { 0.0 })
+        let ces: Vec<f64> = (0..n_g * n_p)
+            .map(|j| {
+                let g = j / n_p;
+                if phi[j] > 0.0 {
+                    p_low[g] * phi[j].powf(-1.0 / inp.theta[g])
+                } else {
+                    f64::INFINITY
+                }
+            })
             .collect();
-        let index: Vec<f64> = alpha
-            .iter()
-            .map(|&a| if a > 0.0 { 1.0 / a } else { f64::INFINITY })
-            .collect();
+        let (index, alpha): (Vec<f64>, Vec<f64>) = match self.gamma {
+            Some(gamma) => {
+                let gamma = good_major(gamma);
+                let index: Vec<f64> = ces.iter().zip(&gamma).map(|(c, g)| g * c).collect();
+                let alpha = index
+                    .iter()
+                    .map(|&q| if q.is_finite() { 1.0 / q } else { 0.0 })
+                    .collect();
+                (index, alpha)
+            }
+            None => {
+                let alpha: Vec<f64> = arrive
+                    .iter()
+                    .zip(&phi)
+                    .map(|(&a, &f)| if f > 0.0 { a / f } else { 0.0 })
+                    .collect();
+                let index = alpha
+                    .iter()
+                    .map(|&a| if a > 0.0 { 1.0 / a } else { f64::INFINITY })
+                    .collect();
+                (index, alpha)
+            }
+        };
         Sourcing {
+            ces: cells(&ces, n_p, n_g),
             index: cells(&index, n_p, n_g),
             alpha: cells(&alpha, n_p, n_g),
             w,
@@ -469,12 +517,20 @@ impl<'a> Model<'a> {
             .map(|(t, p)| p * t)
             .collect();
         let home: Vec<f64> = per_price.iter().zip(&reach).map(|(p, r)| p * r).collect();
-        let arrive: Vec<f64> = self
-            .origin_sums(&per_price, self.arriving())
-            .iter()
-            .zip(&reach)
-            .map(|(a, r)| r * a)
-            .collect();
+        let arrive: Vec<f64> = if self.gamma.is_some() {
+            let alpha = good_major(&src.alpha);
+            ef.iter()
+                .zip(phi)
+                .zip(&alpha)
+                .map(|((&e, &f), &a)| if f > 0.0 { e * a } else { 0.0 })
+                .collect()
+        } else {
+            self.origin_sums(&per_price, self.arriving())
+                .iter()
+                .zip(&reach)
+                .map(|(a, r)| r * a)
+                .collect()
+        };
         let duty_factors = Factors {
             dom: &self.dom_zero,
             acc: &acc.k,

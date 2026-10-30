@@ -1,4 +1,4 @@
-//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 10).
+//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 13).
 
 use std::fs::File;
 use std::ops::{Index, IndexMut};
@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "12";
+pub const EXPORT_FORMAT: &str = "13";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -219,6 +219,10 @@ pub struct Inputs {
     pub w0: Vec<f64>,
     /// (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable).
     pub base_price: Mat,
+    /// (P, G) selection constant Gamma of ADR 0200: buyers pay Gamma P_d. `None` prices them
+    /// at the delivered unit price of the physical arrivals, 1 / alpha_d, as the calibration
+    /// does at every pass (it then sets Gamma = q_d / P_d at the calibrated point).
+    pub gamma: Option<Mat>,
     pub s_l: Vec<f64>,
     /// (C,) 2000 rate (data).
     pub unemployment: Vec<f64>,
@@ -718,6 +722,7 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         population: bincount(&pop_province, &pop_population, n_p),
         w0: provinces.f64("w0")?,
         base_price: columns(&provinces, "base_price", n_p)?,
+        gamma: Some(columns(&provinces, "gamma", n_p)?),
         s_l: countries.f64("s_l")?,
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,

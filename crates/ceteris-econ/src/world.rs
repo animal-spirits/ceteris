@@ -120,6 +120,8 @@ pub struct Layout {
     /// Retained loss each enterprise keeps before the write-off (ADR 0112), minor units: M
     /// months of its base sales VA0 / a_VA (the calibrated steady-state sales value).
     pub ent_loss_cap: Vec<i64>,
+    /// Selection constant per traded good and province, `ProvinceData::gamma` good by good.
+    pub gamma: Vec<Vec<f64>>,
 }
 
 impl Layout {
@@ -222,6 +224,13 @@ pub struct Scratch {
     pub lead: Vec<f64>,
     /// Country-pair flows of the last 12 ticks, for the run export.
     pub flows: FlowWindow,
+    /// Per traded good, this tick's T2b: goods it created less goods it destroyed (selection
+    /// at home purchases and in transit, the melt), the same due from `dispatch`
+    /// (`Sourced::selected - Sourced::lost`), and its shipped plus delivered units, the scale of
+    /// the selection invariant.
+    pub dispatch_made: Vec<f64>,
+    pub dispatch_due: Vec<f64>,
+    pub dispatch_scale: Vec<f64>,
 }
 
 impl Scratch {
@@ -251,6 +260,9 @@ impl Scratch {
             post: PostScratch::default(),
             lead: vec![0.0; np * N_GOODS],
             flows: FlowWindow::new(nc, np),
+            dispatch_made: vec![0.0; n_traded],
+            dispatch_due: vec![0.0; n_traded],
+            dispatch_scale: vec![0.0; n_traded],
         }
     }
 }
@@ -312,7 +324,9 @@ pub struct Order {
     pub account: AccountId,
     pub buyer: usize,
     pub household: bool,
+    /// Delivered units bought at home, and the origin units shipped for them (ADR 0200).
     pub home: f64,
+    pub home_shipped: f64,
     pub slots: [f64; 4],
 }
 
@@ -332,10 +346,9 @@ pub struct EconWorld {
     pub markets: Markets,
     /// Goods paid for and in flight per buyer: pops `0..n_pops`, then enterprises.
     pub pipeline: Pipeline,
-    /// Buyer prices `[province * N_GOODS + g]`: the delivered unit price q_d = 1 / alpha_d of
-    /// each traded good, the numeraire a buyer at d needs per arriving unit under the current
-    /// sourcing shares (tariffs and iceberg losses included; infinite where no active origin
-    /// is reachable), and the posted price of each local good (owner decision, 2026-10-24).
+    /// Buyer prices `[province * N_GOODS + g]`: q_d = Gamma_d P_d of each traded good (ADR
+    /// 0200), the numeraire a buyer at d pays per arriving unit, tariffs included (infinite
+    /// where no active origin is reachable), and the posted price of each local good.
     /// Refreshed at E3 from the prices of the moment, read by E1 of the next tick.
     pub price_index: Vec<f64>,
     /// Wage w per province, numeraire per effective labour unit.
@@ -640,7 +653,8 @@ fn open_wide_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
     (0..n).map(|_| ledger.open_wide()).collect()
 }
 
-fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
+/// Creates `change` of `good` in `account`, or destroys `-change` of it.
+pub(crate) fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
     if change >= 0.0 {
         ledger.create(account, good, change);
     } else {
@@ -659,18 +673,28 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
     off
 }
 
+/// Selection constants of the traded goods, one column over provinces per good.
+fn gamma_columns(gamma: &[[f64; N_GOODS]]) -> Vec<Vec<f64>> {
+    (0..N_GOODS)
+        .filter(|&g| TRADED[g])
+        .map(|g| gamma.iter().map(|row| row[g]).collect())
+        .collect()
+}
+
 /// Buyer prices of every cell, `[province * N_GOODS + g]`, with origins posting `price` on
-/// `active` markets: a traded good's delivered unit price q_d = 1 / alpha_d (alpha_d the units
-/// arriving per unit of intermediate spending, `source` and `dispatch` of one unit at every
-/// destination; infinite where no active origin is reachable) and the expected months in
-/// transit (`lead`, arrival slots weighted by units); a local good's posted price, lead 0.
+/// `active` markets: a traded good's buyer price q_d = Gamma_d P_d (ADR 0200; `gamma` one
+/// column per traded good; infinite where no active origin is reachable) and the expected
+/// months in transit (`lead`, the arrival slots of `source` and `dispatch` of one unit at every
+/// destination, weighted by the units arriving); a local good's posted price, lead 0.
 /// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
 /// same good at the same prices on it again, and `source` then reuses the origin access.
 /// Traded goods run in parallel, each on its own `sourced` and `columns` entry.
+#[allow(clippy::too_many_arguments)]
 fn delivered_prices(
     kernel: &Kernel,
     price: &[f64],
     active: &[bool],
+    gamma: &[Vec<f64>],
     sourced: &mut [Sourced],
     columns: &mut [Columns],
     index: &mut [f64],
@@ -692,21 +716,16 @@ fn delivered_prices(
         .enumerate()
         .for_each(|(g, (unit, col))| {
             col.gather(price, active, g);
-            source(kernel, g, &col.price, &col.active, &spend, unit);
+            source(kernel, g, &col.price, &col.active, &gamma[g], &spend, unit);
             dispatch(kernel, g, &col.price, &fill, unit);
-            col.index.clear();
+            col.index.clone_from(&unit.buyer_price);
             col.lead.clear();
             for d in 0..np {
                 let slots = unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
-                let alpha: f64 = slots.clone().sum();
+                let units: f64 = slots.clone().sum();
                 let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
-                let (q, l) = if alpha > 0.0 {
-                    (1.0 / alpha, weighted / alpha)
-                } else {
-                    (f64::INFINITY, 0.0)
-                };
-                col.index.push(q);
-                col.lead.push(l);
+                col.lead
+                    .push(if units > 0.0 { weighted / units } else { 0.0 });
             }
         });
     for d in 0..np {
@@ -720,10 +739,17 @@ fn delivered_prices(
     }
 }
 
-/// Base delivered prices per province: [`delivered_prices`] in the data state, every price 1,
-/// the traded markets of [`active_cells`] (which do not depend on input coefficients), over
-/// the kernel of `inp`'s network under `trade`. The buyer prices of tick 0.
-pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64; N_GOODS]> {
+/// Base delivered prices and selection constants per province, in the data state (every price
+/// 1, the traded markets of [`active_cells`], which do not depend on input coefficients) over
+/// the kernel of `inp`'s network under `trade`. The base price of a traded good is the
+/// delivered unit price of the physical arrivals, 1 / alpha_d with alpha_d the units that
+/// survive the losses per unit of spending (infinite where no active origin is reachable), and
+/// Gamma = (1 / alpha_d) / P_d (ADR 0200; 1 where unreachable), so that the buyer price of tick
+/// 0, Gamma P_d, is the base price. Local goods: 1 and 1.
+pub fn base_delivered_prices(
+    inp: &EconInputs,
+    trade: &TradeParams,
+) -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
     let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, trade);
     let np = inp.n_provinces();
     let ent = &inp.enterprises;
@@ -739,16 +765,31 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
     let n_traded = TRADED.iter().filter(|&&t| t).count();
     let mut sourced: Vec<Sourced> = (0..n_traded).map(|_| Sourced::new()).collect();
     let mut columns = vec![Columns::default(); n_traded];
+    let ones = vec![vec![1.0; np]; n_traded];
     delivered_prices(
         &kernel,
         &price,
         &active,
+        &ones,
         &mut sourced,
         &mut columns,
         &mut index,
         &mut lead,
     );
-    index.as_chunks::<N_GOODS>().0.to_vec()
+    let (mut base, mut gamma) = (vec![[1.0; N_GOODS]; np], vec![[1.0; N_GOODS]; np]);
+    for (g, unit) in sourced.iter().enumerate() {
+        for d in 0..np {
+            let alpha: f64 = unit.survived.iter().map(|s| s[d]).sum();
+            let ces = unit.price_index[d];
+            if alpha > 0.0 {
+                base[d][g] = 1.0 / alpha;
+                gamma[d][g] = base[d][g] / ces;
+            } else {
+                base[d][g] = f64::INFINITY;
+            }
+        }
+    }
+    (base, gamma)
 }
 
 /// Relative rounding of market holdings that the transit accounts carry (`EconWorld::end_tick`).
@@ -849,6 +890,7 @@ impl EconWorld {
             country_pops,
             a_va: inp.enterprises.a_va.clone(),
             coef,
+            gamma: gamma_columns(&inp.provinces.gamma),
         };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
@@ -1110,7 +1152,15 @@ impl EconWorld {
                 active[o] = self.markets.active[o * N_GOODS + g];
             }
             let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
-            source(&self.kernel, g, &price, &active, &s, &mut sourced);
+            source(
+                &self.kernel,
+                g,
+                &price,
+                &active,
+                &lay.gamma[g],
+                &s,
+                &mut sourced,
+            );
             for o in (0..np).filter(|&o| active[o]) {
                 let stock = self.trade.coverage[g] * (sourced.orders[o][0] + sourced.orders[o][1]);
                 if stock > 0.0 {
@@ -1122,15 +1172,16 @@ impl EconWorld {
     }
 
     /// Recomputes [`EconWorld::price_index`] and `Scratch::lead` at the current prices. For a
-    /// traded good, every destination spends one unit, sourced over the floored origin
-    /// weights (`ceteris_trade::source`) and dispatched in full: alpha_d is the units
-    /// arriving at d, q_d = 1 / alpha_d, and the lead is the mean arrival slot of those units.
+    /// traded good, every destination spends one unit, sourced over the origin weights
+    /// (`ceteris_trade::source`) and dispatched in full: q_d = Gamma_d P_d (ADR 0200), and the
+    /// lead is the mean arrival slot of the units arriving.
     pub fn refresh_price_index(&mut self) {
         let sc = &mut self.scratch;
         delivered_prices(
             &self.kernel,
             &self.markets.price,
             &self.markets.active,
+            &self.layout.gamma,
             &mut sc.sourced,
             &mut sc.columns,
             &mut self.price_index,
@@ -1259,7 +1310,9 @@ impl State for EconWorld {
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
     /// (S >= 0, and held by the market account to 1e-9 of the turnover S + Q + D), transit
     /// (pipeline and transit accounts agree to 1e-9, plus 1e-12 of the good's market turnover),
-    /// gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// selection (what T2b created less what it destroyed is its selection term less its melt,
+    /// 1e-9 of its shipped and delivered units plus the transit rounding; ADR 0200), gateway
+    /// clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
     /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
     /// dispatch mass (units dispatched = origin sales, 1e-12)
@@ -1355,6 +1408,16 @@ impl State for EconWorld {
                 return fail(
                     "transit",
                     format!("good {g}: pipeline {flight}, account {held}"),
+                );
+            }
+            // ADR 0200: what T2b created less what it destroyed is its selection less its melt
+            let sc = &self.scratch;
+            let (made, due) = (sc.dispatch_made[g], sc.dispatch_due[g]);
+            let gap = (made - due).abs();
+            if gap.is_nan() || gap > GOODS_TOLERANCE * sc.dispatch_scale[g].max(1.0) + rounding {
+                return fail(
+                    "selection",
+                    format!("good {g}: dispatch made {made}, selection less melt {due}"),
                 );
             }
         }
@@ -1555,7 +1618,14 @@ mod tests {
             EconParams::default(),
             TradeParams::default(),
         );
-        assert_eq!(w.price_index, inp.provinces.base_price.as_flattened());
+        // Gamma P_d reproduces 1 / alpha_d to rounding (ADR 0200)
+        let base = inp.provinces.base_price.as_flattened();
+        for (cell, (&q, &b)) in w.price_index.iter().zip(base).enumerate() {
+            assert!(
+                q == b || (q - b).abs() <= 4e-16 * b,
+                "cell {cell}: {q} vs {b}"
+            );
+        }
         assert!(
             inp.provinces
                 .base_price
@@ -1687,8 +1757,8 @@ mod tests {
             for (g, &traded) in TRADED.iter().enumerate() {
                 let p = w.price_index[i * N_GOODS + g];
                 if traded {
-                    // q_d = 1 / alpha_d at prices 1: a mean of delivered unit costs, each at
-                    // least the price 1
+                    // Gamma P_d at prices 1 is 1 / alpha_d there (ADR 0200): a mean of delivered
+                    // unit costs, each at least the price 1
                     assert!(p.is_finite() && p >= 1.0, "{i} {g}: {p}");
                 } else {
                     assert_eq!(p, 1.0);

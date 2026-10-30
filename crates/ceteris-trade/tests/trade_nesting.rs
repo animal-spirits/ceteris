@@ -111,17 +111,26 @@ fn two_level_vs_direct_report() {
 
         let kernel = Kernel::build(&w.net, &W, &w.wedges, &p);
         let mut gate = Sourced::new();
-        source(&kernel, GOOD, &price, &active, &spend, &mut gate);
+        source(
+            &kernel,
+            GOOD,
+            &price,
+            &active,
+            &vec![1.0; n],
+            &spend,
+            &mut gate,
+        );
         dispatch(&kernel, GOOD, &price, &vec![[1.0; 2]; n], &mut gate);
 
-        // gateway kernel: every destination spends E, and goods survive every loss
+        // gateway kernel: every destination spends E, and goods survive every loss but for
+        // selection (ADR 0200)
         for (d, e) in spend.iter().enumerate() {
             let rel = (gate.paid[d] - (e[0] + e[1])).abs() / (e[0] + e[1]);
             assert!(rel < 1e-12, "gateway kernel destination {d}: {rel}");
         }
         let shipped: f64 = gate.shipped.iter().sum();
         let arrived: f64 = gate.arrive.iter().flatten().flatten().sum();
-        assert!((shipped - arrived - gate.lost).abs() < 1e-12 * shipped);
+        assert!((shipped - gate.lost + gate.selected - arrived).abs() < 1e-12 * shipped);
 
         // direct kernel: the cross-border pair gets its own straight-line leg
         let wt: Vec<f64> = price.iter().map(|&q| q.powf(-theta)).collect();
@@ -156,9 +165,10 @@ fn two_level_vs_direct_report() {
                 let x = e * weight(o) / phi;
                 let units = x / (price[o] * (1.0 + tariff(o)));
                 direct_orders[o] += units;
-                direct_arrival[d] += if o == d { units } else { units / route_tau(o) };
                 spent += x;
             }
+            // buyers pay the CES index, Gamma 1 (ADR 0200)
+            direct_arrival[d] = e * phi.powf(1.0 / theta);
             assert!(
                 (spent - e).abs() < 1e-12 * e,
                 "direct kernel destination {d}"

@@ -293,9 +293,10 @@ struct Oracle {
 /// Every route enumerated from the exported legs: home, o -> d inside a country, and
 /// o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination d
 /// spends E_d over routes by K w_o / Phi_d; the buyer pays p_o (1 + t) per shipped unit,
-/// t / (1 + t) of it is tariff, the origin receives p_o per unit; d receives the units over the
-/// route's tau.
-fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
+/// t / (1 + t) of it is tariff, the origin receives p_o per unit. With `gamma` (ADR 0200) d
+/// pays q_d = Gamma_d p_min Phi_d^(-1/theta) and receives what it paid over q_d; without, it
+/// receives the units over the route's tau and q_d is what it pays per arriving unit.
+fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat, gamma: Option<&Mat>) -> Oracle {
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let zeros = || Mat::zeros(n_p, n_g);
     let mut out = Oracle {
@@ -339,6 +340,13 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
         for &(o, d, k, _, _) in &routes {
             phi[d] += k * w[o];
         }
+        let active = active_column(inp, g);
+        let p_min = (0..n_p)
+            .filter(|&i| active[i])
+            .map(|i| p[i])
+            .fold(f64::INFINITY, f64::min);
+        let buyer =
+            |d: usize| gamma.map(|gm| gm[(d, g)] * p_min * phi[d].powf(-1.0 / inp.theta[g]));
         let mut alpha = vec![0.0; n_p];
         for &(o, d, k, arrives, net) in &routes {
             if w[o] == 0.0 {
@@ -348,7 +356,10 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
             let units = x * net / p[o];
             alpha[d] += k * w[o] / phi[d] * net / p[o] * arrives;
             out.orders[(o, g)] += units;
-            out.arrive[(d, g)] += units * arrives;
+            out.arrive[(d, g)] += match buyer(d) {
+                Some(q) => x / q,
+                None => units * arrives,
+            };
             out.paid[(d, g)] += x;
             out.tariff[(d, g)] += x * (1.0 - net);
             out.received[(o, g)] += x * net;
@@ -361,7 +372,7 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
             }
         }
         for (d, a) in alpha.iter().enumerate() {
-            out.index[(d, g)] = 1.0 / a;
+            out.index[(d, g)] = buyer(d).unwrap_or(1.0 / a);
         }
     }
     out
@@ -384,11 +395,23 @@ fn sourcing_weights_use_theta_per_good() {
     }
 }
 
+/// Both buyer prices: Gamma P_d with the exported Gamma (ADR 0200), and the delivered unit
+/// price of the physical arrivals ([`Model::physical`]).
 #[test]
 fn trade_money_matches_dense_route_oracle() {
     let inp = inputs();
     assert!(inp.crossing.inv_duty.iter().any(|&d| d < 1.0));
-    let m = Model::new(inp).unwrap();
+    let gamma = inp.gamma.as_ref().unwrap();
+    assert!(gamma.data.iter().any(|&g| (g - 1.0).abs() > 1e-3));
+    for (m, gamma) in [
+        (Model::new(inp).unwrap(), Some(gamma)),
+        (Model::physical(inp).unwrap(), None),
+    ] {
+        oracle_case(inp, &m, gamma);
+    }
+}
+
+fn oracle_case(inp: &Inputs, m: &Model, gamma: Option<&Mat>) {
     let mut rng = Draws(11);
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
     let price = draw_mat(n_p, n_g, |_| rng.uniform(-2.3, 2.3).exp());
@@ -396,7 +419,7 @@ fn trade_money_matches_dense_route_oracle() {
         let s = rng.uniform(0.0, 1e6);
         if inp.traded[g] { s } else { 0.0 }
     });
-    let want = dense_route_oracle(inp, &price, &spend);
+    let want = dense_route_oracle(inp, &price, &spend, gamma);
     let src = m.sourcing(&price);
     let got = m.flows(&price, &spend, &src);
     let traded = traded_goods(inp);
@@ -432,23 +455,22 @@ fn trade_money_matches_dense_route_oracle() {
 }
 
 /// Owner decision 2026-10-25: coefficients are ICIO cost shares at base delivered prices. The
-/// exported base prices are the reference's own delivered unit prices at prices 1, so at the
-/// data state every enterprise's input cost share is its sector's a_kg.
+/// exported base prices are the reference's own buyer prices at prices 1, both with the exported
+/// Gamma (Gamma P_d, ADR 0200) and as the delivered unit price of the physical arrivals, so at
+/// the data state every enterprise's input cost share is its sector's a_kg.
 #[test]
 fn base_prices_are_the_reference_sourcing_at_prices_one() {
     let inp = inputs();
     let m = Model::new(inp).unwrap();
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
-    let q = m.sourcing(&Mat::filled(n_p, n_g, 1.0)).index;
+    let ones = Mat::filled(n_p, n_g, 1.0);
+    let q = m.sourcing(&ones).index;
+    let physical = Model::physical(inp).unwrap().sourcing(&ones).index;
     for g in 0..n_g {
         if inp.traded[g] {
-            assert_close(
-                &column(&inp.base_price, g),
-                &column(&q, g),
-                1e-13,
-                0.0,
-                "base price",
-            );
+            for (what, q) in [("base price", &q), ("physical base price", &physical)] {
+                assert_close(&column(&inp.base_price, g), &column(q, g), 1e-13, 0.0, what);
+            }
         } else {
             assert!(column(&inp.base_price, g).iter().all(|&p| p == 1.0));
         }
@@ -701,6 +723,7 @@ fn two_provinces(
         population: vec![1e6; 2],
         w0: vec![s_l * 50.0 / l0; 2],
         base_price: Mat::filled(2, 1, 1.0),
+        gamma: None,
         s_l: vec![s_l],
         unemployment: vec![u],
         u_star: vec![0.0],
@@ -764,7 +787,8 @@ proptest! {
         let inp = two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u);
         let m = Model::new(&inp).unwrap();
         let eq = solve::equilibrium(&m, None, TOL, None).unwrap();
-        // Buyers pay the delivered unit price q = 1 / alpha: a unit of spending buys home at p
+        // Without Gamma (the toy's inputs carry none) buyers pay the delivered unit price of
+        // the physical arrivals, q = 1 / alpha: a unit of spending buys home at p
         // and the other province's good at p tau, with sourcing shares 1 / (1 + k) and
         // k / (1 + k); the world index is q, normalized to 1.
         let k = tau.powf(-theta);

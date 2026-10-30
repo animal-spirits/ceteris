@@ -49,6 +49,7 @@ struct Columns {
     active: Vec<Vec<bool>>,
     spend: Vec<Vec<[f64; 2]>>,
     fill: Vec<Vec<[f64; 2]>>,
+    gamma: Vec<Vec<f64>>,
 }
 
 fn columns(w: &EconWorld) -> Columns {
@@ -72,12 +73,13 @@ fn columns(w: &EconWorld) -> Columns {
         fill: traded
             .map(|g| column(g).map(|c| sc.fill[c]).collect())
             .collect(),
+        gamma: w.layout().gamma.clone(),
     }
 }
 
 fn source_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     for (g, r) in out.iter_mut().enumerate() {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
     }
 }
 
@@ -90,7 +92,7 @@ fn dispatch_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 /// One task per good, sourcing and dispatch together, as E3 runs them.
 fn unit_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
         dispatch(k, g, &c.price[g], &c.fill[g], r);
     });
 }
@@ -98,7 +100,7 @@ fn unit_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 /// One task per good, sourcing for every good and then dispatch, as T2 and T2b run them.
 fn tick_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
     });
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
         dispatch(k, g, &c.price[g], &c.fill[g], r);
@@ -145,6 +147,7 @@ fn bench(c: &mut Criterion) {
         fill: cols.fill.iter().map(|f| vec![[1.0; 2]; f.len()]).collect(),
         price: cols.price.clone(),
         active: cols.active.clone(),
+        gamma: cols.gamma.clone(),
     };
     let kernel = w.kernel();
     let mut sourced = stale.clone();

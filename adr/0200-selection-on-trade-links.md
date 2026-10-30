@@ -128,3 +128,36 @@ lambda_dd'^(-1/theta) times the change in the home price (the ACR identity), to 
 links at s = 1 (autarky toy), hashes equal the status quo." "steady_state_unchanged_by_selection"
 checks stage 1's values at 1e-12 and reports the move of the lead and the pipeline.
 
+## As built (2026-10-30, pre-P3 B2a)
+
+- `ceteris_trade::source` takes Gamma per province and returns the buyer price
+  `Sourced::buyer_price = Gamma P_d`; `dispatch` carries value by arrival slot beside the units
+  that survive the melt and delivers `X / q_d` per route, with `Sourced::selected` (delivered
+  units less surviving units, all routes), `Sourced::survived` (surviving units per
+  destination and arrival slot, summed in the order the buyer price used before, so the base
+  prices are bit for bit unchanged) and `Sourced::home` (origin units bought at home). No pow: one extra multiply-add
+  per leg and slot.
+- `ProvinceData::gamma` (inputs digest): the data state's `(1 / alpha_d) / P_d` at prices 1
+  (`world::base_delivered_prices`), else the calibration tables' `gamma` (calibration format 5).
+  Export format 13 carries it in `provinces`; the reference model reads it and prices buyers at
+  Gamma P_d (`Model::new`), while the calibration keeps 1 / alpha_d at every pass
+  (`Model::physical`) and writes Gamma = q_d / P_d where it settles.
+- T2b books selection in the ledger (home purchases at the buyer, transit accounts brought to
+  the pipeline), and `EconWorld::end_tick` checks every tick that what T2b creates less what it
+  destroys is `selected - lost` (1e-9 of the good's shipped and delivered units plus the
+  transit rounding).
+- Production is unchanged: an origin's output leaves in shipped units at its coefficients, so
+  input use per delivered unit is 1 / s_r of the cell's average, as the Decision reads it.
+- Tests: `two_country_welfare_equals_acr` (1e-12 at border costs x1.1, x2 and x10),
+  `raising_tau_never_lowers_the_buyer_price` (proptest, 200 cases),
+  `inactive_leg_has_no_selection_term`, `goods_invariant_holds_with_selection` (120 ticks),
+  `buyers_pay_the_ces_index` (1e-12), `steady_state_unchanged_by_selection` (fixture: buyer
+  prices, spending, incomes, value added, orders, tariffs and arrivals at the calibrated point
+  with and without selection agree to 1e-12), the reference oracle in both pricings. The
+  autarky test `selection_off_reproduces_the_status_quo` checks that buyers pay their own
+  market's price and selection adds nothing every tick; the status quo's state hash is not
+  reproduced bit for bit (the inputs digest now carries Gamma, and Gamma P_d differs from
+  1 / (1 / p_d) in the last bits: the states agree to 3.4e-12 at tick 120).
+- Fixture calibration: stage 1's values are bit for bit unchanged; the lead moves by up to 0.165
+  months and the pipeline by up to 52% in one entry (+1.4% in total units), from splitting
+  arrivals over slots by value.
