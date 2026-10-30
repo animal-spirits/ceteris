@@ -43,40 +43,15 @@ jobs:
 
   app:
     if: github.event_name == 'push'
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: app/src-tauri
-      - run: npm ci
-      - run: npm run build
-      - run: cargo fmt --check
-        working-directory: app/src-tauri
-      - run: cargo clippy --all-targets -- -D warnings
-        working-directory: app/src-tauri
-      - run: cargo test
-        working-directory: app/src-tauri
-
-  native:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: native
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: native
+          workspaces: app
       # Lavapipe gives the offscreen map tests a Vulkan adapter.
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: cargo fmt --check

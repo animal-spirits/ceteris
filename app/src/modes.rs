@@ -37,7 +37,7 @@ impl Mode {
 }
 
 pub const NO_DATA: [u8; 3] = [0x9a, 0x9a, 0x96];
-/// Neighbour-separating slots, as in the Tauri map.
+/// Neighbour-separating slots.
 pub const COUNTRY: [[u8; 3]; 8] = [
     [0x2a, 0x78, 0xd6],
     [0xeb, 0x68, 0x34],
