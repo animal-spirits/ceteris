@@ -70,7 +70,8 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   legs. Every class off 1 must share one pair of multipliers. The fixture's hand-built network
   builds its bulk legs itself (sea crossings at P154 times its sea cost per tonne-km; it has no
   ports, so P155 scales nothing); hand-built test networks without bulk legs and the fixture's
-  unreachable island (route taus) run with the rate off (`TradeParams::bulk_off`). A network
+  unreachable island (route taus) run with the rate off (`TradeParams::bulk_off`); the island
+  folds the bulk legs into its route taus for the goods of a bulk class. A network
   with bulk legs and route taus is rejected. `BulkLegs`
   records the multipliers it was built with, and the kernel rejects parameters whose bulk rate
   (classes, P154, P155) differs from the network's, so P154 and P155 take effect only through
