@@ -1,6 +1,6 @@
 # 0254. Organic conflict onset: crisis hazard, actors decide
 
-Status: proposed
+Status: accepted (owner, 2026-10-30)
 Date: 2026-10-30
 Design sections: 6.5, 10.8, 11.1, 11.2, 11.6, 11.8, 13.5, 13.6, 15, 23.6; ADRs 0051, 0069, 0073, 0110, 0136, 0145, 0189, 0241, 0242
 Phase: P5 pack (t0 conflict state), P8 and P9 (1.0 conflict incidence), P6 (cohesion, attribution), P7 (crisis generator, intervention, cross-border groups)
@@ -49,7 +49,7 @@ D3, recording: one ADR for all mechanisms; an ADR for t0 state and 1.0 only; res
 
 ## Decision
 
-Option 1 for D1, D2 and D3 (recommended; pending owner).
+Option 1 for D1, D2 and D3 (owner, 2026-10-30).
 
 **Layers.** L0 structural risk is state already computed (income, growth, exclusion, state
 capacity and reach, terrain, rents, youth unemployment, peace-years, neighbourhood conflict; per
