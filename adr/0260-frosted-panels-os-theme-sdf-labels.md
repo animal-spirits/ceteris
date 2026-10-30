@@ -1,6 +1,6 @@
 # 0260. Frosted panels, theme from the OS, SDF map labels
 
-Status: accepted (owner, 2026-10-30)
+Status: accepted (owner, 2026-10-30); amended by 0261
 Date: 2026-10-30
 Design sections: 19.1 (Map UI), 20; amends ADR 0137; ADRs 0088, 0221, 0244, 0252, 0255
 Phase: P3, with the hillshade (0255 stage 1) and the chart kit
