@@ -59,10 +59,9 @@ and reports, per case, the change since the previous gate and its tier. A tier 1
 gate. A tier 2 miss blocks it unless an ADR traces it to an unbuilt mechanism. Tier 3 and 4
 changes are reported. P9 adds the second comprehensive pass with estimation.
 
-**Harness.** The benchmark harness (`crates/ceteris-econ/examples/shock.rs`, branch
-`claude/project-thread-cy0p06`) and its analysis scripts
-(`/mnt/project-files/research/benchmark-2026-10-28/`) move into the repository as part of C7, so
-later gates run one command. It runs owner-side on the full pack, like the P2 gate.
+**Harness.** Pre-P3 task B2b moves the benchmark harness (`shock.rs`, branch
+`claude/project-thread-cy0p06`) into `ceteris_calibrate` as a benchmark module. C7 and every
+later gate run that module. It runs owner-side on the full pack, like the P2 gate.
 
 ## Consequences
 
