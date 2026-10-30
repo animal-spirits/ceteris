@@ -75,6 +75,15 @@ Miss on the 2000 pack (B1 econ tables, masses, home shares; rate off): class 3's
 0.2964 against the model's 0.2007 at nu 0. The ablation result that triggered the fallback is in
 ADR 0247, As built.
 
+Fit on that pack with the rate off (scratch `b2/pack-off`): nu = 2.6767, 0.8032, 0.4003 for
+classes 0 to 2 (shares equal to the targets 0.1544, 0.3085, 0.1391 within 1e-10 relative), class
+3 clamped at 0 (share 0.2007), 17 evaluations; calibrated from cold in 70 passes (712 s with the
+fit). At the calibrated steady state the shares are 0.1545, 0.3108, 0.1428 and 0.1963. H2 after
+the fit: distance -0.509 (s.e. 0.014), outside -1.1 to -0.7; per class (theta_c against the PPML
+estimate +- 2 pair-clustered s.e.) class 0 2.91 against 2.221 to 2.566, class 1 4.14 against
+2.993 to 4.021, class 2 7.68 against 7.231 to 7.998 (pass), class 3 16.91 against 9.686 to 15.086.
+Only class 2 passes. Before the fit (every nu 0.3) distance was -0.433.
+
 ## Consequences
 
 - The border effect is consistent with each class's theta. Food trade across borders falls to
