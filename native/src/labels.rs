@@ -225,7 +225,9 @@ mod tests {
                 code: vec!["AAA".into(), "BBB".into()],
                 name: vec!["Alpha".into(), "Beta".into()],
                 colour: vec![0, 1],
+                ..Default::default()
             },
+            ..Default::default()
         };
         (fill, provinces)
     }
