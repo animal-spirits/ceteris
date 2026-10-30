@@ -102,8 +102,13 @@ nearest in (region, log GDP per capita); national VA by good from WDI sector sha
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
 (ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
-always against the donors' in the same source, never the region median when an income exists. With a sector share missing, VA is WDI GDP times the shares there are (industry
-over goods 1 to 8 when only manufacturing is missing); with no GDP, population (WorldPop national
+always against the donors' in the same source, never the region median when an income exists. With manufacturing missing, industry goes over goods 1 to 8. With
+agriculture, industry or services missing, the known shares keep their goods and the goods they
+do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
+by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
+rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas VA to
+rents, out of its group (all of industry where industry less manufacturing is too small) and at
+most the largest ICIO share of crude oil and gas in industry VA of it (ADR 0249); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
@@ -818,7 +823,7 @@ the radius on p. 9, footnote 10 p. 7).
 ## App (after the native app reaches parity, ADRs 0011 and 0088)
 
 The app is fully native (no React, webview or Tauri), with Slint panels over a wgpu map
-(ADR 0088). P2's UI is built there, not in `app/`. Map modes: price by good
+(ADR 0088). P2's UI is built there (`app/`, specs/app/SPEC.md). Map modes: price by good
 (index-normalized), output by sector, net exports by good, wage, unemployment. Province panel:
 market rows per good (price, inventory, supply, demand), its enterprises (sector, employment,
 output, profit), its pops (education, labour force, employed, income). Time controls: play,

@@ -1,7 +1,7 @@
 //! Map labels (ADR 0244): anchors computed once from the fills, placed on screen each time the
 //! camera moves, drawn by Slint over the map.
 
-use crate::camera::Camera;
+use crate::camera::{Camera, lon_lat};
 use crate::fill::Fill;
 use crate::web::Provinces;
 
@@ -9,7 +9,7 @@ pub struct Anchor {
     pub text: String,
     /// Web Mercator.
     pub xy: [f64; 2],
-    /// Mercator area, for ranking and for when the label fits.
+    /// Area on the unit sphere, for ranking and for when the label fits.
     pub area: f64,
 }
 
@@ -26,17 +26,18 @@ pub struct Placed {
     pub country: bool,
 }
 
-/// Per-feature area and area-weighted centroid of a fill's triangles.
+/// Per-feature area on the unit sphere and area-weighted Mercator centroid of a fill's
+/// triangles. Mercator magnifies area by (2 pi / cos lat)^2, taken at each triangle's centroid.
 fn centroids(fill: &Fill) -> Vec<(f64, [f64; 2])> {
     let mut acc = vec![(0.0, [0.0, 0.0]); fill.features as usize];
     for t in fill.index.as_chunks::<3>().0 {
         let [a, b, c] = t.map(|i| fill.xy[i as usize].map(f64::from));
-        let area = ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])).abs() / 2.0;
+        let mid = [0, 1].map(|k| (a[k] + b[k] + c[k]) / 3.0);
+        let flat = ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])).abs() / 2.0;
+        let area = flat * (std::f64::consts::TAU * lon_lat(mid)[1].cos()).powi(2);
         let f = &mut acc[fill.feature[t[0] as usize] as usize];
         f.0 += area;
-        for k in 0..2 {
-            f.1[k] += area * (a[k] + b[k] + c[k]) / 3.0;
-        }
+        f.1 = [0, 1].map(|k| f.1[k] + area * mid[k]);
     }
     acc.into_iter()
         .map(|(area, m)| (area, if area > 0.0 { m.map(|v| v / area) } else { m }))
@@ -242,9 +243,31 @@ mod tests {
             (0.40..0.42).contains(&x) && (0.40..0.41).contains(&y),
             "{x} {y}"
         );
-        assert!((a.countries[0].area - 3.4884e-4).abs() < 1e-8);
+        let provinces: f64 = a.provinces[..3].iter().map(|p| p.area).sum();
+        assert!((a.countries[0].area - provinces).abs() < 1e-15);
         let isle = a.provinces[2].xy;
-        assert!((isle[0] - 0.8061).abs() < 1e-6 && (isle[1] - 0.8061).abs() < 1e-6);
+        assert!((isle[0] - 0.8061).abs() < 1e-4 && (isle[1] - 0.8061).abs() < 1e-4);
+    }
+
+    #[test]
+    fn area_is_on_the_sphere_not_mercator() {
+        // Equal Mercator squares on the equator and at 60 degrees north (y = 0.2904).
+        let fill = Fill {
+            xy: [square(0.5, 0.4995, 0.001), square(0.5, 0.2899, 0.001)].concat(),
+            feature: (0..2).flat_map(|f| [f; 4]).collect(),
+            index: (0..2)
+                .flat_map(|q| [0, 1, 2, 0, 2, 3].map(|k| 4 * q + k))
+                .collect(),
+            features: 2,
+        };
+        let c = centroids(&fill);
+        let equator = (std::f64::consts::TAU * 0.001).powi(2);
+        assert!(
+            (c[0].0 / equator - 1.0).abs() < 1e-3,
+            "{}",
+            c[0].0 / equator
+        );
+        assert!((c[1].0 / c[0].0 - 0.25).abs() < 1e-3, "{}", c[1].0 / c[0].0);
     }
 
     #[test]
@@ -252,21 +275,26 @@ mod tests {
         let (fill, p) = world();
         let a = Anchors::new(&fill, &p);
         let view = [800.0, 800.0];
-        let camera = Camera::fit(800.0, 800.0);
+        let mut camera = Camera::fit(800.0, 800.0);
+        camera.centre = lon_lat([0.125, 0.125]);
         let world_view: Vec<String> = a
             .place(&camera, view, 12.0)
             .into_iter()
             .map(|l| l.text)
             .collect();
-        // At world scale only Beta (40 px wide feature) has room.
-        assert_eq!(world_view, ["BETA"]);
+        // At world scale only the countries have room.
+        assert_eq!(world_view, ["ALPHA", "BETA"]);
         let mut close = camera;
-        close.scale = 20_000.0;
-        close.centre = [0.41, 0.405];
+        close.scale = 3_835.0;
+        close.centre = lon_lat([0.41, 0.405]);
         let near: Vec<Placed> = a.place(&close, view, 12.0);
         let texts: Vec<&str> = near.iter().map(|l| l.text.as_str()).collect();
-        // Alpha first; Westmark overlaps it at the shared anchor and is dropped.
-        assert_eq!(texts, ["ALPHA", "Eastmark"]);
+        // Alpha first, anchored on one of its two equal halves; that half's label overlaps it
+        // and is dropped.
+        assert!(
+            texts == ["ALPHA", "Eastmark"] || texts == ["ALPHA", "Westmark"],
+            "{texts:?}"
+        );
         assert!(near.iter().all(|l| (0.0..800.0).contains(&l.at[0])));
     }
 }

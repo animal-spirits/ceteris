@@ -1,7 +1,7 @@
 //! Offscreen map pass on whatever adapter the machine has; skipped where there is none (CI
 //! installs lavapipe).
 
-use ceteris_app::camera::Camera;
+use ceteris_app::camera::{Camera, lon_lat};
 use ceteris_app::fill::Fill;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::tokens::{INK, PAPER, SEA};
@@ -18,9 +18,25 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
 }
 
+/// Fixtures are laid out on a unit square that `local` shrinks to a patch at 0, 0 small enough
+/// that the globe is flat there, and `camera` fits to a 100 x 100 viewport: unit x maps to
+/// pixel 100 x.
+const PATCH: f32 = 1e-3;
+
+fn local(xy: [f32; 2]) -> [f32; 2] {
+    xy.map(|v| 0.5 + (v - 0.5) * PATCH)
+}
+
+fn camera() -> Camera {
+    Camera {
+        centre: [0.0, 0.0],
+        scale: 100.0 / (std::f64::consts::TAU * f64::from(PATCH)),
+    }
+}
+
 /// Feature 0 covers x in [0.1, 0.4], feature 1 covers x in [0.6, 0.9], both for y in [0.3, 0.7].
 fn two_squares() -> Fill {
-    let square = |x0: f32, x1: f32| [[x0, 0.3], [x1, 0.3], [x1, 0.7], [x0, 0.7]];
+    let square = |x0: f32, x1: f32| [[x0, 0.3], [x1, 0.3], [x1, 0.7], [x0, 0.7]].map(local);
     Fill {
         xy: [square(0.1, 0.4), square(0.6, 0.9)].concat(),
         feature: vec![0, 0, 0, 0, 1, 1, 1, 1],
@@ -102,7 +118,7 @@ fn pick(
 /// Feature 0 covers x in [0.1, 0.5], feature 1 x in [0.5, 0.9], both y in [0.3, 0.7]: two
 /// provinces sharing an edge at x = 0.5. Counties split feature 0 at x = 0.3.
 fn neighbours() -> (Fill, Fill) {
-    let square = |x0: f32, x1: f32| [[x0, 0.3], [x1, 0.3], [x1, 0.7], [x0, 0.7]];
+    let square = |x0: f32, x1: f32| [[x0, 0.3], [x1, 0.3], [x1, 0.7], [x0, 0.7]].map(local);
     let quads = |n: u32| {
         (0..n)
             .flat_map(|q| [0, 1, 2, 0, 2, 3].map(|k| 4 * q + k))
@@ -142,8 +158,7 @@ fn fills_take_feature_colours_and_pick_feature_ids() {
     };
     let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
     map.set_colours(&queue, Layer::Provinces, &[RED, BLUE]);
-    // World [0, 1] fills the 100 x 100 viewport, so world x maps to pixel 100 x.
-    let camera = Camera::fit(100.0, 100.0);
+    let camera = camera();
     let target = map
         .render(&device, &queue, [100, 100], &camera, Style::default(), None)
         .expect("first frame allocates");
@@ -168,42 +183,31 @@ fn fills_take_feature_colours_and_pick_feature_ids() {
 }
 
 #[test]
-fn the_world_wraps_across_the_antimeridian() {
-    let Some((device, queue)) = device() else {
-        eprintln!("skipping: no wgpu adapter");
-        return;
-    };
-    let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
-    map.set_colours(&queue, Layer::Provinces, &[RED, BLUE]);
-    let mut camera = Camera::fit(100.0, 100.0);
-    // Centre on x = 0: the left half of the viewport shows the previous copy's feature 1.
-    camera.centre = [0.0, 0.5];
-    let target = map
-        .render(&device, &queue, [100, 100], &camera, Style::default(), None)
-        .expect("allocates");
-    assert_eq!(read_pixel(&device, &queue, &target, 25, 50), BLUE);
-    assert_eq!(read_pixel(&device, &queue, &target, 75, 50), RED);
-}
-
-#[test]
 fn the_globe_shows_the_near_side_only() {
     let Some((device, queue)) = device() else {
         eprintln!("skipping: no wgpu adapter");
         return;
     };
-    let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
+    // The squares at world scale, half a world apart.
+    let mut fill = two_squares();
+    fill.xy = fill
+        .xy
+        .iter()
+        .map(|xy| xy.map(|v| 0.5 + (v - 0.5) / PATCH))
+        .collect();
+    let mut map = Map::new(&device, &queue, &fill, None, &[0, 1]);
     map.set_colours(&queue, Layer::Provinces, &[RED, BLUE]);
-    let mut camera = Camera::fit(100.0, 100.0);
-    camera.globe = true;
-    // Radius 100 / 2 pi px; centred on feature 0 (x 0.25), feature 1 (x 0.75) is behind.
-    camera.scale = 100.0 * std::f64::consts::TAU / 2.0;
-    camera.centre = [0.25, 0.5];
+    // The disc fills the viewport; centred on feature 0 (x 0.25), feature 1 (x 0.75) is behind.
+    let mut camera = Camera {
+        centre: lon_lat([0.25, 0.5]),
+        scale: 50.0,
+    };
     let target = map
         .render(&device, &queue, [100, 100], &camera, Style::default(), None)
         .expect("allocates");
     assert_eq!(read_pixel(&device, &queue, &target, 50, 50), RED);
     assert_eq!(pick(&mut map, &device, &queue, &camera, [50, 50]), Some(0));
-    camera.centre = [0.75, 0.5];
+    camera.centre = lon_lat([0.75, 0.5]);
     map.render(&device, &queue, [100, 100], &camera, Style::default(), None);
     assert_eq!(read_pixel(&device, &queue, &target, 50, 50), BLUE);
     // Off the disc is paper, and picks nothing.
@@ -219,7 +223,7 @@ fn borders_follow_ids_and_counties_pick() {
         return;
     };
     let (provinces, counties) = neighbours();
-    let camera = Camera::fit(100.0, 100.0);
+    let camera = camera();
     let style = Style {
         county_fill: false,
         county_borders: true,
@@ -265,7 +269,7 @@ fn county_fill_replaces_province_colours() {
     let mut map = Map::new(&device, &queue, &provinces, Some(&counties), &[0, 0]);
     map.set_colours(&queue, Layer::Provinces, &[RED, RED]);
     map.set_colours(&queue, Layer::Counties, &[BLUE, RED, BLUE]);
-    let camera = Camera::fit(100.0, 100.0);
+    let camera = camera();
     let style = Style {
         county_fill: true,
         county_borders: false,
@@ -286,7 +290,7 @@ fn selection_and_origin_outline_inside_the_edge_and_hover_lightens() {
     };
     let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
     map.set_colours(&queue, Layer::Provinces, &[RED, BLUE]);
-    let camera = Camera::fit(100.0, 100.0);
+    let camera = camera();
     let style = Style {
         selected: Some(0),
         origin: Some(1),
@@ -313,4 +317,29 @@ fn selection_and_origin_outline_inside_the_edge_and_hover_lightens() {
         [PAPER[0], PAPER[1], PAPER[2], 255]
     );
     assert_eq!(read_pixel(&device, &queue, &target, 75, 50), BLUE);
+}
+
+#[test]
+fn colours_mix_towards_the_next_tick() {
+    let Some((device, queue)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
+    map.set_colours(&queue, Layer::Provinces, &[RED, RED]);
+    map.set_next_colours(&queue, &[BLUE, RED]);
+    let camera = camera();
+    let style = Style {
+        mix: 0.5,
+        ..Style::default()
+    };
+    let target = map
+        .render(&device, &queue, [100, 100], &camera, style, None)
+        .expect("allocates");
+    let px = read_pixel(&device, &queue, &target, 25, 50);
+    for c in 0..3 {
+        let want = (f32::from(RED[c]) + f32::from(BLUE[c])) / 2.0;
+        assert!((f32::from(px[c]) - want).abs() <= 2.0, "{px:?}");
+    }
+    assert_eq!(read_pixel(&device, &queue, &target, 75, 50), RED);
 }

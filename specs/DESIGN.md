@@ -30,7 +30,7 @@ Headline specification:
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB | Desktop only; sets all budgets |
 | Performance target | 0.5 to 1 simulated year per second, single run | Interactive play; ensembles and calibration overnight |
 
-Stack: a Rust simulation core embedded in a desktop app. Today the app is Tauri with a MapLibre map and a GPU fill layer; ADR 0088 makes it a fully native Rust app, Slint panels over a wgpu map, with no React, webview or Tauri. The data pipeline, the reference model and calibration are Rust crates driven by the `ceteris` CLI (ADR 0113). The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
+Stack: a Rust simulation core embedded in a desktop app. The app is fully native Rust, Slint panels over a wgpu globe, with no React, webview or Tauri (ADR 0088). The data pipeline, the reference model and calibration are Rust crates driven by the `ceteris` CLI (ADR 0113). The project is open source (Apache-2.0 / MIT) and non-commercial; each user's pipeline downloads the source data, so non-commercial sources are acceptable inputs and restricted data is never bundled (owner, 28 Oct 2026). Build order puts the map, accounting, markets, trade and the counterfactual workbench first, because those define the product (Section 21).
 
 ## 2. Vision, Scope and Design Principles
 
@@ -1175,8 +1175,8 @@ A Rust core gives deterministic, parallel speed; Rust crates also own the data p
 | Simulation core | Rust, plain structure-of-arrays, rayon for parallelism | Determinism control, speed, memory safety for a long-lived codebase |
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
-| App shell | Today Tauri 2: Rust core in-process, raw buffers to the UI over IPC, pack files through pack://. Target: one native Rust process, winit window, Slint panels, core columns read directly (ADR 0088) | One native macOS app, no server |
-| Map UI | MapLibre GL for tiles, borders and labels; a GPU fill layer coloured from a per-feature texture; PMTiles; React panels, ECharts; flat map or globe. To be rewritten in Rust on wgpu, drawn into a texture shown in Slint (ADR 0088; stage 1 of ADR 0011 becomes a native spike instead of the hybrid) | A full recolour of 53,084 counties reaches the screen in 19 ms (p50) |
+| App shell | One native Rust process: winit window, Slint panels, the economy on a sim thread publishing views through a run-ahead ring (ADRs 0088, 0208) | One native macOS app, no server |
+| Map UI | wgpu globe drawn into a texture shown in Slint: fills coloured from a per-feature texture, borders from an id target, labels as Slint text (ADRs 0010, 0088, 0244); globe only, with Equal Earth for flat exports (ADR 0250) 120 fps on the owner's Mac (frame p50 8.33 ms); a full province recolour uploads in 0.06 ms |
 | Pipeline, reference model, calibration | Rust crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate`, driven by the `ceteris` CLI; GEOS only on the owner-side map build (ADR 0113) | One toolchain; the restricted part of the pack builds on the user's machine with no Python runtime |
 | Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow and Parquet outputs | No bindings to maintain; runs are driven by scenario files |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
@@ -1225,7 +1225,7 @@ ceteris/
     ceteris-reference/    GE hat-algebra reference model
     ceteris-calibrate/    calibration, estimation, SBI, MSM, emulators
     ceteris-cli/          the ceteris binary: pack, reference, calibrate, runs, branch and ensemble runners
-  app/                    Tauri shell (Rust) + TypeScript map UI, until the native app reaches parity (ADR 0088)
+  app/                    native app (winit, Slint, wgpu), its own cargo workspace (ADR 0088)
   tests/golden/           golden runs with state hashes
 ```
 
@@ -1420,7 +1420,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Provinces | Natural Earth first-level regions at 2000 borders, kept whole, 4,594 (ADR 0251) | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
-| App | Tauri desktop app today; moving to a fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
+| App | Fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
 | Core language | Rust from the start | Pipeline, reference model and calibration in Rust too (ADR 0113); no Python in the build, release or test path |
 | Hardware | MacBook Pro, M-series Pro, 18-36 GB, desktop only | Budgets in 15.2 and 19.2; emulators and modular calibration mandatory |
 | Pops | Province x ethnic group x education x labour status | About 100,000 pops; religion as shares |

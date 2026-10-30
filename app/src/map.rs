@@ -24,7 +24,7 @@ pub enum Layer {
 }
 
 /// What a frame shows beyond the fills.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Style {
     /// Fill with county colours instead of province colours.
     pub county_fill: bool,
@@ -33,6 +33,8 @@ pub struct Style {
     pub selected: Option<u32>,
     pub origin: Option<u32>,
     pub hover: Option<u32>,
+    /// How far province colours have moved towards the next tick's, 0 to 1.
+    pub mix: f32,
 }
 
 /// The features under a pixel; ids index the pack's tables.
@@ -49,6 +51,8 @@ struct Geometry {
     indices: u32,
     features: u32,
     colours: wgpu::Texture,
+    /// The next tick's colours, mixed in by `Style::mix` (ADR 0208).
+    next: wgpu::Texture,
     bind_group: wgpu::BindGroup,
 }
 
@@ -157,6 +161,10 @@ impl Map {
                 ),
                 entry(
                     1,
+                    texture(wgpu::TextureSampleType::Float { filterable: false }),
+                ),
+                entry(
+                    2,
                     texture(wgpu::TextureSampleType::Float { filterable: false }),
                 ),
             ],
@@ -295,6 +303,12 @@ impl Map {
                 fill.features,
                 wgpu::TextureFormat::Rgba8Unorm,
             );
+            let next = texture_2d(
+                device,
+                label,
+                fill.features,
+                wgpu::TextureFormat::Rgba8Unorm,
+            );
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(label),
                 layout: &fill_layout,
@@ -307,6 +321,12 @@ impl Map {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(
                             &colours.create_view(&Default::default()),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &next.create_view(&Default::default()),
                         ),
                     },
                 ],
@@ -332,6 +352,7 @@ impl Map {
                 indices: fill.index.len() as u32,
                 features: fill.features,
                 colours,
+                next,
                 bind_group,
             }
         };
@@ -384,6 +405,11 @@ impl Map {
         }
     }
 
+    /// Uploads the next tick's province colours, which `Style::mix` blends towards.
+    pub fn set_next_colours(&self, queue: &wgpu::Queue, rgba: &[[u8; 4]]) {
+        write_rows(queue, &self.provinces.next, rgba);
+    }
+
     /// Draws one frame at `size` physical pixels, and when `pick` is given starts reading the
     /// ids at that pixel. Returns the colour target when it was (re)allocated, so the caller
     /// hands the new one to Slint.
@@ -406,20 +432,14 @@ impl Map {
         }
         let targets = self.targets.as_ref()?;
         let viewport = [f64::from(width), f64::from(height)];
-        let [cx, cy, kx, ky] = camera.uniform(viewport);
-        // Flat: world copies left and right of the centre that can reach the viewport.
-        let reach = if camera.globe {
-            0
-        } else {
-            (viewport[0] / (2.0 * camera.scale)).ceil() as i32 + 1
-        };
         let id = |p: Option<u32>| p.map_or(0, |p| p + 1);
         let rgba = |c: [u8; 3]| c.into_iter().chain([255]).map(|v| f32::from(v) / 255.0);
-        let uniform: Vec<u8> = [cx, cy, kx, ky, -(reach as f32)]
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .chain(u32::from(camera.globe).to_le_bytes())
-            .chain([0; 8])
+        let uniform: Vec<u8> = camera
+            .uniform(viewport)
+            .into_iter()
+            .chain([style.mix])
+            .flat_map(f32::to_le_bytes)
+            .chain([0; 12])
             .chain(
                 rgba(SEA)
                     .chain(rgba(PAPER))
@@ -465,14 +485,13 @@ impl Map {
             pass.set_bind_group(0, &self.provinces.bind_group, &[]);
             pass.set_pipeline(&self.pipelines.background);
             pass.draw(0..3, 0..1);
-            let copies = 0..(2 * reach + 1) as u32;
             let mut draw = |pipeline, g: &Geometry| {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &g.bind_group, &[]);
                 pass.set_vertex_buffer(0, g.xy.slice(..));
                 pass.set_vertex_buffer(1, g.feature.slice(..));
                 pass.set_index_buffer(g.index.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..g.indices, 0, copies.clone());
+                pass.draw_indexed(0..g.indices, 0, 0..1);
             };
             draw(&self.pipelines.provinces, &self.provinces);
             if let Some(counties) = &self.counties {

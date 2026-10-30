@@ -1,6 +1,9 @@
 //! Map modes (DESIGN 20.1): one RGBA colour per feature, uploaded to the feature colour texture
 //! (ADR 0010), plus a legend. Ports `app/src/modes.ts`.
 
+use ceteris_trade::goods::{NAME as GOODS, TRADED};
+
+use crate::econ::View;
 use crate::web::{Provinces, RESOURCE_GROUPS, TERRAIN};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -11,10 +14,30 @@ pub enum Mode {
     Resources(Option<usize>),
     /// Freight cost from the selected origin.
     Cost,
+    /// P2 (econ SPEC, App), by good where they take one.
+    Price(usize),
+    Output(usize),
+    NetExports(usize),
+    Wage,
+    Unemployment,
+}
+
+impl Mode {
+    /// Modes that change every tick, so the map interpolates between views.
+    pub fn moves(self) -> bool {
+        matches!(
+            self,
+            Self::Price(_)
+                | Self::Output(_)
+                | Self::NetExports(_)
+                | Self::Wage
+                | Self::Unemployment
+        )
+    }
 }
 
 pub const NO_DATA: [u8; 3] = [0x9a, 0x9a, 0x96];
-/// Neighbour-separating slots, as in the Tauri map.
+/// Neighbour-separating slots.
 pub const COUNTRY: [[u8; 3]; 8] = [
     [0x2a, 0x78, 0xd6],
     [0xeb, 0x68, 0x34],
@@ -30,6 +53,15 @@ pub const TERRAIN_RAMP: [[u8; 3]; 4] = [
     [0xc6, 0xa5, 0x71],
     [0x9a, 0x73, 0x42],
     [0x5e, 0x44, 0x24],
+];
+/// Net imports (blue) to net exports (brown), three magnitude classes a side.
+pub const DIVERGING: [[u8; 3]; 6] = [
+    [0x2c, 0x5f, 0x8a],
+    [0x5b, 0x8d, 0xb8],
+    [0xa9, 0xc8, 0xdf],
+    [0xec, 0xc4, 0x93],
+    [0xc9, 0x7a, 0x3a],
+    [0x7f, 0x42, 0x14],
 ];
 pub const SEQUENTIAL: [[u8; 3]; 7] = [
     [0xfd, 0xe0, 0xc5],
@@ -81,7 +113,7 @@ fn classify(x: f64, breaks: &[f64]) -> usize {
     breaks.iter().take_while(|&&b| x >= b).count()
 }
 
-/// Whole numbers with thousands separators from 100 up, two significant digits below.
+/// Whole numbers with thousands separators from 100 up, three significant digits below.
 pub fn fmt(x: f64) -> String {
     if x.abs() >= 100.0 || x.fract() == 0.0 {
         let digits = format!("{}", x.abs().round() as u64);
@@ -94,7 +126,7 @@ pub fn fmt(x: f64) -> String {
         }
         if x < 0.0 { format!("-{out}") } else { out }
     } else {
-        let decimals = (1 - x.abs().log10().floor() as i32).max(0) as usize;
+        let decimals = (2 - x.abs().log10().floor() as i32).max(0) as usize;
         format!("{x:.decimals$}")
     }
 }
@@ -156,6 +188,58 @@ fn sequential(values: &[f64], unit: &str, zero: Option<&str>) -> (Vec<[u8; 4]>, 
     (fill, legend)
 }
 
+/// Signed values in three magnitude classes a side, split at the terciles of |x|.
+fn diverging(
+    values: &[f64],
+    unit: &str,
+    negative: &str,
+    positive: &str,
+) -> (Vec<[u8; 4]>, Vec<LegendItem>) {
+    let mut mag: Vec<f64> = values
+        .iter()
+        .filter(|x| x.is_finite() && **x != 0.0)
+        .map(|x| x.abs())
+        .collect();
+    mag.sort_by(f64::total_cmp);
+    let at = |k: usize| mag.get(k * mag.len() / 3).copied();
+    let (Some(t1), Some(t2)) = (at(1), at(2)) else {
+        return (vec![rgba(NO_DATA); values.len()], Vec::new());
+    };
+    let class = |x: f64| {
+        let k = usize::from(x.abs() >= t1) + usize::from(x.abs() >= t2);
+        if x < 0.0 { 2 - k } else { 3 + k }
+    };
+    let fill = values
+        .iter()
+        .map(|&x| {
+            if x.is_finite() {
+                rgba(DIVERGING[class(x)])
+            } else {
+                rgba(NO_DATA)
+            }
+        })
+        .collect();
+    let range = |lo: f64, hi: Option<f64>| match hi {
+        Some(hi) => format!("{} to {} {unit}", fmt(lo), fmt(hi)),
+        None => format!("{}+ {unit}", fmt(lo)),
+    };
+    let legend = [
+        (0, format!("{negative} {}", range(t2, None))),
+        (1, format!("{negative} {}", range(t1, Some(t2)))),
+        (2, format!("{negative} under {} {unit}", fmt(t1))),
+        (3, format!("{positive} under {} {unit}", fmt(t1))),
+        (4, format!("{positive} {}", range(t1, Some(t2)))),
+        (5, format!("{positive} {}", range(t2, None))),
+    ]
+    .into_iter()
+    .map(|(k, label)| LegendItem {
+        colour: DIVERGING[k],
+        label,
+    })
+    .collect();
+    (fill, legend)
+}
+
 pub fn political(p: &Provinces) -> Vec<[u8; 4]> {
     p.country
         .iter()
@@ -163,9 +247,21 @@ pub fn political(p: &Provinces) -> Vec<[u8; 4]> {
         .collect()
 }
 
-/// `cost`: USD per tonne from the origin to each province, once an origin is chosen.
-pub fn paint(mode: Mode, p: &Provinces, cost: Option<&[f64]>) -> Painted {
+/// `cost`: USD per tonne from the origin to each province, once an origin is chosen; `econ`:
+/// the presented tick's view, once the economy runs.
+pub fn paint(mode: Mode, p: &Provinces, cost: Option<&[f64]>, econ: Option<&View>) -> Painted {
     let n = p.len();
+    if mode.moves() {
+        return match econ {
+            Some(v) => economy(mode, n, v),
+            None => Painted {
+                title: "The economy is loading".into(),
+                fill: vec![rgba(NO_DATA); n],
+                legend: Vec::new(),
+                note: String::new(),
+            },
+        };
+    }
     match mode {
         Mode::Political => Painted {
             title: "Countries, 1 January 2000".into(),
@@ -219,6 +315,52 @@ pub fn paint(mode: Mode, p: &Provinces, cost: Option<&[f64]>) -> Painted {
                 }
             }
         },
+        _ => unreachable!("moving modes return above"),
+    }
+}
+
+fn economy(mode: Mode, n: usize, v: &View) -> Painted {
+    let at = format!("tick {}", v.tick);
+    let seq = |values: Vec<f64>, unit: &str| sequential(&values, unit, None);
+    let (title, (fill, legend), note) = match mode {
+        Mode::Price(g) => (
+            format!("Price of {}", GOODS[g].to_lowercase()),
+            seq(v.price_of(n, g), "x world index"),
+            format!("Buyer price over the world price index, {at}."),
+        ),
+        Mode::Output(g) => (
+            format!("Output of {}", GOODS[g].to_lowercase()),
+            seq(v.output_of(n, g), "per month"),
+            format!("At the province's market price, numeraire per month, {at}."),
+        ),
+        Mode::NetExports(g) if TRADED[g] => (
+            format!("Net exports of {}", GOODS[g].to_lowercase()),
+            diverging(&v.net_out_of(n, g), "per month", "in", "out"),
+            format!(
+                "Sales of the province's market less its buyers' purchases, numeraire per month, {at}."
+            ),
+        ),
+        Mode::NetExports(g) => (
+            format!("Net exports of {}", GOODS[g].to_lowercase()),
+            (vec![rgba(NO_DATA); n], Vec::new()),
+            "A local good: it does not ship between provinces.".into(),
+        ),
+        Mode::Wage => (
+            "Wage".into(),
+            seq(v.wages(n), "per labour unit"),
+            format!("Numeraire per effective labour unit and month, {at}."),
+        ),
+        _ => (
+            "Unemployment".into(),
+            seq(v.unemployment(n).iter().map(|u| 100.0 * u).collect(), "%"),
+            format!("Share of the labour force not employed, {at}."),
+        ),
+    };
+    Painted {
+        title,
+        fill,
+        legend,
+        note,
     }
 }
 
@@ -260,11 +402,21 @@ mod tests {
     }
 
     #[test]
+    fn diverging_classes_split_by_sign_and_magnitude() {
+        let values = [-9.0, -5.0, -1.0, 1.0, 5.0, 9.0, f64::NAN];
+        let (fill, legend) = diverging(&values, "u", "in", "out");
+        let want: Vec<[u8; 4]> = DIVERGING.iter().map(|&c| rgba(c)).collect();
+        assert_eq!(&fill[..6], &want[..]);
+        assert_eq!(fill[6], rgba(NO_DATA));
+        assert_eq!(legend.len(), 6);
+    }
+
+    #[test]
     fn number_format() {
         assert_eq!(fmt(1234567.4), "1,234,567");
         assert_eq!(fmt(150.6), "151");
-        assert_eq!(fmt(12.34), "12");
-        assert_eq!(fmt(0.0345), "0.035");
+        assert_eq!(fmt(12.34), "12.3");
+        assert_eq!(fmt(0.0345), "0.0345");
         assert_eq!(fmt(7.0), "7");
     }
 }

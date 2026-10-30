@@ -166,7 +166,6 @@ reference model's iceberg factors.
 - Golden: `tests/golden/p1-geo.txt` (cost and hour bits from eight probe provinces) and
   `tests/golden/p1-pack.txt` (table hashes). Bless with `CETERIS_BLESS=1`.
 - Benchmark: `dijkstra_grid_40k` (criterion), a 40,000-node grid the size of the pack graph.
-- App: IPC test of `cost_from` on Tauri's mock runtime.
 
 ## Open questions
 
