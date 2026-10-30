@@ -124,9 +124,12 @@ slot through the gateways and divides by q_d at the destination, and the cost pe
 one multiply-add for the value by lag. Migration's "one powf per leg per tick" does not apply.
 
 **Tests, as amended.** "Two-country toy": with Gamma fixed per cell, the change in q_d equals
-lambda_dd'^(-1/theta) times the change in the home price (the ACR identity), to 1e-12. "With all
-links at s = 1 (autarky toy), hashes equal the status quo." "steady_state_unchanged_by_selection"
-checks stage 1's values at 1e-12 and reports the move of the lead and the pipeline.
+lambda_dd'^(-1/theta) times the change in the home price (the ACR identity), to 1e-12. The
+autarky toy (no legs, every s = 1) cannot give hashes equal to the status quo, since the inputs
+digest carries Gamma; it is a property instead: every tick, each buyer pays its own market's
+price to 4 ulp, Gamma is 1 to 4 ulp and selection adds nothing.
+"steady_state_unchanged_by_selection" checks stage 1's values at 1e-12; the moves of the lead and
+the pipeline are recorded in As built.
 
 ## As built (2026-10-30, pre-P3 B2a)
 
@@ -135,8 +138,8 @@ checks stage 1's values at 1e-12 and reports the move of the lead and the pipeli
   that survive the melt and delivers `X / q_d` per route, with `Sourced::selected` (delivered
   units less surviving units, all routes), `Sourced::survived` (surviving units per
   destination and arrival slot, summed in the order the buyer price used before, so the base
-  prices are bit for bit unchanged) and `Sourced::home` (origin units bought at home). No pow: one extra multiply-add
-  per leg and slot.
+  prices are bit for bit unchanged) and `Sourced::home` (origin units bought at home). No pow:
+  one extra multiply-add per leg and slot.
 - `ProvinceData::gamma` (inputs digest): the data state's `(1 / alpha_d) / P_d` at prices 1
   (`world::base_delivered_prices`), else the calibration tables' `gamma` (calibration format 5).
   Export format 13 carries it in `provinces`; the reference model reads it and prices buyers at
@@ -154,10 +157,15 @@ checks stage 1's values at 1e-12 and reports the move of the lead and the pipeli
   `buyers_pay_the_ces_index` (1e-12), `steady_state_unchanged_by_selection` (fixture: buyer
   prices, spending, incomes, value added, orders, tariffs and arrivals at the calibrated point
   with and without selection agree to 1e-12), the reference oracle in both pricings. The
-  autarky test `selection_off_reproduces_the_status_quo` checks that buyers pay their own
+  autarky test `autarky_has_no_selection` checks that buyers pay their own
   market's price and selection adds nothing every tick; the status quo's state hash is not
   reproduced bit for bit (the inputs digest now carries Gamma, and Gamma P_d differs from
   1 / (1 / p_d) in the last bits: the states agree to 3.4e-12 at tick 120).
+- Gamma P_d reproduces 1 / alpha_d to two roundings: with b = 1 / alpha_d the base price,
+  Gamma = fl(b / P_d) and q_d = fl(Gamma P_d) each round by at most u = 2^-53 relative, so q_d
+  is within about 2u = `f64::EPSILON` (2.2e-16) of b.
+  `coefficients_are_cost_shares_at_base_prices` allows `2 * f64::EPSILON` (4.4e-16), twice the
+  bound.
 - Fixture calibration: stage 1's values are bit for bit unchanged; the lead moves by up to 0.165
   months and the pipeline by up to 52% in one entry (+1.4% in total units), from splitting
   arrivals over slots by value.
