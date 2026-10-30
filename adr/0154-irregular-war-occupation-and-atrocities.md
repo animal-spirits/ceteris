@@ -1,6 +1,6 @@
 # 0154. Irregular war, occupation, civilian harm and atrocities
 
-Status: proposed; amended by ADR 0226 (2026-10-28) and ADR 0245 (2026-10-30)
+Status: proposed; amended by ADR 0226 (2026-10-28), ADR 0245 and ADR 0246 (2026-10-30)
 Date: 2026-10-28
 Design sections: 11.5, 11.6, 23.6, 23.7; ADRs 0029, 0033, 0051, 0060, 0069, 0072, 0115, 0132, 0145
 Phase: P7 (2.0-beta)
