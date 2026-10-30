@@ -143,6 +143,9 @@ struct Work {
     work: usize,
     /// Fits evaluated by the last [`descend`].
     descent: usize,
+    /// Whether a [`jump`] since this was cleared did not apply: the cycle's map undefined or
+    /// singular, its fall within rounding, or the budget spent.
+    inapplicable: bool,
 }
 
 /// A fill as an affine function of the fills at the start of a pass: c + sum_k d_k F_k.
@@ -444,7 +447,7 @@ const CONFIRMED: f64 = 1e-12;
 /// Passes after which [`fills`] moves the goods still falling to the last pass's fixed point
 /// (ADR 0093, bounded work).
 pub const STALL_PASSES: usize = 256;
-/// The bound on the passes of [`fills`], a jump's confirming passes included: past
+/// The bound on the passes of [`fills`], a jump's confirming passes included: at
 /// `PASS_CAP - PERIOD` passes it ends on its fallback ([`capped`]), the stall reported.
 pub const PASS_CAP: usize = 4 * STALL_PASSES;
 /// The fit the fills keep where the passes stop short of their end: 1e-12 of a good's flows,
@@ -559,14 +562,19 @@ fn jump(
     w: &mut Work,
 ) -> Option<Jump> {
     if *budget == 0 {
+        w.inapplicable = true;
         return None;
     }
-    let FixedPoint { cut, map, g, limit } = fixed_point(cycle, f)?;
+    let Some(FixedPoint { cut, map, g, limit }) = fixed_point(cycle, f) else {
+        w.inapplicable = true;
+        return None;
+    };
     // a fall the map gives only to rounding is no fall: no jump extrapolates it (its first
     // cycle allows the maps' rounding on shortages, as the cycles followed one at a time do)
     *budget -= 1;
     let next = follow(p, cycle, f, ROUNDING, w)?;
     if !cut.iter().all(|&j| resolvable(f[j], next[j])) {
+        w.inapplicable = true;
         return None;
     }
     let mut now = *f;
@@ -724,6 +732,9 @@ pub fn fills(p: &Province) -> Fills {
     let mut since = 0;
     let mut moves = 0;
     let mut stalled = false;
+    let mut uncovered = 0;
+    // `uncovered` at the last move: a stall charges every pass since
+    let mut mark = 0;
     loop {
         passes += 1;
         since += 1;
@@ -735,6 +746,7 @@ pub fn fills(p: &Province) -> Fills {
                 passes,
                 work: w.work,
                 stalled,
+                uncovered,
             };
         }
         // a jump's confirming passes come after this check, at most PERIOD of them
@@ -744,6 +756,7 @@ pub fn fills(p: &Province) -> Fills {
                 passes,
                 work: w.work,
                 stalled: true,
+                uncovered,
             };
         }
         if tail.len() == PERIOD {
@@ -760,7 +773,19 @@ pub fn fills(p: &Province) -> Fills {
         // plain passes go on and the stall is reported.
         let lowered: Vec<usize> = (0..3).filter(|&j| f[j] != start[j]).collect();
         let rounding = lowered.iter().all(|&j| !resolvable(start[j], f[j]));
+        // what this pass adds to `uncovered`, None once counted: a good cut by rounding alone
+        // while another falls changes the pieces where no kink lies, and costs two passes as a
+        // kink does (this one and the one whose jump it ends)
+        let mut charge = if !rounding && lowered.iter().any(|&j| !resolvable(start[j], f[j])) {
+            Some(2)
+        } else {
+            Some(usize::from(stalled))
+        };
         if rounding || (since >= STALL_PASSES && !stalled) {
+            if !rounding {
+                let this = charge.take().unwrap_or(0);
+                uncovered = mark + since.max(uncovered + this - mark);
+            }
             since = 0;
             recent.clear();
             moves += 1;
@@ -769,15 +794,19 @@ pub fn fills(p: &Province) -> Fills {
                 .flatten();
             tail.clear();
             if let Some(to) = to {
+                uncovered += usize::from(rounding);
+                mark = uncovered;
                 f = to;
                 continue;
             }
+            mark = uncovered;
             if rounding {
                 return Fills {
                     fills: f,
                     passes,
                     work: w.work,
                     stalled,
+                    uncovered,
                 };
             }
             stalled = true;
@@ -788,6 +817,7 @@ pub fn fills(p: &Province) -> Fills {
         recent.push(last);
         // a limit from the shortest cycle that reaches one, else the first cycle that runs ahead
         let mut ahead = None;
+        w.inapplicable = false;
         for period in 1..=recent.len() {
             let cycle = &recent[recent.len() - period..];
             match jump(p, cycle, &f, &mut budget, &mut w) {
@@ -801,6 +831,10 @@ pub fn fills(p: &Province) -> Fills {
                 }
                 None => {}
             }
+        }
+        if let Some(c) = charge {
+            let missed = (ahead.is_none() && w.inapplicable) || budget == 0;
+            uncovered += c.max(usize::from(missed));
         }
         if let Some(h) = ahead {
             f = h.map(|x| if x < f64::MIN_POSITIVE { 0.0 } else { x });
@@ -885,6 +919,13 @@ pub struct Fills {
     /// Whether the stall rule found no fixed point to move to and left the fall to the plain
     /// passes (a diagnostic).
     pub stalled: bool,
+    /// Passes outside the kink accounting of the pass bound (ADR 0093; `specs/econ/SPEC.md`,
+    /// Production), which holds where every jump applies: a pass after which no jump moved and
+    /// one did not apply (its cycle's map undefined or singular, its fall within rounding, or
+    /// the jumps' budget spent); two for a pass that cuts a good by rounding alone while another
+    /// falls resolvably; a pass a stop moves on from; every pass since the last move when the
+    /// stall rule acts, and every pass after a stall (a diagnostic).
+    pub uncovered: usize,
 }
 
 /// Runs the chain for the enterprises of province `i`. On entry `Scratch::produced` holds

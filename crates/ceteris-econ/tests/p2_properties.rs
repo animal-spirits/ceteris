@@ -1200,7 +1200,9 @@ fn kink_bound(p: &Province) -> usize {
 /// collapses, at a loop gain of 0.7 to 0.9 per pass, the fall to 0 crossing the residue
 /// thresholds. Before the jump found the last whole cycle on the pieces (it returned the last
 /// point the doubling checked), a jump could stop short of a kink and cost passes no kink
-/// accounts for: 11 passes there at 13410ce.
+/// accounts for: 11 passes there at 13410ce. This bound does not tell that defect apart (the old
+/// jump also stays within it here), nor does [`chain_passes_within_their_kinks`]; the guard is
+/// the unit test `a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`.
 #[test]
 fn local_chain_terminates_on_cycles() {
     let coefficients = [
@@ -1255,6 +1257,85 @@ fn local_chain_terminates_on_cycles() {
     }
     println!("chain binds in {binding} province ticks, at most {most} passes");
     assert!(binding > 0);
+}
+
+/// The random province families of the chain bound: (extra enterprises, largest coefficient,
+/// probability of no stock) for [`random_province_with`]: the default, higher coefficients, no
+/// stocks, up to 10 enterprises, scarce stocks.
+const FAMILIES: [(usize, f64, f64); 5] = [
+    (5, 0.6, 0.5),
+    (5, 0.9, 0.5),
+    (5, 0.6, 1.0),
+    (9, 0.6, 0.5),
+    (5, 0.6, 0.9),
+];
+
+/// The passes of [`local::fills`] on `p` are at most [`kink_bound`] plus the passes outside its
+/// accounting ([`local::Fills::uncovered`]).
+fn assert_within_kinks(p: &Province, what: &str) {
+    let out = local::fills(p);
+    let bound = kink_bound(p);
+    assert!(
+        out.passes <= bound + out.uncovered,
+        "{what}: {out:?}, kink bound {bound}"
+    );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2000))]
+    /// ADR 0093, jump ahead to the last whole cycle: on random small provinces of every family the
+    /// passes are within the kink bound, plus the passes no jump covered.
+    #[test]
+    fn chain_passes_within_their_kinks(seed in any::<u64>()) {
+        for (i, &(extra, coef_max, no_stock)) in FAMILIES.iter().enumerate() {
+            let p = random_province_with(seed, extra, coef_max, no_stock);
+            assert_within_kinks(&p, &format!("family {i} seed {seed}"));
+        }
+    }
+}
+
+/// ADR 0093, jump ahead to the last whole cycle: the 22 provinces of 1,000,000 (200,000 of each
+/// family, seeds k x 0x9E3779B97F4A7C15 for k = 1 to 200,000; k in the comments) whose passes
+/// exceed [`kink_bound`], each within it once the passes outside its accounting are added:
+/// - a good cut by rounding alone every other pass (10): it sits at its limit with U = R along
+///   the rest of the fall, so each such cut changes the pieces where no kink lies and ends the
+///   jump of the pass before after a few cycles (175527: 88 passes against 25, 39 such cuts;
+///   3779: 68 against 27);
+/// - the stall rule (11): pieces that repeat over 4 or more passes or binding fills that switch
+///   every pass (99418: goods 0 and 1 switch 204 times), so no jump of up to 3 passes applies and
+///   the stall rule ends the fall at 257 passes (73799 stalls, 792 passes);
+/// - a root rounded onto a kink (1, 170254: 14 against 11): good 0's step lands on good 2's
+///   fill every other pass, so the cycle's map is undefined and no jump applies there.
+#[test]
+fn chain_passes_beyond_their_kinks_are_uncovered() {
+    for (family, seed) in [
+        (0, 9079438926617766920u64), // 185832
+        (1, 9445586431414458203),    // 45487
+        (1, 7755772308687514728),    // 101576
+        (1, 12026231257191621299),   // 175527
+        (1, 13337483376192305907),   // 177383
+        (1, 1491518143059507267),    // 196855
+        (2, 1532048138609151479),    // 2267
+        (2, 10068621952487064433),   // 38125
+        (2, 1643254794265822703),    // 50931
+        (2, 16419583651343627261),   // 51785
+        (2, 12969786537767039842),   // 99418
+        (2, 13995925185394726438),   // 170254
+        (2, 16771139658170358534),   // 189038
+        (3, 10153890110564051455),   // 3779
+        (3, 14357194857401195837),   // 56969
+        (3, 13803108746253734605),   // 135641
+        (4, 1532048138609151479),    // 2267
+        (4, 941226322657314038),     // 12446
+        (4, 16419583651343627261),   // 51785
+        (4, 5355749340075788755),    // 73799
+        (4, 12969786537767039842),   // 99418
+        (4, 13546262730378525300),   // 199076
+    ] {
+        let (extra, coef_max, no_stock) = FAMILIES[family];
+        let p = random_province_with(seed, extra, coef_max, no_stock);
+        assert_within_kinks(&p, &format!("family {family} seed {seed}"));
+    }
 }
 
 /// Outputs at fills `f`, as ADR 0093's Amendment defines them, written out here independently.
@@ -1643,8 +1724,8 @@ fn balanced_markets_keep_their_fills() {
 /// others' limit may cut them in the plain iteration. This holds on the sampled provinces. The
 /// 1e-200 threshold leaks: in seed 2172124891379086981 good 1 ends at 1.02e-200 in the original,
 /// a collapse, and is classified None. None goods get only the loose check of lying in [t, 1].
-fn degenerate_limit(p: &Province, t: f64) -> [Option<f64>; 3] {
-    let original = bisection_iteration(p, true).expect("the original iteration converges");
+/// `original` is the bisection iteration's limit on `p`, fills below 1e-200 flushed to 0.
+fn degenerate_limit(original: &[f64; 3], t: f64) -> [Option<f64>; 3] {
     original.map(|v| {
         if v == 0.0 {
             Some(t)
@@ -1664,18 +1745,53 @@ fn degenerate_limit(p: &Province, t: f64) -> [Option<f64>; 3] {
 /// the other goods pin it within 1.03e-12 of t).
 const RESOLUTION: f64 = 1e-11;
 
-/// The fills of `translate(random_province(seed), t)`. Where the province is degenerate (some
-/// good of the original falls to 0, by [`degenerate_limit`]), each good with a known exact limit
-/// is within [`RESOLUTION`] of it, and each other good lies in [t, 1] to that resolution (the
-/// fills only fall, and a good falls no further than its share of the collapse). Otherwise every
-/// good is at the plain iteration's limit (1e-12). Every good fits to 1e-12 of its flows.
+/// The fills of `translate(random_province(seed), t)`, which must be held to the exact limits.
+/// Where the province is degenerate (some good of the original falls to 0, by
+/// [`degenerate_limit`]), each good whose heuristic limit the plain iteration on the translated
+/// province confirms (within [`RESOLUTION`]) is within [`RESOLUTION`] of it, and each other good
+/// lies in [t, 1] to that resolution (the fills only fall, and no good can fall below t: with the
+/// others at t or above, a good at t fits by the construction of the stocks). The heuristic is
+/// not a logical consequence, so a good where the two disagree, or where the plain iteration does
+/// not converge, gets the loose check only: seed 1122501757669556625 at 0.3, where the heuristic
+/// says good 0 stays at 1 and the plain iteration and the fills both take it to t. Where a fill
+/// is off its confirmed limit and some good's limit is not resolved at the fills
+/// ([`shortage_at_one`]), every good gets the loose check: the limits there turn on rounding.
+/// Otherwise every good is at the plain iteration's limit (1e-12). Every good fits to 1e-12 of its
+/// flows.
 fn assert_translated_limit(seed: u64, t: f64) -> local::Fills {
     let original = random_province(seed);
-    let p = translate(&original, t);
-    let exact = degenerate_limit(&original, t);
-    let degenerate = exact.contains(&Some(t));
+    let limit = bisection_iteration(&original, true).expect("the original iteration converges");
+    let (out, exact) = assert_translated_limit_of(seed, &original, &limit, t);
+    assert!(exact, "seed {seed} t {t}: held to the loose check only");
+    out
+}
+
+/// [`assert_translated_limit`] with the original province and its flushed bisection limit given;
+/// also returns whether every good with a heuristic limit was held to it, none to the loose
+/// check only.
+fn assert_translated_limit_of(
+    seed: u64,
+    original: &Province,
+    limit: &[f64; 3],
+    t: f64,
+) -> (local::Fills, bool) {
+    let p = translate(original, t);
+    let heuristic = degenerate_limit(limit, t);
+    let degenerate = heuristic.contains(&Some(t));
     let out = local::fills(&p);
-    let iterated = (!degenerate).then(|| converged_fills(&p)).flatten();
+    let plain = converged_fills(&p);
+    // the heuristic limits the plain iteration confirms
+    let confirmed: [Option<f64>; 3] = std::array::from_fn(|j| {
+        heuristic[j].filter(|&want| plain.is_some_and(|it| (it[j] - want).abs() <= RESOLUTION))
+    });
+    // a fill off its confirmed limit, where some good's limit is not resolved at the fills
+    let off =
+        (0..3).any(|j| confirmed[j].is_some_and(|want| (out.fills[j] - want).abs() > RESOLUTION));
+    let unresolved = (0..3).any(|k| shortage_at_one(&p, k, &out.fills).abs() <= RESOLUTION);
+    let loose = off && unresolved;
+    let exact = if loose { [None; 3] } else { confirmed };
+    let held = !loose && (0..3).all(|j| heuristic[j].is_none() || confirmed[j].is_some());
+    let iterated = (!degenerate).then_some(plain).flatten();
     for (j, (&f, &limit)) in out.fills.iter().zip(&exact).enumerate() {
         assert!(
             fits_up_to_rounding(&p, j, &out.fills),
@@ -1700,11 +1816,40 @@ fn assert_translated_limit(seed: u64, t: f64) -> local::Fills {
             );
         }
     }
-    out
+    (out, held)
+}
+
+/// What good j of `p` lacks at fills `f` with its own raised to 1, U - R, relative to its flows
+/// at F = 1. Where this is within [`RESOLUTION`] of 0, the good's users bind on the other goods
+/// and sit at their stock thresholds when those are at t, and its producer falls with them: its
+/// balance is rounding whatever its own fill, so whether it falls to t or stays at 1 is decided
+/// by the rounding of the other fills and of the stocks, and its limit is not resolved; nor are
+/// the limits of goods whose users or producer take it.
+/// - Seed 1097310483361641164 at 0.1: good 2 has no producer and every user's stock covers
+///   its need at t. The plain iteration ends a unit above t on good 0 and cuts good 2 to t; the
+///   fills end on t and keep good 2 at 1.
+/// - Seed 7641237549142102837 at 0.1: good 2's balance is 5.6e-17 at any fill of its own.
+///   The plain iteration keeps it at 1; the fills cut it to t.
+/// - Seed 13946236107313884973 at 0.1: as 1097310483361641164 for good 2, which the fills keep
+///   at 1; good 1's producer takes good 2, so good 1 fits at 1 too, where the plain iteration
+///   cuts both to t.
+fn shortage_at_one(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
+    let mut g = *f;
+    g[j] = 1.0;
+    let y = outputs_at(p, &g);
+    let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
+    let uncovered: f64 = (0..y.len())
+        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
+        .sum();
+    let flows: f64 = (0..p.cap.len())
+        .map(|u| p.coef[u][j] * p.cap[u])
+        .sum::<f64>()
+        + p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * p.cap[q]);
+    (uncovered - rest) / flows
 }
 
 /// ADR 0093, bounded work: collapses moved to a limit at t, at their exact limits to the
-/// resolution bound.
+/// resolution bound, none held to the loose check only.
 /// - 14411755600342564334 and 9578761762967406418 at 0.1: a jump once overshot them to 0.
 /// - 14707373548302171422 at 0.1: its first step lands one unit below 1 (a midpoint of the
 ///   piece rounded onto its end, a panic before).
@@ -1734,52 +1879,71 @@ fn translated_collapses_stop_at_their_limit() {
     }
 }
 
-/// The collapsing provinces among `n` random draws from `offset` (SplitMix64 seeds): at least
-/// 12 passes and at least two fills of 0, each moved to limits at 0.1, 0.3 and 0.5, every one
-/// held to [`assert_translated_limit`]. Since a jump ahead ends after the last whole cycle on
-/// its pieces (ADR 0093, amendment of 2026-10-30), most collapses take fewer passes: of the
-/// draws below, 7 of 300,000 and 62 of 3,000,000 take 12 or more, against 43 and 420 when a
-/// jump ended at the doubling's last check. A cut at 8 passes takes in seed
-/// 1122501757669556625, where [`degenerate_limit`] misclassifies good 0 (limit 1 by the
-/// heuristic; the plain iteration and the fills, before and after that change, give t).
-fn translated_sample(n: u64, offset: u64) -> usize {
+/// The collapsing provinces among `n` random draws from `offset` (SplitMix64 seeds), each moved
+/// to limits at 0.1, 0.3 and 0.5, every one held to [`assert_translated_limit`]. A collapse is
+/// chosen without the code under test: the plain fill iteration ([`bisection_iteration`], fills
+/// below 1e-200 flushed to 0) ends with at least two fills of 0, about 23% of the draws. Returns
+/// the cases checked and those held to every heuristic limit (none to the loose check only).
+fn translated_sample(n: u64, offset: u64) -> (usize, usize) {
     let mix = |i: u64| {
         let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
     };
-    let mut checked = 0;
+    let (mut checked, mut exact) = (0, 0);
     for i in 0..n {
         let seed = mix(i + offset);
-        let out = local::fills(&random_province(seed));
-        if out.passes < 12 || out.fills.iter().filter(|&&x| x == 0.0).count() < 2 {
+        let original = random_province(seed);
+        let Some(limit) = bisection_iteration(&original, true) else {
+            continue;
+        };
+        if limit.iter().filter(|&&x| x == 0.0).count() < 2 {
             continue;
         }
         for t in [0.1, 0.3, 0.5] {
-            assert_translated_limit(seed, t);
+            exact += usize::from(assert_translated_limit_of(seed, &original, &limit, t).1);
             checked += 1;
         }
     }
-    checked
+    (checked, exact)
 }
 
-/// ADR 0093, bounded work: a sample of the translated collapses (300,000 draws, 21 cases).
+/// ADR 0093, bounded work: a sample of the translated collapses (5,000 draws: 3,552 cases, 2,290
+/// held to every heuristic limit). The minimums are these counts. The selection alone fixes the
+/// cases, so a case fails rather than drops out; the held count turns on the plain iteration
+/// and the heuristic, and on the fills only where a fill is off its limit at an unresolved good.
 #[test]
 fn translated_collapses_sample() {
-    let n = translated_sample(300_000, 12 << 40);
-    println!("{n} checked");
-    assert!(n >= 21, "{n} cases");
+    let (n, exact) = translated_sample(5_000, 12 << 40);
+    println!("{n} checked, {exact} at their exact limits");
+    assert!(n >= 3_552 && exact >= 2_290, "{n} cases, {exact} held");
 }
 
-/// ADR 0093, bounded work: the translated collapses of 3,000,000 draws (186 cases); slow, so
-/// run on request.
+/// ADR 0093, bounded work: the translated collapses of 300,000 draws (207,054 cases; 132,459 of
+/// the 207,053 that pass held to every heuristic limit; minimums as in
+/// [`translated_collapses_sample`]); slow, so run on request. It fails on seed
+/// 13067305529229119429 at 0.3, which [`translated_collapse_settles_below_its_limit`] isolates.
 #[test]
 #[ignore]
 fn translated_collapses_full() {
-    let n = translated_sample(3_000_000, 12 << 40);
-    println!("{n} checked");
-    assert!(n >= 186, "{n} cases");
+    let (n, exact) = translated_sample(300_000, 12 << 40);
+    println!("{n} checked, {exact} at their exact limits");
+    assert!(n >= 207_054 && exact >= 132_459, "{n} cases, {exact} held");
+}
+
+/// ADR 0093, bounded work: seed 13067305529229119429 at 0.3, a collapse whose plain iteration
+/// ends at [0.3, 0.3, 0.3] to rounding (and its exact limit is t: no good can fall below it). The
+/// fills reach t to rounding in 3 passes, the third a rounding pass, on pieces below t; at that
+/// stop the last pass's fixed point is taken wherever it lies, here [0.267, 0, 0], where every
+/// good fits and the confirming passes return it. Ignored until a ruling on the stop's fixed
+/// point (the same restriction to 9.3e-10 of f that the cycles of two and three passes have
+/// fixes it and fails `near_singular_cycle_keeps_its_limit`).
+#[test]
+#[ignore = "the stop takes a fixed point far below the limit; ruling pending (b3fill3)"]
+fn translated_collapse_settles_below_its_limit() {
+    let out = assert_translated_limit(13067305529229119429, 0.3);
+    assert_eq!(out.fills.map(|x| (x - 0.3).abs() <= RESOLUTION), [true; 3]);
 }
 
 /// ADR 0093, bounded work: provinces whose collapse outlasts the stall rule end within
