@@ -3,6 +3,7 @@
 Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 9; the estimation part lands with PLAN Task 18)
 Date: 2026-10-24
 Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate
+Amended by ADR 0247 (proposed, 2026-10-30): per-class multipliers on P04's sea cost per tonne-km and port fee (bulk freight rate, P154 and P155).
 Paths (ADR 0113, 2026-10-29): the uniqueness check and PPML are `ceteris_reference::{uniqueness, ppml}`, the gravity estimation `ceteris_calibrate::gravity` (`ceteris gravity`), and the gate `crates/ceteris-cli/tests/p2_gate.rs`.
 
 ## Context
