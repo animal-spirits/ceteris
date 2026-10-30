@@ -749,8 +749,10 @@ fn nu_fit_matches_cross_border_share() {
     let fit = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet()).unwrap();
     println!("fit: {fit:?}");
     for c in 0..border::N_CLASSES {
+        // relative, not the PLAN's absolute 1e-6: class 3's share moves by about 2.6e-7 per unit
+        // of nu here, so an absolute 1e-6 would accept any nu from 0 to about 4
         assert!(
-            (fit.share[c] - target[c]).abs() <= 1e-6,
+            (fit.share[c] / target[c] - 1.0).abs() <= 1e-6,
             "class {c}: share {} vs target {}",
             fit.share[c],
             target[c]
@@ -791,10 +793,26 @@ fn nu_fit_is_monotone_and_bracketed() {
             shares[1][c]
         );
     }
+    let fit_err = |target: [f64; border::N_CLASSES]| {
+        border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet())
+            .unwrap_err()
+            .to_string()
+    };
+    // above the share at nu 0
     let mut target = shares[1];
     target[0] = 0.5 * (1.0 + shares[0][0]);
-    let err = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet())
-        .unwrap_err()
-        .to_string();
-    assert!(err.starts_with("class 0:"), "{err}");
+    let err = fit_err(target);
+    assert!(
+        err.starts_with("class 0:") && err.contains("(nu 0)"),
+        "{err}"
+    );
+    // below the share at the bracket's upper end
+    let top = at([border::NU_MAX; border::N_CLASSES]);
+    let mut target = shares[1];
+    target[2] = 0.5 * top[2];
+    let err = fit_err(target);
+    assert!(
+        err.starts_with("class 2:") && err.contains("outside"),
+        "{err}"
+    );
 }
