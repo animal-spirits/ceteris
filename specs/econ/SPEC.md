@@ -228,10 +228,15 @@ cycle), follows at most 64 cycles one at a time, then 2^k cycles at once (k <= 6
 those points, the shortages strictly; all jumps share 4,096 units of work per province and tick;
 a pass whose falls are all below the margin, or the 256th pass, moves the goods resolvably to
 the fixed point of the last pass's map (or, at a stop, of the last two or three passes' cycle
-within 9.3e-10 of f), clamped to [0, f] and confirmed by the cycle's passes; else stops (after a
-rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on
-degenerate limits (U = R at the limit): the fills are placed within eps (U + R) / |slope of U - R|
-of the exact limit (about 2e-12, tests cap 1e-11), the resolution f64 gives there
+within 9.3e-10 of f), inside [0, f] and confirmed by the cycle's passes; else stops (after a
+rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on; a
+fall below the margin is no fall whatever its source, so a real loop of gain within about
+9e-13 of 1 is not followed (gain 1 - 8e-13 stays at [0.4999999999992, 0.9999999999984, 1])
+pass cap: at 1,024 passes the fills are kept where every good fits to 1e-12 of its flows, else
+the goods that do not are set to 0 one at a time in good order; the stall is reported
+degenerate limits (U = R at the limit): rounding of U - R decides the fit near the limit; the
+fills land within 1.81e-12 of it on the translated collapses (tests cap 1e-11; the per-case
+eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray)
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
@@ -239,17 +244,23 @@ max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
 lowers its root by rounding units until it does), except where the passes stop at what f64
 resolves: there a good may be short by rounding, at most about 9e-13 of its flows, which the
-split shares pro rata within the Leontief invariant. No clearing step is needed. The draws are
+split shares pro rata within the Leontief invariant. That holds by construction: each good fit
+at its own step in the last pass, its R fell later in the pass by at most the relative fall of
+its producer's binding fill (below the margin), and other falls only lower its U. No clearing
+step is needed. The draws are
 paid at the posted price at E2, count in the market's demand and sales, and come before
 household demand under every S11 setting (the chain runs before E3); at T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
-services at 0.3 and construction and services each other at 0.2 it binds in 413 of 3,000 province
+services at 0.3 and construction and services each other at 0.2 it binds in 415 of 3,000 province
 ticks over 120 ticks and settles in at most 6 passes (`local_chain_terminates_on_cycles`). On
 1,000,000 random small provinces with coefficients up to 0.6, all but 129 settle within 12
-passes, the most take 257 (the stall bound) and none takes more than 0.3 ms; in 200,000 provinces
-of the calibrated form (markets balanced at F = 1, one capacity cut) the fills match the
-iteration to 1.4e-10 within 2 passes. Each tick the enterprise orders up to an inventory position (stock plus goods on order, the paid shipments in its pipeline):
+passes, the most take 257 and none takes more than 0.3 ms; over five other families of 1,000,000
+(higher coefficients, no stocks, up to 10 enterprises, scarce stocks, near-balanced markets) 7
+provinces stall, collapses crawling towards the smallest normal f64, and take up to the pass cap
+of 1,024 that bounds every call. In 200,000 provinces of the calibrated form (markets balanced at F = 1, one capacity
+cut) the fills match the plain iteration to 1.4e-10 within 2 passes, the iteration itself
+drifting by rounding over thousands of passes (its error, not the fills'). Each tick the enterprise orders up to an inventory position (stock plus goods on order, the paid shipments in its pipeline):
 
 ```
 order_k = max(0, (1 + cover + L_k) coef_k Y_cap - stock_k - on_order_k),    cover = 1
