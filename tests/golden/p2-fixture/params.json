@@ -1,5 +1,5 @@
 {
-  "format": "11",
+  "format": "12",
   "static_digest": "c30f42df7710a747a0fbbf786d76b953f9c24afefee387105d98dc7758cf4cee",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
@@ -25,6 +25,8 @@
     "eta": "P41",
     "edu_eff": "P42",
     "time_cost": "P43",
+    "bulk_sea": "P154",
+    "bulk_port": "P155",
     "expectation_gain": "P45",
     "rationing": "S11",
     "technology": "S09",
@@ -58,6 +60,9 @@
     "c_max_storable": 0.3,
     "expectation_gain": 0.006,
     "border_nu": [0.3, 0.3, 0.3, 0.3],
-    "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0]
+    "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0],
+    "bulk_sea": [1.0, 1.0, 1.0, 0.026],
+    "bulk_port": [1.0, 1.0, 1.0, 0.4],
+    "bulk_classes": [false, false, false, false]
   }
 }

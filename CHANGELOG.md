@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### BEHAVIOUR: bulk freight rate for theta class 3 (ADR 0247)
+
+- Class 3 (crude oil, gas and refined fuels; coal and other mining) is shipped at a bulk freight
+  rate: its legs are least-cost paths on the graph repriced with the sea cost per tonne-km times
+  P154 (0.026) and the listed and minor port fees times P155 (0.40), from 2000 tanker and
+  dry-bulk voyage rates (UNCTAD Review of Maritime Transport 2001 and 2002). Classes 0 to 2 are
+  unchanged. A pack world builds the bulk legs at load (`Network::bulk`); they enter the inputs
+  digest, so a pack calibrated before this change no longer matches its calibration tables.
+- Export format 12: `legs` gains `bulk_cost_per_t` and `bulk_hours`, `params.json` gains
+  `bulk_sea`, `bulk_port` and `bulk_classes`.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: the export's tables for format 12 (schema metadata, the two new
+  leg columns, NaN on the fixture, which has no bulk legs) and `params.json` (the new fields). The
+  fixture's kernel, digest, reference solution and calibration do not move.
+- `tests/golden/p2-econ.txt`, `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move.
+  `p2-pack.txt` waits for the pack rebuild (pre-P3 B8).
+
 ### BEHAVIOUR: calibration passes mixed in relative units
 
 - The Anderson mixing of the calibration passes holds the rebates and the PIGL scales relative to
