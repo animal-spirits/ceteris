@@ -1,6 +1,6 @@
 # 0195. Government as bodies with scopes and competences
 
-Status: proposed
+Status: proposed; amended by ADR 0253 (succession laws for heredity)
 Date: 2026-10-28
 Design sections: 9.6, 9.8, 10.1, 10.3, 10.5, 10.6, 14.2, 20; amends ADRs 0068 and 0129; see ADRs 0047, 0067, 0083, 0140, 0163, 0186, 0187, 0189, 0190
 Phase: P6 (2.0-alpha)
