@@ -1,6 +1,6 @@
 # 0261. Glass loupe and glass edges on floating overlays
 
-Status: accepted (owner, 2026-10-30)
+Status: accepted (owner, 2026-10-30); amended by 0262
 Date: 2026-10-30
 Design sections: 19.1 (Map UI), 20; amends ADR 0260; ADRs 0137, 0221
 Phase: P3, after the 0260 frosted backdrop
