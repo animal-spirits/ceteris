@@ -1,7 +1,7 @@
 # 0247. Bulk freight rate per theta class
 
 Status: proposed (owner ruling 1B, 2026-10-30: add a bulk freight rate for class 3 inside pre-P3
-B2, then refit nu); ablation result under As built
+B2, then refit nu); built and off by default: the ablation test failed on criterion 3 (As built)
 Date: 2026-10-30
 Design sections: 5.3 (maritime container, bulk and tanker; freight rates), 5.4, 15.7 (ablation),
 17.1 (P04; new P154, P155), 21.2 item 7; amends ADR 0022 (P04 mode costs); ADR 0092 (nu per
@@ -104,4 +104,36 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
 
 ## As built
 
-Pending (pre-P3 B2, task b2-1b).
+Built on 2026-10-30 (pre-P3 B2, task b2-1b): `TransportParams::bulk`, `TradeParams::{bulk_sea,
+bulk_port}` (P154, P155), `Network::bulk` (`BulkLegs`), built by `network_from_graph` and used by
+the kernel per class; export format 12. Every class off 1 must share one rate
+(`TradeParams::bulk_rate`).
+
+**Ablation test** on the 2000 pack (B1 econ tables, gateway masses, home shares; scratch packs
+`b2/pack-bulk` and `b2/pack-off`), each fitted (ADR 0092) and calibrated from cold:
+
+| | Off (P154, P155 at 1) | On (0.026, 0.40 for class 3) |
+|---|---|---|
+| Class-3 share at nu 0 (target 0.2964) | 0.2007 | 0.3037 |
+| Fitted nu, classes 0 to 3 | 2.6767, 0.8032, 0.4003, no root (clamped at 0) | 2.6767, 0.8032, 0.4003, 0.0078 |
+| Fit evaluations | 17 | 18 |
+| Calibration passes (cold) | 70 (final change 3.7e-13) | 64 (9.4e-13) |
+| Fit and calibration, wall time | 712 s | 578 s |
+| Shares at the calibrated steady state (coupled check) | 0.1545, 0.3108, 0.1428, 0.1963 | 0.1545, 0.3108, 0.1428, 0.2954 |
+| H2 class 3: PPML theta (pair-clustered s.e.), band | 12.386 (1.350), 9.686 to 15.086 | 16.432 (0.370), 15.692 to 17.171 |
+| H2 distance elasticity (s.e.), band -1.1 to -0.7 | -0.509 (0.014) | -0.463 (0.011) |
+
+1. Off, no root; on, a root (nu 0.0078). **Pass.**
+2. theta_3 16.91 is outside the class-3 band off and inside it on. **Pass.**
+3. H2 distance is outside -1.1 to -0.7 with the rate on (-0.463), and the rate moves it further
+   from the band than off (-0.509). **Fail.**
+
+By the criterion, the rate stays off by default: P154 and P155 are 1 for every class, and class
+3 is clamped at nu = 0 with the miss recorded in ADR 0092 (Amendment 2026-10-30). The sourced
+values stay in the register for a later decision. The distance elasticity is outside the band
+with the rate off as well: the miss comes from the leg costs and the masses (ADR 0092, As
+built), not from this rate.
+
+H2 per class at the fitted nu, both runs: classes 0 (2.393, pair-clustered s.e. 0.086, band 2.221
+to 2.566 against theta 2.91) and 1 (3.507, 0.257, 2.993 to 4.021 against 4.14) miss; class 2 (7.61,
+0.19, 7.23 to 8.00 against 7.68) passes; they move by less than 0.003 between off and on.

@@ -467,6 +467,15 @@ balanced Sinkhorn on the dense kernel with the equilibrium's origin supplies and
 expenditures reproduces the sourcing flows (1e-8, reference test), and a Rust run started at the
 reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_a_fixed_point`).
 
+H2 after the nu fit (pre-P3 B2, 2026-10-30; 2000 pack with the B1 econ tables, gateway masses and
+home shares, scratch, not installed; `p2_gate.rs`): at nu 2.677, 0.803, 0.400 and 0 (class 3
+clamped, ADR 0092), distance -0.509 (s.e. 0.014), **outside** -1.1 to -0.7; per class (theta_c
+against the PPML estimate +- 2 pair-clustered s.e.) class 0 2.91 against 2.221 to 2.566, class 1
+4.14 against 2.993 to 4.021, class 2 7.68 against 7.231 to 7.998 (pass), class 3 16.91 against
+9.686 to 15.086. Before the fit (nu 0.3 for every class) distance was -0.433. With the bulk
+freight rate on (ADR 0247; off by default after its ablation test) distance is -0.463 and class 3
+passes (15.692 to 17.171). No band was changed; the miss is for the owner.
+
 ## Test plan
 
 - Unit: leg factors and tariff wedges; theta per good (`kernel_uses_theta_per_good`) and price
