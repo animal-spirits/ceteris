@@ -54,7 +54,7 @@ Consequences of the line:
   their modelled values. The player gets more friction by taking a weaker seat (finance
   minister rather than head of government, a minority government, a low-capacity state) or by
   a player-side order rule from the list below, never by editing the bodies of 0195.
-- **The 0161 rung "markets learn the player's rule faster" is dropped.** Market learning is a
+- **The 0161 rung "markets learn the player's rule faster" is dropped** (owner, 2026-10-30). Market learning is a
   calibrated behaviour; varying it per run changes the model. The other 0161 rungs are in the
   families below.
 
