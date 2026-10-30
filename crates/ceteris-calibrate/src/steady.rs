@@ -895,14 +895,26 @@ impl<'a> Setup<'a> {
     }
 }
 
-/// The fixed point of the passes as one vector: ln q of traded goods, rebates, ln r of traded
-/// goods, the PIGL weights.
+/// The fixed point of the passes as one vector, in the units `change` measures it in: ln q of
+/// traded goods, rebates over `rebate_unit`, ln r of traded goods, the PIGL scales over
+/// `scale_unit`, the PIGL omega and within-good weights. Anderson's least squares weighs every
+/// entry alike, so in money units the rebates would decide the mixing alone.
 struct State {
     n_p: usize,
     n_c: usize,
     traded: Vec<bool>,
     /// The within-pop dispersion, fixed by the inputs.
     sigma: Vec<f64>,
+    /// The largest rebate of the first pass (1 without rebates), fixed for the run.
+    rebate_unit: f64,
+    /// The largest PIGL scale at the start, fixed for the run.
+    scale_unit: f64,
+}
+
+/// The largest magnitude in `v`, or 1 where every entry is 0: the unit of a block of the state.
+fn block_unit(v: &[f64]) -> f64 {
+    let m = max_abs(v);
+    if m > 0.0 { m } else { 1.0 }
 }
 
 impl State {
@@ -915,9 +927,9 @@ impl State {
                     .map(|g| q[(p, g)].ln()),
             );
         }
-        z.extend_from_slice(rebate);
+        z.extend(rebate.iter().map(|x| x / self.rebate_unit));
         z.extend((0..r.len()).filter(|&g| self.traded[g]).map(|g| r[g].ln()));
-        z.extend_from_slice(&w.scale);
+        z.extend(w.scale.iter().map(|x| x / self.scale_unit));
         z.extend_from_slice(&w.omega.data);
         z.extend_from_slice(&w.within.data);
         z
@@ -934,14 +946,20 @@ impl State {
                 at += 1;
             }
         }
-        let rebate = z[at..at + n_c].to_vec();
+        let rebate = z[at..at + n_c]
+            .iter()
+            .map(|x| x * self.rebate_unit)
+            .collect();
         at += n_c;
         let mut r = vec![1.0; n_g];
         for &g in &goods {
             r[g] = z[at].exp();
             at += 1;
         }
-        let scale = z[at..at + n_c].to_vec();
+        let scale = z[at..at + n_c]
+            .iter()
+            .map(|x| x * self.scale_unit)
+            .collect();
         at += n_c;
         let omega = Mat {
             rows: n_c,
@@ -1082,18 +1100,20 @@ pub fn calibrate_from(
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
         .collect();
-    let state = State {
-        n_p,
-        n_c,
-        traded: traded.clone(),
-        sigma: sigma_within.clone(),
-    };
 
     let mut q = start.clone();
     let mut r = vec![1.0; n_g];
     let mut rebate = vec![0.0; n_c];
     let mut y_local = setup.local_start()?;
     let mut weights = inp.pigl_weights()?;
+    let mut state = State {
+        n_p,
+        n_c,
+        traded: traded.clone(),
+        sigma: sigma_within.clone(),
+        rebate_unit: 0.0,
+        scale_unit: block_unit(&weights.scale),
+    };
     let mut lw: Option<Mat> = None;
     let mut history: Vec<Pass> = Vec::new();
     let (mut zs, mut fs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
@@ -1222,6 +1242,9 @@ pub fn calibrate_from(
             break;
         }
         // Anderson mixing of the passes' fixed point (prices, rebates, r and the PIGL weights).
+        if state.rebate_unit == 0.0 {
+            state.rebate_unit = block_unit(&rebate_new);
+        }
         let z = state.pack(&q, &rebate, &r, &weights);
         let f = state.pack(&q_new, &rebate_new, &scaling.r, &weights_new);
         let fz: Vec<f64> = f.iter().zip(&z).map(|(f, z)| f - z).collect();
@@ -1437,6 +1460,47 @@ mod tests {
         ] {
             assert_eq!(sci(x), want, "{x}");
         }
+    }
+
+    /// The mixing state holds rebates and PIGL scales relative to their block's unit, the other
+    /// blocks as they are, and unpacks back to the same values.
+    #[test]
+    fn state_packs_rebates_and_scales_relative_to_their_unit() {
+        let state = State {
+            n_p: 2,
+            n_c: 2,
+            traded: vec![true, false],
+            sigma: vec![0.1, 0.2],
+            rebate_unit: 4e9,
+            scale_unit: 2.5,
+        };
+        let q = Mat::from_fn(2, 2, |p, g| if g == 0 { 1.5 + p as f64 } else { 1.0 });
+        let (rebate, r) = (vec![1e9, 4e9], vec![1.1, 1.0]);
+        let w = Weights {
+            scale: vec![2.5, 0.5],
+            omega: Mat::from_fn(2, N_CATEGORIES, |c, j| 0.1 * (c + j) as f64),
+            within: Mat::from_fn(2, 2, |c, g| 0.3 + 0.1 * (c + g) as f64),
+            sigma: state.sigma.clone(),
+        };
+        let z = state.pack(&q, &rebate, &r, &w);
+        assert_eq!(&z[..2], &[1.5f64.ln(), 2.5f64.ln()]);
+        assert_eq!(&z[2..4], &[0.25, 1.0]);
+        assert_eq!(z[4], 1.1f64.ln());
+        assert_eq!(&z[5..7], &[1.0, 0.2]);
+        let (q2, rebate2, r2, w2) = state.unpack(&z);
+        let close = |a: &[f64], b: &[f64]| {
+            a.iter()
+                .zip(b)
+                .all(|(x, y)| (x - y).abs() <= 1e-15 * y.abs())
+        };
+        assert!(close(&q2.data, &q.data) && close(&rebate2, &rebate) && close(&r2, &r));
+        assert!(close(&w2.scale, &w.scale));
+        assert_eq!(
+            (w2.omega.data, w2.within.data),
+            (w.omega.data, w.within.data)
+        );
+        assert_eq!(block_unit(&[0.0, 0.0]), 1.0);
+        assert_eq!(block_unit(&[-3.0, 2.0]), 3.0);
     }
 
     #[test]
