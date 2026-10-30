@@ -64,6 +64,20 @@ comparing runs.
 - **Sim thread.** Owns the `EconWorld`. Each finished tick publishes an immutable view (mode
   columns per province, panel rows for the selection, the date) into the ring; the frame loop
   takes the latest by atomic swap. No lock is held while drawing.
+- **Time (step 5).** `sim::Runner` steps the `EconWorld` (calibrated steady state when the
+  pack has its calibration tables) on its own thread and publishes a view per tick into a
+  bounded channel of 4, the run-ahead ring; it blocks when the ring is full. The frame loop
+  takes at most the next view per frame without blocking. `clock::Clock` holds the presented
+  tick and fraction of its month: speeds 1 to 4 are 1, 7, 30.4 and 91.3 days per second, speed
+  5 presents each view as it arrives. Without the next view the date holds at the month's last
+  day and the sim-bound chip shows. Tick 0 is 1 January 2000 and dates count real month lengths.
+  Thinking further ahead while paused, eased slow-down and edits that drop the ring are P3
+  (0208's edit rule needs the edit log).
+- **Commands (step 5).** `commands` names every action and binds the standard keymap's Time
+  group (Space, 1-5, +/-, F5, Shift+F5, F10) and Map group (WASD pan, Ctrl+=/-/0 zoom);
+  buttons call commands by name. Keys arrive through a Slint `FocusScope`, not yet the winit
+  router of 0188. Step back, run to cursor, go to date, events and alerts need P3 state; the
+  registry moves to the crate P3 shares with the CLI (P3 plan, C).
 - **Determinism.** The app reads; edits go through the core. A headless run and an app run
   of the same ticks give the same state hash (test below).
 
@@ -71,8 +85,8 @@ comparing runs.
 
 | Invariant | Statement | Checked where |
 |---|---|---|
-| Read-only view | Running N ticks in the app and headless gives the same state hash | `tests/sim_hash.rs` |
-| Run-ahead neutrality | Ring on and off give the same hash at every tick (0208) | `tests/sim_hash.rs` |
+| Read-only view | Views through the ring carry the same state hash as a headless run at every tick | `tests/sim_hash.rs` (fixture world, 24 ticks) |
+| Run-ahead neutrality | Ring sizes 1 and 4 give the same hash at every tick (0208) | `tests/sim_hash.rs` |
 | Picking | The id under a pixel is the feature whose triangle covers it | `tests/picking.rs`, offscreen |
 | Ramps | Adjacent classes at least 5 CIEDE2000 apart under normal vision and simulated protanopia, deuteranopia and tritanopia (Machado et al. 2009, severity 1); sequential lightness monotonic (0221) | `ramps.rs`, `modes.rs` unit tests |
 
