@@ -1069,6 +1069,7 @@ The register lists every parameter that is not pinned by data, with its prior an
 | P03a | Price adjustment speed kappa1 | Markets | 0.05 to 0.5 per month, start 0.05 | Price volatility and autocorrelation | Free |
 | P03b | Inventory term kappa2 of the price rule | Markets | 0.05 to 0.5 per month when on; start 0 (off) | Price volatility and autocorrelation; stability region (ADR 0019) | Free |
 | P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move; binding ticks counted per province | Free |
+| P03d | Share m of each market's stability limit used by its price gain (ADR 0263) | Markets | 0 to 1, start 0.5 | Frictionless stability (V1); per-market speed | Free |
 | P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
 | P05 | Non-tariff border frictions | Trade | Log-uniform | Gravity border effects | Calibrated |
 | P06 | Goods substitution sigma within a PIGL category | Demand | 0.3 to 0.9, start 0.6 | Comin-Lashkari-Mestieri (2021) | Literature |
