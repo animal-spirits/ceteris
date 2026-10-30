@@ -256,8 +256,12 @@ Priority: intermediate users first, households share the rest, DESIGN 8.2). S' =
 supply goes to merchant inventory. Then (8.2):
 
 ```
-dlnp = pi^e + clip( kappa1 (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_max_g ),   S* = s_g D
+dlnp = pi^e + clip( kappa1_cell (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_max_g ),   S* = s_g D
 ```
+
+kappa1_cell is kappa1 (P03a) capped per market at the share m (P03d) of its stability limit (ADR
+0263; Stability region, Per-market gain): kappa1 itself in every market of a world without a
+calibration.
 
 The clip bounds the gap terms only (ADR 0106): expected inflation passes through unclipped, so a
 sustained inflation or collapse is bounded by the expectation rule, not by the numerical guard.
@@ -397,15 +401,25 @@ The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.125 / 0.054 | 0.055 / 0.008 | 0.019 / 0.061 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.203 / 0.074 | 0.056 / 0.050 | 0.020 / 0.113 |
 
-Per-market gain (ADR 0263, accepted; code after the pre-P3 B branch). Each cell's gain is
+Per-market gain (ADR 0263). Each cell's gain is
 kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with m = P03d (start 0.5, so
-J_ref 20 at kappa1 0.05), J_cell = E_cell + eta eps_cell / (2 - eta) at the run's eta. E_cell =
-1 + theta_g - (theta_g + 1) Pi_cell (local cells sigma), eps_cell the output-weighted mean of
-s_L sigma_FL / ((1 - s_L) a_VA) over the cell's enterprises. J is computed from the pack at
-calibration and fixed for the run. In the default mode no cell is capped (J at most 16.9 on the
-0256 pack); frictionless it slows the 298 traded cells above 20 and removes the São Tomé cycle
-below. J2 bounds one market only: coupled modes across goods (Albania g5 to g1 and g2) are not
-covered.
+J_ref 20 at kappa1 0.05; `TradeParams::price_gain`), J_cell = E_cell + eta eps_cell / (2 - eta) at
+the run's eta (P41; 1 frictionless). E_cell = 1 + theta_g - (theta_g + 1) Pi_cell for traded
+cells, Pi_cell the cell's share of its buyers' purchases weighted by the units it sells to each
+(Leontief inputs, sigma_d 0; at buyer price Gamma P_d, ADR 0200, the own-price elasticity of
+these orders is exactly E), computed per leg with the leg factors squared (two passes over the
+kernel legs: one destination sum of the spending, one with squared leg factors; a pair joined by
+several routes leaves out the cross terms between them); local cells E = sigma (P06). eps_cell is
+the largest over the cell's enterprises of s_L sigma_FL / ((1 - s_L) a_VA) (ADR 0263, As built: the
+enterprise maximum, which the ADR's numbers rest on). The calibration computes E_cell and eps_cell
+at the calibrated prices and spending (`ceteris_calibrate::elasticity`) and writes them to
+`econ_calib_cells.arrow` (calibration format 6); `EconWorld::new` combines them with the run's
+eta, once, and the gain stays fixed for the run (`EconWorld::set_network` keeps it). A world
+started from the data state has no calibration and runs kappa1 in every market. In the default
+mode no cell is capped (J at most 16.9 on the 0256 pack; on the fixture
+`no_cell_capped_in_the_default_mode`); frictionless it slows the traded cells above 20 (298 on
+the 0256 pack) and removes the São Tomé cycle below. J2 bounds one market only: coupled modes
+across goods (Albania g5 to g1 and g2) are not covered.
 
 In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
 outside for light manufacturing: J2 fails for the two light-manufacturing enterprises of São Tomé
@@ -543,8 +557,15 @@ miss is for the owner (B8).
   (`clip_lets_expected_inflation_through`), the wider clip of storable goods
   (`storable_goods_clip_at_0_3`) and clip counts (`clip_ticks_count_bindings`).
 - Stability: the Jury conditions against a toy market run through `Markets`
-  (`stability_region_matches_simulation`) and the default on the region's kappa2 = 0 edge
-  (`default_lies_on_the_untargeted_stock_edge`), in `tests/price_rule_stability.rs`.
+  (`stability_region_matches_simulation`), the default on the region's kappa2 = 0 edge
+  (`default_lies_on_the_untargeted_stock_edge`) and a frictionless market beyond J2 that cycles
+  at kappa1 and settles at its capped gain (`capped_gain_settles_a_market_beyond_j2`), in
+  `tests/price_rule_stability.rs`. Per-market gain (ADR 0263): the cap
+  (`price_gain_caps_at_the_share_of_the_limit`), the gain per cell in the rule
+  (`reprice_uses_the_gain_of_each_cell`), E_cell against a finite difference of the orders on
+  the calibrated fixture (`own_price_elasticity_matches_finite_difference`, calibrate crate),
+  eps_cell (`supply_elasticity_is_the_enterprise_maximum`) and J at the run's eta
+  (`gain_per_cell_follows_eta`, econ crate).
 - Property: goods and money conservation through T1-T4 under random supply and demand;
   gateway accounts net to zero; prices stay finite.
 - Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at
