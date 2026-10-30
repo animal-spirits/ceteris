@@ -240,7 +240,7 @@ The 2000 graph has 4,796 province anchors, 2,757 rail nodes, 2,284 ports (1,001 
 | Road | Network between adjacent provinces | Distance, road class, congestion, fuel | Dominant within continents |
 | Rail freight | Built lines | Distance, gauge breaks, electrification | Bulk goods |
 | Inland waterway | Navigable rivers, canals | Distance, seasonal depth | Bulk goods; not yet built |
-| Maritime (container, bulk, tanker) | Sea lanes via chokepoints (Suez, Panama, Hormuz, Malacca, Bosporus) | Distance, bunker fuel, port capacity, freight rates | Chokepoint closures are shocks; bulk and tanker cargo (theta class 3) at the bulk freight rate, P154 and P155 (ADR 0247) |
+| Maritime (container, bulk, tanker) | Sea lanes via chokepoints (Suez, Panama, Hormuz, Malacca, Bosporus) | Distance, bunker fuel, port capacity, freight rates | Chokepoint closures are shocks; a bulk and tanker rate per theta class, P154 and P155, built and off (ADR 0247) |
 | Air freight | Airport pairs | Distance, jet fuel | High value-to-weight goods |
 | Pipeline | Built oil and gas pipelines | Throughput, transit fees | Geopolitically exposed; not yet built (P8, with energy assets) |
 
@@ -1121,8 +1121,8 @@ Added for the modern scenario:
 | P52 | Entry costs by sector | Production | Log-uniform | Firm counts by size class; entry and exit rates | Calibrated |
 | P148 | Loss write-off threshold M | Production | 3 months of base sales | Limited liability of enterprises (ADR 0112) | Free |
 | P149 | Input stock cover | Production | 1 month | The cover of the input order rule (owner decision, 24 Oct 2026) | Free |
-| P154 | Bulk freight rate: multiplier on the sea cost per tonne-km, per theta class (ADR 0247) | Transport | 1 for classes 0 to 2; class 3 (fuels, mining) 0.026 | Slope of 2000 tanker and dry-bulk voyage rates per tonne against sea km, UNCTAD Review of Maritime Transport 2001 and 2002; off (1) if the ablation test fails | Literature |
-| P155 | Bulk freight rate: multiplier on the port handling fee, per theta class (ADR 0247) | Transport | 1 for classes 0 to 2; class 3 0.40 | Half the fixed part of the same rates over P04m's listed-port fee | Literature |
+| P154 | Bulk freight rate: multiplier on the sea cost per tonne-km, per theta class (ADR 0247) | Transport | 1 for every class (off: the ablation test failed on H2 distance); sourced class 3 (fuels, mining) 0.026 | Slope of 2000 tanker and dry-bulk voyage rates per tonne against sea km, UNCTAD Review of Maritime Transport 2001 and 2002 | Literature |
+| P155 | Bulk freight rate: multiplier on the port handling fee, per theta class (ADR 0247) | Transport | 1 for every class (off, as P154); sourced class 3 0.40 | Half the fixed part of the same rates over P04m's listed-port fee | Literature |
 
 Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it), P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090`) and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 

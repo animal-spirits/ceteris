@@ -524,9 +524,11 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    scaling's noise in the share over the share's slope: on the fixture 6.8e-9 for class 3, whose
    share moves by 2.7e-7 per unit nu, and 2e-10 or better for the others. That test checks the
    shares relative to their target (1e-6), a deviation from the PLAN's absolute 1e-6, which class
-   3's flat share passes for any nu from 0 to about 4. A target outside the shares at the
-   bracket's ends stops the calibration, naming the class (`nu_fit_is_monotone_and_bracketed`,
-   both ends). Interfaces as built: `border::fit_border_nu(inp, target, icio, limits, progress)
+   3's flat share passes for any nu from 0 to about 4. A target above the share at nu 0, the
+   largest the class reaches with nu >= 0, clamps the class at nu = 0, the corner of the
+   constraint, and the fit reports it (`Fit::clamped`, the share at nu 0 against the target;
+   ADR 0092, Amendment 2026-10-30); a target below the share at the bracket's upper end stops the
+   calibration, naming the class (`nu_fit_is_monotone_and_bracketed`, both ends). Interfaces as built: `border::fit_border_nu(inp, target, icio, limits, progress)
    -> Result<Fit, CalibrationError>` (no `u_star`, which stage 1 at the data state does not use;
    the ICIO flags; the shares and the evaluation count with the nu) and
    `border::target_shares(pack, theta_class) -> Result<([f64; 4], Vec<bool>), String>` (also the

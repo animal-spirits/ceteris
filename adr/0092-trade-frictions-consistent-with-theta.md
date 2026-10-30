@@ -63,6 +63,18 @@ Petroleum: (i) keep in good 5; (ii) move into good 1; (iii) a new good.
 - Pack: good 1 and good 5 totals equal the ICIO aggregation with C19 moved; econ golden hashes
   regenerated.
 
+## Amendment (2026-10-30): class 3 clamped at nu = 0
+
+Owner ruling 1B (2026-10-30) added a bulk freight rate for class 3 (ADR 0247) with an ablation
+test whose fallback is this amendment: the rate stays off by default and a class whose ICIO
+target is above its share at nu 0 is clamped at nu = 0, the corner of nu >= 0, with the miss
+recorded. The fit no longer stops there; it reports the clamped classes (`Fit::clamped`) and
+fits the others. A target below the share at the bracket's upper end still stops it.
+
+Miss on the 2000 pack (B1 econ tables, masses, home shares; rate off): class 3's ICIO target
+0.2964 against the model's 0.2007 at nu 0. The ablation result that triggered the fallback is in
+ADR 0247, As built.
+
 ## Consequences
 
 - The border effect is consistent with each class's theta. Food trade across borders falls to
