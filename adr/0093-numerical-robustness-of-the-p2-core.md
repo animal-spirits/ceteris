@@ -1,6 +1,7 @@
 # 0093. Numerical robustness of the P2 core
 
-Status: proposed (partly built, see As built)
+Status: proposed (partly built, see As built); the frictionless wage search amended by ADR 0266
+(input-capped labour targets)
 Date: 2026-10-25
 Design sections: 19.4; trade SPEC Active markets; econ SPEC Production, Labour
 
