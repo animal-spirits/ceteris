@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
     Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, impute, impute_pack, median_va_over_gdp,
-    sector_shares,
+    oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
@@ -257,22 +257,169 @@ fn imputed_va_follows_wdi_shares_split_by_donor_proportions() {
 }
 
 #[test]
-fn missing_sector_share_uses_gdp_times_the_shares_there_are() {
+fn missing_sector_share_leaves_the_rest_of_the_icio_median_va_over_gdp_to_its_goods() {
     let w = Wdi {
         services: BTreeMap::new(),
         ..wdi()
     };
     let got = one("XXX", &w, &obs());
-    // Agriculture 0.1 and industry 0.35 of GDP 1000 million USD, split as the donor's VA (the
-    // donor's own VA/GDP is not used).
+    // Agriculture 100, industry other than manufacturing 150, manufacturing 200 as with all shares;
+    // services take the ICIO median VA over GDP (0.8) less the 0.45 there are: 350 million USD.
+    let expected = [
+        100.0, 60.0, 15.0, 120.0, 40.0, 20.0, 20.0, 45.0, 30.0, 350.0,
+    ];
     assert_eq!(got.va_basis, Basis::WdiGdp);
     assert_eq!(got.donor.as_deref(), Some("BBB"));
-    assert!(approx(total(&got.table.va), 450.0, 1e-6));
-    assert!(all_close(
-        &proportions(&got.table.va),
-        &donor_proportions(),
+    assert!(all_close(&got.table.va, &expected, 1e-12));
+    assert!(closes(&got.table, 1e-9, 1e-12));
+}
+
+#[test]
+fn agriculture_and_manufacturing_alone_leave_the_rest_to_every_other_good() {
+    // Kuwait in 2000: no industry or services share.
+    let w = Wdi {
+        industry: BTreeMap::new(),
+        services: BTreeMap::new(),
+        ..wdi()
+    };
+    let got = one("XXX", &w, &obs());
+    // 800 - 100 - 200 = 500 over goods 1, 2, 7, 8, 9 as the donor (4, 1, 3, 2, 70) / 80.
+    let rest = [1, 2, 7, 8, 9].map(|g| 500.0 * DONOR_VA[g] / 80.0);
+    assert!(approx(total(&got.table.va), 800.0, 1e-12));
+    assert!(approx(got.table.va[0], 100.0, 1e-12));
+    assert!(approx(got.table.va[3..7].iter().sum(), 200.0, 1e-12));
+    for (g, want) in [1, 2, 7, 8, 9].into_iter().zip(rest) {
+        assert!(approx(got.table.va[g], want, 1e-12), "{g}");
+    }
+}
+
+#[test]
+fn known_shares_above_the_median_leave_nothing_to_the_rest() {
+    let w = Wdi {
+        agriculture: map(&[("XXX", 0.5)]),
+        industry: map(&[("XXX", 0.4)]),
+        services: BTreeMap::new(),
+        ..wdi()
+    };
+    let got = one("XXX", &w, &obs());
+    assert!(approx(total(&got.table.va), 900.0, 1e-12));
+    assert_eq!(got.table.va[9], 0.0);
+}
+
+/// `wdi()` with oil rents for donor AAA (2 percent of GDP against VA 4 of 100: VA over rents 2)
+/// and the given oil and gas rents for XXX.
+fn with_rents(oil: f64, gas: f64) -> Wdi {
+    Wdi {
+        oil_rents: map(&[("AAA", 0.02), ("XXX", oil)]),
+        gas_rents: map(&[("XXX", gas)]),
+        ..wdi()
+    }
+}
+
+/// `donors()` with donor CCC (not XXX's) at crude oil and gas 40 of its industry VA of 49, total
+/// VA still 100: the largest share of oil and gas in industry is 40 / 49.
+fn oil_donors() -> BTreeMap<String, CountryIo> {
+    let mut icio = donors();
+    let c = icio.get_mut("CCC").unwrap();
+    c.va = [10.0, 40.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 41.0];
+    c.output = c.va.map(|v| v / 0.7);
+    icio
+}
+
+fn oil(wdi: &Wdi) -> Economy {
+    run(&[("XXX", "XXX")], &oil_donors(), wdi, &obs(), &PLAIN)["XXX"].clone()
+}
+
+#[test]
+fn oil_gas_most_of_industry_is_the_largest_icio_share() {
+    assert!(approx(
+        oil_gas_most_of_industry(&oil_donors()),
+        40.0 / 49.0,
         1e-12
     ));
+}
+
+#[test]
+fn oil_gas_va_over_rents_sums_the_icio_economies_with_a_rent() {
+    assert!(approx(
+        oil_gas_va_over_rents(&donors(), &with_rents(0.0, 0.0)),
+        2.0,
+        1e-12
+    ));
+}
+
+#[test]
+fn oil_and_gas_rents_set_crude_oil_and_gas_out_of_its_group() {
+    let got = oil(&with_rents(0.05, 0.01));
+    // 0.06 of GDP times 2: 120 of the 150 of industry other than manufacturing; the other 30 over
+    // goods 2, 7, 8 as the donor (1, 3, 2).
+    assert!(approx(got.table.va[1], 120.0, 1e-12));
+    for (g, want) in [(2, 5.0), (7, 15.0), (8, 10.0)] {
+        assert!(approx(got.table.va[g], want, 1e-12), "{g}");
+    }
+    assert!(approx(total(&got.table.va), 1000.0 * 0.9, 1e-12));
+    assert_eq!(got.va_basis, Basis::Wdi);
+    assert!(closes(&got.table, 1e-9, 1e-12));
+}
+
+#[test]
+fn oil_and_gas_above_their_group_take_from_manufacturing() {
+    // 0.2 of GDP exceeds the 0.15 of industry other than manufacturing, so all industry (0.35)
+    // is one group: oil and gas 200, the other 150 over goods 2 to 8 as the donor (1, 6, 2, 1, 1,
+    // 3, 2) / 16.
+    let got = oil(&with_rents(0.1, 0.0));
+    assert!(approx(got.table.va[1], 200.0, 1e-12));
+    let want: Vec<f64> = DONOR_VA[2..9].iter().map(|v| 150.0 * v / 16.0).collect();
+    assert!(all_close(&got.table.va[2..9], &want, 1e-12));
+    assert!(approx(total(&got.table.va), 900.0, 1e-12));
+}
+
+#[test]
+fn oil_and_gas_take_at_most_the_largest_icio_share_of_industry() {
+    // Turkmenistan in 2000: rents above all of industry. Oil and gas 350 * 40 / 49; the rest
+    // over goods 2 to 8 as the donor, so electricity and construction keep a producer.
+    let got = oil(&with_rents(0.2, 0.0));
+    let rest = 350.0 * 9.0 / 49.0;
+    assert!(approx(got.table.va[1], 350.0 * 40.0 / 49.0, 1e-12));
+    let want: Vec<f64> = DONOR_VA[2..9].iter().map(|v| rest * v / 16.0).collect();
+    assert!(all_close(&got.table.va[2..9], &want, 1e-12));
+}
+
+#[test]
+fn oil_and_gas_with_no_sector_share_come_out_of_the_median_level() {
+    let zero = map(&[("XXX", 0.0)]);
+    let w = Wdi {
+        agriculture: zero.clone(),
+        industry: zero.clone(),
+        manufacturing: zero.clone(),
+        services: zero,
+        ..with_rents(0.1, 0.0)
+    };
+    let got = oil(&w);
+    // Venezuela in 2000: 200 of the 800, the other 600 over the other goods as the donor.
+    assert!(approx(total(&got.table.va), 800.0, 1e-12));
+    assert!(approx(got.table.va[1], 200.0, 1e-12));
+    assert!(approx(got.table.va[9], 600.0 * 70.0 / 96.0, 1e-12));
+}
+
+#[test]
+fn a_donor_without_oil_and_gas_still_gives_oil_and_gas_output() {
+    let mut icio = oil_donors();
+    let b = icio.get_mut("BBB").unwrap();
+    (b.va[1], b.output[1]) = (0.0, 0.0);
+    for row in &mut b.io {
+        row[1] = 0.0;
+    }
+    let got = run(
+        &[("XXX", "XXX")],
+        &icio,
+        &with_rents(0.05, 0.01),
+        &obs(),
+        &PLAIN,
+    )["XXX"]
+        .clone();
+    assert!(approx(got.table.va[1], 120.0, 1e-12));
+    assert_eq!(got.table.output[1], got.table.va[1]);
     assert!(closes(&got.table, 1e-9, 1e-12));
 }
 
@@ -564,7 +711,7 @@ fn split_economies_sum_gdp_and_weight_shares_by_gdp() {
 
 // Tests below need the downloaded sources and the 2000 pack; CI is data-free.
 
-const NAMES: [&str; 18] = [
+const NAMES: [&str; 20] = [
     "BL_v3_MF1564.csv",
     "BPJresult_AGE_V01.csv",
     "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv",
@@ -580,6 +727,8 @@ const NAMES: [&str; 18] = [
     "wdi_NV.IND.MANF.ZS.zip",
     "wdi_NV.SRV.TOTL.ZS.zip",
     "wdi_NY.GDP.MKTP.CD.zip",
+    "wdi_NY.GDP.PETR.RT.ZS.zip",
+    "wdi_NY.GDP.NGAS.RT.ZS.zip",
     "adb_kidb_NY_GDP_PCAP_CD_COO.csv",
     "mpd2023_web.xlsx",
     "ppp_2000_1km_Aggregated.tif",
@@ -821,4 +970,44 @@ fn real_venezuela_is_not_left_empty() {
     let ven = &d.imputed["VEN"];
     assert_eq!(ven.va_basis, Basis::WdiGdp);
     assert!((80e3..130e3).contains(&total(&ven.table.va)));
+}
+
+/// Economies whose WDI 2000 lacks one of agriculture, industry or services.
+const PARTIAL_SHARES: [&str; 9] = [
+    "BMU", "ERI", "KEN", "KWT", "LBY", "MAC", "MDG", "PNG", "TUV",
+];
+
+#[test]
+fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
+    let Some(d) = data() else { return };
+    let ratio = median_va_over_gdp(&d.real, &d.wdi);
+    let mut scope = Vec::new();
+    for (code, c) in &d.imputed {
+        let (gdp, s) = sector_shares(&d.wdi, &[d.iso.get(code).unwrap_or(code).clone()]);
+        let have = [s.agriculture, s.industry, s.services];
+        let partial = have.iter().any(Option::is_some) && have.iter().any(Option::is_none);
+        if c.va_basis != Basis::Icio && gdp > 0.0 && partial {
+            scope.push(code.as_str());
+            // All nine have less than the median in the shares there are.
+            assert!(
+                approx(total(&c.table.va) * 1e6, gdp * ratio, 1e-9),
+                "{code}"
+            );
+        }
+    }
+    assert_eq!(scope, PARTIAL_SHARES);
+    // Kuwait was 135 million USD against GDP 37.7 billion.
+    assert!(total(&d.imputed["KWT"].table.va) > 30e3);
+}
+
+#[test]
+fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
+    let Some(d) = data() else { return };
+    let k = oil_gas_va_over_rents(&d.real, &d.wdi);
+    assert!((0.5..3.0).contains(&k), "{k}");
+    // Billion USD of crude oil and gas VA, against about 21, 14, 20 and 33 of 2000 crude output.
+    for (code, low) in [("KWT", 10.0), ("LBY", 5.0), ("DZA", 8.0), ("VEN", 15.0)] {
+        let va = d.imputed[code].table.va[1] / 1e3;
+        assert!(va > low, "{code} {va}");
+    }
 }
