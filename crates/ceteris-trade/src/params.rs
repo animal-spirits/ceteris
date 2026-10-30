@@ -80,12 +80,43 @@ pub struct TradeParams {
     /// since no value in the prior brings the spectral radius below 1 on the P1 graph, and
     /// `Network::route_taus` stays `None`.
     pub theta_r: f64,
+    /// P154 bulk freight rate (ADR 0247): multiplier on the sea cost per tonne-km (P04c, sea and
+    /// canal edges) for the legs of each theta class. 1 for classes 0 to 2; class 3 (fuels and
+    /// mining) 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
+    /// km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC, Parameters) over
+    /// P04c. It reaches the kernel only through `Network::bulk`.
+    pub bulk_sea: [f64; N_CLASSES],
+    /// P155 bulk freight rate (ADR 0247): multiplier on the listed and minor port fees (P04m)
+    /// per theta class. 1 for classes 0 to 2; class 3 0.40, half the fixed part of the same
+    /// rates over the listed-port fee.
+    pub bulk_port: [f64; N_CLASSES],
 }
 
 impl TradeParams {
     /// The border friction of good `g`'s theta class.
     pub fn border_nu_of(&self, g: usize) -> f64 {
         self.border_nu[usize::from(self.theta_class[g])]
+    }
+
+    /// The bulk freight rate (ADR 0247) as the theta classes that use it and their (sea, port)
+    /// multipliers, or `None` when every class is at 1. Panics when two classes use different
+    /// rates: the network carries one set of bulk legs.
+    pub fn bulk_rate(&self) -> Option<([bool; N_CLASSES], f64, f64)> {
+        let classes: [bool; N_CLASSES] =
+            std::array::from_fn(|c| self.bulk_sea[c] != 1.0 || self.bulk_port[c] != 1.0);
+        let c = classes.iter().position(|&b| b)?;
+        let rate = (self.bulk_sea[c], self.bulk_port[c]);
+        for k in (0..N_CLASSES).filter(|&k| classes[k]) {
+            assert!(
+                (self.bulk_sea[k], self.bulk_port[k]) == rate,
+                "classes {c} and {k} have different bulk freight rates"
+            );
+            assert!(
+                rate.0 > 0.0 && rate.1 >= 0.0 && rate.0.is_finite() && rate.1.is_finite(),
+                "bulk freight rate {rate:?}"
+            );
+        }
+        Some((classes, rate.0, rate.1))
     }
 
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
@@ -115,6 +146,8 @@ impl Default for TradeParams {
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
+            bulk_sea: [1.0, 1.0, 1.0, 0.026],
+            bulk_port: [1.0, 1.0, 1.0, 0.40],
         }
     }
 }

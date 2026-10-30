@@ -399,6 +399,9 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         theta_r: _,
         // groups goods for kernel sharing; the dynamics read theta alone
         theta_class: _,
+        // reach the kernel only through Network.bulk, in the inputs digest
+        bulk_sea: _,
+        bulk_port: _,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));

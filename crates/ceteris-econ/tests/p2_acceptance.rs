@@ -458,7 +458,7 @@ fn kernel_rebuilds_after_chokepoint_closure() {
     let suez = pack.chokepoint("Suez Canal").expect("Suez in the pack");
     pack.graph
         .set_chokepoint_closed(suez, true, &TransportParams::default());
-    let closed = inputs.network_from_graph(&pack, &gateways);
+    let closed = inputs.network_from_graph(&pack, &gateways, &inputs.trade_params());
     let open = &inputs.network;
     let legs = |n: &ceteris_trade::Network| (n.domestic.len(), n.access.len(), n.crossings.len());
     assert_eq!(

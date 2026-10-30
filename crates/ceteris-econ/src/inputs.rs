@@ -435,6 +435,7 @@ impl EconInputs {
             access,
             crossings,
             route_taus,
+            bulk,
         } = network;
         let Countries {
             omega,
@@ -536,6 +537,14 @@ impl EconInputs {
                 &rt.crossing_hours,
             ] {
                 e.f64s(list.as_flattened());
+            }
+        }
+        // appended only when present, so networks without a bulk freight rate keep their digest
+        if let Some(b) = bulk {
+            b"bulk-legs".iter().for_each(|&b| e.u8(b));
+            b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
+            for legs in [&b.domestic, &b.access, &b.crossings] {
+                encode_legs(&mut e, legs);
             }
         }
         state_hash(&e.into_bytes())

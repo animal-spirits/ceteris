@@ -18,7 +18,7 @@
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
 //! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them: origin markets of traded goods, province markets of local goods) |
-//! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64 |
+//! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64, bulk_cost_per_t f64, bulk_hours f64 (the leg at the bulk freight rate, `Network::bulk`, ADR 0247; NaN without bulk legs) |
 //! | `kernel_domestic` | good u8, o u32, d u32, k f64, inv_tau f64 |
 //! | `kernel_access` | good u8, province u32, gateway u32, k f64, inv_tau f64 |
 //! | `kernel_crossing` | good u8, a u32, b u32, k f64 (gateway masses included), inv_duty f64, inv_loss f64, lag u8 |
@@ -76,8 +76,10 @@ use crate::world::{
 /// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093). 10: `params.json` has
 /// `theta_scale` (P150), by which the kernel factors and the sourcing scale theta (ADR 0101).
 /// 11: `gateways` has `mass` and the crossings' k carry the gateway masses, and `params.json`
-/// `border_nu` is a list, one per theta class (ADR 0092).
-pub const EXPORT_FORMAT: &str = "11";
+/// `border_nu` is a list, one per theta class (ADR 0092). 12: `legs` has `bulk_cost_per_t` and
+/// `bulk_hours`, and `params.json` has `bulk_sea` (P154), `bulk_port` (P155) and the network's
+/// `bulk_classes` (ADR 0247).
+pub const EXPORT_FORMAT: &str = "12";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -329,6 +331,14 @@ pub fn write_inputs(
         .enumerate()
         .flat_map(|(kind, legs)| legs.iter().map(move |l| (kind as u8, l)))
         .collect();
+    let bulk: Vec<Option<&ceteris_trade::Leg>> = match &net.bulk {
+        Some(b) => [&b.domestic, &b.access, &b.crossings]
+            .into_iter()
+            .flatten()
+            .map(Some)
+            .collect(),
+        None => vec![None; legs.len()],
+    };
     write_table(
         dir,
         "legs",
@@ -338,13 +348,26 @@ pub fn write_inputs(
             u32s("to", legs.iter().map(|l| l.1.to)),
             f64s("cost_per_t", legs.iter().map(|l| l.1.cost_per_t)),
             f64s("hours", legs.iter().map(|l| l.1.hours)),
+            f64s(
+                "bulk_cost_per_t",
+                bulk.iter().map(|l| l.map_or(f64::NAN, |l| l.cost_per_t)),
+            ),
+            f64s(
+                "bulk_hours",
+                bulk.iter().map(|l| l.map_or(f64::NAN, |l| l.hours)),
+            ),
         ],
     )?;
 
     write_kernel(dir, kernel)?;
     fs::write(
         dir.join("params.json"),
-        params_json(static_digest(inputs, params, trade), params, trade),
+        params_json(
+            static_digest(inputs, params, trade),
+            params,
+            trade,
+            net.bulk.as_ref().map(|b| b.classes),
+        ),
     )?;
     Ok(())
 }
@@ -455,7 +478,12 @@ fn pigl_check(inputs: &EconInputs, params: &EconParams) -> Vec<Column> {
     columns
 }
 
-fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
+fn params_json(
+    digest: [u8; 32],
+    p: &EconParams,
+    t: &TradeParams,
+    bulk_classes: Option<[bool; ceteris_trade::N_CLASSES]>,
+) -> String {
     let register = [
         ("theta", "P01"),
         ("theta_class", "P01"),
@@ -478,6 +506,8 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", "P41"),
         ("edu_eff", "P42"),
         ("time_cost", "P43"),
+        ("bulk_sea", "P154"),
+        ("bulk_port", "P155"),
         ("expectation_gain", "P45"),
         ("rationing", "S11"),
         ("technology", "S09"),
@@ -531,6 +561,12 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("expectation_gain", num(t.expectation_gain)),
         ("border_nu", nums(&t.border_nu)),
         ("time_cost", nums(&t.time_cost)),
+        ("bulk_sea", nums(&t.bulk_sea)),
+        ("bulk_port", nums(&t.bulk_port)),
+        (
+            "bulk_classes",
+            format!("{:?}", bulk_classes.unwrap_or_default()),
+        ),
     ];
     let object = |items: &[(&str, String)]| {
         let lines: Vec<String> = items
