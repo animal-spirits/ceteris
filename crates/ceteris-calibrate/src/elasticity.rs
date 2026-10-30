@@ -12,7 +12,8 @@ use ceteris_reference::model::{Factors, Model, Sourcing, cells, good_major};
 /// `spend` (P, G) is spending by destination, `src` the sourcing at the calibrated prices. Pi
 /// comes from two passes over the kernel legs, one destination sum of the spending and one with
 /// squared leg factors, so a pair joined by several routes leaves out the cross terms between
-/// them.
+/// them. A traded cell that reaches no buyer with spending has Pi 0, so E = 1 + theta_g, the
+/// study's value and the limit of a vanishing share.
 pub fn demand(m: &Model, src: &Sourcing, spend: &Mat) -> Mat {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
@@ -71,7 +72,7 @@ pub fn demand(m: &Model, src: &Sourcing, spend: &Mat) -> Mat {
                 let pi = if t[j] > 0.0 {
                     src.w[j] * t2[j] / t[j]
                 } else {
-                    1.0
+                    0.0
                 };
                 1.0 + inp.theta[g] - (inp.theta[g] + 1.0) * pi
             }
