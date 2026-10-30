@@ -368,8 +368,9 @@ fn pass(p: &Province, f: &mut [f64; 3], w: &mut Work) -> Pass {
     Pass { map, pieces }
 }
 
-/// A fall of a fill, per pass or cycle, that rounding cannot produce: [`RESOLVABLE`] units in
-/// the last place of the fill.
+/// A fall of a fill, per pass or cycle, of more than [`RESOLVABLE`] units in the last place of
+/// the fill. A smaller fall is taken as no fall, whatever its source: rounding, or a real loop
+/// whose gain is within about 9e-13 of 1.
 fn resolvable(before: f64, after: f64) -> bool {
     before - after > RESOLVABLE * f64::EPSILON * before
 }
@@ -399,6 +400,12 @@ const CONFIRMED: f64 = 1e-12;
 /// Passes after which [`fills`] moves the goods still falling to the last pass's fixed point
 /// (ADR 0093, bounded work).
 pub const STALL_PASSES: usize = 256;
+/// Passes after which [`fills`] ends on its fallback ([`capped`]), the stall reported: the
+/// bound on its passes (a jump's confirming passes count).
+pub const PASS_CAP: usize = 4 * STALL_PASSES;
+/// The fit the fills keep where the passes stop short of their end: 1e-12 of a good's flows,
+/// the Leontief invariant's tolerance (ADR 0093, bounded work).
+const FIT: f64 = 1e-12;
 /// Moves to a pass's fixed point after which [`fills`] takes the fills as they are.
 const MAX_MOVES: usize = 3;
 /// Cycles followed and maps applied by the jumps within one [`fills`], all jumps together.
@@ -647,6 +654,14 @@ pub fn fills(p: &Province) -> Fills {
                 stalled,
             };
         }
+        if passes >= PASS_CAP {
+            return Fills {
+                fills: capped(p, f, &mut w),
+                passes,
+                work: w.work,
+                stalled: true,
+            };
+        }
         if tail.len() == PERIOD {
             tail.remove(0);
         }
@@ -656,7 +671,7 @@ pub fn fills(p: &Province) -> Fills {
         // last one to three passes ends at its fixed point, clamped to [0, f], and the goods it
         // would lower by more than rounding move there, where the cycle's passes from there
         // return it. Where none would after a rounding pass (the fills are at the fixed point
-        // to rounding, or the map falls to 0 only by rounding: no constant, so the fixed point
+        // to rounding, or the map falls to 0 by less than the margin: no constant, so the fixed point
         // is 0, and no resolvable fall), the fills are taken as they are; after a stall, the
         // plain passes go on and the stall is reported.
         let lowered: Vec<usize> = (0..3).filter(|&j| f[j] != start[j]).collect();
@@ -728,7 +743,8 @@ fn settle(
     let periods = if rounding { 1..=tail.len() } else { 1..=1 };
     for period in periods.filter(|&n| n <= tail.len()) {
         let cycle = &tail[tail.len() - period..];
-        let Some(fp) = fixed_point(cycle, f) else {
+        // a fixed point outside [0, f] beyond the solve's rounding is not where the passes go
+        let Some(fp) = fixed_point(cycle, f).filter(|fp| fp.limit) else {
             continue;
         };
         if rounding && fp.cut.iter().all(|&j| fp.g[j] == 0.0) {
@@ -755,6 +771,23 @@ fn settle(
         }
     }
     None
+}
+
+/// The fills [`fills`] returns at [`PASS_CAP`]: the current ones, where every good fits to
+/// [`FIT`] of its flows, else with the goods that do not set to 0 one at a time in good order
+/// until every good does (all fills 0 always fit: no user of a local good then runs).
+fn capped(p: &Province, mut f: [f64; 3], w: &mut Work) -> [f64; 3] {
+    loop {
+        p.outputs(&f, &mut w.y);
+        let short = (0..3).find(|&j| {
+            let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+            uncovered > rest + FIT * (uncovered + rest)
+        });
+        match short {
+            Some(j) => f[j] = 0.0,
+            None => return f,
+        }
+    }
 }
 
 /// What [`fills`] returns.
