@@ -331,20 +331,69 @@ and pairs of local goods some user takes both of (econ SPEC, Production; asserte
 tick in `local_chain_terminates_on_cycles`, at most 6 passes there against bounds of 12 and up).
 On a fall of gain 0.995 to a kink 1,500 cycles on, 7 passes become 4
 (`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`). On 200,000 random provinces of
-each of five families, 21 of 1,000,000 take more than their kinks allow, against 140 before:
-falls below the margin, pieces repeating over more than 3 passes, collapses only the stall rule
-ends. No golden moves: the chain does not bind on the golden runs. The cycle fixture's run
+each of five families, 21 of 1,000,000 take more than their kinks allow, against 140 before.
+No golden moves: the chain does not bind on the golden runs. The cycle fixture's run
 moves from tick 22, where province 10's fills (about 5e-19) land 300 units in the last place
 apart, in 4 passes instead of 5, and the difference grows from there.
 
-Collapses take fewer passes, so `translated_collapses_sample`, which translates the collapses of
-12 or more passes, now finds 7 of 300,000 draws (43 before) and `translated_collapses_full` 62
-of 3,000,000 (420); their minimum case counts follow (21 and 186). A cut at 8 passes would take
-in seed 1122501757669556625, where the test's degenerate-limit heuristic is wrong about good 0
-(limit 1; the plain iteration and the fills, with either jump, give t).
+Collapses take fewer passes, so `translated_collapses_sample`, which translated the collapses of
+12 or more passes, found 7 of 300,000 draws (43 before) and `translated_collapses_full` 62 of
+3,000,000 (420). That selection used the code under test; the next paragraph replaces it.
+
+**Chain bound, accounted (2026-10-30, task B3 fill round 3).** The bound 2 + 3 + 2K holds where
+every jump applies, and the 21 exceedances above were described by cause without evidence. The
+fills now report the passes outside the accounting (`Fills::uncovered`): a pass after which no
+jump moved and one did not apply (its cycle's map undefined or singular, its fall within
+rounding, or the budget spent); two for a pass that cuts a good by rounding alone while another
+falls resolvably (it changes the pieces where no kink lies and ends the previous pass's jump,
+as a kink costs two); a pass a stop moves on from; at the stall rule every pass since the last
+move, and every pass after a stall. `chain_passes_within_their_kinks` asserts passes <=
+2 + 3 + 2K + uncovered on random provinces of the five families; it held on 3,000,000 probed.
+The exceedances, rerun at this code (22 of 1,000,000: the 21 and one that stalls, which the
+first count left out), classify as:
+
+| Cause | Cases | Example (k of k x 0x9E3779B97F4A7C15) |
+|---|---|---|
+| A good cut by rounding every other pass: at its limit with U = R along the rest of the fall, each cut ends the last pass's jump after a few cycles | 10 | 175527: 88 passes, bound 25, 39 cuts; 3779: 68, bound 27 |
+| Stall rule at 257 passes: pieces that repeat over 4 or more passes, or binding fills switching every pass, so no jump of up to 3 passes applies | 11 | 2267: period 4; 99418: goods 0 and 1 switch 204 times; 73799 stalls, 792 passes |
+| A step's root rounded onto a kink every other pass (good 0 lands on good 2's fill), so the cycle's map is undefined | 1 | 170254: 14, bound 11 |
+
+None exceeds the bound where every jump applies, so the derivation stands under its stated
+condition (`chain_passes_beyond_their_kinks_are_uncovered` keeps the 22). The pair term remains
+an assumption: a pair of goods can switch its binding more than once (175527, goods 0 and 1,
+three times early in the fall; 23 provinces with no uncovered pass, within 6 of their bound,
+have such a pair), and the allowance of two passes per kink has held each one. About 11% of
+provinces have an uncovered pass; those without stay at least 1 pass inside the bound. Neither
+this property nor the fixture's bound tells apart the jump that ended at the doubling's last
+check (with it, 141 of 1,000,000 exceed 2 + 3 + 2K, all with uncovered passes); the unit test
+above is the guard.
+
+`translated_collapses_*` now choose the collapses without the code under test: the plain fill
+iteration (bisection, fills below 1e-200 flushed to 0) ends with at least two fills of 0, about
+23% of draws. The degenerate-limit heuristic is checked against the plain iteration on the
+translated province: a good where they disagree (seed 1122501757669556625 at 0.3) gets the loose
+check of lying in [t, 1] only. Some limits turn on rounding whatever the solver: a good whose
+balance with its own fill raised to 1 is within 1e-11 of its flows of 0 can stay at 1 or fall
+to t (seeds 1097310483361641164, 7641237549142102837, 13946236107313884973 at 0.1, where the
+fills and the plain iteration end on different sides); where a fill is off its confirmed limit
+and such a good is present, every good of the case gets the loose check. The sample is 5,000
+draws (3,552 cases, 2,290 held to every heuristic limit, about 14 s in debug) and the full run
+300,000 (207,054 cases); the minimums are these counts. The named regression seeds are all held
+to their exact limits.
+
+The full run finds one solver defect: seed 13067305529229119429 at 0.3 ends at [0.267, 0, 0]
+against t = 0.3 (the plain iteration gives t to rounding, and no good of a translated province
+can fall below t). The third pass reaches t to rounding on the pieces below t; at that stop
+`settle` takes the last pass's fixed point wherever it lies, [0.267, 0, 0], where every good
+fits and the confirming passes return it. Holding that fixed point to 9.3e-10 of f, as the
+cycles of two and three passes are, fixes the case and fails
+`near_singular_cycle_keeps_its_limit`, whose real loop of gain 1 - 1e-13 needs the far fixed
+point. Telling the two apart is a change to the solver, open pending a ruling
+(`translated_collapse_settles_below_its_limit`, ignored; `translated_collapses_full` fails on it).
 
 **Pass cap.** A jump's confirming passes (up to PERIOD = 3) came after the cap check, so a call
-could run 1,027 passes. The fallback now starts past 1,021, and no call runs more than 1,024.
+could run 1,027 passes. The fallback now starts at 1,021 passes, and no call runs more than
+1,024.
 
 **Descent.** The step's bounded descent counts its fit evaluations (at most 8 + 1 + 64, asserted
 in debug builds and in its regression test), and asserts in debug builds that the good's

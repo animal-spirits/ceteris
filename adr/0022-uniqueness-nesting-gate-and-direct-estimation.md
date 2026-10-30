@@ -92,6 +92,9 @@ for the 80 ICIO economies (44,800 rows). Fixed effects exporter x good and impor
 
 Since the OECD key (ADR 0023 amendment, 2026-10-25) the P01 defaults are 2.62 for food, 5.19 for good 6
 and 10.57 for goods 0, 1, 2, 4 and 5. The estimates were made on the first partition and were not rerun.
+They also predate the bulk legs (ADR 0247, 2026-10-30): the S05 costs of class 3 now take its
+sea km and port fees at P154 and P155, so the P04 ratios above, fitted on base legs for every
+good, are stale. They are rerun (`ceteris gravity`, owner-side) at pre-P3 B8.
 
 theta is minus the coefficient on ln(1 + tariff), with ln tau (S05) as a free control. P05 pools the
 classes' ln(1 + nu_c) = b_c / beta_c (border and tariff coefficients of one fit; class nu 0.388, 0.158,
