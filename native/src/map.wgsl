@@ -11,6 +11,10 @@ struct View {
     paper: vec4f,
     ink: vec4f,
     county_borders: u32,
+    // Province ids (index + 1; 0 for none).
+    selected: u32,
+    origin: u32,
+    hover: u32,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -92,7 +96,8 @@ fn fs_bg(in: ScreenOut) -> FsOut {
 }
 
 // Borders from the id target: where neighbouring pixels differ in country (both sides, so two
-// pixels wide), province or county (one side, one pixel). Sea is country 0.
+// pixels wide), province or county (one side, one pixel). Sea is country 0. The selected and
+// origin provinces get a two-pixel outline inside their edge; the hovered one is lightened.
 
 @group(1) @binding(0) var ids: texture_2d<u32>;
 @group(1) @binding(1) var countries: texture_2d<u32>;
@@ -116,6 +121,13 @@ fn fs_borders(in: ScreenOut) -> @location(0) vec4f {
     let here = id_at(p);
     let own = country(here.x);
     let offsets = array(vec2i(1, 0), vec2i(0, 1), vec2i(-1, 0), vec2i(0, -1));
+    if here.x != 0u && (here.x == view.selected || here.x == view.origin) {
+        for (var k = 0; k < 8; k++) {
+            if id_at(p + offsets[k % 4] * (1 + k / 4)).x != here.x {
+                return select(view.ink, view.paper, here.x == view.origin);
+            }
+        }
+    }
     for (var k = 0; k < 4; k++) {
         if country(id_at(p + offsets[k]).x) != own {
             return vec4f(view.ink.rgb, 0.85);
@@ -129,6 +141,9 @@ fn fs_borders(in: ScreenOut) -> @location(0) vec4f {
         if view.county_borders == 1u && there.y != here.y && there.y != 0u && here.y != 0u {
             return vec4f(view.ink.rgb, 0.18);
         }
+    }
+    if here.x != 0u && here.x == view.hover {
+        return vec4f(view.paper.rgb, 0.3);
     }
     discard;
 }

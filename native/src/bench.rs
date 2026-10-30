@@ -110,6 +110,15 @@ impl Bench {
             v[v.len() / 2]
         };
         println!("CETERIS_BENCH fps p50 {:.0}", 1e3 / p50);
+        // Where the hitches fall: at start-up, or with the camera script.
+        let slow: Vec<String> = self
+            .intervals
+            .iter()
+            .enumerate()
+            .filter(|&(_, &ms)| ms > 2.0 * p50)
+            .map(|(k, ms)| format!("{} ({ms:.1} ms)", k + 1))
+            .collect();
+        println!("CETERIS_BENCH frames over 2x p50: [{}]", slow.join(", "));
     }
 }
 
