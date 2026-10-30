@@ -11,28 +11,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Both jobs run on the owner's self-hosted Mac (aarch64-darwin) while hosted minutes are
+  # exhausted. The x86-64 Linux leg of the cross-architecture golden check (Section 4.5) is
+  # paused until hosted runners return. Target dirs sit outside the checkout so they survive
+  # the clean checkout between runs.
   rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Golden hashes must agree across architectures (Section 4.5). macOS minutes count 10x,
-        # so pull requests run Linux only and the cross-architecture check runs on main.
-        os: ${{ github.event_name == 'push' && fromJSON('["macos-14", "ubuntu-latest"]') || fromJSON('["ubuntu-latest"]') }}
-    runs-on: ${{ matrix.os }}
+    # Fork pull requests never reach the self-hosted runner.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rust
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain (pinned by rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
       - name: Data-source licence manifest and research pack profile (ADRs 0005, 0050)
         run: cargo run --release --bin ceteris -- pack check-sources --profile research
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Determinism bans still fire (ADR 0097)
         run: scripts/check_clippy_bans.sh
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check licenses
+      - run: cargo deny check licenses
       - run: cargo test --workspace
       - name: Determinism gate in optimized builds
         run: |
@@ -43,17 +42,14 @@ jobs:
 
   app:
     if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/app
     defaults:
       run:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: app
-      # Lavapipe gives the offscreen map tests a Vulkan adapter.
-      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
