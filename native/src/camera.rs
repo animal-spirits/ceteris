@@ -1,100 +1,103 @@
-//! Flat Web Mercator camera. World units are Mercator (0 to 1, y down), wrapped in x.
+//! Globe camera (ADR 0250): an orthographic sphere seen from above the centre, north up. World
+//! points are Web Mercator (0 to 1, y down), the pack's encoding of lon/lat.
+
+use std::f64::consts::{PI, TAU};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
-    /// World point at the viewport centre.
+    /// Longitude and latitude at the viewport centre, radians.
     pub centre: [f64; 2],
-    /// Physical pixels per world unit; on the globe the radius is `scale / 2 pi`, so the
-    /// equator has the same length in both projections.
+    /// Sphere radius in physical pixels.
     pub scale: f64,
-    pub globe: bool,
 }
 
 /// Deepest zoom: about 2 m per pixel at the equator.
-const MAX_SCALE: f64 = 2.0e7;
+const MAX_SCALE: f64 = 3.2e6;
+/// The pack's Mercator clamp, 85.05 degrees.
+pub const MAX_LAT: f64 = 1.484_422_229_745_332_4;
+
+pub fn lon_lat(m: [f64; 2]) -> [f64; 2] {
+    [(m[0] - 0.5) * TAU, (PI * (1.0 - 2.0 * m[1])).sinh().atan()]
+}
+
+fn wrap(lon: f64) -> f64 {
+    (lon + PI).rem_euclid(TAU) - PI
+}
 
 impl Camera {
-    /// The whole world fitted to a viewport.
+    /// The globe filling 90% of the shorter side, centred on 0, 0.
     pub fn fit(width: f64, height: f64) -> Self {
         Self {
-            centre: [0.5, 0.5],
-            scale: width.min(height).max(1.0),
-            globe: false,
+            centre: [0.0, 0.0],
+            scale: 0.45 * width.min(height).max(1.0),
         }
     }
 
-    /// Switches projection and refits the world: the whole map flat, a globe filling 90% of
-    /// the shorter side.
-    pub fn set_globe(&mut self, viewport: [f64; 2], globe: bool) {
-        let short = viewport[0].min(viewport[1]).max(1.0);
-        self.globe = globe;
-        self.scale = if globe {
-            0.9 * short * std::f64::consts::PI
-        } else {
-            short
-        };
+    /// The lon/lat under a screen point; `None` off the disc.
+    pub fn screen_to_lon_lat(&self, viewport: [f64; 2], px: [f64; 2]) -> Option<[f64; 2]> {
+        let x = (px[0] - viewport[0] / 2.0) / self.scale;
+        let yr = (viewport[1] / 2.0 - px[1]) / self.scale;
+        let zr = (1.0 - x * x - yr * yr).sqrt();
+        if zr.is_nan() {
+            return None;
+        }
+        let (s, c) = self.centre[1].sin_cos();
+        let y = yr * c + zr * s;
+        let z = zr * c - yr * s;
+        Some([wrap(self.centre[0] + x.atan2(z)), y.asin()])
     }
 
-    pub fn screen_to_world(&self, viewport: [f64; 2], px: [f64; 2]) -> [f64; 2] {
-        [
-            self.centre[0] + (px[0] - viewport[0] / 2.0) / self.scale,
-            self.centre[1] + (px[1] - viewport[1] / 2.0) / self.scale,
-        ]
-    }
-
-    /// Where a world point lands on screen, in physical pixels; `None` on the far side of the
-    /// globe. Flat, the copy of the point nearest the centre is used.
+    /// Where a world point lands on screen, in physical pixels; `None` on the far side.
     pub fn project(&self, viewport: [f64; 2], xy: [f64; 2]) -> Option<[f64; 2]> {
-        let half = [viewport[0] / 2.0, viewport[1] / 2.0];
-        if !self.globe {
-            let dx = (xy[0] - self.centre[0] + 0.5).rem_euclid(1.0) - 0.5;
-            return Some([
-                half[0] + dx * self.scale,
-                half[1] + (xy[1] - self.centre[1]) * self.scale,
-            ]);
-        }
-        let lon_lat = |m: [f64; 2]| {
-            let y = std::f64::consts::PI * (1.0 - 2.0 * m[1]);
-            [(m[0] - 0.5) * std::f64::consts::TAU, y.sinh().atan()]
-        };
         let [lon, lat] = lon_lat(xy);
-        let [lon0, lat0] = lon_lat(self.centre);
-        let dl = lon - lon0;
+        let dl = lon - self.centre[0];
         let (x, y, z) = (lat.cos() * dl.sin(), lat.sin(), lat.cos() * dl.cos());
-        let yr = y * lat0.cos() - z * lat0.sin();
-        let zr = y * lat0.sin() + z * lat0.cos();
-        let r = self.scale / std::f64::consts::TAU;
-        (zr > 0.0).then(|| [half[0] + x * r, half[1] - yr * r])
+        let (s, c) = self.centre[1].sin_cos();
+        let yr = y * c - z * s;
+        let zr = y * s + z * c;
+        (zr > 0.0).then(|| {
+            [
+                viewport[0] / 2.0 + x * self.scale,
+                viewport[1] / 2.0 - yr * self.scale,
+            ]
+        })
     }
 
+    /// Rotates the sphere so the point under the pointer near the centre follows it.
     pub fn pan(&mut self, dx: f64, dy: f64) {
-        self.centre[0] = (self.centre[0] - dx / self.scale).rem_euclid(1.0);
-        self.centre[1] = (self.centre[1] - dy / self.scale).clamp(0.0, 1.0);
+        let [lon, lat] = self.centre;
+        self.centre = [
+            wrap(lon - dx / (self.scale * lat.cos())),
+            (lat + dy / self.scale).clamp(-MAX_LAT, MAX_LAT),
+        ];
     }
 
-    /// Zooms by `factor` keeping the world point under `px` fixed.
+    /// Zooms by `factor` keeping the lon/lat under `px` fixed, or the centre when `px` is off
+    /// the disc.
     pub fn zoom_at(&mut self, viewport: [f64; 2], px: [f64; 2], factor: f64) {
-        let min = viewport[0].min(viewport[1]).max(1.0) / 2.0;
-        let before = self.screen_to_world(viewport, px);
+        let min = 0.25 * viewport[0].min(viewport[1]).max(1.0);
+        let before = self.screen_to_lon_lat(viewport, px);
         self.scale = (self.scale * factor).clamp(min, MAX_SCALE);
-        let after = self.screen_to_world(viewport, px);
-        self.centre[0] = (self.centre[0] + before[0] - after[0]).rem_euclid(1.0);
-        self.centre[1] = (self.centre[1] + before[1] - after[1]).clamp(0.0, 1.0);
+        let Some(before) = before else { return };
+        // Fixed-point on the centre; converges in a few steps for any point on the disc.
+        for _ in 0..8 {
+            let Some(after) = self.screen_to_lon_lat(viewport, px) else {
+                return;
+            };
+            self.centre = [
+                wrap(self.centre[0] + wrap(before[0] - after[0])),
+                (self.centre[1] + before[1] - after[1]).clamp(-MAX_LAT, MAX_LAT),
+            ];
+        }
     }
 
-    /// Shader uniform: centre and k. Flat, world to clip is `(world - centre) * k`; on the
-    /// globe, k scales the unit sphere (y up).
+    /// Shader uniform: centre lon/lat, then k scaling the unit sphere (y up) to clip space.
     pub fn uniform(&self, viewport: [f64; 2]) -> [f32; 4] {
-        let (scale, flip) = if self.globe {
-            (self.scale / std::f64::consts::TAU, 1.0)
-        } else {
-            (self.scale, -1.0)
-        };
         [
             self.centre[0] as f32,
             self.centre[1] as f32,
-            (2.0 * scale / viewport[0]) as f32,
-            (flip * 2.0 * scale / viewport[1]) as f32,
+            (2.0 * self.scale / viewport[0]) as f32,
+            (2.0 * self.scale / viewport[1]) as f32,
         ]
     }
 }
@@ -105,53 +108,71 @@ mod tests {
 
     const VIEW: [f64; 2] = [800.0, 600.0];
 
+    fn close(a: [f64; 2], b: [f64; 2], tol: f64) -> bool {
+        (a[0] - b[0]).abs() < tol && (a[1] - b[1]).abs() < tol
+    }
+
+    #[test]
+    fn max_lat_is_the_mercator_clamp() {
+        assert!((lon_lat([0.5, 0.0])[1] - MAX_LAT).abs() < 1e-15);
+    }
+
     #[test]
     fn zoom_keeps_the_point_under_the_cursor() {
         let mut c = Camera::fit(VIEW[0], VIEW[1]);
-        let px = [610.0, 140.0];
-        let before = c.screen_to_world(VIEW, px);
+        c.centre = [2.0, 0.6];
+        let px = [510.0, 140.0];
+        let before = c.screen_to_lon_lat(VIEW, px).unwrap();
         c.zoom_at(VIEW, px, 3.5);
-        let after = c.screen_to_world(VIEW, px);
-        assert!((before[0] - after[0]).abs() < 1e-12 && (before[1] - after[1]).abs() < 1e-12);
+        let after = c.screen_to_lon_lat(VIEW, px).unwrap();
+        assert!(close(before, after, 1e-9), "{before:?} {after:?}");
     }
 
     #[test]
-    fn pan_moves_the_world_with_the_pointer_and_wraps() {
+    fn pan_moves_the_point_under_the_pointer_and_wraps() {
         let mut c = Camera::fit(VIEW[0], VIEW[1]);
-        let w = c.screen_to_world(VIEW, [100.0, 100.0]);
-        c.pan(50.0, 20.0);
-        let moved = c.screen_to_world(VIEW, [150.0, 120.0]);
-        assert!((w[1] - moved[1]).abs() < 1e-12);
-        assert!(((w[0] - moved[0]).rem_euclid(1.0)).min((moved[0] - w[0]).rem_euclid(1.0)) < 1e-12);
-        c.pan(1e6, 0.0);
-        assert!((0.0..1.0).contains(&c.centre[0]));
+        c.scale = 1e4;
+        c.centre = [1.0, 0.5];
+        let w = c.screen_to_lon_lat(VIEW, [400.0, 300.0]).unwrap();
+        c.pan(5.0, 3.0);
+        let moved = c.screen_to_lon_lat(VIEW, [405.0, 303.0]).unwrap();
+        assert!(close(w, moved, 1e-7), "{w:?} {moved:?}");
+        c.pan(1e9, 0.0);
+        assert!((-PI..PI).contains(&c.centre[0]));
+        c.pan(0.0, 1e9);
+        assert_eq!(c.centre[1], MAX_LAT);
     }
 
     #[test]
-    fn project_inverts_screen_to_world_on_the_flat_map() {
+    fn project_inverts_screen_to_lon_lat() {
         let mut c = Camera::fit(VIEW[0], VIEW[1]);
+        c.centre = [-2.5, -0.4];
         c.zoom_at(VIEW, [100.0, 500.0], 2.0);
         let px = [233.0, 411.0];
-        let back = c.project(VIEW, c.screen_to_world(VIEW, px)).unwrap();
-        assert!((back[0] - px[0]).abs() < 1e-9 && (back[1] - px[1]).abs() < 1e-9);
+        let [lon, lat] = c.screen_to_lon_lat(VIEW, px).unwrap();
+        let m = [
+            lon / TAU + 0.5,
+            0.5 - (lat.tan() + 1.0 / lat.cos()).ln() / TAU,
+        ];
+        let back = c.project(VIEW, m).unwrap();
+        assert!(close(back, px, 1e-6), "{back:?}");
     }
 
     #[test]
-    fn globe_puts_the_centre_mid_screen_and_hides_the_far_side() {
+    fn the_centre_is_mid_screen_north_is_up_and_the_far_side_hidden() {
         let mut c = Camera::fit(VIEW[0], VIEW[1]);
-        c.set_globe(VIEW, true);
-        c.centre = [0.3, 0.4];
+        c.centre = lon_lat([0.3, 0.4]);
         let mid = c.project(VIEW, [0.3, 0.4]).unwrap();
-        assert!((mid[0] - 400.0).abs() < 1e-9 && (mid[1] - 300.0).abs() < 1e-9);
+        assert!(close(mid, [400.0, 300.0], 1e-9));
         assert!(c.project(VIEW, [0.8, 0.6]).is_none());
-        // North is up.
         assert!(c.project(VIEW, [0.3, 0.3]).unwrap()[1] < 300.0);
+        assert!(c.screen_to_lon_lat(VIEW, [5.0, 5.0]).is_none());
     }
 
     #[test]
-    fn zoom_out_stops_at_half_the_fitted_world() {
+    fn zoom_out_stops_at_a_quarter_of_the_short_side() {
         let mut c = Camera::fit(VIEW[0], VIEW[1]);
         c.zoom_at(VIEW, [400.0, 300.0], 1e-6);
-        assert_eq!(c.scale, 300.0);
+        assert_eq!(c.scale, 150.0);
     }
 }

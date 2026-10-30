@@ -23,7 +23,7 @@ comparing runs.
 | Area | In the shell | Later |
 |---|---|---|
 | Window | winit window, Slint 1.18 on the femtovg wgpu renderer (`unstable-wgpu-30`), one wgpu device shared with the map | Multiple windows (0196, 1.x) |
-| Map | Province and county fills from `provinces.fill` and `counties.fill`, feature colour texture (0010), flat and globe projections, pan and zoom, ID-buffer picking; borders from the id target and labels as Slint text (ADR 0244) | Hillshade (0137), difference maps (P3), units and arcs |
+| Map | Province and county fills from `provinces.fill` and `counties.fill`, feature colour texture (0010), globe only (0250: pan rotates the sphere, north up, centre latitude clamped to 85.05 degrees; labels ranked by area on the sphere), pan and zoom, ID-buffer picking; borders from the id target and labels as Slint text (ADR 0244) | Hillshade (0137), difference maps (P3), units and arcs |
 | Map modes | P1: political, terrain, resources (by group), freight cost from an origin. P2: price by good, output by sector, net exports by good, wage, unemployment (econ SPEC, App) | Every later phase adds its own |
 | Panels | Mode picker, legend, inspector (province, county), province panel (markets, enterprises, pops), error banner, About with `AboutSlint` | Outliner, edit log, branch manager (P3) |
 | Time | Play, pause, step, speeds 1-5, date counting days between monthly ticks, sim-bound chip; two loops and the run-ahead ring of 0208 | Step back, fork, run to event (P3) |
@@ -113,7 +113,8 @@ n/a: the app computes nothing the core does not.
 ## Test plan
 
 - Offscreen wgpu tests (no window): fill pipeline renders the fixture's provinces; picking;
-  projection round trips (screen to lon/lat to screen) on flat and globe.
+  projection round trips (screen to lon/lat to screen) on the globe; zoom keeps the point under
+  the cursor; pan follows the pointer.
 - Sim tests as in Invariants, on the econ fixture.
 - Ramp check in CI (unit tests in the `native` job). The political palette is categorical and
   not yet gated: two of its eight slots come within 4.7 under protanopia. The flag-hue country
