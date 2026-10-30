@@ -362,6 +362,7 @@ pub fn fit_border_nu(
         None,
         limits,
     )?;
+    progress(&format!("border friction: shares at nu 0 {at_zero:?}"));
     let mut shares = |nu: &[f64; N_CLASSES]| {
         evaluations += 1;
         shares_at(inp, &at(nu), &spend, &supply, icio, Some(&start), limits).map(|s| s.0)
@@ -372,13 +373,31 @@ pub fn fit_border_nu(
     // The upper end, one class at a time: where the scaling fails there (its log-domain weights
     // leave the range of f64 when a class's imports are cut that far), the end comes down by
     // halves until it solves.
+    // a target above the share at nu 0, the largest, has no root: no need to look further
+    if let Some(&c) = fitted
+        .iter()
+        .find(|&&c| at_zero[c] < target[c] || at_zero[c].is_nan())
+    {
+        return Err(format!(
+            "class {c}: target cross-border share {} outside the model's {} (nu 0) to the \
+             share at the upper end",
+            target[c], at_zero[c]
+        )
+        .into());
+    }
     for &c in &fitted {
         let mut halvings = 0;
         let f_hi = loop {
             let mut nu = [0.0; N_CLASSES];
             nu[c] = hi[c];
             match shares(&nu) {
-                Ok(share) => break share[c] - target[c],
+                Ok(share) => {
+                    progress(&format!(
+                        "border friction: class {c} share {} at nu {}",
+                        share[c], hi[c]
+                    ));
+                    break share[c] - target[c];
+                }
                 Err(Failure::Scaling(e)) if halvings < MAX_HALVINGS => {
                     progress(&format!(
                         "class {c}: no scaling at nu {} ({e}); halving",
