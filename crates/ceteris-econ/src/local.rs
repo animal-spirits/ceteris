@@ -321,16 +321,8 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
     if x < f64::MIN_POSITIVE {
         x = 0.0;
     }
-    // the closed form rounds: step down until the fit holds as `Province::fits` evaluates it
-    loop {
-        f[j] = x;
-        p.outputs(f, &mut w.y);
-        if x == 0.0 || p.fits(j, &w.y, &mut w.users) {
-            break;
-        }
-        x = x.next_down().max(0.0);
-    }
-    if x < f64::MIN_POSITIVE {
+    f[j] = descend(p, j, f, x, w);
+    if f[j] < f64::MIN_POSITIVE {
         f[j] = 0.0;
     }
     let map = if inside {
@@ -345,6 +337,47 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
         }
     };
     Some((map, piece))
+}
+
+/// Units in the last place [`descend`] steps down one at a time before it searches.
+const DESCENT: usize = 8;
+
+/// The largest fill at most `x` at which good j fits as [`Province::fits`] evaluates it, the
+/// other fills `f` as they stand; leaves f\[j\] at an unspecified value. The closed form of
+/// [`step`] rounds, so its root may not fit: the fill steps down a unit in the last place at a
+/// time, and after [`DESCENT`] units searches the bit patterns of [0, x] by bisection. The
+/// search returns what stepping down would: the evaluated fit is monotone in the fill (each
+/// user's need is a product of a min over the fills, and rounded products, maxima and sums are
+/// monotone; the producer's output does not depend on its own good), 0 always fits (every
+/// uncovered need is then 0) and positive f64 order as their bits. A root above a flat piece,
+/// where U - R is rounding at a stock threshold, could otherwise take up to 2^62 steps.
+fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f64 {
+    let fits = |x: f64, f: &mut [f64; 3], w: &mut Work| {
+        f[j] = x;
+        p.outputs(f, &mut w.y);
+        x == 0.0 || p.fits(j, &w.y, &mut w.users)
+    };
+    let mut x = x;
+    for _ in 0..DESCENT {
+        if fits(x, f, w) {
+            return x;
+        }
+        x = x.next_down().max(0.0);
+    }
+    if fits(x, f, w) {
+        return x;
+    }
+    // invariant: lo fits, hi does not
+    let (mut lo, mut hi) = (0u64, x.to_bits());
+    while hi - lo > 1 {
+        let mid = lo + (hi - lo) / 2;
+        if fits(f64::from_bits(mid), f, w) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    f64::from_bits(lo)
 }
 
 /// What a pass did: each good's fill at its end as an affine function of the fills at its
@@ -404,8 +437,9 @@ pub const STALL_PASSES: usize = 256;
 /// bound on its passes (a jump's confirming passes count).
 pub const PASS_CAP: usize = 4 * STALL_PASSES;
 /// The fit the fills keep where the passes stop short of their end: 1e-12 of a good's flows,
-/// the Leontief invariant's tolerance (ADR 0093, bounded work).
-const FIT: f64 = 1e-12;
+/// which the Leontief invariant allows for local draws (ADR 0093, bounded work and amendment of
+/// 2026-10-30).
+pub(crate) const FIT: f64 = 1e-12;
 /// Moves to a pass's fixed point after which [`fills`] takes the fills as they are.
 const MAX_MOVES: usize = 3;
 /// Cycles followed and maps applied by the jumps within one [`fills`], all jumps together.
@@ -896,5 +930,130 @@ mod tests {
         // no output and stocks covering every need: nothing drawn, not 0 * (0 / 0)
         split(0.0, &[(4.0, 6.0), (2.0, 2.0)], &mut out);
         assert_eq!(out, [0.0, 0.0]);
+    }
+
+    /// A province of the installed pack under the B6 split rule, frictionless, where good 8's
+    /// producer has no capacity (R = 0) and, at fills [0.9776, 1, 1], user 3 sits exactly at its
+    /// stock threshold of good 8: (coef cap) F_7 - b is 0, while coef (cap F_7) - b, as
+    /// `Province::fits` evaluates it, is 1.8e-12. The closed form puts the root at 1 on a piece
+    /// where U is flat at 0 and the evaluated fit fails by rounding, so the fill must cross the
+    /// whole piece down to F_7. Stepping down one unit at a time took about 2e14 steps (over 40 minutes).
+    fn flat_piece_province() -> Province {
+        let b = f64::from_bits;
+        Province {
+            cap: vec![
+                b(0x412ca1b14416c37a),
+                b(0x0),
+                b(0x0),
+                b(0x413b6304bf9fe3d9),
+                b(0x0),
+                b(0x0),
+                b(0x0),
+                b(0x41843e5a458416d9),
+            ],
+            coef: vec![
+                [
+                    b(0x3f85a6f0b9b3de98),
+                    b(0x3f7e92ae222c96b8),
+                    b(0x3fc63815566005fa),
+                ],
+                [
+                    b(0x3f9598f71129cc52),
+                    b(0x3f79d47b198be467),
+                    b(0x3fdfab0aed7215a1),
+                ],
+                [
+                    b(0x3f8ce1e978c9b3c6),
+                    b(0x3f817caeb6d4c865),
+                    b(0x3fcfe8ac55ea2841),
+                ],
+                [
+                    b(0x3f9fc40dc68be582),
+                    b(0x3f7f8bd01844bef0),
+                    b(0x3fdc141a3f614221),
+                ],
+                [
+                    b(0x3f95d4d30cb01947),
+                    b(0x3f8a7e4722eaf7c8),
+                    b(0x3fe43550d69303c6),
+                ],
+                [b(0x0), b(0x3f9f7ffeb7ac1bc6), b(0x3fbd7e85874df7ef)],
+                [b(0x3f6e4a140d81724a), b(0x0), b(0x3fc4d72654a714d9)],
+                [b(0x3f890a0d967c814b), b(0x3f8e3b0f260305de), b(0x0)],
+            ],
+            stock: vec![
+                [
+                    b(0x40d421b1e80faeb2),
+                    b(0x40f18cd85b25b322),
+                    b(0x414163a049f2f949),
+                ],
+                [
+                    b(0x40e78644fc76e453),
+                    b(0x40cc22755f56162d),
+                    b(0x41313f2f15bbe47f),
+                ],
+                [
+                    b(0x40e81a6cb4b96176),
+                    b(0x40e6538a32796eb6),
+                    b(0x41345e9e2d5b1bd6),
+                ],
+                [
+                    b(0x40ea93e85f71d36e),
+                    b(0x40ca64da27b1b2a8),
+                    b(0x4149df4744fbe9dd),
+                ],
+                [
+                    b(0x40cec03480ddd4b8),
+                    b(0x40c2a8a10b6fffb4),
+                    b(0x411c76ef7a254b22),
+                ],
+                [
+                    b(0x4132e6633c80f92c),
+                    b(0x411b5a116c5dd448),
+                    b(0x41399c3671587619),
+                ],
+                [
+                    b(0x41043dfd0a783826),
+                    b(0x41611b52aecc713f),
+                    b(0x4169c4178bd0d50e),
+                ],
+                [
+                    b(0x41406b3fc97b9847),
+                    b(0x415a6620efa51dfa),
+                    b(0x41a0c1d444f73464),
+                ],
+            ],
+            producer: [Some(5), Some(6), Some(7)],
+            own: [
+                b(0x3fb5c42c41795521),
+                b(0x3fbbac4c897bd664),
+                b(0x3fcf61ba23120be3),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_root_above_a_flat_piece_descends_in_bounded_work() {
+        let p = flat_piece_province();
+        let mut w = Work::default();
+        let lo = 0.9776130665525171;
+        let mut f = [lo, 1.0, 1.0];
+        let (_, piece) = step(&p, 1, &mut f, &mut w).expect("good 8 is short at fill 1");
+        assert!(
+            piece.roles.iter().all(|&(_, r)| r != Role::OnStep),
+            "{piece:?}"
+        );
+        // the largest f64 at most 1 at which good 8 fits: below the piece, the next one up not
+        let x = f[1];
+        let fits_at = |x: f64| {
+            let mut g = f;
+            g[1] = x;
+            let mut y = Vec::new();
+            p.outputs(&g, &mut y);
+            p.fits(1, &y, &mut Vec::new())
+        };
+        assert!(x < lo && fits_at(x) && !fits_at(x.next_up()), "{x}");
+        let out = fills(&p);
+        assert!(out.passes <= PASS_CAP, "{out:?}");
     }
 }

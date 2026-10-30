@@ -1122,9 +1122,19 @@ fn traded_shortage_still_lags() {
 
 /// Local-good chains: services feeding services, and construction and services feeding each
 /// other. From the data state the chain binds in every mainland province at tick 1; over 120
-/// ticks every province tick settles in at most 8 passes (6 as built; the old chain ran up to
-/// its bound of 32 and then cleared the rest), and every local input used equals coef Y (the
-/// Leontief invariant, exactly, at every tick).
+/// ticks every province tick ends within the pass cap without a stall, and every local input
+/// used equals coef Y (the Leontief invariant, exactly, at every tick).
+///
+/// The cap, not a smaller count, is the bound: the passes depend on the state. Two passes set
+/// up a cycle (the first cuts only the goods short at F = 1), a jump to its fixed point takes
+/// one confirming pass, and the pass that changes nothing ends; each kink the fall crosses on
+/// the way, a user's stock threshold b / (coef cap) or a switch of its binding fill, ends the
+/// jump there and costs a pass on the next piece, and a jump stopped by its doubling short of
+/// a kink costs one more each time. Province 5 at ticks 78 and 79 (9 and 11 passes) is a collapse of
+/// utilities and construction, inputs of each other with no stocks (construction none,
+/// utilities residues of 1e-45 to 5e-12 left by earlier collapses), at a loop gain of 0.7 to
+/// 0.9 per pass: the fall to the residues' fixed point (2e-45) or to 0 crosses the four
+/// residue thresholds one by one. As built, before ADR 0200, the fixture had at most 6.
 #[test]
 fn local_chain_terminates_on_cycles() {
     let coefficients = [
@@ -1140,8 +1150,14 @@ fn local_chain_terminates_on_cycles() {
         let w = sim.world();
         let passes = &w.scratch.chain_iterations;
         assert!(
-            passes.iter().all(|&n| (1..=8).contains(&n)),
+            passes
+                .iter()
+                .all(|&n| (1..=local::PASS_CAP).contains(&(n as usize))),
             "tick {tick}: {passes:?}"
+        );
+        assert!(
+            !w.scratch.chain_stalled.iter().any(|&s| s),
+            "tick {tick}: stalled"
         );
         if tick == 1 {
             assert!(passes[..24].iter().all(|&n| n > 1));
