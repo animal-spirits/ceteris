@@ -1,6 +1,6 @@
 # 0137. Art and sound direction: Modern Atlas
 
-Status: accepted (owner, 2026-10-28)
+Status: accepted (owner, 2026-10-28); amended by 0255
 Date: 2026-10-28
 Design sections: 20 (Interface and Visualization), 19.1; ADRs 0011, 0088, 0124
 Phase: P3 (tokens, map compositor, panels, charts), after the event log has causes (audio)
