@@ -2,6 +2,7 @@
 
 pub mod bench;
 pub mod camera;
+pub mod chunks;
 pub mod clock;
 pub mod commands;
 pub mod econ;
@@ -15,3 +16,13 @@ pub mod ramps;
 pub mod sim;
 pub mod tokens;
 pub mod web;
+
+/// A Tracy zone over the rest of the enclosing scope with the `profile` feature; nothing
+/// without it.
+#[macro_export]
+macro_rules! zone {
+    ($name:literal) => {
+        #[cfg(feature = "profile")]
+        let _zone = tracy_client::span!($name);
+    };
+}

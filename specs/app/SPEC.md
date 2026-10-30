@@ -57,12 +57,31 @@ comparing runs.
 - **Frame.** Slint's rendering notifier (`BeforeRendering`) runs the map pass into a texture
   the size of the map viewport and hands it to an `Image`. Picking renders feature ids into an
   R32Uint target and reads back one pixel on pointer move.
+- **Culling.** At load, each fill's triangles are regrouped by a 2-degree Mercator grid cell
+  (`chunks`), each chunk bounded by a cap on the unit sphere; the pack's `.fill` format is
+  unchanged. A frame draws only chunks that face the viewer and overlap the viewport, adjacent
+  ones merged into one draw. Counties are drawn only when their fill or borders are on, or the
+  sphere radius is at least 1,600 px (about 4 km per pixel); below that the hover line names no
+  county.
+- **Start-up.** The fills' chunks and the label anchors are built on worker threads while the
+  window and GPU device start; labels appear when the anchors arrive.
+- **Labels.** Placed where the camera changes (pan, zoom, keys), before the frame renders, so
+  labels and map show the same frame; the label model is updated row by row, so unchanged
+  labels keep their Slint items.
+- **Profiling.** The `profile` cargo feature adds Tracy zones (UI frame, present, paint, labels,
+  map render; sim step and view on the sim thread), frame marks and plots of the fill and border
+  passes' GPU time from timestamp queries. Off by default; without it the zones compile to
+  nothing.
+- **Build.** `app/` is its own workspace, so its `[profile.release]` repeats the root's fat LTO
+  and single codegen unit; the sim it links is built with them.
 - **Colour.** Each mode maps its column to classes on the CPU once per presented tick and
   uploads 4 bytes per feature (0010). Interpolation between two ticks mixes two textures in the
   shader (0208). Panels show tick values only.
 - **Sim thread.** Owns the `EconWorld`. Each finished tick publishes an immutable view (mode
   columns per province, panel rows for the selection, the date) into the ring; the frame loop
-  takes the latest by atomic swap. No lock is held while drawing.
+  takes the next one without blocking (step 5). A channel, not a latest-value swap, because
+  the clock interpolates between consecutive ticks and must see every one. No lock is held
+  while drawing.
 - **Time (step 5).** `sim::Runner` steps the `EconWorld` (calibrated steady state when the
   pack has its calibration tables) on its own thread and publishes a view per tick into a
   bounded channel of 4, the run-ahead ring; it blocks when the ring is full. The frame loop
@@ -98,6 +117,8 @@ comparing runs.
 | Read-only view | Views through the ring carry the same state hash as a headless run at every tick | `tests/sim_hash.rs` (fixture world, 24 ticks) |
 | Run-ahead neutrality | Ring sizes 1 and 4 give the same hash at every tick (0208) | `tests/sim_hash.rs` |
 | Picking | The id under a pixel is the feature whose triangle covers it | `tests/picking.rs`, offscreen |
+| Culling | Every triangle with a vertex on screen is in a drawn chunk; chunks keep every triangle | `chunks.rs` unit tests |
+| County level of detail | Counties pick only past the threshold, or with county fill or borders on | `tests/offscreen.rs` |
 | Ramps | Adjacent classes at least 5 CIEDE2000 apart under normal vision and simulated protanopia, deuteranopia and tritanopia (Machado et al. 2009, severity 1); sequential lightness monotonic (0221) | `ramps.rs`, `modes.rs` unit tests |
 
 ## Parameters
