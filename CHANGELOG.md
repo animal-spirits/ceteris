@@ -63,6 +63,8 @@ Goldens re-blessed:
     with every good fitting to 1e-12 of its flows (the Leontief tolerance).
   - After 256 passes, the fills move to the last pass's fixed point, clamped to [0, f], or the
     stall is reported (`Scratch::chain_stalled`).
+  - A call ends at 1,024 passes (`local::PASS_CAP`) on a counted fallback: the fills as they
+    stand where every good fits to 1e-12 of its flows, else the goods that do not set to 0.
   - Markets balanced exactly at the limit keep their fills; before, the doubling took them to 0.
 
 ### BEHAVIOUR: refined fuels in good 1, four harmonic theta classes, theta scale (ADRs 0092, 0101, 0023)
