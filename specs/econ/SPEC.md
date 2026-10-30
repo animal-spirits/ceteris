@@ -107,7 +107,8 @@ do not cover take WDI GDP times the ICIO median VA over GDP less the known share
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
 rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas VA to
 rents, out of its group (all of industry where industry less manufacturing is too small) and at
-most the largest ICIO share of crude oil and gas in industry VA of it (ADR 0249), with the ICIO
+most the largest ICIO share of crude oil and gas in industry VA of it (ADR 0249), when that is
+more than the donor's split gives (rents are a floor on VA), with the ICIO
 world crude oil and gas inputs per unit of output, weighted by output, in place of the donor's
 (ADR 0256); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its

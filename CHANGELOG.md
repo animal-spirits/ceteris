@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-### BEHAVIOUR: world technology for crude oil and gas set by rents (ADR 0256)
+### BEHAVIOUR: rents as a floor, world technology for crude oil and gas (ADR 0256)
 
+- WDI rents only raise crude oil and gas VA above the donor's split, never lower it; Albania
+  (rents 1.1% of GDP) keeps its donor split and passes V1 again.
 - Outside ICIO, crude oil and gas VA set from WDI rents now produces with the ICIO world input
   column (output-weighted) instead of the donor's, which could have next to no such sector
   (Sudan took Senegal's a_VA of 0.072). `econ_io` and the calibration move; `tests/golden/p2-pack.txt` is re-blessed from the owner-side build.
