@@ -1,6 +1,7 @@
 # 0258. Indicator registry, display transforms and the headline set
 
-Status: proposed
+Status: accepted (owner, 2026-10-30: PPP default for cross-country levels, chain-linked Fisher,
+yearly GEKS-Fisher PPP, true values in seat play as a difficulty setting)
 Date: 2026-10-30
 Design sections: 14.1, 20.1, 20.2; ADRs 0065, 0098, 0137, 0155, 0161, 0188, 0191, 0212, 0238, 0239, 0240, 0241
 Phase: P3 (registry, numeraire transforms, headline set); P5a (currency and PPP transforms, money rows); 2.0+ (source stage, seat dashboards, objectives)
@@ -121,9 +122,11 @@ the default peer-radar axes.
   any agent: model rules (0210) read their own state, not the registry.
 - **2.0+ seat play** adds, without changing the registry:
   - A source stage before valuation: true, published first release, latest vintage, independent
-    signal (night lights, mirror trade). In seat play the default and only source is published
-    (0065, 0238 under S21); the true source is shown in observer and lab modes and in the run's
-    post-mortem.
+    signal (night lights, mirror trade). In seat play the default source is published (0065,
+    0238 under S21). Access to the true source is a per-run difficulty setting (owner,
+    2026-10-30): with fog on, truth appears only in the post-mortem; with fog off, true is one
+    more source on the chip. Scores and run records carry the setting. Observer and lab modes
+    always show truth.
   - Availability follows the seat state's statistical office: a low-capacity state publishes
     fewer series, later and less often, so some cells read "not published".
   - Seat default dashboards by seat type (head of government: fiscal and growth; central bank:
