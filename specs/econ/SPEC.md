@@ -694,10 +694,20 @@ With g = ln received - ln target over a good's origins, each solve stops at max 
 (K_o'd w_o' / Phi_d) with b_d = E_d / Phi_d: row-stochastic, M 1 = 1 the free scale. On the
 mean-free part d = sum_k M^k (g_1 - g_2), so the spread max |d - mean d| is at most about 2 tau
 / (1 - lambda2_g), lambda2_g the second eigenvalue of M for good g (power iteration with the
-constant deflated). The test asserts 1.5 times that (a margin for the first-order and asymptotic
-steps and the estimate, not a parameter). A near-closed block of origins sets lambda2_g: on the
-B2c pack Brazil's coal and other mining, lambda2 0.99908, bound 2.2e-10 against an observed
-2.1e-10. The fixed 1e-10 the check used before was never derived: it fails on the B2c pack (2.1e-10)
+constant deflated), with tau raised by delta_g, the rounding of the computed gap against the
+exact one at the same stored ln w. From the gap's operations (u = eps / 2, libm exp and ln
+within 1 ulp): exp(ln w - top) carries 2uL + 2u (L = max |ln w| of the good's origins in either
+solution); the origin and destination sums, positive terms D additions deep (D = max(m_dom,
+m_gate + m_cross + m_prov) + 2, the most legs of the good in one bucket), add (2D + 4)u; ln got
+and the target ln (r v) add 4uT + u (T = max |ln (r v)|); r is common to the good's origins and
+moves none against another. So delta_g <= eps (2L + 2T + D + 4.5), and the test asserts
+1.5 x 2 (tau + delta_g) / (1 - lambda2_g) (1.5 a margin for the first-order and asymptotic
+steps and the estimate, not a parameter). The part in L is k eps L with k = 6 / (1 - lambda2_g).
+The sums' worst case dominates on the full pack (D = 858): the rounding term is about twice the
+stop-rule term, and good 2's bound 1.0e-9 against an observed 2.1e-10 (2026-10-30, task B3
+fill round 5). A near-closed block of origins sets lambda2_g: on the
+B2c pack Brazil's coal and other mining, lambda2 0.99908, stop-rule term 2.2e-10 against an
+observed 2.1e-10. The fixed 1e-10 the check used before was never derived: it fails on the B2c pack (2.1e-10)
 and held on the B2a pack at 9.5e-11 (2026-10-30); the reference model at the calibrated point, with labour
 supply (1 - u*) L^s, has residual at most 1e-10 and reproduces VA0, L0 and Y; local output is
 positive and clears; the stage 5 state is stationary under the order rule. In Rust

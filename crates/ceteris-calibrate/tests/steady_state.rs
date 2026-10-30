@@ -383,19 +383,63 @@ fn slow_rates(m: &Model, spend: &Mat, lw: &Mat) -> Vec<f64> {
         .collect()
 }
 
+/// The longest chain of additions in one of `Model::origin_sums` or `Model::destination_sums`
+/// for traded good g, the depth D_g of the rounding derivation in
+/// [`sinkhorn_is_unique_up_to_scale`]: a cell's sum is its own term plus the domestic legs into
+/// it plus the access legs into it of the gateway sums, each of which sums crossings of access
+/// sums, so D_g = max(m_dom, m_gate + m_cross + m_prov) + 2, each m the most legs of good g in
+/// one bucket of that sum (by origin or by destination, whichever is larger).
+fn summation_depth(inp: &Inputs, g: usize) -> f64 {
+    let most = |good: &[usize], key: &[usize]| -> usize {
+        let mut count = std::collections::BTreeMap::new();
+        for (_, &k) in good.iter().zip(key).filter(|&(&h, _)| h == g) {
+            *count.entry(k).or_insert(0usize) += 1;
+        }
+        count.into_values().max().unwrap_or(0)
+    };
+    let (d, a, c) = (&inp.domestic, &inp.access, &inp.crossing);
+    let dom = most(&d.good, &d.row).max(most(&d.good, &d.col));
+    let cross = most(&c.good, &c.row).max(most(&c.good, &c.col));
+    let chain = most(&a.good, &a.col) + cross + most(&a.good, &a.row);
+    (dom.max(chain) + 2) as f64
+}
+
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.
 ///
 /// The bound on the spread is derived from the stop rule. Let g(ln w) = ln received - ln target
-/// over a good's origins; each solve stops with max |g| <= tau = `SINKHORN_TOL`. Near the fixed
-/// point, two solutions differing by d (ln w) have g_1 - g_2 = (I - M) d to first order (r agrees
-/// to 1e-16 between them, so the target moves by no constant), M the row-stochastic Jacobian of
-/// `slow_rates`. M 1 = 1 carries the free scale; on the mean-free part d = sum_k M^k (g_1 - g_2),
-/// whose terms shrink by lambda2_g a step once the slowest mode dominates, so spread(d) <= 2 tau /
-/// (1 - lambda2_g). A near-closed block of origins sets lambda2_g: on the full pack Brazil's 48
-/// origins of coal and other mining (good 2) keep 0.999 of their Sinkhorn coupling, lambda2 =
-/// 0.99908, so the bound is 2.2e-10 where the observed spread is 2.1e-10. The factor 1.5 covers
-/// the first-order and asymptotic steps and the estimate of lambda2_g; it is a test margin, not
-/// a parameter.
+/// over a good's origins; each solve stops with max |g| <= tau = `SINKHORN_TOL` as computed. Near
+/// the fixed point, two solutions differing by d (ln w) have g_1 - g_2 = (I - M) d to first order
+/// (r agrees to 1e-16 between them, so the target moves by no constant), M the row-stochastic
+/// Jacobian of `slow_rates`. M 1 = 1 carries the free scale; on the mean-free part d = sum_k M^k
+/// (g_1 - g_2), whose terms shrink by lambda2_g a step once the slowest mode dominates, so
+/// spread(d) <= 2 (tau + delta_g) / (1 - lambda2_g), delta_g the rounding of the computed gap
+/// against the exact one at the same stored ln w. A near-closed block of origins sets lambda2_g:
+/// on the full pack Brazil's 48 origins of coal and other mining (good 2) keep 0.999 of their
+/// Sinkhorn coupling, lambda2 = 0.99908, so the first-order bound is 2.2e-10 where the observed
+/// spread is 2.1e-10. The factor 1.5 covers the first-order and asymptotic steps and the
+/// estimate of lambda2_g; it is a test margin, not a parameter.
+///
+/// delta_g, from the operations of the step that computes the gap (u = eps / 2, first order;
+/// libm's exp and ln within 1 ulp, 2u relative; L = max |ln w| over the good's origins in either
+/// solution, T = max |ln (r v)| over them, D = [`summation_depth`]):
+/// - w = exp(ln w - top): the subtraction rounds by u |ln w - top| <= 2uL, exp by 2u, so w has
+///   relative error e_w <= 2uL + 2u;
+/// - Phi, a sum of positive terms each with relative error e_w, D additions and one product per
+///   level deep: e_w + (D + 1)u; b = E / Phi one more u; reach, the same sums over b with the
+///   net factors (one more product): e_w + (2D + 3)u; got = w reach: 2 e_w + (2D + 4)u;
+/// - ln got rounds by 2u |ln got|, and the target ln (r v) by u + 2u |ln (r v)|, with |ln got|
+///   within tau of |ln (r v)| <= T; r itself is common to the good's origins and recomputed from
+///   the same got, so its rounding moves no origin against another and is left out;
+/// - delta_g <= 4uL + 4uT + (2D + 9)u = eps (2L + 2T + D + 4.5).
+///
+/// So the bound is 1.5 x 2 (tau + delta_g) / (1 - lambda2_g): the stop-rule term and a rounding
+/// term 3 eps (2L + 2T + D + 4.5) / (1 - lambda2_g), whose part in L (the update's subtraction
+/// and exp) is k eps L with k = 6 / (1 - lambda2_g). The sums' term is a worst case ((m - 1)u for
+/// m positive terms) and dominates on the full pack, where one gateway's access legs make D =
+/// 858: there the rounding term is about twice the stop-rule term for every good, and good 2's
+/// bound is 1.0e-9 against an observed 2.1e-10. The well-conditioned goods (lambda2 0.39 to
+/// 0.44) sit up to 8.3e-14 above the unscaled stop-rule term (3e-13 to 4.3e-13 against 3.3e-13
+/// to 3.6e-13); the part in L alone is about 3e-14 there, the targets' about 5e-14.
 #[test]
 fn sinkhorn_is_unique_up_to_scale() {
     for w in worlds() {
@@ -429,9 +473,20 @@ fn sinkhorn_is_unique_up_to_scale() {
                 .collect();
             let mean = d.iter().sum::<f64>() / d.len() as f64;
             let spread = d.iter().fold(0.0f64, |m, x| m.max((x - mean).abs()));
-            let bound = 1.5 * 2.0 * SINKHORN_TOL / (1.0 - lambda2[g]);
+            let cells = || (0..n_p).filter(|&p| origin(p, g));
+            let big = cells().fold(0.0f64, |a, p| {
+                a.max(one.log_weight[(p, g)].abs())
+                    .max(other.log_weight[(p, g)].abs())
+            });
+            let target = cells().fold(0.0f64, |a, p| a.max((one.r[g] * v[(p, g)]).ln().abs()));
+            let depth = summation_depth(inp, g);
+            let stop = 1.5 * 2.0 * SINKHORN_TOL / (1.0 - lambda2[g]);
+            let rounding = 1.5 * 2.0 * f64::EPSILON * (2.0 * big + 2.0 * target + depth + 4.5)
+                / (1.0 - lambda2[g]);
+            let bound = stop + rounding;
             eprintln!(
-                "{}: good {g} lambda2 {:.7} spread {spread:.3e} bound {bound:.3e}",
+                "{}: good {g} lambda2 {:.7} spread {spread:.3e} stop {stop:.3e} rounding \
+                 {rounding:.3e} (L {big:.2}, T {target:.2}, D {depth}) bound {bound:.3e}",
                 w.name, lambda2[g]
             );
             assert!(
