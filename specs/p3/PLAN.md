@@ -25,7 +25,7 @@ The plan is written on the recommended option of each; a different answer change
 | # | Question | Recommended | Tasks affected |
 |---|---|---|---|
 | Q1 | Where does ensemble spread come from at P3? The P2 tick draws no random numbers, so K seeds of the same branch give K identical runs and gate 3 cannot pass. | Decided (owner, 2026-10-30): each ensemble member draws the uncertain parameters from their register priors (theta by class, rho, nu, the price-rule gains); CRN means a branch and its baseline share the draw. New ADR. | C1, C2, J2 |
-| Q2 | How much UI is in P3? 0207 keeps 0049, 0137, 0143, 0155, 0188 and 0197 lean in P3 at 4 to 6 owner-weeks; their own ADRs cost 15 to 25 part-time weeks. | P3 ships the workbench views the gate needs (W1 to W4); the rest of 0155, 0188 and 0197 becomes a parallel lab-UI track after the gate. ADR amending 0207's table. | W5, W6, F4 |
+| Q2 | How much UI is in P3? 0207 keeps 0049, 0137, 0143, 0155, 0188 and 0197 lean in P3 at 4 to 6 owner-weeks; their own ADRs cost 15 to 25 part-time weeks. | Decided (owner, 2026-10-30): P3 ships the workbench views the gate needs (W1 to W4); the rest of 0155, 0188 and 0197 becomes a parallel lab-UI track after the gate. ADR amending 0207's table. | W5, W6, F4 |
 | Q3 | ADR 0027 short-run trade adjustment: default on or off? | Fit rho from BACI local projections in P3; on by default if its falsification test passes, otherwise off (S12 instant), as with the fuels friction ruling of 0247. | E1, E2 |
 
 ## Controller rulings (cost if wrong in brackets)
@@ -171,7 +171,7 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 
 - [ ] `ceteris share` prints the run hash; `ceteris fetch <hash>` recomputes from the scenario file or pulls chunks from a directory or URL mirror. Failing test: `fetch_recomputes_state_hashes`. Commit.
 
-### Task F4: Read-only `ceteris serve` (0197; in P3 or the lab-UI track per Q2)
+### Task F4: Read-only `ceteris serve` (0197; lab-UI track after the gate, per Q2)
 
 - [ ] Localhost socket, token file with a read scope, JSON-RPC from the registry, tables as Arrow IPC streams, per-tick subscriptions; `ceteris api schema`. Failing tests: `serve_reads_do_not_change_state_hash`; `non_loopback_bind_is_refused`. Commit.
 
@@ -200,7 +200,7 @@ Independent of B to F; can start the day P3 starts.
 
 ## Branch W: `p3/workbench-views` (native app, after the shell's exit criteria)
 
-W1 to W4 are the views the gate names; W5 and W6 are in P3 only if Q2 is answered "everything".
+W1 to W4 are the views the gate names. W5 and W6 belong to the lab-UI track after the gate (Q2), listed here so the track starts from them.
 
 - [ ] **W1 Branch manager and edit log.** Tree of branches, fork at the cursor, step back (seek), run to tick, the edit log with source and god flag; every action through the registry (0188). Test: a headless run and an app run of the same scenario give the same run hash.
 - [ ] **W2 Difference map.** Any map mode as branch minus baseline per province, diverging ramp passing the 0221 check, sign-robustness mask hatched; picking shows the paired interval.
@@ -242,7 +242,7 @@ W1-W4: after the app shell exits and C3 lands
 
 ## Estimate
 
-Owner-weeks of attention with agents coding, anchored like ADR 0207's: Branch 0 0.5; A 1 to 1.5; B 1 to 1.5; C 1.5 to 2.5; D 0.5; E 0.5 to 1; F1 to F3 0.5 to 1; G 1 to 1.5; H 0.5; W1 to W4 1.5 to 2.5; J 0.5 to 1. Total 9 to 14 owner-weeks on the recommended answers, against 0207's 4 to 6. The gap is mostly work 0207 did not count: ADRs 0234 to 0236 (G), 0241 (D, C2), the C1 member draws, and the views the gate needs. W5, W6 and F4 add 4 to 7 more if Q2 keeps them in P3. The roadmap re-estimate thread should take these numbers.
+Owner-weeks of attention with agents coding, anchored like ADR 0207's: Branch 0 0.5; A 1 to 1.5; B 1 to 1.5; C 1.5 to 2.5; D 0.5; E 0.5 to 1; F1 to F3 0.5 to 1; G 1 to 1.5; H 0.5; W1 to W4 1.5 to 2.5; J 0.5 to 1. Total 9 to 14 owner-weeks on the recommended answers, against 0207's 4 to 6. The gap is mostly work 0207 did not count: ADRs 0234 to 0236 (G), 0241 (D, C2), the C1 member draws, and the views the gate needs. W5, W6 and F4 (4 to 7 more) go to the lab-UI track after the gate (Q2). The roadmap re-estimate thread should take these numbers.
 
 ## Risks
 
