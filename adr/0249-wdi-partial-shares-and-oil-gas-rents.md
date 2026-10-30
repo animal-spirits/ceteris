@@ -33,7 +33,11 @@ exporters only; (3) WDI oil and gas rents times the ICIO ratio of crude oil and 
 - Crude oil and gas: option 3 (owner, 2026-10-30). Where WDI has an oil or natural gas rent
   (NY.GDP.PETR.RT.ZS, NY.GDP.NGAS.RT.ZS; a missing one counts as zero), good 1 takes GDP times
   the rents times k, out of the group that holds it and at most all of it; the rest of the
-  group keeps the donor's proportions. k is the sum of ICIO crude oil and gas VA over the sum of
+  group keeps the donor's proportions. Where that exceeds industry less manufacturing and WDI
+  gives manufacturing apart, industry counts as one group (goods 1 to 8): WDI 2000 then counts
+  hydrocarbons in manufacturing (DZA 45% of GDP in manufacturing, 8% in the rest of industry).
+  Without this, DZA, ECU, IRN and TKM had no electricity or construction and the calibration
+  found local demand without a producer. k is the sum of ICIO crude oil and gas VA over the sum of
   GDP times rents of the ICIO economies with a rent: derived from data, not tuned, so no register
   entry (DESIGN 17). Rents are price less extraction cost times output, so k > 1 is expected.
 - A good the donor lacks gets output equal to its VA (the donor's input column is zero).

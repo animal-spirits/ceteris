@@ -340,10 +340,22 @@ fn oil_and_gas_rents_set_crude_oil_and_gas_out_of_its_group() {
 }
 
 #[test]
-fn oil_and_gas_take_at_most_their_whole_group() {
+fn oil_and_gas_above_their_group_take_from_manufacturing() {
+    // 0.2 of GDP exceeds the 0.15 of industry other than manufacturing, so all industry (0.35)
+    // is one group: oil and gas 200, the other 150 over goods 2 to 8 as the donor (1, 6, 2, 1, 1,
+    // 3, 2) / 16.
+    let got = one("XXX", &with_rents(0.1, 0.0), &obs());
+    assert!(approx(got.table.va[1], 200.0, 1e-12));
+    let want: Vec<f64> = DONOR_VA[2..9].iter().map(|v| 150.0 * v / 16.0).collect();
+    assert!(all_close(&got.table.va[2..9], &want, 1e-12));
+    assert!(approx(total(&got.table.va), 900.0, 1e-12));
+}
+
+#[test]
+fn oil_and_gas_take_at_most_all_of_industry() {
     let got = one("XXX", &with_rents(0.2, 0.0), &obs());
-    assert!(approx(got.table.va[1], 150.0, 1e-12));
-    assert!([2, 7, 8].iter().all(|&g| got.table.va[g] == 0.0));
+    assert!(approx(got.table.va[1], 350.0, 1e-12));
+    assert!((2..9).all(|g| got.table.va[g] == 0.0));
 }
 
 #[test]
@@ -944,7 +956,8 @@ fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
     for (code, c) in &d.imputed {
         let (gdp, s) = sector_shares(&d.wdi, &[d.iso.get(code).unwrap_or(code).clone()]);
         let have = [s.agriculture, s.industry, s.services];
-        if gdp > 0.0 && have.iter().any(Option::is_some) && have.iter().any(Option::is_none) {
+        let partial = have.iter().any(Option::is_some) && have.iter().any(Option::is_none);
+        if c.va_basis != Basis::Icio && gdp > 0.0 && partial {
             scope.push(code.as_str());
             // All eight have less than the median in the shares there are.
             assert!(
