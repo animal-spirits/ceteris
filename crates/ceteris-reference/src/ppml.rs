@@ -865,3 +865,33 @@ pub fn hdfe(
         keep,
     })
 }
+
+/// H2 per theta class (ADRs 0092 and 0264): PPML of `flows` over rows (exporter, importer, good)
+/// on ln(1 + `tariff`), named `ln_tariff`, and `controls`, with exporter and importer effects per
+/// good; standard errors clustered on the unordered country pair when `clustered`, else HC0.
+/// Theta is minus the `ln_tariff` coefficient when the flow is what importers pay, FOB value times
+/// 1 + t. Domestic pairs are the caller's to leave out.
+pub fn class_tariff_fit(
+    rows: &[(usize, usize, usize)],
+    flows: &[f64],
+    tariff: &[f64],
+    controls: &Regressors,
+    clustered: bool,
+) -> Result<Fit, PpmlError> {
+    let code = |a: usize, b: usize| ((a as i64) << 32) | b as i64;
+    let ln_tariff: Vec<f64> = tariff.iter().map(|t| t.ln_1p()).collect();
+    let mut regressors: Vec<(&str, &[f64])> = vec![("ln_tariff", &ln_tariff)];
+    regressors.extend_from_slice(controls);
+    let fe_e: Vec<i64> = rows.iter().map(|&(e, _, k)| code(e, k)).collect();
+    let fe_m: Vec<i64> = rows.iter().map(|&(_, m, k)| code(m, k)).collect();
+    let cluster: Vec<i64> = rows
+        .iter()
+        .map(|&(e, m, _)| code(e.min(m), e.max(m)))
+        .collect();
+    hdfe(
+        flows,
+        &[&fe_e, &fe_m],
+        &regressors,
+        clustered.then_some(cluster.as_slice()),
+    )
+}

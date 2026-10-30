@@ -187,6 +187,46 @@ pub fn cells(v: &[f64], n_p: usize, n_g: usize) -> Mat {
     Mat::from_fn(n_p, n_g, |p, g| v[g * n_p + p])
 }
 
+/// ln of each country pair's trade-cost kernel net of tariffs, flat (C, C, G) exporter x importer
+/// (ADR 0264): the sum over crossings a -> b of u_a K_ab (1 + t_ab)^theta v_b, where u_a is the
+/// exporter's access to gateway a averaged over its provinces by `origin` weight and v_b the
+/// importer's by `destination` weight, both (P, G). With the sourcing weights w_o and E_d / Phi_d
+/// as the weights, a pair's flow is its exporter's total weight times its importer's times
+/// (1 + t)^-theta times this kernel. -inf where no crossing links the pair, for domestic pairs
+/// and for local goods.
+pub fn ln_country_kernel(inp: &Inputs, origin: &Mat, destination: &Mat) -> Vec<f64> {
+    let (n_c, n_g, n_n) = (inp.n_countries(), inp.n_goods(), inp.n_gateways());
+    let pc = &inp.province_country;
+    let mut origin_c = vec![0.0; n_c * n_g];
+    let mut destination_c = vec![0.0; n_c * n_g];
+    for p in 0..inp.n_provinces() {
+        for g in (0..n_g).filter(|&g| inp.traded[g]) {
+            origin_c[pc[p] * n_g + g] += origin[(p, g)];
+            destination_c[pc[p] * n_g + g] += destination[(p, g)];
+        }
+    }
+    let (mut u, mut v) = (vec![0.0; n_n * n_g], vec![0.0; n_n * n_g]);
+    let acc = &inp.access;
+    for j in 0..acc.k.len() {
+        let (p, a, g) = (acc.row[j], acc.col[j], acc.good[j]);
+        let c = pc[p] * n_g + g;
+        if origin_c[c] > 0.0 {
+            u[a * n_g + g] += origin[(p, g)] / origin_c[c] * acc.k[j];
+        }
+        if destination_c[c] > 0.0 {
+            v[a * n_g + g] += destination[(p, g)] / destination_c[c] * acc.k[j];
+        }
+    }
+    let mut k = vec![0.0; n_c * n_c * n_g];
+    let (cro, gc) = (&inp.crossing, &inp.gateway_country);
+    for j in 0..cro.k.len() {
+        let (a, b, g) = (cro.row[j], cro.col[j], cro.good[j]);
+        let net = cro.k[j] * cro.inv_duty[j].powf(-inp.theta[g]);
+        k[(gc[a] * n_c + gc[b]) * n_g + g] += u[a * n_g + g] * net * v[b * n_g + g];
+    }
+    k.iter().map(|x| x.ln()).collect()
+}
+
 /// numpy's `max` of |v|: NaN wins.
 pub fn max_abs(v: &[f64]) -> f64 {
     v.iter().fold(0.0, |m: f64, &x| {

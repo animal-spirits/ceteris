@@ -15,6 +15,7 @@ use proptest::prelude::*;
 use ceteris_reference::demand::Pigl;
 use ceteris_reference::io::{self, Crossings, Inputs, Legs, Mat};
 use ceteris_reference::model::{self, Model};
+use ceteris_reference::ppml;
 use ceteris_reference::sinkhorn;
 use ceteris_reference::solve::{self, Equilibrium, Limits, SolveError, TOL};
 
@@ -593,6 +594,93 @@ fn fixture_reference_is_current() {
         serde_json::from_str(&std::fs::read_to_string(dir.join("solution.json")).unwrap()).unwrap();
     assert_eq!(meta["static_digest"], inp.static_digest.as_str());
     assert!((meta["price_index"].as_f64().unwrap() - eq.price_index).abs() <= 1e-8);
+}
+
+/// The fixture with a tariff per country pair and good, 0 to 10%: its own tariffs vary by
+/// importer and good only, which importer effects absorb.
+fn pair_tariffs(inp: &Inputs) -> Inputs {
+    let mut out = inp.clone();
+    let cro = &mut out.crossing;
+    for j in 0..cro.k.len() {
+        let (e, m, g) = (
+            inp.gateway_country[cro.row[j]],
+            inp.gateway_country[cro.col[j]],
+            cro.good[j],
+        );
+        let inv_duty = 1.0 / (1.0 + 0.01 * ((7 * e + 3 * m * m + 5 * e * m + g) % 11) as f64);
+        cro.k[j] *= (inv_duty / cro.inv_duty[j]).powf(inp.theta[g]);
+        cro.inv_duty[j] = inv_duty;
+    }
+    out
+}
+
+/// H2 per theta class (ADRs 0092 and 0264): with the model's own country-pair kernel net of
+/// tariffs as the cost control, the tariff regression of each class's equilibrium flows recovers
+/// the class's theta, on the fixture with tariffs per pair. Weighted by the sourcing weights w_o
+/// and E_d / Phi_d the kernel is exact: theta to the fit's tolerance, the kernel's coefficient 1.
+#[test]
+fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
+    let inp = &pair_tariffs(inputs());
+    let m = Model::new(inp).unwrap();
+    let eq = solve::equilibrium(&m, None, TOL, None).unwrap();
+    let (n_p, n_c, n_g) = (inp.n_provinces(), inp.n_countries(), inp.n_goods());
+    let src = m.sourcing(&eq.price);
+    let phi = model::cells(&src.phi, n_p, n_g);
+    let destination = Mat::from_fn(n_p, n_g, |p, g| {
+        if phi[(p, g)] > 0.0 {
+            eq.expenditure[(p, g)] / phi[(p, g)]
+        } else {
+            0.0
+        }
+    });
+    let ln_k = model::ln_country_kernel(inp, &model::cells(&src.w, n_p, n_g), &destination);
+    let mut tariff = vec![f64::NAN; n_c * n_c * n_g];
+    let cro = &inp.crossing;
+    for j in 0..cro.k.len() {
+        let (e, m) = (
+            inp.gateway_country[cro.row[j]],
+            inp.gateway_country[cro.col[j]],
+        );
+        tariff[(e * n_c + m) * n_g + cro.good[j]] = 1.0 / cro.inv_duty[j] - 1.0;
+    }
+    let goods = traded_goods(inp);
+    let n_classes = goods.iter().map(|&g| inp.theta_class[g]).max().unwrap() + 1;
+    for c in 0..n_classes {
+        let rows: Vec<(usize, usize, usize)> = (0..n_c)
+            .flat_map(|e| (0..n_c).filter(move |&m| m != e).map(move |m| (e, m)))
+            .flat_map(|(e, m)| {
+                goods
+                    .iter()
+                    .filter(move |&&g| inp.theta_class[g] == c)
+                    .map(move |&g| (e, m, g))
+            })
+            .filter(|&(e, m, g)| ln_k[(e * n_c + m) * n_g + g].is_finite())
+            .collect();
+        let at = |&(e, m, g): &(usize, usize, usize)| (e * n_c + m) * n_g + g;
+        let t: Vec<f64> = rows.iter().map(|r| tariff[at(r)]).collect();
+        let paid: Vec<f64> = rows
+            .iter()
+            .zip(&t)
+            .map(|(r, t)| eq.flows_by_country_pair_good[at(r)] * (1.0 + t))
+            .collect();
+        let control: Vec<f64> = rows.iter().map(|r| ln_k[at(r)]).collect();
+        let fit =
+            ppml::class_tariff_fit(&rows, &paid, &t, &[("ln_kernel", &control)], true).unwrap();
+        let theta = -fit.coef("ln_tariff");
+        let theta_c = inp.theta[rows[0].2];
+        println!(
+            "class {c}: theta {theta:.4} (pair-clustered s.e. {:.4}), ln kernel {:.4}, theta_c \
+             {theta_c}, n {}",
+            fit.se("ln_tariff"),
+            fit.coef("ln_kernel"),
+            fit.n
+        );
+        assert!(
+            (theta - theta_c).abs() <= 1e-6 * theta_c,
+            "class {c}: theta {theta} against {theta_c}"
+        );
+        assert!((fit.coef("ln_kernel") - 1.0).abs() <= 1e-6);
+    }
 }
 
 /// Newton-Krylov that hits its step cap falls back to tatonnement, then
