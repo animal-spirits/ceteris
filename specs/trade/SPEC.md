@@ -479,8 +479,8 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
 ## Open questions
 
 - Gateway count and selection rule are an agent default (22.2); the rule is in the econ SPEC
-  pack section. As built (Task 17, controller ruling): 600 gateways (287 ports, 168 airports,
-  145 land crossings). Each country's land crossing points, the merged endpoints of its
+  pack section. As built (Task 17, controller ruling): 600 gateways (286 ports, 171 airports,
+  143 land crossings; ADR 0251). Each country's land crossing points, the merged endpoints of its
   cross-border road and rail edges, join its ports and airports as candidates of the k-medoids,
   one count rule for all; a crossing is not a gateway pair of its own, which would have made
   about 2,700 gateways. Every pair of gateways of different countries is a crossing leg: 356,080
@@ -496,7 +496,7 @@ reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_
   Measured without the masses (ADR 0097, As built, 2026-10-27): 300 gateways by the same rule
   halve parallel source and dispatch (4.7 against 9.7 ms, cold, unit spending) but move ln Phi_d
   by medians of 0.03 to 2.0 by good, and the 300 pack does not calibrate (100 passes), so H2 was
-  not run there; at 600 H2 distance is -0.753. No count is proposed before the masses land.
+  not run there; at 600 H2 distance is -0.744 (-0.753 before ADR 0251). No count is proposed before the masses land.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.

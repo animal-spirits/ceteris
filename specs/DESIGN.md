@@ -233,7 +233,7 @@ Provinces are first-level administrative regions from Natural Earth (public doma
 
 Nodes are province centroids, ports, airports and sea-lane waypoints. Edges carry one or more modes, each with a per-ton-km cost, speed, capacity and risk that depend on investment and fuel prices.
 
-The 2000 graph has 4,594 province anchors, 2,757 rail nodes, 2,284 ports (1,001 listed, 1,283 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack. Chokepoints carry closure hazards and coastal provinces a piracy hazard (ADR 0242).
+The 2000 graph has 4,594 province anchors, 2,662 rail nodes, 2,234 ports (1,001 listed, 1,233 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack. Chokepoints carry closure hazards and coastal provinces a piracy hazard (ADR 0242).
 
 | Mode | Edge existence | Cost driver | Notes |
 | --- | --- | --- | --- |

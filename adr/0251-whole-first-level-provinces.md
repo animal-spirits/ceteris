@@ -40,13 +40,20 @@ Option 3 (owner, 2026-10-30, on the card "Undo splits in the pack").
 
 ## Consequences
 
-- 4,594 provinces. The largest provinces return to their admin-1 size (Sakha, about 3.1
-  million km²; Western Australia, about 2.5 million km²). Each has one transport anchor, so
+- 4,594 provinces. The largest provinces return to their admin-1 size (the largest is
+  3,053,172 km², against 402,129 with the split). Each has one transport anchor, so
   trade inside such a region is not priced; domestic trade between provinces still is.
 - Every province index changes, so the pack tables, the econ tables, the calibration, the P2
   gate and every golden hash that reads the pack move together in one rebuild
   (`### BEHAVIOUR` entry in the CHANGELOG).
 - The 22.2 default "province-splitting rule" is resolved as no split. Population-based
   splitting or merging can return as a new ADR, through ADR 0190's redraws if it is in-run.
-- Province counts in DESIGN 2, 5.2, 5.3, 9, 19.2 and 23 and in the geo and econ specs read
-  4,594.
+- Province counts in DESIGN 1, 5.2, 5.3, 6.5, 19.2, 21 and 22.1 and in the geo, econ and trade
+  specs read 4,594. The rebuilt graph has 40,187 nodes and 133,907 edges (40,534 and
+  134,810); gateways stay 600 (286 ports, 171 airports, 143 land crossings).
+- P2 gate on the rebuilt pack (econ SPEC, P2 gate): passes. H2 distance -0.744 (was -0.753),
+  theta by class 1.68, 3.53, 9.08 (were 1.75, 3.72, 9.52), 100 years without violation.
+- The gravity fit (`ceteris gravity --pack`) gives no estimates on either pack: on the split
+  pack the P04 stop rule fires (air ratio -0.70), on the whole pack the mode costs do not
+  converge in 50 steps. `gravity_2000.toml` is not written and nothing reads it yet, so this
+  ADR does not change trade parameters.

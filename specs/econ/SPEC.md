@@ -1,8 +1,9 @@
 # Econ SPEC
 
 Status: approved (owner, 2026-10-23); P2 gate passed (owner, 2026-10-26, p2-econ c9b6e11). V1 from the
-perturbed steady state 9.085e-3 (the run from the shocked data state is an `xfail(strict)` stress test);
-H2 distance -0.753 (s.e. 0.016), H2 per class 1.75, 3.72 and 9.52, all in their bands; 100 years without
+perturbed steady state 9.086e-3 (the run from the shocked data state is an `xfail(strict)` stress test);
+H2 distance -0.744 (s.e. 0.015), H2 per class 1.68, 3.53 and 9.08, all in their bands (whole provinces,
+ADR 0251; -0.753, 1.75, 3.72 and 9.52 on the split pack); 100 years without
 violation; 1 vs 8 threads identical; tick about 34 ms and `source_dispatch` 7.9 ms against the re-budgeted
 35 ms and 8 ms. Numbers and commands: P2 gate, Measured
 Phase: P2
@@ -785,13 +786,22 @@ the radius on p. 9, footnote 10 p. 7).
     price index 1.0000000000000067, no pop with negative money, no negative pool, no retained
     loss, no stockout. 1 vs 8 threads, 120 ticks: identical hashes (20.0 s and 6.3 s). Every
     number equals the Python gate's at its printed precision.
+  - On the pack with whole provinces (ADR 0251, 2026-10-30; 4,594 provinces, 45 passes,
+    Sinkhorn residual 9.9e-14): V1 from the perturbed steady state passes (price 9.086e-3,
+    wage 9.067e-4, flow units 4.950e-5, value 5.390e-5, bound 0.9671, reference residual
+    5.0e-12); V1 from the data state still misses (price 0.879, wage 0.604); H2 distance
+    -0.7438 (s.e. 0.0151, pseudo-R2 0.982, 47,306 pairs) passes; H2 per class passes (food
+    1.676, s.e. 0.171; machinery 3.533, 0.517; the five-good class 9.084, 0.332). 100 years: no
+    violation, world price index 1.0000000000000124, no negative money, pool, retained loss or
+    stockout. 1 vs 8 threads, 120 ticks: identical hashes (20.1 s and 6.1 s). Tick about
+    53.5 ms (12 ticks from the data state, not a benchmark median).
   - Commands (M4 Pro, `data/packs/2000` built and calibrated, `PACK=$PWD/data/packs/2000`,
     `EXPORT` a scratch directory):
     - `cargo run --release --bin ceteris -- export --pack $PACK --out $EXPORT`, the export the
       gate reads.
     - V1 (both starts), H2 distance and H2 per class, about 265 s:
       `CETERIS_PACK=$PACK CETERIS_PACK_EXPORT=$EXPORT cargo test -p ceteris-cli --release --test p2_gate -- --nocapture`;
-      `v1_full_pack_from_the_perturbed_steady_state` gives the 9.085e-3 line,
+      `v1_full_pack_from_the_perturbed_steady_state` gives the 9.086e-3 line,
       `v1_full_pack_from_the_data_state_stays_open` the stress test, `h2_distance_elasticity` the
       -0.753 line, `h2_theta_by_class` one line per class.
     - 100 years and 1 vs 8 threads (`hundred_years_without_violation`,
@@ -875,7 +885,7 @@ texture fed from core columns.
   pipeline. Land crossings enter as candidates, not each as a gateway pair: the P1 graph has
   2,481 cross-border road and rail edges, 1,359 after merging within 50 km, which as gateways
   would make about 2,700 gateways and the all-pairs crossing matrix twenty times its budget. The
-  built pack has 600 gateways (287 ports, 168 airports, 145 land crossings). Revisit with path
+  built pack has 600 gateways (286 ports, 171 airports, 143 land crossings; ADR 0251). Revisit with path
   cost medoids, or sparse land crossings joined only to their neighbour, in the ADR 0092 rework after the
   P2 gate; the 356,080 crossings per traded good, the Task 19b pruning result and the 8 ms re-budget are in
   the trade SPEC, Open questions.

@@ -26,8 +26,8 @@ Outputs go to `data/packs/2000/` (not in git).
 | `provinces.arrow` | 4,594 | id, name, 2000 country and sovereign, current country, anchor lon/lat, area, elevation mean and spread, TRI, terrain class, coastal, dev-slice flag, cell, port and airport counts, rail flag, mineral site counts by group |
 | `countries.arrow` | 242 | code, name, sovereign, map colour slot |
 | `cells.arrow` | 78,483 | H3 cell (resolution 4, finer for provinces too small to own a resolution-4 centre), province, area, elevation mean and spread, TRI |
-| `nodes.arrow` | 40,534 | kind, province (u32::MAX for sea), lon/lat, label, sea zone |
-| `edges.arrow` | 134,810 | endpoints (a < b), mode, length in km, mean TRI, chokepoint id |
+| `nodes.arrow` | 40,187 | kind, province (u32::MAX for sea), lon/lat, label, sea zone |
+| `edges.arrow` | 133,907 | endpoints (a < b), mode, length in km, mean TRI, chokepoint id |
 | `counties.arrow` | 53,084 | name, current country, geoBoundaries level, province, area, elevation mean and spread, TRI (resolution-6 sampling) |
 | `sea_zones.arrow` | 725 | H3 resolution-1 parent per zone |
 | `chokepoints.arrow` | 10 | name, canal flag; edge chokepoint id k is row k - 1 |
