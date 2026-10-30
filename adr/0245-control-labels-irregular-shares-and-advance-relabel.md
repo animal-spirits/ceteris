@@ -1,6 +1,6 @@
 # 0245. Control labels, irregular shares and how advances relabel cells
 
-Status: accepted (owner, 2026-10-30)
+Status: accepted (owner, 2026-10-30); amended by 0246 (rear security)
 Date: 2026-10-30
 Design sections: 11.5, 11.6; amends ADRs 0115, 0149 and 0154
 Phase: P7 (2.0-beta), stage W2
