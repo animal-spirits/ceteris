@@ -1,6 +1,11 @@
 # Hard Brexit (Dhingra et al. 2017), reported only: crossing tau x 1.0831 both ways between GBR
 # and each EU27 member, and each side's MFN tariff on the other: the EU common external tariff
-# of the 2000 pack (EU27 on USA: group 0 0.0314, group 1 0.0214), which GBR applied in 2000
+# of the 2000 pack (EU27 on USA: group 0 0.0314, group 1 0.0214), which GBR applied in 2000.
+# Rule: each side's tariff on the other becomes max(2000 tariff, CET), so a line adds only
+# CET - 2000 tariff where that is positive. GBR has agreements at 0 with every member but CYP,
+# HRV, MLT and ROU in the pack; it already applies the CET to those four, and they apply at
+# least the CET to it (CYP 0.1173 / 0.0221, HRV 0.0398 / 0.0469, MLT 0.068 / 0.1031, ROU
+# 0.0965 / 0.0664), so their pairs take the iceberg lines only.
 ntb GBR AUT 1.0831
 ntb AUT GBR 1.0831
 tariff AUT GBR 0 0.0314
@@ -21,16 +26,8 @@ tariff GBR BGR 0 0.0314
 tariff GBR BGR 1 0.0214
 ntb GBR HRV 1.0831
 ntb HRV GBR 1.0831
-tariff HRV GBR 0 0.0314
-tariff HRV GBR 1 0.0214
-tariff GBR HRV 0 0.0314
-tariff GBR HRV 1 0.0214
 ntb GBR CYP 1.0831
 ntb CYP GBR 1.0831
-tariff CYP GBR 0 0.0314
-tariff CYP GBR 1 0.0214
-tariff GBR CYP 0 0.0314
-tariff GBR CYP 1 0.0214
 ntb GBR CZE 1.0831
 ntb CZE GBR 1.0831
 tariff CZE GBR 0 0.0314
@@ -111,10 +108,6 @@ tariff GBR LUX 0 0.0314
 tariff GBR LUX 1 0.0214
 ntb GBR MLT 1.0831
 ntb MLT GBR 1.0831
-tariff MLT GBR 0 0.0314
-tariff MLT GBR 1 0.0214
-tariff GBR MLT 0 0.0314
-tariff GBR MLT 1 0.0214
 ntb GBR NLD 1.0831
 ntb NLD GBR 1.0831
 tariff NLD GBR 0 0.0314
@@ -135,10 +128,6 @@ tariff GBR PRT 0 0.0314
 tariff GBR PRT 1 0.0214
 ntb GBR ROU 1.0831
 ntb ROU GBR 1.0831
-tariff ROU GBR 0 0.0314
-tariff ROU GBR 1 0.0214
-tariff GBR ROU 0 0.0314
-tariff GBR ROU 1 0.0214
 ntb GBR SVK 1.0831
 ntb SVK GBR 1.0831
 tariff SVK GBR 0 0.0314

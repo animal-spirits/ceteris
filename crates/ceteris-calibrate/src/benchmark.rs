@@ -6,7 +6,13 @@
 //! Omega-weighted d ln of its buyer prices. Home shares lambda are value shares of the
 //! country's absorption of a traded good, both at origin prices over the last
 //! `ceteris_econ::flows::WINDOW` ticks; absorption counts home purchases, domestic pairs and
-//! imports.
+//! imports. Two approximations, both exact to first order: a country's buyer price is the
+//! population-weighted mean of its provinces' price levels, and Omega is the data's final
+//! demand share, not the run's expenditure share.
+//!
+//! [`acr`] is the ACR prediction without input-output linkages, [`acr_io`] the one with them;
+//! the model has Leontief intermediates, so its welfare follows the second, which ADR 0207's
+//! criterion grades (ADR 0265).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -169,25 +175,89 @@ pub fn welfare(base: &Outcome, shocked: &Outcome) -> Vec<f64> {
 }
 
 /// The multi-sector ACR welfare change per country (Arkolakis, Costinot and Rodriguez-Clare
-/// 2012): -sum over traded g of Omega_cg / theta_g d ln lambda_cg. A good the country buys
-/// nothing of at home in both runs adds nothing; one it buys at home in one run only gives NaN.
+/// 2012): -sum over traded g of Omega_cg / theta_g d ln lambda_cg, over the goods with
+/// Omega > 0. A good the country buys nothing of at home in both runs adds nothing; one it buys
+/// at home in one run only makes the country's value NaN.
 pub fn acr(base: &Outcome, shocked: &Outcome, theta: &[f64; N_GOODS]) -> Vec<f64> {
     (0..base.income.len())
+        .map(|c| weighted_dln_home(base, shocked, c, &base.omega[c], theta))
+        .collect()
+}
+
+/// The multi-sector ACR welfare change per country with input-output linkages (Costinot and
+/// Rodriguez-Clare 2014, section 3.4, eq. (28) under perfect competition, delta_k = 0, as in
+/// NBER WP 18896; Caliendo and Parro 2015): d ln W_c = -Omega_c' (I - A_c')^-1 diag(1/theta)
+/// d ln lambda_c, with `a[c]` the country's cost shares a_kg of input k in sector g at
+/// `[k * N_GOODS + g]` (`Countries::io`, which the calibrated coefficients reproduce at the
+/// calibrated prices). Local goods have no lambda term but pass cost changes on through
+/// (I - A_c')^-1. Goods with a zero weight in Omega_c' (I - A_c')^-1 add nothing; otherwise as
+/// [`acr`], which this is when A_c is 0.
+pub fn acr_io(
+    base: &Outcome,
+    shocked: &Outcome,
+    theta: &[f64; N_GOODS],
+    a: &[[f64; N_GOODS * N_GOODS]],
+) -> Vec<f64> {
+    (0..base.income.len())
         .map(|c| {
-            -(0..N_GOODS)
-                .filter(|&g| TRADED[g] && base.omega[c][g] > 0.0)
-                .map(|g| {
-                    let (l0, l1) = (base.home_share[c][g], shocked.home_share[c][g]);
-                    let none = |l: f64| l.is_nan() || l <= 0.0;
-                    if none(l0) && none(l1) {
-                        0.0
-                    } else {
-                        base.omega[c][g] / theta[g] * (l1 / l0).ln()
-                    }
-                })
-                .sum::<f64>()
+            let weight = leontief_weights(&base.omega[c], &a[c]);
+            weighted_dln_home(base, shocked, c, &weight, theta)
         })
         .collect()
+}
+
+/// -sum over traded g with weight > 0 of weight_g / theta_g d ln lambda_cg, as [`acr`].
+fn weighted_dln_home(
+    base: &Outcome,
+    shocked: &Outcome,
+    c: usize,
+    weight: &[f64; N_GOODS],
+    theta: &[f64; N_GOODS],
+) -> f64 {
+    -(0..N_GOODS)
+        .filter(|&g| TRADED[g] && weight[g] > 0.0)
+        .map(|g| {
+            let (l0, l1) = (base.home_share[c][g], shocked.home_share[c][g]);
+            let none = |l: f64| l.is_nan() || l <= 0.0;
+            match (none(l0), none(l1)) {
+                (true, true) => 0.0,
+                (false, false) => weight[g] / theta[g] * (l1 / l0).ln(),
+                _ => f64::NAN,
+            }
+        })
+        .sum::<f64>()
+}
+
+/// v solving (I - A) v = omega, that is v' = omega' (I - A')^-1, A at `[k * N_GOODS + g]`:
+/// Gaussian elimination with partial pivoting.
+fn leontief_weights(omega: &[f64; N_GOODS], a: &[f64; N_GOODS * N_GOODS]) -> [f64; N_GOODS] {
+    const N: usize = N_GOODS;
+    let mut m: [[f64; N + 1]; N] = std::array::from_fn(|k| {
+        std::array::from_fn(|g| match g {
+            N => omega[k],
+            _ if g == k => 1.0 - a[k * N + g],
+            _ => -a[k * N + g],
+        })
+    });
+    for col in 0..N {
+        let pivot = (col..N)
+            .max_by(|&x, &y| m[x][col].abs().total_cmp(&m[y][col].abs()))
+            .unwrap_or(col);
+        m.swap(col, pivot);
+        let top = m[col];
+        for row in &mut m[col + 1..] {
+            let f = row[col] / top[col];
+            for (x, t) in row[col..].iter_mut().zip(&top[col..]) {
+                *x -= f * t;
+            }
+        }
+    }
+    let mut v = [0.0; N];
+    for k in (0..N).rev() {
+        let rest: f64 = (k + 1..N).map(|j| m[k][j] * v[j]).sum();
+        v[k] = (m[k][N] - rest) / m[k][k];
+    }
+    v
 }
 
 /// The world's absorption-weighted foreign share 1 - lambda of `goods`, over the countries

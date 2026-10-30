@@ -179,11 +179,16 @@ prices; ACR = -sum over traded g of Omega_cg / theta_g d ln lambda_cg; lambda by
 prices over the last 12 ticks) and `crates/ceteris-calibrate/tests/benchmark.rs` with the shock files
 of `tests/data/benchmark/`. Soft Brexit is crossing tau x 1.0277 both ways between GBR and each
 EU27 member; hard Brexit x 1.0831 and each side's 2000 EU MFN tariff on the other (0.0314 on group
-0, 0.0214 on group 1), reported only.
+0, 0.0214 on group 1), reported only. Each side's tariff becomes max(2000 tariff, CET): CYP, HRV,
+MLT and ROU had no agreement with GBR in 2000 and already met the CET both ways, so their pairs
+take the iceberg lines only (the hard-Brexit values below: GBR -0.631%, EU27 -0.107%, IRL -0.192%
+with the rule; -0.630%, -0.106%, -0.193% with the tariffs stacked).
 
 Welfare on the scratch pack `k263/pack` (pre-P3 branch at ADR 0263, calibration format 6; it
 predates ADR 0256 and the unsplit provinces, so B8 reruns on the final pack), beside the
-28 October values (main 6423389, `data/packs/2000` of 26 October, buyer price 1 / alpha_d):
+28 October values (main 6423389, `data/packs/2000` of 26 October, buyer price 1 / alpha_d, run at
+the default border friction P05 nu 0.3 rather than the calibrated one, so the columns differ in nu
+as well as in the buyer price and the pack):
 
 | Case | 28 October | k263/pack |
 |---|---|---|
@@ -204,3 +209,20 @@ the record: foreign share per theta class 1.11, 1.04, 1.13 and 1.00 times ICIO 2
 x1.1, 80 ICIO countries with |ACR| above 1e-4, none of the wrong sign, median model / ACR 2.45,
 correlation 0.85; under x10 the run panics in the dividend write-off (`systems.rs`, "write-off
 within i64", an i64 overflow) before tick 1,200.
+
+The ACR value of ADR 0207's criterion (Omega_cg / theta_g d ln lambda_cg summed) has no
+input-output linkages; the model has Leontief intermediates (median column sum of A about 0.55
+on this pack), for which the literature's prediction is d ln W_c = -Omega_c' (I - A_c')^-1
+diag(1/theta) d ln lambda_c (Costinot and Rodriguez-Clare 2014, section 3.4, eq. (28) of NBER
+WP 18896 under perfect competition; Caliendo and Parro 2015), A_c the country's cost shares.
+`benchmark::acr_io` computes it. Under x1.1 on `k263/pack`, the 80 ICIO countries with |ACR|
+above 1e-4, model / ACR:
+
+| ACR form | median | p10 | p90 | correlation | wrong sign |
+|---|---|---|---|---|---|
+| plain (`acr`) | 2.453 | 1.849 | 3.025 | 0.847 | 0 |
+| input-output (`acr_io`) | 1.064 | 0.941 | 1.306 | 0.865 | 0 |
+
+The 2.45 is consistent with the input-output prediction (the B2b review's amplification
+estimate on this pack, 2.34 at the median, 1.71 to 2.83 at p10 to p90). ADR 0265 makes the
+input-output form ADR 0207's criterion (owner, 2026-10-30); C7 checks it at B8.
