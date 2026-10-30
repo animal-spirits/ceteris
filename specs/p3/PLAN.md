@@ -24,7 +24,7 @@ The plan is written on the recommended option of each; a different answer change
 
 | # | Question | Recommended | Tasks affected |
 |---|---|---|---|
-| Q1 | Where does ensemble spread come from at P3? The P2 tick draws no random numbers, so K seeds of the same branch give K identical runs and gate 3 cannot pass. | Each ensemble member draws the uncertain parameters from their register priors (theta by class, rho, nu, the price-rule gains); CRN means a branch and its baseline share the draw. New ADR. | C1, C2, J2 |
+| Q1 | Where does ensemble spread come from at P3? The P2 tick draws no random numbers, so K seeds of the same branch give K identical runs and gate 3 cannot pass. | Decided (owner, 2026-10-30): each ensemble member draws the uncertain parameters from their register priors (theta by class, rho, nu, the price-rule gains); CRN means a branch and its baseline share the draw. New ADR. | C1, C2, J2 |
 | Q2 | How much UI is in P3? 0207 keeps 0049, 0137, 0143, 0155, 0188 and 0197 lean in P3 at 4 to 6 owner-weeks; their own ADRs cost 15 to 25 part-time weeks. | P3 ships the workbench views the gate needs (W1 to W4); the rest of 0155, 0188 and 0197 becomes a parallel lab-UI track after the gate. ADR amending 0207's table. | W5, W6, F4 |
 | Q3 | ADR 0027 short-run trade adjustment: default on or off? | Fit rho from BACI local projections in P3; on by default if its falsification test passes, otherwise off (S12 instant), as with the fuels friction ruling of 0247. | E1, E2 |
 
