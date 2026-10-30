@@ -278,16 +278,29 @@ fn groups(s: SectorShares, ratio: f64) -> (Vec<(f64, Vec<usize>)>, Basis) {
 }
 
 /// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most the group's.
+/// Where `share` exceeds that group and WDI gives manufacturing apart, the two groups count as one
+/// (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
 fn oil_gas_apart(mut groups: Vec<(f64, Vec<usize>)>, share: f64) -> Vec<(f64, Vec<usize>)> {
-    if let Some(g) = groups
+    let Some(i) = groups.iter().position(|(_, g)| g.contains(&OIL_GAS)) else {
+        return groups;
+    };
+    if share > groups[i].0
+        && let Some(m) = groups.iter().position(|(_, g)| g == GROUPS[2])
+    {
+        let (t, goods) = groups.remove(m);
+        let i = if m < i { i - 1 } else { i };
+        groups[i].0 += t;
+        groups[i].1.extend(goods);
+        groups[i].1.sort_unstable();
+    }
+    let g = groups
         .iter_mut()
         .find(|(_, goods)| goods.contains(&OIL_GAS))
-    {
-        let take = share.min(g.0);
-        g.0 -= take;
-        g.1.retain(|&x| x != OIL_GAS);
-        groups.push((take, vec![OIL_GAS]));
-    }
+        .expect("found above");
+    let take = share.min(g.0);
+    g.0 -= take;
+    g.1.retain(|&x| x != OIL_GAS);
+    groups.push((take, vec![OIL_GAS]));
     groups
 }
 
@@ -348,7 +361,8 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// times the ICIO median VA over GDP less them over the goods they do not cover (wdi_gdp); with
 /// no share, GDP times the ICIO median VA over GDP (wdi_gdp). Where WDI has oil or gas rents,
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
-/// its group and at most all of it (ADR 0249). With no GDP, population (WDI, else the WorldPop
+/// its group (all of industry where industry less manufacturing is too small) and at most all of
+/// it (ADR 0249). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
