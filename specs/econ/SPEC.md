@@ -246,12 +246,17 @@ within 9.3e-10 of f), inside [0, f] and confirmed by the cycle's passes; else st
 rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on; a
 fall below the margin is no fall whatever its source, so a real loop of gain within about
 9e-13 of 1 is not followed (gain 1 - 8e-13 stays at [0.4999999999992, 0.9999999999984, 1])
-pass cap: no call runs more than 1,024 passes, a jump's confirming passes included: past 1,021
+pass cap: no call runs more than 1,024 passes, a jump's confirming passes included: at 1,021
 (the cap less a jump's up to 3) the fills are kept where every good fits to 1e-12 of its flows,
 else the goods that do not are set to 0 one at a time in good order; the stall is reported
 degenerate limits (U = R at the limit): rounding of U - R decides the fit near the limit; the
 fills land within 1.81e-12 of it on the translated collapses (tests cap 1e-11; the per-case
-eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray)
+eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray); open
+defect: at a stop the last pass's fixed point is taken wherever it lies, and on a degenerate
+limit whose last pass sits on the pieces below it that point can be far below the limit (seed
+13067305529229119429 translated to 0.3: [0.267, 0, 0], every good fitting, against t; 1 of the
+207,054 translated collapses of 300,000 draws chosen by the plain iteration;
+`translated_collapse_settles_below_its_limit`, ignored pending a ruling)
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```
@@ -280,17 +285,31 @@ cycle on its pieces ends at the limit or after the last whole cycle before the p
 and at the limit up to 3 confirming passes and the pass that changes nothing. K counts the
 users' stock thresholds inside (0, 1) (b < coef cap; each crossed at most once, as needs only
 fall), each local good beyond the first that starts to fall, and each pair of local goods some
-user takes both of (a switch of the binding fill, taken once per pair). The most is 6 passes,
+user takes both of (a switch of the binding fill, taken once per pair: an assumption, not
+derived; a pair can switch more than once, and the allowance of two passes per kink has held
+those seen). The most is 6 passes,
 province 5 at tick 79, against a bound of 21: utilities and construction, inputs of each other
 with no stocks but residues from earlier collapses, fall at a loop gain of 0.7 to 0.9 per pass
 to 0 across the residue thresholds. Before a jump ahead found the last whole cycle (it ended at
 the doubling's last check), it could stop short of a kink and cost passes no kink accounts for:
 11 passes there at 13410ce, 7 for 4 on a fall of gain 0.995 to a kink 1,500 cycles on
-(`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`). Over 200,000 random small
-provinces of each of five families (the first below, higher coefficients, no stocks, up to 10
-enterprises, scarce stocks), 21 of the 1,000,000 take more passes than their kinks allow (140
-before): a fall below the margin per cycle, pieces that do not repeat within 3
-passes, or a collapse to 0 that only the stall rule ends (257 passes). On 1,000,000 random small
+(`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`; neither the fixture bound nor
+the property below tells that defect apart). Where a jump does not apply, the fills report the
+passes outside the accounting (`Fills::uncovered`): a pass after which no jump moved and one did
+not apply (map undefined or singular, fall within rounding, budget spent); two for a pass that
+cuts a good by rounding alone while another falls resolvably (it changes the pieces where no
+kink lies, and ends the previous pass's jump); a pass a stop moves on from; at the stall rule
+every pass since the last move, and every pass after a stall. Passes <= 2 + 3 + 2K + uncovered
+on random small provinces of five families (the first below, higher coefficients, no stocks, up
+to 10 enterprises, scarce stocks; `chain_passes_within_their_kinks`), and on all of 3,000,000
+probed. Of 1,000,000 (200,000 per family), 22 exceed 2 + 3 + 2K
+(`chain_passes_beyond_their_kinks_are_uncovered`; the 21 of the jump fix plus one that stalls):
+10 cut a good by rounding every other pass (it sits at its limit with U = R along the rest of
+the fall: 88 passes against 25, with 39 such cuts), 11 end at the stall rule (pieces repeating
+over 4 or more passes, or binding fills switching every pass; one stalls and runs 792 passes),
+and 1 lands a step's root on a kink every other pass (map undefined: 14 against 11). None
+exceeds it where every jump applies. About 11% of the provinces have an uncovered pass; those
+without are at least 1 pass inside the bound. On 1,000,000 random small
 provinces with coefficients up to 0.6, before that change, all but 129 settled within 12 passes,
 the most took 257 and none more than 0.3 ms (on 200,000 after it, all but 1, at 257); over five
 other families of 1,000,000 (higher coefficients, no stocks, up to 10 enterprises, scarce stocks,
