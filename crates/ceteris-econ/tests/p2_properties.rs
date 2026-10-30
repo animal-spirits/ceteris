@@ -1140,6 +1140,28 @@ fn traded_shortage_still_lags() {
     assert!(lower.is_some(), "downstream output never fell");
 }
 
+/// Leontief, local goods (ADR 0093, amendment of 2026-10-30): the allowance for where the chain's
+/// passes stop short is relative to each user's own need, and only the market drain's rounding is
+/// relative to the province's draws D. A user whose need is 1e-12 of D and which gets none of it
+/// breaks the invariant (a D-relative 2e-12 would let it pass).
+#[test]
+fn a_tiny_local_user_left_without_its_input_breaks_leontief() {
+    let mut w = world(EconParams::default());
+    up_to_dispatch(&mut w);
+    from_dispatch(&mut w, 0);
+    let (e, k) = (0..w.inputs().n_enterprises())
+        .flat_map(|e| LOCAL.map(|k| (e, k)))
+        .find(|&(e, k)| w.layout().coef[e][k] * w.scratch.produced[e] > 0.0)
+        .expect("a user of a local good");
+    let want = w.layout().coef[e][k] * w.scratch.produced[e];
+    let cell = w.inputs().enterprises.province[e] as usize * N_GOODS + k;
+    w.scratch.drawn[cell] = 1e12 * want;
+    w.scratch.input_used[e * N_GOODS + k] = 0.0;
+    w.scratch.input_before[e * N_GOODS + k] = 0.0;
+    let v = w.end_tick(0).expect_err("a user short of its whole need");
+    assert_eq!(v.invariant, "leontief", "{v}");
+}
+
 /// Local-good chains: services feeding services, and construction and services feeding each
 /// other. From the data state the chain binds in every mainland province at tick 1; over 120
 /// ticks every province tick ends within the pass cap without a stall, and every local input
