@@ -2,10 +2,30 @@
 
 ## Unreleased
 
+### BEHAVIOUR: inputs ordered by effective demand; the own good caps labour too (ADR 0266)
+
+- E3 orders a traded input whose cap cut the enterprise's labour at E1 on notional output,
+  VA(L_notional) / a_VA, and every other input on constrained output, VA(L) / a_VA at this tick's
+  employment (Benassy 1975, 1982; Dreze 1975; owner decision 2026-10-30T22:43Z). E1 hands E3 the
+  binding inputs (`systems::scarcest_inputs`, `Scratch::short`) and the employment it would
+  allocate without the cap (`Scratch::notional`).
+- The labour cap counts every traded input, the enterprise's own good included (owner decision
+  2026-10-30T22:43Z); the own-good exclusion of the first build covered a lock that came from E3
+  planning orders on the output the cap had cut.
+- Why the hashes move: in the fixture's default run caps bind from tick 1 as stocks run short, and
+  the short inputs are now reordered on notional output; the P2 fixture golden differs from tick
+  12. Where no cap binds nothing changes: the fixture's calibrated state and the scratch pack's
+  steady start are bit for bit as before (pack: through tick 72, where the first cap binds).
+- Stress (ADR 0266, As built): frictionless sweep seeds 0 to 9 no panic (one before), structured
+  perturbations 8 and 2 overflows of 24 (11 and 10 before), the spiral case at index 1.55 (2.7).
+  `input_orders_plan_on_capacity_output` is now `input_orders_plan_on_notional_output_for_the_short_input`;
+  `frictionless_unemployment_is_the_natural_rate` also allows province 20 at ticks 8 and 9 and
+  checks the wage where caps leave more than u* unemployed.
+
 ### BEHAVIOUR: labour capped at what traded inputs allow (ADR 0266)
 
 - E1 caps each labour target at the labour whose output the enterprise's traded input stocks
-  after T1 allow, its own good left out (`systems::input_output`,
+  after T1 allow, its own good left out (included since: entry above) (`systems::input_output`,
   `production::labour_for_value_added`). Local inputs set no cap: the same-tick chain bounds
   them, and both bounds from last tick's chain failed (owner decision 2026-10-30; ADR 0266). Both wage rules read the capped targets. Frictionless, the wage
   clears on them; where no cap binds at the uncapped root that root is kept bit for bit, and
