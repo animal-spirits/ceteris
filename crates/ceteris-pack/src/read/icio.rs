@@ -396,6 +396,9 @@ pub struct Wdi {
     pub industry: BTreeMap<String, f64>,
     pub manufacturing: BTreeMap<String, f64>,
     pub services: BTreeMap<String, f64>,
+    /// Oil and natural gas rents, shares of GDP.
+    pub oil_rents: BTreeMap<String, f64>,
+    pub gas_rents: BTreeMap<String, f64>,
 }
 
 /// The WDI series the imputation needs, with ADB and Maddison Project income where WDI has none.
@@ -431,5 +434,7 @@ pub fn load_wdi(cache: &Path) -> Result<Wdi, String> {
         industry: series("NV.IND.TOTL.ZS", 100.0)?,
         manufacturing: series("NV.IND.MANF.ZS", 100.0)?,
         services: series("NV.SRV.TOTL.ZS", 100.0)?,
+        oil_rents: series("NY.GDP.PETR.RT.ZS", 100.0)?,
+        gas_rents: series("NY.GDP.NGAS.RT.ZS", 100.0)?,
     })
 }

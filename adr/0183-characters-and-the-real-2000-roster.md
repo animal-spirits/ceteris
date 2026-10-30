@@ -1,6 +1,6 @@
 # 0183. Characters and the real 2000 roster
 
-Status: proposed
+Status: proposed; amended by ADR 0253 (kin edges, houses, claims)
 Date: 2026-10-28
 Design sections: 2.4, 10.6, 13.5, 14.4, 15.7, 23.5; ADRs 0066, 0078, 0107, 0132, 0136, 0147, 0154
 Phase: P6 (2.0-alpha), extended profile; lab candidate at 4.0 (ADR 0136)

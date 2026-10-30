@@ -1,6 +1,6 @@
 # 0239. No player seats in 1.x: game mechanics start at 2.0
 
-Status: proposed
+Status: accepted (owner, 2026-10-29)
 Date: 2026-10-29
 Design sections: 2.1, 12.6, 21, 23.4, 23.9; ADRs 0126, 0129, 0132, 0136, 0160, 0161, 0162, 0206, 0210, 0237
 Phase: 2.0-alpha onward
@@ -45,9 +45,10 @@ autocrat's levers. The Steward for economic levers lands with 2.0-alpha.
 ## Migration
 
 - DESIGN 2.1 drops "(later)" for "(2.0)" on Steward; 21 and 23.9 replace 1.3 with 2.0-alpha
-  for the moved rows; the 23.9 lead sentence names 1.4 as the first post-1.0 addition.
+  for the moved rows; the 23.9 lead sentence names the 1.4 solver as the first 23.9 addition (climate, 1.1, is
+  outside 23.9).
 - Phase lines of 0126, 0129, 0132, 0160, 0161, 0162, 0206 and 0237, and the two "1.3" mentions in
-  0210, read 2.0-alpha when this ADR is accepted.
+  0210, read 2.0-alpha (applied 2026-10-29).
 
 ## Tests
 

@@ -1,9 +1,9 @@
 # 0160. Trade-core seats: corridor planner and commodity trader
 
-Status: proposed
+Status: proposed; amended by ADR 0239 (seats and scoring to 2.0-alpha)
 Date: 2026-10-28
 Design sections: 5.3, 5.5, 8.2, 17, 23.4; ADRs 0017, 0091, 0130
-Phase: P3 (commodity trader), P8 (corridor planner, with endogenous infrastructure); both 1.x minors
+Phase: 2.0-alpha or later (commodity trader; corridor planner, with endogenous infrastructure), ADR 0239
 
 ## Context
 
