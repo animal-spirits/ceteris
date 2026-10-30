@@ -245,7 +245,12 @@ the fixed point of the last pass's map (or, at a stop, of the last two or three 
 within 9.3e-10 of f), inside [0, f] and confirmed by the cycle's passes; the last pass's fixed
 point beyond 9.3e-10 of f only where it lies on that pass's pieces (every step's piece holds
 there, as the jumps check it, and every good the pass leaves fits to 1e-12 of its flows), so
-that the passes run on them from f to it; else stops (after a
+that the passes run on them from f to it to first order (a threshold on one fill holding at f
+and g holds along a monotone fall; the passes follow g + M^k (f - g), the segment only along
+one near-unit direction, and comparisons between two fills are not kept by a fall but hold
+trivially at ties); where it is refused, the goods whose fixed point lies within 9.3e-10 of
+f still move there, if the pass confirms it, and only then is a stop's cycle of two or three
+passes tried; else stops (after a
 rounding pass, every good fitting to 1e-12 of its flows) or reports the stall and goes on; a
 fall below the margin is no fall whatever its source, so a real loop of gain within about
 9e-13 of 1 is not followed (gain 1 - 8e-13 stays at [0.4999999999992, 0.9999999999984, 1])
@@ -257,7 +262,8 @@ fills land within 1.81e-12 of it on the translated collapses (tests cap 1e-11; t
 eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray); a last pass
 that sits on pieces reaching only just below the limit has a fixed point far below it, off its
 pieces, which is not taken (seed 13067305529229119429 translated to 0.3 ended at
-[0.267, 0, 0] against t when it was; `translated_collapse_settles_below_its_limit`)
+[0.267, 0, 0] against t when it was;
+`translated_collapse_stop_refuses_an_off_piece_fixed_point`)
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
 ```

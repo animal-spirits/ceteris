@@ -359,6 +359,12 @@ first count left out), classify as:
 | Stall rule at 257 passes: pieces that repeat over 4 or more passes, or binding fills switching every pass, so no jump of up to 3 passes applies | 11 | 2267: period 4; 99418: goods 0 and 1 switch 204 times; 73799 stalls, 792 passes |
 | A step's root rounded onto a kink every other pass (good 0 lands on good 2's fill), so the cycle's map is undefined | 1 | 170254: 14, bound 11 |
 
+Some causes are mixed (noted 2026-10-30, round 5): 135641 and 12446, listed as rounding cuts
+(28 and 15), also have falls no jump resolves (19 and 9); 175527 and 56969 also have a pair whose
+binding switches three and two times; 73799 is within the bound only by the charge for every
+pass after a stall (521 over without it). `chain_passes_and_uncovered_are_pinned` pins
+(passes, uncovered) for five of the 22 and for four provinces with no uncovered pass, since the
+counter is generous by design (a stall charges 256 at once) and would absorb added passes.
 None exceeds the bound where every jump applies, so the derivation stands under its stated
 condition (`chain_passes_beyond_their_kinks_are_uncovered` keeps the 22). The pair term remains
 an assumption: a pair of goods can switch its binding more than once (175527, goods 0 and 1,
@@ -382,6 +388,39 @@ draws (3,552 cases, 2,290 held to every heuristic limit, about 14 s in debug) an
 300,000 (207,054 cases); the minimums are these counts. The named regression seeds are all held
 to their exact limits.
 
+**Oracle loosening at the plain limit (2026-10-30, task B3 fill round 5).** The rule above read
+the fills under test: whether a fill was off its limit and whether some good's balance was
+rounding were both evaluated at the solver's output, and a review's mutation probe (a good the
+plain iteration confirms at 1, lowered to t: it still fits) found 3,898 of 6,418 such wrong
+fills accepted (seed 9896657790763124343 at 0.1, 0.3 and 0.5, [t, t, t] for [1, t, t]). The
+loosening is now decided at the plain iteration's limit and per good (`loosened`): a good is
+unresolved where its balance with its own fill raised to 1 is within 1e-11 of its flows of 0
+there; a good is loosened where it is unresolved, or where, with each unresolved good at t or
+at 1 and the rest at the plain limit, its own such balance is within 1e-11 of 0 or changes
+sign (its choice between staying at 1 and a cut turns on where they end). Loosened goods get the
+check of lying in [t, 1]; every other good keeps its confirmed limit to 1e-11. Where the plain
+iteration does not converge every good is loosened, as before. The cross rule is needed: with
+the unresolved goods alone loosened, 25 of the 207,054 cases fail, seed 13946236107313884973
+among them (good 1 fits at 1 once good 2 stays at 1). Loosening every good whose users or
+producer take an unresolved good, the structural reading, accepts 2,188 of 6,418 wrong fills on
+the 30,000-draw sample, all at goods that fit at 1 by a wide margin under every end. The named
+rounding seeds (1097310483361641164, 7641237549142102837, 13946236107313884973 at 0.1,
+1122501757669556625 at 0.3) all pass under the rule; none is held by name.
+
+Mutation result, as `translated_sample` now counts it (full run, 207,054 cases): of 64,098
+wrong fills (a good confirmed at 1 and kept at 1 by the fills, lowered to t), 51,078 are
+rejected and 13,020 accepted, every accepted one at a good whose own balance is rounding at the
+plain limit, which the sample asserts. Those cannot be rejected by an oracle that admits the
+solver: holding such goods to their confirmed limits fails 74 of the 20,565 cases of the
+30,000-draw sample, both ways and between (seed 7641237549142102837 cuts good 2 to t where the
+plain iteration keeps 1; seed 13997107944263473172 at 0.3 stops good 0 at 0.73). The sample
+counts are 3,552 cases, 1,107 held to every heuristic limit, 858 mutants rejected (239 at
+unresolved goods); the full run 207,054, 65,073, 51,078 (13,020). Held counts fall from 2,290
+and 132,459 because a case is held only where no good is loosened. The named regression seeds
+of `translated_collapses_stop_at_their_limit` are held to every heuristic limit directly, the
+loosened goods included; `translated_oracle_rejects_a_good_lowered_from_one` keeps the review's
+examples.
+
 The full run finds one solver defect: seed 13067305529229119429 at 0.3 ends at [0.267, 0, 0]
 against t = 0.3 (the plain iteration gives t to rounding, and no good of a translated province
 can fall below t). The third pass reaches t to rounding on the pieces below t; at that stop
@@ -390,7 +429,9 @@ fits and the confirming passes return it. Holding that fixed point to 9.3e-10 of
 cycles of two and three passes are, fixes the case and fails
 `near_singular_cycle_keeps_its_limit`, whose real loop of gain 1 - 1e-15 needs the far fixed
 point. Telling the two apart is a change to the solver, open pending a ruling
-(`translated_collapse_settles_below_its_limit`, ignored; `translated_collapses_full` fails on it).
+(`translated_collapse_settles_below_its_limit`, ignored, since renamed
+`translated_collapse_stop_refuses_an_off_piece_fixed_point`; `translated_collapses_full` fails
+on it).
 
 **Off-piece fixed point (2026-10-30, task B3 fill round 4).** The two cases differ in where the
 last pass's pieces hold, not in the gain. In the near-singular cycle (gain 1 - 1e-15) the pass
@@ -406,13 +447,22 @@ Rule: the last pass's fixed point g beyond TAIL of f is taken only where g lies 
 pieces: from g, each step that cut in the pass is on its piece (`on_piece`, the roles and the
 producer's binding fill the jumps check) with its map's value at least 0, and each good the pass
 leaves fits to 1e-12 of its flows (the maps' rounding, as in `follow`). The shortages are not
-checked at g, where they vanish. The piece conditions are linear in the fills at the start of
-the pass, apart from a covered user's min (a union of two half-planes), so holding at f and at g
-they hold on the segment between, where each cut good's shortage is affine, positive at f and 0
-at g: the passes from f run on the pieces towards g, which is their limit. Within TAIL a move is
-taken as before. It applies at a stop and at the stall rule alike. Where g is refused, nothing
-else changes: a stop tries the two- and three-pass cycles, then takes the fills as they are; a
-stall is reported. Seed 13067305529229119429 at 0.3 now stops at t to rounding; the
+checked at g, where they vanish. A condition on one fill (a stock threshold, a covered user's
+min) that holds at f and at g holds along any monotone fall from f to g, and the passes only
+lower the fills, so the passes from f run on the pieces towards g, which is their limit. That is
+first-order (corrected 2026-10-30, task B3 fill round 5, which earlier named the covered user's
+min as the gap; the min is harmless under a monotone fall). The real gap has two parts. The
+passes follow g + M^k (f - g), not the segment, except where f - g lies along one near-unit
+direction: so it is at a rounding stop (the other components are below margin / (1 - lambda2)),
+but not necessarily at the stall rule, where two slow directions can coexist. And the
+comparisons between two fills (which fill binds a user or the producer, `OnStep` m >= x,
+`On(k)` f_k <= x) are not kept by a monotone fall; they hold trivially at ties, as at a collapse
+to 0, where every acceptance a review probed (10 in 1,000,000 random provinces) occurred. Within
+TAIL a move is taken as before. It applies at a stop and at the stall rule alike. Where g is
+refused, the period-1 move is partial: the goods whose g lies within TAIL of f still move there
+(each chosen on its own), and the move is kept if the pass confirms it; only where none moves or the
+confirmation fails does a stop try the two- and three-pass cycles, then take the fills as they
+are; a stall is then reported. Seed 13067305529229119429 at 0.3 now stops at t to rounding; the
 near-singular cycle keeps its limit.
 
 **Pass cap.** A jump's confirming passes (up to PERIOD = 3) came after the cap check, so a call
