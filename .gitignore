@@ -2,10 +2,6 @@
 **/*.rs.bk
 .DS_Store
 /data/
-app/node_modules/
-app/dist/
-app/src-tauri/target/
-native/target/
-app/src-tauri/gen/
+app/target/
 .claude/settings.local.json
 .claude/worktrees/
