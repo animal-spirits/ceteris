@@ -1,6 +1,6 @@
 # 0250. Globe-only map, Equal Earth for print
 
-Status: accepted (owner, 2026-10-30)
+Status: accepted (owner, 2026-10-30); amended by 0255
 Date: 2026-10-30
 Design sections: 19.1 (Map UI, App shell), 20.1; amends ADRs 0010, 0011 and 0124
 Phase: App shell (after step 6 of `specs/app/PLAN.md`); print projection with the P3 atlas
