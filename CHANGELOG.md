@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### BEHAVIOUR: world technology for crude oil and gas set by rents (ADR 0256)
+
+- Outside ICIO, crude oil and gas VA set from WDI rents now produces with the ICIO world input
+  column (output-weighted) instead of the donor's, which could have next to no such sector
+  (Sudan took Senegal's a_VA of 0.072). `econ_io`, `econ_countries`, `econ_provinces` and the
+  calibration move; `tests/golden/p2-pack.txt` is re-blessed from the owner-side build.
+
 ### BEHAVIOUR: partial WDI sector shares and oil and gas from rents (ADR 0249)
 
 - Outside ICIO, a missing agriculture, industry or services share no longer drops its VA: the

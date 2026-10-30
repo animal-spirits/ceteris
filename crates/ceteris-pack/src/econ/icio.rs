@@ -154,6 +154,21 @@ pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
         .fold(0.0, f64::max)
 }
 
+/// Inputs per unit of crude oil and gas output over all ICIO economies, weighted by their crude
+/// oil and gas output.
+pub fn world_oil_gas_column(icio: &BTreeMap<String, CountryIo>) -> [f64; N_GOODS] {
+    let output: Vec<f64> = icio.values().map(|c| c.output[OIL_GAS]).collect();
+    let total = pairwise_sum(&output);
+    std::array::from_fn(|k| {
+        let inputs: Vec<f64> = icio
+            .values()
+            .zip(&output)
+            .map(|(c, x)| c.io[k][OIL_GAS] * x)
+            .collect();
+        pairwise_sum(&inputs) / total
+    })
+}
+
 /// Oil plus natural gas rents over GDP, with a missing one as zero; None when both are missing.
 fn rents(wdi: &Wdi, code: &str) -> Option<f64> {
     match (wdi.oil_rents.get(code), wdi.gas_rents.get(code)) {
@@ -377,7 +392,8 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// no share, GDP times the ICIO median VA over GDP (wdi_gdp). Where WDI has oil or gas rents,
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
 /// its group (all of industry where industry less manufacturing is too small) and at most the
-/// largest ICIO share of crude oil and gas in industry of it (ADR 0249). With no GDP, population (WDI, else the WorldPop
+/// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
+/// world crude oil and gas inputs per unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
@@ -401,6 +417,8 @@ pub fn impute(
     let ratio = median_va_over_gdp(icio, wdi);
     let oil_gas_ratio = oil_gas_va_over_rents(icio, wdi);
     let oil_gas_cap = oil_gas_most_of_industry(icio);
+    let oil_gas_column = world_oil_gas_column(icio);
+    let oil_gas_inputs = py_sum(oil_gas_column);
     let mut out = BTreeMap::new();
     for (code, sovereign) in countries {
         let own = iso.get(code).unwrap_or(code);
@@ -474,9 +492,20 @@ pub fn impute(
             scale: level.map(|x| x / ranking.gdp_per_capita[&name]),
         };
         let (va, basis) = value_added(d, &level);
+        // Crude oil and gas set by rents produces with the ICIO world technology, not the
+        // donor's, which may have next to no such sector (ADR 0256).
+        let from_rents = gdp > 0.0 && shares.rents.is_some();
+        let mut io = d.io;
+        if from_rents {
+            for (k, row) in io.iter_mut().enumerate() {
+                row[OIL_GAS] = oil_gas_column[k];
+            }
+        }
         let output = std::array::from_fn(|g| {
             // A good the donor lacks has no inputs (its io column is zero).
-            let per_va = if d.va[g] > 0.0 {
+            let per_va = if g == OIL_GAS && from_rents {
+                1.0 / (1.0 - oil_gas_inputs)
+            } else if d.va[g] > 0.0 {
                 d.output[g] / d.va[g]
             } else {
                 1.0
@@ -489,7 +518,7 @@ pub fn impute(
                 table: CountryIo {
                     output,
                     va,
-                    io: d.io,
+                    io,
                     final_demand_shares: d.final_demand_shares,
                     coal_share: d.coal_share,
                 },
