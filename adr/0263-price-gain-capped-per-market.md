@@ -39,8 +39,9 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
 - J_cell = E_cell + eta eps_cell / (2 - eta), with the run's eta, so in the default mode (J at
   most 16.9 on the 0256 pack) no cell is capped and the live dynamics are unchanged. E_cell = 1 + theta_g - (theta_g + 1) Pi_cell, Pi the
   cell's share of its buyers' purchases weighted by the units it sells to each (Leontief inputs,
-  sigma_d 0); local cells E = sigma (P06). eps_cell is the output-weighted mean over the cell's
-  enterprises of s_L sigma_FL / ((1 - s_L) a_VA).
+  sigma_d 0); local cells E = sigma (P06). eps_cell is the largest over the cell's enterprises of
+  s_L sigma_FL / ((1 - s_L) a_VA) (amended as built, below; the draft said the output-weighted
+  mean).
 - Computed from the pack at calibration, at the calibrated prices, as a calibrated quantity: two
   sparse passes over the kernel legs per traded good (one destination sum, one with squared leg
   factors), the cost of one dispatch. Recomputed when the network, the thetas or the structural
@@ -63,3 +64,19 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
 - The pre-P3 B branch changes demand elasticities (ADRs 0200, 0247, gateway masses), so the code
   lands after it, and B8 recomputes J and reruns the gate.
 - P03d is a new free parameter (DESIGN 17 register): m in (0, 1), start 0.5.
+
+## As built (2026-10-30, pre-P3 B)
+
+- eps_cell is the enterprise maximum, not the output-weighted mean the Decision first named: the
+  study measured the maximum, and every number above rests on it (298 cells above 20, Albania's g5
+  at 36.3 to 36.9, São Tomé at 42.0). The mean gives a lower J, so it caps fewer cells than the
+  measurements that justified m = 0.5, and in a cell whose enterprises differ it understates the
+  loop gain of the most elastic one, which J2 is about.
+- E_cell and eps_cell are written by the calibration to `econ_calib_cells.arrow` (columns
+  `demand_elasticity`, `supply_elasticity`; calibration format 6), read into
+  `EconInputs::market_elasticity` (in the inputs digest), and combined with the run's eta in
+  `EconWorld::new` (`TradeParams::price_gain`); P03d is `TradeParams::gain_share`, in the static
+  digest when the inputs carry a calibration. A world started from the data state has no
+  calibration and runs kappa1 in every market, so its hashes do not move.
+- Pi_cell is computed per leg with squared leg factors (the study's form): a pair joined by
+  several routes leaves out the cross terms between them.

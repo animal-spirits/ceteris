@@ -158,15 +158,18 @@ network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arriv
 `econ_calib.arrow` per enterprise (A, VA0, L0, a_VA, own price, output, sales, profit, coef and
 input stock per good; the summary in its `calibration` metadata), `econ_calib_cells.arrow` per
 (province, good) (posted and buyer prices, the selection constant Gamma of ADR 0200, lead, Q, D by
-buyer class, sales, merchant stock),
+buyer class, sales, merchant stock, and the own-price elasticity E and supply elasticity eps of
+the market's price loop, ADR 0263, trade SPEC, Per-market gain),
 `econ_calib_provinces.arrow` (w0, employment, income), `econ_calib_pops.arrow` per (province,
 education) (money at the start of a tick, income, wage), `econ_calib_pipeline.arrow` (goods in
 flight by buyer, good and ticks ahead) and `econ_calib_countries.arrow` (u*, rebate, PIGL
 weights). Every table carries `calibration_format` in its schema metadata. Installed into the
 pack (copied next to the econ tables; their sha256 then joins `tests/golden/p2-pack.txt`), they are
 read by `EconInputs::from_pack` (`EconInputs::calibrate`, `calibration.rs`) into A, VA0, L0,
-a_VA, the coefficients (both S09 settings), w0, the PIGL weights and the initial state (State
-components): only at `calibration_format` 5 (5 since ADR 0200 added `gamma`) and only when the
+a_VA, the coefficients (both S09 settings), w0, the PIGL weights, E and eps per cell
+(`EconInputs::market_elasticity`, in the inputs digest) and the initial state (State
+components): only at `calibration_format` 6 (5 since ADR 0200 added `gamma`, 6 since ADR 0263
+added E and eps) and only when the
 `static_digest` in the `calibration` metadata is that of the uncalibrated inputs under default
 parameters (`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack
 build, another format or other coefficients stop the load with a `PackError`.
