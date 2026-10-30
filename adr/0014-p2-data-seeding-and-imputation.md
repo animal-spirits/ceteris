@@ -1,6 +1,6 @@
 # 0014. P2 data seeding, downscaling and imputation
 
-Status: accepted (owner, 2026-10-23, with `specs/econ/SPEC.md`)
+Status: accepted (owner, 2026-10-23, with `specs/econ/SPEC.md`); amended by ADR 0249 (partial WDI shares, oil and gas from rents)
 Date: 2026-10-23
 Design sections: 5.2, 6.1, 7.1, 7.2, 8.5, 15.1, 16, 16.1, 22.2
 
