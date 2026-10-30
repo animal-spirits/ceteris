@@ -298,15 +298,22 @@ fits, and positive f64 order as their bits. No golden moves. Regression:
 **Leontief tolerance of local draws.** "That is the Leontief invariant's own tolerance" was not
 so. The invariant compared each user's use with 1e-12 of its own coef Y, but two roundings of
 the good's flows land on single users:
-- where the passes stop short, a good is short by at most FIT = 1e-12 of U + R. With
-  U <= R (1 + 2 FIT), the users miss up to 2 FIT (1 + FIT) R together, pro rata. Relative to one
-  user's need that is up to 2e-12: the 1.1e-12 to 2e-12 breaches under the B6 rule;
+- where the passes stop short, a good is short by at most FIT = 1e-12 of its flows,
+  U - R <= FIT (U + R), so R / U >= (1 - FIT) / (1 + FIT) exactly. A user drawing pro rata then
+  misses (n - b)(1 - R / U) <= 2 FIT / (1 + FIT) (n - b) < 2 FIT of its own need n: the 1.1e-12
+  to 2e-12 breaches under the B6 rule. This bound is per user, so it scales with the user's
+  need, not the market's;
 - the users draw from the market account one after the other. Each draw rounds its balance by
-  at most eps / 2 of what it held, about the units drawn D, since the market cap binds only
-  where it ends near empty. With the split's own sum, that is up to 2 (N_GOODS + 1) roundings,
-  and the last user absorbs them. The proptest seed of `conservation_over_120_ticks` (tick 43,
-  enterprise 41, good 7) misses 1.8e-31 of a need of 1.5e-22, which is 1.6e-17 of D = 1.1e-14.
+  at most eps / 2 of what the market held, M; with the split's own sums that is up to
+  2 (N_GOODS + 1) roundings, (N_GOODS + 1) eps M in all, and the user at which the market runs
+  dry absorbs them. The market cap binds only where the market ends empty, so M is the units
+  drawn D plus those roundings: M <= D / (1 - (N_GOODS + 1) eps) < 2 D. The proptest seed of
+  `conservation_over_120_ticks` (tick 43, enterprise 41, good 7) misses 1.8e-31 of a need of
+  1.5e-22, which is 1.6e-17 of D = 1.1e-14.
 
-The invariant now allows, for a local good, 1e-12 of max(coef Y, available) plus
-(2 FIT (1 + FIT) + 2 (N_GOODS + 1) eps) D, where D is the units of the good drawn at the
-province market that tick (about 2.005e-12 D). Traded inputs keep 1e-12.
+The invariant now allows, for a local good, (1e-12 + 2 FIT) of max(coef Y, available) plus
+2 (N_GOODS + 1) eps D (4.9e-15 D), where D is the units of the good drawn at the province market
+that tick. Traded inputs keep 1e-12. A first version of this amendment scaled the chain-stop term
+by D as well (2 FIT (1 + FIT) D); that let a user whose need is below 2e-12 of its market's draws
+get nothing and pass, so the term is per user
+(`a_tiny_local_user_left_without_its_input_breaks_leontief`).
