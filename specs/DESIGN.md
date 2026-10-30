@@ -1124,7 +1124,7 @@ Added for the modern scenario:
 | P154 | Bulk freight rate: multiplier on the sea cost per tonne-km, per theta class (ADR 0247) | Transport | Class 3 (fuels, mining) 0.026, classes 0 to 2 at 1 (on by default, owner ruling 2026-10-30) | Slope of 2000 tanker and dry-bulk voyage rates per tonne against sea km, UNCTAD Review of Maritime Transport 2001 and 2002 | Literature |
 | P155 | Bulk freight rate: multiplier on the port handling fee, per theta class (ADR 0247) | Transport | Class 3 0.40, classes 0 to 2 at 1 (on, as P154) | Half the fixed part of the same rates over P04m's listed-port fee | Literature |
 
-Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it), P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090`) and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
+Held or proposed, not built in P2: P56 storage cost and convenience yield (ADRs 0029 and 0091, proposed; 0090 reads it), P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090` and `pre-p3/b6-wip`, and deferred to P5 by owner ruling, 2026-10-30, ADR 0090 "Deferred to P5") and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 
 ### 17.2 Structural switches (model uncertainty)
 
