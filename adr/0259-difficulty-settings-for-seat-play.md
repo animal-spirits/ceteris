@@ -1,6 +1,7 @@
 # 0259. Difficulty settings for seat play
 
-Status: proposed
+Status: accepted (owner, 2026-10-30: rivals at profile default, baseline mirrors the seat,
+market-learning rung dropped, no replay in seat play)
 Date: 2026-10-30
 Design sections: 23.4, 23.8; ADRs 0065, 0129, 0153, 0161, 0198, 0199, 0237, 0238, 0239, 0241, 0242, 0258
 Phase: 2.0-alpha (with Steward and office seats, ADR 0239)
@@ -46,7 +47,7 @@ Consequences of the line:
 
 - **No economic bonuses** to the player or the AI, no rubber-banding, no luck dial, no hazard
   tilt, no AI that reads true values while the world is fogged.
-- **Rival AI strength is not a difficulty setting.** Strategic AI horizon and rollouts (23.8)
+- **Rival AI strength is not a difficulty setting** (owner, 2026-10-30). Strategic AI horizon and rollouts (23.8)
   stay at the profile default for all actors in every run. A weaker or stronger rival changes
   the world being simulated, not the player's handicap. 23.4 and 23.8 lose "planner horizon"
   as a difficulty lever.
@@ -54,7 +55,7 @@ Consequences of the line:
   their modelled values. The player gets more friction by taking a weaker seat (finance
   minister rather than head of government, a minority government, a low-capacity state) or by
   a player-side order rule from the list below, never by editing the bodies of 0195.
-- **The 0161 rung "markets learn the player's rule faster" is dropped.** Market learning is a
+- **The 0161 rung "markets learn the player's rule faster" is dropped** (owner, 2026-10-30). Market learning is a
   calibrated behaviour; varying it per run changes the model. The other 0161 rungs are in the
   families below.
 
@@ -73,7 +74,6 @@ Consequences of the line:
 | | Plan lock | none; lever schedules commit for 12 months |
 | Seat and start | Seat (0237) | any registered seat |
 | | Start origin | 2000; 2005; 2010 packs (0241) |
-| | Replay (0241) | off; shocks family |
 | | Objective (23.4, 0161, 0198) | presets; custom vector |
 | Time | Pause | free; at decision points and event cards only; none |
 | | Speed floor | none; minimum game speed while unpaused |
@@ -83,18 +83,19 @@ Consequences of the line:
 | | Branch, undo and god-mode (14.2) | off under Ironman; on in sandbox |
 | | Mandate loss (0198) | continue as successor or opposition; run ends |
 
-Replay in seat play is the shocks family only, plus the policy family for other states. The
-seat's own state never runs its historical policy tape: the player holds those levers. A
-replay run is a foresight setting: the player may know 2008 is coming and the baseline does not.
+No replay in seat play (owner, 2026-10-30). Seat runs are always calendar-blind (0241); replay
+stays a lab instrument. History does not repeat, so the player's knowledge of 2000-2024 gives no
+foresight.
 
-### The baseline is fixed
+### The baseline mirrors the seat (owner, 2026-10-30)
 
-The AI baseline of 23.4 is the default world for that seat: profile-default AI holding the seat,
-published sources where the lab's fog switch is on, no assists, same seeds under common random
-numbers. No setting moves it. So an easy setting raises the expected score and a hard one lowers
-it, and one baseline ensemble serves every player and every setting of a (pack, seat, origin,
-replay) tuple. The baseline never reads true values while the world is fogged; true values are
-the player's alone.
+The AI baseline of 23.4 is the profile-default AI holding the seat under the player's own
+information and friction settings: it reads the same sources, lags, coverage and intelligence,
+and obeys the same order calendar, budget and plan lock. Seat, origin, objective and seeds
+(common random numbers) are the player's. Time and assist settings do not apply to an AI. The
+score therefore measures decision skill on equal terms, and one baseline ensemble serves every
+run with the same (pack, seat, origin, information, friction) vector. True values reach
+the baseline only when the player has them on; no other actor reads them.
 
 ### Presets, custom, ascension
 
@@ -110,7 +111,7 @@ the player's alone.
 
 ### Scores across settings
 
-Scores compare only within an equal settings vector, with replay and origin part of the vector.
+Scores compare only within an equal settings vector, with origin part of the vector.
 Each vector gets a measured difficulty: the mean score, against the baseline, of the scripted
 players of the 0198 audit under that vector, computed in the same audit. The number is shown
 beside the preset name; it is measured, never asserted, and no setting is tuned to hit it.
@@ -120,7 +121,8 @@ Histograms of 0161 filter by vector by default.
 
 - For a fixed order log, the state hash is identical under every preset and under a random
   custom vector.
-- The baseline ensemble's hash is independent of the player's settings vector.
+- The baseline ensemble's hash depends only on the information and friction entries of the
+  vector: changing a time or assist setting leaves it unchanged.
 - With true values on, no actor other than the seat reads a true-source observation (an
   observation log check over one decade).
 - Every score record deserializes with its settings vector; scores with unequal vectors are not
@@ -134,6 +136,9 @@ Histograms of 0161 filter by vector by default.
 - Easy play costs nothing in fidelity: the world is the same; only the player's view, hands and
   help change.
 - Players who want harder rivals get them only if the strategic AI is improved for everyone.
-- One baseline ensemble per tuple is cheaper than one per player and setting.
+- A baseline ensemble is computed per distinct information and friction vector, so presets
+  share cached baselines and a custom vector may need a fresh one before its score is final.
+- Since the baseline faces the same handicaps, a hard setting lowers the expected score only
+  where the player copes with it worse than the AI; the measured difficulty reports that.
 - The order budget and plan lock are game rules with no real-world analogue; they are labelled
   as such in the settings screen.
