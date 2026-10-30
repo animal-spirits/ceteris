@@ -1,7 +1,7 @@
 ---
 paths:
   - "crates/**/*.rs"
-  - "app/src-tauri/**/*.rs"
+  - "app/**/*.rs"
 ---
 
 # Rust rules (DESIGN 4.5, 19.4; ADR 0097)
