@@ -9,6 +9,7 @@ use slint::wgpu_30::wgpu;
 use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
+use crate::chunks::Chunks;
 use crate::fill::Fill;
 use crate::tokens::{INK, PAPER, SEA};
 
@@ -16,6 +17,9 @@ use crate::tokens::{INK, PAPER, SEA};
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const ID_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg32Uint;
 const TEX_WIDTH: u32 = 1024;
+/// Sphere radius in pixels (about 4 km per pixel) from which counties are drawn when neither
+/// their fill nor their borders are on; below it they would be a few pixels wide.
+pub const COUNTY_SCALE: f64 = 1_600.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layer {
@@ -48,7 +52,7 @@ struct Geometry {
     xy: wgpu::Buffer,
     feature: wgpu::Buffer,
     index: wgpu::Buffer,
-    indices: u32,
+    chunks: Chunks,
     features: u32,
     colours: wgpu::Texture,
     /// The next tick's colours, mixed in by `Style::mix` (ADR 0208).
@@ -78,7 +82,93 @@ struct Pipelines {
     borders: wgpu::RenderPipeline,
 }
 
+/// Timestamps around the fill and border passes, read back a frame or more later; for the
+/// benchmark and Tracy plots. Only when the device was created with timestamp queries.
+struct GpuTimer {
+    set: wgpu::QuerySet,
+    resolve: wgpu::Buffer,
+    read: wgpu::Buffer,
+    ready: Arc<AtomicBool>,
+    pending: bool,
+    period_ns: f32,
+    /// The last frame read back: fill and border pass, ms.
+    last: Option<[f64; 2]>,
+}
+
+impl GpuTimer {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Self> {
+        if !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
+            return None;
+        }
+        let buffer = |label, usage| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: 32,
+                usage,
+                mapped_at_creation: false,
+            })
+        };
+        Some(Self {
+            set: device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("map timestamps"),
+                ty: wgpu::QueryType::Timestamp,
+                count: 4,
+            }),
+            resolve: buffer(
+                "map timestamps",
+                wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+            ),
+            read: buffer(
+                "map timestamps read",
+                wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            ),
+            ready: Arc::new(AtomicBool::new(false)),
+            pending: false,
+            period_ns: queue.get_timestamp_period(),
+            last: None,
+        })
+    }
+
+    /// Plots the last frame's pass times once they are read back.
+    fn collect(&mut self, device: &wgpu::Device) {
+        if !self.pending {
+            return;
+        }
+        let _ = device.poll(wgpu::PollType::Poll);
+        if !self.ready.swap(false, Ordering::Acquire) {
+            return;
+        }
+        if let Ok(bytes) = self.read.slice(..).get_mapped_range() {
+            let t: Vec<u64> = bytes
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| u64::from_le_bytes(*b))
+                .collect();
+            let ms = |a: u64, b: u64| f64::from(self.period_ns) * b.saturating_sub(a) as f64 / 1e6;
+            let last = [ms(t[0], t[1]), ms(t[2], t[3])];
+            #[cfg(feature = "profile")]
+            {
+                tracy_client::plot!("gpu fills ms", last[0]);
+                tracy_client::plot!("gpu borders ms", last[1]);
+            }
+            self.last = Some(last);
+        }
+        self.read.unmap();
+        self.pending = false;
+    }
+
+    fn writes(&self, first: u32) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
+        (!self.pending).then_some(wgpu::RenderPassTimestampWrites {
+            query_set: &self.set,
+            beginning_of_pass_write_index: Some(first),
+            end_of_pass_write_index: Some(first + 1),
+        })
+    }
+}
+
 pub struct Map {
+    timer: Option<GpuTimer>,
     pipelines: Pipelines,
     view_buffer: wgpu::Buffer,
     provinces: Geometry,
@@ -134,6 +224,23 @@ impl Map {
         queue: &wgpu::Queue,
         provinces: &Fill,
         counties: Option<&Fill>,
+        country: &[u32],
+    ) -> Self {
+        Self::with_chunks(
+            device,
+            queue,
+            (provinces, Chunks::new(provinces)),
+            counties.map(|c| (c, Chunks::new(c))),
+            country,
+        )
+    }
+
+    /// As `new`, with the fills' chunks built beforehand (off the UI thread).
+    pub fn with_chunks(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        provinces: (&Fill, Chunks),
+        counties: Option<(&Fill, Chunks)>,
         country: &[u32],
     ) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("map.wgsl"));
@@ -296,7 +403,7 @@ impl Map {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let geometry = |label: &str, fill: &Fill| {
+        let geometry = |label: &str, (fill, chunks): (&Fill, Chunks)| {
             let colours = texture_2d(
                 device,
                 label,
@@ -348,8 +455,8 @@ impl Map {
             Geometry {
                 xy: buffer(&xy, wgpu::BufferUsages::VERTEX),
                 feature: buffer(&words(&fill.feature), wgpu::BufferUsages::VERTEX),
-                index: buffer(&words(&fill.index), wgpu::BufferUsages::INDEX),
-                indices: fill.index.len() as u32,
+                index: buffer(&words(&chunks.index), wgpu::BufferUsages::INDEX),
+                chunks,
                 features: fill.features,
                 colours,
                 next,
@@ -367,6 +474,7 @@ impl Map {
         let provinces = geometry("provinces", provinces);
         let counties = counties.map(|c| geometry("counties", c));
         Self {
+            timer: GpuTimer::new(device, queue),
             pipelines,
             view_buffer,
             provinces,
@@ -422,6 +530,7 @@ impl Map {
         style: Style,
         pick: Option<[u32; 2]>,
     ) -> Option<wgpu::Texture> {
+        crate::zone!("map render");
         let [width, height] = size.map(|s| s.max(1));
         let stale = self
             .targets
@@ -458,6 +567,10 @@ impl Map {
             )
             .collect();
         queue.write_buffer(&self.view_buffer, 0, &uniform);
+        if let Some(t) = self.timer.as_mut() {
+            t.collect(device);
+        }
+        let writes = |first| self.timer.as_ref().and_then(|t| t.writes(first));
 
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("map") });
@@ -480,6 +593,7 @@ impl Map {
                     attachment(&targets.colour_view),
                     attachment(&targets.id_view),
                 ],
+                timestamp_writes: writes(0),
                 ..Default::default()
             });
             pass.set_bind_group(0, &self.provinces.bind_group, &[]);
@@ -491,10 +605,14 @@ impl Map {
                 pass.set_vertex_buffer(0, g.xy.slice(..));
                 pass.set_vertex_buffer(1, g.feature.slice(..));
                 pass.set_index_buffer(g.index.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..g.indices, 0, 0..1);
+                for range in g.chunks.visible(camera, viewport) {
+                    pass.draw_indexed(range, 0, 0..1);
+                }
             };
             draw(&self.pipelines.provinces, &self.provinces);
-            if let Some(counties) = &self.counties {
+            let counties_shown =
+                style.county_fill || style.county_borders || camera.scale >= COUNTY_SCALE;
+            if let Some(counties) = self.counties.as_ref().filter(|_| counties_shown) {
                 let pipeline = if style.county_fill {
                     &self.pipelines.county_fill
                 } else {
@@ -515,6 +633,7 @@ impl Map {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
+                timestamp_writes: writes(2),
                 ..Default::default()
             });
             pass.set_pipeline(&self.pipelines.borders);
@@ -546,7 +665,21 @@ impl Map {
                 },
             );
         }
+        let timed = self.timer.as_ref().is_some_and(|t| !t.pending);
+        if let Some(t) = self.timer.as_ref().filter(|_| timed) {
+            encoder.resolve_query_set(&t.set, 0..4, &t.resolve, 0);
+            encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, 32);
+        }
         queue.submit([encoder.finish()]);
+        if let Some(t) = self.timer.as_mut().filter(|_| timed) {
+            let ready = t.ready.clone();
+            t.pending = true;
+            t.read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+                if r.is_ok() {
+                    ready.store(true, Ordering::Release);
+                }
+            });
+        }
         if pick.is_some() {
             let ready = self.pick.ready.clone();
             self.pick.pending = true;
@@ -583,6 +716,12 @@ impl Map {
             province: ids[0].checked_sub(1),
             county: ids[1].checked_sub(1),
         })
+    }
+
+    /// GPU time of the fill and border passes in the last frame read back, ms, when the device
+    /// has timestamp queries; taken once.
+    pub fn gpu_times(&mut self) -> Option<[f64; 2]> {
+        self.timer.as_mut().and_then(|t| t.last.take())
     }
 
     pub fn pick_pending(&self) -> bool {

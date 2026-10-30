@@ -3,7 +3,7 @@
 
 use ceteris_app::camera::{Camera, lon_lat};
 use ceteris_app::fill::Fill;
-use ceteris_app::map::{Layer, Map, Picked, Style};
+use ceteris_app::map::{COUNTY_SCALE, Layer, Map, Picked, Style};
 use ceteris_app::tokens::{INK, PAPER, SEA};
 use slint::wgpu_30::wgpu;
 
@@ -342,4 +342,50 @@ fn colours_mix_towards_the_next_tick() {
         assert!((f32::from(px[c]) - want).abs() <= 2.0, "{px:?}");
     }
     assert_eq!(read_pixel(&device, &queue, &target, 75, 50), RED);
+}
+
+#[test]
+fn counties_are_drawn_only_when_needed_at_world_scale() {
+    let Some((device, queue)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let (provinces, counties) = neighbours();
+    let mut map = Map::new(&device, &queue, &provinces, Some(&counties), &[0, 0]);
+    let at = |scale: f64| Camera {
+        centre: [0.0, 0.0],
+        scale,
+    };
+    let style = Style::default();
+    let far = picked(
+        &mut map,
+        &device,
+        &queue,
+        &at(COUNTY_SCALE / 1.6),
+        style,
+        [49, 50],
+    );
+    assert_eq!((far.province, far.county), (Some(0), None));
+    let near = picked(
+        &mut map,
+        &device,
+        &queue,
+        &at(COUNTY_SCALE * 1.25),
+        style,
+        [49, 50],
+    );
+    assert_eq!((near.province, near.county), (Some(0), Some(1)));
+    let borders = Style {
+        county_borders: true,
+        ..style
+    };
+    let far = picked(
+        &mut map,
+        &device,
+        &queue,
+        &at(COUNTY_SCALE / 1.6),
+        borders,
+        [49, 50],
+    );
+    assert_eq!(far.county, Some(1));
 }
