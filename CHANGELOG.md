@@ -10,17 +10,24 @@
   unchanged; nodes 40,187 (40,534), edges 133,907 (134,810), minor ports 1,233 (1,283), coastal
   provinces 1,864 (1,934), county area outside its province 0.0274 (0.0302). Gateways stay 600
   (286 port, 171 airport, 143 land crossing; were 287, 168, 145); provinces with value added
-  4,368 (4,555).
-- Recalibrated by `ceteris calibrate --pack` (45 passes, Sinkhorn residual 9.9e-14).
+  4,368 (4,555); `va_imputed_share` 0.0759 (with ADR 0249's econ tables).
+- Recalibrated by `ceteris calibrate --pack` on ADR 0249's econ tables (39 passes, Sinkhorn
+  residual 9.6e-14).
 - Every province index moves, so every province-indexed table, the calibration tables and the
   least-cost trees move. `crates/ceteris-pack/tests/data/pixel_cells.txt` maps each old index to
   the whole province's new index; the build stats pinned in `tests/econ_build.rs` follow the
-  new gateway kinds and value-added count.
-- P2 gate on the new pack: V1 from the perturbed steady state passes (price 9.086e-3, wage
-  9.067e-4, flow units 4.950e-5, value 5.390e-5, bound 0.9671); H2 distance -0.744 (s.e.
-  0.015, pseudo-R2 0.982, 47,306 pairs) passes; H2 per class passes (food 1.676, s.e. 0.171;
-  machinery 3.533, 0.517; the five-good class 9.084, 0.332). 100 years: no violation, world
-  price index 1.0000000000000124. 1 vs 8 threads, 120 ticks: identical hashes.
+  new gateway kinds, value-added count and imputed share.
+- P2 gate on the new pack with ADR 0249: V1 from the perturbed steady state FAILS (price
+  5.219e-1 at PRY-620 Itapúa, wage 5.013e-1, flow units 6.810e-1, value 5.453e-1, against
+  bound 0.9671; the largest price gap rises from 0.109 at tick 0 to about 0.5 by tick 240 and
+  stays). Before ADR 0249 the same province set passed (price 9.086e-3). V1 from the data
+  state stays open (price 4.876, wage 5.432). H2 distance -0.745 (s.e. 0.015, pseudo-R2 0.982,
+  47,306 pairs) passes; H2 per class passes (food 1.657, s.e. 0.177; machinery 3.496, 0.525;
+  the five-good class 9.174, 0.312). 100 years: no violation, world price index
+  1.000000000000015. 1 vs 8 threads, 120 ticks: identical hashes.
+- `p2_steady_state::pack_calibrated_state_holds_to_2e_6_and_4_minor_units` FAILS: pop money
+  reaches 1.069 times its tolerance (relative 1.210e-3 at tick 1); every other series stays
+  within 0.6.
 
 Goldens re-blessed:
 
