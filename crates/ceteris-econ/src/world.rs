@@ -977,7 +977,23 @@ impl EconWorld {
                 );
                 w.start_steady(&steady)
             }
-            None => w.start_data_state(),
+            None => {
+                if w.inputs.market_elasticity.is_some() {
+                    assert_eq!(
+                        structural_digest(&w.inputs, &w.params, &w.trade),
+                        structural_digest(
+                            &w.inputs,
+                            &EconParams::default(),
+                            &w.inputs.trade_params()
+                        ),
+                        "the market elasticities were computed under the default structural \
+                         parameters and the calibrated border friction \
+                         (`EconInputs::trade_params`), so their price gains (ADR 0263) would be \
+                         stale; recalibrate, or start inputs without a calibration"
+                    );
+                }
+                w.start_data_state()
+            }
         }
         w
     }
@@ -1243,7 +1259,9 @@ impl EconWorld {
     /// Called between ticks; the buyer prices of the last E3 stand until the next E3 sources
     /// over the new kernel, and goods already in flight arrive as scheduled, so the same
     /// network leaves the run unchanged. The network must keep the provinces and gateways,
-    /// whose accounts are open. In P2 the caller triggers it; shocks arrive in P3.
+    /// whose accounts are open. The price gains stay those of the calibration (ADR 0263, As
+    /// built), as the coefficients and Gamma do: J needs the calibrated spending, which a run
+    /// does not have. In P2 the caller triggers it; shocks arrive in P3.
     pub fn set_network(&mut self, network: Network) {
         let old = &self.inputs.network;
         assert!(
@@ -2019,8 +2037,30 @@ mod tests {
             assert!((gains[1] - 1.0 / 25.0).abs() < 1e-16);
             assert!(gains[2..].iter().all(|&k| k == trade.kappa1));
         }
-        let w = EconWorld::new(Arc::new(inputs), EconParams::frictionless(), trade.clone());
+        let mut w = EconWorld::new(Arc::new(inputs), EconParams::frictionless(), trade.clone());
         assert_eq!(w.layout().price_gain, frictionless);
+        let mut net = w.inputs().network.clone();
+        for l in &mut net.crossings {
+            l.cost_per_t *= 4.0;
+        }
+        w.set_network(net);
+        assert_eq!(w.layout().price_gain, frictionless);
+    }
+
+    #[test]
+    #[should_panic(expected = "market elasticities were computed under the default structural")]
+    fn data_state_start_refuses_elasticities_of_other_structural_parameters() {
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand: vec![1.0; n],
+            supply: vec![0.0; n],
+        });
+        let params = EconParams {
+            sigma_demand: EconParams::default().sigma_demand + 0.5,
+            ..EconParams::default()
+        };
+        EconWorld::new(Arc::new(inputs), params, TradeParams::default());
     }
 
     #[test]
