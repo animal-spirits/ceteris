@@ -808,7 +808,7 @@ the radius on p. 9, footnote 10 p. 7).
 ## App (after the native app reaches parity, ADRs 0011 and 0088)
 
 The app is fully native (no React, webview or Tauri), with Slint panels over a wgpu map
-(ADR 0088). P2's UI is built there, not in `app/`. Map modes: price by good
+(ADR 0088). P2's UI is built there (`app/`, specs/app/SPEC.md). Map modes: price by good
 (index-normalized), output by sector, net exports by good, wage, unemployment. Province panel:
 market rows per good (price, inventory, supply, demand), its enterprises (sector, employment,
 output, profit), its pops (education, labour force, employed, income). Time controls: play,
