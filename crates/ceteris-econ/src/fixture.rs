@@ -6,9 +6,9 @@
 //! west gateway of the next form a land crossing, the outer gateways of countries 0 and 2
 //! are ports, joined by sea to each other and to the island port. Country 1 is landlocked.
 //! Land legs (domestic, access, land crossings) cost 0.02 USD per tonne-km, sea crossings
-//! (the three port-to-port lanes, including both island crossings) cost 0.002, bulk sea
-//! freight; theta class 3 ships them at P154 times that (`Network::bulk`, ADR 0247). All legs
-//! move at 40 km/h along the straight line.
+//! (the three port-to-port lanes, including both island crossings) cost 0.002, the sea freight
+//! rate; theta class 3 ships them at P154 times that (`Network::bulk`, ADR 0247). All legs move
+//! at 40 km/h along the straight line.
 //!
 //! Crude oil (good 1) has no final demand and is an input only to chemicals, fuels and
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
@@ -25,7 +25,7 @@ const MAINLAND: usize = 3;
 const PER_COUNTRY: usize = 8;
 /// USD per tonne-km on land legs.
 const LAND_COST_PER_TKM: f64 = 0.02;
-/// USD per tonne-km on sea crossings (bulk freight, a tenth of land).
+/// USD per tonne-km on sea crossings (sea freight, a tenth of land).
 const SEA_COST_PER_TKM: f64 = 0.002;
 const KMH: f64 = 40.0;
 const OIL: usize = 1;
@@ -261,33 +261,47 @@ pub const ISLAND_USER: usize = 4;
 /// island would be input capped and its labour market would have no solution. The base point
 /// does not depend on input coefficients, so it stays that of [`small_world`], and so do the
 /// base prices: coefficients are set in the base world, the cut comes after. Route taus and
-/// bulk legs are exclusive (ADR 0247), so this world drops the bulk legs and runs with the bulk
-/// freight rate off: `trade` must have P154 and P155 at 1, or the kernel refuses it.
+/// bulk legs are exclusive (ADR 0247), so this world folds the bulk legs into the route taus of
+/// the bulk classes' goods, drops them, and runs with the bulk freight rate off: `trade` must
+/// have P154 and P155 at 1, or the kernel refuses it. Its kernel is that of [`small_world`] at
+/// the default rate but for the cut.
 pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
     let mut inputs = small_world();
-    inputs.network.bulk = None;
+    let bulk = inputs.network.bulk.take();
     let island_port = (2 * MAINLAND) as u32;
     let weight = inputs.weight;
-    let factors = |legs: &[Leg], crossings: bool| -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
-        legs.iter()
-            .map(|l| {
-                let cut = crossings && (l.from == island_port || l.to == island_port);
-                let tau = std::array::from_fn(|g| {
-                    if cut && g == UNREACHABLE {
-                        f64::INFINITY
-                    } else {
-                        // the kernel's least-cost factor, so every other leg is unchanged
-                        1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
-                    }
-                });
-                (tau, [l.hours; N_GOODS])
-            })
-            .unzip()
+    let on_bulk = |g: usize| {
+        bulk.as_ref()
+            .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
+    };
+    let factors = |base: &[Leg],
+                   bulk: Option<&Vec<Leg>>,
+                   crossings: bool|
+     -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
+        let mut taus = Vec::with_capacity(base.len());
+        let mut hours = Vec::with_capacity(base.len());
+        for (i, b) in base.iter().enumerate() {
+            let cut = crossings && (b.from == island_port || b.to == island_port);
+            let leg = |g: usize| bulk.filter(|_| on_bulk(g)).map_or(b, |legs| &legs[i]);
+            taus.push(std::array::from_fn(|g| {
+                if cut && g == UNREACHABLE {
+                    f64::INFINITY
+                } else {
+                    // the kernel's least-cost factor, so every other leg is unchanged
+                    let l = leg(g);
+                    1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
+                }
+            }));
+            hours.push(std::array::from_fn(|g| leg(g).hours));
+        }
+        (taus, hours)
     };
     let net = &inputs.network;
-    let (domestic, domestic_hours) = factors(&net.domestic, false);
-    let (access, access_hours) = factors(&net.access, false);
-    let (crossings, crossing_hours) = factors(&net.crossings, true);
+    let (domestic, domestic_hours) =
+        factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic), false);
+    let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access), false);
+    let (crossings, crossing_hours) =
+        factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings), true);
     inputs.network.route_taus = Some(LegTaus {
         domestic,
         access,
@@ -409,14 +423,18 @@ mod tests {
 
     #[test]
     fn unreachable_island_cuts_only_the_island_machinery_crossings() {
-        // the cut world runs with the bulk freight rate off, so compare with the plain one off
-        let p = TradeParams::default().bulk_off();
-        let (mut plain, cut) = (small_world(), unreachable_island(&p));
-        plain.network.bulk = None;
+        // the cut world folds the bulk legs into its route taus and runs with the rate off
+        let off = TradeParams::default().bulk_off();
+        let (plain, cut) = (small_world(), unreachable_island(&off));
         cut.validate();
         assert_eq!(cut.enterprises.l0, plain.enterprises.l0);
-        let kernel = |w: &EconInputs| Kernel::build(&w.network, &w.weight, &w.wedges, &p);
-        let (a, b) = (kernel(&plain), kernel(&cut));
+        let a = Kernel::build(
+            &plain.network,
+            &plain.weight,
+            &plain.wedges,
+            &TradeParams::default(),
+        );
+        let b = Kernel::build(&cut.network, &cut.weight, &cut.wedges, &off);
         let mut changed = 0;
         for g in (0..N_GOODS).filter(|&g| ceteris_trade::goods::TRADED[g]) {
             let (a, b) = (a.good(g), b.good(g));
