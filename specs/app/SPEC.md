@@ -23,7 +23,7 @@ comparing runs.
 | Area | In the shell | Later |
 |---|---|---|
 | Window | winit window, Slint 1.18 on the femtovg wgpu renderer (`unstable-wgpu-30`), one wgpu device shared with the map | Multiple windows (0196, 1.x) |
-| Map | Province and county fills from `provinces.fill` and `counties.fill`, feature colour texture (0010), flat and globe projections, pan and zoom, ID-buffer picking, borders and labels from `web/map.pmtiles` | Hillshade (0137), difference maps (P3), units and arcs |
+| Map | Province and county fills from `provinces.fill` and `counties.fill`, feature colour texture (0010), flat and globe projections, pan and zoom, ID-buffer picking; borders from the id target and labels as Slint text (ADR 0244) | Hillshade (0137), difference maps (P3), units and arcs |
 | Map modes | P1: political, terrain, resources (by group), freight cost from an origin. P2: price by good, output by sector, net exports by good, wage, unemployment (econ SPEC, App) | Every later phase adds its own |
 | Panels | Mode picker, legend, inspector (province, county), province panel (markets, enterprises, pops), error banner, About with `AboutSlint` | Outliner, edit log, branch manager (P3) |
 | Time | Play, pause, step, speeds 1-5, date counting days between monthly ticks, sim-bound chip; two loops and the run-ahead ring of 0208 | Step back, fork, run to event (P3) |
@@ -35,8 +35,8 @@ comparing runs.
 - **Workspace.** Its own cargo workspace in `native/` (owner, 2026-10-29), as `app/src-tauri`
   is, so Slint and wgpu stay out of the core's lockfile, CI and `cargo deny`. It reaches the
   core by path dependencies. At stage 3 it moves to `app/`.
-- **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, PMTiles
-  reader), `ui` (`.slint` files compiled in by `slint-build`), `sim` (sim thread, view
+- **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, borders),
+  `labels` (anchors and placement), `ui` (`.slint` files compiled in by `slint-build`), `sim` (sim thread, view
   publishing, ring), `commands` (registry and keymap). Arrow tables are read through `ceteris-geo`
   and `ceteris-econ`. The `.fill` reader is the app's own (`fill.rs`, a few lines against the
   format of `ceteris_pack::geo::fills`), so the app does not link the pack builder.
@@ -87,5 +87,3 @@ n/a: the app computes nothing the core does not.
 
 - Slint licence for runtime-loaded mod markup (0088): moot in 1.0 if mods change themes and
   data only; to confirm with Slint before mods reach panel markup.
-- PMTiles over the local file needs no HTTP Range server; confirm the `pmtiles` crate's sync
-  file reader at step 3.

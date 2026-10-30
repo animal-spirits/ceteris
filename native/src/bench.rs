@@ -1,5 +1,6 @@
 //! Map benchmark (`CETERIS_BENCH=1`), the in-app measurement of ADR 0011 stage 1: frame
-//! interval over a scripted camera path, and the CPU cost of a full recolour. Results go to
+//! interval over a scripted camera path, and the CPU cost of a full recolour of the counties
+//! (provinces when the pack has no county fills). Results go to
 //! stdout, then the app quits.
 
 use std::time::Instant;
@@ -7,7 +8,7 @@ use std::time::Instant;
 use slint::wgpu_30::wgpu;
 
 use crate::camera::Camera;
-use crate::map::Map;
+use crate::map::{Layer, Map};
 
 const FRAMES: usize = 600;
 /// A recolour every `RECOLOUR`-th frame.
@@ -18,6 +19,7 @@ pub struct Bench {
     last: Option<Instant>,
     intervals: Vec<f64>,
     recolours: Vec<f64>,
+    recoloured: u32,
 }
 
 impl Bench {
@@ -27,6 +29,7 @@ impl Bench {
             last: None,
             intervals: Vec::with_capacity(FRAMES),
             recolours: Vec::new(),
+            recoloured: 0,
         }
     }
 
@@ -35,7 +38,6 @@ impl Bench {
         &mut self,
         map: &Map,
         queue: &wgpu::Queue,
-        features: usize,
         viewport: [f64; 2],
         base: Camera,
     ) -> Camera {
@@ -55,7 +57,8 @@ impl Bench {
         if self.frame.is_multiple_of(RECOLOUR) {
             let start = Instant::now();
             let shift = self.frame as u32;
-            let colours: Vec<[u8; 4]> = (0..features as u32)
+            let layer = Self::layer(map);
+            let colours: Vec<[u8; 4]> = (0..map.features(layer))
                 .map(|i| {
                     let h = i
                         .wrapping_mul(2_654_435_761)
@@ -63,11 +66,20 @@ impl Bench {
                     [(h >> 24) as u8, (h >> 16) as u8, (h >> 8) as u8, 255]
                 })
                 .collect();
-            map.set_colours(queue, &colours);
+            map.set_colours(queue, layer, &colours);
+            self.recoloured = colours.len() as u32;
             self.recolours.push(start.elapsed().as_secs_f64() * 1e3);
         }
         self.frame += 1;
         camera
+    }
+
+    pub fn layer(map: &Map) -> Layer {
+        if map.features(Layer::Counties) > 0 {
+            Layer::Counties
+        } else {
+            Layer::Provinces
+        }
     }
 
     pub fn done(&self) -> bool {
@@ -88,7 +100,10 @@ impl Bench {
             );
         };
         stats("frame interval", &self.intervals);
-        stats("recolour upload", &self.recolours);
+        stats(
+            &format!("recolour upload ({} features)", self.recoloured),
+            &self.recolours,
+        );
         let p50 = {
             let mut v = self.intervals.clone();
             v.sort_by(f64::total_cmp);
