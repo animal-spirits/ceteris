@@ -28,6 +28,13 @@
 - `p2_steady_state::pack_calibrated_state_holds_to_2e_6_and_4_minor_units` FAILS: pop money
   reaches 1.069 times its tolerance (relative 1.210e-3 at tick 1); every other series stays
   within 0.6.
+- Cause of the V1 miss (diagnosed 2026-10-30): ADR 0249 sets crude oil VA from rents but keeps
+  the donor's VA share of output (Sudan from Senegal, a_va 0.072), so Unity and South Kordufan
+  sell about Sudan's whole pop money per tick and a perturbation moves Sudan to another steady
+  state. Which seed does so depends on the cell order, not the province set: main's split pack
+  fails V1 too on a fresh build (price 1.879e-2 at ALB-1529 Tiranë, seed 20; Sudan drifts at
+  seed 21), and the whole pack passes at seed 21. The steady-state miss is Pitcairn's one pop
+  (4.28 minor units against a floor of 4).
 
 Goldens re-blessed:
 

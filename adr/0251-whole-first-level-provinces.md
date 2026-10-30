@@ -51,8 +51,11 @@ Option 3 (owner, 2026-10-30, on the card "Undo splits in the pack").
 - Province counts in DESIGN 1, 5.2, 5.3, 6.5, 19.2, 21 and 22.1 and in the geo, econ and trade
   specs read 4,594. The rebuilt graph has 40,187 nodes and 133,907 edges (40,534 and
   134,810); gateways stay 600 (286 ports, 171 airports, 143 land crossings).
-- P2 gate on the rebuilt pack (econ SPEC, P2 gate): passes. H2 distance -0.744 (was -0.753),
-  theta by class 1.68, 3.53, 9.08 (were 1.75, 3.72, 9.52), 100 years without violation.
+- P2 gate on the rebuilt pack before ADR 0249: passes. H2 distance -0.744 (was -0.753), theta
+  by class 1.68, 3.53, 9.08 (were 1.75, 3.72, 9.52), 100 years without violation. With ADR
+  0249's econ tables, V1 from the perturbed steady state fails on this pack and on main's split
+  pack alike: 0249's rents path gives Sudan's crude oil a donor's VA share of 0.072, and the
+  seed decides which pack drifts (CHANGELOG). That fix belongs to ADR 0249's data, not here.
 - The gravity fit (`ceteris gravity --pack`) gives no estimates on either pack: on the split
   pack the P04 stop rule fires (air ratio -0.70), on the whole pack the mode costs do not
   converge in 50 steps. `gravity_2000.toml` is not written and nothing reads it yet, so this

@@ -791,7 +791,7 @@ the radius on p. 9, footnote 10 p. 7).
     price index 1.0000000000000067, no pop with negative money, no negative pool, no retained
     loss, no stockout. 1 vs 8 threads, 120 ticks: identical hashes (20.0 s and 6.3 s). Every
     number equals the Python gate's at its printed precision.
-  - On the pack with whole provinces (ADR 0251, 2026-10-30; 4,594 provinces, 45 passes,
+  - On the pack with whole provinces before ADR 0249 (ADR 0251, 2026-10-30; 4,594 provinces, 45 passes,
     Sinkhorn residual 9.9e-14): V1 from the perturbed steady state passes (price 9.086e-3,
     wage 9.067e-4, flow units 4.950e-5, value 5.390e-5, bound 0.9671, reference residual
     5.0e-12); V1 from the data state still misses (price 0.879, wage 0.604); H2 distance
