@@ -919,14 +919,16 @@ fn autarky_has_no_selection() {
         province_country: inputs.network.province_country.clone(),
         ..Network::default()
     };
-    inputs.set_base_prices(&TradeParams::default());
+    // no legs, so no bulk legs: the bulk freight rate is off (ADR 0247)
+    let trade = TradeParams::default().bulk_off();
+    inputs.set_base_prices(&trade);
     inputs.set_coefficients();
     inputs.set_base_point(&EconParams::default().edu_eff);
     let gamma = inputs.provinces.gamma.clone();
     let mut sim = sim_of(EconWorld::new(
         Arc::new(inputs),
         EconParams::default(),
-        TradeParams::default(),
+        trade,
     ));
     for tick in 1..=120 {
         sim.step().unwrap_or_else(|v| panic!("{v}"));
@@ -1902,7 +1904,7 @@ fn putty_clay_one_vintage_equals_fixed_leontief() {
 #[test]
 fn unreachable_destination_buys_nothing_in_the_world() {
     for params in [EconParams::default(), EconParams::frictionless()] {
-        let trade = TradeParams::default();
+        let trade = TradeParams::default().bulk_off();
         let mut w = EconWorld::new(Arc::new(unreachable_island(&trade)), params, trade);
         let (inp, lay) = (w.inputs().clone(), w.layout().clone());
         let island = inp.n_provinces() - 1;

@@ -81,15 +81,15 @@ pub struct TradeParams {
     /// `Network::route_taus` stays `None`.
     pub theta_r: f64,
     /// P154 bulk freight rate (ADR 0247): multiplier on the sea cost per tonne-km (P04c, sea and
-    /// canal edges) for the legs of each theta class. Default 1 for every class: the rate is off,
-    /// since ADR 0247's ablation test failed on H2 distance. The sourced value for class 3
-    /// (fuels and mining) is 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne
-    /// against sea km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC,
-    /// Parameters) over P04c. It reaches the kernel only through `Network::bulk`.
+    /// canal edges) for the legs of each theta class. 1 for classes 0 to 2; class 3 (fuels and
+    /// mining) 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
+    /// km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC, Parameters) over
+    /// P04c. On by default by owner ruling (2026-10-30). It reaches the kernel only through
+    /// `Network::bulk`.
     pub bulk_sea: [f64; N_CLASSES],
     /// P155 bulk freight rate (ADR 0247): multiplier on the listed and minor port fees (P04m)
-    /// per theta class. Default 1 for every class (off, as P154); the sourced value for class 3
-    /// is 0.40, half the fixed part of the same rates over the listed-port fee.
+    /// per theta class. 1 for classes 0 to 2; class 3 0.40, half the fixed part of the same
+    /// rates over the listed-port fee (on by default, as P154).
     pub bulk_port: [f64; N_CLASSES],
 }
 
@@ -121,6 +121,17 @@ impl TradeParams {
         Some((classes, rate.0, rate.1))
     }
 
+    /// These parameters with the bulk freight rate off (P154 and P155 at 1 for every class), for
+    /// a network without bulk legs: one built without a graph, or one with route taus.
+    #[must_use]
+    pub fn bulk_off(self) -> Self {
+        Self {
+            bulk_sea: [1.0; N_CLASSES],
+            bulk_port: [1.0; N_CLASSES],
+            ..self
+        }
+    }
+
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
     pub fn price_clip(&self, g: usize) -> f64 {
         if STORABLE[g] {
@@ -148,8 +159,8 @@ impl Default for TradeParams {
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
-            bulk_sea: [1.0; N_CLASSES],
-            bulk_port: [1.0; N_CLASSES],
+            bulk_sea: [1.0, 1.0, 1.0, 0.026],
+            bulk_port: [1.0, 1.0, 1.0, 0.40],
         }
     }
 }
@@ -158,13 +169,23 @@ impl Default for TradeParams {
 mod tests {
     use super::*;
 
+    /// P154 and P155 default to the sourced bulk freight rate for class 3 only (ADR 0247,
+    /// owner ruling 2026-10-30).
+    #[test]
+    fn bulk_rate_is_on_for_class_3_by_default() {
+        assert_eq!(
+            TradeParams::default().bulk_rate(),
+            Some(([false, false, false, true], 0.026, 0.40))
+        );
+    }
+
     /// A NaN multiplier is reported as a bad rate, not as two classes that differ.
     #[test]
     #[should_panic(expected = "bulk freight rate (NaN, 1.0) of class 3")]
     fn bulk_rate_rejects_nan() {
         TradeParams {
             bulk_sea: [1.0, 1.0, 1.0, f64::NAN],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         }
         .bulk_rate();
     }

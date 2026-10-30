@@ -94,7 +94,7 @@ fn median(mut v: Vec<f64>) -> f64 {
 
 #[test]
 fn two_level_vs_direct_report() {
-    let p = TradeParams::default();
+    let p = TradeParams::default().bulk_off();
     let (nu, theta) = (1.0 + p.border_nu_of(GOOD), p.theta[GOOD]);
     let mut diffs_orders = vec![];
     let mut diffs_arrival = vec![];

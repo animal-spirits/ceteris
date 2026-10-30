@@ -749,7 +749,7 @@ mod tests {
     fn kernel_at(net: &Network, wedges: &Wedges, theta: f64) -> Kernel {
         let p = TradeParams {
             theta: [theta; N_GOODS],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         };
         Kernel::build(net, &W, wedges, &p)
     }
@@ -760,7 +760,7 @@ mod tests {
     }
 
     fn tau_leg(g: usize, l: &Leg) -> f64 {
-        1.0 + l.cost_per_t * W[g] + TradeParams::default().time_cost[g] * l.hours / 24.0
+        1.0 + l.cost_per_t * W[g] + TradeParams::default().bulk_off().time_cost[g] * l.hours / 24.0
     }
 
     /// K of a leg by the spec formula.
@@ -784,7 +784,7 @@ mod tests {
 
     /// Every route o to d, by explicit enumeration of gateway pairs.
     fn hops(net: &Network, wedges: &Wedges, g: usize, o: usize, d: usize, theta: f64) -> Vec<Hop> {
-        let nu = 1.0 + TradeParams::default().border_nu_of(g);
+        let nu = 1.0 + TradeParams::default().bulk_off().border_nu_of(g);
         let (co, cd) = (net.province_country[o], net.province_country[d]);
         if o == d {
             return vec![Hop {
@@ -1264,7 +1264,7 @@ mod tests {
     #[test]
     fn shares_homogeneous_in_prices() {
         // per good, each at its own default theta
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         for (seed, g) in (0..7).map(|g| (3 + 14 * g as u64, g)) {
             let (net, wedges) = random_world(seed);
             let n = net.n_provinces();
@@ -2040,7 +2040,7 @@ mod tests {
         };
         let wedges = Wedges::none(2);
         let k = kernel(&net, &wedges);
-        let nu = 1.0 + TradeParams::default().border_nu_of(g);
+        let nu = 1.0 + TradeParams::default().bulk_off().border_nu_of(g);
         let abroad =
             k_leg(g, &net.access[0], 1.0, THETA).powi(2) * k_leg(g, &net.crossings[0], nu, THETA);
         let gap = 4.0 - abroad.ln();

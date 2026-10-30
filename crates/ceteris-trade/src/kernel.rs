@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn leg_factor_matches_spec() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = two_provinces(150.0, 48.0);
         let k = Kernel::build(&net, &W, &Wedges::none(1), &p);
         let e = k.good(4).domestic.row(0)[0];
@@ -800,7 +800,7 @@ mod tests {
 
     #[test]
     fn kernel_uses_theta_per_good() {
-        let mut p = TradeParams::default();
+        let mut p = TradeParams::default().bulk_off();
         p.theta[0] = 2.0;
         p.theta[4] = 8.0;
         let net = world(&mut Rng(5));
@@ -890,7 +890,7 @@ mod tests {
             ..base.clone()
         };
         let (a, b) = (
-            Kernel::build(&base, &W, &wedges, &TradeParams::default()),
+            Kernel::build(&base, &W, &wedges, &TradeParams::default().bulk_off()),
             Kernel::build(&same, &W, &wedges, &p),
         );
         for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
@@ -939,7 +939,7 @@ mod tests {
         TradeParams {
             bulk_sea: [1.0, 1.0, 1.0, sea],
             bulk_port: [1.0, 1.0, 1.0, port],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         }
     }
 
@@ -952,7 +952,7 @@ mod tests {
         let refused = |net: &Network, p: &TradeParams| {
             std::panic::catch_unwind(|| Kernel::build(net, &W, &wedges, p)).is_err()
         };
-        assert!(refused(&net, &TradeParams::default()));
+        assert!(refused(&net, &TradeParams::default().bulk_off()));
         assert!(refused(&net, &bulk_params(0.5, 0.5)));
         assert!(refused(&world(&mut Rng(9)), &bulk_params(0.5, 0.25)));
     }
@@ -962,7 +962,7 @@ mod tests {
     fn border_nu_follows_the_theta_class() {
         let p = TradeParams {
             border_nu: [0.1, 0.25, 0.5, 2.0],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         };
         let net = world(&mut Rng(9));
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
@@ -985,9 +985,9 @@ mod tests {
         wedges.tariff.iter_mut().for_each(|t| *t = 0.1);
         let scaled = TradeParams {
             theta_scale: 1.4,
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         };
-        let mut multiplied = TradeParams::default();
+        let mut multiplied = TradeParams::default().bulk_off();
         multiplied.theta.iter_mut().for_each(|t| *t *= 1.4);
         let (a, b) = (
             Kernel::build(&net, &W, &wedges, &scaled),
@@ -1002,7 +1002,7 @@ mod tests {
         }
         assert_ne!(
             a.good(0).domestic.entries,
-            Kernel::build(&net, &W, &wedges, &TradeParams::default())
+            Kernel::build(&net, &W, &wedges, &TradeParams::default().bulk_off())
                 .good(0)
                 .domestic
                 .entries
@@ -1015,14 +1015,14 @@ mod tests {
             &two_provinces(1.0, 1.0),
             &W,
             &Wedges::none(1),
-            &TradeParams::default(),
+            &TradeParams::default().bulk_off(),
         );
         assert!((0..N_GOODS).all(|g| k.try_good(g).is_some() == (g < 7)));
     }
 
     #[test]
     fn crossing_includes_border_and_tariff() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = Network {
             province_country: vec![0, 1],
             gateway_country: vec![0, 1],
@@ -1112,7 +1112,7 @@ mod tests {
 
     #[test]
     fn kernel_uses_route_taus_when_present() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let mut net = world(&mut Rng(11));
         let least = Kernel::build(&net, &W, &Wedges::none(2), &p);
         // per-good factors unrelated to the least-cost legs; hours give lags 0 to 3
@@ -1177,12 +1177,17 @@ mod tests {
             domestic_hours: vec![[1.0; N_GOODS]; 2],
             ..LegTaus::default()
         });
-        Kernel::build(&net, &W, &Wedges::none(1), &TradeParams::default());
+        Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(1),
+            &TradeParams::default().bulk_off(),
+        );
     }
 
     #[test]
     fn home_kernel_is_one() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = world(&mut Rng(7));
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
         for g in 0..7 {
@@ -1203,7 +1208,7 @@ mod tests {
 
     #[test]
     fn phi_matches_dense_kernel() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let mut rng = Rng(0x9e3779b97f4a7c15);
         let net = world(&mut rng);
         let mut wedges = Wedges::none(2);
@@ -1301,7 +1306,7 @@ mod tests {
         // f32 ln K resolves to 1e-7 (1.5e-5)
         let p = TradeParams {
             theta: [64.85; N_GOODS],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         };
         let mut net = world(&mut Rng(3));
         let taus = |n: usize| vec![[1e4; N_GOODS]; n];
@@ -1359,7 +1364,12 @@ mod tests {
             access_hours: vec![[0.0; N_GOODS]; n(&net.access)],
             crossing_hours: vec![[0.0; N_GOODS]; n(&net.crossings)],
         });
-        let k = Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
+        let k = Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(2),
+            &TradeParams::default().bulk_off(),
+        );
         let mut acc = Access::default();
         k.origin_access_into(0, &[1.0; 10], &[0.0, -800.0], &mut acc);
         // country 0 imports from country 1 in country 1's scale; nothing reaches country 1
@@ -1377,6 +1387,11 @@ mod tests {
         let mut net = world(&mut Rng(2));
         assert_eq!(equal_gateway_mass(&net.gateway_country), [0.5, 0.5, 1.0]);
         net.gateway_mass = vec![0.5, 0.6, 1.0];
-        Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
+        Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(2),
+            &TradeParams::default().bulk_off(),
+        );
     }
 }
