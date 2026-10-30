@@ -119,6 +119,11 @@ to 2.
   tonne-km; it has no ports, so P155 has nothing to scale. Hand-built test networks without bulk
   legs, and the fixture's unreachable-island variant (route taus), run with the rate off
   (`TradeParams::bulk_off`).
+- The gravity estimation's S05 costs between countries (`ceteris gravity`, ADR 0022;
+  `ceteris_calibrate::costs::CostInputs::country_costs`) take the same bulk legs for the goods of
+  a bulk class as the kernel (2026-10-30; they were base legs only before): the chains run on the
+  graph repriced at the rate, and the path quantities carry the sea km and port fees scaled by
+  P154 and P155, so the P04 fit prices them at the rate (`bulk_class_country_costs_match_the_kernel`).
 
 ## As built
 

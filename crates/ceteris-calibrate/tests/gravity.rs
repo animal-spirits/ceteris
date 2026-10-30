@@ -710,6 +710,103 @@ fn s05_costs_match_the_rust_crossing_legs() {
     assert!(n > 300_000, "{n} crossing legs");
 }
 
+/// ADR 0247: with the bulk freight rate on (class 3 by default), the country costs of a bulk
+/// class are those of the kernel's bulk legs (`EconInputs::network_from_graph`: the same graph
+/// repriced at `TransportParams::bulk`, shortest paths by `ceteris_geo::paths::shortest`), and
+/// the other classes keep the base legs. Two countries: A with provinces 0 and 1 and port 3, B
+/// with province 2 and port 4; between the ports a sea lane of 4,000 km and a rail line of
+/// 600 km, the rail line cheaper at the base rate (31.2 against 32 per tonne) and the sea lane
+/// at the bulk rate, so the route switches.
+#[test]
+fn bulk_class_country_costs_match_the_kernel() {
+    use ceteris_geo::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
+    use ceteris_geo::paths::shortest;
+    use ceteris_trade::TradeParams;
+
+    let edges = [
+        (0, 1, Mode::Road, 100.0),
+        (0, 3, Mode::PortAccess, 10.0),
+        (1, 3, Mode::Road, 50.0),
+        (2, 4, Mode::PortAccess, 10.0),
+        (3, 5, Mode::Sea, 2000.0),
+        (5, 4, Mode::Sea, 2000.0),
+        (3, 6, Mode::Rail, 300.0),
+        (6, 4, Mode::Rail, 300.0),
+    ];
+    let inputs = gravity::CostInputs {
+        nodes: 7,
+        edge_a: edges.iter().map(|e| e.0).collect(),
+        edge_b: edges.iter().map(|e| e.1).collect(),
+        mode: edges.iter().map(|e| e.2 as u8).collect(),
+        length_km: edges.iter().map(|e| e.3).collect(),
+        tri_m: vec![0.0; edges.len()],
+        gateway_node: vec![3, 4],
+        gateway_country: vec![0, 1],
+        province_country: vec![0, 0, 1],
+        n_countries: 2,
+        va: vec![[1.0; 10]; 3],
+    };
+    let trade = TradeParams::default();
+    let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
+    let p = Transport::default();
+    let costs = inputs.country_costs(&p, &trade);
+
+    let kind = [0, 0, 0, 2, 2, 4, 1].map(|k| NodeKind::from_u8(k).unwrap());
+    let base = TransportGraph::new(
+        3,
+        NodeList {
+            kind: kind.to_vec(),
+            province: vec![0, 1, 2, 0, 2, 0, 0],
+            lon: vec![0.0; 7],
+            lat: vec![0.0; 7],
+        },
+        EdgeList {
+            a: edges.iter().map(|e| e.0 as u32).collect(),
+            b: edges.iter().map(|e| e.1 as u32).collect(),
+            mode: edges.iter().map(|e| e.2).collect(),
+            length_km: inputs.length_km.clone(),
+            tri_m: inputs.tri_m.clone(),
+            chokepoint: vec![0; edges.len()],
+        },
+        &TransportParams::default(),
+    );
+    let mut bulk = base.clone();
+    bulk.reprice(&TransportParams::default().bulk(sea, port));
+    // the kernel's chain from A to B: access from the province to port 3, the crossing to port 4,
+    // access from province 2; with VA 1 everywhere the country cost is the mean over A's provinces
+    let chain = |g: &TransportGraph| {
+        let (p3, p2) = (shortest(g, 3), shortest(g, 2));
+        let legs = |o: u32| {
+            let t = shortest(g, o);
+            (
+                t.cost[3] + p3.cost[4] + p2.cost[4],
+                t.hours[3] + p3.hours[4] + p2.hours[4],
+            )
+        };
+        let (a, b) = (legs(0), legs(1));
+        ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+    };
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * y;
+    let (on_base, on_bulk) = (chain(&base), chain(&bulk));
+    assert!(
+        on_bulk.0 < 0.9 * on_base.0 && on_bulk.1 > on_base.1,
+        "{on_bulk:?} {on_base:?}"
+    );
+    for g in 0..7 {
+        let want = if classes[usize::from(trade.theta_class[g])] {
+            on_bulk
+        } else {
+            on_base
+        };
+        let q = costs.at(0, 1, g);
+        let got = (gravity::edge_cost(q, &p), q[Q_HOURS]);
+        assert!(
+            close(got.0, want.0) && close(got.1, want.1),
+            "good {g}: {got:?} {want:?}"
+        );
+    }
+}
+
 /// The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by
 /// p2_acceptance), against `CLASSES` and `THETA_DEFAULT`.
 #[test]
