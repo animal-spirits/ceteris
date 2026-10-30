@@ -10,38 +10,37 @@
   unchanged; nodes 40,187 (40,534), edges 133,907 (134,810), minor ports 1,233 (1,283), coastal
   provinces 1,864 (1,934), county area outside its province 0.0274 (0.0302). Gateways stay 600
   (286 port, 171 airport, 143 land crossing; were 287, 168, 145); provinces with value added
-  4,368 (4,555); `va_imputed_share` 0.0759 (with ADR 0249's econ tables).
-- Recalibrated by `ceteris calibrate --pack` on ADR 0249's econ tables (39 passes, Sinkhorn
-  residual 9.6e-14).
+  4,368 (4,555); `va_imputed_share` 0.0759.
+- Recalibrated by `ceteris calibrate --pack` with ADRs 0256 and 0263 (41 passes, Sinkhorn
+  residual 8.3e-14).
 - Every province index moves, so every province-indexed table, the calibration tables and the
   least-cost trees move. `crates/ceteris-pack/tests/data/pixel_cells.txt` maps each old index to
   the whole province's new index; the build stats pinned in `tests/econ_build.rs` follow the
   new gateway kinds, value-added count and imputed share.
-- P2 gate on the new pack with ADR 0249: V1 from the perturbed steady state FAILS (price
-  5.219e-1 at SDN-882 South Kordufan, wage 5.013e-1, flow units 6.810e-1, value 5.453e-1, against
-  bound 0.9671; the largest price gap rises from 0.109 at tick 0 to about 0.5 by tick 240 and
-  stays). Before ADR 0249 the same province set passed (price 9.086e-3). V1 from the data
-  state stays open (price 4.876, wage 5.432). H2 distance -0.745 (s.e. 0.015, pseudo-R2 0.982,
-  47,306 pairs) passes; H2 per class passes (food 1.657, s.e. 0.177; machinery 3.496, 0.525;
-  the five-good class 9.174, 0.312). 100 years: no violation, world price index
-  1.000000000000015. 1 vs 8 threads, 120 ticks: identical hashes.
+- P2 gate on the new pack: H2 distance -0.745 (s.e. 0.015, pseudo-R2 0.982, 47,306 pairs)
+  passes; H2 per class passes (food 1.662, s.e. 0.176; machinery 3.502, 0.525; the five-good
+  class 9.173, 0.323). 100 years: no violation, world price index 1.000000000000006. 1 vs 8
+  threads, 120 ticks: identical hashes. V1 from the data state stays open (price 0.907, wage
+  0.749).
+- V1 from the perturbed steady state FAILS on flows: seed 20 price 9.27e-3, wage 4.10e-3, flow
+  units 2.71e-2, value 2.53e-2 (Albania to Italy, coal and other mining); seed 21 8.34e-3,
+  2.62e-3, 2.02e-2, 1.87e-2; seed 22 1.157e-2 (ALB-1524), 4.23e-3, 3.78e-2, 3.73e-2. Sudan
+  (SDS-871 Unity, SDN-882 South Kordufan) now converges under every seed. The miss is main's:
+  main's split pack, built and calibrated fresh, fails seed 20 in Albania by more (price
+  1.047e-2, wage 1.191e-2, flow units 3.10e-2). Albania's pops hold 0.22 ticks of income and
+  their money moves 10 to 16% after the perturbation.
 - `p2_steady_state::pack_calibrated_state_holds_to_2e_6_and_4_minor_units` FAILS: pop money
-  reaches 1.069 times its tolerance (relative 1.210e-3 at tick 1); every other series stays
-  within 0.6.
-- Cause of the V1 miss (diagnosed 2026-10-30): ADR 0249 sets crude oil VA from rents but keeps
-  the donor's VA share of output (Sudan from Senegal, a_va 0.072), so Unity and South Kordufan
-  sell about Sudan's whole pop money per tick and a perturbation moves Sudan to another steady
-  state. Which seed does so depends on the cell order, not the province set: main's split pack
-  fails V1 too on a fresh build (price 1.879e-2 at ALB-1529 Tiranë, seed 20; Sudan drifts at
-  seed 21), and the whole pack passes at seed 21. The steady-state miss is Pitcairn's one pop
-  (4.28 minor units against a floor of 4).
+  reaches 1.493 times its tolerance at tick 10 (0.729 after tick 60), on Pitcairn's tertiary pop
+  (1,700 units, against the floor of 4 minor units); every other series stays within 0.6. Main
+  passes it.
 
 Goldens re-blessed:
 
 - `tests/golden/p1-pack.txt`, `tests/golden/p2-pack.txt`: every province-indexed table
   (provinces, cells, counties, nodes, edges, gateways, `econ_provinces`, `econ_pops`), every
-  calibration table and the web fills, attributes and tile layers. `sea_zones`, `countries`,
-  `chokepoints`, `econ_goods`, `econ_countries`, `econ_io` and `econ_tariffs` are unchanged.
+  calibration table and the web fills, attributes and tile layers. Against main, `sea_zones`,
+  `countries`, `chokepoints`, `econ_goods`, `econ_countries`, `econ_io` and `econ_tariffs` are
+  unchanged.
 - `tests/golden/p1-geo.txt`: every source, since the network changes; `IND-2447.1` is now
   `IND-2447`.
 - `tests/golden/p0-toy.txt` and `tests/golden/p2-econ.txt` do not read the pack and are
