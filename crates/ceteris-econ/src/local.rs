@@ -783,7 +783,7 @@ pub fn fills(p: &Province) -> Fills {
         };
         if rounding || (since >= STALL_PASSES && !stalled) {
             if !rounding {
-                let this = charge.take().unwrap_or(0);
+                let this = charge.take().expect("a pass's charge is counted once");
                 uncovered = mark + since.max(uncovered + this - mark);
             }
             since = 0;
@@ -870,10 +870,15 @@ fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
 /// Where the passes stop or stall at fills `f`, the fixed point of a cycle of the last passes
 /// `tail` (oldest first), clamped to [0, f], where it lowers some good resolvably and the
 /// cycle's passes from it return it to [`CONFIRMED`]. The last pass's fixed point is taken
-/// within [`TAIL`] of f, or beyond where it lies on that pass's pieces ([`on_pieces`]): the
-/// pieces' conditions are linear in the fills (but for a covered user's min), so the passes
-/// from f run on them to it. Off them, every good may fit there and the passes return it,
-/// though no pass from f goes there. At a stop (`rounding`) the cycles of two and three passes
+/// within [`TAIL`] of f, or beyond where it lies on that pass's pieces ([`on_pieces`]): a
+/// threshold on one fill (a stock threshold, a covered user's min) that holds at f and at g
+/// holds on any path falling monotonely from f to g, so the passes from f run on the pieces to
+/// it, to first order. Not exactly: the passes follow g + M^k (f - g), not the segment, but
+/// along one near-unit direction (as at a stop; at the stall rule two slow directions may
+/// coexist), and the comparisons between two fills (which fill binds a user or the producer, a
+/// step's root against a user's smallest other fill) are not kept by a monotone fall; they hold
+/// trivially at ties, as at a collapse to 0. Off the pieces, every good may fit there and the
+/// passes return it, though no pass from f goes there. At a stop (`rounding`) the cycles of two and three passes
 /// are tried next, their fixed points only within [`TAIL`] of f (the rest of a fall already
 /// below the margin per pass), since a cycle across pieces may have fixed points the passes
 /// never reach. A map that falls to 0 only by rounding at a stop (no constant: every fixed
