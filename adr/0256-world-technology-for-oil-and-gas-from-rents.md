@@ -30,7 +30,9 @@ keep the donor's column. Derived from data, no register entry (DESIGN 17).
 
 ## Consequences
 
-- `econ_io` and `econ_countries` (output) move for every non-ICIO economy with a rent, and so do
-  `econ_provinces`, the calibration and the `p2-pack` goldens.
-- V1 on the split pack is to be rerun at seeds 20 to 22. An oscillation at province 3474 seen on
-  packs built before 0249 may have another cause.
+- `econ_io` moves for every non-ICIO economy with a rent, and so do the calibration and the
+  `p2-pack` goldens; `econ_countries` and `econ_provinces` hold VA and do not move. World column
+  a_VA is 0.666 on 2000 data; Sudan's a_VA goes from 0.072 to it, COG, GNQ and GAB from 0.184,
+  TKM, AZE and UZB from 0.340.
+- Sudan no longer drifts in V1 (seeds 21, 22: price gap 1.02 before, below 1e-4 after). Unity
+  (province 3474) does not oscillate on a pre-0249 pack or on this one.
