@@ -60,10 +60,34 @@ pub struct Gateways {
     pub mass: Vec<f64>,
 }
 
+/// Largest deviation from 1 of a country's summed gateway masses (as `Kernel::build` checks).
+const MASS_TOLERANCE: f64 = 1e-12;
+
+/// Each gateway's mass in (0, 1], and each country's masses summing to 1 (ADR 0092).
+fn check_masses(country: &[u16], mass: &[f64]) -> Result<(), PackError> {
+    let mut total: std::collections::BTreeMap<u16, f64> = std::collections::BTreeMap::new();
+    for (a, (&c, &m)) in country.iter().zip(mass).enumerate() {
+        // also rejects NaN
+        if !(m > 0.0 && m <= 1.0) {
+            return Err(err(format!("gateways.arrow: gateway {a} has mass {m}")));
+        }
+        *total.entry(c).or_insert(0.0) += m;
+    }
+    match total
+        .iter()
+        .find(|(_, t)| (*t - 1.0).abs() > MASS_TOLERANCE)
+    {
+        Some((c, t)) => Err(err(format!(
+            "gateways.arrow: the gateway masses of country {c} sum to {t}, not 1 (ADR 0092)"
+        ))),
+        None => Ok(()),
+    }
+}
+
 impl Gateways {
     pub fn read(dir: &Path) -> Result<Self, PackError> {
         let t = read_table(&dir.join("gateways.arrow"))?;
-        let country = u32s(&t, "country")?
+        let country: Vec<u16> = u32s(&t, "country")?
             .into_iter()
             .map(|c| u16::try_from(c).map_err(|_| err(format!("gateway country {c}"))))
             .collect::<Result<_, _>>()?;
@@ -74,11 +98,13 @@ impl Gateways {
                 dir.join("gateways.arrow").display()
             )));
         }
+        let mass = f64s(&t, "mass")?;
+        check_masses(&country, &mass)?;
         Ok(Self {
             node: u32s(&t, "node")?,
             country,
             kind: u8s(&t, "kind")?,
-            mass: f64s(&t, "mass")?,
+            mass,
         })
     }
 
@@ -469,6 +495,18 @@ mod tests {
         let closed = inputs.network_from_graph(&pack, &gateways());
         assert!(closed.crossings.is_empty());
         assert_eq!(closed.domestic, net.domestic);
+    }
+
+    /// Masses that do not sum to 1 per country, or are not in (0, 1], are a load error.
+    #[test]
+    fn gateway_masses_are_checked_at_load() {
+        assert!(check_masses(&[0, 0, 1], &[0.5, 0.5, 1.0]).is_ok());
+        let e = check_masses(&[0, 0, 1], &[0.5, 0.6, 1.0]).unwrap_err();
+        assert!(e.0.contains("country 0 sum to"), "{e}");
+        for bad in [0.0, f64::NAN, 1.5] {
+            let e = check_masses(&[0, 1], &[bad, 1.0]).unwrap_err();
+            assert!(e.0.contains("gateway 0 has mass"), "{e}");
+        }
     }
 
     /// A pack built before the gateway masses is refused with an error naming the column.
