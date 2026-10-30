@@ -337,6 +337,16 @@ The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.125 / 0.054 | 0.055 / 0.008 | 0.019 / 0.061 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.203 / 0.074 | 0.056 / 0.050 | 0.020 / 0.113 |
 
+Per-market gain (ADR 0263, accepted; code after the pre-P3 B branch). Each cell's gain is
+kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with m = P03d (start 0.5, so
+J_ref 20 at kappa1 0.05), J_cell = E_cell + eta eps_cell / (2 - eta) at the run's eta. E_cell =
+1 + theta_g - (theta_g + 1) Pi_cell (local cells sigma), eps_cell the output-weighted mean of
+s_L sigma_FL / ((1 - s_L) a_VA) over the cell's enterprises. J is computed from the pack at
+calibration and fixed for the run. In the default mode no cell is capped (J at most 16.9 on the
+0256 pack); frictionless it slows the 298 traded cells above 20 and removes the São Tomé cycle
+below. J2 bounds one market only: coupled modes across goods (Albania g5 to g1 and g2) are not
+covered.
+
 In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
 outside for light manufacturing: J2 fails for the two light-manufacturing enterprises of São Tomé
 and Príncipe (eps 30.4 against 2 / kappa1 - theta - 1 = 28.4; no other enterprise of any good is
@@ -411,6 +421,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
 | P03c | Price and wage step clip c_max | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
+| P03d | Share m of each market's J2 limit that its gain may use (ADR 0263) | 0 to 1, start 0.5: kappa1_cell = kappa1 min(1, 2 m / (kappa1 J_cell)) | Free |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P05 | Border friction nu, ad valorem equivalent | log-uniform 0.1 to 1.0, start 0.3. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated (P9) |
 | P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
