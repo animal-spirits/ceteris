@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### BEHAVIOUR: per-market price gain, capped at half each market's stability limit (ADR 0263)
+
+- T4 moves each market by kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with
+  the new P03d m = 0.5 (`TradeParams::gain_share`, `TradeParams::price_gain`) and J_cell = E +
+  eta eps / (2 - eta) at the run's eta. `Markets::reprice` takes the gain per cell;
+  `Layout::price_gain` holds it, computed once in `EconWorld::new` (`world::price_gains`).
+- The calibration computes E (own-price elasticity of the cell's orders, Leontief buyers at
+  Gamma P_d) and eps (the largest supply elasticity of the cell's enterprises; ADR 0263 amended
+  from the output-weighted mean as built) at the calibrated point
+  (`ceteris_calibrate::elasticity`) and writes them to `econ_calib_cells.arrow`
+  (`demand_elasticity`, `supply_elasticity`); calibration format 6, so format-5 tables (every
+  calibrated pack, `data/packs/2000` included) must be recalibrated. They load into
+  `EconInputs::market_elasticity` (inputs digest); P03d joins the static digest only for inputs
+  that carry them. Inputs without a calibration run kappa1 in every market.
+- Behaviour moves only where a market's J exceeds 20: frictionless runs of a calibrated pack
+  (the 0256 pack: 298 traded cells). In the default mode no cell is capped on the 0256 pack (J at
+  most 16.9) or the fixture (12.5); the fixture's frictionless J tops at 13.8, so no fixture run
+  moves.
+- `params.json` of an export gains `gain_share` (P03d).
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: calibration format 6 and the two new columns; every
+  existing column is bit for bit the same (`ceteris pack compare` against the format-5 tables).
+- `tests/golden/p2-fixture/params.json`: `gain_share` 0.5 under P03d; the static digest does not
+  move. The fixture's other export tables and its reference do not move.
+- `tests/golden/p2-econ.txt`, `p0-toy.txt` and the core goldens do not move (the fixture runs
+  from its data state, without a calibration). `p2-pack.txt` waits for the pack recalibration
+  (pre-P3 B8).
+
 ### Changed: H2 distance reported, H2 per class on the model's kernel (ADR 0264)
 
 - `p2_gate.rs::h2_distance_elasticity` prints the distance coefficient against -1.1 to -0.7 and
