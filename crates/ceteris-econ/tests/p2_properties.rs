@@ -1162,21 +1162,45 @@ fn a_tiny_local_user_left_without_its_input_breaks_leontief() {
     assert_eq!(v.invariant, "leontief", "{v}");
 }
 
+/// The passes [`local::fills`] takes on `p` where every jump applies (a resolvable fall per
+/// cycle, on pieces that repeat within [`local::PERIOD`] passes), from the kinks the fall can
+/// cross. A jump from a cycle on its pieces ends at the limit or at the last whole cycle before
+/// the pieces change, so the passes are: one from F = 1, which cuts only the goods short there;
+/// at most two per kink, the pass that crosses it and one more where that pass straddles the
+/// kink, so that its map does not repeat; and at the limit up to `PERIOD` confirming passes and
+/// the pass that changes nothing. The kinks are a user's stock threshold of a good, inside
+/// (0, 1) (b < coef cap; crossed at most once, since needs only fall with the fills), each local
+/// good beyond the first that starts to fall, and each pair of local goods some user takes
+/// both of (a switch of the users' binding fill, taken to happen once per pair).
+fn kink_bound(p: &Province) -> usize {
+    let n = p.cap.len();
+    let uses = |u: usize, j: usize| p.cap[u] > 0.0 && p.coef[u][j] > 0.0;
+    let thresholds = (0..n)
+        .flat_map(|u| (0..3).map(move |j| (u, j)))
+        .filter(|&(u, j)| uses(u, j) && p.stock[u][j] > 0.0)
+        .filter(|&(u, j)| p.stock[u][j] < p.coef[u][j] * p.cap[u])
+        .count();
+    let goods = (0..3).filter(|&j| (0..n).any(|u| uses(u, j))).count();
+    let pairs = [(0, 1), (0, 2), (1, 2)]
+        .iter()
+        .filter(|&&(j, k)| (0..n).any(|u| uses(u, j) && uses(u, k)))
+        .count();
+    let kinks = thresholds + goods.saturating_sub(1) + pairs;
+    1 + 2 * kinks + local::PERIOD + 1
+}
+
 /// Local-good chains: services feeding services, and construction and services feeding each
 /// other. From the data state the chain binds in every mainland province at tick 1; over 120
-/// ticks every province tick ends within the pass cap without a stall, and every local input
-/// used equals coef Y (the Leontief invariant, exactly, at every tick).
+/// ticks every province tick ends within the passes its kinks allow ([`kink_bound`]) without a
+/// stall, and every local input used equals coef Y (the Leontief invariant, exactly, at every
+/// tick).
 ///
-/// The cap, not a smaller count, is the bound: the passes depend on the state. Two passes set
-/// up a cycle (the first cuts only the goods short at F = 1), a jump to its fixed point takes
-/// one confirming pass, and the pass that changes nothing ends; each kink the fall crosses on
-/// the way, a user's stock threshold b / (coef cap) or a switch of its binding fill, ends the
-/// jump there and costs a pass on the next piece, and a jump stopped by its doubling short of
-/// a kink costs one more each time. Province 5 at ticks 78 and 79 (9 and 11 passes) is a collapse of
-/// utilities and construction, inputs of each other with no stocks (construction none,
-/// utilities residues of 1e-45 to 5e-12 left by earlier collapses), at a loop gain of 0.7 to
-/// 0.9 per pass: the fall to the residues' fixed point (2e-45) or to 0 crosses the four
-/// residue thresholds one by one. As built, before ADR 0200, the fixture had at most 6.
+/// The most is 6 passes (province 5 at tick 79, where the kink bound allows 21): a collapse of
+/// utilities and construction, inputs of each other with no stocks but residues of earlier
+/// collapses, at a loop gain of 0.7 to 0.9 per pass, the fall to 0 crossing the residue
+/// thresholds. Before the jump found the last whole cycle on the pieces (it returned the last
+/// point the doubling checked), a jump could stop short of a kink and cost passes no kink
+/// accounts for: 11 passes there at 13410ce.
 #[test]
 fn local_chain_terminates_on_cycles() {
     let coefficients = [
@@ -1186,17 +1210,29 @@ fn local_chain_terminates_on_cycles() {
     ];
     let inputs = Arc::new(fixture_with(&coefficients));
     let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
-    let mut bound = 0;
+    let (mut binding, mut most) = (0, 0);
     for tick in 0..120 {
+        let mut probe = sim.world().clone();
+        probe.begin_tick();
+        systems::deliver(&mut probe);
+        systems::labour(&mut probe);
+        systems::cap_output(&mut probe);
+        let (inp, lay) = (probe.inputs().clone(), probe.layout().clone());
+        let bounds: Vec<usize> = (0..inp.n_provinces())
+            .map(|i| {
+                let cap = &probe.scratch.produced[lay.enterprises(i)];
+                kink_bound(&Province::new(&inp, &lay, &probe.ledger, i, cap))
+            })
+            .collect();
         sim.step().unwrap_or_else(|v| panic!("{v}"));
         let w = sim.world();
         let passes = &w.scratch.chain_iterations;
-        assert!(
-            passes
-                .iter()
-                .all(|&n| (1..=local::PASS_CAP).contains(&(n as usize))),
-            "tick {tick}: {passes:?}"
-        );
+        for (i, (&n, &bound)) in passes.iter().zip(&bounds).enumerate() {
+            assert!(
+                (1..=bound).contains(&(n as usize)),
+                "tick {tick} province {i}: {n} passes, kink bound {bound}"
+            );
+        }
         assert!(
             !w.scratch.chain_stalled.iter().any(|&s| s),
             "tick {tick}: stalled"
@@ -1204,7 +1240,8 @@ fn local_chain_terminates_on_cycles() {
         if tick == 1 {
             assert!(passes[..24].iter().all(|&n| n > 1));
         }
-        bound += passes.iter().filter(|&&n| n > 1).count();
+        binding += passes.iter().filter(|&&n| n > 1).count();
+        most = most.max(*passes.iter().max().unwrap());
         for e in 0..w.inputs().n_enterprises() {
             for k in LOCAL {
                 let want = w.layout().coef[e][k] * w.scratch.produced[e];
@@ -1216,8 +1253,8 @@ fn local_chain_terminates_on_cycles() {
             }
         }
     }
-    println!("chain bound in {bound} province ticks");
-    assert!(bound > 0);
+    println!("chain binds in {binding} province ticks, at most {most} passes");
+    assert!(binding > 0);
 }
 
 /// Outputs at fills `f`, as ADR 0093's Amendment defines them, written out here independently.
@@ -1699,7 +1736,12 @@ fn translated_collapses_stop_at_their_limit() {
 
 /// The collapsing provinces among `n` random draws from `offset` (SplitMix64 seeds): at least
 /// 12 passes and at least two fills of 0, each moved to limits at 0.1, 0.3 and 0.5, every one
-/// held to [`assert_translated_limit`].
+/// held to [`assert_translated_limit`]. Since a jump ahead ends after the last whole cycle on
+/// its pieces (ADR 0093, amendment of 2026-10-30), most collapses take fewer passes: of the
+/// draws below, 7 of 300,000 and 62 of 3,000,000 take 12 or more, against 43 and 420 when a
+/// jump ended at the doubling's last check. A cut at 8 passes takes in seed
+/// 1122501757669556625, where [`degenerate_limit`] misclassifies good 0 (limit 1 by the
+/// heuristic; the plain iteration and the fills, before and after that change, give t).
 fn translated_sample(n: u64, offset: u64) -> usize {
     let mix = |i: u64| {
         let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -1722,18 +1764,22 @@ fn translated_sample(n: u64, offset: u64) -> usize {
     checked
 }
 
-/// ADR 0093, bounded work: a sample of the translated collapses (300,000 draws).
+/// ADR 0093, bounded work: a sample of the translated collapses (300,000 draws, 21 cases).
 #[test]
 fn translated_collapses_sample() {
-    assert!(translated_sample(300_000, 12 << 40) > 60);
+    let n = translated_sample(300_000, 12 << 40);
+    println!("{n} checked");
+    assert!(n >= 21, "{n} cases");
 }
 
-/// ADR 0093, bounded work: the translated collapses of 3,000,000 draws (about 1,260 provinces);
-/// slow, so run on request.
+/// ADR 0093, bounded work: the translated collapses of 3,000,000 draws (186 cases); slow, so
+/// run on request.
 #[test]
 #[ignore]
 fn translated_collapses_full() {
-    assert!(translated_sample(3_000_000, 12 << 40) > 1_000);
+    let n = translated_sample(3_000_000, 12 << 40);
+    println!("{n} checked");
+    assert!(n >= 186, "{n} cases");
 }
 
 /// ADR 0093, bounded work: provinces whose collapse outlasts the stall rule end within

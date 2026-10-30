@@ -137,8 +137,12 @@ struct Work {
     y: Vec<f64>,
     users: Vec<(f64, f64)>,
     kinks: Vec<f64>,
+    /// The cycle's composed map squared k times, k = 0, 1, ..., in [`jump`].
+    powers: Vec<[Affine; 3]>,
     /// Cycles followed and maps applied by [`jump`].
     work: usize,
+    /// Fits evaluated by the last [`descend`].
+    descent: usize,
 }
 
 /// A fill as an affine function of the fills at the start of a pass: c + sum_k d_k F_k.
@@ -352,7 +356,14 @@ const DESCENT: usize = 8;
 /// uncovered need is then 0) and positive f64 order as their bits. A root above a flat piece,
 /// where U - R is rounding at a stock threshold, could otherwise take up to 2^62 steps.
 fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f64 {
+    debug_assert!(
+        p.producer[j].is_none_or(|q| p.coef[q][j] == 0.0),
+        "good {j}'s producer takes its own good as an input: the fit is not monotone"
+    );
+    w.descent = 0;
     let fits = |x: f64, f: &mut [f64; 3], w: &mut Work| {
+        w.descent += 1;
+        debug_assert!(w.descent <= DESCENT + 65, "descent unbounded");
         f[j] = x;
         p.outputs(f, &mut w.y);
         x == 0.0 || p.fits(j, &w.y, &mut w.users)
@@ -419,7 +430,7 @@ const RESOLVABLE: f64 = 4096.0;
 const TAIL: f64 = 1024.0 * RESOLVABLE * f64::EPSILON;
 
 /// The longest cycle of passes [`jump`] looks for.
-const PERIOD: usize = 3;
+pub const PERIOD: usize = 3;
 /// Relative rounding of the affine maps that [`jump`] allows where a good fits with equality.
 const ROUNDING: f64 = 1e-12;
 /// How far beyond [0, f] the solve of [`jump`] may put a fixed point by rounding.
@@ -433,8 +444,8 @@ const CONFIRMED: f64 = 1e-12;
 /// Passes after which [`fills`] moves the goods still falling to the last pass's fixed point
 /// (ADR 0093, bounded work).
 pub const STALL_PASSES: usize = 256;
-/// Passes after which [`fills`] ends on its fallback ([`capped`]), the stall reported: the
-/// bound on its passes (a jump's confirming passes count).
+/// The bound on the passes of [`fills`], a jump's confirming passes included: past
+/// `PASS_CAP - PERIOD` passes it ends on its fallback ([`capped`]), the stall reported.
 pub const PASS_CAP: usize = 4 * STALL_PASSES;
 /// The fit the fills keep where the passes stop short of their end: 1e-12 of a good's flows,
 /// which the Leontief invariant allows for local draws (ADR 0093, bounded work and amendment of
@@ -456,7 +467,8 @@ const DOUBLINGS: usize = 64;
 enum Jump {
     /// The limit, confirmed by running the cycle's passes from it.
     Limit([f64; 3]),
-    /// The fills after the last whole cycle that stays on the cycle's pieces.
+    /// The fills after the last whole cycle that stays on the cycle's pieces (short of it where
+    /// the jumps' shared budget runs out).
     Ahead([f64; 3]),
 }
 
@@ -535,8 +547,10 @@ struct FixedPoint {
 /// others held: taken where the passes reach it on the pieces and running the cycle from g
 /// returns g. The passes are followed one cycle at a time up to [`SEQUENTIAL`] cycles (and
 /// `budget` within the call to [`fills`]), then 2^k cycles at once, checked at those points.
-/// Where they leave a piece first, the fills after the last checked point before that, which
-/// the passes reach in exact arithmetic. None where the first cycle already leaves.
+/// Where they leave a piece first, the fills after the last whole cycle on the pieces, which the
+/// passes reach in exact arithmetic: between the last two checked points it is found by
+/// bisection of the cycles (as the doubling, the cycles that stay on the pieces taken to be the
+/// first ones), so the next pass crosses a kink. None where the first cycle already leaves.
 fn jump(
     p: &Province,
     cycle: &[Pass],
@@ -589,28 +603,63 @@ fn jump(
     // then 2^k cycles at once (the composed map squared k times), checked at those points
     // with no rounding allowance on the shortages: a fall too slow to follow cycle by cycle,
     // typically a collapse towards 0 at a rate near 1
-    let mut power = map;
+    // the fills `power` gives from `from`, where they lie in [0, below] and on the pieces
+    let on = |from: &[f64; 3], power: &[Affine; 3], below: &[f64; 3], w: &mut Work| {
+        let mut at = *from;
+        for &j in &cut {
+            at[j] = power[j].at(from);
+        }
+        let valid = cut.iter().all(|&j| at[j] >= 0.0 && at[j] <= below[j])
+            && follow(p, cycle, &at, 0.0, w).is_some();
+        valid.then_some(at)
+    };
+    w.powers.clear();
+    w.powers.push(map);
     let mut last = now;
-    for _ in 0..DOUBLINGS {
+    let mut left = false;
+    for k in 0..DOUBLINGS {
         if *budget == 0 {
             break;
         }
         *budget -= 1;
         w.work += 1;
-        let mut at = now;
-        for &j in &cut {
-            at[j] = power[j].at(&now);
-        }
-        let valid = cut.iter().all(|&j| at[j] >= 0.0 && at[j] <= last[j])
-            && follow(p, cycle, &at, 0.0, w).is_some();
-        if !valid {
+        let power = w.powers[k];
+        let Some(at) = on(&now, &power, &last, w) else {
+            left = true;
             break;
-        }
+        };
         last = at;
         if reached(&at) {
             return confirm(w).or_else(|| ahead(last));
         }
-        power = power.map(|o| o.after(&power));
+        w.powers.push(power.map(|o| o.after(&power)));
+    }
+    // The passes left the pieces between the last two checked points, 2^(k-1) and 2^k cycles
+    // on: the last point before from which a cycle stays on them, by bisection of the cycles in
+    // between (adding 2^i cycles for i from k - 2 down to 0 where the cycle from there stays on
+    // the pieces; the cycles that do are the first ones), then that last whole cycle.
+    if left {
+        let checked = w.powers.len() - 1;
+        for i in (0..checked.saturating_sub(1)).rev() {
+            if *budget == 0 {
+                return ahead(last);
+            }
+            *budget -= 1;
+            w.work += 1;
+            let power = w.powers[i];
+            if let Some(at) = on(&last, &power, &last, w) {
+                last = at;
+                if reached(&at) {
+                    return confirm(w).or_else(|| ahead(last));
+                }
+            }
+        }
+        if *budget > 0 {
+            *budget -= 1;
+            if let Some(next) = follow(p, cycle, &last, 0.0, w) {
+                last = next;
+            }
+        }
     }
     ahead(last)
 }
@@ -688,7 +737,8 @@ pub fn fills(p: &Province) -> Fills {
                 stalled,
             };
         }
-        if passes >= PASS_CAP {
+        // a jump's confirming passes come after this check, at most PERIOD of them
+        if passes + PERIOD >= PASS_CAP {
             return Fills {
                 fills: capped(p, f, &mut w),
                 passes,
@@ -1032,6 +1082,46 @@ mod tests {
         }
     }
 
+    /// Utilities and construction inputs of each other at a loop gain of 0.995 per pass, and a
+    /// third user of utilities whose stock covers its need below fill 1e-3: the fall reaches
+    /// that kink after about 1,500 cycles, past the 64 followed one at a time and between two
+    /// points the doubling checks (1,088 and 2,112 cycles).
+    fn slow_fall_province() -> Province {
+        Province {
+            cap: vec![1.0, 1.0, 1.0],
+            coef: vec![[0.0, 0.5, 0.0], [0.50151, 0.0, 0.0], [0.001, 0.0, 0.0]],
+            stock: vec![[0.0; 3], [0.0; 3], [1e-6, 0.0, 0.0]],
+            producer: [Some(0), Some(1), None],
+            own: [0.5, 0.5, 0.0],
+        }
+    }
+
+    /// `Jump::Ahead` ends after the last whole cycle on the cycle's pieces: one more cycle from
+    /// there leaves them, and the next pass crosses the kink. Ending at the doubling's last
+    /// check, about 400 cycles short, it took 7 passes.
+    #[test]
+    fn a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces() {
+        let p = slow_fall_province();
+        let mut w = Work::default();
+        let mut f = [1.0; 3];
+        let cycle = [pass(&p, &mut f, &mut w), pass(&p, &mut f, &mut w)];
+        let cycle = &cycle[1..];
+        let mut budget = CYCLE_BUDGET;
+        let Some(Jump::Ahead(h)) = jump(&p, cycle, &f, &mut budget, &mut w) else {
+            panic!("no jump ahead from {f:?}");
+        };
+        let kink = 1e-6 / 0.001;
+        assert!(h[0] > kink, "{h:?} past the kink");
+        assert!(
+            follow(&p, cycle, &h, 0.0, &mut w).is_none(),
+            "a whole cycle from {h:?} stays on the pieces"
+        );
+        // the pass from F = 1 (both goods short), a jump to the kink, the pass across it, a
+        // jump to the limit and its confirming pass, and the pass that changes nothing
+        let out = fills(&p);
+        assert_eq!((out.fills, out.passes), ([0.0, 0.0, 1.0], 4), "{out:?}");
+    }
+
     #[test]
     fn a_root_above_a_flat_piece_descends_in_bounded_work() {
         let p = flat_piece_province();
@@ -1053,6 +1143,13 @@ mod tests {
             p.fits(1, &y, &mut Vec::new())
         };
         assert!(x < lo && fits_at(x) && !fits_at(x.next_up()), "{x}");
+        // DESCENT steps and the check after them, then at most 64 bisections; one unit at a time
+        // took about 2e14
+        assert!(
+            w.descent <= DESCENT + 1 + 64,
+            "{} fits evaluated",
+            w.descent
+        );
         let out = fills(&p);
         assert!(out.passes <= PASS_CAP, "{out:?}");
     }
