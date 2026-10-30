@@ -11,8 +11,8 @@ The native desktop app: one Rust process with a winit window, Slint panels and a
 into a texture that Slint shows (ADR 0088), and the core in-process on its own thread pool
 (ADR 0208). It reads the pack from disk and core columns directly. It owns presentation only:
 it never writes state except by appending edits to the core's edit log, so it enters no run
-hash. It replaces `app/` (Tauri, React, MapLibre, ECharts) when it reaches parity (ADR 0011
-stage 3).
+hash. It replaced the Tauri app (React, MapLibre, ECharts) at ADR 0011 stage 3 (owner sign-off
+2026-10-30).
 
 1.0 is a pure simulator (ADRs 0239, 0240). The app has no seats, scores, objectives,
 narration, era themes or local-flavour chrome; it is a lab tool for reading, editing and
@@ -32,9 +32,8 @@ comparing runs.
 
 ## Architecture
 
-- **Workspace.** Its own cargo workspace in `native/` (owner, 2026-10-29), as `app/src-tauri`
-  is, so Slint and wgpu stay out of the core's lockfile, CI and `cargo deny`. It reaches the
-  core by path dependencies. At stage 3 it moves to `app/`.
+- **Workspace.** Its own cargo workspace in `app/` (owner, 2026-10-29), so Slint and wgpu stay
+  out of the core's lockfile, CI and `cargo deny`. It reaches the core by path dependencies.
 - **Crate layout.** `ceteris-app` binary: `map` (wgpu pipelines, camera, picking, borders,
   selection marks), `labels` (anchors and placement), `modes` (colour per feature and legend),
   `ramps` (the 0221 check), `inspect` (inspector rows), `freight` (least-cost trees on a worker
@@ -116,12 +115,12 @@ n/a: the app computes nothing the core does not.
   projection round trips (screen to lon/lat to screen) on the globe; zoom keeps the point under
   the cursor; pan follows the pointer.
 - Sim tests as in Invariants, on the econ fixture.
-- Ramp check in CI (unit tests in the `native` job). The political palette is categorical and
+- Ramp check in CI (unit tests in the `app` job). The political palette is categorical and
   not yet gated: two of its eight slots come within 4.7 under protanopia. The flag-hue country
   colours (art direction, 0137) replace it.
 - Slint panel tests with Slint's testing backend: the inspector shows the fields of a picked
   province; every panel renders at 200% without clipping.
-- Benchmark (owner's Mac, `CETERIS_BENCH=1` as in the Tauri app): frame time over a scripted
+- Benchmark (owner's Mac, `CETERIS_BENCH=1`): frame time over a scripted
   camera path, and county recolour to screen. Exit criteria (0088, 0011 stage 1): 120 fps on
   ProMotion; a county recolour on screen within one frame plus 2 ms; panels working over the
   map.
