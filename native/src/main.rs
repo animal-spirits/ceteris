@@ -1,16 +1,25 @@
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Instant;
 
 use ceteris_app::bench::Bench;
 use ceteris_app::camera::Camera;
+use ceteris_app::clock::Clock;
+use ceteris_app::commands::{self, Command};
 use ceteris_app::fill::Fill;
 use ceteris_app::freight::{Costs, Freight};
 use ceteris_app::inspect;
 use ceteris_app::labels::Anchors;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes::{self, Mode};
+use ceteris_app::sim::Runner;
 use ceteris_app::web::{Counties, Provinces};
+use ceteris_core::sim::Sim;
+use ceteris_econ::{EconInputs, EconParams, EconWorld};
+use ceteris_trade::TradeParams;
+use slint::platform::Key;
 use slint::{Color, ModelRc, VecModel};
 
 slint::include_modules!();
@@ -20,6 +29,44 @@ fn pack_dir() -> PathBuf {
     std::env::var_os("CETERIS_PACK")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/packs/2000"))
+}
+
+/// The econ world of the pack, from its calibrated steady state when the pack has one.
+fn econ(dir: &Path) -> Result<Sim<EconWorld>, String> {
+    let pack = ceteris_geo::pack::Pack::load(dir, &ceteris_geo::graph::TransportParams::default())
+        .map_err(|e| format!("the economy did not load: {e}"))?;
+    let inputs =
+        EconInputs::from_pack(&pack, dir).map_err(|e| format!("the economy did not load: {e}"))?;
+    Ok(EconWorld::sim(
+        Arc::new(inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    ))
+}
+
+/// What the frame loop shows of one finished tick (ADR 0208); P2 map modes add their columns.
+struct View {
+    tick: u32,
+}
+
+/// Requests a redraw from any thread.
+fn waker(app: &AppWindow) -> impl Fn() + Send + 'static {
+    let weak = app.as_weak();
+    move || {
+        let weak = weak.clone();
+        let _ = slint::invoke_from_event_loop(move || {
+            weak.upgrade().inspect(|a| a.window().request_redraw());
+        });
+    }
+}
+
+/// The keymap's name for a key event's text (0188).
+fn key_name(text: &str) -> String {
+    let named = [(Key::Space, "Space"), (Key::F5, "F5"), (Key::F10, "F10")];
+    named
+        .iter()
+        .find(|(key, _)| text.chars().eq(std::iter::once(char::from(*key))))
+        .map_or_else(|| text.to_owned(), |(_, name)| (*name).to_owned())
 }
 
 fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
@@ -51,6 +98,14 @@ struct State {
     freight: Freight,
     costs: Option<Costs>,
     bench: Option<Bench>,
+    runner: Runner<View>,
+    clock: Clock,
+    /// The presented tick's view and the next one, once published.
+    current: Option<View>,
+    next: Option<View>,
+    /// A step waiting for the next view.
+    stepping: bool,
+    last_frame: Option<Instant>,
 }
 
 impl State {
@@ -141,6 +196,104 @@ impl State {
     }
 }
 
+impl State {
+    /// Takes views from the ring, advances the clock and shows the date (ADR 0208).
+    fn present(&mut self, app: &AppWindow) {
+        let now = Instant::now();
+        let seconds = self
+            .last_frame
+            .replace(now)
+            .map_or(0.0, |t| now.duration_since(t).as_secs_f64());
+        self.pull(app);
+        let mut crossed = self.clock.advance(seconds, self.next.is_some());
+        if self.stepping && self.next.is_some() {
+            self.stepping = false;
+            self.clock.step();
+            crossed = true;
+        }
+        if crossed {
+            self.current = self.next.take();
+            self.pull(app);
+        }
+        let ready = self.current.is_some();
+        app.set_running(ready);
+        app.set_date(
+            if ready {
+                self.clock.date()
+            } else {
+                "loading the economy".into()
+            }
+            .into(),
+        );
+        app.set_tick(self.current.as_ref().map_or(0, |v| v.tick as i32));
+        app.set_playing(self.clock.playing);
+        app.set_speed(i32::from(self.clock.speed));
+        app.set_sim_bound(self.clock.sim_bound);
+        if self.clock.playing {
+            app.window().request_redraw();
+        }
+    }
+
+    fn pull(&mut self, app: &AppWindow) {
+        if self.next.is_some() {
+            return;
+        }
+        match self.runner.next() {
+            Some(Ok(view)) if self.current.is_none() => self.current = Some(view),
+            Some(Ok(view)) => self.next = Some(view),
+            Some(Err(e)) => {
+                self.clock.playing = false;
+                app.set_error(e.into());
+            }
+            None => {}
+        }
+    }
+
+    fn execute(&mut self, app: &AppWindow, cmd: Command) {
+        let c = &mut self.clock;
+        match cmd {
+            Command::TogglePause => c.playing = !c.playing,
+            Command::Run => c.playing = true,
+            Command::Pause => c.playing = false,
+            Command::Speed(n) => c.set_speed(n),
+            Command::Faster => c.set_speed(c.speed + 1),
+            Command::Slower => c.set_speed(c.speed.saturating_sub(1)),
+            Command::Step => {
+                c.playing = false;
+                self.stepping = true;
+            }
+            Command::Pan(x, y) => {
+                let v = self.viewport;
+                if let Some(cam) = self.camera.as_mut() {
+                    cam.pan(-0.1 * v[0] * f64::from(x), -0.1 * v[1] * f64::from(y));
+                }
+            }
+            Command::ZoomIn | Command::ZoomOut => {
+                let v = self.viewport;
+                let factor = if cmd == Command::ZoomIn {
+                    2f64.sqrt()
+                } else {
+                    0.5f64.sqrt()
+                };
+                if let Some(cam) = self.camera.as_mut() {
+                    cam.zoom_at(v, [v[0] / 2.0, v[1] / 2.0], factor);
+                }
+            }
+            Command::ZoomReset => {
+                let v = self.viewport;
+                if let Some(cam) = self.camera.as_mut() {
+                    let globe = cam.globe;
+                    *cam = Camera::fit(v[0], v[1]);
+                    cam.set_globe(v, globe);
+                }
+            }
+        }
+        // Keep the frame clock from counting the paused time.
+        self.last_frame = None;
+        app.window().request_redraw();
+    }
+}
+
 fn mode(app: &AppWindow) -> Mode {
     match app.get_mode() {
         1 => Mode::Terrain,
@@ -172,13 +325,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(e) = county_error {
         app.set_error(e.into());
     }
-    let weak = app.as_weak();
-    let freight = Freight::spawn(pack, provinces.id.clone(), move || {
-        let weak = weak.clone();
-        let _ = slint::invoke_from_event_loop(move || {
-            weak.upgrade().inspect(|a| a.window().request_redraw());
-        });
-    });
+    let freight = Freight::spawn(pack.clone(), provinces.id.clone(), waker(&app));
+    let runner = Runner::spawn(
+        4,
+        move || econ(&pack),
+        |sim| View { tick: sim.tick() },
+        waker(&app),
+    );
     let state = Rc::new(RefCell::new(State {
         anchors: Anchors::new(&fill, &provinces),
         labelled: None,
@@ -203,6 +356,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         freight,
         costs: None,
         bench,
+        runner,
+        clock: Clock::default(),
+        current: None,
+        next: None,
+        stepping: false,
+        last_frame: None,
     }));
     state.borrow_mut().paint(&app);
 
@@ -305,6 +464,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.window().request_redraw();
     });
 
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_command(move |name| {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(cmd) = commands::by_name(&name) {
+            s.borrow_mut().execute(&app, cmd);
+        }
+    });
+
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_key(move |text, ctrl, alt, shift| {
+        let Some(app) = weak.upgrade() else {
+            return false;
+        };
+        let chord = commands::chord(&key_name(&text), ctrl, alt, shift);
+        let Some(cmd) = commands::lookup(&chord) else {
+            return false;
+        };
+        s.borrow_mut().execute(&app, cmd);
+        true
+    });
+
     let weak = app.as_weak();
     app.on_dismiss_error(move || {
         weak.upgrade().inspect(|a| a.set_error("".into()));
@@ -329,6 +511,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ));
             }
             slint::RenderingState::BeforeRendering => {
+                s.present(&app);
                 match s.freight.poll() {
                     Some(Ok(costs)) => {
                         s.costs = Some(costs);

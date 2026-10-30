@@ -147,6 +147,27 @@ export component AppWindow inherits Window {
     callback ui-scale(float);
     callback dismiss-error();
     callback close-inspector();
+    // Registry commands by name, and key events for the keymap (ADR 0188).
+    callback command(string);
+    callback key(string, bool, bool, bool) -> bool;
+
+    // Time controls (ADRs 0208, 0232).
+    in property <bool> running;
+    in property <string> date;
+    in property <int> tick;
+    in property <bool> playing;
+    in property <int> speed;
+    in property <bool> sim-bound;
+
+    keys := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if root.key(e.text, e.modifiers.control, e.modifiers.alt, e.modifiers.shift) {
+                return accept;
+            }
+            reject
+        }
+    }
 
     MenuBar {
         Menu {
@@ -264,6 +285,56 @@ export component AppWindow inherits Window {
         }
     }
 
+    time-panel := Panel {
+        x: parent.width - self.width - Tokens.pad;
+        y: Tokens.pad;
+        width: time.preferred-width;
+        height: time.preferred-height;
+        time := HorizontalLayout {
+            padding: Tokens.pad / 2;
+            spacing: Tokens.pad / 2;
+            Action {
+                // Wide enough for either label, so the panel does not jump.
+                min-width: Tokens.body-size * 4;
+                text: root.playing ? "Pause" : "Play";
+                clicked => { root.command("time.toggle-pause"); }
+            }
+            for n in [1, 2, 3, 4, 5]: Toggle {
+                text: n;
+                checkable: false;
+                checked: root.speed == n;
+                clicked => { root.command("time.speed " + n); }
+            }
+            Action {
+                text: "Step";
+                clicked => { root.command("time.step"); }
+            }
+            Text {
+                text: root.date;
+                font-family: Tokens.mono;
+                color: Tokens.ink;
+                vertical-alignment: center;
+                min-width: Tokens.body-size * 8;
+                horizontal-alignment: right;
+            }
+            Text {
+                text: root.running ? "tick " + root.tick : "";
+                font-family: Tokens.mono;
+                color: Tokens.ink;
+                opacity: 0.7;
+                vertical-alignment: center;
+            }
+            if root.sim-bound: Rectangle {
+                background: Tokens.ink;
+                min-width: chip.preferred-width + Tokens.pad;
+                chip := Text {
+                    text: "sim-bound";
+                    color: Tokens.paper;
+                }
+            }
+        }
+    }
+
     // The pointer's place, bottom left, with the legend above it.
     status := Panel {
         x: Tokens.pad;
@@ -330,7 +401,7 @@ export component AppWindow inherits Window {
 
     if root.inspector-open: Inspector {
         x: parent.width - self.width - Tokens.pad;
-        y: picker-panel.y + picker-panel.height + Tokens.pad;
+        y: max(picker-panel.y + picker-panel.height, time-panel.y + time-panel.height) + Tokens.pad;
         width: min(Tokens.body-size * 26, (parent.width - 3 * Tokens.pad) / 2);
         height: parent.height - self.y - Tokens.pad;
         title: root.inspector-title;
