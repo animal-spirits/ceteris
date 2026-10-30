@@ -145,7 +145,6 @@ export component AppWindow inherits Window {
     callback select(length, length);
     callback hover(length, length);
     callback unhover();
-    callback globe(bool);
     callback counties(bool);
     callback mode-changed();
     callback ui-scale(float);
@@ -268,10 +267,6 @@ export component AppWindow inherits Window {
                 Toggle {
                     text: "Counties";
                     clicked => { root.counties(self.checked); }
-                }
-                Toggle {
-                    text: "Globe";
-                    clicked => { root.globe(self.checked); }
                 }
             }
             HorizontalLayout {

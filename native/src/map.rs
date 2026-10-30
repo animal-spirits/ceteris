@@ -432,21 +432,14 @@ impl Map {
         }
         let targets = self.targets.as_ref()?;
         let viewport = [f64::from(width), f64::from(height)];
-        let [cx, cy, kx, ky] = camera.uniform(viewport);
-        // Flat: world copies left and right of the centre that can reach the viewport.
-        let reach = if camera.globe {
-            0
-        } else {
-            (viewport[0] / (2.0 * camera.scale)).ceil() as i32 + 1
-        };
         let id = |p: Option<u32>| p.map_or(0, |p| p + 1);
         let rgba = |c: [u8; 3]| c.into_iter().chain([255]).map(|v| f32::from(v) / 255.0);
-        let uniform: Vec<u8> = [cx, cy, kx, ky, -(reach as f32)]
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .chain(u32::from(camera.globe).to_le_bytes())
-            .chain(style.mix.to_le_bytes())
-            .chain([0; 4])
+        let uniform: Vec<u8> = camera
+            .uniform(viewport)
+            .into_iter()
+            .chain([style.mix])
+            .flat_map(f32::to_le_bytes)
+            .chain([0; 12])
             .chain(
                 rgba(SEA)
                     .chain(rgba(PAPER))
@@ -492,14 +485,13 @@ impl Map {
             pass.set_bind_group(0, &self.provinces.bind_group, &[]);
             pass.set_pipeline(&self.pipelines.background);
             pass.draw(0..3, 0..1);
-            let copies = 0..(2 * reach + 1) as u32;
             let mut draw = |pipeline, g: &Geometry| {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &g.bind_group, &[]);
                 pass.set_vertex_buffer(0, g.xy.slice(..));
                 pass.set_vertex_buffer(1, g.feature.slice(..));
                 pass.set_index_buffer(g.index.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..g.indices, 0, copies.clone());
+                pass.draw_indexed(0..g.indices, 0, 0..1);
             };
             draw(&self.pipelines.provinces, &self.provinces);
             if let Some(counties) = &self.counties {
