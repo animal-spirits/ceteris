@@ -26,6 +26,7 @@ use ceteris_pack::read::natural_earth::{ADMIN0, IsoCodes, read_codes};
 use ceteris_pack::read::people::parts;
 use ceteris_reference::io::pairwise_sum;
 use ceteris_reference::ppml::{Fit, TOL};
+use ceteris_trade::TradeParams;
 
 pub use crate::costs::*;
 use crate::dta::select;
@@ -715,7 +716,7 @@ pub fn samples(pack: &Path, cache: &Path) -> Result<(Sample, Sample, Notes), Str
         rate[(i * nc + e) * 2 + g] = r;
     }
     let p = Transport::default();
-    let costs = country_costs(pack, &p)?;
+    let costs = country_costs(pack, &p, &TradeParams::default())?;
     let weight = read("econ_goods.arrow")?.f64("weight")?;
 
     let build = |mask: &dyn Fn(usize, usize, usize) -> bool| -> Sample {

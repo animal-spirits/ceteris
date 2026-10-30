@@ -538,7 +538,8 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
 1. Rust loads the pack, builds the kernel, and exports kernel legs, enterprises, pops and
    parameters as Arrow. theta per class, the border friction P05 and the mode cost ratios P04 are
    estimated before this, directly by PPML structural gravity on 2000 BACI with least-cost (S05)
-   costs between countries (ADR 0022, PLAN Task 18), with provenance "data".
+   costs between countries (ADR 0022, PLAN Task 18; the goods of a bulk class on the kernel's
+   bulk legs, ADR 0247), with provenance "data".
 2. `reference/calibrate.py` (numpy, the source of truth) solves stages 1 to 5 below at the pack's
    u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
    Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"

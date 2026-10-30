@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BinaryHeap};
 use std::path::Path;
 
 use ceteris_reference::io::pairwise_sum;
+use ceteris_trade::TradeParams;
 use rayon::prelude::*;
 
 use crate::write::Table;
@@ -314,187 +315,269 @@ struct Access {
     acc_q: Vec<Quantities>,
 }
 
-/// S05 costs between and within the pack's countries as the trade kernel builds them
-/// (`EconInputs::network_from_graph`): domestic pairs by the least-cost path between provinces,
-/// and pairs of different countries by the cheapest chain of an access leg, a crossing leg
-/// between gateways and an access leg, over every gateway pair. Inside a province trade is
-/// costless (A2). These are the base legs: the bulk legs of a bulk freight rate (P154, P155,
-/// ADR 0247) are not built here, so for a bulk class the costs match the kernel only while the
-/// rate is off. It is on for class 3 by default (owner ruling 2026-10-30): there these are the
-/// base-leg costs, not the kernel's.
-pub fn country_costs(pack: &Path, p: &Transport) -> Result<CountryCosts, String> {
-    let read = |name: &str| Table::open(&pack.join(name));
-    let (nodes, edges, gw, prov) = (
-        read("nodes.arrow")?,
-        read("edges.arrow")?,
-        read("gateways.arrow")?,
-        read("econ_provinces.arrow")?,
-    );
-    let countries = read("countries.arrow")?.strings("code")?;
-    let index: BTreeMap<&str, usize> = countries
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.as_str(), i))
-        .collect();
-    let country: Vec<usize> = read("provinces.arrow")?
-        .strings("country")?
-        .iter()
-        .map(|c| {
-            index
-                .get(c.as_str())
-                .copied()
-                .ok_or_else(|| format!("province country {c} is not a pack country"))
-        })
-        .collect::<Result<_, _>>()?;
-    let (np, nc) = (country.len(), countries.len());
-    let va_cols = (0..10)
-        .map(|g| prov.f64(&format!("va_{g}")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let mode: Vec<u8> = edges.usize("mode")?.iter().map(|&m| m as u8).collect();
-    let q_edge = edge_quantities(&mode, &edges.f64("length_km")?, &edges.f64("tri_m")?, p);
-    let graph = Graph::new(
-        nodes.rows(),
-        &edges.usize("a")?,
-        &edges.usize("b")?,
-        &q_edge,
-        p,
-    );
-    let gnode = gw.usize("node")?;
-    let gcountry = gw.usize("country")?;
-    let provinces_of: Vec<Vec<usize>> = (0..nc)
-        .map(|c| (0..np).filter(|&s| country[s] == c).collect())
-        .collect();
-    let gateways_of: Vec<Vec<usize>> = (0..nc)
-        .map(|c| (0..gnode.len()).filter(|&i| gcountry[i] == c).collect())
-        .collect();
+/// [`CostInputs::country_costs`] of the pack at `pack`.
+pub fn country_costs(
+    pack: &Path,
+    p: &Transport,
+    trade: &TradeParams,
+) -> Result<CountryCosts, String> {
+    Ok(CostInputs::read(pack)?.country_costs(p, trade))
+}
 
-    let access: Vec<Access> = (0..np)
-        .into_par_iter()
-        .map(|s| {
-            let (dist, q) = graph.tree(s);
-            let c = country[s];
-            let at = |nodes: &mut dyn Iterator<Item = usize>| -> (Vec<f64>, Vec<Quantities>) {
-                nodes.map(|n| (dist[n], q[n])).unzip()
-            };
-            let (dom_cost, dom_q) = at(&mut provinces_of[c].iter().copied());
-            let (acc_cost, acc_q) = at(&mut gateways_of[c].iter().map(|&g| gnode[g]));
-            Access {
-                dom_cost,
-                dom_q,
-                acc_cost,
-                acc_q,
+/// Path quantities at a bulk freight rate (P154 `sea`, P155 `port`; ADR 0247) as quantities at
+/// the base rate, from the base ones `q` of edges of `mode`: the sea km of sea and canal edges
+/// times `sea`, and the fees of port and minor port access times `port`, so that [`edge_cost`]
+/// gives `ceteris_geo::graph::price` at `TransportParams::bulk(sea, port)`. Hours are unchanged.
+pub fn bulk_quantities(mode: &[u8], q: &[Quantities], sea: f64, port: f64) -> Vec<Quantities> {
+    mode.iter()
+        .zip(q)
+        .map(|(&m, &q)| {
+            let mut b = q;
+            match m {
+                SEA | CANAL => b[usize::from(SEA)] *= sea,
+                PORT_ACCESS | MINOR_PORT_ACCESS => b[Q_FEE] *= port,
+                _ => {}
             }
+            b
         })
-        .collect();
-    let crossing: Vec<(Vec<f64>, Vec<Quantities>)> = gnode
-        .par_iter()
-        .map(|&s| {
-            let (dist, q) = graph.tree(s);
-            gnode.iter().map(|&n| (dist[n], q[n])).unzip()
-        })
-        .collect();
+        .collect()
+}
 
-    // Exporter: the good's VA; importer: all VA.
-    let weight_out: Vec<[f64; N_TRADED]> = (0..np)
-        .map(|s| std::array::from_fn(|g| va_cols[g][s]))
-        .collect();
-    let weight_in: Vec<f64> = (0..np)
-        .map(|s| pairwise_sum(&(0..10).map(|g| va_cols[g][s]).collect::<Vec<_>>()))
-        .collect();
-    let mut out = vec![[0.0; N_Q]; nc * nc * N_TRADED];
-    let mut reach = vec![false; nc * nc];
-    let mut put = |a: usize, b: usize, mean: [Quantities; N_TRADED]| {
-        for (g, q) in mean.into_iter().enumerate() {
-            out[(a * nc + b) * N_TRADED + g] = q;
-        }
-        reach[a * nc + b] = true;
-    };
-    for a in 0..nc {
-        let pa = &provinces_of[a];
-        let win_a: Vec<f64> = pa.iter().map(|&s| weight_in[s]).collect();
-        if pa.is_empty() || !win_a.iter().any(|&w| w > 0.0) {
-            continue;
-        }
-        // A good the country does not make: all VA.
-        let makes: Vec<bool> = (0..N_TRADED)
-            .map(|g| pa.iter().any(|&s| weight_out[s][g] > 0.0))
-            .collect();
-        let wo: Vec<[f64; N_TRADED]> = pa
+/// The pack's tables that [`country_costs`] reads: the transport graph's edges, the gateways,
+/// each province's country and its value added by good.
+#[derive(Clone, Debug)]
+pub struct CostInputs {
+    pub nodes: usize,
+    pub edge_a: Vec<usize>,
+    pub edge_b: Vec<usize>,
+    pub mode: Vec<u8>,
+    pub length_km: Vec<f64>,
+    pub tri_m: Vec<f64>,
+    pub gateway_node: Vec<usize>,
+    pub gateway_country: Vec<usize>,
+    pub province_country: Vec<usize>,
+    pub n_countries: usize,
+    /// Value added by good, per province.
+    pub va: Vec<[f64; 10]>,
+}
+
+impl CostInputs {
+    pub fn read(pack: &Path) -> Result<CostInputs, String> {
+        let read = |name: &str| Table::open(&pack.join(name));
+        let (nodes, edges, gw, prov) = (
+            read("nodes.arrow")?,
+            read("edges.arrow")?,
+            read("gateways.arrow")?,
+            read("econ_provinces.arrow")?,
+        );
+        let countries = read("countries.arrow")?.strings("code")?;
+        let index: BTreeMap<&str, usize> = countries
             .iter()
-            .map(|&s| {
-                std::array::from_fn(|g| {
-                    if makes[g] {
-                        weight_out[s][g]
-                    } else {
-                        weight_in[s]
-                    }
-                })
+            .enumerate()
+            .map(|(i, c)| (c.as_str(), i))
+            .collect();
+        let province_country: Vec<usize> = read("provinces.arrow")?
+            .strings("country")?
+            .iter()
+            .map(|c| {
+                index
+                    .get(c.as_str())
+                    .copied()
+                    .ok_or_else(|| format!("province country {c} is not a pack country"))
             })
-            .collect();
-        let ok: Vec<Vec<bool>> = pa
-            .iter()
-            .map(|&s| access[s].dom_cost.iter().map(|c| c.is_finite()).collect())
-            .collect();
-        let q: Vec<Vec<Quantities>> = pa.iter().map(|&s| access[s].dom_q.clone()).collect();
-        if let Some(mean) = weighted_mean(&wo, &win_a, &ok, &q) {
-            put(a, a, mean);
-        }
-        let ga = &gateways_of[a];
-        if ga.is_empty() {
-            continue;
-        }
-        // The cheapest first two legs to every gateway j: over a's gateways i, access to i
-        // plus the crossing from i to j.
-        let (first, u): (Vec<Vec<usize>>, Vec<Vec<f64>>) = pa
-            .iter()
-            .map(|&s| {
-                (0..gnode.len())
-                    .map(|j| {
-                        argmin(
-                            ga.iter()
-                                .zip(&access[s].acc_cost)
-                                .map(|(&i, c)| c + crossing[i].0[j]),
-                        )
-                    })
-                    .unzip()
-            })
-            .unzip();
-        for b in 0..nc {
-            let (pb, gb) = (&provinces_of[b], &gateways_of[b]);
-            if b == a || pb.is_empty() || gb.is_empty() || !pb.iter().any(|&s| weight_in[s] > 0.0) {
-                continue;
-            }
-            let mut ok = vec![vec![false; pb.len()]; pa.len()];
-            let mut q = vec![vec![[0.0; N_Q]; pb.len()]; pa.len()];
-            for o in 0..pa.len() {
-                let qa = &access[pa[o]].acc_q;
-                for (d, &t) in pb.iter().enumerate() {
-                    let cb = &access[t].acc_cost;
-                    let (last, best) = argmin(gb.iter().zip(cb).map(|(&j, c)| u[o][j] + c));
-                    if !best.is_finite() {
-                        continue;
-                    }
-                    ok[o][d] = true;
-                    let ai = first[o][gb[last]];
-                    let x = &crossing[ga[ai]].1[gb[last]];
-                    let qb = &access[t].acc_q[last];
-                    q[o][d] = std::array::from_fn(|k| qa[ai][k] + x[k] + qb[k]);
+            .collect::<Result<_, _>>()?;
+        let va_cols = (0..10)
+            .map(|g| prov.f64(&format!("va_{g}")))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(CostInputs {
+            nodes: nodes.rows(),
+            edge_a: edges.usize("a")?,
+            edge_b: edges.usize("b")?,
+            mode: edges.usize("mode")?.iter().map(|&m| m as u8).collect(),
+            length_km: edges.f64("length_km")?,
+            tri_m: edges.f64("tri_m")?,
+            gateway_node: gw.usize("node")?,
+            gateway_country: gw.usize("country")?,
+            va: (0..province_country.len())
+                .map(|s| std::array::from_fn(|g| va_cols[g][s]))
+                .collect(),
+            province_country,
+            n_countries: countries.len(),
+        })
+    }
+
+    /// S05 costs between and within the countries as the trade kernel builds them
+    /// (`EconInputs::network_from_graph`): domestic pairs by the least-cost path between
+    /// provinces, and pairs of different countries by the cheapest chain of an access leg, a
+    /// crossing leg between gateways and an access leg, over every gateway pair. Inside a
+    /// province trade is costless (A2). Where `trade` gives theta classes a bulk freight rate
+    /// (P154, P155, ADR 0247), the goods of those classes take the same chains on the graph
+    /// repriced at that rate, as the kernel's bulk legs; their path quantities are then
+    /// [`bulk_quantities`], so that [`edge_cost`] at `p` prices them at the rate. The rate
+    /// changes no edge's reachability, so `reach` is the same for every good.
+    pub fn country_costs(&self, p: &Transport, trade: &TradeParams) -> CountryCosts {
+        let q_edge = edge_quantities(&self.mode, &self.length_km, &self.tri_m, p);
+        let (mut q, reach) = self.means(&q_edge, p);
+        if let Some((classes, sea, port)) = trade.bulk_rate() {
+            let (bulk, _) = self.means(&bulk_quantities(&self.mode, &q_edge, sea, port), p);
+            for g in (0..N_TRADED).filter(|&g| classes[usize::from(trade.theta_class[g])]) {
+                for cell in 0..self.n_countries * self.n_countries {
+                    q[cell * N_TRADED + g] = bulk[cell * N_TRADED + g];
                 }
             }
-            if !ok.iter().flatten().any(|&x| x) {
-                continue;
-            }
-            let win_b: Vec<f64> = pb.iter().map(|&s| weight_in[s]).collect();
-            if let Some(mean) = weighted_mean(&wo, &win_b, &ok, &q) {
-                put(a, b, mean);
-            }
+        }
+        CountryCosts {
+            n: self.n_countries,
+            q,
+            reach,
         }
     }
-    Ok(CountryCosts {
-        n: nc,
-        q: out,
-        reach,
-    })
+
+    /// The mean path quantities of every country pair and good, and whether the pair is
+    /// reached, on the graph whose edges have quantities `q_edge`.
+    fn means(&self, q_edge: &[Quantities], p: &Transport) -> (Vec<Quantities>, Vec<bool>) {
+        let graph = Graph::new(self.nodes, &self.edge_a, &self.edge_b, q_edge, p);
+        let (country, gnode, gcountry, va) = (
+            &self.province_country,
+            &self.gateway_node,
+            &self.gateway_country,
+            &self.va,
+        );
+        let (np, nc) = (country.len(), self.n_countries);
+        let provinces_of: Vec<Vec<usize>> = (0..nc)
+            .map(|c| (0..np).filter(|&s| country[s] == c).collect())
+            .collect();
+        let gateways_of: Vec<Vec<usize>> = (0..nc)
+            .map(|c| (0..gnode.len()).filter(|&i| gcountry[i] == c).collect())
+            .collect();
+
+        let access: Vec<Access> = (0..np)
+            .into_par_iter()
+            .map(|s| {
+                let (dist, q) = graph.tree(s);
+                let c = country[s];
+                let at = |nodes: &mut dyn Iterator<Item = usize>| -> (Vec<f64>, Vec<Quantities>) {
+                    nodes.map(|n| (dist[n], q[n])).unzip()
+                };
+                let (dom_cost, dom_q) = at(&mut provinces_of[c].iter().copied());
+                let (acc_cost, acc_q) = at(&mut gateways_of[c].iter().map(|&g| gnode[g]));
+                Access {
+                    dom_cost,
+                    dom_q,
+                    acc_cost,
+                    acc_q,
+                }
+            })
+            .collect();
+        let crossing: Vec<(Vec<f64>, Vec<Quantities>)> = gnode
+            .par_iter()
+            .map(|&s| {
+                let (dist, q) = graph.tree(s);
+                gnode.iter().map(|&n| (dist[n], q[n])).unzip()
+            })
+            .collect();
+
+        // Exporter: the good's VA; importer: all VA.
+        let weight_out: Vec<[f64; N_TRADED]> =
+            (0..np).map(|s| std::array::from_fn(|g| va[s][g])).collect();
+        let weight_in: Vec<f64> = (0..np)
+            .map(|s| pairwise_sum(&(0..10).map(|g| va[s][g]).collect::<Vec<_>>()))
+            .collect();
+        let mut out = vec![[0.0; N_Q]; nc * nc * N_TRADED];
+        let mut reach = vec![false; nc * nc];
+        let mut put = |a: usize, b: usize, mean: [Quantities; N_TRADED]| {
+            for (g, q) in mean.into_iter().enumerate() {
+                out[(a * nc + b) * N_TRADED + g] = q;
+            }
+            reach[a * nc + b] = true;
+        };
+        for a in 0..nc {
+            let pa = &provinces_of[a];
+            let win_a: Vec<f64> = pa.iter().map(|&s| weight_in[s]).collect();
+            if pa.is_empty() || !win_a.iter().any(|&w| w > 0.0) {
+                continue;
+            }
+            // A good the country does not make: all VA.
+            let makes: Vec<bool> = (0..N_TRADED)
+                .map(|g| pa.iter().any(|&s| weight_out[s][g] > 0.0))
+                .collect();
+            let wo: Vec<[f64; N_TRADED]> = pa
+                .iter()
+                .map(|&s| {
+                    std::array::from_fn(|g| {
+                        if makes[g] {
+                            weight_out[s][g]
+                        } else {
+                            weight_in[s]
+                        }
+                    })
+                })
+                .collect();
+            let ok: Vec<Vec<bool>> = pa
+                .iter()
+                .map(|&s| access[s].dom_cost.iter().map(|c| c.is_finite()).collect())
+                .collect();
+            let q: Vec<Vec<Quantities>> = pa.iter().map(|&s| access[s].dom_q.clone()).collect();
+            if let Some(mean) = weighted_mean(&wo, &win_a, &ok, &q) {
+                put(a, a, mean);
+            }
+            let ga = &gateways_of[a];
+            if ga.is_empty() {
+                continue;
+            }
+            // The cheapest first two legs to every gateway j: over a's gateways i, access to i
+            // plus the crossing from i to j.
+            let (first, u): (Vec<Vec<usize>>, Vec<Vec<f64>>) = pa
+                .iter()
+                .map(|&s| {
+                    (0..gnode.len())
+                        .map(|j| {
+                            argmin(
+                                ga.iter()
+                                    .zip(&access[s].acc_cost)
+                                    .map(|(&i, c)| c + crossing[i].0[j]),
+                            )
+                        })
+                        .unzip()
+                })
+                .unzip();
+            for b in 0..nc {
+                let (pb, gb) = (&provinces_of[b], &gateways_of[b]);
+                if b == a
+                    || pb.is_empty()
+                    || gb.is_empty()
+                    || !pb.iter().any(|&s| weight_in[s] > 0.0)
+                {
+                    continue;
+                }
+                let mut ok = vec![vec![false; pb.len()]; pa.len()];
+                let mut q = vec![vec![[0.0; N_Q]; pb.len()]; pa.len()];
+                for o in 0..pa.len() {
+                    let qa = &access[pa[o]].acc_q;
+                    for (d, &t) in pb.iter().enumerate() {
+                        let cb = &access[t].acc_cost;
+                        let (last, best) = argmin(gb.iter().zip(cb).map(|(&j, c)| u[o][j] + c));
+                        if !best.is_finite() {
+                            continue;
+                        }
+                        ok[o][d] = true;
+                        let ai = first[o][gb[last]];
+                        let x = &crossing[ga[ai]].1[gb[last]];
+                        let qb = &access[t].acc_q[last];
+                        q[o][d] = std::array::from_fn(|k| qa[ai][k] + x[k] + qb[k]);
+                    }
+                }
+                if !ok.iter().flatten().any(|&x| x) {
+                    continue;
+                }
+                let win_b: Vec<f64> = pb.iter().map(|&s| weight_in[s]).collect();
+                if let Some(mean) = weighted_mean(&wo, &win_b, &ok, &q) {
+                    put(a, b, mean);
+                }
+            }
+        }
+        (out, reach)
+    }
 }
 
 /// S05 iceberg factor 1 + c w_g + lambda_g T (trade SPEC, Leg factors) of path quantities.
