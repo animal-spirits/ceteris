@@ -760,7 +760,7 @@ mod tests {
     }
 
     fn tau_leg(g: usize, l: &Leg) -> f64 {
-        1.0 + l.cost_per_t * W[g] + TradeParams::default().bulk_off().time_cost[g] * l.hours / 24.0
+        1.0 + l.cost_per_t * W[g] + TradeParams::default().time_cost[g] * l.hours / 24.0
     }
 
     /// K of a leg by the spec formula.
@@ -784,7 +784,7 @@ mod tests {
 
     /// Every route o to d, by explicit enumeration of gateway pairs.
     fn hops(net: &Network, wedges: &Wedges, g: usize, o: usize, d: usize, theta: f64) -> Vec<Hop> {
-        let nu = 1.0 + TradeParams::default().bulk_off().border_nu_of(g);
+        let nu = 1.0 + TradeParams::default().border_nu_of(g);
         let (co, cd) = (net.province_country[o], net.province_country[d]);
         if o == d {
             return vec![Hop {
@@ -2040,7 +2040,7 @@ mod tests {
         };
         let wedges = Wedges::none(2);
         let k = kernel(&net, &wedges);
-        let nu = 1.0 + TradeParams::default().bulk_off().border_nu_of(g);
+        let nu = 1.0 + TradeParams::default().border_nu_of(g);
         let abroad =
             k_leg(g, &net.access[0], 1.0, THETA).powi(2) * k_leg(g, &net.crossings[0], nu, THETA);
         let gap = 4.0 - abroad.ln();
