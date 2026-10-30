@@ -9,7 +9,7 @@
 //! ceteris pack build [--out DIR]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
-//! ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
+//! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris export --fixture|--pack DIR --out DIR
@@ -38,8 +38,10 @@
 //! `--out` (default `target/calibration/<pack name>`, never the pack), printing one line per
 //! pass and the summary. Copying the tables into the pack installs them: `EconInputs::from_pack`
 //! loads them at their `calibration_format` and the static digest of the export they were
-//! solved from. `--inputs DIR` calibrates an export directory at its own u*, its provinces
-//! serving as their own pack provinces, and needs `--out`.
+//! solved from. Before the steady state it fits the border friction per theta class to ICIO's
+//! cross-border shares (ADR 0092); `--no-border-fit` keeps the default instead, for comparisons.
+//! `--inputs DIR` calibrates an export directory at its own u*, its provinces serving as their
+//! own pack provinces, and needs `--out`.
 //!
 //! `calibrate stability` prints the stability table of the stock-flow price rule for the
 //! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`).
@@ -85,7 +87,7 @@ const USAGE: &str = "usage:
   ceteris pack build [--out DIR]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
-  ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
+  ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris export --fixture|--pack DIR --out DIR
@@ -514,16 +516,18 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
-/// `calibrate --pack DIR | --inputs DIR [--out DIR]`: exit 1 without a calibration.
+/// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
+/// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let mut args = args.peekable();
     if args.peek().map(String::as_str) == Some("stability") {
         args.next();
         return stability(args);
     }
-    let (mut pack, mut inputs, mut out) = (None, None, None);
+    let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--no-border-fit" => fit_border = false,
             "--pack" => {
                 pack = Some(PathBuf::from(
                     args.next().ok_or("--pack needs a directory")?,
@@ -579,20 +583,32 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Some(pack) => {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
             let (target, icio) = border::target_shares(pack, &inp.theta_class[..n_traded])?;
-            let fit =
-                match border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut progress)
-                {
+            println!("border friction: ICIO cross-border share by class {target:?}");
+            if fit_border {
+                let fit = match border::fit_border_nu(
+                    &inp,
+                    &target,
+                    &icio,
+                    Limits::default(),
+                    &mut progress,
+                ) {
                     Ok(fit) => fit,
                     Err(e) => {
                         eprintln!("no calibration: {e}");
                         return Ok(ExitCode::FAILURE);
                     }
                 };
-            println!(
-                "border friction: nu {:?}, target {:?}, share {:?}, {} evaluations",
-                fit.nu, fit.target, fit.share, fit.evaluations
-            );
-            inp = border::at_border_nu(&inp, &fit.nu)?;
+                println!(
+                    "border friction: nu {:?}, share {:?}, {} evaluations",
+                    fit.nu, fit.share, fit.evaluations
+                );
+                inp = border::at_border_nu(&inp, &fit.nu)?;
+            } else {
+                println!(
+                    "border friction: kept at {:?} (--no-border-fit)",
+                    inp.border_nu
+                );
+            }
             Some(icio)
         }
         None => None,

@@ -534,7 +534,8 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    parameters a calibrated world runs under; `EconWorld::new` refuses a calibrated start under
    other structural parameters, nu included. After the stages the command prints the shares at
    the calibrated steady state, where stage 1 is no longer the data state's. The fixture keeps
-   its default nu (it has no ICIO data).
+   its default nu (it has no ICIO data). `ceteris calibrate --pack DIR --no-border-fit` skips the
+   fit and calibrates at the default nu, for comparisons (H2 before the fit).
 
 **Stage 1, values.** Output value V_o = VA_o / (1 - sum_k a_kg) per traded enterprise, VA the
 pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
