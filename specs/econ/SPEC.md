@@ -545,8 +545,9 @@ steady-state sales value) is written off: per country the excesses E_e = max(0, 
 T_e) are credited to their enterprises and debited from the country's pops in proportion to
 their positive money, never taking a pop below zero. If the pops hold less than the sum of the
 excesses, what they hold is written off, shared over the enterprises by their excess, and the
-rest is carried to the next tick. Both sides are one exact i64 split per country per tick by the
-largest remainder (floor of each exact share; the leftover units one each to the largest
+rest is carried to the next tick. Both sides are one exact split per country per tick of an
+`i128` total (an aggregate, as the pool account it passes through; ADR 0106), each part within
+its own weight and so `i64`, by the largest remainder (floor of each exact share; the leftover units one each to the largest
 remainders, ties to the first), routed through the country's pool account; flow `WRITE_OFF`,
 which is not income. The cap is nominal, so homogeneity of degree zero holds only while nothing
 is written off. S_e = VA0_e / a_VA_e is the steady-state sales only on a calibrated world, where A

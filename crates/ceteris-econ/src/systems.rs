@@ -1021,8 +1021,9 @@ pub fn distribute(w: &mut EconWorld) {
 /// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in
 /// proportion to their positive money, never taking a pop below zero. Where the pops hold less than the excess, what they hold is
 /// written off, shared over the holders by their excess, and the rest stays with them. Both
-/// sides are exact [`largest_remainder`] splits of one i64 per country, moved through the
-/// country's profit pool account, which ends at zero.
+/// sides are exact [`largest_remainder`] splits of one total per country, moved through the
+/// country's profit pool account, which ends at zero. The total is an aggregate, kept `i128`
+/// (ADR 0106); each part is bounded by its own weight, so it fits `i64`.
 pub fn write_off(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
@@ -1047,7 +1048,7 @@ pub fn write_off(w: &mut EconWorld) {
         );
         let held: i128 = weights.iter().map(|&m| i128::from(m)).sum();
         let excess: i128 = holders.iter().map(|&(_, x)| i128::from(x)).sum();
-        let total = i64::try_from(held.min(excess)).expect("write-off within i64");
+        let total = held.min(excess);
         if total == 0 {
             continue;
         }
@@ -1068,17 +1069,25 @@ pub fn write_off(w: &mut EconWorld) {
 /// largest remainder: each part is the floor of its exact share, and the units left over go
 /// one each to the largest remainders, ties to the first. The parts add up to `total`, and
 /// none exceeds the ceiling of its share, so none exceeds its weight.
-fn largest_remainder(total: i64, weights: &[i64], out: &mut Vec<i64>) {
+fn largest_remainder(total: i128, weights: &[i64], out: &mut Vec<i64>) {
     let sum: i128 = weights.iter().map(|&x| i128::from(x)).sum();
-    let t = i128::from(total);
+    assert!(
+        (0..=sum).contains(&total),
+        "largest remainder: total within the weights"
+    );
+    let (total_u, sum_u) = (total.unsigned_abs(), sum.unsigned_abs());
     out.clear();
-    let mut remainders: Vec<(i128, usize)> = Vec::with_capacity(weights.len());
+    let mut remainders: Vec<(u128, usize)> = Vec::with_capacity(weights.len());
     for (j, &x) in weights.iter().enumerate() {
-        let product = t * i128::from(x);
-        out.push(i64::try_from(product / sum).expect("part within i64"));
-        remainders.push((product % sum, j));
+        let (q, r) = mul_div(
+            u64::try_from(x).expect("nonnegative weight"),
+            total_u,
+            sum_u,
+        );
+        out.push(i64::try_from(q).expect("part within its weight"));
+        remainders.push((r, j));
     }
-    let left = total - out.iter().sum::<i64>();
+    let left = total - out.iter().map(|&p| i128::from(p)).sum::<i128>();
     remainders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     for &(_, j) in remainders
         .iter()
@@ -1086,6 +1095,34 @@ fn largest_remainder(total: i64, weights: &[i64], out: &mut Vec<i64>) {
     {
         out[j] += 1;
     }
+}
+
+/// x t / s as (floor, remainder), exactly, for t <= s: binary long division over the bits of x,
+/// the remainder kept below s, since x t can exceed `u128`.
+fn mul_div(x: u64, t: u128, s: u128) -> (u64, u128) {
+    if t == 0 {
+        return (0, 0);
+    }
+    let (mut q, mut r) = (0u64, 0u128);
+    for bit in (0..64).rev() {
+        // r < s throughout, so each step subtracts s at most once and never overflows
+        q <<= 1;
+        if r >= s - r {
+            r -= s - r;
+            q |= 1;
+        } else {
+            r += r;
+        }
+        if (x >> bit) & 1 == 1 {
+            if r >= s - t {
+                r -= s - t;
+                q += 1;
+            } else {
+                r += t;
+            }
+        }
+    }
+    (q, r)
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
@@ -1118,8 +1155,52 @@ mod tests {
         let weights = [1, 2, 3, 1_000_000_007, i64::MAX / 4];
         for total in [0, 1, 17, 999, 1_000_000_000] {
             largest_remainder(total, &weights, &mut out);
-            assert_eq!(out.iter().sum::<i64>(), total);
+            assert_eq!(out.iter().sum::<i64>(), total as i64);
             assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
+        }
+    }
+
+    /// A total beyond i64 over weights near i64::MAX (ADR 0106), where total x weight exceeds
+    /// u128: exact, and each part within its weight.
+    #[test]
+    fn largest_remainder_takes_a_wide_total() {
+        let mut out = Vec::new();
+        let weights = [i64::MAX; 64].map(|w| w - 3);
+        let mut weights = weights.to_vec();
+        weights.extend([1, 0, i64::MAX / 3, 12_345]);
+        let sum: i128 = weights.iter().map(|&x| i128::from(x)).sum();
+        for total in [sum, sum - 1, sum / 2 + 7, i128::from(i64::MAX) + 1, 5] {
+            largest_remainder(total, &weights, &mut out);
+            assert_eq!(out.iter().map(|&p| i128::from(p)).sum::<i128>(), total);
+            assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
+        }
+        largest_remainder(sum, &weights, &mut out);
+        assert_eq!(out, weights, "the whole weight: every part is its weight");
+    }
+
+    #[test]
+    fn mul_div_is_exact() {
+        for (x, t, s) in [
+            (7u64, 5u128, 9u128),
+            (u64::MAX, u128::MAX / 3, u128::MAX / 2),
+            (u64::MAX, u128::MAX, u128::MAX),
+            (12_345, 0, 1),
+        ] {
+            let (q, r) = mul_div(x, t, s);
+            // x t = q s + r, checked in 256 bits as (high, low) halves of 128
+            let wide = |a: u128, b: u128| {
+                let (al, ah, bl, bh) = (a as u64 as u128, a >> 64, b as u64 as u128, b >> 64);
+                let (ll, lh, hl, hh) = (al * bl, al * bh, ah * bl, ah * bh);
+                let mid = (ll >> 64) + (lh as u64 as u128) + (hl as u64 as u128);
+                let lo = (ll as u64 as u128) | (mid << 64);
+                let hi = hh + (lh >> 64) + (hl >> 64) + (mid >> 64);
+                (hi, lo)
+            };
+            let (h1, l1) = wide(u128::from(x), t);
+            let (h2, l2) = wide(u128::from(q), s);
+            let (l3, carry) = l2.overflowing_add(r);
+            assert_eq!((h1, l1), (h2 + u128::from(carry), l3), "{x} {t} {s}");
+            assert!(r < s);
         }
     }
 
