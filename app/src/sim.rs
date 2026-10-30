@@ -21,6 +21,8 @@ impl<V: Send + 'static> Runner<V> {
     ) -> Self {
         let (ring, views) = sync_channel(ring);
         std::thread::spawn(move || {
+            #[cfg(feature = "profile")]
+            tracy_client::set_thread_name!("sim");
             let mut sim = match build() {
                 Ok(sim) => sim,
                 Err(e) => {
@@ -31,11 +33,19 @@ impl<V: Send + 'static> Runner<V> {
             };
             loop {
                 // Blocks while the ring is full; ends when the app drops the runner.
-                if ring.send(Ok(view(&sim))).is_err() {
+                let published = {
+                    crate::zone!("view");
+                    view(&sim)
+                };
+                if ring.send(Ok(published)).is_err() {
                     return;
                 }
                 wake();
-                if let Err(v) = sim.step() {
+                let stepped = {
+                    crate::zone!("step");
+                    sim.step()
+                };
+                if let Err(v) = stepped {
                     let _ = ring.send(Err(format!("tick {}: {v}", sim.tick() + 1)));
                     wake();
                     return;

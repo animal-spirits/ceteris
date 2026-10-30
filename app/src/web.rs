@@ -11,7 +11,7 @@ fn read<T: DeserializeOwned>(path: &Path) -> Result<T, String> {
     serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct Countries {
     pub code: Vec<String>,
     pub name: Vec<String>,
@@ -25,7 +25,7 @@ pub const TERRAIN: [&str; 4] = ["Plains", "Plateau", "Hills", "Mountains"];
 /// USGS MRDS commodity groups, as the pack's `res_<group>` columns.
 pub const RESOURCE_GROUPS: [&str; 5] = ["precious", "base", "ferrous", "energy", "industrial"];
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct Provinces {
     pub id: Vec<String>,
     pub name: Vec<String>,
