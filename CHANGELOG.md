@@ -18,7 +18,7 @@
   the whole province's new index; the build stats pinned in `tests/econ_build.rs` follow the
   new gateway kinds, value-added count and imputed share.
 - P2 gate on the new pack with ADR 0249: V1 from the perturbed steady state FAILS (price
-  5.219e-1 at PRY-620 Itapúa, wage 5.013e-1, flow units 6.810e-1, value 5.453e-1, against
+  5.219e-1 at SDN-882 South Kordufan, wage 5.013e-1, flow units 6.810e-1, value 5.453e-1, against
   bound 0.9671; the largest price gap rises from 0.109 at tick 0 to about 0.5 by tick 240 and
   stays). Before ADR 0249 the same province set passed (price 9.086e-3). V1 from the data
   state stays open (price 4.876, wage 5.432). H2 distance -0.745 (s.e. 0.015, pseudo-R2 0.982,
