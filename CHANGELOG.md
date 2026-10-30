@@ -17,6 +17,9 @@
   static digest encodes nu as a list.
 - The P2 gate's H2 per class asks that each class's theta_c lie within 2 pair-clustered
   standard errors of its PPML estimate (ADR 0092), in place of the prior bands.
+- Calibration's stage 2 scaling may run 100,000 sweeps (was 20,000; a slow mode on the full pack
+  at theta 16.91), and an Anderson-extrapolated step that leaves f64 restarts the mixing from the
+  plain sweep it extrapolated instead of failing. Neither moves a golden.
 
 Goldens re-blessed:
 
