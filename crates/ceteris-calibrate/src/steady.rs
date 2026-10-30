@@ -48,6 +48,8 @@ use ceteris_reference::io::{Inputs, Mat};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
 
+use crate::elasticity;
+
 /// `systems::COVER`.
 pub const COVER: f64 = 1.0;
 /// `pipeline::SLOTS`: arrival slots 1 to 4 enter the pipeline, slot 0 is home.
@@ -74,7 +76,7 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "5";
+pub const FORMAT: &str = "6";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -201,6 +203,10 @@ pub struct Steady {
     pub gamma: Mat,
     /// (P, G) expected months in transit of traded goods.
     pub lead: Mat,
+    /// (P, G) the own-price elasticity E and the supply elasticity eps of each market's price
+    /// loop (ADR 0263, [`crate::elasticity`]), 0 where no market is active.
+    pub demand_elasticity: Mat,
+    pub supply_elasticity: Mat,
     /// SLOTS + 1 matrices (P, G): units arriving per unit spent, by arrival slot.
     pub arrive: Vec<Mat>,
     pub weights: Weights,
@@ -1314,6 +1320,15 @@ pub fn calibrate_from(
         Mat::from_fn(n_p, n_g, |p, g| o[(p, g)] * mask(g))
     };
     let orders = [orders_of(&spend_int), orders_of(&hh.spend_hh)];
+    let spend_traded = Mat::from_fn(n_p, n_g, |p, g| {
+        if traded[g] {
+            spend_int[(p, g)] + hh.spend_hh[(p, g)]
+        } else {
+            0.0
+        }
+    });
+    let demand_elasticity = elasticity::demand(&m, &src, &spend_traded);
+    let supply_elasticity = elasticity::supply(inp, s_l, &a_va);
     let ent_spend = Mat::from_fn(
         n_e,
         n_g,
@@ -1370,6 +1385,8 @@ pub fn calibrate_from(
         }),
         consumer: q,
         lead,
+        demand_elasticity,
+        supply_elasticity,
         arrive,
         weights,
         rebate,

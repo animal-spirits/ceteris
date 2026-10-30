@@ -10,6 +10,23 @@ use ceteris_trade::{Leg, N_CLASSES, N_GOODS, Network, TradeParams, Wedges};
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
 
+/// The elasticities of each market's price loop at the calibrated point (ADR 0263; trade SPEC,
+/// Stability region, Per-market gain), `[province * N_GOODS + g]`, 0 where no market is active.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarketElasticity {
+    /// E: the own-price elasticity of the orders the market receives.
+    pub demand: Vec<f64>,
+    /// eps: the largest supply elasticity of the market's enterprises.
+    pub supply: Vec<f64>,
+}
+
+impl MarketElasticity {
+    /// J of cell `i` at employment speed `eta` (P41): E + eta eps / (2 - eta).
+    pub fn j(&self, i: usize, eta: f64) -> f64 {
+        self.demand[i] + eta * self.supply[i] / (2.0 - eta)
+    }
+}
+
 /// Education levels of a pop: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
 
@@ -117,6 +134,9 @@ pub struct EconInputs {
     /// P05 per theta class of the calibration (ADR 0092), which its steady state was solved at;
     /// `None` uncalibrated. [`EconInputs::trade_params`] carries it into the trade parameters.
     pub border_nu: Option<[f64; N_CLASSES]>,
+    /// The calibration's elasticities of each market's price loop (ADR 0263), which cap its
+    /// price gain; `None` uncalibrated, where every market runs kappa1.
+    pub market_elasticity: Option<MarketElasticity>,
 }
 
 impl EconInputs {
@@ -442,6 +462,7 @@ impl EconInputs {
             // the initial state, which snapshots carry
             steady: _,
             border_nu,
+            market_elasticity,
         } = self;
         let Network {
             province_country,
@@ -537,6 +558,12 @@ impl EconInputs {
         if let Some(nu) = border_nu {
             b"border-nu".iter().for_each(|&b| e.u8(b));
             e.f64s(nu);
+        }
+        // appended only when present, so uncalibrated worlds keep their digest
+        if let Some(m) = market_elasticity {
+            b"market-elasticity".iter().for_each(|&b| e.u8(b));
+            e.f64s(&m.demand);
+            e.f64s(&m.supply);
         }
         // appended only when present, so generated worlds keep their digest
         if !pack.is_empty() {

@@ -392,6 +392,47 @@ fn calibrated_start_accepts_other_speeds() {
     EconWorld::new(calibrated_fixture(), params, trade);
 }
 
+/// ADR 0263: the calibrated fixture carries each market's elasticities; at the default eta no
+/// market's J reaches J_ref = 20, so every gain is kappa1 and the default dynamics are those
+/// before the cap. Frictionless (eta 1) J is reported with the cells it caps.
+#[test]
+fn no_cell_capped_in_the_default_mode() {
+    let inputs = calibrated_fixture();
+    let m = inputs
+        .market_elasticity
+        .as_ref()
+        .expect("calibrated elasticities");
+    let trade = inputs.trade_params();
+    let active: Vec<usize> = (0..m.demand.len())
+        .filter(|&i| m.demand[i] > 0.0 || m.supply[i] > 0.0)
+        .collect();
+    assert!(!active.is_empty());
+    for (params, what) in [
+        (EconParams::default(), "default"),
+        (EconParams::frictionless(), "frictionless"),
+    ] {
+        let w = EconWorld::new(Arc::clone(&inputs), params.clone(), trade.clone());
+        let (top, cell) = active
+            .iter()
+            .map(|&i| (m.j(i, params.eta), i))
+            .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
+        let capped = w
+            .layout()
+            .price_gain
+            .iter()
+            .filter(|&&k| k != trade.kappa1)
+            .count();
+        eprintln!("{what}: largest J {top:.3} at cell {cell}, {capped} cells capped");
+        if what == "default" {
+            assert!(
+                top < 2.0 * trade.gain_share / trade.kappa1,
+                "J {top} at cell {cell}"
+            );
+            assert_eq!(capped, 0);
+        }
+    }
+}
+
 #[test]
 fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let dir = std::env::var_os("CETERIS_PACK").map_or_else(

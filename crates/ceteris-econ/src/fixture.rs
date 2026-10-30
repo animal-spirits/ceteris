@@ -242,6 +242,7 @@ pub fn small_world() -> EconInputs {
         enterprises: ent,
         steady: None,
         border_nu: None,
+        market_elasticity: None,
     };
     inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();

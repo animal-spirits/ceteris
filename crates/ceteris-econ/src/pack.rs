@@ -279,6 +279,7 @@ impl EconInputs {
             enterprises: ent,
             steady: None,
             border_nu: None,
+            market_elasticity: None,
         };
         inputs.network =
             inputs.network_from_graph(pack, &Gateways::read(dir)?, &TradeParams::default());

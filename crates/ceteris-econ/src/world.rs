@@ -135,6 +135,8 @@ pub struct Layout {
     pub ent_loss_cap: Vec<i64>,
     /// Selection constant per traded good and province, `ProvinceData::gamma` good by good.
     pub gamma: Vec<Vec<f64>>,
+    /// Price gain kappa1_cell of each market (ADR 0263), [`price_gains`].
+    pub price_gain: Vec<f64>,
 }
 
 impl Layout {
@@ -413,6 +415,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         theta_scale,
         coverage,
         kappa1,
+        gain_share,
         kappa2,
         c_max,
         // binds only off a steady state, so calibrations do not depend on it; the snapshot
@@ -452,6 +455,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(theta);
     e.f64(*theta_scale);
     e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain]);
+    // reaches the dynamics only through the calibration's market elasticities
+    if inputs.market_elasticity.is_some() {
+        e.f64(*gain_share);
+    }
     e.f64s(border_nu);
     e.f64s(coverage);
     e.f64s(time_cost);
@@ -482,6 +489,19 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
             ..TradeParams::default()
         },
     )
+}
+
+/// kappa1_cell of every cell (ADR 0263; trade SPEC, Per-market gain): kappa1 capped at the share
+/// P03d of the cell's J2 limit, J from the calibration's market elasticities at the run's
+/// employment speed eta (P41); kappa1 in every cell of inputs without a calibration.
+pub fn price_gains(inp: &EconInputs, params: &EconParams, trade: &TradeParams) -> Vec<f64> {
+    let n = inp.n_provinces() * N_GOODS;
+    match &inp.market_elasticity {
+        Some(m) => (0..n)
+            .map(|i| trade.price_gain(m.j(i, params.eta)))
+            .collect(),
+        None => vec![trade.kappa1; n],
+    }
 }
 
 /// Which (province, good) cells have a market, `[province * N_GOODS + g]`. A traded good's
@@ -905,6 +925,7 @@ impl EconWorld {
             a_va: inp.enterprises.a_va.clone(),
             coef,
             gamma: gamma_columns(&inp.provinces.gamma),
+            price_gain: price_gains(inp, &params, &trade),
         };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
@@ -1626,6 +1647,7 @@ impl State for EconWorld {
 mod tests {
     use super::*;
     use crate::fixture::small_world;
+    use crate::inputs::MarketElasticity;
     use ceteris_core::snapshot::{canonical, decode_canonical_with};
     use ceteris_trade::N_GOODS;
     use ceteris_trade::goods::TRADED;
@@ -1959,6 +1981,46 @@ mod tests {
             TradeParams::default(),
         );
         assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+    }
+
+    /// ADR 0263: J = E + eta eps / (2 - eta) at the run's eta caps the gain of the markets
+    /// above J_ref = 2 m / kappa1 (20 at the defaults); inputs without a calibration run kappa1
+    /// everywhere, and P03d reaches the static digest only with a calibration.
+    #[test]
+    fn gain_per_cell_follows_eta() {
+        let trade = TradeParams::default();
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        for params in [EconParams::default(), EconParams::frictionless()] {
+            assert!(
+                price_gains(&inputs, &params, &trade)
+                    .iter()
+                    .all(|&k| k == trade.kappa1)
+            );
+        }
+        let other_share = TradeParams {
+            gain_share: 0.25,
+            ..trade.clone()
+        };
+        let digest =
+            |inp: &EconInputs, t: &TradeParams| static_digest(inp, &EconParams::default(), t);
+        assert_eq!(digest(&inputs, &trade), digest(&inputs, &other_share));
+
+        // cell 0: E 11.57, eps 30.4 (J 16.92 default, 41.97 frictionless); cell 1: E 25, eps 0
+        let (mut demand, mut supply) = (vec![1.0; n], vec![0.0; n]);
+        (demand[0], supply[0], demand[1]) = (11.57, 30.4, 25.0);
+        inputs.market_elasticity = Some(MarketElasticity { demand, supply });
+        assert_ne!(digest(&inputs, &trade), digest(&inputs, &other_share));
+        let default = price_gains(&inputs, &EconParams::default(), &trade);
+        let frictionless = price_gains(&inputs, &EconParams::frictionless(), &trade);
+        assert_eq!(default[0], trade.kappa1);
+        assert!((frictionless[0] - 1.0 / (11.57 + 30.4)).abs() < 1e-16);
+        for gains in [&default, &frictionless] {
+            assert!((gains[1] - 1.0 / 25.0).abs() < 1e-16);
+            assert!(gains[2..].iter().all(|&k| k == trade.kappa1));
+        }
+        let w = EconWorld::new(Arc::new(inputs), EconParams::frictionless(), trade.clone());
+        assert_eq!(w.layout().price_gain, frictionless);
     }
 
     #[test]

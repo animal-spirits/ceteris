@@ -43,6 +43,12 @@ pub struct TradeParams {
     /// 0.9862 / 0.9871; 0.1: 0.9718 / 0.9756; 0.2: 1.0000 / 1.0000 (oscillates), the same with
     /// every crossing lag at 3 months (the full pack's cap).
     pub kappa1: f64,
+    /// P03d share m of each market's stability limit (J2, `specs/trade/SPEC.md`, Stability
+    /// region) that its price gain may use (ADR 0263): kappa1_cell = kappa1 min(1, 2 m /
+    /// (kappa1 J_cell)), [`TradeParams::price_gain`]. Prior 0 to 1, start 0.5: J_ref = 20 at
+    /// kappa1 0.05, so in the default mode no market of the 0256 pack is capped (J at most
+    /// 16.9) and frictionless the 298 traded cells above 20 are.
+    pub gain_share: f64,
     /// P03b price response to the inventory gap, per month. Prior 0 to 0.5 (widened from 0.05
     /// by owner decision, 2026-10-24), default 0: the inventory term is off and inventories
     /// are untargeted in P2, so the default sits on the region's edge kappa2 = 0, where only
@@ -132,6 +138,13 @@ impl TradeParams {
         }
     }
 
+    /// kappa1_cell of ADR 0263: kappa1 for a market whose loop gain kappa1 J stays within the
+    /// share `gain_share` of its J2 limit 2, else the gain that puts it there, 2 m / J. Exactly
+    /// kappa1 when uncapped.
+    pub fn price_gain(&self, j: f64) -> f64 {
+        self.kappa1 * (2.0 * self.gain_share / (self.kappa1 * j)).min(1.0)
+    }
+
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
     pub fn price_clip(&self, g: usize) -> f64 {
         if STORABLE[g] {
@@ -150,6 +163,7 @@ impl Default for TradeParams {
             theta_scale: 1.0,
             coverage: [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.05,
+            gain_share: 0.5,
             kappa2: 0.0,
             c_max: 0.1,
             c_max_storable: 0.3,
@@ -177,6 +191,28 @@ mod tests {
             TradeParams::default().bulk_rate(),
             Some(([false, false, false, true], 0.026, 0.40))
         );
+    }
+
+    /// ADR 0263: below J_ref = 2 m / kappa1 the gain is kappa1 bit for bit; above it the loop
+    /// gain kappa1_cell J is 2 m.
+    #[test]
+    fn price_gain_caps_at_the_share_of_the_limit() {
+        let p = TradeParams::default();
+        assert_eq!((p.kappa1, p.gain_share), (0.05, 0.5));
+        for j in [0.0, 0.6, 12.5, 16.9, 20.0] {
+            assert_eq!(p.price_gain(j).to_bits(), p.kappa1.to_bits(), "J {j}");
+        }
+        for j in [20.5, 36.9, 42.0, 1e6] {
+            let loop_gain = p.price_gain(j) * j;
+            assert!((loop_gain - 1.0).abs() < 1e-15, "J {j}: {loop_gain}");
+        }
+        let p = TradeParams {
+            gain_share: 0.25,
+            kappa1: 0.1,
+            ..p
+        };
+        assert_eq!(p.price_gain(5.0), 0.1);
+        assert!((p.price_gain(10.0) - 0.05).abs() < 1e-17);
     }
 
     /// A NaN multiplier is reported as a bad rate, not as two classes that differ.

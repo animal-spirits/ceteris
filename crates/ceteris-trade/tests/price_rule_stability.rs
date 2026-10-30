@@ -66,9 +66,9 @@ impl Toy {
 
     /// Runs the market from a price deviation x0 for `steps` ticks: output Q = exp(q) with
     /// q_t = (1 - eta) q_{t-1} + eta eps x_t from the price of the tick, household orders
-    /// D = exp(-E x), clearing and the price rule as built. Returns the largest of |x|, |q|
-    /// and |S / S*_eq - 1| over the last 100 ticks.
-    fn simulate(&self, k1: f64, k2: f64, x0: f64, steps: usize) -> f64 {
+    /// D = exp(-E x), clearing and the price rule as built. Returns the largest of |x| and |q|,
+    /// and that of |S / S*_eq - 1|, over the last 100 ticks.
+    fn simulate(&self, k1: f64, k2: f64, x0: f64, steps: usize) -> [f64; 2] {
         let mut coverage = [0.0; N_GOODS];
         coverage[G] = self.cover;
         let p = TradeParams {
@@ -82,7 +82,7 @@ impl Toy {
         m.price[G] = libm::exp(x0);
         m.inventory[G] = self.cover;
         let mut fill = vec![[1.0; 2]; N_GOODS];
-        let (mut q, mut late) = (0.0, 0.0f64);
+        let (mut q, mut late) = (0.0, [0.0f64; 2]);
         for t in 0..steps {
             let x = libm::log(m.price[G]);
             q = (1.0 - self.eta) * q + self.eta * self.eps * x;
@@ -90,10 +90,10 @@ impl Toy {
             m.demand_int[G] = 0.0;
             m.demand_hh[G] = libm::exp(-self.e * x);
             m.clear(Rationing::Proportional, &mut fill);
-            m.reprice(&p, 0.0);
+            m.reprice(&p, &[k1; N_GOODS], 0.0);
             if t + 100 >= steps {
                 let s = m.inventory[G] / self.cover - 1.0;
-                late = late.max(x.abs()).max(q.abs()).max(s.abs());
+                late = [late[0].max(x.abs()).max(q.abs()), late[1].max(s.abs())];
             }
         }
         late
@@ -150,7 +150,8 @@ fn stability_region_matches_simulation() {
             toy.e,
             if inside { "inside" } else { "outside" }
         );
-        let late = toy.simulate(k1, k2, X0, STEPS);
+        let [flow, stock] = toy.simulate(k1, k2, X0, STEPS);
+        let late = flow.max(stock);
         if inside {
             assert!(late < X0, "E {} ({k1}, {k2}) inside: {late:e}", toy.e);
         } else {
@@ -172,4 +173,34 @@ fn default_lies_on_the_untargeted_stock_edge() {
         assert!(1.0 - a0 * a0 > (a1 - a0 * a2).abs());
         assert!(toy.stable(p.kappa1, 1e-6));
     }
+}
+
+/// ADR 0263: a frictionless market beyond J2 at the default kappa1 (E 11.57 at theta 10.57, eps
+/// 30.4 as São Tomé's light manufacturing: J 41.97, kappa1 J 2.10) cycles away from its steady
+/// state; at its capped gain (kappa1_cell J = 2 m = 1) it is inside the region and settles. The
+/// supply response is lagged by the employment step, so the toy's eps carries the loop at eta 1.
+#[test]
+fn capped_gain_settles_a_market_beyond_j2() {
+    const X0: f64 = 1e-9;
+    const STEPS: usize = 2000;
+    let toy = Toy {
+        e: 11.57,
+        eta: 1.0,
+        eps: 30.4,
+        cover: 2.0,
+    };
+    let p = TradeParams::default();
+    let j = toy.e + toy.eta * toy.eps / (2.0 - toy.eta);
+    assert!(p.kappa1 * j > 2.0, "J {j}");
+    // kappa2 = 0 is the region's edge (`default_lies_on_the_untargeted_stock_edge`)
+    assert!(!toy.stable(p.kappa1, 1e-6));
+    let [late, _] = toy.simulate(p.kappa1, p.kappa2, X0, STEPS);
+    assert!(late > 1e3 * X0, "uncapped: {late:e}");
+
+    let gain = p.price_gain(j);
+    assert!((gain * j - 2.0 * p.gain_share).abs() < 1e-12);
+    assert!(toy.stable(gain, 1e-6));
+    // the stock keeps what the transient left (kappa2 = 0): price and output settle
+    let [late, _] = toy.simulate(gain, p.kappa2, X0, STEPS);
+    assert!(late < 1e-3 * X0, "capped: {late:e}");
 }
