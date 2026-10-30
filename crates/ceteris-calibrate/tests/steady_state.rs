@@ -798,14 +798,21 @@ fn nu_fit_is_monotone_and_bracketed() {
             .unwrap_err()
             .to_string()
     };
-    // above the share at nu 0
+    // above the share at nu 0: clamped at nu = 0 (ADR 0092, Amendment 2026-10-30), the other
+    // classes fitted to the shares made at 0.3
     let mut target = shares[1];
     target[0] = 0.5 * (1.0 + shares[0][0]);
-    let err = fit_err(target);
+    let fit = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet()).unwrap();
+    assert_eq!(fit.clamped, [true, false, false, false]);
+    assert_eq!(fit.nu[0], 0.0);
     assert!(
-        err.starts_with("class 0:") && err.contains("(nu 0)"),
-        "{err}"
+        (fit.share[0] - shares[0][0]).abs() <= 1e-12 * shares[0][0],
+        "{fit:?}"
     );
+    for (c, t) in target.iter().enumerate().skip(1) {
+        assert!((fit.share[c] / t - 1.0).abs() <= 1e-6, "class {c}: {fit:?}");
+        assert!((fit.nu[c] - 0.3).abs() <= 1e-6 * 0.3, "class {c}: {fit:?}");
+    }
     // below the share at the bracket's upper end
     let top = at([border::NU_MAX; border::N_CLASSES]);
     let mut target = shares[1];

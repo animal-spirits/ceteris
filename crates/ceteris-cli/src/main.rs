@@ -599,8 +599,8 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                     }
                 };
                 println!(
-                    "border friction: nu {:?}, share {:?}, {} evaluations",
-                    fit.nu, fit.share, fit.evaluations
+                    "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
+                    fit.nu, fit.share, fit.clamped, fit.evaluations
                 );
                 inp = border::at_border_nu(&inp, &fit.nu)?;
             } else {

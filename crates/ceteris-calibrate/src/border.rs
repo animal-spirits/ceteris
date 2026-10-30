@@ -42,6 +42,9 @@ pub struct Fit {
     /// Evaluations, each one scaling of every good: the bracket's ends, the rounds and the
     /// share at the result.
     pub evaluations: usize,
+    /// Classes whose target is above their share at nu 0, held at nu = 0 (ADR 0092, Amendment
+    /// 2026-10-30); `share` then falls short of `target`.
+    pub clamped: [bool; N_CLASSES],
 }
 
 /// The inputs with every crossing at the border friction `nu` of its good's class in place of
@@ -323,8 +326,10 @@ impl Brent {
 
 /// nu per class such that the model's cross-border share of the class equals `target`, over the
 /// countries flagged `icio`, at the stage 1 spending of the data state of `inp`. Each class's
-/// share falls as its nu rises; a target outside the shares at nu 0 and the bracket's upper end
-/// ([`NU_MAX`], lower where the scaling fails there) is an error naming the class. A class with a
+/// share falls as its nu rises. A target above the share at nu 0 clamps the class at nu = 0, the
+/// corner of nu >= 0 (`Fit::clamped`; ADR 0092, Amendment 2026-10-30); a target below the share at
+/// the bracket's upper end ([`NU_MAX`], lower where the scaling fails there) is an error naming
+/// the class. A class with a
 /// NaN target (no ICIO use) keeps the inputs' nu. Brent's method per class, its bracket to
 /// [`NU_TOL`] in nu (the root's resolution is coarser where a class's share is flat, see
 /// [`NU_TOL`]); the classes share each evaluation, and every scaling starts from the scaling at
@@ -345,10 +350,17 @@ pub fn fit_border_nu(
     }
     let (spend, supply) = steady::data_state_spending(inp, limits)?;
     let own: [f64; N_CLASSES] = std::array::from_fn(|c| inp.border_nu[c]);
-    let fitted: Vec<usize> = (0..N_CLASSES).filter(|&c| !target[c].is_nan()).collect();
+    let mut fitted: Vec<usize> = (0..N_CLASSES).filter(|&c| !target[c].is_nan()).collect();
     let mut evaluations = 0;
+    let target_of = fitted.clone();
     let at = |nu: &[f64; N_CLASSES]| -> [f64; N_CLASSES] {
-        std::array::from_fn(|c| if fitted.contains(&c) { nu[c] } else { own[c] })
+        std::array::from_fn(|c| {
+            if target_of.contains(&c) {
+                nu[c]
+            } else {
+                own[c]
+            }
+        })
     };
     // Every scaling starts from that at nu 0, so an evaluation depends on nu alone, not on the
     // path of the search.
@@ -373,18 +385,19 @@ pub fn fit_border_nu(
     // The upper end, one class at a time: where the scaling fails there (its log-domain weights
     // leave the range of f64 when a class's imports are cut that far), the end comes down by
     // halves until it solves.
-    // a target above the share at nu 0, the largest, has no root: no need to look further
-    if let Some(&c) = fitted
-        .iter()
-        .find(|&&c| at_zero[c] < target[c] || at_zero[c].is_nan())
-    {
-        return Err(format!(
-            "class {c}: target cross-border share {} outside the model's {} (nu 0) to the \
-             share at the upper end",
-            target[c], at_zero[c]
-        )
-        .into());
+    if let Some(&c) = fitted.iter().find(|&&c| at_zero[c].is_nan()) {
+        return Err(format!("class {c}: no cross-border share at nu 0").into());
     }
+    // a target above the share at nu 0, the largest, has no root: the class stays at the corner
+    let clamped: [bool; N_CLASSES] =
+        std::array::from_fn(|c| target_of.contains(&c) && at_zero[c] < target[c]);
+    for c in (0..N_CLASSES).filter(|&c| clamped[c]) {
+        progress(&format!(
+            "border friction: class {c} clamped at nu 0, target {} above the model's {}",
+            target[c], at_zero[c]
+        ));
+    }
+    fitted.retain(|&c| !clamped[c]);
     for &c in &fitted {
         let mut halvings = 0;
         let f_hi = loop {
@@ -426,6 +439,9 @@ pub fn fit_border_nu(
         brent[c] = Some(Brent::new(0.0, f_lo, hi[c], f_hi));
     }
     let mut nu = own;
+    for c in (0..N_CLASSES).filter(|&c| clamped[c]) {
+        nu[c] = 0.0;
+    }
     for round in 1..=MAX_ROUNDS {
         let mut open = Vec::new();
         for &c in &fitted {
@@ -445,6 +461,7 @@ pub fn fit_border_nu(
                 target: *target,
                 share,
                 evaluations,
+                clamped,
             });
         }
         let share = shares(&nu)?;
