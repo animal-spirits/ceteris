@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### BEHAVIOUR: buyers pay the CES index with selection on trade links (ADR 0200)
+
+- Buyers of a traded good pay q_d = Gamma_d,g P_d, the CES index times a selection constant per
+  cell fixed where the world is calibrated (owner ruling 2026-10-30, option A): there q_d is the
+  delivered unit price of the physical arrivals, 1 / alpha_d, as before. Every route delivers
+  what the buyer paid over q_d, whatever the origin: shipped units melt by the route's physical
+  loss and selection adds (or, where the physical cost is below q_d, takes) the rest.
+  `Sourced` gains `buyer_price`, `home` (origin units bought at home), `survived` (by arrival
+  slot) and the `selected` tally beside `lost`; `source` takes Gamma per province.
+- T2b books selection in the ledger: home purchases arrive as delivered units at the buyer,
+  and each transit account is brought to the pipeline, creating what selection adds and
+  destroying the melt. A new invariant checks every tick that what T2b creates less what it
+  destroys is the selection term less the melt.
+- `ProvinceData::gamma` (in the inputs digest): the data state's 1 / (alpha_d P_d) at prices 1,
+  or the calibration's q_d / P_d at the calibrated prices. Calibration format 5
+  (`econ_calib_cells.arrow` gains `gamma`); export format 13 (`provinces` gains `gamma_g`). The
+  calibration prices buyers at 1 / alpha_d at every pass (`Model::physical`); the reference
+  model prices them at Gamma P_d where its inputs carry Gamma.
+- The lead and the calibrated pipeline count arrivals by value over q_d instead of by
+  physical units, so the arrival slots of a destination are weighted by what it pays on each
+  route.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: `provinces` gains `gamma_0` to `gamma_9`, and `params.json` its
+  format and static digest. Every other value of the export, base prices included, is bit for
+  bit the same (the other tables change only in their `export_format` metadata).
+- `tests/golden/p2-fixture/calibration/`: stage 1's values (output value, value added, sales,
+  rebates, prices, coefficients, PIGL weights) are bit for bit the same; the lead moves by up
+  to 0.165 months (52% relative in one cell; the sum over cells +0.8%) and the pipeline by up to
+  52% in one entry (+1.4% in total units), because arrivals are now split over slots by value;
+  `gamma` is new.
+- `tests/golden/p2-fixture/reference/`: the frictionless GE equilibrium moves (prices by up to
+  2.0%, wages 2.0%, cross-border flows up to 16%): it lies away from the data state, where
+  buyers now pay Gamma P_d rather than 1 / alpha_d.
+- `tests/golden/p2-econ.txt`: every hash (the inputs digest carries Gamma, and the run from the
+  data state moves off the calibration point at once).
+- `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move. `p2-pack.txt` waits for the pack
+  rebuild (pre-P3 B8).
+
 ### BEHAVIOUR: bulk freight rate per theta class, built and off; class 3 clamped at nu 0 (ADRs 0247, 0092)
 
 - A theta class can be shipped at a bulk freight rate: its legs are least-cost paths on the
