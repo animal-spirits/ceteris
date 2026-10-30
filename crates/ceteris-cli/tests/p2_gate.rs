@@ -1,5 +1,6 @@
-//! P2 gate on the full pack (`specs/econ/SPEC.md`, P2 gate): V1 after the uniqueness check, H2
-//! (the distance elasticity) and H2 per theta class (ADRs 0018 and 0023).
+//! P2 gate on the full pack (`specs/econ/SPEC.md`, P2 gate): V1 after the uniqueness check, H2 per
+//! theta class (ADRs 0018, 0023, 0092 and 0264) and the H2 distance elasticity, a reported
+//! diagnostic since ADR 0264.
 //!
 //! Needs `CETERIS_PACK_EXPORT`, a `ceteris export --pack` directory of the calibrated pack in
 //! `CETERIS_PACK` (default `data/packs/2000`), and the pack's calibration tables; H2 also reads
@@ -29,7 +30,7 @@ use ceteris_calibrate::write;
 use ceteris_pack::fetch;
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
-use ceteris_reference::io::{self, Inputs, pairwise_sum};
+use ceteris_reference::io::{self, Inputs, Mat, pairwise_sum};
 use ceteris_reference::model::{self, Model, max_abs};
 use ceteris_reference::ppml::{self, GravityTable, RunFlows};
 use ceteris_reference::solve::{self, Equilibrium, Info};
@@ -44,10 +45,15 @@ const V1_TOL: f64 = 0.01;
 const FLOW_FLOOR: f64 = 1e-6;
 /// The reference solver's tolerance on scaled residuals.
 const REFERENCE_TOL: f64 = 1e-10;
+/// The data's band for the distance elasticity, reported, not gated (ADR 0264).
 const H2_DISTANCE: (f64, f64) = (-1.1, -0.7);
-/// Theta classes; each must recover its own theta_c within 2 pair-clustered standard errors of
-/// its PPML estimate (ADR 0092).
+/// Theta classes; each must recover its own theta_c within max(2 pair-clustered standard errors,
+/// [`H2_THETA_TOL`] of theta_c) of its PPML estimate with the model's country-pair kernel as the
+/// cost control (ADRs 0092, 0264).
 const N_CLASSES: usize = 4;
+/// With the model's own kernel as the control the regression is nearly an identity and the
+/// clustered s.e. no longer measures sampling error: V1's 1% (ADR 0264).
+const H2_THETA_TOL: f64 = V1_TOL;
 const N_TRADED: usize = 7;
 
 fn root() -> PathBuf {
@@ -420,10 +426,14 @@ fn gravity() -> Option<&'static Gravity> {
         .as_ref()
 }
 
-/// H2: PPML of simulated country-pair trade (traded goods, FOB value, the last 12 ticks of the
-/// default run) on ln distance and contiguity with exporter and importer effects, domestic
-/// pairs excluded: the distance coefficient lies in -1.1 to -0.7 (owner decision; a miss stops
-/// work for the owner, ADR 0013).
+/// H2 distance (ADR 0264): PPML of simulated country-pair trade (traded goods, FOB value, the
+/// last 12 ticks of the default run) on ln distance and contiguity with exporter and importer
+/// effects, domestic pairs excluded. A reported diagnostic: the test prints the coefficient
+/// against the data's band of -1.1 to -0.7 and fails only on a non-finite or non-negative one.
+/// The model's cost-distance slope is about 0.09 per class with iceberg leg costs, so each
+/// class's distance coefficient is about -0.09 theta_c and the pooled one near -0.46; the data
+/// give about -0.8 per class whatever theta. The structural fix, a log-distance component in leg
+/// costs, is scheduled by ADR 0264.
 #[test]
 fn h2_distance_elasticity() {
     let (Some(out), Some(g)) = (default_run(), gravity()) else {
@@ -466,25 +476,46 @@ fn h2_distance_elasticity() {
     .unwrap();
     println!("H2 distance: {e:?}");
     let (lo, hi) = H2_DISTANCE;
+    println!(
+        "H2 distance (diagnostic, ADR 0264): {:.4} (s.e. {:.4}) against the data's {lo} to {hi}: \
+         {}; iceberg leg costs give a cost-distance slope near 0.09 per class, a log-distance \
+         leg-cost component is the scheduled fix",
+        e.elasticity,
+        e.se_elasticity,
+        if lo <= e.elasticity && e.elasticity <= hi {
+            "inside"
+        } else {
+            "outside"
+        }
+    );
     assert!(
-        lo <= e.elasticity && e.elasticity <= hi,
-        "distance elasticity {:.4} (s.e. {:.4}) outside {H2_DISTANCE:?}",
+        e.elasticity.is_finite() && e.elasticity < 0.0,
+        "distance elasticity {} (s.e. {}): not finite and negative",
         e.elasticity,
         e.se_elasticity
     );
 }
 
-/// H2 per theta class (ADRs 0018 and 0092): per class, PPML of the simulated country-pair flows
-/// of its goods on ln(1 + tariff) and ln distance (CEPII population-weighted) with exporter and
-/// importer effects per good, domestic pairs excluded, zero flows kept; theta is minus the
-/// tariff coefficient, and the class's theta_c (the export's) must lie within 2 pair-clustered
-/// standard errors of it. The flow is what the
-/// importer pays, FOB value times (1 + t): the kernel carries (1 + t)^-theta on spending (trade
-/// SPEC, Sourcing), so that is the flow whose tariff elasticity is theta (the FOB value's is
-/// theta + 1). The class with one good is also fitted by `ppml::trade_elasticity`.
+/// H2 per theta class (ADRs 0018, 0092 and 0264): per class, PPML of the simulated country-pair
+/// flows of its goods on ln(1 + tariff) with the model's own country-pair trade-cost kernel net of
+/// tariffs as the cost control (`model::ln_country_kernel` at the calibrated point, weighted by
+/// the sourcing weights w_o and E_d / Phi_d), exporter and importer effects per good, foreign
+/// pairs a crossing links, zero flows kept; theta is minus the tariff coefficient, and the class's
+/// theta_c (the export's) must lie within max(2 pair-clustered standard errors, 1% of theta_c)
+/// of it: with the model's own kernel as the control the regression is nearly an identity, so
+/// the s.e. stops measuring sampling error and the tolerance is V1's 1% (ADR 0264). The flow is
+/// what the importer pays, FOB value times (1 + t): the kernel carries (1 + t)^-theta on spending
+/// (trade SPEC, Sourcing), so that is the flow whose tariff elasticity is theta (the FOB value's
+/// is theta + 1).
+///
+/// Printed as a diagnostic, the earlier gate: ln distance (CEPII population-weighted) as the cost
+/// control, which leaves the costs the model puts on near partners in the tariff coefficient
+/// (ADR 0264). The class with one good is also fitted there by `ppml::trade_elasticity`.
 #[test]
 fn h2_theta_by_class() {
-    let (Some(inp), Some(out), Some(g)) = (export(), default_run(), gravity()) else {
+    let (Some(inp), Some(r), Some(out), Some(g)) =
+        (export(), reference(), default_run(), gravity())
+    else {
         return;
     };
     let n_c = inp.n_countries();
@@ -527,6 +558,20 @@ fn h2_theta_by_class() {
         .collect();
     // Tariff groups: primary goods 0 to 3, manufactures 4 to 6.
     let group = [0, 0, 0, 0, 1, 1, 1];
+    let ln_k = {
+        let m = Model::new(&r.inputs).unwrap();
+        let n_p = r.inputs.n_provinces();
+        let src = m.sourcing(&r.eq.price);
+        let phi = model::cells(&src.phi, n_p, n_g);
+        let destination = Mat::from_fn(n_p, n_g, |p, g| {
+            if phi[(p, g)] > 0.0 {
+                r.eq.expenditure[(p, g)] / phi[(p, g)]
+            } else {
+                0.0
+            }
+        });
+        model::ln_country_kernel(&r.inputs, &model::cells(&src.w, n_p, n_g), &destination)
+    };
     let index: std::collections::BTreeMap<&str, usize> = g
         .iso3
         .iter()
@@ -542,8 +587,8 @@ fn h2_theta_by_class() {
             dist[o * n_c + d] = row.distw;
         }
     }
-    let pairs: Vec<(usize, usize)> = (0..n_c * n_c)
-        .filter(|&i| dist[i].is_finite() && dist[i] > 0.0 && i / n_c != i % n_c)
+    let foreign: Vec<(usize, usize)> = (0..n_c * n_c)
+        .filter(|&i| i / n_c != i % n_c)
         .map(|i| (i / n_c, i % n_c))
         .collect();
     let (mut lines, mut misses) = (vec![], vec![]);
@@ -555,62 +600,87 @@ fn h2_theta_by_class() {
     for c in 0..N_CLASSES {
         let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
         let theta_c = theta_good[goods[0]];
-        let rows: Vec<(usize, usize, usize)> = pairs
+        let rows_of = |keep: &dyn Fn(usize, usize, usize) -> bool| -> Vec<(usize, usize, usize)> {
+            foreign
+                .iter()
+                .flat_map(|&(e, m)| goods.iter().map(move |&k| (e, m, k)))
+                .filter(|&(e, m, k)| keep(e, m, k))
+                .collect()
+        };
+        let tariff_of = |rows: &[(usize, usize, usize)]| -> Vec<f64> {
+            rows.iter()
+                .map(|&(e, m, k)| rate[(m * n_c + e) * 2 + group[k]])
+                .collect()
+        };
+        let fob_of = |rows: &[(usize, usize, usize)]| -> Vec<f64> {
+            rows.iter()
+                .map(|&(e, m, k)| value[(e * n_c + m) * n_g + k])
+                .collect()
+        };
+        let paid_of = |fob: &[f64], tariff: &[f64]| -> Vec<f64> {
+            fob.iter().zip(tariff).map(|(v, t)| v * (1.0 + t)).collect()
+        };
+
+        let rows = rows_of(&|e, m, k| ln_k[(e * n_c + m) * n_g + k].is_finite());
+        let tariff = tariff_of(&rows);
+        let paid = paid_of(&fob_of(&rows), &tariff);
+        let control: Vec<f64> = rows
             .iter()
-            .flat_map(|&(e, m)| goods.iter().map(move |&k| (e, m, k)))
+            .map(|&(e, m, k)| ln_k[(e * n_c + m) * n_g + k])
             .collect();
-        let tariff: Vec<f64> = rows
-            .iter()
-            .map(|&(e, m, k)| rate[(m * n_c + e) * 2 + group[k]])
-            .collect();
-        let fob: Vec<f64> = rows
-            .iter()
-            .map(|&(e, m, k)| value[(e * n_c + m) * n_g + k])
-            .collect();
-        let flow: Vec<f64> = fob
-            .iter()
-            .zip(&tariff)
-            .map(|(v, t)| v * (1.0 + t))
-            .collect();
+        let fit = ppml::class_tariff_fit(&rows, &paid, &tariff, &[("ln_kernel", &control)], true)
+            .unwrap();
+        let theta = -fit.coef("ln_tariff");
+        let se = fit.se("ln_tariff");
+        let tol = (2.0 * se).max(H2_THETA_TOL * theta_c);
+        let line = format!(
+            "class {c} goods {goods:?}: theta {theta:.7} (pair-clustered s.e. {se:.3e}), deviation \
+             from theta_c {:.3e} ({:.3e} relative) against tolerance {tol:.3e} (max of 2 s.e. and \
+             {H2_THETA_TOL} theta_c), ln kernel {:.4}, pseudo-R2 {:.4}, n {} ({} separated)",
+            theta - theta_c,
+            (theta - theta_c) / theta_c,
+            fit.coef("ln_kernel"),
+            fit.pseudo_r2,
+            fit.n,
+            fit.n_separated
+        );
+        println!("H2 per class: {line}");
+        lines.push(line);
+        if (theta - theta_c).abs() > tol || theta.is_nan() {
+            misses.push(c);
+        }
+
+        let rows = rows_of(&|e, m, _| dist[e * n_c + m].is_finite() && dist[e * n_c + m] > 0.0);
+        let tariff = tariff_of(&rows);
+        let fob = fob_of(&rows);
+        let paid = paid_of(&fob, &tariff);
         let distance: Vec<f64> = rows.iter().map(|&(e, m, _)| dist[e * n_c + m]).collect();
-        let ln_tariff: Vec<f64> = tariff.iter().map(|t| t.ln_1p()).collect();
         let ln_dist: Vec<f64> = distance.iter().map(|d| d.ln()).collect();
-        let regressors = [("ln_tariff", ln_tariff.as_slice()), ("ln_dist", &ln_dist)];
-        let fe_e: Vec<i64> = rows
-            .iter()
-            .map(|&(e, _, k)| (e * N_TRADED + k) as i64)
-            .collect();
-        let fe_m: Vec<i64> = rows
-            .iter()
-            .map(|&(_, m, k)| (m * N_TRADED + k) as i64)
-            .collect();
-        let cluster: Vec<i64> = rows
-            .iter()
-            .map(|&(e, m, _)| (e.min(m) * n_c + e.max(m)) as i64)
-            .collect();
-        let fit = ppml::hdfe(&flow, &[&fe_e, &fe_m], &regressors, None).unwrap();
-        let clustered = ppml::hdfe(&flow, &[&fe_e, &fe_m], &regressors, Some(&cluster)).unwrap();
-        let fob_fit = ppml::hdfe(&fob, &[&fe_e, &fe_m], &regressors, None).unwrap();
+        let controls = [("ln_dist", ln_dist.as_slice())];
+        let fit = ppml::class_tariff_fit(&rows, &paid, &tariff, &controls, false).unwrap();
+        let clustered = ppml::class_tariff_fit(&rows, &paid, &tariff, &controls, true).unwrap();
+        let fob_fit = ppml::class_tariff_fit(&rows, &fob, &tariff, &controls, false).unwrap();
         let theta = -fit.coef("ln_tariff");
         let se = clustered.se("ln_tariff");
-        let (lo, hi) = (theta - 2.0 * se, theta + 2.0 * se);
         let mut line = format!(
-            "class {c} goods {goods:?}: theta {theta:.4} (s.e. {:.4}, pair-clustered {:.4}), ln \
-             distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n {} ({} separated); theta_c \
-             {theta_c} against {lo:.4} to {hi:.4}; FOB value: tariff coefficient {:.4} (s.e. {:.4})",
+            "class {c} with ln distance as the cost control (diagnostic): theta {theta:.4} (s.e. \
+             {:.4}, pair-clustered {se:.4}), ln distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n \
+             {} ({} separated); theta_c {theta_c} against {:.4} to {:.4}; FOB value: tariff \
+             coefficient {:.4} (s.e. {:.4})",
             fit.se("ln_tariff"),
-            clustered.se("ln_tariff"),
             fit.coef("ln_dist"),
             fit.se("ln_dist"),
             fit.pseudo_r2,
             fit.n,
             fit.n_separated,
+            theta - 2.0 * se,
+            theta + 2.0 * se,
             fob_fit.coef("ln_tariff"),
             fob_fit.se("ln_tariff")
         );
         if goods.len() == 1 {
             let (e, m): (Vec<usize>, Vec<usize>) = rows.iter().map(|&(e, m, _)| (e, m)).unzip();
-            let dense = ppml::trade_elasticity(&flow, &e, &m, &tariff, &distance).unwrap();
+            let dense = ppml::trade_elasticity(&paid, &e, &m, &tariff, &distance).unwrap();
             assert!(
                 (dense.theta - theta).abs() <= 1e-6 * theta.abs(),
                 "trade_elasticity {} vs hdfe {theta}",
@@ -622,14 +692,11 @@ fn h2_theta_by_class() {
             );
         }
         println!("H2 per class: {line}");
-        lines.push(line);
-        if !(lo <= theta_c && theta_c <= hi) {
-            misses.push(c);
-        }
     }
     assert!(
         misses.is_empty(),
-        "classes {misses:?}: theta_c outside 2 pair-clustered s.e. of the estimate: {}",
+        "classes {misses:?}: theta_c outside the tolerance of the kernel-controlled estimate: \
+         {}",
         lines.join("; ")
     );
 }

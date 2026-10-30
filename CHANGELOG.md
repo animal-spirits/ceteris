@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed: H2 distance reported, H2 per class on the model's kernel (ADR 0264)
+
+- `p2_gate.rs::h2_distance_elasticity` prints the distance coefficient against -1.1 to -0.7 and
+  fails only on a non-finite or non-negative one (owner ruling A, 2026-10-30).
+- `h2_theta_by_class` controls for the model's country-pair kernel net of tariffs
+  (`model::ln_country_kernel`, sourcing weights) and gates theta_c within max(2 pair-clustered
+  s.e., 1% of theta_c); the ln distance version is printed. New `ppml::class_tariff_fit`.
+- No golden moves.
+
 ### BEHAVIOUR: bulk freight rate on for theta class 3 by default (ADR 0247, owner ruling 2026-10-30)
 
 - P154 0.026 and P155 0.40 for class 3 (goods 1 and 2), 1 for classes 0 to 2, in
