@@ -108,13 +108,14 @@ impl TradeParams {
         let c = classes.iter().position(|&b| b)?;
         let rate = (self.bulk_sea[c], self.bulk_port[c]);
         for k in (0..N_CLASSES).filter(|&k| classes[k]) {
+            let r = (self.bulk_sea[k], self.bulk_port[k]);
             assert!(
-                (self.bulk_sea[k], self.bulk_port[k]) == rate,
-                "classes {c} and {k} have different bulk freight rates"
+                r.0 > 0.0 && r.1 >= 0.0 && r.0.is_finite() && r.1.is_finite(),
+                "bulk freight rate {r:?} of class {k}"
             );
             assert!(
-                rate.0 > 0.0 && rate.1 >= 0.0 && rate.0.is_finite() && rate.1.is_finite(),
-                "bulk freight rate {rate:?}"
+                r == rate,
+                "classes {c} and {k} have different bulk freight rates"
             );
         }
         Some((classes, rate.0, rate.1))
@@ -150,5 +151,21 @@ impl Default for TradeParams {
             bulk_sea: [1.0; N_CLASSES],
             bulk_port: [1.0; N_CLASSES],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A NaN multiplier is reported as a bad rate, not as two classes that differ.
+    #[test]
+    #[should_panic(expected = "bulk freight rate (NaN, 1.0) of class 3")]
+    fn bulk_rate_rejects_nan() {
+        TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, f64::NAN],
+            ..TradeParams::default()
+        }
+        .bulk_rate();
     }
 }

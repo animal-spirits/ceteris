@@ -313,6 +313,8 @@ impl EconInputs {
             let [domestic, access, crossings] = self.legs_on(&graph, gateways);
             BulkLegs {
                 classes,
+                sea,
+                port,
                 domestic,
                 access,
                 crossings,
@@ -408,7 +410,13 @@ mod tests {
     /// (country 1) joined through sea node 6, the sea edge in chokepoint 1. The economy holds
     /// provinces 0, 1 and 2; province 3 lies on the road from 0 to 1.
     fn pack() -> Pack {
-        let kind = [
+        pack_with_coastal_route(false)
+    }
+
+    /// [`pack`], and with `coastal` a port 7 in province 1, 1000 km by sea from port 4: a
+    /// second path from province 0 to province 1, dearer than the road at P04's defaults.
+    fn pack_with_coastal_route(coastal: bool) -> Pack {
+        let mut kind = vec![
             NodeKind::Province,
             NodeKind::Province,
             NodeKind::Province,
@@ -417,13 +425,8 @@ mod tests {
             NodeKind::Port,
             NodeKind::Sea,
         ];
-        let nodes = NodeList {
-            kind: kind.to_vec(),
-            province: vec![0, 1, 2, 3, 0, 2, u32::MAX],
-            lon: vec![0.0; 7],
-            lat: vec![0.0; 7],
-        };
-        let e = [
+        let mut province = vec![0, 1, 2, 3, 0, 2, u32::MAX];
+        let mut e = vec![
             (0, 3, Mode::Road, 50.0, 0),
             (3, 1, Mode::Road, 50.0, 0),
             (0, 4, Mode::PortAccess, 10.0, 0),
@@ -431,6 +434,18 @@ mod tests {
             (6, 5, Mode::Sea, 1000.0, 0),
             (5, 2, Mode::PortAccess, 10.0, 0),
         ];
+        if coastal {
+            kind.push(NodeKind::Port);
+            province.push(1);
+            e.push((4, 7, Mode::Sea, 1000.0, 0));
+            e.push((7, 1, Mode::PortAccess, 10.0, 0));
+        }
+        let nodes = NodeList {
+            lon: vec![0.0; kind.len()],
+            lat: vec![0.0; kind.len()],
+            kind,
+            province,
+        };
         let edges = EdgeList {
             a: e.iter().map(|x| x.0).collect(),
             b: e.iter().map(|x| x.1).collect(),
@@ -575,6 +590,44 @@ mod tests {
         assert_eq!(
             (&net.domestic, &net.access, &net.crossings),
             (&base.domestic, &base.access, &base.crossings)
+        );
+    }
+
+    /// ADR 0247: the bulk legs are least-cost paths on the repriced graph, so the rate can
+    /// change the path. From province 0 to province 1 the road wins at P04's defaults and the
+    /// coastal sea route wins at a tenth of the sea cost and port fees.
+    #[test]
+    fn bulk_rate_can_switch_the_path() {
+        let (pack, inputs) = (pack_with_coastal_route(true), inputs());
+        let on = TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, 0.1],
+            bulk_port: [1.0, 1.0, 1.0, 0.1],
+            ..TradeParams::default()
+        };
+        let net = inputs.network_from_graph(&pack, &gateways(), &on);
+        let b = net.bulk.as_ref().unwrap();
+        let g = &pack.graph;
+        let at = |p: &TransportParams, edges: &[usize]| {
+            edges
+                .iter()
+                .map(|&e| ceteris_geo::graph::price(g.mode[e], g.length_km[e], g.tri_m[e], p))
+                .fold((0.0, 0.0), |(c, h), (ec, eh)| (c + ec, h + eh))
+        };
+        let (road, coastal) = ([0, 1], [2, 6, 7]);
+        let (base, bulk) = (
+            TransportParams::default(),
+            TransportParams::default().bulk(0.1, 0.1),
+        );
+        assert!(at(&base, &road).0 < at(&base, &coastal).0);
+        assert!(at(&bulk, &coastal).0 < at(&bulk, &road).0);
+        let leg = |l: &Leg| (l.from, l.to, l.cost_per_t, l.hours);
+        assert_eq!(
+            leg(&net.domestic[0]),
+            (0, 1, at(&base, &road).0, at(&base, &road).1)
+        );
+        assert_eq!(
+            leg(&b.domestic[0]),
+            (0, 1, at(&bulk, &coastal).0, at(&bulk, &coastal).1)
         );
     }
 
