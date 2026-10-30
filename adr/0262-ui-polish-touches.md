@@ -26,7 +26,7 @@ the art page and anything springy, since 0137 rules out bounce and shake.
 
 All 34 touches (owner, 2026-10-30). Numbers roll at speeds 1 and 2 and snap above (owner). The
 0261 loupe is dropped (owner). Destructive actions take the undo toast, with a 700 ms hold only
-on actions that cannot be undone, such as discarding a branch; the owner may still revise this.
+on actions that cannot be undone, such as discarding a branch (owner).
 
 | Id | Touch | Behaviour | Build |
 |---|---|---|---|
