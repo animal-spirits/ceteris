@@ -78,6 +78,17 @@ comparing runs.
   buttons call commands by name. Keys arrive through a Slint `FocusScope`, not yet the winit
   router of 0188. Step back, run to cursor, go to date, events and alerts need P3 state; the
   registry moves to the crate P3 shares with the CLI (P3 plan, C).
+- **Economy (step 6).** `econ::View` copies one tick's columns on the sim thread (prices,
+  stocks, supply, orders, sales, wages, employment, output, profit, pop employment and income),
+  so the frame loop never reads the world. Modes per pack province, NaN where the economy has
+  no province: price of a good (buyer price over the world price index), output of a sector
+  (at its market price), net exports of a traded good (market sales less the province's
+  buyers' spending at delivered prices, so it counts shipments to other provinces of the same
+  country too; local goods show no data), wage, unemployment (share of the labour force not
+  employed). Net exports use a six-class diverging ramp (0137) split at the terciles of |x|; it
+  passes the 0221 check. Moving modes upload the next view's colours to a second texture and
+  the shader mixes by the clock's fraction (0208). The province panel adds the presented tick's
+  markets, enterprises and pops, named by tick and date.
 - **Determinism.** The app reads; edits go through the core. A headless run and an app run
   of the same ticks give the same state hash (test below).
 

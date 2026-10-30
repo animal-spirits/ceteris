@@ -1,6 +1,10 @@
 //! Inspector rows (DESIGN 20.2): every attribute of one province, its county, and the freight
 //! cost from the origin. Ports `app/src/Inspector.tsx`.
 
+use ceteris_trade::N_GOODS;
+use ceteris_trade::goods::NAME as GOODS;
+
+use crate::econ::View;
 use crate::freight::Costs;
 use crate::web::{Counties, Provinces, RESOURCE_GROUPS, TERRAIN};
 
@@ -9,6 +13,8 @@ pub struct Row {
     pub value: String,
     /// Set in the number face (ADR 0137).
     pub number: bool,
+    /// A section heading; its value is empty.
+    pub heading: bool,
 }
 
 /// Thousands separators and at most `digits` decimals, trailing zeros dropped.
@@ -41,7 +47,86 @@ fn text(key: &str, value: impl Into<String>) -> Row {
         key: key.into(),
         value: value.into(),
         number: false,
+        heading: false,
     }
+}
+
+fn heading(key: &str) -> Row {
+    Row {
+        heading: true,
+        ..text(key, "")
+    }
+}
+
+/// Three significant figures with a k, M or B suffix.
+pub fn compact(x: f64) -> String {
+    if !x.is_finite() {
+        return "n/a".into();
+    }
+    let (scaled, suffix) = [(1e9, "B"), (1e6, "M"), (1e3, "k")]
+        .into_iter()
+        .find(|(unit, _)| x.abs() >= *unit)
+        .map_or((x, ""), |(unit, s)| (x / unit, s));
+    let digits = if scaled.abs() >= 100.0 {
+        0
+    } else if scaled.abs() >= 10.0 {
+        1
+    } else {
+        2
+    };
+    format!("{scaled:.digits$}{suffix}")
+}
+
+const EDUCATION: [&str; 3] = ["Below secondary", "Secondary", "Tertiary"];
+
+/// The province panel (econ SPEC, App): markets, enterprises and pops of econ province `i`
+/// at the view's tick (ADR 0208: panels show tick values and name the tick).
+pub fn economy(v: &View, i: usize, date: &str) -> Vec<Row> {
+    let cell = |g: usize| i * N_GOODS + g;
+    let mut rows = vec![heading(&format!("Economy, tick {} ({date})", v.tick))];
+    rows.push(heading("Markets: price, stock, supply, orders"));
+    rows.extend((0..N_GOODS).map(|g| {
+        let c = cell(g);
+        number(
+            GOODS[g],
+            format!(
+                "{} · {} · {} · {}",
+                compact(v.price[c]),
+                compact(v.inventory[c]),
+                compact(v.supply[c]),
+                compact(v.demand[c])
+            ),
+        )
+    }));
+    rows.push(heading("Enterprises: employment, output, profit"));
+    rows.extend(v.layout.ents_of(i).map(|e| {
+        number(
+            GOODS[usize::from(v.layout.ent_good[e])],
+            format!(
+                "{} · {} · {}",
+                compact(v.employment[e]),
+                compact(v.output[e]),
+                compact(v.profit[e])
+            ),
+        )
+    }));
+    rows.push(heading("Pops: labour force, employed, income"));
+    rows.extend(v.layout.pops_of(i).map(|k| {
+        number(
+            EDUCATION
+                .get(usize::from(v.layout.pop_edu[k]))
+                .copied()
+                .unwrap_or("Other"),
+            format!(
+                "{} · {} · {}",
+                compact(v.layout.labour_force[k]),
+                compact(v.employed[k]),
+                compact(v.income[k])
+            ),
+        )
+    }));
+    rows.push(number("Wage", compact(v.wage[i])));
+    rows
 }
 
 fn number(key: &str, value: impl Into<String>) -> Row {
@@ -132,5 +217,9 @@ mod tests {
         assert_eq!(num(3.0, 2), "3");
         assert_eq!(num(-282.0, 0), "-282");
         assert_eq!(num(1234.567, 2), "1,234.57");
+        assert_eq!(compact(1234.0), "1.23k");
+        assert_eq!(compact(56_700_000.0), "56.7M");
+        assert_eq!(compact(-0.5), "-0.50");
+        assert_eq!(compact(f64::NAN), "n/a");
     }
 }

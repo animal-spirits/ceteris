@@ -1,13 +1,14 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use ceteris_app::bench::Bench;
 use ceteris_app::camera::Camera;
-use ceteris_app::clock::Clock;
+use ceteris_app::clock::{self, Clock};
 use ceteris_app::commands::{self, Command};
+use ceteris_app::econ::{self, View};
 use ceteris_app::fill::Fill;
 use ceteris_app::freight::{Costs, Freight};
 use ceteris_app::inspect;
@@ -42,11 +43,6 @@ fn econ(dir: &Path) -> Result<Sim<EconWorld>, String> {
         EconParams::default(),
         TradeParams::default(),
     ))
-}
-
-/// What the frame loop shows of one finished tick (ADR 0208); P2 map modes add their columns.
-struct View {
-    tick: u32,
 }
 
 /// Requests a redraw from any thread.
@@ -92,8 +88,10 @@ struct State {
     pick: Option<([u32; 2], bool)>,
     picking: Option<bool>,
     mode: Mode,
-    /// Province colours waiting for the next frame's upload.
+    /// Province colours waiting for the next frame's upload, for the presented tick and the
+    /// next one.
     fill: Option<Vec<[u8; 4]>>,
+    next_fill: Option<Vec<[u8; 4]>>,
     selected: Option<(u32, Option<u32>)>,
     freight: Freight,
     costs: Option<Costs>,
@@ -132,7 +130,13 @@ impl State {
         let costs = (self.mode == Mode::Cost)
             .then(|| self.costs().map(|c| &c.cost[..]))
             .flatten();
-        let painted = modes::paint(self.mode, &self.provinces, costs);
+        let painted = modes::paint(self.mode, &self.provinces, costs, self.current.as_ref());
+        if self.mode.moves() {
+            self.next_fill = self
+                .next
+                .as_ref()
+                .map(|next| modes::paint(self.mode, &self.provinces, None, Some(next)).fill);
+        }
         app.set_legend_title(painted.title.into());
         app.set_legend_note(painted.note.into());
         app.set_legend(model(
@@ -160,13 +164,18 @@ impl State {
             app.set_inspector_open(false);
             return;
         };
-        let rows = inspect::rows(
+        let mut rows = inspect::rows(
             &self.provinces,
             p as usize,
             self.counties.as_ref(),
             county,
             self.costs(),
         );
+        if let Some(v) = &self.current
+            && let Some(i) = v.province(p)
+        {
+            rows.extend(inspect::economy(v, i, &clock::date(v.tick, 0)));
+        }
         app.set_inspector_title(self.provinces.name[p as usize].clone().into());
         app.set_inspector(model(
             rows.into_iter()
@@ -174,6 +183,7 @@ impl State {
                     key: r.key.into(),
                     value: r.value.into(),
                     number: r.number,
+                    heading: r.heading,
                 })
                 .collect(),
         ));
@@ -204,7 +214,7 @@ impl State {
             .last_frame
             .replace(now)
             .map_or(0.0, |t| now.duration_since(t).as_secs_f64());
-        self.pull(app);
+        let mut changed = self.pull(app);
         let mut crossed = self.clock.advance(seconds, self.next.is_some());
         if self.stepping && self.next.is_some() {
             self.stepping = false;
@@ -214,7 +224,19 @@ impl State {
         if crossed {
             self.current = self.next.take();
             self.pull(app);
+            changed = true;
         }
+        if changed && (self.mode.moves() || crossed) {
+            self.paint(app);
+        }
+        if crossed && self.selected.is_some() {
+            self.inspect(app);
+        }
+        self.style.mix = if self.mode.moves() && self.next.is_some() {
+            self.clock.fraction as f32
+        } else {
+            0.0
+        };
         let ready = self.current.is_some();
         app.set_running(ready);
         app.set_date(
@@ -234,9 +256,10 @@ impl State {
         }
     }
 
-    fn pull(&mut self, app: &AppWindow) {
+    /// Takes the next view from the ring if there is room for it; true if one came.
+    fn pull(&mut self, app: &AppWindow) -> bool {
         if self.next.is_some() {
-            return;
+            return false;
         }
         match self.runner.next() {
             Some(Ok(view)) if self.current.is_none() => self.current = Some(view),
@@ -244,9 +267,11 @@ impl State {
             Some(Err(e)) => {
                 self.clock.playing = false;
                 app.set_error(e.into());
+                return false;
             }
-            None => {}
+            None => return false,
         }
+        true
     }
 
     fn execute(&mut self, app: &AppWindow, cmd: Command) {
@@ -295,11 +320,17 @@ impl State {
 }
 
 fn mode(app: &AppWindow) -> Mode {
+    let good = usize::try_from(app.get_good()).unwrap_or(0);
     match app.get_mode() {
         1 => Mode::Terrain,
         // Group 0 is all groups.
         2 => Mode::Resources(usize::try_from(app.get_resource_group() - 1).ok()),
         3 => Mode::Cost,
+        4 => Mode::Price(good),
+        5 => Mode::Output(good),
+        6 => Mode::NetExports(good),
+        7 => Mode::Wage,
+        8 => Mode::Unemployment,
         _ => Mode::Political,
     }
 }
@@ -329,7 +360,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runner = Runner::spawn(
         4,
         move || econ(&pack),
-        |sim| View { tick: sim.tick() },
+        {
+            let layout = OnceLock::new();
+            move |sim| {
+                let layout = layout.get_or_init(|| Arc::new(econ::Layout::new(sim.world())));
+                View::new(sim, layout)
+            }
+        },
         waker(&app),
     );
     let state = Rc::new(RefCell::new(State {
@@ -352,6 +389,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         picking: None,
         mode: Mode::Political,
         fill: None,
+        next_fill: None,
         selected: None,
         freight,
         costs: None,
@@ -544,12 +582,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         })
                         .collect();
                     app.set_labels(model(labels));
+                    // Text changes made while rendering show on the next frame.
+                    app.window().request_redraw();
                 }
                 let State {
                     map,
                     bench,
                     style,
                     fill,
+                    next_fill,
                     pick,
                     picking,
                     ..
@@ -557,6 +598,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let Some(map) = map.as_mut() else { return };
                 if let Some(fill) = fill.take() {
                     map.set_colours(queue, Layer::Provinces, &fill);
+                }
+                if let Some(fill) = next_fill.take() {
+                    map.set_next_colours(queue, &fill);
                 }
                 let camera = match bench.as_mut() {
                     Some(b) => b.frame(map, queue, viewport, camera),

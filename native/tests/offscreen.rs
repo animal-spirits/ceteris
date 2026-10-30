@@ -314,3 +314,28 @@ fn selection_and_origin_outline_inside_the_edge_and_hover_lightens() {
     );
     assert_eq!(read_pixel(&device, &queue, &target, 75, 50), BLUE);
 }
+
+#[test]
+fn colours_mix_towards_the_next_tick() {
+    let Some((device, queue)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let mut map = Map::new(&device, &queue, &two_squares(), None, &[0, 1]);
+    map.set_colours(&queue, Layer::Provinces, &[RED, RED]);
+    map.set_next_colours(&queue, &[BLUE, RED]);
+    let camera = Camera::fit(100.0, 100.0);
+    let style = Style {
+        mix: 0.5,
+        ..Style::default()
+    };
+    let target = map
+        .render(&device, &queue, [100, 100], &camera, style, None)
+        .expect("allocates");
+    let px = read_pixel(&device, &queue, &target, 25, 50);
+    for c in 0..3 {
+        let want = (f32::from(RED[c]) + f32::from(BLUE[c])) / 2.0;
+        assert!((f32::from(px[c]) - want).abs() <= 2.0, "{px:?}");
+    }
+    assert_eq!(read_pixel(&device, &queue, &target, 75, 50), RED);
+}

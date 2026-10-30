@@ -26,6 +26,7 @@ export struct Row {
     key: string,
     value: string,
     number: bool,
+    heading: bool,
 }
 
 component Panel inherits Rectangle {
@@ -87,14 +88,15 @@ component Inspector inherits Panel {
                 padding-right: Tokens.pad * 2;
                 for row in root.rows: HorizontalLayout {
                     spacing: Tokens.pad;
-                    padding-top: 2px;
+                    padding-top: row.heading ? Tokens.pad : 2px;
                     padding-bottom: 2px;
                     Text {
                         text: row.key;
                         color: Tokens.ink;
-                        opacity: 0.7;
+                        opacity: row.heading ? 1 : 0.7;
+                        font-weight: row.heading ? 600 : 400;
                         wrap: word-wrap;
-                        width: 45%;
+                        width: root.width * (row.heading ? 0.85 : 0.35);
                     }
                     Text {
                         text: row.value;
@@ -132,6 +134,8 @@ export component AppWindow inherits Window {
     // Index into the mode buttons; resource group 0 is all groups.
     in-out property <int> mode;
     in-out property <int> resource-group;
+    // The good of the price, output and net exports modes.
+    in-out property <int> good;
     out property <length> map-width: map.width;
     out property <length> map-height: map.height;
 
@@ -250,6 +254,7 @@ export component AppWindow inherits Window {
             spacing: Tokens.pad / 2;
             HorizontalLayout {
                 spacing: Tokens.pad / 2;
+                alignment: start;
                 for name[k] in ["Political", "Terrain", "Resources", "Freight cost"]: Toggle {
                     text: name;
                     checkable: false;
@@ -267,6 +272,32 @@ export component AppWindow inherits Window {
                 Toggle {
                     text: "Globe";
                     clicked => { root.globe(self.checked); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Tokens.pad / 2;
+                alignment: start;
+                for name[k] in ["Price", "Output", "Net exports", "Wage", "Unemployment"]: Toggle {
+                    text: name;
+                    checkable: false;
+                    checked: root.mode == k + 4;
+                    clicked => {
+                        root.mode = k + 4;
+                        root.mode-changed();
+                    }
+                }
+            }
+            if root.mode >= 4 && root.mode <= 6: HorizontalLayout {
+                spacing: Tokens.pad / 2;
+                alignment: start;
+                for name[g] in ["Agriculture", "Oil and gas", "Mining", "Food", "Light mfg", "Chemicals", "Machinery", "Utilities", "Construction", "Services"]: Toggle {
+                    text: name;
+                    checkable: false;
+                    checked: root.good == g;
+                    clicked => {
+                        root.good = g;
+                        root.mode-changed();
+                    }
                 }
             }
             if root.mode == 2: HorizontalLayout {
