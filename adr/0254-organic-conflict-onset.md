@@ -1,4 +1,4 @@
-# 0253. Organic conflict onset: crisis hazard, actors decide
+# 0254. Organic conflict onset: crisis hazard, actors decide
 
 Status: proposed
 Date: 2026-10-30
