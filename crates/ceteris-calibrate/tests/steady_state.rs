@@ -11,11 +11,11 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
-use ceteris_calibrate::border;
 use ceteris_calibrate::steady::{
     self, COVER, CalibrationError, Limits, PASS_TOL, SINKHORN_TOL, SLOTS, Steady,
 };
 use ceteris_calibrate::write;
+use ceteris_calibrate::{border, elasticity};
 use ceteris_core::entity::{EntityId, Kind};
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::SystemId;
@@ -1159,6 +1159,43 @@ fn own_price_elasticity_matches_finite_difference() {
             assert!(worst < 1e-8, "{}: worst {worst:e}", w.name);
         }
     }
+}
+
+/// ADR 0263: a traded cell that reaches no buyer with spending has Pi 0, so E = 1 + theta_g, the
+/// study's value. With one traded good's spending set to 0 everywhere on the fixture, every
+/// active cell of that good takes it and the other goods keep their calibrated E.
+#[test]
+fn traded_cell_with_no_buyer_has_the_study_elasticity() {
+    let w = &worlds()[0];
+    let (inp, s) = (&w.inp, &w.s);
+    let reference = steady::reference_inputs(inp, s);
+    let m = Model::new(&reference).unwrap();
+    let src = m.sourcing(&s.price);
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    let none = (0..n_g)
+        .find(|&g| inp.traded[g] && (0..n_p).filter(|&p| inp.active[p][g]).count() > 1)
+        .unwrap();
+    let spend = Mat::from_fn(n_p, n_g, |p, g| {
+        if inp.traded[g] && g != none {
+            s.spend_int[(p, g)] + s.spend_hh[(p, g)]
+        } else {
+            0.0
+        }
+    });
+    let e = elasticity::demand(&m, &src, &spend);
+    let mut cells = 0;
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| inp.active[p][g]) {
+            if g == none {
+                assert_eq!(e[(p, g)], 1.0 + inp.theta[g], "p{p} g{g}");
+                cells += 1;
+            } else {
+                let want = s.demand_elasticity[(p, g)];
+                assert!((e[(p, g)] - want).abs() <= 1e-12 * want.abs(), "p{p} g{g}");
+            }
+        }
+    }
+    assert!(cells > 1, "{cells} cells of good {none}");
 }
 
 /// ADR 0263 (As built): eps of a cell is the largest s_L sigma_FL / ((1 - s_L) a_VA) of its
