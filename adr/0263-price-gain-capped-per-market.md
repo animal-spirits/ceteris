@@ -37,7 +37,8 @@ kappa1 J exceeds the share m of its own stability limit. m = 0.5 (new P03d), so 
 kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
 
 - J_cell = E_cell + eta eps_cell / (2 - eta), with the run's eta, so in the default mode (J at
-  most 16.9 on the 0256 pack) no cell is capped and the live dynamics are unchanged. E_cell = 1 + theta_g - (theta_g + 1) Pi_cell, Pi the
+  most 16.9 on the 0256 pack) no cell is capped and the live dynamics are unchanged (not
+  established on the pre-P3 B pack: see As built). E_cell = 1 + theta_g - (theta_g + 1) Pi_cell, Pi the
   cell's share of its buyers' purchases weighted by the units it sells to each (Leontief inputs,
   sigma_d 0); local cells E = sigma (P06). eps_cell is the largest over the cell's enterprises of
   s_L sigma_FL / ((1 - s_L) a_VA) (amended as built, below; the draft said the output-weighted
@@ -45,7 +46,7 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
 - Computed from the pack at calibration, at the calibrated prices, as a calibrated quantity: two
   sparse passes over the kernel legs per traded good (one destination sum, one with squared leg
   factors), the cost of one dispatch. Recomputed when the network, the thetas or the structural
-  parameters change, never mid-run.
+  parameters change, never mid-run (as built: by recalibrating; see below).
 
 ## Consequences
 
@@ -79,7 +80,25 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
   digest when the inputs carry a calibration. Inputs without a calibration (the generated
   fixture, an uncalibrated pack) run kappa1 in every market and keep their digest, so their
   hashes do not move; a data-state start of calibrated inputs keeps the calibrated gains.
+- J is recomputed only by recalibrating, since it needs the calibrated spending, which a run does
+  not have. A data-state start of calibrated inputs under structural parameters other than the
+  calibration's (`structural_digest`: the thetas, coverage, time costs, border friction, sigma
+  (P06), sigma_FL, the PIGL parameters, the education efficiencies) is refused, as a steady
+  start already is (`EconWorld::new`), instead of running stale gains.
+  `EconWorld::set_network` (a mid-run network change, such as the Suez closure above) keeps the
+  gains, as it keeps the calibrated coefficients and Gamma: the Decision's "never mid-run"
+  governs, and a new network gets new gains when it is calibrated.
 - On the calibrated fixture no cell is capped in either mode (largest J 12.5 at eta 0.3, 13.8 at
   eta 1), so its runs do not move either; only the calibration tables gain the two columns.
 - Pi_cell is computed per leg with squared leg factors (the study's form): a pair joined by
-  several routes leaves out the cross terms between them.
+  several routes leaves out the cross terms between them. A traded cell that reaches no buyer
+  with spending has Pi 0, so E = 1 + theta, as in the study.
+- The default-mode claim (no cell capped, J at most 16.9) is the study's, on main's 0256 pack.
+  On this branch's scratch pack (the B2 pack recalibrated at format 6, which predates ADR 0256)
+  383 traded cells are capped in the default mode, J up to 32.4 (1,596 frictionless). The top
+  cells are Lesotho g1 (Qacha's Nek 32.4): eps 84.81 at a_VA 0.021309, from Senegal's donor
+  ICIO good-1 column, which BEN, CAF, COM, GIN, GMB, GNB, LSO, MDG, SDN, SEN, TGO, TZA, ZMB and
+  ZWE share. ADR 0256 replaces the donor good-1 column only for economies with a rent, so the
+  rebuilt pack may still cap these cells. The claim is pending: B8 lists the default-capped
+  cells on the rebuilt pack (in particular the no-rent economies on a donor g1 column), and if
+  any remain the owner rules whether to accept default-mode capping or change m.
