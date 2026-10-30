@@ -12,7 +12,9 @@ use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
 use ceteris_calibrate::border;
-use ceteris_calibrate::steady::{self, COVER, CalibrationError, Limits, PASS_TOL, SLOTS, Steady};
+use ceteris_calibrate::steady::{
+    self, COVER, CalibrationError, Limits, PASS_TOL, SINKHORN_TOL, SLOTS, Steady,
+};
 use ceteris_calibrate::write;
 use ceteris_core::entity::{EntityId, Kind};
 use ceteris_core::rng::Seed;
@@ -20,7 +22,7 @@ use ceteris_core::schedule::SystemId;
 use ceteris_pack::compare::{self, Tolerance};
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
-use ceteris_reference::model::{self, Model, max_abs};
+use ceteris_reference::model::{self, Factors, Model, max_abs};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -260,7 +262,140 @@ fn calibration_unique_from_eight_starts() {
     }
 }
 
+/// Power iterations for the second eigenvalue of the Sinkhorn map's Jacobian. On the full pack
+/// the estimate for coal and other mining settles within 1,000 iterations on one pack and keeps
+/// moving by 2e-4 in 1 - lambda until about 3,000 on another (a second slow block close to the
+/// first); 3,000 cost about a minute there.
+const POWER_ITERATIONS: usize = 3_000;
+/// Trailing iterations whose geometric-mean contraction is the estimate.
+const POWER_WINDOW: usize = 500;
+
+/// Per good, the second eigenvalue lambda2_g of M, the Jacobian of -ln reach with respect to ln w
+/// over the active origins of traded good g at the scaling `lw` (P, G), by power iteration on the
+/// mean-free part: M_oo' = sum_d (K_od / (1 + t_od) b_d / reach_o) (K_o'd w_o' / Phi_d), b_d =
+/// E_d / Phi_d, is row-stochastic (M 1 = 1), so deflating the constant leaves its other
+/// eigenvalues. 0 for a good with at most one origin and for local goods.
+fn slow_rates(m: &Model, spend: &Mat, lw: &Mat) -> Vec<f64> {
+    let inp = m.inp;
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    let n = n_p * n_g;
+    let origin: Vec<bool> = (0..n)
+        .map(|i| inp.traded[i / n_p] && inp.active[i % n_p][i / n_p])
+        .collect();
+    let lwv = model::good_major(lw);
+    let mut top = vec![f64::NEG_INFINITY; n_g];
+    for i in (0..n).filter(|&i| origin[i]) {
+        top[i / n_p] = top[i / n_p].max(lwv[i]);
+    }
+    let w: Vec<f64> = (0..n)
+        .map(|i| {
+            if origin[i] {
+                (lwv[i] - top[i / n_p]).exp()
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let e: Vec<f64> = model::good_major(spend)
+        .into_iter()
+        .enumerate()
+        .map(|(i, x)| if inp.traded[i / n_p] { x } else { 0.0 })
+        .collect();
+    let net: Vec<f64> = inp
+        .crossing
+        .k
+        .iter()
+        .zip(&inp.crossing.inv_duty)
+        .map(|(k, d)| k * d)
+        .collect();
+    let gross = Factors {
+        dom: &inp.domestic.k,
+        acc: &inp.access.k,
+        cro: &inp.crossing.k,
+    };
+    let net = Factors {
+        dom: &inp.domestic.k,
+        acc: &inp.access.k,
+        cro: &net,
+    };
+    let phi = m.origin_sums(&w, gross);
+    let b: Vec<f64> = (0..n)
+        .map(|i| if phi[i] > 0.0 { e[i] / phi[i] } else { 0.0 })
+        .collect();
+    let reach = m.destination_sums(&b, net);
+    let apply = |x: &[f64]| -> Vec<f64> {
+        let wx: Vec<f64> = w.iter().zip(x).map(|(w, x)| w * x).collect();
+        let y = m.origin_sums(&wx, gross);
+        let by: Vec<f64> = (0..n)
+            .map(|i| {
+                if phi[i] > 0.0 {
+                    b[i] * y[i] / phi[i]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let z = m.destination_sums(&by, net);
+        (0..n)
+            .map(|i| if origin[i] { z[i] / reach[i] } else { 0.0 })
+            .collect()
+    };
+    let cells = |g: usize| (g * n_p..(g + 1) * n_p).filter(|&i| origin[i]);
+    // Deflates the constant and scales each good's part to unit max-norm; returns the norms.
+    let normalise = |x: &mut [f64]| -> Vec<f64> {
+        (0..n_g)
+            .map(|g| {
+                let k = cells(g).count();
+                if k == 0 {
+                    return 0.0;
+                }
+                let mean = cells(g).map(|i| x[i]).sum::<f64>() / k as f64;
+                let norm = cells(g).fold(0.0f64, |a, i| a.max((x[i] - mean).abs()));
+                for i in cells(g) {
+                    x[i] = if norm > 0.0 {
+                        (x[i] - mean) / norm
+                    } else {
+                        0.0
+                    };
+                }
+                norm
+            })
+            .collect()
+    };
+    let mut rng = Rng(17);
+    let mut x: Vec<f64> = (0..n)
+        .map(|i| if origin[i] { rng.normal(0.0, 1.0) } else { 0.0 })
+        .collect();
+    normalise(&mut x);
+    let mut log_rate = vec![0.0; n_g];
+    for k in 1..=POWER_ITERATIONS {
+        x = apply(&x);
+        let norm = normalise(&mut x);
+        if k > POWER_ITERATIONS - POWER_WINDOW {
+            for (l, nrm) in log_rate.iter_mut().zip(norm) {
+                *l += nrm.ln();
+            }
+        }
+    }
+    log_rate
+        .iter()
+        .map(|l| (l / POWER_WINDOW as f64).exp())
+        .collect()
+}
+
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.
+///
+/// The bound on the spread is derived from the stop rule. Let g(ln w) = ln received - ln target
+/// over a good's origins; each solve stops with max |g| <= tau = `SINKHORN_TOL`. Near the fixed
+/// point, two solutions differing by d (ln w) have g_1 - g_2 = (I - M) d to first order (r agrees
+/// to 1e-16 between them, so the target moves by no constant), M the row-stochastic Jacobian of
+/// `slow_rates`. M 1 = 1 carries the free scale; on the mean-free part d = sum_k M^k (g_1 - g_2),
+/// whose terms shrink by lambda2_g a step once the slowest mode dominates, so spread(d) <= 2 tau /
+/// (1 - lambda2_g). A near-closed block of origins sets lambda2_g: on the full pack Brazil's 48
+/// origins of coal and other mining (good 2) keep 0.999 of their Sinkhorn coupling, lambda2 =
+/// 0.99908, so the bound is 2.2e-10 where the observed spread is 2.1e-10. The factor 1.5 covers
+/// the first-order and asymptotic steps and the estimate of lambda2_g; it is a test margin, not
+/// a parameter.
 #[test]
 fn sinkhorn_is_unique_up_to_scale() {
     for w in worlds() {
@@ -286,6 +421,7 @@ fn sinkhorn_is_unique_up_to_scale() {
         }
         let one = steady::sinkhorn(&m, &spend, &v, None).unwrap();
         let other = steady::sinkhorn(&m, &spend, &v, Some(&start)).unwrap();
+        let lambda2 = slow_rates(&m, &spend, &one.log_weight);
         for g in (0..n_g).filter(|&g| inp.traded[g]) {
             let d: Vec<f64> = (0..n_p)
                 .filter(|&p| origin(p, g))
@@ -293,7 +429,17 @@ fn sinkhorn_is_unique_up_to_scale() {
                 .collect();
             let mean = d.iter().sum::<f64>() / d.len() as f64;
             let spread = d.iter().fold(0.0f64, |m, x| m.max((x - mean).abs()));
-            assert!(spread <= 1e-10, "{}: good {g} spread {spread}", w.name);
+            let bound = 1.5 * 2.0 * SINKHORN_TOL / (1.0 - lambda2[g]);
+            eprintln!(
+                "{}: good {g} lambda2 {:.7} spread {spread:.3e} bound {bound:.3e}",
+                w.name, lambda2[g]
+            );
+            assert!(
+                spread <= bound,
+                "{}: good {g} spread {spread} above {bound} (lambda2 {})",
+                w.name,
+                lambda2[g]
+            );
         }
         allclose(w.name, &one.r, &other.r, 1e-12, 0.0);
         let traded: Vec<usize> = (0..n_g).filter(|&g| inp.traded[g]).collect();

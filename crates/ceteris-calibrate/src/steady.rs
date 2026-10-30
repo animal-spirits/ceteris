@@ -55,9 +55,11 @@ pub const SLOTS: usize = 4;
 /// Largest |ln(received / target)| over origins that ends the scaling.
 pub const SINKHORN_TOL: f64 = 1e-13;
 /// The cap on sweeps of one scaling: an iteration cap, not a tolerance. 100,000 since the B1
-/// thetas: on the full pack, coal and other mining (theta 16.91) has an origin (province 3906,
-/// about 52 times its good's cheapest price) that its destinations buy almost only from, so its
-/// part of the scaling contracts by about 0.99995 a sweep; pass 7 needs 34,614 sweeps.
+/// thetas, for a slow mode of coal and other mining (theta 16.91). On the current full pack it
+/// is Brazil's 48 origins of that good, a near-closed block that keeps 0.999 of its Sinkhorn
+/// coupling: the plain sweep contracts it by 0.99908 a sweep (the second eigenvalue of the map's
+/// Jacobian, `sinkhorn_is_unique_up_to_scale`). The cap was set when an earlier pack's mode
+/// (province 3906, 0.99995 a sweep) needed 34,614 sweeps in pass 7.
 pub const MAX_SWEEPS: usize = 100_000;
 pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
