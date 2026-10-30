@@ -538,6 +538,8 @@ passes (15.692 to 17.171). No band was changed; the miss is for the owner.
   halve parallel source and dispatch (4.7 against 9.7 ms, cold, unit spending) but move ln Phi_d
   by medians of 0.03 to 2.0 by good, and the 300 pack does not calibrate (100 passes), so H2 was
   not run there; at 600 H2 distance is -0.753. No count is proposed before the masses land.
+  With the masses and the nu fit (2026-10-30, ADR 0097): the 300 pack fits nu but its calibration
+  fails in pass 3's Sinkhorn (100,000 sweeps, residual 4.2e-5); no count is proposed.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.

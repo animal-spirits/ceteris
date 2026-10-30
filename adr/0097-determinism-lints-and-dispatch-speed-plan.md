@@ -237,3 +237,5 @@ ADR 0093's changes, Tests above), leave `Crossing` at 32 bytes and grow `Entry` 
 bytes.
 History memory falls without touching state. Any later warm-started solver has to declare its
 warm-start vector as snapshot state or pay for a cold start.
+
+2026-10-30 (pre-P3 B2, with the masses and the nu fit, bulk rate off): the 300-gateway pack fits nu (2.588, 0.789, 0.370, class 3 clamped at 0; its class-3 nu-0 share 0.1935) but does not calibrate: pass 3's Sinkhorn stops at 100,000 sweeps, residual 4.2e-5. H2 at 300, the source and dispatch timing and |d ln Phi_d| with the masses are not measured.
