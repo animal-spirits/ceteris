@@ -1,0 +1,165 @@
+# Hard Brexit (Dhingra et al. 2017), reported only: crossing tau x 1.0831 both ways between GBR
+# and each EU27 member, and each side's MFN tariff on the other: the EU common external tariff
+# of the 2000 pack (EU27 on USA: group 0 0.0314, group 1 0.0214), which GBR applied in 2000
+ntb GBR AUT 1.0831
+ntb AUT GBR 1.0831
+tariff AUT GBR 0 0.0314
+tariff AUT GBR 1 0.0214
+tariff GBR AUT 0 0.0314
+tariff GBR AUT 1 0.0214
+ntb GBR BEL 1.0831
+ntb BEL GBR 1.0831
+tariff BEL GBR 0 0.0314
+tariff BEL GBR 1 0.0214
+tariff GBR BEL 0 0.0314
+tariff GBR BEL 1 0.0214
+ntb GBR BGR 1.0831
+ntb BGR GBR 1.0831
+tariff BGR GBR 0 0.0314
+tariff BGR GBR 1 0.0214
+tariff GBR BGR 0 0.0314
+tariff GBR BGR 1 0.0214
+ntb GBR HRV 1.0831
+ntb HRV GBR 1.0831
+tariff HRV GBR 0 0.0314
+tariff HRV GBR 1 0.0214
+tariff GBR HRV 0 0.0314
+tariff GBR HRV 1 0.0214
+ntb GBR CYP 1.0831
+ntb CYP GBR 1.0831
+tariff CYP GBR 0 0.0314
+tariff CYP GBR 1 0.0214
+tariff GBR CYP 0 0.0314
+tariff GBR CYP 1 0.0214
+ntb GBR CZE 1.0831
+ntb CZE GBR 1.0831
+tariff CZE GBR 0 0.0314
+tariff CZE GBR 1 0.0214
+tariff GBR CZE 0 0.0314
+tariff GBR CZE 1 0.0214
+ntb GBR DNK 1.0831
+ntb DNK GBR 1.0831
+tariff DNK GBR 0 0.0314
+tariff DNK GBR 1 0.0214
+tariff GBR DNK 0 0.0314
+tariff GBR DNK 1 0.0214
+ntb GBR EST 1.0831
+ntb EST GBR 1.0831
+tariff EST GBR 0 0.0314
+tariff EST GBR 1 0.0214
+tariff GBR EST 0 0.0314
+tariff GBR EST 1 0.0214
+ntb GBR FIN 1.0831
+ntb FIN GBR 1.0831
+tariff FIN GBR 0 0.0314
+tariff FIN GBR 1 0.0214
+tariff GBR FIN 0 0.0314
+tariff GBR FIN 1 0.0214
+ntb GBR FRA 1.0831
+ntb FRA GBR 1.0831
+tariff FRA GBR 0 0.0314
+tariff FRA GBR 1 0.0214
+tariff GBR FRA 0 0.0314
+tariff GBR FRA 1 0.0214
+ntb GBR DEU 1.0831
+ntb DEU GBR 1.0831
+tariff DEU GBR 0 0.0314
+tariff DEU GBR 1 0.0214
+tariff GBR DEU 0 0.0314
+tariff GBR DEU 1 0.0214
+ntb GBR GRC 1.0831
+ntb GRC GBR 1.0831
+tariff GRC GBR 0 0.0314
+tariff GRC GBR 1 0.0214
+tariff GBR GRC 0 0.0314
+tariff GBR GRC 1 0.0214
+ntb GBR HUN 1.0831
+ntb HUN GBR 1.0831
+tariff HUN GBR 0 0.0314
+tariff HUN GBR 1 0.0214
+tariff GBR HUN 0 0.0314
+tariff GBR HUN 1 0.0214
+ntb GBR IRL 1.0831
+ntb IRL GBR 1.0831
+tariff IRL GBR 0 0.0314
+tariff IRL GBR 1 0.0214
+tariff GBR IRL 0 0.0314
+tariff GBR IRL 1 0.0214
+ntb GBR ITA 1.0831
+ntb ITA GBR 1.0831
+tariff ITA GBR 0 0.0314
+tariff ITA GBR 1 0.0214
+tariff GBR ITA 0 0.0314
+tariff GBR ITA 1 0.0214
+ntb GBR LVA 1.0831
+ntb LVA GBR 1.0831
+tariff LVA GBR 0 0.0314
+tariff LVA GBR 1 0.0214
+tariff GBR LVA 0 0.0314
+tariff GBR LVA 1 0.0214
+ntb GBR LTU 1.0831
+ntb LTU GBR 1.0831
+tariff LTU GBR 0 0.0314
+tariff LTU GBR 1 0.0214
+tariff GBR LTU 0 0.0314
+tariff GBR LTU 1 0.0214
+ntb GBR LUX 1.0831
+ntb LUX GBR 1.0831
+tariff LUX GBR 0 0.0314
+tariff LUX GBR 1 0.0214
+tariff GBR LUX 0 0.0314
+tariff GBR LUX 1 0.0214
+ntb GBR MLT 1.0831
+ntb MLT GBR 1.0831
+tariff MLT GBR 0 0.0314
+tariff MLT GBR 1 0.0214
+tariff GBR MLT 0 0.0314
+tariff GBR MLT 1 0.0214
+ntb GBR NLD 1.0831
+ntb NLD GBR 1.0831
+tariff NLD GBR 0 0.0314
+tariff NLD GBR 1 0.0214
+tariff GBR NLD 0 0.0314
+tariff GBR NLD 1 0.0214
+ntb GBR POL 1.0831
+ntb POL GBR 1.0831
+tariff POL GBR 0 0.0314
+tariff POL GBR 1 0.0214
+tariff GBR POL 0 0.0314
+tariff GBR POL 1 0.0214
+ntb GBR PRT 1.0831
+ntb PRT GBR 1.0831
+tariff PRT GBR 0 0.0314
+tariff PRT GBR 1 0.0214
+tariff GBR PRT 0 0.0314
+tariff GBR PRT 1 0.0214
+ntb GBR ROU 1.0831
+ntb ROU GBR 1.0831
+tariff ROU GBR 0 0.0314
+tariff ROU GBR 1 0.0214
+tariff GBR ROU 0 0.0314
+tariff GBR ROU 1 0.0214
+ntb GBR SVK 1.0831
+ntb SVK GBR 1.0831
+tariff SVK GBR 0 0.0314
+tariff SVK GBR 1 0.0214
+tariff GBR SVK 0 0.0314
+tariff GBR SVK 1 0.0214
+ntb GBR SVN 1.0831
+ntb SVN GBR 1.0831
+tariff SVN GBR 0 0.0314
+tariff SVN GBR 1 0.0214
+tariff GBR SVN 0 0.0314
+tariff GBR SVN 1 0.0214
+ntb GBR ESP 1.0831
+ntb ESP GBR 1.0831
+tariff ESP GBR 0 0.0314
+tariff ESP GBR 1 0.0214
+tariff GBR ESP 0 0.0314
+tariff GBR ESP 1 0.0214
+ntb GBR SWE 1.0831
+ntb SWE GBR 1.0831
+tariff SWE GBR 0 0.0314
+tariff SWE GBR 1 0.0214
+tariff GBR SWE 0 0.0314
+tariff GBR SWE 1 0.0214
