@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
     Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, impute, impute_pack, median_va_over_gdp,
-    oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
+    oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares, world_oil_gas_column,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
@@ -418,9 +418,55 @@ fn a_donor_without_oil_and_gas_still_gives_oil_and_gas_output() {
         &PLAIN,
     )["XXX"]
         .clone();
+    // The donor has no oil and gas column, so the world's (AAA, CCC) gives the inputs.
+    let world = world_oil_gas_column(&icio);
     assert!(approx(got.table.va[1], 120.0, 1e-12));
-    assert_eq!(got.table.output[1], got.table.va[1]);
+    assert!(approx(
+        world[0],
+        (0.01 * 4.0 / 0.9 + 0.03 * 40.0 / 0.7) / (4.0 / 0.9 + 40.0 / 0.7),
+        1e-12
+    ));
+    assert!(approx(
+        got.table.output[1],
+        120.0 / (1.0 - 10.0 * world[0]),
+        1e-12
+    ));
     assert!(closes(&got.table, 1e-9, 1e-12));
+}
+
+#[test]
+fn world_oil_gas_column_weights_inputs_by_oil_and_gas_output() {
+    // Every input takes 0.01, 0.02, 0.03 of output in AAA, BBB, CCC, whose oil and gas outputs
+    // are 4 / 0.9, 4 / 0.8, 40 / 0.7.
+    let out = [4.0 / 0.9, 4.0 / 0.8, 40.0 / 0.7];
+    let want = (0.01 * out[0] + 0.02 * out[1] + 0.03 * out[2]) / (out[0] + out[1] + out[2]);
+    assert!(
+        world_oil_gas_column(&oil_donors())
+            .iter()
+            .all(|&x| approx(x, want, 1e-12))
+    );
+}
+
+#[test]
+fn oil_and_gas_from_rents_produce_with_the_world_column() {
+    let got = oil(&with_rents(0.05, 0.01));
+    let world = world_oil_gas_column(&oil_donors());
+    let donor = &oil_donors()["BBB"];
+    for ((row, w), d) in got.table.io.iter().zip(world).zip(&donor.io) {
+        assert_eq!((row[1], row[2]), (w, d[2]));
+    }
+    assert!(approx(
+        got.table.output[1],
+        120.0 / (1.0 - world.iter().sum::<f64>()),
+        1e-12
+    ));
+    assert!(closes(&got.table, 1e-9, 1e-12));
+}
+
+#[test]
+fn without_rents_oil_and_gas_keep_the_donor_column() {
+    let got = one("XXX", &wdi(), &obs());
+    assert_eq!(got.table.io, donors()["BBB"].io);
 }
 
 #[test]
@@ -1006,6 +1052,14 @@ fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
     let k = oil_gas_va_over_rents(&d.real, &d.wdi);
     assert!((0.5..3.0).contains(&k), "{k}");
     // Billion USD of crude oil and gas VA, against about 21, 14, 20 and 33 of 2000 crude output.
+    // Crude oil and gas from rents produce with the world column, not the donor's (Sudan's
+    // donor Senegal has a value-added share of 0.07 in it).
+    let world = world_oil_gas_column(&d.real);
+    for code in ["SDN", "TKM", "COG", "AZE"] {
+        let io = &d.imputed[code].table.io;
+        assert!(io.iter().zip(world).all(|(row, w)| row[1] == w), "{code}");
+    }
+    assert!(1.0 - world.iter().sum::<f64>() > 0.5);
     for (code, low) in [("KWT", 10.0), ("LBY", 5.0), ("DZA", 8.0), ("VEN", 15.0)] {
         let va = d.imputed[code].table.va[1] / 1e3;
         assert!(va > low, "{code} {va}");

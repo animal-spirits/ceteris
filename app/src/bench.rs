@@ -20,6 +20,10 @@ pub struct Bench {
     intervals: Vec<f64>,
     recolours: Vec<f64>,
     recoloured: u32,
+    /// The camera the script starts from.
+    base: Option<Camera>,
+    /// GPU time of the fill and border passes, when the device has timestamp queries.
+    gpu: [Vec<f64>; 2],
 }
 
 impl Bench {
@@ -30,10 +34,13 @@ impl Bench {
             intervals: Vec::with_capacity(FRAMES),
             recolours: Vec::new(),
             recoloured: 0,
+            base: None,
+            gpu: [Vec::with_capacity(FRAMES), Vec::with_capacity(FRAMES)],
         }
     }
 
-    /// Advances the script one frame and returns the camera to draw with.
+    /// Advances the script one frame and returns the camera to draw with; `base` is taken on
+    /// the first frame.
     pub fn frame(
         &mut self,
         map: &Map,
@@ -47,7 +54,7 @@ impl Bench {
                 .push(now.duration_since(last).as_secs_f64() * 1e3);
         }
         let t = self.frame as f64 / FRAMES as f64;
-        let mut camera = base;
+        let mut camera = *self.base.get_or_insert(base);
         camera.pan(t * viewport[0] * 2.0, 0.0);
         camera.zoom_at(
             viewport,
@@ -72,6 +79,12 @@ impl Bench {
         }
         self.frame += 1;
         camera
+    }
+
+    pub fn gpu(&mut self, times: [f64; 2]) {
+        for (v, t) in self.gpu.iter_mut().zip(times) {
+            v.push(t);
+        }
     }
 
     pub fn layer(map: &Map) -> Layer {
@@ -104,6 +117,10 @@ impl Bench {
             &format!("recolour upload ({} features)", self.recoloured),
             &self.recolours,
         );
+        if !self.gpu[0].is_empty() {
+            stats("gpu fill pass", &self.gpu[0]);
+            stats("gpu border pass", &self.gpu[1]);
+        }
         let p50 = {
             let mut v = self.intervals.clone();
             v.sort_by(f64::total_cmp);
