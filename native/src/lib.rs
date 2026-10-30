@@ -4,6 +4,7 @@ pub mod bench;
 pub mod camera;
 pub mod clock;
 pub mod commands;
+pub mod econ;
 pub mod fill;
 pub mod freight;
 pub mod inspect;

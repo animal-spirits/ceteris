@@ -7,6 +7,7 @@ struct View {
     k: vec2f,
     first: f32,
     globe: u32,
+    mix: f32,
     sea: vec4f,
     paper: vec4f,
     ink: vec4f,
@@ -19,6 +20,7 @@ struct View {
 
 @group(0) @binding(0) var<uniform> view: View;
 @group(0) @binding(1) var colours: texture_2d<f32>;
+@group(0) @binding(2) var next_colours: texture_2d<f32>;
 
 const TEX_WIDTH: u32 = 1024u;
 const PI: f32 = 3.14159265358979;
@@ -55,7 +57,8 @@ fn vs(@location(0) xy: vec2f, @location(1) feature: u32, @builtin(instance_index
         out.pos = vec4f(vec2f(x, yr) * view.k, 0.0, 1.0);
         out.facing = zr;
     }
-    out.colour = textureLoad(colours, vec2u(feature % TEX_WIDTH, feature / TEX_WIDTH), 0);
+    let texel = vec2u(feature % TEX_WIDTH, feature / TEX_WIDTH);
+    out.colour = mix(textureLoad(colours, texel, 0), textureLoad(next_colours, texel, 0), view.mix);
     out.id = feature + 1u;
     return out;
 }
