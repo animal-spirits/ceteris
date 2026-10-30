@@ -550,7 +550,16 @@ without it the level depended on the start and the mixing path, by up to 4e-4 fr
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-12 relative
 (Anderson-mixed; `PASS_TOL`), so the returned state is a fixed point to the 1e-12 its checks
-claim (`sinkhorn_is_unique_up_to_scale`). The stopping tolerance is a solver setting, not a model
+claim (`sinkhorn_is_unique_up_to_scale`). The mixing runs on a state in the units `change` uses:
+ln q, ln r, the PIGL omega and within-good weights as they are, and the rebates and the PIGL
+scales each divided by their block's largest magnitude (the rebates' from the first pass, the
+scales' from the start), fixed for the whole run. In money units the rebates' residual (about
+1e7) swamped the prices' (about 1) in Anderson's least squares, and on the full pack with the
+B1 tables and theta 16.91 the passes wandered between 2e-4 and 6e-2 for 100 passes: the
+undamped pass map is not a contraction (it locks onto a period-6 cycle in the good-1 prices of
+the DR Congo's interior and that country's PIGL weights), so settling rests on the mixing, and
+the mixing only saw the rebates. The passes still stop on `change` alone; the units change no
+equation and no fixed point. The stopping tolerance is a solver setting, not a model
 parameter, so it has no register ID. Within a pass the income and local-output fixed point is
 iterated until no local output changes by more than 1e-14 relative.
 
