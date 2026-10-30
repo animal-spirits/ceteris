@@ -1,6 +1,6 @@
 # 0090. Split price rule and inventory gain
 
-Status: proposed (owner chose the options, 2026-10-25)
+Status: proposed (owner chose the options, 2026-10-25); deferred to P5 (owner, 2026-10-30)
 Date: 2026-10-25
 Design sections: 8.2, 17 (P02, P03a, P03b); trade SPEC Origin market, Stability region; ADRs 0016, 0019
 
@@ -128,3 +128,32 @@ tests and records are on the local branch `p2-adr0090` (56b8e7f, ec17126), and t
   As Consequences notes, P5 money and expectations can replace the aggregate term with a micro-founded
   anchor.
 
+## Deferred to P5 (2026-10-30)
+
+**Owner ruling (2026-10-30, "Do the recommended"):** pre-P3 task B6 (the split rule rebuilt on the
+P2 model) is deferred to P5. The as-built price rule stays through P3 and P4; the aggregate anchor
+is redesigned around money in P5 (12.2), as Consequences anticipated.
+
+**Why.** The split rule inflates from the data state, and no variant probed before P3 fixes it
+(`.superpowers/sdd/PLAN-pre-p3-rust/b6-report.md`, `b6-options.md`).
+
+- The input-stock refill is over by tick 3. The aggregate traded D/Q then rebuilds to 2.03 by tick
+  15: a second wave that the rule makes itself. Its aggregate term (kappa_n / h, 0.41) pushes every
+  price up together, and relative gains of kappa_r / E 0.006 to 0.026 are too slow to ration the
+  orders this creates. No single gain removes it.
+- Every variant fails:
+
+  | Variant | Fixture, data state: world index max (tick) | Other result |
+  |---|---|---|
+  | Split rule as specified | 7.76 (23) | pack: Leontief stop at tick 15 |
+  | A: household-only aggregate | 13.1 (123) | does not nest the as-built special case |
+  | B: lower kappa_n (0.1, 0.05, 0.032) | 10 to 11 (0.1: i64 panic at 305) | fails the nominal shock test (37 to 57 ticks) |
+  | C: money anchor ln(M / M0) - ln(I / I0) | 1.78 (660) | exact for nominal shocks (8 ticks); traded-versus-local level drifts, NaN price at 682 |
+  | D: start from the calibrated steady state | flat | stock shock (3x merchant stock) spikes 1.22 (fixture), 1.55 (pack) |
+  | Traded kappa_r 0.15 to 0.05 | Log: diverges (i64 panic about 195); Linear: 6.5 to 6.9 | pack: Leontief stop at 15 or 16 |
+
+  For reference, the as-built rule peaks at 1.18 on the same run.
+- C is the only principled nominal anchor, but it needs a separate, slow traded-versus-local term:
+  a design change for P5, not a gain.
+
+The work in progress is parked on local branch `pre-p3/b6-wip`. The as-built rule is unchanged.
