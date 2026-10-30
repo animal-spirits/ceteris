@@ -187,7 +187,8 @@ rounding from being extrapolated.
   reached what f64 resolves (see the margin's caveat above). The fills then move to a fixed point g, clamped to [0, f], for the goods g
   would lower by more than the margin. The fixed point comes from the last passes, kept across
   jumps:
-  - the last pass's map, wherever g lies;
+  - the last pass's map: within 1,024 margins of f, or beyond where g lies on that pass's
+    pieces (amended 2026-10-30, task B3 fill round 4, below);
   - else a cycle of the last two or three passes, but only within 1,024 margins of f (relative
     9.3e-10, the rest of a fall below the margin per pass at a gain up to 1 - 1/1024). A cycle
     spanning pieces may have fixed points the passes never reach: unbounded, one moved a fixture
@@ -242,8 +243,8 @@ rounding from being extrapolated.
   - That is exact where a single map takes the fills to its limit. Since F never rises, the
     passes that follow restore every fit.
   - Confirmation shows that g is stationary under the passes, not that it is their limit. TAIL
-    bounds the two- and three-pass moves. The one-pass move rests on the near-singularity of the
-    map that stalls.
+    bounds the two- and three-pass moves. The one-pass move beyond TAIL needs g on the pass's
+    pieces (amended 2026-10-30, below).
   - The stall is reported (`Fills::stalled`, `Scratch::chain_stalled`) where g is undefined, lies
     outside [0, f], would lower nothing, or fails its confirmation. The plain passes then go on.
 - **Pass cap.** A call ends at 1,024 passes (`local::PASS_CAP`, four stall bounds; a jump's
@@ -387,9 +388,32 @@ can fall below t). The third pass reaches t to rounding on the pieces below t; a
 `settle` takes the last pass's fixed point wherever it lies, [0.267, 0, 0], where every good
 fits and the confirming passes return it. Holding that fixed point to 9.3e-10 of f, as the
 cycles of two and three passes are, fixes the case and fails
-`near_singular_cycle_keeps_its_limit`, whose real loop of gain 1 - 1e-13 needs the far fixed
+`near_singular_cycle_keeps_its_limit`, whose real loop of gain 1 - 1e-15 needs the far fixed
 point. Telling the two apart is a change to the solver, open pending a ruling
 (`translated_collapse_settles_below_its_limit`, ignored; `translated_collapses_full` fails on it).
+
+**Off-piece fixed point (2026-10-30, task B3 fill round 4).** The two cases differ in where the
+last pass's pieces hold, not in the gain. In the near-singular cycle (gain 1 - 1e-15) the pass
+has the same pieces at f = [0.5, 1, 1] and at its fixed point [0.270, 0.540, 1]: the passes run
+on them all the way, and the fixed point is their limit. In seed 13067305529229119429 at 0.3 the
+fills stop at t to rounding on a pass whose good-0 step sits on a piece (user 2 short of good 0
+above its stock threshold) that holds only at f: just below t that user's stock covers its need
+and good 0 fits; goods 1 and 2 have a gain of 1 - 1e-16 and no constant, so the fixed point
+takes them to 0 and good 0 to its constant, 0.267. Every good fits there, so the passes confirm
+it, but no pass from f goes there.
+
+Rule: the last pass's fixed point g beyond TAIL of f is taken only where g lies on that pass's
+pieces: from g, each step that cut in the pass is on its piece (`on_piece`, the roles and the
+producer's binding fill the jumps check) with its map's value at least 0, and each good the pass
+leaves fits to 1e-12 of its flows (the maps' rounding, as in `follow`). The shortages are not
+checked at g, where they vanish. The piece conditions are linear in the fills at the start of
+the pass, apart from a covered user's min (a union of two half-planes), so holding at f and at g
+they hold on the segment between, where each cut good's shortage is affine, positive at f and 0
+at g: the passes from f run on the pieces towards g, which is their limit. Within TAIL a move is
+taken as before. It applies at a stop and at the stall rule alike. Where g is refused, nothing
+else changes: a stop tries the two- and three-pass cycles, then takes the fills as they are; a
+stall is reported. Seed 13067305529229119429 at 0.3 now stops at t to rounding; the
+near-singular cycle keeps its limit.
 
 **Pass cap.** A jump's confirming passes (up to PERIOD = 3) came after the cap check, so a call
 could run 1,027 passes. The fallback now starts at 1,021 passes, and no call runs more than
