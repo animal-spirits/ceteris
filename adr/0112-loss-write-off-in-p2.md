@@ -42,7 +42,8 @@ Option 2 (owner, 2026-10-26). The design is a controller ruling fixed before any
   their positive money. No pop is taken below zero. Where the pops hold less than the excess,
   what they hold is written off, shared over the enterprises by their excess, and the rest stays
   with the enterprises for the next tick.
-- **Rounding.** One exact i64 split per country per tick on each side, by the largest remainder
+- **Rounding.** One exact split per country per tick on each side (of an `i128` total since
+  2026-10-30; Tests), by the largest remainder
   (floors of the exact shares, leftover units one each to the largest remainders, ties to the
   first), moved through the country's profit pool account, which ends at zero. Countries in order,
   so the result does not depend on the thread count. The journal flow is `WRITE_OFF`, outside a
@@ -108,3 +109,10 @@ needs, while frictionless labour still clears at (1 - u*) L^s. Built and tested 
 `write_off_takes_the_excess_beyond_the_cap_from_the_pops`, `write_off_spares_losses_within_the_cap`,
 `write_off_takes_what_the_pops_hold_and_carries_the_rest`, `write_off_runs_are_thread_independent`
 (`crates/ceteris-econ/tests/p2_properties.rs`).
+
+`write_off_total_beyond_i64_conserves`: the country total was narrowed to i64, and on the scratch
+pack's x10 border run the pops of Taiwan held 9.6e18 against excesses of 9.65e18, so the write-off
+panicked at tick 49. The total is an aggregate moved through the wide pool account, so ADR 0106
+keeps it `i128`, as is the total of the largest-remainder split (exact by long division, since
+total x weight can exceed `u128`); each part stays within its own weight and so `i64`
+(2026-10-30). No hash moves.

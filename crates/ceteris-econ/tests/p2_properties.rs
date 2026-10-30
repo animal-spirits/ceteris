@@ -2973,6 +2973,60 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
     w.end_tick(1).unwrap();
 }
 
+/// ADR 0106: the write-off's country total is an aggregate moved through the wide pool account,
+/// so it may exceed i64 where each pop's money and each enterprise's excess fit. Pops holding
+/// 1.5 x i64::MAX in all and enterprises with as much excess: the write-off completes and
+/// conserves, every pop paying exactly what its enterprise counterparts receive.
+#[test]
+fn write_off_total_beyond_i64_conserves() {
+    let mut w = calibrated_before_distribute();
+    let lay = w.layout().clone();
+    let acc = &lay.accounts;
+    let inp = w.inputs().clone();
+    let c = (0..inp.n_countries())
+        .find(|&c| lay.country_pops[c].len() >= 3)
+        .expect("a country with three pops");
+    let pops: Vec<usize> = lay.country_pops[c].iter().map(|&k| k as usize).collect();
+    let ents: Vec<usize> = (0..inp.n_enterprises())
+        .filter(|&e| inp.country_of(inp.enterprises.province[e] as usize) == c)
+        .collect();
+    assert!(ents.len() >= 2, "two enterprises in country {c}");
+    let each = i64::MAX / 2;
+    for (n, &k) in pops.iter().enumerate() {
+        set_balance(&mut w, acc.pop[k], 0);
+        set_balance(&mut w, acc.pop[k], if n < 3 { each } else { 0 });
+    }
+    for &e in &ents {
+        set_balance(&mut w, acc.enterprise[e], 0);
+    }
+    for &e in &ents[..2] {
+        set_balance(&mut w, acc.enterprise[e], -i64::MAX);
+    }
+    let held = 3 * i128::from(each);
+    let excess: i128 = ents[..2]
+        .iter()
+        .map(|&e| i128::from(i64::MAX) - i128::from(lay.ent_loss_cap[e]))
+        .sum();
+    let total = held.min(excess);
+    assert!(total > i128::from(i64::MAX));
+    let start = w.ledger.journal().len();
+    systems::write_off(&mut w);
+    let paid: i128 = pops
+        .iter()
+        .map(|&k| -i128::from(written(&w, start, acc.pop[k])))
+        .sum();
+    let received: i128 = ents
+        .iter()
+        .map(|&e| i128::from(written(&w, start, acc.enterprise[e])))
+        .sum();
+    assert_eq!((paid, received), (total, total));
+    assert_eq!(w.ledger.money_wide(acc.dividend[c]), 0);
+    assert!(pops.iter().all(|&k| w.ledger.money(acc.pop[k]) >= 0));
+    for &e in &ents[..2] {
+        assert!(w.ledger.money(acc.enterprise[e]) <= -lay.ent_loss_cap[e]);
+    }
+}
+
 /// A run with write-offs is identical at 1 and 4 threads.
 #[test]
 fn write_off_runs_are_thread_independent() {
