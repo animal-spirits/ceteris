@@ -391,6 +391,12 @@ wage moves at most a doubling or halving per tick
 (`frictionless_wage_matches_closed_form_when_one_target_reaches_supply`). The unemployment
 rate u_i = 1 - sum_g L_ig / L^s_i applies equally to each education level.
 
+Known defect (owner decision pending): E1 hires labour it cannot equip. Frictionless, a target
+valued at the posted price of an origin with no output can take a province's whole labour, paid
+from debt, until a wage payment overflows the ledger (ignored test
+`frictionless_labour_spiral_overflows_the_ledger`). Proposed fix: cap each labour target at the
+labour its inputs allow.
+
 **Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
 effective labour force, and the wage rule reads excess demand against the country's natural rate
 u*_i, its mean ILOSTAT modelled unemployment rate 1995 to 2005 (`econ_countries.u_star`), so the
