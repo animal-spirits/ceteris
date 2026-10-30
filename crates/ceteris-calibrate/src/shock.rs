@@ -13,14 +13,14 @@
 //!
 //! Iceberg shocks go through `Network::route_taus`, filled with the kernel's least-cost factors
 //! (S05) of the leg each good uses: the bulk legs for the bulk classes (ADR 0247), which are then
-//! dropped, since route taus and bulk legs are exclusive. Such a world runs with the bulk freight
+//! dropped, since route taus and bulk legs are exclusive
+//! ([`EconInputs::fold_bulk_into_route_taus`]). Such a world runs with the bulk freight
 //! rate off ([`trade_params`]); its kernel is the default one but for the shocked crossings. An
 //! empty shock list changes nothing.
 
 use ceteris_econ::EconInputs;
 use ceteris_trade::TradeParams;
 use ceteris_trade::goods::N_GOODS;
-use ceteris_trade::network::{Leg, LegTaus};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shock {
@@ -136,7 +136,9 @@ pub fn apply(inputs: &mut EconInputs, shocks: &[Shock], trade: &TradeParams) {
         .iter()
         .any(|s| matches!(s, Shock::Ntb { .. } | Shock::Border { .. }))
     {
-        fold_route_taus(inputs, trade);
+        if inputs.network.route_taus.is_none() {
+            inputs.fold_bulk_into_route_taus(trade);
+        }
         let net = &mut inputs.network;
         let taus = net.route_taus.as_mut().expect("route taus just set");
         for (i, l) in net.crossings.iter().enumerate() {
@@ -201,46 +203,4 @@ pub fn trade_params(inputs: &EconInputs, trade: TradeParams) -> TradeParams {
     } else {
         trade
     }
-}
-
-/// Sets the network's route taus to the kernel's least-cost factors under `trade`, from the
-/// bulk legs for the bulk classes' goods, and drops the bulk legs.
-fn fold_route_taus(inputs: &mut EconInputs, trade: &TradeParams) {
-    if inputs.network.route_taus.is_some() {
-        return;
-    }
-    let bulk = inputs.network.bulk.take();
-    let weight = inputs.weight;
-    let on_bulk = |g: usize| {
-        bulk.as_ref()
-            .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
-    };
-    let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>| {
-        let leg = |i: usize, g: usize| bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]);
-        let taus: Vec<[f64; N_GOODS]> = (0..base.len())
-            .map(|i| {
-                std::array::from_fn(|g| {
-                    let l = leg(i, g);
-                    // the kernel's least-cost factor, bit for bit
-                    1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
-                })
-            })
-            .collect();
-        let hours = (0..base.len())
-            .map(|i| std::array::from_fn(|g| leg(i, g).hours))
-            .collect();
-        (taus, hours)
-    };
-    let net = &inputs.network;
-    let (domestic, domestic_hours) = factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic));
-    let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access));
-    let (crossings, crossing_hours) = factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings));
-    inputs.network.route_taus = Some(LegTaus {
-        domestic,
-        access,
-        crossings,
-        domestic_hours,
-        access_hours,
-        crossing_hours,
-    });
 }
