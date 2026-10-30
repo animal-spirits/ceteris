@@ -159,10 +159,10 @@ weights). Every table carries `calibration_format` in its schema metadata. Insta
 pack (copied next to the econ tables; their sha256 then joins `tests/golden/p2-pack.txt`), they are
 read by `EconInputs::from_pack` (`EconInputs::calibrate`, `calibration.rs`) into A, VA0, L0,
 a_VA, the coefficients (both S09 settings), w0, the PIGL weights and the initial state (State
-components): only at `calibration_format` 5 (5 since ADR 0200 added `gamma`) and only when the `static_digest` in the
-`calibration` metadata is that of the uncalibrated inputs under default parameters
-(`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack build,
-another format or other coefficients stop the load with a `PackError`.
+components): only at `calibration_format` 5 (5 since ADR 0200 added `gamma`) and only when the
+`static_digest` in the `calibration` metadata is that of the uncalibrated inputs under default
+parameters (`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack
+build, another format or other coefficients stop the load with a `PackError`.
 
 ## State components
 
@@ -216,8 +216,9 @@ transit as the lag. Units are delivered units (ADR 0200): an origin's output lea
 at coef_k per unit, and on route r each shipped unit arrives as s_r delivered units (trade SPEC,
 Sourcing), so the origin's best producers, which make what d buys from it, use 1 / s_r of the
 cell's average inputs per delivered unit. The production equations do not change; the dispatch
-books the difference as the selection term. Local inputs (goods 7 to 9) come from this tick's local output first and the
-enterprise's stock second, in the same-tick chain (ADR 0020, `local.rs`), run per province:
+books the difference as the selection term. Local inputs (goods 7 to 9) come from this tick's local
+output first and the enterprise's stock second, in the same-tick chain (ADR 0020, `local.rs`), run
+per province:
 
 ```
 cap_e = min(VA / a_VA, min over traded k of M_k / coef_k)     every enterprise of the province
@@ -293,13 +294,14 @@ that the chain draws only in a shortage). Where L = 0 everywhere this is the two
 decisions, 2026-10-24): planning on output cut by a short input would cut the next order and the
 next output with it, a ratchet that emptied the fixture economy from the data state; and a fixed
 target that counts goods on order cannot hold a month in transit. Traded inputs are bought at the
-buyer price q_k (ADR 0200), spend = order_k q_k, so the units ordered are the units that arrive. At a
-steady state inputs do not bind, Y_cap = Y, local stocks stay at their target and their orders are
+buyer price q_k (ADR 0200), spend = order_k q_k, so the units ordered are the units that arrive. At
+a steady state inputs do not bind, Y_cap = Y, local stocks stay at their target and their orders are
 zero, so the steady state (and the GE reference) is that of the lagged rule.
 
 **Labour target.** With value-added price p_VA = (p_ig - sum_k coef_k q_ik) / a_VA, the own
 (origin or province market) price at current prices and the buyer prices q_ik of last tick's
-E3 (the buyer price of traded inputs, the posted price of local ones), the profit-maximizing employment solves p_VA dVA/dL = w_i, in closed form:
+E3 (the buyer price of traded inputs, the posted price of local ones), the profit-maximizing
+employment solves p_VA dVA/dL = w_i, in closed form:
 
 ```
 q  = w L0 / (p_VA A VA0 s_L)
@@ -607,9 +609,10 @@ delivered unit price of the physical arrivals, at every pass (`Model::physical`)
 selection constant of ADR 0200, Gamma_d,g = q_d / P_d at the calibrated prices (1 where no origin
 is reachable), is written to `econ_calib_cells.arrow` (`gamma`), so a calibrated world's buyer
 price Gamma P_d is the calibrated q_d. The export carries every world's Gamma in `provinces`
-(`gamma_0` to `gamma_9`, export format 13), which the GE reference reads. The arrival slots split each destination's spending by
-value over its routes' slots and divide by q_d: every unit of spending arrives as 1 / q_d units
-(stage 1 values do not depend on them; the lead and the pipeline do, `steady_state_unchanged_by_selection`).
+(`gamma_0` to `gamma_9`, export format 13), which the GE reference reads. The arrival slots split
+each destination's spending by value over its routes' slots and divide by q_d: every unit of
+spending arrives as 1 / q_d units (stage 1 values do not depend on them; the lead and the pipeline
+do, `steady_state_unchanged_by_selection`).
 
 **Stage 3, technology.** coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices,
 so input coefficients differ across enterprises of a country), a_VA = 1 - sum_k a_kg (cost
@@ -696,7 +699,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Invariant | Statement | Tolerance | Checked where |
 |---|---|---|---|
 | Money | Sum of balances zero; every flow tagged | exact | `Ledger::check`, every tick |
-| Goods | Created - destroyed = change in holdings (incl. transit) | 1e-9 relative; transit 1e-9 relative plus 1e-12 of the good's market turnover, since markets fill it by differences of their holdings | every tick |
+| Goods | Created - destroyed = change in holdings (incl. transit). The transit part is true by construction right after T2b, which brings each transit account to the goods in flight (ADR 0200); the Selection invariant below does the real check | 1e-9 relative; transit 1e-9 relative plus 1e-12 of the good's market turnover, since markets fill it by differences of their holdings | every tick |
 | Selection | What T2b creates less what it destroys, per traded good (selection at home purchases and in transit, the melt), equals `dispatch`'s selection term less its melt (ADR 0200; trade SPEC, Invariants) | 1e-9 of the good's delivered and shipped units, plus 1e-12 of its market turnover | every tick; `goods_invariant_holds_with_selection` (120 ticks of the fixture) |
 | Population | Pops unchanged | exact | every tick |
 | Labour | 0 <= employed <= labour force; sum L <= L^s | 1e-12 relative | every tick |

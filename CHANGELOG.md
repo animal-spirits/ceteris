@@ -37,8 +37,10 @@ Goldens re-blessed:
 - `tests/golden/p2-fixture/reference/`: the frictionless GE equilibrium moves (prices by up to
   2.0%, wages 2.0%, cross-border flows up to 16%): it lies away from the data state, where
   buyers now pay Gamma P_d rather than 1 / alpha_d.
-- `tests/golden/p2-econ.txt`: every hash (the inputs digest carries Gamma, and the run from the
-  data state moves off the calibration point at once).
+- `tests/golden/p2-econ.txt`: every hash. The inputs digest carries Gamma. The fixture run
+  starts at the data state, where its Gamma is fixed, so buyers pay 1 / alpha_d at tick 0; the
+  data state is not a steady state, so prices move from tick 1 and q_d then follows P_d rather
+  than 1 / alpha_d. Arrivals are also split over slots by value from tick 1.
 - `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move. `p2-pack.txt` waits for the pack
   rebuild (pre-P3 B8).
 

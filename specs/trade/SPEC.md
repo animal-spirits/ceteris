@@ -457,7 +457,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | Inventory sign | S >= 0, and the market account holds S | exact; holding to 1e-9 of the turnover S + Q + D (Task 20 round 3) | every tick |
 | Price bounds | Prices finite and positive | exact | every tick |
 | Two-level vs single-level | On small worlds, flows from the gateway kernel versus direct-path kernel: median absolute log difference reported, and both nest in their GE solutions | report only; V1 tolerances apply to each | `tests/trade_nesting.rs` |
-| Pipeline | goods in the transit accounts = goods in the pipeline, per good | 1e-9 relative | every tick |
+| Pipeline | goods in the transit accounts = goods in the pipeline, per good. True by construction right after T2b, which brings each transit account to the goods in flight (ADR 0200); the Selection invariant checks what that adjustment creates or destroys | 1e-9 relative | every tick |
 | Thread independence | 1 and 8 threads, identical hashes | exact | P2 acceptance |
 
 ## Parameters
