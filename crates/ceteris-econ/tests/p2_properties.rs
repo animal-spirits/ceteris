@@ -1920,12 +1920,11 @@ fn translated_collapses_sample() {
     assert!(n >= 3_552 && exact >= 2_290, "{n} cases, {exact} held");
 }
 
-/// ADR 0093, bounded work: the translated collapses of 300,000 draws (207,054 cases; 132,459 of
-/// the 207,053 that pass held to every heuristic limit; minimums as in
-/// [`translated_collapses_sample`]); slow, so run on request. It fails on seed
-/// 13067305529229119429 at 0.3, which [`translated_collapse_settles_below_its_limit`] isolates.
+/// ADR 0093, bounded work: the translated collapses of 300,000 draws (207,054 cases, 132,459 held
+/// to every heuristic limit; minimums as in [`translated_collapses_sample`]; about 45 s in
+/// release); slow, so run on request.
 #[test]
-#[ignore]
+#[ignore = "slow: 300,000 draws; run on request"]
 fn translated_collapses_full() {
     let (n, exact) = translated_sample(300_000, 12 << 40);
     println!("{n} checked, {exact} at their exact limits");
@@ -1934,16 +1933,25 @@ fn translated_collapses_full() {
 
 /// ADR 0093, bounded work: seed 13067305529229119429 at 0.3, a collapse whose plain iteration
 /// ends at [0.3, 0.3, 0.3] to rounding (and its exact limit is t: no good can fall below it). The
-/// fills reach t to rounding in 3 passes, the third a rounding pass, on pieces below t; at that
-/// stop the last pass's fixed point is taken wherever it lies, here [0.267, 0, 0], where every
-/// good fits and the confirming passes return it. Ignored until a ruling on the stop's fixed
-/// point (the same restriction to 9.3e-10 of f that the cycles of two and three passes have
-/// fixes it and fails `near_singular_cycle_keeps_its_limit`).
+/// fills reach t to rounding in 3 passes, the third a rounding pass, whose good-0 step sits on a
+/// piece that holds only at f. Its fixed point, [0.267, 0, 0], lies off that piece; every good
+/// fits there and the confirming passes return it, so the stop took it while the last pass's
+/// fixed point was taken wherever it lies. Restricting it to 9.3e-10 of f, as the cycles of two
+/// and three passes are, would fail [`near_singular_cycle_keeps_its_limit`], whose fixed point
+/// lies on its pass's pieces. The heuristic gives good 1 the limit 1, which the plain iteration
+/// does not confirm (as seed 1122501757669556625), so the case is not held to every heuristic
+/// limit; every good is checked at t here instead.
 #[test]
-#[ignore = "the stop takes a fixed point far below the limit; ruling pending (b3fill3)"]
 fn translated_collapse_settles_below_its_limit() {
-    let out = assert_translated_limit(13067305529229119429, 0.3);
-    assert_eq!(out.fills.map(|x| (x - 0.3).abs() <= RESOLUTION), [true; 3]);
+    let seed = 13067305529229119429;
+    let original = random_province(seed);
+    let limit = bisection_iteration(&original, true).expect("the original iteration converges");
+    let (out, _) = assert_translated_limit_of(seed, &original, &limit, 0.3);
+    assert_eq!(
+        out.fills.map(|x| (x - 0.3).abs() <= RESOLUTION),
+        [true; 3],
+        "{out:?}"
+    );
 }
 
 /// ADR 0093, bounded work: provinces whose collapse outlasts the stall rule end within

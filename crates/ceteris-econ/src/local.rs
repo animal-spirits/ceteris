@@ -843,14 +843,41 @@ pub fn fills(p: &Province) -> Fills {
     }
 }
 
+/// Whether fills `at` lie on the pieces of `pass`: each step that cut is on its piece with its
+/// map's value at least 0, and each good the pass leaves fits up to [`ROUNDING`] of its flows.
+/// Unlike [`follow`], no shortage is required: at a fixed point of the pass they vanish.
+fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
+    let mut state = *at;
+    for j in 0..3 {
+        p.outputs(&state, &mut w.y);
+        let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+        let on = match &pass.pieces[j] {
+            None => uncovered <= rest + ROUNDING * (uncovered + rest),
+            Some(piece) => {
+                let next = pass.map[j].at(at);
+                let on = next >= 0.0 && on_piece(p, j, piece, &state, next);
+                state[j] = next;
+                on
+            }
+        };
+        if !on {
+            return false;
+        }
+    }
+    true
+}
+
 /// Where the passes stop or stall at fills `f`, the fixed point of a cycle of the last passes
 /// `tail` (oldest first), clamped to [0, f], where it lowers some good resolvably and the
 /// cycle's passes from it return it to [`CONFIRMED`]. The last pass's fixed point is taken
-/// wherever it lies; at a stop (`rounding`) the cycles of two and three passes are tried next,
-/// their fixed points only within [`TAIL`] of f (the rest of a fall already below the margin per
-/// pass), since a cycle across pieces may have fixed points the passes never reach. A map that
-/// falls to 0 only by rounding at a stop (no constant: every fixed point of the goods it lowers
-/// is 0) is not followed. None where no cycle moves.
+/// within [`TAIL`] of f, or beyond where it lies on that pass's pieces ([`on_pieces`]): the
+/// pieces' conditions are linear in the fills (but for a covered user's min), so the passes
+/// from f run on them to it. Off them, every good may fit there and the passes return it,
+/// though no pass from f goes there. At a stop (`rounding`) the cycles of two and three passes
+/// are tried next, their fixed points only within [`TAIL`] of f (the rest of a fall already
+/// below the margin per pass), since a cycle across pieces may have fixed points the passes
+/// never reach. A map that falls to 0 only by rounding at a stop (no constant: every fixed
+/// point of the goods it lowers is 0) is not followed. None where no cycle moves.
 fn settle(
     p: &Province,
     tail: &[Pass],
@@ -868,11 +895,13 @@ fn settle(
         if rounding && fp.cut.iter().all(|&j| fp.g[j] == 0.0) {
             continue;
         }
+        let near = |j: usize| f[j] - fp.g[j] <= TAIL * f[j];
+        let reached =
+            period == 1 && (fp.cut.iter().all(|&j| near(j)) || on_pieces(p, &cycle[0], &fp.g, w));
         let mut to = *f;
         for &j in &fp.cut {
-            let g = fp.g[j].clamp(0.0, f[j]) + 0.0;
-            let near = period == 1 || f[j] - g <= TAIL * f[j];
-            if g.is_finite() && resolvable(f[j], g) && near {
+            let g = fp.g[j];
+            if g.is_finite() && resolvable(f[j], g) && (reached || near(j)) {
                 to[j] = g;
             }
         }
