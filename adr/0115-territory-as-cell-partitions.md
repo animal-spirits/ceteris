@@ -1,6 +1,6 @@
 # 0115. Territory as partitions of a fixed cell grid
 
-Status: proposed; amended by 0190 (open partition registry, province redraws during a run)
+Status: proposed; amended by 0190 (open partition registry, province redraws during a run) and 0245 (control label and irregular shares)
 Date: 2026-10-28
 Design sections: 5.1, 5.2, 11.5, 11.6, 11.8, 14, 23; amends ADRs 0006, 0009 and 0114
 
