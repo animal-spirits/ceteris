@@ -146,6 +146,14 @@ pub fn oil_gas_va_over_rents(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f
     pairwise_sum(&va) / pairwise_sum(&rents)
 }
 
+/// The largest share of crude oil and gas in the VA of goods 1 to 8 among the ICIO economies.
+pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
+    icio.values()
+        .map(|c| c.va[OIL_GAS] / pairwise_sum(&c.va[1..9]))
+        .filter(|x| x.is_finite())
+        .fold(0.0, f64::max)
+}
+
 /// Oil plus natural gas rents over GDP, with a missing one as zero; None when both are missing.
 fn rents(wdi: &Wdi, code: &str) -> Option<f64> {
     match (wdi.oil_rents.get(code), wdi.gas_rents.get(code)) {
@@ -237,6 +245,8 @@ struct Level {
     ratio: f64,
     /// ICIO crude oil and gas VA over rents.
     oil_gas_ratio: f64,
+    /// Largest ICIO share of crude oil and gas in its group.
+    oil_gas_cap: f64,
     scale: Option<f64>,
 }
 
@@ -277,14 +287,19 @@ fn groups(s: SectorShares, ratio: f64) -> (Vec<(f64, Vec<usize>)>, Basis) {
     (known, Basis::WdiGdp)
 }
 
-/// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most the group's.
-/// Where `share` exceeds that group and WDI gives manufacturing apart, the two groups count as one
+/// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most `cap` of the
+/// group's, so the group's local goods keep a producer.
+/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups count as one
 /// (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
-fn oil_gas_apart(mut groups: Vec<(f64, Vec<usize>)>, share: f64) -> Vec<(f64, Vec<usize>)> {
+fn oil_gas_apart(
+    mut groups: Vec<(f64, Vec<usize>)>,
+    share: f64,
+    cap: f64,
+) -> Vec<(f64, Vec<usize>)> {
     let Some(i) = groups.iter().position(|(_, g)| g.contains(&OIL_GAS)) else {
         return groups;
     };
-    if share > groups[i].0
+    if share > cap * groups[i].0
         && let Some(m) = groups.iter().position(|(_, g)| g == GROUPS[2])
     {
         let (t, goods) = groups.remove(m);
@@ -297,7 +312,7 @@ fn oil_gas_apart(mut groups: Vec<(f64, Vec<usize>)>, share: f64) -> Vec<(f64, Ve
         .iter_mut()
         .find(|(_, goods)| goods.contains(&OIL_GAS))
         .expect("found above");
-    let take = share.min(g.0);
+    let take = share.min(cap * g.0);
     g.0 -= take;
     g.1.retain(|&x| x != OIL_GAS);
     groups.push((take, vec![OIL_GAS]));
@@ -310,7 +325,7 @@ fn value_added(donor: &CountryIo, l: &Level) -> ([f64; N_GOODS], Basis) {
         let gdp = l.gdp / 1e6;
         let (mut shares, basis) = groups(l.shares, l.ratio);
         if let Some(r) = l.shares.rents {
-            shares = oil_gas_apart(shares, r * l.oil_gas_ratio);
+            shares = oil_gas_apart(shares, r * l.oil_gas_ratio, l.oil_gas_cap);
         }
         let va = shares
             .iter()
@@ -361,8 +376,8 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// times the ICIO median VA over GDP less them over the goods they do not cover (wdi_gdp); with
 /// no share, GDP times the ICIO median VA over GDP (wdi_gdp). Where WDI has oil or gas rents,
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
-/// its group (all of industry where industry less manufacturing is too small) and at most all of
-/// it (ADR 0249). With no GDP, population (WDI, else the WorldPop
+/// its group (all of industry where industry less manufacturing is too small) and at most the
+/// largest ICIO share of crude oil and gas in industry of it (ADR 0249). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
@@ -385,6 +400,7 @@ pub fn impute(
     let by_maddison = ranked_by(obs, &wdi.maddison);
     let ratio = median_va_over_gdp(icio, wdi);
     let oil_gas_ratio = oil_gas_va_over_rents(icio, wdi);
+    let oil_gas_cap = oil_gas_most_of_industry(icio);
     let mut out = BTreeMap::new();
     for (code, sovereign) in countries {
         let own = iso.get(code).unwrap_or(code);
@@ -454,6 +470,7 @@ pub fn impute(
             donor_people: obs.population[&name],
             ratio,
             oil_gas_ratio,
+            oil_gas_cap,
             scale: level.map(|x| x / ranking.gdp_per_capita[&name]),
         };
         let (va, basis) = value_added(d, &level);
