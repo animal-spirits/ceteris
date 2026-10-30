@@ -169,3 +169,38 @@ the pipeline are recorded in As built.
 - Fixture calibration: stage 1's values are bit for bit unchanged; the lead moves by up to 0.165
   months and the pipeline by up to 52% in one entry (+1.4% in total units), from splitting
   arrivals over slots by value.
+
+## As built (2026-10-30, pre-P3 B2b): benchmark
+
+The harness of the 28 October benchmark is in the repository: `ceteris_calibrate::shock` (shock
+files name countries by ISO3 code), `ceteris_calibrate::benchmark` (frictionless run from the
+calibrated steady state, 1,200 ticks; welfare = d ln pop income less the Omega-weighted d ln buyer
+prices; ACR = -sum over traded g of Omega_cg / theta_g d ln lambda_cg; lambda by value at origin
+prices over the last 12 ticks) and `crates/ceteris-calibrate/tests/benchmark.rs` with the shock files
+of `tests/data/benchmark/`. Soft Brexit is crossing tau x 1.0277 both ways between GBR and each
+EU27 member; hard Brexit x 1.0831 and each side's 2000 EU MFN tariff on the other (0.0314 on group
+0, 0.0214 on group 1), reported only.
+
+Welfare on the scratch pack `k263/pack` (pre-P3 branch at ADR 0263, calibration format 6; it
+predates ADR 0256 and the unsplit provinces, so B8 reruns on the final pack), beside the
+28 October values (main 6423389, `data/packs/2000` of 26 October, buyer price 1 / alpha_d):
+
+| Case | 28 October | k263/pack |
+|---|---|---|
+| Border x1.1, JPN | +0.6% | -0.53% |
+| Border x1.1, GBR | -4.0% | -1.20% |
+| Border x1.1, EU27 (income-weighted) | | -1.92% |
+| Soft Brexit, GBR | -0.95% | -0.24% |
+| Soft Brexit, EU27 | +0.06% | -0.043% |
+| Hard Brexit, GBR | -2.2% | -0.63% |
+| Hard Brexit, EU27 | +0.47% | -0.11% |
+| Hard Brexit, IRL | +0.18% | -0.19% |
+
+`japan_loses_from_costlier_borders` and `eu_loses_from_soft_brexit` pass. The base run is not at
+rest on this pack: the largest |d ln p| over the last 50 of 1,200 ticks is 0.17 (28 October:
+2e-7), all of the top markets in Sudan (province 3474 and its neighbours; 588 markets above 1e-3),
+the known drift that ADR 0256 removes on main. The ADR 0207 criteria are C7's; on this pack, for
+the record: foreign share per theta class 1.11, 1.04, 1.13 and 1.00 times ICIO 2000's; under
+x1.1, 80 ICIO countries with |ACR| above 1e-4, none of the wrong sign, median model / ACR 2.45,
+correlation 0.85; under x10 the run panics in the dividend write-off (`systems.rs`, "write-off
+within i64", an i64 overflow) before tick 1,200.

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: benchmark harness with welfare and ACR in Rust (ADRs 0200, 0207)
+
+- `ceteris_calibrate::shock` parses shock files (countries by ISO3 code) and applies tariff,
+  iceberg (ntb, border) and productivity shocks; iceberg shocks fold the bulk legs into route
+  taus, so the kernel is the default one but for the shocked crossings.
+  `ceteris_calibrate::benchmark` runs a calibrated pack frictionless from its steady state and
+  computes welfare, the multi-sector ACR value and the foreign share.
+- The comparative-statics example of 28 October (90a6940) moves to
+  `crates/ceteris-calibrate/examples/shock.rs` as a wrapper over both, with its four CSVs.
+- Benchmark shock files in `crates/ceteris-calibrate/tests/data/benchmark/`. No behaviour moves.
+
 ### BEHAVIOUR: per-market price gain, capped at half each market's stability limit (ADR 0263)
 
 - T4 moves each market by kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with

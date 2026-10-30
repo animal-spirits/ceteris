@@ -1,7 +1,9 @@
 //! Steady-state calibration of the 2000 data state (ADR 0089): [`steady`] solves it from a
 //! `ceteris export` read by the reference model's reader, [`write`] writes the tables that
-//! `EconInputs::from_pack` loads.
+//! `EconInputs::from_pack` loads; [`benchmark`] runs a calibrated pack under [`shock`]s and
+//! measures welfare (ADRs 0200, 0207).
 
+pub mod benchmark;
 pub mod border;
 pub mod costs;
 pub mod dta;
@@ -9,6 +11,7 @@ pub mod elasticity;
 pub mod gravity;
 pub mod json;
 pub mod pyfmt;
+pub mod shock;
 pub mod stability;
 pub mod steady;
 pub mod summary;
