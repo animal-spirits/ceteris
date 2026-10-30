@@ -59,7 +59,7 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
   | Route (cargo, ship) | Source | 2000 quotes, USD/t | Mean | Pack sea km |
   |---|---|---|---|---|
   | Brazil (Tubarao) to Europe (Rotterdam), iron ore, Capesize | RMT 2001 para. 96 p. 54; RMT 2002 ch. VII p. 107 | 6.15, 7.95; 7.50, 8.70 | 7.575 | 10,273 |
-  | Australia (Port Hedland) to Europe, iron ore, Capesize | RMT 2001 para. 96 p. 54 | 8.50, 10.70 | 9.60 | 19,136 |
+  | Australia (Port Hedland) to Europe, iron ore, Capesize | RMT 2001 para. 96 p. 54 | 8.50, 10.70 | 9.60 | 19,450 (Cape) |
   | South Africa (Richards Bay) to Antwerp-Rotterdam-Amsterdam, coal, Capesize | RMT 2001 para. 96 p. 54 | 7.60, 10.10 | 8.85 | 14,125 |
   | East Coast North America (Hampton Roads) to ARA, coal, Capesize | RMT 2001 para. 96 p. 54 | 5.90, 7.70 | 6.80 | 7,097 |
   | Brazil (Tubarao) to China (Beilun), iron ore | RMT 2002 ch. VII p. 107 | 11.50, 13.50 | 12.50 | 21,087 |
@@ -72,11 +72,18 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
   Latin America. Each route takes the 2000 quotes as given (start and end of the year, or the
   months named), averaged. Grain routes are left out (class 2). Every class-3 rate in USD per tonne
   for 2000 that the two reports give is in the table. Sea km: least-cost sea path between the
-  ports nearest the named terminals, sea and canal edges only (P04 circuity 1).
+  ports nearest the named terminals, sea and canal edges only (P04 circuity 1), from the probe
+  run with the canal fee at 0 (canals free) and again with it at 1e9 (canals barred). The two
+  runs agree on every route but Port Hedland to Rotterdam: 19,136 km through Suez, 19,450 km
+  round the Cape. A loaded Capesize could not transit Suez in 2000, so the quote is a Cape
+  voyage and the table uses 19,450 km. No route in the table is then canal-routed, so no
+  canal fee (P04o, 5 USD/t) is netted out of a quote; the bulk legs keep P04o unscaled.
 
-  Fit (8 routes): F = 6.45 USD/t (s.e. 0.89), s = 2.08e-4 USD per tonne-km (s.e. 7.0e-5).
-  **P154 bulk_sea = 0.026** (2.08e-4 / 0.008), **P155 bulk_port = 0.40** (3.22 / 8), for class
-  3; 1 for classes 0 to 2. Sensitivity: the six dry-bulk routes alone give 0.041 and 0.28.
+  Fit (8 routes): F = 6.47 USD/t (s.e. 0.89), s = 2.05e-4 USD per tonne-km (s.e. 7.0e-5).
+  **P154 bulk_sea = 0.026** (2.05e-4 / 0.008), **P155 bulk_port = 0.40** (3.23 / 8), for class
+  3; 1 for classes 0 to 2. Sensitivity: the six dry-bulk routes alone give 0.039 and 0.29.
+  With Port Hedland at its Suez km (the fit before the routing check, 2026-10-30): F = 6.45,
+  s = 2.08e-4, the same 0.026 and 0.40, dry bulk alone 0.040 and 0.29.
   The quoted rates are port to port: what they include at the terminals (cargo handling) is not
   stated, so the bulk port fee is the rate's fixed part only.
 - **Ablation test (DESIGN 15.7, falsification branch; owner criterion, 2026-10-30).** With no
@@ -92,8 +99,9 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
 
 ## Consequences
 
-- Class 3's international legs cost about a tenth of what they cost before, and the class can
-  trade two-way, as ICIO says it does in 2000.
+- With the rate on, class 3's sea cost per tonne-km is 1/38 of P04c's and its port fees 0.40
+  of P04m's, and the class can trade two-way, as ICIO says it does in 2000. Off (the default),
+  nothing changes.
 - A second shortest-path pass over all sources at load, on a repriced copy of the graph (pack
   load time; the kernel and the tick are unchanged).
 - The export's legs table carries the bulk costs and hours (export format 12); the reference
@@ -107,7 +115,9 @@ Option 3 (owner, 2026-10-30), with option 1 as the fallback if the ablation test
 Built on 2026-10-30 (pre-P3 B2, task b2-1b): `TransportParams::bulk`, `TradeParams::{bulk_sea,
 bulk_port}` (P154, P155), `Network::bulk` (`BulkLegs`), built by `network_from_graph` and used by
 the kernel per class; export format 12. Every class off 1 must share one rate
-(`TradeParams::bulk_rate`).
+(`TradeParams::bulk_rate`). `BulkLegs` records the multipliers it was built with, and
+`Kernel::build` refuses parameters whose P154 or P155 differ from them (review fix, 2026-10-30):
+the network is built once at load, so a run cannot change the rate on its own.
 
 **Ablation test** on the 2000 pack (B1 econ tables, gateway masses, home shares; scratch packs
 `b2/pack-bulk` and `b2/pack-off`), each fitted (ADR 0092) and calibrated from cold:
