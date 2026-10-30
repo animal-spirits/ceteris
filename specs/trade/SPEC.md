@@ -409,17 +409,23 @@ cells, Pi_cell the cell's share of its buyers' purchases weighted by the units i
 (Leontief inputs, sigma_d 0; at buyer price Gamma P_d, ADR 0200, the own-price elasticity of
 these orders is exactly E), computed per leg with the leg factors squared (two passes over the
 kernel legs: one destination sum of the spending, one with squared leg factors; a pair joined by
-several routes leaves out the cross terms between them); local cells E = sigma (P06). eps_cell is
+several routes leaves out the cross terms between them; a traded cell that reaches no buyer with
+spending has Pi 0, so E = 1 + theta_g); local cells E = sigma (P06). eps_cell is
 the largest over the cell's enterprises of s_L sigma_FL / ((1 - s_L) a_VA) (ADR 0263, As built: the
 enterprise maximum, which the ADR's numbers rest on). The calibration computes E_cell and eps_cell
 at the calibrated prices and spending (`ceteris_calibrate::elasticity`) and writes them to
 `econ_calib_cells.arrow` (calibration format 6); `EconWorld::new` combines them with the run's
-eta, once, and the gain stays fixed for the run (`EconWorld::set_network` keeps it). Inputs
-without a calibration (the generated fixture, an uncalibrated pack) run kappa1 in every market;
-a data-state start of calibrated inputs keeps their gains, as it keeps their coefficients. In the default
-mode no cell is capped (J at most 16.9 on the 0256 pack; on the fixture
-`no_cell_capped_in_the_default_mode`); frictionless it slows the traded cells above 20 (298 on
-the 0256 pack) and removes the São Tomé cycle below. J2 bounds one market only: coupled modes
+eta, once, and the gain stays fixed for the run (`EconWorld::set_network` keeps it, as it keeps
+the calibrated coefficients; only a recalibration recomputes J). Inputs without a calibration
+(the generated fixture, an uncalibrated pack) run kappa1 in every market; a data-state start of
+calibrated inputs keeps their gains, as it keeps their coefficients, and is refused under
+structural parameters other than the calibration's (`structural_digest`), as a steady start is.
+On main's 0256 pack the study found no cell capped in the default mode (J at most 16.9; on the
+fixture `no_cell_capped_in_the_default_mode`); this branch's pre-0256 scratch pack caps 383
+traded cells there (J up to 32.4, Lesotho g1 on Senegal's donor good-1 column, a_VA 0.0213,
+which 14 no-rent economies share and ADR 0256 does not replace), so the default-mode claim is
+pending B8 and an owner ruling (ADR 0263, As built). Frictionless it slows the traded cells
+above 20 (298 on the 0256 pack) and removes the São Tomé cycle below. J2 bounds one market only: coupled modes
 across goods (Albania g5 to g1 and g2) are not covered.
 
 In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
@@ -574,7 +580,8 @@ miss is for the owner (B8).
 - Golden: covered by `tests/golden/p2-econ.txt` (econ SPEC).
 - Benchmarks (criterion, `cargo bench -p ceteris-econ`): `source` and `dispatch` on the full pack (7
   traded goods; `source_dispatch` budget 8 ms per tick on the M4 Pro, re-budgeted from 5 ms by the
-  owner on 2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms),
+  owner on 2026-10-26, measured 7.9 ms; 19.2 at rev 226), `clear_reprice` (budget 2 ms; 0.25 ms
+with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion median 2026-10-30),
   `kernel_build` (not per tick; budget 2 s).
   After the stored reciprocals and the log-domain weights (ADRs 0093, 0097; M4 Pro, AC, 98 W, full
   pack from its calibrated steady state, criterion medians, 2026-10-26), with the serial dispatch

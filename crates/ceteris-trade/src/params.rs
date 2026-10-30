@@ -46,8 +46,9 @@ pub struct TradeParams {
     /// P03d share m of each market's stability limit (J2, `specs/trade/SPEC.md`, Stability
     /// region) that its price gain may use (ADR 0263): kappa1_cell = kappa1 min(1, 2 m /
     /// (kappa1 J_cell)), [`TradeParams::price_gain`]. Prior 0 to 1, start 0.5: J_ref = 20 at
-    /// kappa1 0.05, so in the default mode no market of the 0256 pack is capped (J at most
-    /// 16.9) and frictionless the 298 traded cells above 20 are.
+    /// kappa1 0.05: frictionless the 298 traded cells of main's 0256 pack above 20 are capped;
+    /// in the default mode none there (J at most 16.9), but 383 on the pre-0256 B scratch pack
+    /// (J up to 32.4), pending B8 and an owner ruling (ADR 0263, As built).
     pub gain_share: f64,
     /// P03b price response to the inventory gap, per month. Prior 0 to 0.5 (widened from 0.05
     /// by owner decision, 2026-10-24), default 0: the inventory term is off and inventories

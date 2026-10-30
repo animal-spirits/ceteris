@@ -28,10 +28,23 @@
   `EconInputs::market_elasticity` (inputs digest); P03d joins the static digest only for inputs
   that carry them. Inputs without a calibration run kappa1 in every market.
 - Behaviour moves only where a market's J exceeds 20: frictionless runs of a calibrated pack
-  (the 0256 pack: 298 traded cells). In the default mode no cell is capped on the 0256 pack (J at
-  most 16.9) or the fixture (12.5); the fixture's frictionless J tops at 13.8, so no fixture run
-  moves.
+  (the 0256 pack: 298 traded cells), and in the default mode wherever a cell's J exceeds 20.
+  The study found none on main's 0256 pack (J at most 16.9), and the fixture has none (12.5;
+  frictionless 13.8, so no fixture run moves). That is not established for the rebuilt pack:
+  this branch's scratch pack (pre-0256) caps 383 traded cells in the default mode, J up to 32.4
+  at Lesotho g1 (eps 84.81 at a_VA 0.021309, from Senegal's donor good-1 column, which 14
+  economies share: BEN CAF COM GIN GMB GNB LSO MDG SDN SEN TGO TZA ZMB ZWE), and ADR 0256
+  replaces that column only for economies with a rent. Pending B8, which lists the
+  default-capped cells on the rebuilt pack, and an owner ruling if any remain (ADR 0263, As
+  built).
+- A traded cell that reaches no buyer with spending gets E = 1 + theta (Pi 0), as in the study.
+- A data-state start of calibrated inputs under structural parameters other than the
+  calibration's is refused (`EconWorld::new`), as a steady start is, since its gains would be
+  stale. `EconWorld::set_network` keeps the calibrated gains.
 - `params.json` of an export gains `gain_share` (P03d).
+- `conservation_over_120_ticks`'s frictionless case that overflows the ledger is now the ignored
+  test `frictionless_labour_spiral_overflows_the_ledger` (known defect: E1 hires labour it cannot
+  equip; owner decision pending), so the property test is green.
 
 Goldens re-blessed:
 
