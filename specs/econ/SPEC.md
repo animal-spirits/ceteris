@@ -292,8 +292,8 @@ paid at the posted price at E2, count in the market's demand and sales, and come
 household demand under every S11 setting (the chain runs before E3); at T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
-services at 0.3 and construction and services each other at 0.2 it binds in 285 of 3,000 province
-ticks over 120 ticks (415 before labour was capped at what inputs allow, ADR 0266), each within the passes its kinks allow, without a stall
+services at 0.3 and construction and services each other at 0.2 it binds in 547 of 3,000 province
+ticks over 120 ticks (415 before labour was capped at what traded inputs allow, ADR 0266), each within the passes its kinks allow, without a stall
 (`local_chain_terminates_on_cycles`). Where every jump applies (a resolvable fall per cycle, on
 pieces that repeat within 3 passes) the passes are at most 2 + 3 + 2K: one from F = 1, which
 cuts only the goods short there; at most two per kink the fall crosses (the pass across it, and
@@ -304,7 +304,7 @@ users' stock thresholds inside (0, 1) (b < coef cap; each crossed at most once, 
 fall), each local good beyond the first that starts to fall, and each pair of local goods some
 user takes both of (a switch of the binding fill, taken once per pair: an assumption, not
 derived; a pair can switch more than once, and the allowance of two passes per kink has held
-those seen). The most is 4 passes since ADR 0266. Before it, the most was 6 passes,
+those seen). The most is 6 passes; before ADR 0266 it was 6 passes too,
 province 5 at tick 79, against a bound of 21: utilities and construction, inputs of each other
 with no stocks but residues from earlier collapses, fall at a loop gain of 0.7 to 0.9 per pass
 to 0 across the residue thresholds. Before a jump ahead found the last whole cycle (it ended at
@@ -370,19 +370,33 @@ fixed-coefficient (Leontief), so labour demand is bounded by the scarcest input 
 rationing: Clower 1965; Barro and Grossman 1971; Malinvaud 1977). At E1, after T1:
 
 ```
-Y_in  = min over inputs k != g with coef_k > 0 of (M_k + Q_ik [k local]) / coef_k   (infinite if none)
+Y_in  = min over traded inputs k != g with coef_k > 0 of M_k / coef_k   (infinite if none)
 L_in  = VA^-1(a_VA Y_in)      L at which VA(L) = a_VA Y_in; infinite beyond VA's asymptote
                               (rho < 0), 0 below VA(0) (rho > 0); Cobb-Douglas L0 (VA/(A VA0))^(1/s_L)
 L*    = min(L*_notional, L_in)
 ```
 
-M_k is the enterprise's stock of k (traded inputs as delivered by T1, local inputs as held), and
-Q_ik the province's last output of local good k (the market's Q from the last same-tick chain):
-the most this tick's chain can give the enterprise if output holds. The enterprise's own good is
-left out, since its own output serves it first. No new parameter: the cap uses coef, a_VA, A,
-VA0, L0, s_L and P08 only (`systems::input_output`, `production::labour_for_value_added`). At a
-steady state it never binds: stocks hold (1 + COVER + L) months of use (P149) and Q_ik exceeds
-any one user's use, so L_in > L*; the reference model and the calibration are unchanged.
+M_k is the enterprise's stock of traded input k as delivered by T1. No new parameter: the cap
+uses coef, a_VA, A, VA0, L0, s_L and P08 only (`systems::input_output`,
+`production::labour_for_value_added`). At a steady state it never binds: stocks hold
+(1 + COVER + L) months of use (P149), so L_in > L*; the reference model and the calibration are
+unchanged.
+
+Two kinds of input set no cap (owner decision 2026-10-30T21:51Z; ADR 0266):
+
+- **Local inputs.** The same-tick chain already bounds their use within the tick, and a bound from
+  last tick's chain fails both ways it was built. From the enterprise's last fill (last output
+  where it was below 1, none at 1), an enterprise cut to no output hires no one, its need
+  vanishes, its fill reads 1, and it rehires the whole province the next tick, every other tick:
+  the fixture's spiral case still overflowed the ledger, near tick 76. From the enterprise's
+  stock plus the province's last output, a province whose local goods all reach zero together
+  stays there (every cap is 0 / coef): on the scratch pack the frictionless benchmark base
+  locked province 3464 at zero by tick 220, its local prices rose every tick under the Q = 0
+  rule (7.6e5 by tick 380), expected inflation carried them to every market, and the ledger
+  overflowed at tick 1,186 (world price index 6e9), a run that completes without the cap.
+- **The enterprise's own good.** A stock of it short of what output needs cuts the output that
+  refills it, the same lock: capped on it, the fixture's default run inflates (world price index
+  1.1e7 at tick 100) and overflows the ledger before tick 150.
 
 Employment moves toward the target: L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t
 exceeds L^s_i, all are scaled down pro rata.
@@ -412,7 +426,8 @@ the allocation caps (sum L_ig <= L^s), and eta = 1. Where demand never meets sup
 enterprise that would hire (p_VA > 0, L_in > 0) is at its input cap at that wage, labour demand
 is flat in w and the root is not unique: every wage up to w_top = min over them of p_VA
 dVA/dL(L_in) hires the same labour. The wage is then min(w_{t-1}, w_top): unchanged where the
-last wage still clears, else the highest wage that does (ADR 0266). Without it the search runs
+last wage still clears, else the highest wage that does (owner decision 2026-10-30T21:51Z; ADR 0266).
+Without it the search runs
 down the flat stretch to its lower limit; the fixture's data state, whose one month of stocks
 caps every enterprise at L0 exactly, would set wages near 1e-58 at tick 0. Frictionless
 unemployment is u* except where input caps leave more labour unhired
@@ -423,7 +438,7 @@ sum_g L_ig / L^s_i applies equally to each education level.
 Before ADR 0266, frictionless E1 valued labour at the posted price of an origin with no output
 and could hand it a province's whole labour, paid from debt, until a wage payment overflowed the
 ledger (`frictionless_labour_spiral_is_bounded`: the same case now runs 120 ticks with the world
-price index at most 1.7).
+price index at most 2.7).
 
 **Natural rate (ADR 0089; supersedes the full-employment owner choice).** L^s stays the full
 effective labour force, and the wage rule reads excess demand against the country's natural rate

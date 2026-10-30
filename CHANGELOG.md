@@ -2,26 +2,22 @@
 
 ## Unreleased
 
-### BEHAVIOUR: labour capped at what inputs allow (ADR 0266)
+### BEHAVIOUR: labour capped at what traded inputs allow (ADR 0266)
 
-- E1 caps each labour target at the labour whose output the enterprise's inputs allow: traded
-  stocks after T1, and for a local input its stock plus the province's last output of the good
-  (`systems::input_output`, `production::labour_for_value_added`). Both wage rules read the
-  capped targets. Frictionless, the wage clears on them; where no cap binds at the uncapped root
-  that root is kept bit for bit, and where every enterprise that would hire is at its cap (flat
-  demand) the wage is min(last wage, lowest marginal value product at the caps).
+- E1 caps each labour target at the labour whose output the enterprise's traded input stocks
+  after T1 allow, its own good left out (`systems::input_output`,
+  `production::labour_for_value_added`). Local inputs set no cap: the same-tick chain bounds
+  them, and both bounds from last tick's chain failed (owner decision 2026-10-30; ADR 0266). Both wage rules read the capped targets. Frictionless, the wage
+  clears on them; where no cap binds at the uncapped root that root is kept bit for bit, and
+  where every enterprise that would hire is at its cap (flat demand) the wage is min(last wage,
+  lowest marginal value product at the caps) (owner decision 2026-10-30).
 - Why the hashes move: the fixture's data state holds one month of base inputs, so the caps sit
   at L0 from tick 0 and bind wherever stocks run short; the P2 fixture golden differs from tick
-  12. Steady states do not move: on the scratch pack runs from the calibrated state match HEAD
-  bit for bit through tick 72 in both modes (the cap first binds at tick 76, in the known Sudan
-  drift).
+  12. Steady starts do not move until a cap binds (scratch pack: see ADR 0266, As built).
 - The frictionless ledger overflow is gone: `frictionless_labour_spiral_overflows_the_ledger`
-  is now `frictionless_labour_spiral_is_bounded` (world price index at most 1.7 over 120 ticks),
-  and a 40-draw frictionless price sweep stays below 18.1 (4.6e3 before).
-- Tests adjusted with reasons in their docs: `frictionless_unemployment_is_the_natural_rate`
-  allows more unemployment where caps bind (province 24, tick 1);
-  `exact_fill_equals_converged_iteration` adds a frictionless cycle run, the chain binding less;
-  `write_off_runs_are_thread_independent` runs in the default mode.
+  is now `frictionless_labour_spiral_is_bounded`, and a seeded 40-draw frictionless price sweep
+  is added. `frictionless_unemployment_is_the_natural_rate` allows more unemployment where caps
+  bind (province 24, tick 1).
 
 ### Added: benchmark harness with welfare and ACR in Rust (ADRs 0200, 0207)
 

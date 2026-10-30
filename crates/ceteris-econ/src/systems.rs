@@ -198,27 +198,21 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
     (p_g - inputs) / a_va
 }
 
-/// The output enterprise `e`'s inputs allow at E1 (ADR 0266): of each input k it uses, what it
-/// can have over coef_k. A traded input is its stock after T1. A local input is its stock plus
-/// the province's last output of the good (the market's Q of the last same-tick chain), the
-/// most this tick's chain can give it if output holds; its own good is left out, since its own
-/// output serves it first. Infinite where it uses no input.
+/// The output enterprise `e`'s traded inputs allow at E1 (ADR 0266): the least, over the
+/// traded inputs k it uses other than its own good, of its stock after T1 over coef_k;
+/// infinite where it uses none. Local inputs set no cap: the same-tick chain bounds their use
+/// within the tick, and a bound from last tick's chain either rehires a cut enterprise every
+/// other tick or holds a province whose local goods all fell to zero there for good. Its own
+/// good sets none for the same reason: a stock short of its own output's input cuts the output
+/// that refills it, and the fixture's default run then inflates until the ledger overflows.
 pub fn input_output(w: &EconWorld, e: usize) -> f64 {
     let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
-    let (i, own) = (
-        w.inputs.enterprises.province[e] as usize,
-        usize::from(w.inputs.enterprises.good[e]),
-    );
     let mut y = f64::INFINITY;
-    for k in (0..N_GOODS).filter(|&k| k != own) {
+    let own = usize::from(w.inputs.enterprises.good[e]);
+    for k in (0..N_GOODS).filter(|&k| TRADED[k] && k != own) {
         let a = lay.coef[e][k];
         if a > 0.0 {
-            let chain = if TRADED[k] {
-                0.0
-            } else {
-                w.markets.supply[i * N_GOODS + k]
-            };
-            y = y.min((w.ledger.goods(account, k) + chain) / a);
+            y = y.min(w.ledger.goods(account, k) / a);
         }
     }
     y
@@ -1133,9 +1127,9 @@ mod tests {
         assert!((value_added_price(2.0, b, &index, 0.6) - 1.8 / 0.6).abs() < 1e-15);
     }
 
-    /// ADR 0266: an enterprise with no stock of a traded input it uses, or without a local
-    /// input in stock or in its province's last output, hires no one; with inputs to spare
-    /// every target, and so the wage and employment, are the same whatever the stocks.
+    /// ADR 0266: an enterprise with no stock of a traded input it uses hires no one; local
+    /// inputs set no cap; with inputs to spare every target, and so the wage and employment,
+    /// are the same whatever the stocks.
     #[test]
     fn labour_is_capped_at_what_inputs_allow() {
         use crate::fixture::small_world;
@@ -1148,7 +1142,10 @@ mod tests {
             let fresh = EconWorld::new(Arc::clone(&inputs), params.clone(), TradeParams::default());
             let lay = Arc::clone(&fresh.layout);
             let e = (0..fresh.inputs.n_enterprises())
-                .find(|&e| (0..N_GOODS).any(|k| TRADED[k] && lay.coef[e][k] > 0.0))
+                .find(|&e| {
+                    let own = usize::from(fresh.inputs.enterprises.good[e]);
+                    (0..N_GOODS).any(|k| TRADED[k] && k != own && lay.coef[e][k] > 0.0)
+                })
                 .expect("an enterprise using a traded input");
             let with_stocks = |factor: f64| {
                 let mut w = fresh.clone();
@@ -1173,7 +1170,8 @@ mod tests {
 
             let mut w = with_stocks(100.0);
             let account = lay.accounts.enterprise[e];
-            for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
+            let own = usize::from(w.inputs.enterprises.good[e]);
+            for k in (0..N_GOODS).filter(|&k| TRADED[k] && k != own && lay.coef[e][k] > 0.0) {
                 let held = w.ledger.goods(account, k);
                 w.ledger.destroy(account, k, held);
             }
@@ -1182,10 +1180,9 @@ mod tests {
             labour(&mut w);
             assert_eq!(w.employment[e], prev + params.eta * (0.0 - prev));
 
-            // a local input: its stock plus the province's last output of it
+            // local inputs: none in stock and none in the province's last output caps nothing
             let mut w = with_stocks(100.0);
             let i = w.inputs.enterprises.province[e] as usize;
-            let own = usize::from(w.inputs.enterprises.good[e]);
             let k = LOCAL
                 .into_iter()
                 .find(|&k| k != own && lay.coef[e][k] > 0.0)
@@ -1193,11 +1190,13 @@ mod tests {
             let held = w.ledger.goods(account, k);
             w.ledger.destroy(account, k, held);
             w.markets.supply[i * N_GOODS + k] = 0.0;
-            assert_eq!(input_output(&w, e), 0.0);
+            let traded = (0..N_GOODS)
+                .filter(|&g| TRADED[g] && g != own && lay.coef[e][g] > 0.0)
+                .map(|g| w.ledger.goods(account, g) / lay.coef[e][g])
+                .fold(f64::INFINITY, f64::min);
+            assert_eq!(input_output(&w, e), traded);
             labour(&mut w);
-            assert_eq!(w.employment[e], prev + params.eta * (0.0 - prev));
-            w.markets.supply[i * N_GOODS + k] = 2.0 * lay.coef[e][k];
-            assert_eq!(input_output(&w, e), 2.0);
+            assert_eq!((w.wage, w.employment), (wage, employment));
         }
     }
 
