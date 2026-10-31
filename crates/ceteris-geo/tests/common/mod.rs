@@ -22,12 +22,5 @@ pub fn province(pack: &Pack, id: &str) -> u32 {
 
 /// Rotterdam, Hamburg, Shanghai, Mumbai, Ulaanbaatar, Nairobi, Sao Paulo, New York.
 pub const PROBES: [&str; 8] = [
-    "NLD-3485",
-    "DEU-1578",
-    "CHN-1819",
-    "IND-2447.1",
-    "MNG-3331",
-    "KEN-1196",
-    "BRA-1311",
-    "USA-3559",
+    "NLD-3485", "DEU-1578", "CHN-1819", "IND-2447", "MNG-3331", "KEN-1196", "BRA-1311", "USA-3559",
 ];

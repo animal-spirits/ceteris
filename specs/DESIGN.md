@@ -22,7 +22,7 @@ Headline specification:
 | Start / horizon | 1 Jan 2000, open-ended | 25 years of out-of-sample history; long runs need climate, demography and stable growth |
 | Economic tick | 1 month | Captures harvests, prices, credit and policy cycles |
 | Military sub-tick | 1 day | Movement, battles, sieges |
-| Provinces | 4,796 first-level regions from Natural Earth at 2000 borders; those over 250,000 km² split along county borders | Modern admin units carry the subnational data |
+| Provinces | 4,594 first-level regions from Natural Earth at 2000 borders, kept whole (ADR 0251) | Modern admin units carry the subnational data |
 | Markets | Every province prices every good | Finest price geography; costs about 10x more trade-solver work than hubs |
 | Goods | 45 sectors aligned with OECD ICIO, with energy and food staples split out | Direct mapping to input-output data |
 | States | About 195 | Current sovereign states plus a handful of de facto entities |
@@ -215,7 +215,7 @@ A global hexagonal grid (H3 resolution 4, cells of roughly 1,800 sq km; finer ce
 
 ### 5.2 Provinces
 
-Provinces are first-level administrative regions from Natural Earth (public domain; 4,594 units at mixed levels), remapped to 1 January 2000: South Sudan in Sudan, Serbia and Montenegro in Yugoslavia, Crimea in Ukraine. Regions over 250,000 km² are split along county boundaries from geoBoundaries (82 regions), or by Voronoi cells where counties are too few (11), giving 4,796. A county layer of 53,084 units is drawn on the map and carries raster statistics; it is not simulated. The post-2000 sovereignty changes (Timor-Leste, Montenegro, Kosovo, South Sudan) remain validation events, not scripted ones.
+Provinces are first-level administrative regions from Natural Earth (public domain; 4,594 units at mixed levels), remapped to 1 January 2000: South Sudan in Sudan, Serbia and Montenegro in Yugoslavia, Crimea in Ukraine. Regions are kept whole, whatever their area (ADR 0251; ADRs 0006 and 0009 split those over 250,000 km²). A county layer from geoBoundaries of 53,084 units is drawn on the map and carries raster statistics; it is not simulated. The post-2000 sovereignty changes (Timor-Leste, Montenegro, Kosovo, South Sudan) remain validation events, not scripted ones.
 
 | Attribute | Source | Dynamic? |
 | --- | --- | --- |
@@ -233,7 +233,7 @@ Provinces are first-level administrative regions from Natural Earth (public doma
 
 Nodes are province centroids, ports, airports and sea-lane waypoints. Edges carry one or more modes, each with a per-ton-km cost, speed, capacity and risk that depend on investment and fuel prices.
 
-The 2000 graph has 4,796 province anchors, 2,757 rail nodes, 2,284 ports (1,001 listed, 1,283 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack. Chokepoints carry closure hazards and coastal provinces a piracy hazard (ADR 0242).
+The 2000 graph has 4,594 province anchors, 2,662 rail nodes, 2,234 ports (1,001 listed, 1,233 minor), 1,154 airports and 29,543 open-water H3 resolution-3 cells, grouped into 725 sea zones. Ten chokepoints tag their sea cells; Suez, Panama, the Turkish Straits, Gibraltar and Bab-el-Mandeb are explicit links. Edge costs are priced in the core from P04 parameters, not stored in the pack. Chokepoints carry closure hazards and coastal provinces a piracy hazard (ADR 0242).
 
 | Mode | Edge existence | Cost driver | Notes |
 | --- | --- | --- | --- |
@@ -324,7 +324,7 @@ Internal and international migration share one dynamic discrete-choice model in 
 
 Moving cost m depends on distance and travel cost, immigration law and visa regimes (free movement inside unions such as the EU), language and cultural distance, credit constraints, and diaspora networks. Expected value uses Harris-Todaro expected wages (wage times employment probability), amenities, conflict risk and climate damages. Forced displacement from conflict and disasters follows a separate hazard-driven flow toward safe neighbours. Remittances flow back as household transfers, a large financial flow for many economies. The dispersion parameter nu is calibrated to bilateral migration stocks and flow estimates; internal urbanization rates are a second target.
 
-**Computation.** A dense logit is 100,000 pops x 4,796 destinations, about 5 x 10^8 exponentials a month, far over budget. Choice probabilities depend on a pop only through its origin province and the attributes that enter V (education, ethnic group), so they are computed per (origin province, education, group) cell over a sparse choice set: provinces within a cost radius, the largest cities, and foreign gateways, with remaining destinations pooled in one nest per country. Expected values follow the Caliendo-Dvorkin-Parro recursion, updated once per tick:
+**Computation.** A dense logit is 100,000 pops x 4,594 destinations, about 5 x 10^8 exponentials a month, far over budget. Choice probabilities depend on a pop only through its origin province and the attributes that enter V (education, ethnic group), so they are computed per (origin province, education, group) cell over a sparse choice set: provinces within a cost radius, the largest cities, and foreign gateways, with remaining destinations pooled in one nest per country. Expected values follow the Caliendo-Dvorkin-Parro recursion, updated once per tick:
 
 ```latex
 V_{o,t+1} = u_{o,t} + \nu \ln \sum_{d} \exp\left( \left( \beta V_{d,t} - m_{od} \right) / \nu \right)
@@ -1199,7 +1199,7 @@ Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of
 | Demand and consumption | 100k pops x 8 categories x goods | 10 ms |
 | Production and labour | 150k enterprises | 12 ms |
 | Province markets | 4,000 provinces x 50 goods | 2 ms |
-| Trade (one gravity normalization per tick, gateway-factorized kernel) | 45 goods in 3 to 5 theta classes, 600 gateways + 4,796 provinces x k gateways | 30 ms, of which source\_dispatch 8 ms (P2, full pack) |
+| Trade (one gravity normalization per tick, gateway-factorized kernel) | 45 goods in 3 to 5 theta classes, 600 gateways + 4,594 provinces x k gateways | 30 ms, of which source\_dispatch 8 ms (P2, full pack) |
 | Finance, fiscal, monetary | 1M claims, mostly passive | 8 ms |
 | Politics, migration, diplomacy | Pops, parties, states | 8 ms |
 | Climate (annual) | Emulator + pattern scaling | under 1 ms amortized |
@@ -1345,7 +1345,7 @@ Eleven phases take the project from an empty repository to a calibrated, playabl
 
 Each phase starts only when the previous gate passes; the highlighted workbench phase is where the project first becomes useful for experiments. Phases run in the order P0-P2, pre-P3, App shell, P3, P4, P5a, P5b, P8, P9, R, then P6, P7, P10; numbers are kept, and the order follows the major-version rule of ADR 0136 and the 1.0 phase plan of ADR 0207. Each phase builds only what its gate and the 2011-2024 scorecard need; other mechanisms land after 1.0 as minors behind a flag (ADR 0207 lists them).
 
-**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,796 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is 1.0 at the end of R: a calibrated, validated economic world (P0-P5, P8, P9), not an earlier partial build. 1.0 runs with the climate emulator and damages off; they arrive as 1.1 (ADR 0207). P6 is 2.0-alpha, P7 2.0-beta, and P10 lands with 2.0-alpha (Steward mode for economic levers) and 2.x (full Steward mode and Tier 1b); 1.x has no seats (ADR 0239).
+**Full globe from P2 (ADR 0012).** P2 onward runs on all 4,594 provinces; the dev\_slice flag stays in the pack for ad hoc fast runs, and no gate depends on it. **First release** is 1.0 at the end of R: a calibrated, validated economic world (P0-P5, P8, P9), not an earlier partial build. 1.0 runs with the climate emulator and damages off; they arrive as 1.1 (ADR 0207). P6 is 2.0-alpha, P7 2.0-beta, and P10 lands with 2.0-alpha (Steward mode for economic levers) and 2.x (full Steward mode and Tier 1b); 1.x has no seats (ADR 0239).
 
 ### 21.1 Phases and acceptance criteria
 
@@ -1422,7 +1422,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Start-year flexibility | Pipeline builds packs for any year 1995-2022 | Rolling-origin validation (2000, 2005, 2010, 2015) |
 | Horizon | Open-ended | Demography and long-run stability are first-class requirements; climate joins them in 1.1 (ADR 0207) |
 | Map scope | Global, full globe from P2 (ADR 0012) | dev\_slice kept in the pack for ad hoc fast runs; no gate depends on it |
-| Provinces | Natural Earth first-level regions at 2000 borders, oversized ones split along county borders, 4,796 | Public domain; geoBoundaries counties add a display layer |
+| Provinces | Natural Earth first-level regions at 2000 borders, kept whole, 4,594 (ADR 0251) | Public domain; geoBoundaries counties add a display layer |
 | Markets | Every province prices every good | Gravity kernel factorized through gateways (8.3) |
 | UI priority | Observer / laboratory | Branches, diff maps, ensembles before Steward controls |
 | App | Fully native Rust app, Slint panels over a wgpu map (ADR 0088) | Rust core in-process, no server |
@@ -1442,7 +1442,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 ### 22.2 Defaults the coding agent may take (recorded as ADRs)
 
 - Exact sector splits beyond the 45 ICIO industries.
-- The province-splitting rule (population and area thresholds).
+- The province-splitting rule (population and area thresholds); resolved as no split (ADR 0251).
 - The imputation model for input-output coefficients of countries outside OECD ICIO.
 - Number of trade gateways and partner-set size, set by benchmark results.
 - Generic naming scheme for parties.

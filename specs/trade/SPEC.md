@@ -16,7 +16,7 @@ them only as quantities offered to and demanded from each market.
 
 | Design | P2 | Why |
 |---|---|---|
-| Develop P1-P3 on a European slice (21) | Full globe, 4,796 provinces | Owner decision; ADR 0012 |
+| Develop P1-P3 on a European slice (21) | Full globe, 4,594 provinces | Owner decision; ADR 0012 |
 | Per-tick unbalanced Sinkhorn over both marginals (8.3) | Destination sourcing in value (ADR 0015): each destination spreads its spending over origins with Eaton-Kortum shares K_od p_o^-theta / Phi_d on the two-level kernel; origin markets clear the orders against output and merchant stock across ticks, one normalization per tick (ADR 0016). Balanced Sinkhorn is the S02 full solve, in the GE reference only | Flows keep the gravity form and are homogeneous of degree zero in prices; one destination normalization followed by the origin price update is one Sinkhorn sweep spread over ticks, with the same frictionless fixed point. ADRs 0013, 0015, 0016 |
 | Per-unit plus iceberg costs (5.4, A7) | Iceberg only (S05 = iceberg): tau = 1 + c w_g + lambda_g T at reference prices, the second term the time cost of transit (Hummels and Schaur 2013) standing in for 5.4's carrying cost; risk and per-unit composition effects deferred to P8 (freight) | Per-unit costs need a transport sector that owns fleets; iceberg nests exactly in the GE reference. Freight alone gives distance elasticities far below H2's range (owner decision: add the literature time cost, nothing fitted to H2) |
 | Route-choice costs with A = t^-theta, the trade elasticity (ADR 0017 as accepted) | Least-cost legs (S05) in P2; route choice with a separate dispersion theta_r (P44) is built and tested but off, deferred past P2 (owner decision, 2026-10-24) | With theta the spectral radius on the P1 graph is 6.5 (coal) to 27 (machinery) at theta 5; with theta_r at its prior's upper end (182) still 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 to 880,000, driven by short sea-grid edges. Per-edge factors also compound (coal Rotterdam to Shanghai 13.1 against 3.6 under S05). ADR 0017, Deferral |
@@ -787,8 +787,8 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
 ## Open questions
 
 - Gateway count and selection rule are an agent default (22.2); the rule is in the econ SPEC
-  pack section. As built (Task 17, controller ruling): 600 gateways (287 ports, 168 airports,
-  145 land crossings). Each country's land crossing points, the merged endpoints of its
+  pack section. As built (Task 17, controller ruling): 600 gateways (286 ports, 171 airports,
+  143 land crossings; ADR 0251). Each country's land crossing points, the merged endpoints of its
   cross-border road and rail edges, join its ports and airports as candidates of the k-medoids,
   one count rule for all; a crossing is not a gateway pair of its own, which would have made
   about 2,700 gateways. Every pair of gateways of different countries is a crossing leg: 356,080
@@ -804,7 +804,7 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   Measured without the masses (ADR 0097, As built, 2026-10-27): 300 gateways by the same rule
   halve parallel source and dispatch (4.7 against 9.7 ms, cold, unit spending) but move ln Phi_d
   by medians of 0.03 to 2.0 by good, and the 300 pack does not calibrate (100 passes), so H2 was
-  not run there; at 600 H2 distance is -0.753. No count is proposed before the masses land.
+  not run there; at 600 H2 distance is -0.744 (-0.753 before ADR 0251). No count is proposed before the masses land.
   With the masses and the nu fit (2026-10-30, ADR 0097): the 300 pack fits nu but its calibration
   fails in pass 3's Sinkhorn (100,000 sweeps, residual 4.2e-5); no count is proposed.
 - Expectations are adaptive only in P2 (S04): one pi^e for the numeraire area (ADR 0019); price
