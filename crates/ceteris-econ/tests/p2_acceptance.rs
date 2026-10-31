@@ -20,6 +20,10 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::{Kernel, N_CLASSES, N_GOODS, TradeParams};
 
 const TICKS: u32 = 1200;
+/// V1's horizon where competitive storage is on (ADR 0091; econ SPEC, P2 gate): from the data
+/// state the fixture converges slowly and not monotonically (flows 1.5% off at 3,600 ticks, 2.1%
+/// at 4,800, 1.4e-4 at 6,000; owner, 2026-10-31).
+const STORAGE_TICKS: u32 = 6000;
 
 fn run(threads: usize, ticks: u32) -> Sim<EconWorld> {
     let pool = rayon::ThreadPoolBuilder::new()
@@ -165,8 +169,9 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 }
 
 /// V1 (specs/econ/SPEC.md, Equilibrium nesting): with frictionless settings the run from the
-/// data state reaches the GE reference within 1,200 ticks. Prices and wages are divided by the
-/// world price index over consumer prices (`EconWorld::world_price_index`, the index the
+/// data state reaches the GE reference within 1,200 ticks, 6,000 where storage is on. Prices
+/// and wages are divided by the world price index over consumer prices
+/// (`EconWorld::world_price_index`, the index the
 /// expectations of ADR 0019 track; the reference is normalized to an index of 1);
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
@@ -180,16 +185,18 @@ fn v1_fixture_frictionless_matches_reference() {
     let reference = fixture_dir().join("reference");
     let solution = ceteris_econ::equilibrium::Equilibrium::read(&reference).unwrap();
 
+    let trade = TradeParams::default();
+    let ticks = if (0..N_GOODS).any(|g| trade.stores(g)) {
+        STORAGE_TICKS
+    } else {
+        TICKS
+    };
     let mut sim = Sim::new(
-        EconWorld::new(
-            Arc::new(small_world()),
-            EconParams::frictionless(),
-            TradeParams::default(),
-        ),
+        EconWorld::new(Arc::new(small_world()), EconParams::frictionless(), trade),
         ceteris_econ::systems::schedule(),
         ceteris_econ::systems::SEED,
     );
-    sim.run_until(TICKS).unwrap_or_else(|v| panic!("{v}"));
+    sim.run_until(ticks).unwrap_or_else(|v| panic!("{v}"));
     let w = sim.world();
 
     let index = w.world_price_index();

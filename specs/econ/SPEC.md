@@ -1060,7 +1060,10 @@ the radius on p. 9, footnote 10 p. 7).
 - V0: zero invariant violations; determinism, 1 vs 8 threads, replay.
 - V1: first the uniqueness check (Equilibrium nesting) at the run's theta and the pack's
   value-added shares. Where the bound holds (at most 1, tolerance mode) V1 applies the 1%
-  tolerances above, full pack, within 1,200 ticks. Otherwise (report mode) both models start from
+  tolerances above, full pack, within 1,200 ticks; where competitive storage is on (ADR 0091), within
+  6,000, since from the data state the stored goods converge slowly and not monotonically (on the
+  fixture flows are 1.5% off at 3,600 ticks, 2.1% at 4,800, 1.4e-4 at 6,000; owner,
+  2026-10-31). Otherwise (report mode) both models start from
   the data state, the run frictionless for 1,200 ticks and the reference solve from
   `model.data_state`, and the test reports which equilibrium each reaches (index-normalized
   prices, wages and flows of each, and their largest gaps) instead of a pass or fail at 1%.

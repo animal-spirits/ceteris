@@ -294,8 +294,9 @@ GE reference is unchanged. Every tick the clip binds on the gap terms at a cell 
 a positive delta with psi 0, a stock that spoils with nothing targeting it, the slowly growing
 root of the Storage loop below, is refused by `TradeParams::check_storage` in `EconWorld::new`
 and in the calibration). It
-is off by default (owner ruling 2026-10-31; Storage loop below: V1's horizon), so P144 and P56's delta default to 0 and those goods run the stock rule, bit
-for bit as before ADR 0091, kappa2 included; `TradeParams::with_storage` sets the approved values. Each such origin market keeps an expected log-price change
+is off by default (owner ruling 2026-10-31; since g_s 0.006 the approved values pass the checks of
+the Storage loop below, and turning storage on is the owner's call), so P144 and P56's delta
+default to 0 and those goods run the stock rule, bit for bit as before ADR 0091, kappa2 included; `TradeParams::with_storage` sets the approved values. Each such origin market keeps an expected log-price change
 pi^e_og, 0 at the start of a run and at a steady state, updated after its own T4 step:
 
 ```
@@ -523,10 +524,10 @@ approved values with g_s 0.006 decay by 0.991 a tick frictionless and 0.992 in t
 At g_s 0.08 the default mode grew by 1.0069 a tick (agriculture of the island province,
 calibrated E 1.76 and eps 0.99, whose own income feeds back on its demand and leaves an effective
 E of about 0.3, below the region's sigma floor); with psi = 0 the stock's spoilage term alone
-grows by 1.0004 (nothing targets the stock). Two findings keep storage off by default (owner
-ruling 2026-10-31). V1 from the data state fails at 1,200 ticks at every value set tried (a 1.5%
-to 1.65% price gap, coal), from slow convergence (about 0.9986 a tick; within 0.06% at 3,600
-ticks), not instability. And the stockout claim of ADR 0091 did not hold as first written: on the toy
+grows by 1.0004 (nothing targets the stock). V1 from the data state fails at 1,200 ticks at
+every value set tried (a 1.5% to 1.65% price gap, coal), from slow convergence, not instability:
+prices are within 0.06% at 3,600 ticks but flows 1.5% off, 2.1% at 4,800, and 1.4e-4 at 6,000, so
+V1's horizon is 6,000 ticks where storage is on (econ SPEC, P2 gate; owner, 2026-10-31). And the stockout claim of ADR 0091 did not hold as first written: on the toy
 agriculture market a 30% cut held 12 months raises the price by 0.64 in logs (0.20 for the
 surplus) but the stock stops at 0.23 of target, since the Working-Kaldor convenience yield z^-zeta
 grows without bound as cover falls. Against Deaton and Laroque's benchmark, no stock and the
@@ -1013,5 +1014,5 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   can make an inventory target stable, or with P9 calibration. Goods 0, 1, 2 and 5 target their
   stock through competitive storage (ADR 0091) where it is on; it is off by default (owner ruling
   2026-10-31), so in the default all seven traded goods are untargeted. The approved values with
-  g_s 0.006 pass the stability checks; V1's horizon is open
+  g_s 0.006 pass the stability checks and V1 at 6,000 ticks; turning it on is open
   (Storage loop).
