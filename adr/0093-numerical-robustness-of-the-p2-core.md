@@ -473,3 +473,102 @@ could run 1,027 passes. The fallback now starts at 1,021 passes, and no call run
 **Descent.** The step's bounded descent counts its fit evaluations (at most 8 + 1 + 64, asserted
 in debug builds and in its regression test), and asserts in debug builds that the good's
 producer does not take its own good, which the monotone fit rests on.
+
+## Amendment (2026-10-30): a user's stock is a floor under the fill (defect fix)
+
+**Defect.** The first amendment's rule set each user's output to cap_e min_k F_k, the common fill
+applied to every user of k, including users whose own stock covers their need. That contradicts
+the same amendment's split ("each user takes what its stock cannot cover", the stock "covering
+the remainder"): a user cut to F_k cap_e by the fill draws less than its stock alone could
+supply. On the scratch pack (v1 diagnosis, 2026-10-30) an Algerian enterprise with 2.2 months of
+every local input in stock produced nothing once one local producer stopped, and the collapse
+spread through the province. The rule as built was a defect against its own stated intent, so
+this amendment fixes it without a new decision.
+
+**Rule.** For user e of local good k, with need at capacity n_ek = a_ek cap_e and stock b_ek, let
+s_ek = min(b_ek / n_ek, 1), the share of that need its stock covers. Then
+
+    Y_e = cap_e min_{k : a_ek > 0} G_ek(F_k),    G_ek(F) = s_ek + (1 - s_ek) F   (1 at F = 1).
+
+F_k is the share of each user's uncovered need at capacity, (n_ek - b_ek)^+, that k's output
+serves: where k binds e, e's uncovered need is exactly F_k (n_ek - b_ek)^+. A user fully covered
+by its stock is not cut by k (s = 1), and with no output of k at all a user runs on its stock
+(G(0) = s). U_k, R_k, the fit and the split are unchanged; a user without stock (s = 0) has
+G = F exactly, so a province where no user holds stock gives the same fills and outputs bit for
+bit.
+
+**Solver.** Each user's level G_ek is affine in F_k on [0, 1), so a step's U_k stays continuous,
+nondecreasing and piecewise linear in its fill, a pass and a cycle stay affine maps on their
+pieces, and the evaluated fit stays monotone in the fill (G is s plus a constant times F, then a
+min with 1; the value at F = 1 is 1 exactly, so no unit in the last place is lost there). The
+kinks change: a user k binds contributes (n - b) F_k with no stock threshold inside (0, 1); the
+kink is where its level of k meets its smallest other level, F = (m - s) / (1 - s); a user whose
+smallest other level m is at most s is covered whatever F_k is. Users bound on another good k'
+contribute a_ek cap_e G_ek'(F_k') - b_ek, affine in F_k'.
+
+**Uncovered need without cancelling.** Evaluated as coef_ek Y_e - b_ek, a user's uncovered need
+cancels to the rounding of b where it runs mostly on its stock (a small fill: Y_e near cap_e
+s_ek), so its relative error grows as eps s / ((1 - s) F); past about F = 1e-6 the maps' rounding
+exceeds the 1e-12 the jumps allow, and on random provinces with stocks 133 of 100,000 stalled
+(before the floor 7 stalled over five families of 1,000,000 each) and a fall to a limit near
+1e-17 took 97 passes. The chain
+therefore computes it from the levels: u_ek = coef_ek cap_e max(min_k' (G_ek' - s_ek), 0), with
+G_ek - s_ek = (1 - s_ek) F_k for the good itself and (s_ek' - s_ek) + (1 - s_ek') F_k' for the
+user's other goods, at most its need n_ek, and n_ek exactly for a user without stock. The split
+draws u_ek where it drew max(n - b, 0). s is rounded down until coef (cap s) <= b as evaluated,
+so that at F = 0 every uncovered need is exactly 0 and 0 always fits. With this no stocked
+province of 200,000 per family stalls but one (scarce stocks, 792 passes, as before), and the
+first family takes at most 14 passes.
+
+**Kinks.** A floor is still a kink, though not where the stock threshold was: a user's stock comes
+to cover it where its smallest other level falls to its floor (crossed once, as the fills only
+fall). The chain bound 2 + 3 + 2K keeps K as it was, the floors inside (0, 1) in place of the
+thresholds. Of 1,000,000 random provinces (200,000 per family), 13 exceed 2 + 3 + 2K, each within
+it with the passes outside the accounting: 12 at the stall rule, 1 with a root rounded onto a kink.
+The 10 of the 22 before the floor that cut a good by rounding every other pass, at its limit with
+U = R where stocks covered needs at their thresholds, are gone: a user bound by a good draws
+(1 - s) F of its need, which no stock zeroes along the fall. On the cycle fixture the chain binds
+in 482 of 3,000 province ticks (483 before), the most 14 passes against a bound of at least 15
+(province 10, tick 76: utilities and construction collapse to 0 across the floors of residues of
+earlier collapses, 1e-52 to 1e-12 of their users' needs); 4 before.
+
+**Tests.** `local::tests::stock_is_a_floor_under_the_fill` (a user with two months of every local
+input runs at its cap when a local producer makes nothing; a half-stocked user at half; the
+unstocked user not at all; nobody draws the good from output) and
+`a_stocked_user_is_not_cut_by_the_fill` (the same in the fixture world, with services feeding every
+sector: the stocked user at its cap, the other users of services at 0, the Leontief and
+conservation invariants holding). The oracles of the fill tests (`outputs_at`, `uncovered_at`)
+follow the rule. Test families that rested on the old rule changed, each with its reason in the
+test's documentation:
+- the translated collapses: a partial stock is a floor that gives the fall a constant, and a
+  producer covered on its inputs is not cut, so the originals drop the producers' stocks and raise
+  every other stock to full cover (`translated_original`); a good without a producer has fill 0
+  whatever its stocks; and where a good's users need less than its producer supplies, balancing it
+  at t with an extra user leaves a direction of gain exactly 1, a line of fixed points along which
+  the stop may take any (seed 1997589725841679792 at 0.1 ended at [0.093, 0.013, 0.013], below t).
+  Such provinces are not translatable. `translate` now moves the constant into the producers: a
+  floor r / (1 + r), r = t (A - R) / R, under the local inputs it holds no stock of, and capacity
+  (1 + r) cap, which leaves its needs beyond its stocks at cap F and adds R r to its good's
+  supply. The family is smaller: about 0.4% of draws against 23%, so the sample takes 75,000 draws
+  (969 cases, 546 held to every heuristic limit, 393 mutants rejected) and the full run 3,000,000
+  (38,187 cases, 19,947 held, 14,277 mutants rejected, 553 accepted at goods whose own limit is
+  rounding; 0 failures). The fills land within 1.08e-13 of t on the goods the oracle holds;
+- the pinned seeds of `translated_collapses_stop_at_their_limit`,
+  `translated_oracle_rejects_a_good_lowered_from_one` and
+  `translated_collapse_stop_refuses_an_off_piece_fixed_point` are not translatable under the
+  floor but for one. The first two take new cases from the sample (the longest, the furthest from
+  t, the first with rejected mutants). The third is removed: no translated collapse of 3,000,000
+  draws and no random province of 1,000,000 has a last pass whose fixed point lies off its pieces,
+  so the rule stays without a regression case (`translated_family_leaves_out_a_neutral_good`
+  records the exclusion above instead);
+- the chain bound's pinned passes and exceedances are re-measured; the collapse and stall cases
+  that drew stocks and no longer collapse or stall are replaced by draws that do, with the old
+  ones named; the jump-ahead province (`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`)
+  takes its kink from a floor (5 passes, 4 before: the zero-supply good is cut in the first pass);
+  the captured flat-piece province no longer has a flat piece (the step's root is exact to a few
+  units), so its regression calls the descent from 1 directly.
+
+**Consequences.** Outputs and draws move wherever a stocked user of a short local good is cut
+below what its stock alone allows. On the fixture's golden runs the chain never binds, so no golden
+moves; the steady state never rations, so the calibration and the GE reference do not change. No
+parameter is changed.

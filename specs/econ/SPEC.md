@@ -232,14 +232,21 @@ per province:
 
 ```
 cap_e = min(VA / a_VA, min over traded k of M_k / coef_k)     every enterprise of the province
-one fill F_k in [0, 1] per local good k (ADR 0093, Amendment):
-    Y_e  = cap_e min over local k used by e (its own good left out) of F_k   (cap_e if none)
+one fill F_k in [0, 1] per local good k (ADR 0093, Amendment; stock floor, amendment of
+2026-10-30 (2)):
+    Y_e  = cap_e min over local k used by e (its own good left out) of G_ek(F_k)   (cap_e if none)
+    G_ek(F) = s_ek + (1 - s_ek) F, 1 at F = 1      s_ek = min(b_ek / (coef_ek cap_e), 1)
     R_k  = (1 - coef_kk) Y_p                                    p the producer of k: own use first
     U_k  = sum_e max(coef_ek Y_e - b_ek, 0)                     b_ek = e's stock of k
     k fits when U_k <= R_k
+F_k is the share of each user's uncovered need at capacity, (coef_ek cap_e - b_ek)^+, that k's
+output serves: where k binds a user, its draw from output is F_k times that need, and its stock
+covers the rest. A user whose stock covers its whole need at capacity is not cut by k (s_ek = 1),
+and with no output of k at all a user still runs on its stock (G_ek(0) = s_ek)
 F = the limit of the fill iteration: from F = 1, passes over k = 7, 8, 9, each setting
     F_k = largest x <= F_k at which k fits, the other fills as they stand
-solved exactly: each step is the root of a piecewise-linear U_k on its piece; a fill below the
+solved exactly: each step is the root of a piecewise-linear U_k on its piece (kinks where one of
+a user's levels G becomes its smallest; a user k binds adds (coef cap - b)^+ F_k); a fill below the
 smallest normal f64 is 0; on its pieces a pass, and a cycle of up to three passes, is an affine
 map of the fills, and the passes jump to its fixed point where repeating it stays on the pieces,
 or ahead to the end of the last whole cycle on them, so that the next pass crosses a kink;
@@ -268,14 +275,19 @@ pass cap: no call runs more than 1,024 passes, a jump's confirming passes includ
 (the cap less a jump's up to 3) the fills are kept where every good fits to 1e-12 of its flows,
 else the goods that do not are set to 0 one at a time in good order; the stall is reported
 degenerate limits (U = R at the limit): rounding of U - R decides the fit near the limit; the
-fills land within 1.81e-12 of it on the translated collapses (tests cap 1e-11; the per-case
-eps (U + R) / |slope| has no bound where a good's U - R is about 0 along the ray); a last pass
-that sits on pieces reaching only just below the limit has a fixed point far below it, off its
-pieces, which is not taken (seed 13067305529229119429 translated to 0.3 ended at
-[0.267, 0, 0] against t when it was;
-`translated_collapse_stop_refuses_an_off_piece_fixed_point`)
+fills land within 1.08e-13 of it on the translated collapses under the stock floor, 1.72e-12 on
+goods the tests loosen (1.81e-12 before it; tests cap 1e-11; the per-case eps (U + R) / |slope|
+has no bound where a good's U - R is about 0 along the ray); a last pass that sits on pieces
+reaching only just below the limit has a fixed point far below it, off its pieces, which is not
+taken (seed 13067305529229119429 translated to 0.3 ended at [0.267, 0, 0] against t when it was,
+before the stock floor; no translated collapse or random province under the floor reaches that
+case, 3,000,000 and 1,000,000 probed)
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
-max(n_ek - b_ek, 0) plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder
+its uncovered need u_ek = coef_ek cap_e max(min over its inputs k' of (G_ek' - s_ek), 0), at most
+n_ek (n_ek where b_ek = 0; G_ek' - s_ek written (1 - s_ek) F_k for k itself and
+(s_ek' - s_ek) + (1 - s_ek') F_k' otherwise, so that the stock's share does not cancel to the
+rounding of b_ek), plus the rest of R_k pro rata to min(b_ek, n_ek), its stock the remainder;
+U_k is the sum of the u_ek, and s_ek is rounded down until coef_ek (cap_e s_ek) <= b_ek
 ```
 
 Y never rises above cap. Every good fits at the fills as evaluated in floating point (each step
@@ -292,20 +304,26 @@ paid at the posted price at E2, count in the market's demand and sales, and come
 household demand under every S11 setting (the chain runs before E3); at T3 the rest of local output is shared between enterprise orders (stock refills) and households by
 S11, and what is left perishes. Use equals coef Y exactly. On the fixture, from the data state over
 1,200 ticks, the chain never binds in the default or the frictionless run; with services feeding
-services at 0.3 and construction and services each other at 0.2 it binds in 483 of 3,000 province
-ticks over 120 ticks (ADR 0266: 415 before labour was capped at what traded inputs allow, 547
-with the cap before the split order rule), each within the passes its kinks allow, without a stall
+services at 0.3 and construction and services each other at 0.2 it binds in 482 of 3,000 province
+ticks over 120 ticks (483 before the stock floor; ADR 0266: 415 before labour was capped at what
+traded inputs allow, 547 with the cap before the split order rule), each within the passes its
+kinks allow, without a stall
 (`local_chain_terminates_on_cycles`). Where every jump applies (a resolvable fall per cycle, on
 pieces that repeat within 3 passes) the passes are at most 2 + 3 + 2K: one from F = 1, which
 cuts only the goods short there; at most two per kink the fall crosses (the pass across it, and
 one more where that pass straddles it so that its map does not repeat), since each jump from a
 cycle on its pieces ends at the limit or after the last whole cycle before the pieces change;
 and at the limit up to 3 confirming passes and the pass that changes nothing. K counts the
-users' stock thresholds inside (0, 1) (b < coef cap; each crossed at most once, as needs only
-fall), each local good beyond the first that starts to fall, and each pair of local goods some
+users' floors inside (0, 1) (0 < b < coef cap; the user's stock comes to cover it where its
+smallest other level falls to its floor, once, as the fills only fall; before the stock floor,
+the threshold where its own fill fell to b / (coef cap)), each local good beyond the first that
+starts to fall, and each pair of local goods some
 user takes both of (a switch of the binding fill, taken once per pair: an assumption, not
 derived; a pair can switch more than once, and the allowance of two passes per kink has held
-those seen). The most is 4 passes. Before ADR 0266's split order rule the most was 6 passes, both
+those seen). The most is 14 passes, against a bound of at least 15: province 10 at tick 76, where
+utilities and construction collapse to 0 across the floors of users holding residues of earlier
+collapses (1e-52 to 1e-12 of their needs). Before the stock floor the most was 4 passes. Before
+ADR 0266's split order rule the most was 6 passes, both
 before the input cap and with it: province 5 at tick 79, against a bound of 21, where utilities
 and construction, inputs of each other with no stocks but residues from earlier collapses, fall
 at a loop gain of 0.7 to 0.9 per pass to 0 across the residue thresholds. Before a jump ahead found the last whole cycle (it ended at
@@ -319,15 +337,21 @@ cuts a good by rounding alone while another falls resolvably (it changes the pie
 kink lies, and ends the previous pass's jump); a pass a stop moves on from; at the stall rule
 every pass since the last move, and every pass after a stall. Passes <= 2 + 3 + 2K + uncovered
 on random small provinces of five families (the first below, higher coefficients, no stocks, up
-to 10 enterprises, scarce stocks; `chain_passes_within_their_kinks`), and on all of 3,000,000
-probed. Of 1,000,000 (200,000 per family), 22 exceed 2 + 3 + 2K
-(`chain_passes_beyond_their_kinks_are_uncovered`; the 21 of the jump fix plus one that stalls):
-10 cut a good by rounding every other pass (it sits at its limit with U = R along the rest of
-the fall: 88 passes against 25, with 39 such cuts), 11 end at the stall rule (pieces repeating
-over 4 or more passes, or binding fills switching every pass; one stalls and runs 792 passes),
-and 1 lands a step's root on a kink every other pass (map undefined: 14 against 11). None
-exceeds it where every jump applies. About 11% of the provinces have an uncovered pass; those
-without are at least 1 pass inside the bound. On 1,000,000 random small
+to 10 enterprises, scarce stocks; `chain_passes_within_their_kinks`), and on all of 1,000,000
+probed under the stock floor (3,000,000 before it). Of 1,000,000 (200,000 per family), 13 exceed
+2 + 3 + 2K (`chain_passes_beyond_their_kinks_are_uncovered`): 12 end at the stall rule (pieces
+repeating over 4 or more passes, or binding fills switching every pass; one stalls and runs 792
+passes), and 1 lands a step's root on a kink every other pass (map undefined: 14 against 11).
+Before the stock floor 22 did: the 10 more cut a good by rounding every other pass, sitting at its
+limit with U = R where users' stocks covered their needs at a threshold (88 passes against 25,
+with 39 such cuts); under the floor a user bound by a good draws (1 - s) F of its need, which no
+stock zeroes along the fall. None exceeds it where every jump applies. About 11% of the provinces
+have an uncovered pass. Under the stock floor the stall rule acts in 5 provinces of the stocked
+families (200,000 each: 1 with higher coefficients, 1 with up to 10 enterprises, 3 with scarce
+stocks, one of which stalls at 792 passes, as before the floor), and the first family takes at
+most 14 passes; computing a user's uncovered need as coef cap G - b instead cancels to the
+rounding of b where it runs mostly on its stock, and the jumps cannot follow such falls: 133 of
+100,000 stalled. On 1,000,000 random small
 provinces with coefficients up to 0.6, before that change, all but 129 settled within 12 passes,
 the most took 257 and none more than 0.3 ms (on 200,000 after it, all but 1, at 257); over five
 other families of 1,000,000 (higher coefficients, no stocks, up to 10 enterprises, scarce stocks,
@@ -1182,7 +1206,11 @@ texture fed from core columns.
   good before households, and Priority fills intermediate orders first at origins
   (`local_chain_respects_intermediate_priority`); cutting coal output leaves downstream output
   unchanged in that tick and lowers it once stocks run out (`traded_shortage_still_lags`); cycles
-  among local goods settle in at most 8 passes (`local_chain_terminates_on_cycles`); the exact fills equal
+  among local goods settle within the passes their kinks allow (at most 14, against bounds of 15
+  and up; `local_chain_terminates_on_cycles`); a user whose stock covers its local needs runs at
+  its cap when a local producer makes nothing, while the users without stock are cut to nothing
+  (`a_stocked_user_is_not_cut_by_the_fill`, `local::tests::stock_is_a_floor_under_the_fill`);
+  the exact fills equal
   the fill iteration run to convergence, with its steps found by bisection, on every province tick
   of the fixture runs and on random small provinces, at 1e-12, wherever it converges
   (`exact_fill_equals_converged_iteration`, `exact_fill_equals_converged_iteration_on_random_provinces`);
