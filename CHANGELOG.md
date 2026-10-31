@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed: V1 runs three perturbation seeds; B8 pack figures
+
+- `v1_full_pack_from_the_perturbed_steady_state` runs seeds 20, 21 and 22 and fails if any
+  misses (price 1.939e-4, 1.536e-4, 1.245e-4 on the B8 pack). Figures of the B8 pack (H2
+  -0.4539 reported, per-class H2 passing, 4,368 provinces with value added, Sudan at export
+  provinces 3281 to 3307, pack 3455 to 3481) are in the econ SPEC (P2 gate, Measured) and ADRs
+  0263, 0265 and 0267; they replace the stale split-pack figures listed under the main merge
+  below.
+- `steady_state.rs`'s Omega share check compares countries with pops only (ICIO territories
+  with no economy province have an Omega row and no spending).
+
 ### Fixed: the Sinkhorn level is pinned; the pack world calibrates at its fitted nu (B8c)
 
 - `steady::sinkhorn` takes the map at the shifted weights and returns each good's largest ln w
