@@ -74,7 +74,7 @@ nothing and a sea crossing at a lot, for reasons of gateway geometry.
 
 ## Options
 
-**Placement** (card 2).
+**Placement** (card 2; owner chose A, 2026-10-31).
 
 - **A. A country-pair factor on the crossing, beside nu** (recommended). ln D_AB,c =
   (epsilon / theta_c) (ln d_AB - ln d_0). Keeps the gateway factorization, Dijkstra, the
@@ -97,7 +97,7 @@ nothing and a sea crossing at a lot, for reasons of gateway geometry.
   the data do not show. Per-class epsilon_c fits four moments with four parameters and leaves
   nothing held out.
 
-**Phase** (card 1).
+**Phase** (card 1; owner chose P4, 2026-10-31).
 
 - **P4** (recommended): built, fitted and calibrated with P4's recalibration on the 50 ICIO
   goods (ADR 0271), which recalibrates nu and the steady state anyway; P5 to P8 counterfactuals
@@ -109,7 +109,8 @@ nothing and a sea crossing at a lot, for reasons of gateway geometry.
 
 ## Decision
 
-Proposed, with the recommended options pending the owner's picks on the two cards.
+Owner rulings (2026-10-31): phase P4 and placement A, the country-pair factor beside nu (both
+recommended options). Status stays proposed until the Limao and Venables figures are checked.
 
 1. **Form.** On every crossing a -> b between countries A and B, for good g of class c:
 
@@ -145,7 +146,7 @@ Proposed, with the recommended options pending the owner's picks on the two card
    span). The Eaton and Kortum distance-interval version (six intervals) is reported against the
    log form. The ablation test (DESIGN 15.7) compares epsilon 0 against the fit on these
    criteria; failing, epsilon stays 0 by default.
-5. **Phase.** Built and fitted in P4 with the 50-goods recalibration (card 1, recommended).
+5. **Phase.** Built and fitted in P4 with the 50-goods recalibration (owner ruling, 2026-10-31).
    P9's joint estimation (ADR 0022; ADR 0269's mode shares, the Allen and Arkolakis 2014
    strategy) includes epsilon; the mode ratios and epsilon are identified by separate moments
    (mode shares by value against the distance gradient), and D does not depend on paths, so
