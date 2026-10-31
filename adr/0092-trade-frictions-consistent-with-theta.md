@@ -4,6 +4,7 @@ Status: proposed (owner chose the options, 2026-10-25); partly built, see As bui
 Date: 2026-10-25
 Design sections: 5.4, 8.3, 15.2, 18 (H2), 17 (P01, P05); trade SPEC Two-level kernel, Parameters; econ SPEC Goods; ADRs 0018, 0022, 0023
 Amended by ADR 0264 (proposed, 2026-10-30): H2 distance is a reported diagnostic; H2 per class is gated with the model's country-pair kernel as the cost control.
+Amended by ADR 0276 (proposed, 2026-10-31): border friction per good in theta class 3, the clamp applied per good.
 
 ## Context
 

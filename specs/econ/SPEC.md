@@ -712,33 +712,40 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    u* and writes the calibration tables (Pack additions), which Rust reads as the initial state.
    Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"
    section.
-3. Before the stages, `ceteris calibrate --pack` fits the border friction nu_c of each theta class
-   (P05, ADR 0092; `ceteris_calibrate::border`) so that the cross-border share of the class in the
-   ICIO economies, sum of (1 - home share) absorption over sum of absorption from
+3. Before the stages, `ceteris calibrate --pack` fits the border friction nu of each friction
+   group (P05, ADRs 0092, 0276; `ceteris_calibrate::border`): a group is a theta class, except
+   class 3, each of whose goods (crude oil, gas and refined fuels; coal and other mining) is a
+   group of its own (ADR 0276, proposed: one class value set by crude oil took mining below its
+   own share and the calibration failed). It is fitted so that the cross-border share of the
+   group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
    from other countries over all they buy, at origin prices. Each evaluation is stage 2 at stage
    1's spending of the data state (r = 1, no rebates, the data state's buyer prices and PIGL
-   weights), held across trials, so each class's share depends on its own nu only and falls as it
-   rises; the four roots are found by Brent's method per class, its bracket narrowed to 1e-9 in
+   weights), held across trials, so each group's share depends on its own nu only and falls as it
+   rises; the roots (five on the 2000 pack) are found by Brent's method per group, its bracket narrowed to 1e-9 in
    nu over [0, 10] (the upper end halved where the scaling fails there, on a scaling failure
-   only), the classes sharing each evaluation and every scaling starting from the scaling at nu
-   0, so the result does not depend on the order of the evaluations (19 evaluations on the
-   fixture, `nu_fit_matches_cross_border_share`). The root itself is resolved only to the
+   only), the groups sharing each evaluation and every scaling starting from the scaling at nu
+   0, so the result does not depend on the order of the evaluations (22 evaluations on the
+   fixture, `nu_fit_matches_cross_border_share`; goods 1 and 2 at 1.2 and 0.5 come back within
+   2.4e-8 and 1.4e-11; where goods 1 and 2 share a nu, classes 0 to 2 and both goods come back at
+   the per-class fit's values, `per_good_fit_keeps_the_class_fit_where_goods_agree`). The root itself is resolved only to the
    scaling's noise in the share over the share's slope: on the fixture 6.8e-9 for class 3, whose
    share moves by 2.7e-7 per unit nu, and 2e-10 or better for the others. That test checks the
    shares relative to their target (1e-6), a deviation from the PLAN's absolute 1e-6, which class
    3's flat share passes for any nu from 0 to about 4. A target above the share at nu 0, the
-   largest the class reaches with nu >= 0, clamps the class at nu = 0, the corner of the
+   largest the group reaches with nu >= 0, clamps the group at nu = 0 (one good of class 3 alone,
+   `per_good_fit_clamps_one_good_of_class_3`), the corner of the
    constraint, and the fit reports it (`Fit::clamped`, the share at nu 0 against the target;
    ADR 0092, Amendment 2026-10-30); a target below the share at the bracket's upper end stops the
-   calibration, naming the class (`nu_fit_is_monotone_and_bracketed`, both ends). Interfaces as built: `border::fit_border_nu(inp, target, icio, limits, progress)
+   calibration, naming the group (`nu_fit_is_monotone_and_bracketed`). Interfaces as built: `border::fit_border_nu(inp, groups, target, icio, limits, progress)
    -> Result<Fit, CalibrationError>` (no `u_star`, which stage 1 at the data state does not use;
    the ICIO flags; the shares and the evaluation count with the nu) and
-   `border::target_shares(pack, theta_class) -> Result<([f64; 4], Vec<bool>), String>` (also the
-   ICIO flag of every pack country), in place of the PLAN's `fit_border_nu(inp, u_star, target,
+   `border::target_shares(pack, groups) -> Result<(Vec<f64>, Vec<bool>), String>` (also the
+   ICIO flag of every pack country; groups from `border::friction_groups`, or
+   `border::class_groups` for per-class openness), in place of the PLAN's `fit_border_nu(inp, u_star, target,
    limits) -> [f64; 4]` and `target_shares(pack) -> [f64; 4]`. The stages then run at the fitted nu (crossing factors and
    arrival shares rescaled, base buyer prices recomputed), the calibration tables record it
-   (`econ_calib.arrow` metadata `border_nu`, calibration format 4), and `EconInputs::calibrate`
+   (`econ_calib.arrow` metadata `border_nu`, one per good since calibration format 10), and `EconInputs::calibrate`
    reads it into `EconInputs::border_nu`, from which `EconInputs::trade_params` builds the trade
    parameters a calibrated world runs under; `EconWorld::new` refuses a calibrated start under
    other structural parameters, nu included. After the stages the command prints the shares at
