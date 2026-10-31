@@ -65,7 +65,7 @@ fn worlds() -> &'static [World] {
         match std::env::var_os("CETERIS_PACK_EXPORT") {
             Some(dir) => {
                 let dir = PathBuf::from(dir);
-                let inp = io::load(&dir).unwrap();
+                let inp = pack_inputs(&dir);
                 let u_star = write::read_u_star(&pack()).unwrap();
                 let s = steady::calibrate(&inp, &u_star, &mut quiet()).unwrap();
                 out.push(World {
@@ -81,6 +81,31 @@ fn worlds() -> &'static [World] {
         }
         out
     })
+}
+
+/// The export in `dir` at the border friction of the pack's installed calibration: the export
+/// holds the data state's (P05 defaults), the CLI fits its own before the steady state (ADR 0092),
+/// and the steady state the pack's tables hold is the one at the fitted values.
+fn pack_inputs(dir: &Path) -> Inputs {
+    io::load(dir).unwrap()
+}
+
+/// The pack world is calibrated at the border friction of the pack's calibration, so its steady
+/// state is the installed one, not the steady state at the export's P05 defaults.
+#[test]
+fn pack_world_is_at_the_calibrated_border_friction() {
+    let Some(dir) = std::env::var_os("CETERIS_PACK_EXPORT") else {
+        eprintln!("skipping: CETERIS_PACK_EXPORT unset (a full-pack export directory)");
+        return;
+    };
+    let inp = pack_inputs(Path::new(&dir));
+    let nu = write::read_border_nu(&pack(), inp.n_goods()).unwrap();
+    assert_eq!(inp.border_nu, nu);
+    assert_ne!(
+        io::load(&dir).unwrap().border_nu,
+        nu,
+        "the export carries the data state's border friction"
+    );
 }
 
 /// numpy's `assert_allclose`: |actual - desired| <= atol + rtol |desired|, NaN equal to NaN.
@@ -505,6 +530,47 @@ fn sinkhorn_is_unique_up_to_scale() {
     }
 }
 
+/// The scaling fixes ln w of each good only up to a common level, which a warm start or a
+/// mixed step can move: the sweep pins it, so the largest ln w of each good is 0 at the fixed
+/// point whatever the start, and a start at level 1,000 (where a unit in the last place of ln w
+/// is 1.1e-13, above SINKHORN_TOL) still converges.
+#[test]
+fn sinkhorn_pins_the_level_of_the_weights() {
+    let w = &worlds()[0];
+    let (inp, s) = (&w.inp, &w.s);
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    let m = Model::new(inp).unwrap();
+    let spend = Mat::from_fn(n_p, n_g, |p, g| s.spend_hh[(p, g)] + s.spend_int[(p, g)]);
+    let mut v = Mat::zeros(n_p, n_g);
+    for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
+        if inp.traded[g] {
+            v[(p, g)] += s.value[e] / s.r[g] / (1.0 + s.spoilage[g]);
+        }
+    }
+    let origin = |p: usize, g: usize| inp.active[p][g] && inp.traded[g];
+    let mut rng = Rng(11);
+    let mut start = Mat::zeros(n_p, n_g);
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| origin(p, g)) {
+            start[(p, g)] = 1000.0 + rng.normal(0.0, 3.0);
+        }
+    }
+    for start in [None, Some(&start)] {
+        let scaling = steady::sinkhorn(&m, &spend, &v, start).unwrap();
+        for g in (0..n_g).filter(|&g| inp.traded[g]) {
+            let top = (0..n_p)
+                .filter(|&p| origin(p, g))
+                .map(|p| scaling.log_weight[(p, g)])
+                .fold(f64::NEG_INFINITY, f64::max);
+            assert!(
+                top.abs() <= 1e-12,
+                "good {g}: largest ln w {top} from start {}",
+                if start.is_some() { "1,000" } else { "0" }
+            );
+        }
+    }
+}
+
 /// Stage 3: at the calibrated prices and base wages, with A = 1 / p_VA, coef = a_kg p_o / q_ik
 /// and L0 = s_L VA0 / w0, the reference model's residual vanishes (every market clears, labour
 /// at (1 - u*) L^s, the world price index 1), and VA, employment and output are the data's.
@@ -919,6 +985,10 @@ fn read_reference_round_trips_the_fixture_tables() {
     let provinces: Vec<usize> = (0..w.inp.n_provinces()).collect();
     write::write(tmp.path(), &w.inp, &w.s, &provinces).unwrap();
     let (got, x) = write::read_reference(tmp.path(), &w.inp, &provinces).unwrap();
+    assert_eq!(
+        write::read_border_nu(tmp.path(), w.inp.n_goods()).unwrap(),
+        w.inp.border_nu
+    );
     let want = steady::reference_inputs(&w.inp, &w.s);
     assert_eq!(x, steady::reference_point(&w.inp, &w.s));
     assert_eq!(got.ent_a, want.ent_a);

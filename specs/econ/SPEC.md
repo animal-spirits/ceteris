@@ -798,7 +798,14 @@ below); the cap stays. An extrapolated step that leaves f64 (a non-finite
 residual) restarts the mixing from the plain sweep it extrapolated, which a plain sweep's
 overflow does not (that is an error): the fixture's scaling at border frictions 0.15, 0.6, 0.35
 and 1.2 overflowed this way after 182 sweeps where plain sweeps converge. Scalings that converged
-before take the same path. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+before take the same path. The sweep is the map at the shifted weights, not shifted back, and a
+converged scaling is returned with each good's largest ln w at 0 (`sinkhorn_pins_the_level_of_the_weights`):
+the scaling fixes ln w only up to a level per good, which the mixing and the warm start of the
+next pass otherwise moved freely. On the B8 pack at the export's nu 0.3 coal and mining's level
+reached 532 by pass 3, where a unit in the last place of ln w is 1.1e-13, and pass 9's residual
+froze at 1.208e-13 (the same value from sweep 22,199 to the 100,000 cap, after falling from
+1.15e-12 at sweep 1,000 at about 0.9987 a sweep): a rounding floor of the unpinned level, not
+conditioning (pinned, pass 9 converges in 1,960 sweeps). The tolerance does not change. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
 the index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
 delivered unit price of the physical arrivals, at every pass (`Model::physical`), and the
@@ -835,7 +842,10 @@ later; merchant stocks coverage times output (S* = coverage D with D = Q); pops 
 of income less this tick's wages (dividends and rebates; wages come at E2); pi^e = 0; last D, Q
 and sales their steady-state values (D = Q = sales).
 
-**Checks** (`crates/ceteris-calibrate/tests/steady_state.rs`, fixture and full pack): two starts of stage 2 reach the
+**Checks** (`crates/ceteris-calibrate/tests/steady_state.rs`, fixture and full pack; the full
+pack is the export at the border friction of the installed calibration, `write::read_border_nu`
+and `pack_world_is_at_the_calibrated_border_friction`, since the export holds the data state's
+P05 defaults and the CLI fits its own before the steady state): two starts of stage 2 reach the
 same weights up to scale, to the bound the stop rule implies (`sinkhorn_is_unique_up_to_scale`).
 With g = ln received - ln target over a good's origins, each solve stops at max |g| <= tau
 (1e-13). Two solutions d apart in ln w have g_1 - g_2 = (I - M) d to first order (their r agree to
@@ -895,6 +905,9 @@ A good bought at home in one run only makes the country's ACR NaN in both forms.
 criterion grades `acr_io` (ADR 0265): under every crossing tau x 1.1, every ICIO country with
 |ACR| above 1e-4 has its sign, the median model / ACR ratio is in [0.8, 1.25] and the correlation
 across countries is at least 0.9; `acr` stays reported. C7 asserts it at B8 on the final pack.
+On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) `acr_io` has median 1.077
+(p10 0.931, p90 1.325), correlation 0.862 (misses 0.9: ADR 0265's tier 1 item, for C7) and 0
+wrong signs over 80; `acr` median 2.417 (p10 1.868, p90 3.016), correlation 0.855.
 
 ## GE reference model (`ceteris-reference`)
 
