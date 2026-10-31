@@ -260,7 +260,8 @@ dlnp = pi^e + clip( kappa1_cell (D - Q)/Q  -  kappa2 (S' - S*)/S*,  -c_max_g, c_
 ```
 
 kappa1_cell is kappa1 (P03a) capped per market at the share m (P03d) of its stability limit (ADR
-0263; Stability region, Per-market gain): kappa1 itself in every market of inputs without a
+0263; Stability region, Per-market gain) and scaled by the gain scale b of the market's coupled
+block (ADR 0267; Stability region, Block gain): kappa1 itself in every market of inputs without a
 calibration.
 
 The clip bounds the gap terms only (ADR 0106): expected inflation passes through unclipped, so a
@@ -426,7 +427,76 @@ traded cells there (J up to 32.4, Lesotho g1 on Senegal's donor good-1 column, a
 which 14 no-rent economies share and ADR 0256 does not replace), so the default-mode claim is
 pending B8 and an owner ruling (ADR 0263, As built). Frictionless it slows the traded cells
 above 20 (298 on the 0256 pack) and removes the São Tomé cycle below. J2 bounds one market only: coupled modes
-across goods (Albania g5 to g1 and g2) are not covered.
+across goods (Albania g5 to g1 and g2) are bounded by the block gain below (ADR 0267).
+
+Block gain (ADR 0267). A country's traded cells move together through the price step: buyers
+substitute between the country's origins of a good, its enterprises order inputs from its
+markets in proportion to their output, and their output answers their input costs. Linearize
+the step of the cells of one country around the calibrated steady state with pi^e = 0 and
+kappa2 = 0, as for J2: x_i is the log price deviation of traded cell i, q_k the output deviation
+of enterprise k of the country (any good: a local-good enterprise buys traded inputs too), and a
+slot s = (province d, traded good h) a place where the country's enterprises buy h. Following the
+order of a tick (E1 at this tick's own price and last tick's buyer prices, E2, E3, T3, T4):
+
+```
+y_s     = sum_(o -> s) a_os x_o,t-1                              buyer price of slot s, last E3
+q_k     = (1 - eta) q_k,t-1 + eta ( eps_k x_own(k),t - sum_(s of k) c_ks y_s )
+z_s     = sum_(k at s) v_ks ( q_k + H_s (q_k - q_k,t-1) )        input orders at s
+e_i     = (D_i - Q_i) / Q_i = - sum_j E_ij x_j,t + sum_(i -> s) u_is z_s - sum_(k own i) w_k q_k
+x_i,t+1 = x_i,t + kappa_i e_i
+```
+
+with, at the calibrated point (`ceteris_calibrate::block`; w_o the origin weight, Phi_d the
+destination's sum and t_i the destination sum of the Per-market gain, k_od the factor of the
+domestic leg o -> d, 1 at home):
+
+- E_ii = E_cell; for two origins i != j of one good g in the country E_ij = -(1 + theta_g) w_j
+  T2_ij / t_i, T2_ij the sum over shared last legs of the products of the two origins' factors
+  times spend_d / Phi_d^2: destinations both reach at home or over one domestic leg, and
+  gateways both access, weighted by the squared routes beyond (the Pi_cell convention: routes
+  that do not share their last leg leave out their cross terms). This is the elasticity of i's
+  orders to j's price from Leontief buyers at Gamma P_d, the off-diagonal of (1 + theta) (I - Pi).
+- Slots and routes: an origin o reaches slot s = (d, h) at home or over one domestic leg of the
+  country (routes through gateways join provinces of different countries and are left out);
+  a_os = w_o k_od / Phi_d, o's share of the slot's CES index (so of its buyer price, ADR 0200);
+  u_is = k_id / t_i.
+- Enterprise k at province d buying traded h: v_ks = spend_kh / Phi_d, so that sum_s u_is v_ks
+  is the share of i's orders that k places; c_ks = eps_k spend_kh / value_k, eps_k = s_L sigma_FL
+  / ((1 - s_L) a_VA) its own supply elasticity (the eps of the Per-market gain, per enterprise)
+  and spend_kh / value_k the input's cost share, since d ln Y = eps_k (x_own - sum_h s_kh y_h)
+  at given wage (the labour target, econ SPEC). w_k is k's share of its cell's output; an
+  enterprise of a local good has no own term (its province market is outside the block).
+- H_s = 1 + cover + L (econ SPEC, Production: the order-up-to position holds (1 + cover + L)
+  months of use, so a change in use moves the order by H times the change on top of the use).
+
+A block is a connected set of a country's cells under these terms (cells joined by E_ij, an
+enterprise joining its own cell and its slots, a slot joining the origins that reach it). One
+cell with one enterprise and no inputs is the single-market map above (kappa2 0), whose -1 root
+is J2. The block's gain scale b is the largest value on a grid of 2^-12 in (0, 1] at which the
+map with gains b kappa_cell / m (m = P03d) is stable, so that the block keeps the margin m of its
+stability limit that the Per-market gain gives each market, and 1 where it is already stable
+there: kappa1_cell = b kappa1 min(1, J_ref / J_cell), the per-market cap staying the bound of each
+cell. The map is stable when its spectral radius, measured as the growth rate of its iterates
+over the second half of 4,000 ticks from a fixed start vector, is at most 1 + 2e-3 (a market at
+its own cap has radius 1 there; 4,000 ticks read a radius to about 1e-3). These are numerical
+constants of the measurement (`block::ITERATIONS`, `TOLERANCE`, `BISECTIONS`), not parameters.
+A block unstable at every scale of the grid keeps the smallest, 2^-12.
+
+The calibration computes b at the default kappa1 (P03a) and m (P03d) for the default mode's eta
+(P41 0.3) and frictionless (eta 1) and writes them to `econ_calib_cells.arrow`
+(`block_scale_default`, `block_scale_frictionless`; calibration format 7), into
+`MarketElasticity::block` (inputs digest); `EconWorld::new` multiplies the per-market gain by
+the b of the run's mode (`MarketElasticity::block_scale`). A run at another eta, kappa1 or m keeps
+the per-market cap alone (b is a calibrated quantity at those settings; recalibrating with them is
+the way to get it elsewhere). The steady state does not depend on the gains, so b leaves it and
+the calibration unchanged. On the calibrated fixture no block is scaled (4 blocks; largest radius
+at gains / m 0.820 at eta 0.3, 0.942 at eta 1). On this branch's scratch pack (format 7, the k263
+pack recalibrated) 54 of 233 blocks are scaled frictionless (Lesotho 0.505, Sudan 0.530, Zambia
+0.567, Albania 0.636, radius 1.324 at gains / m; Armenia 0.949 and Bosnia 0.971, the coupled
+cases of ADR 0263's instability map) and 12 in the default mode (Sudan 0.324 and Lesotho 0.348,
+whose radius at the per-market gains themselves is 1.23 and 1.17: the default-mode Sudan
+oscillation the pre-P3 B pack shows; then Zimbabwe, Benin, Tanzania, Togo, Zambia, Switzerland,
+Madagascar, Singapore, Belgium, Guinea).
 
 In the default mode the default kappa1 0.05 is 0.18 to 0.42 of its limit. Frictionless it lies
 outside for light manufacturing: J2 fails for the two light-manufacturing enterprises of São Tomé
@@ -505,7 +575,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03a | kappa1 | 0.01 to 0.5 per month, start 0.05 (prior widened from 0.05 by owner decision, for stability; start 0.02, then 0.05 by owner decision 2026-10-24 so the expectation loop of ADR 0019 passes V1, MIGRATION Task 6) | Free |
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
 | P03c | Price and wage step clip c_max, on the gap terms only (pi^e passes through, ADR 0106) | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
-| P03d | Share m of each market's J2 limit that its gain may use (ADR 0263) | 0 to 1, start 0.5: kappa1_cell = kappa1 min(1, 2 m / (kappa1 J_cell)) | Free |
+| P03d | Share m of each market's J2 limit that its gain may use, and of each coupled block's stability limit (ADRs 0263, 0267) | 0 to 1, start 0.5: kappa1_cell = b kappa1 min(1, 2 m / (kappa1 J_cell)), b the block scale at m | Free |
 | P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P154 | Bulk freight rate: multiplier on the sea cost per tonne-km per theta class, `TradeParams::bulk_sea` (ADR 0247) | 1, 1, 1 and 0.026 (class 3), on by default (owner ruling 2026-10-30; ADR 0247, As built): the slope s = 2.05e-4 USD per tonne-km (s.e. 7.0e-5) of a least-squares line through the 2000 voyage rates per tonne of class-3 cargoes in UNCTAD's Review of Maritime Transport 2001 (ch. IV, paras. 82 and 96, pp. 51 and 54) and 2002 (ch. VII, pp. 107 to 108), eight routes (iron ore and coal in Capesize bulk carriers, crude and products in tankers) against their sea km on the pack graph (Port Hedland to Rotterdam round the Cape, 19,450 km: no loaded Capesize transited Suez in 2000; no route canal-routed, so no canal fee netted), over P04c's 0.008; dry-bulk routes alone 0.039. Not fitted to the cross-border share | Literature |
@@ -572,7 +642,16 @@ miss is for the owner (B8).
   (`reprice_uses_the_gain_of_each_cell`), E_cell against a finite difference of the orders on
   the calibrated fixture (`own_price_elasticity_matches_finite_difference`, calibrate crate),
   eps_cell (`supply_elasticity_is_the_enterprise_maximum`) and J at the run's eta
-  (`gain_per_cell_follows_eta`, econ crate).
+  (`gain_per_cell_follows_eta`, econ crate). Block gain (ADR 0267): the single-market block is
+  the J2 map (`single_market_is_the_j2_map`), a pair stable alone and unstable coupled is scaled
+  into its margin (`coupled_pair_is_scaled_into_its_margin`) and an uncoupled pair keeps its gains
+  (`uncoupled_pair_keeps_its_gains`, `ceteris_calibrate::block`); E_ij against a finite
+  difference of the orders (`cross_price_elasticity_matches_finite_difference`) and the input
+  order shares against the flows (`input_order_shares_match_the_flows`) on the calibrated
+  fixture, the written scales and no scaled block on the fixture
+  (`block_scales_of_the_calibration`), the range check on load
+  (`block_scales_must_be_in_the_unit_interval`) and the scale at its calibration settings only
+  (`block_scale_applies_at_its_calibration_settings`, econ crate).
 - Property: goods and money conservation through T1-T4 under random supply and demand;
   gateway accounts net to zero; prices stay finite.
 - Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at

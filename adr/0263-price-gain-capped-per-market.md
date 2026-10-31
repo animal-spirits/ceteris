@@ -4,6 +4,9 @@ Status: accepted
 Date: 2026-10-30
 Design sections: 8.2; amends the trade SPEC price rule (P03a)
 
+Amended by ADR 0267 (proposed, 2026-10-30): the gain of a coupled block of a country's commodity
+markets is scaled so that the block keeps the margin m of its own stability limit.
+
 ## Context
 
 The origin price rule moves each market by kappa1 (D - Q) / Q a tick (trade SPEC 8.2). One market
