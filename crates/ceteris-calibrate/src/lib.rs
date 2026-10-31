@@ -2,6 +2,7 @@
 //! `ceteris export` read by the reference model's reader, [`write`] writes the tables that
 //! `EconInputs::from_pack` loads.
 
+pub mod air_share;
 pub mod costs;
 pub mod dta;
 pub mod gravity;

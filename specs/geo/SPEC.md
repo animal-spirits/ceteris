@@ -103,6 +103,30 @@ is computed from logs, so it stays finite where z underflows. A warm start is a 
 Deterministic: each solve is sequential; solves and the radius's rows run in parallel into fixed
 slots.
 
+### Air rate from mode shares (ADR 0277; `ceteris_calibrate::air_share`)
+
+P04d is fitted to the air share of import value by importer D, origin country O and traded
+good g. The model's share is the part of the trade kernel's gateway-pair sum (trade SPEC,
+Two-level kernel) that crosses by air:
+
+```
+v_a = sum_{o in O} w_o K_oa,   u_b = sum_{d in D} w_d K_bd       (access legs; road, so no r)
+K_ab(r) = tau_ab(r) ^ -theta_g,   tau_ab(r) = beta_ab + w_g f_road r q_ab[air]
+S_ODg(r) = sum_{(a,b) air} v_a K_ab u_b  /  sum_{(a,b)} v_a K_ab u_b
+```
+
+r = P04d / P04a. beta_ab is the crossing's S05 factor without its air km. An air crossing has
+q_ab[air] > 0. The weights are province VA: of the good at the origin, of all goods at the
+destination, as in `country_costs`. nu_AB and the tariff multiply every K_ab of a country pair
+alike, so they cancel. Paths are fixed while r moves, and are solved again at the converged r
+until the set of air crossings repeats.
+
+Estimator: Bernoulli quasi-likelihood for fractional data (Papke and Wooldridge 1996), with
+weights equal to the cell's import value. Fisher scoring in x = ln r, to 1e-12 in x. Standard
+errors are sandwich, clustered by (importer, origin). Cells with S equal to 0 or 1 at every r
+carry no information and are counted, not fitted. The fit stops, without clamping, if r does
+not exceed 1 (Mode ordering).
+
 ## System order
 
 No tick systems in P1: the graph is static except for shocks. `PathCache` compares the graph
@@ -157,6 +181,10 @@ reference model's iceberg factors.
   two disjoint routes against the closed form z = q / (1 - 2q); expected hours against the walk
   sum on a path; far entries below the f64 range keep tau exact; subgraph and warm-started solves;
   a radius above 1 panics.
+- Air share (unit): on synthetic cells built at a known r the fit recovers r to 1e-9; S equals a
+  brute-force sum over gateway pairs to 1e-12; dS/dr against a central difference (1e-6); S
+  falls as r rises; S is unchanged when every K_ab of a pair is scaled alike (nu and tariff
+  cancel); a cell with no air crossing is dropped.
 - Pack properties: the invariants table above, on the built pack; skipped without one.
 - Measurement: `cargo run -p ceteris-geo --release --example route_choice_radius` prints, per
   traded good, the smallest theta_r with radius below 0.99, the radius at the ends of the P44
