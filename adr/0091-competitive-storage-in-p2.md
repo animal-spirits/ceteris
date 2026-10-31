@@ -170,8 +170,16 @@ the relative and aggregate terms apply unchanged.
   psi of goods 0, 1, 2, 5 sit at 46%, 48%, 16% and 22% of theirs. The fixture's perturbed run
   decays (0.991 frictionless, 0.992 default). Storage stays off by default: V1 from the data state
   fails at 1,200 ticks at every value set tried (slow convergence, about 0.9986 a tick; prices
-  within 0.06% at 3,600). The stockout claim is restated in Tests (the stock stops at 0.23 of
+  within 0.06% at 3,600; superseded by the V1 horizon bullet below). The stockout claim is restated in Tests (the stock stops at 0.23 of
   target at the 12-month cut; a 3-month cut moves the price by 0.10 against 0.59 without stock).
+- **V1 horizon** (owner, 2026-10-31): from the data state the fixture with storage on converges
+  slowly and not monotonically (flows 1.5% off at 3,600 ticks, 2.1% at 4,800, 1.4e-4 at 6,000),
+  so V1 runs 6,000 ticks where storage is on (econ SPEC, P2 gate) instead of raising psi for
+  goods 1, 2 and 5 to pass at 1,200. With g_s 0.006 the approved values pass the stability checks
+  and V1; turning storage on by default is the owner's call.
+- **psi limit** (`stability::psi_limit`): reproduces agriculture's 43.5 at g_s 0.006. It binds at
+  a corner no single fixture market has (E 0.3 with eps 30.4); at E 0.2 it is 42.5, and without
+  the per-market gain cap (ADR 0263) it is 23.9, so the cap is what makes psi 20 safe.
 - **Storage parameters are structural** (B7 review round, I2; ADR 0267): the calibration builds
   the block map at the export's storage parameters (`goods.storage_loss`, and the P56 money
   cost, P144, P145 and P146 of `params.json`), and `structural_digest` carries all five, so a
@@ -184,7 +192,7 @@ the relative and aggregate terms apply unchanged.
 - **Gate for switching storage on** (B7 review I5; none of these is met yet): an ablation test
   (DESIGN 15.7) with a falsification target (price skew, stockout spikes, stock persistence);
   the P9 fit against the 2011 to 2018 holdout (ADR 0107); 100-year invariants with storage on;
-  V1 from the data state at 1,200 ticks; 1 against 8 threads with storage on; the psi limit per
-  good derived and tested (its own thread); a storage-on calibration that loads
+  V1 from the data state at 6,000 ticks (V1 horizon above); 1 against 8 threads with storage on;
+  a storage-on calibration that loads
   (`EconInputs::trade_params` carrying the calibration's storage parameters) and a
   calibrated-state test from it; and the review's I1 and I2, fixed above.
