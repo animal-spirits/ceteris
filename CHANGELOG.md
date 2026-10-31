@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed: the write-off's country total is i128 (ADR 0106)
+
+- `systems::write_off` narrowed the country total to i64 and panicked where the pops' money and
+  the excesses passed it (the scratch pack's x10 border run, Taiwan, tick 49). The total moves
+  through the wide pool account and stays i128, as does the largest-remainder total (exact long
+  division, `mul_div`); each part stays within its weight. No hash moves.
+
 ### BEHAVIOUR: inputs ordered by effective demand; the own good caps labour too (ADR 0266)
 
 - E3 orders a traded input whose cap cut the enterprise's labour at E1 on notional output,
