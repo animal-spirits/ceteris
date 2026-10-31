@@ -486,15 +486,18 @@ rho E (1 + psi c): the storage order raises the static elasticity of the orders 
 divides it by the spoilage share, so the Per-market gain below uses that J for these goods.
 
 kappa1 limit of the storage loop at the approved values, g_s 0.006 (first failing value on the
-0.0005 grid, over E in [0.6, theta_g + 1] and the fixture's eps; default mode / frictionless;
-`ceteris calibrate stability --storage`):
+0.0005 grid, over E in [0.6, theta_g + 1] and the fixture's eps; default mode / frictionless),
+and psi limit (first failing psi on the 0.05 grid, both modes, over E in [0.3, theta_g + 1] and
+the fixture's eps, each market at its Per-market gain with J carrying the storage response at
+that psi; `ceteris_calibrate::stability::psi_limit`); `ceteris calibrate stability --storage`,
+kept by `storage_table_of_the_fixture`:
 
-| Good | theta_g | s_g | kappa1 limit with storage |
-|---|---|---|---|
-| 0 Agriculture | 7.68 | 3 | 0.168 / 0.151 |
-| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.103 / 0.096 |
-| 2 Coal and other mining | 16.91 | 2 | 0.102 / 0.095 |
-| 5 Chemicals and metals | 2.91 | 2 | 0.424 / 0.295 |
+| Good | theta_g | s_g | kappa1 limit with storage | psi limit, fixture eps |
+|---|---|---|---|---|
+| 0 Agriculture | 7.68 | 3 | 0.168 / 0.151 | 49.75 |
+| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.103 / 0.096 | 2.50 |
+| 2 Coal and other mining | 16.91 | 2 | 0.102 / 0.095 | 25.60 |
+| 5 Chemicals and metals | 2.91 | 2 | 0.424 / 0.295 | 28.70 |
 
 The default kappa1 0.05 is at most 0.52 of every limit. det(I - M) = c eta g_s kappa psi (E + eps)
 / s is positive for positive parameters, so no real root crosses +1: the storage loop leaves the
@@ -506,8 +509,14 @@ At g_s 0.006, over the pack's eps range, the limits are 0.121 / 0.0505 for agric
 0.0425 and 0.082 / 0.041 for goods 1 and 2 and 0.212 / 0.0595 for good 5; every frictionless
 limit there comes from eps 30.4 at J above 36, the -1 side that the Per-market gain caps. With the
 cap applied, over E down to 0.3 (the island's effective E, below) and the pack's eps, psi's limit
-is 43.5, 2.1, 22.3 and 26.5 for goods 0, 1, 2, 5 (14.7 for agriculture at g_s 0.08), so the
-approved psi sit at 46%, 48%, 16% and 22% of it (B7 follow-up).
+is 43.5, 2.1, 22.35 and 26.5 for goods 0, 1, 2, 5 (14.75 for agriculture at g_s 0.08), so the
+approved psi sit at 46%, 48%, 16% and 22% of it, each within the share m = P03d
+(`psi_limits_of_the_approved_storage_values`). Agriculture's limit binds in the default mode at
+E 0.3 and eps 30.4, where J is 5.9 and the market runs at kappa1 0.05 uncapped: a complex pair
+at about 40 degrees crosses the unit circle (`psi_limit_is_the_first_failing_grid_value`).
+That corner pairs the island's E with the pack's largest eps, which no single market of the
+fixture has; at E 0.2 the limit is 42.5. Without the cap it is 23.9, from the frictionless -1
+side at large J.
 
 In the fixture world, from the GE reference perturbed by 1% (`small_perturbation_decays`), the
 approved values with g_s 0.006 decay by 0.991 a tick frictionless and 0.992 in the default mode.

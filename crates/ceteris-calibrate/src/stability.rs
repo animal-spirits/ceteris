@@ -156,6 +156,47 @@ pub fn first_failing_storage(
     Err("no limit below 2".into())
 }
 
+/// Lower end of E for the psi limit: the effective E of the fixture island's agriculture, whose
+/// own income feeds back on its demand (trade SPEC, Storage loop).
+pub const ISLAND_E: f64 = 0.3;
+/// The supply elasticities eps over the enterprises of the 0256 pack (B7 follow-up).
+pub const PACK_EPS: (f64, f64) = (0.09, 30.4);
+pub const PSI_STEP: f64 = 0.05;
+
+/// First psi on the [`PSI_STEP`] grid at which the storage loop leaves the region for some E in
+/// [`e_low`, theta + 1], eps in `eps` and either mode, each market at its per-market gain
+/// (ADR 0263) with J carrying the storage response at that psi. `st.psi` is not read.
+pub fn psi_limit(
+    theta: f64,
+    cover: f64,
+    e_low: f64,
+    eps: (f64, f64),
+    st: Storage,
+    trade: &ceteris_trade::TradeParams,
+) -> Result<f64, String> {
+    let mut es = linspace(e_low, theta + 1.0, 80);
+    es.extend([e_low, theta + 1.0]);
+    let epss = linspace(eps.0, eps.1, 6);
+    let c = st.zeta * (st.cost + st.delta);
+    for i in 1..4000 {
+        let psi = f64::from(i) * PSI_STEP;
+        let st = Storage { psi, ..st };
+        let response = (1.0 + psi * c) / (1.0 + st.delta * cover);
+        let stable = ETAS.iter().all(|&eta| {
+            es.iter().all(|&e| {
+                epss.iter().all(|&s| {
+                    let kappa = trade.price_gain(e * response + eta * s / (2.0 - eta));
+                    storage_stable(e, eta, s, cover, kappa, st)
+                })
+            })
+        });
+        if !stable {
+            return Ok(psi);
+        }
+    }
+    Err("no psi limit below 200".into())
+}
+
 /// `num` evenly spaced values from `start` to `stop`, both included, as numpy's `linspace`.
 fn linspace(start: f64, stop: f64, num: usize) -> Vec<f64> {
     let div = (num - 1) as f64;
@@ -300,10 +341,16 @@ fn storage_of(trade: &serde_json::Value, g: usize) -> Result<Storage, String> {
 /// The storage table's rows for the fixture in `fixture` (trade SPEC, Storage loop): per
 /// storable good the kappa1 limit of the storage loop, default mode / frictionless, over E in
 /// [sigma, theta + 1] and the fixture's eps, at the fixture's storage values or, where storage
-/// is off, the approved ones.
+/// is off, the approved ones; and the psi limit over E in [`ISLAND_E`, theta + 1] and the
+/// fixture's eps at the fixture's per-market gain.
 pub fn storage_table(fixture: &Path) -> Result<Vec<String>, String> {
     let trade = &params(fixture)?["trade"];
     let eps = eps_by_good(fixture)?;
+    let gains = ceteris_trade::TradeParams {
+        kappa1: number(&trade["kappa1"], "trade.kappa1")?,
+        gain_share: number(&trade["gain_share"], "trade.gain_share")?,
+        ..ceteris_trade::TradeParams::default()
+    };
     [0usize, 1, 2, 5]
         .iter()
         .map(|&g| {
@@ -316,8 +363,9 @@ pub fn storage_table(fixture: &Path) -> Result<Vec<String>, String> {
                 .ok_or_else(|| format!("no enterprise of good {g}"))?;
             let [a, b] =
                 [ETAS[0], ETAS[1]].map(|eta| first_failing_storage(theta, cover, eta, range, st));
+            let psi = psi_limit(theta, cover, ISLAND_E, range, st, &gains)?;
             Ok(format!(
-                "| {g} {} | {theta:.2} | {} | {} / {} |",
+                "| {g} {} | {theta:.2} | {} | {} / {} | {psi:.2} |",
                 NAMES[g],
                 crate::pyfmt::py_g(cover, 6),
                 fmt(a?),
@@ -407,6 +455,89 @@ mod tests {
         }
         // the stock's unit root of the kappa2 = 0 edge is not strictly inside
         assert!(!storage_stable(e, eta, eps, 2.0, k1, off));
+    }
+
+    /// Good `g`'s storage values at the defaults, storage on (`TradeParams::with_storage`).
+    fn approved(g: usize, gain: f64) -> (f64, f64, Storage) {
+        let p = ceteris_trade::TradeParams::default().with_storage();
+        let st = Storage {
+            delta: p.storage_loss[g],
+            cost: p.storage_cost[g],
+            zeta: p.convenience[g],
+            psi: p.speculation[g],
+            gain,
+        };
+        (p.theta[g], p.coverage[g], st)
+    }
+
+    /// The psi limits behind P146 g_s 0.006 (B7 follow-up; trade SPEC, Storage loop): over E
+    /// down to the island's 0.3 and the pack's eps, at the per-market gain, 43.5 for
+    /// agriculture (14.7 at the earlier g_s 0.08) and 2.1, 22.3 and 26.5 for goods 1, 2 and 5;
+    /// each approved psi within the share P03d of its limit.
+    #[test]
+    fn psi_limits_of_the_approved_storage_values() {
+        let trade = ceteris_trade::TradeParams::default();
+        for (g, gain, want) in [
+            (0, 0.006, 43.5),
+            (0, 0.08, 14.75),
+            (1, 0.006, 2.1),
+            (2, 0.006, 22.35),
+            (5, 0.006, 26.5),
+        ] {
+            let (theta, cover, st) = approved(g, gain);
+            let limit = psi_limit(theta, cover, ISLAND_E, PACK_EPS, st, &trade).unwrap();
+            assert!((limit - want).abs() < 1e-9, "good {g} g_s {gain}: {limit}");
+            if gain == trade.storage_gain {
+                assert!(st.psi <= trade.gain_share * limit, "good {g}: {}", st.psi);
+            }
+        }
+    }
+
+    /// Below the psi limit the loop is inside at every grid point; at it, some point is outside.
+    #[test]
+    fn psi_limit_is_the_first_failing_grid_value() {
+        let trade = ceteris_trade::TradeParams::default();
+        let (theta, cover, st) = approved(0, 0.006);
+        let limit = psi_limit(theta, cover, ISLAND_E, PACK_EPS, st, &trade).unwrap();
+        let c = st.zeta * (st.cost + st.delta);
+        let worst = |psi: f64| {
+            let st = Storage { psi, ..st };
+            let response = (1.0 + psi * c) / (1.0 + st.delta * cover);
+            !ETAS.iter().all(|&eta| {
+                [ISLAND_E, theta + 1.0]
+                    .iter()
+                    .chain(&linspace(ISLAND_E, theta + 1.0, 80))
+                    .all(|&e| {
+                        linspace(PACK_EPS.0, PACK_EPS.1, 6).iter().all(|&s| {
+                            let kappa = trade.price_gain(e * response + eta * s / (2.0 - eta));
+                            storage_stable(e, eta, s, cover, kappa, st)
+                        })
+                    })
+            })
+        };
+        assert!(!worst(limit - PSI_STEP));
+        assert!(worst(limit));
+        // the binding point: default mode, E 0.3, eps 30.4, uncapped kappa1 0.05
+        let st = Storage { psi: limit, ..st };
+        assert!(!storage_stable(
+            ISLAND_E, ETAS[0], PACK_EPS.1, cover, 0.05, st
+        ));
+    }
+
+    /// `ceteris calibrate stability --storage` on the fixture: its eps range is inside the pack's,
+    /// so every psi limit is above the pack's.
+    #[test]
+    fn storage_table_of_the_fixture() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture");
+        assert_eq!(
+            storage_table(&fixture).unwrap(),
+            [
+                "| 0 Agriculture | 7.68 | 3 | 0.168 / 0.151 | 49.75 |",
+                "| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.103 / 0.096 | 2.50 |",
+                "| 2 Coal and other mining | 16.91 | 2 | 0.102 / 0.095 | 25.60 |",
+                "| 5 Chemicals and metals | 2.91 | 2 | 0.424 / 0.295 | 28.70 |",
+            ]
+        );
     }
 
     /// Schur-Cohn against known roots.
