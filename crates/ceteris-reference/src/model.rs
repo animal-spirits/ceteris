@@ -1,7 +1,9 @@
 //! Steady state of the P2 tick pipeline with frictions off (`specs/econ/SPEC.md`, GE reference
 //! model). Mirrors `ceteris-trade` `source` and `dispatch` (ADRs 0015 and 0016) and `ceteris-econ`
 //! E1 to E4 at a fixed point: frictionless wage (employment at the natural rate, (1 - u*) L^s,
-//! ADR 0089), every origin market selling its output (orders = Q), every local market clearing,
+//! ADR 0089), every origin market selling its output (orders = Q; at the origins of the
+//! competitively stored goods, orders (1 + delta s) = Q, the rest of output replacing the stock's
+//! spoilage, ADR 0091), every local market clearing,
 //! input stocks never binding (orders replace use), pops spending their whole income. Expected
 //! inflation (ADR 0019) is zero at a steady state, since the world price index is constant there,
 //! so the price and wage rules' pi^e term leaves this solution unchanged.
@@ -23,7 +25,9 @@
 //! demand of every active market, ln(D / Q) (with a floor far below market size), D the orders
 //! placed at an origin or the demand at a local market, and of every labour market,
 //! (sum L* - N) / N with N = (1 - u*) L^s employed at the natural rate. Market cash flow is zero at
-//! a fixed point and left out, and households are paid w N, so Walras' law reads
+//! a fixed point and left out, except the spoilage of stored goods, p Q delta s / (1 + delta s),
+//! which its country's profits carry (at a solution it is the market's cash flow -p delta S),
+//! and households are paid w N, so at a solution Walras' law reads
 //! sum p (D - Q) + sum w (L* - N) = 0 identically; the labour equation of the province with the
 //! largest base wage bill is replaced by ln(world price index) = 0, the index weighting consumer
 //! prices (q_d for traded goods, the local price for local goods) and leaving out cells with no
@@ -83,6 +87,10 @@ pub struct Model<'a> {
     pub rho: f64,
     /// MARKET_FLOOR (base demand + base output) of every active cell.
     market_floor: Vec<f64>,
+    /// (G,) delta_g s_g: spoilage of the stock per unit of orders at a steady state, which
+    /// origins of competitively stored goods produce on top of their orders (ADR 0091); 0
+    /// elsewhere and for inputs without coverage.
+    pub spoilage: Vec<f64>,
     legs: LegIndex,
     ent_country: Vec<usize>,
     pop_country: Vec<usize>,
@@ -299,7 +307,14 @@ impl<'a> Model<'a> {
             .iter()
             .map(|&i| MARKET_FLOOR * (base_demand.data[i] + base_output.data[i]))
             .collect();
+        let spoilage = (0..inp.n_goods())
+            .map(|g| match &inp.coverage {
+                Some(cover) if inp.traded[g] => inp.storage_loss[g] * cover[g],
+                _ => 0.0,
+            })
+            .collect();
         Ok(Model {
+            spoilage,
             ent_inputs: inp.ent_inputs(),
             ent_a_va: inp.ent_a_va(),
             ent_s_l: inp.ent_s_l(),
@@ -789,7 +804,15 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let kc = &m.pop_country;
     let people = &inp.pop_population;
     let n_k = kp.len();
-    let country_profit = bincount(&m.ent_country, profit.iter().copied(), n_c);
+    // ADR 0091: each origin of a stored good buys its output and sells Q / (1 + delta s), the
+    // rest replacing spoilage, a cash loss its country's profit pool carries (merchant rule)
+    let mut country_profit = bincount(&m.ent_country, profit.iter().copied(), n_c);
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| m.spoilage[g] > 0.0) {
+            let share = m.spoilage[g] / (1.0 + m.spoilage[g]);
+            country_profit[c[p]] -= price[(p, g)] * out[(p, g)] * share;
+        }
+    }
     let earned: Vec<f64> = (0..n_k)
         .map(|k| {
             m.pop_labour_share[k] * (wage[kp[k]] * m.employed_supply[kp[k]])
@@ -866,7 +889,7 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let flows = m.flows(&price, &spend, &src);
     let demand = Mat::from_fn(n_p, n_g, |p, g| {
         if traded[g] {
-            flows.orders[(p, g)]
+            flows.orders[(p, g)] * (1.0 + m.spoilage[g])
         } else {
             let pr = price[(p, g)];
             let hh = if pr > 0.0 { spend_hh[(p, g)] / pr } else { 0.0 };

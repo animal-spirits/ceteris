@@ -26,7 +26,10 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "8";
+/// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
+/// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
+/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge.
+pub const FORMAT: &str = "9";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.

@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+### Changed: B7 competitive storage (ADR 0091) merged into pre-P3 B, calibration format 9
+
+- Merges claude/storage-bounds (edc2e8d, ee79611, ae1473d: B7 with g_s 0.006). Both sides had bumped the calibration
+  format to 8 (ADR 0267's limit gains here, competitive storage there); the merged tables are
+  format 9 (`ceteris_calibrate::steady::FORMAT`, `ceteris_econ::calibration::FORMAT`): format-8
+  tables of either branch must be recalibrated.
+- ADR 0267's country map (wage, local cells, households, pool) carries ADR 0091's storage
+  response r_g on a stored good's own demand term, its cross terms and its routes' order shares,
+  and on the per-market J (`MarketElasticity::j`); the pool's revenue is sales value, p Q / (1 +
+  delta s) at a stored origin; the limit gains are computed at the inputs'
+  P56 loss with P144 and P145 at their defaults. B7's guard that dropped the block scale at
+  storage parameters off the defaults is gone with the scale: a run with storage on keeps the
+  calibration's limit, as at other settings off the defaults (trade SPEC, Block gain).
+- Storage stays off by default (`TradeParams::default`: psi and delta 0).
+
+Goldens regenerated (`ceteris calibrate --inputs tests/golden/p2-fixture`):
+
+- `tests/golden/p2-fixture/calibration/`: format 9 in every table's metadata, B7's static digest
+  in `econ_calib` (with g_s 0.006), the block limit columns of ADR 0267; every column is bit for bit the
+  pre-merge `pre-p3/econ-review` tables (`ceteris pack compare`), and against B7's (ae1473d) only the
+  block columns differ (scales there, limits here). p2-econ.txt is B7's (ae1473d); p0-toy.txt and the core
+  goldens do not move.
+
+### BEHAVIOUR: storage expectation gain g_s 0.006 (P146, ADR 0091)
+
+- `TradeParams::storage_gain` 0.08 to 0.006, P45's start (Milani 2007; owner approval
+  2026-10-31): at 0.08 agriculture's storage loop leaves the stability region, at 0.006 the
+  approved values pass the fixture's perturbation test. Storage stays off by default, so no
+  price, quantity or money moves.
+- ADR 0091's Tests amended (owner, 2026-10-31): `storage_smooths_a_short_cut_below_flow_clearing`
+  and `cut_draws_the_stock_to_a_pipeline_floor` replace the ignored
+  `stock_hits_zero_only_on_the_cut_side`; the storage loop's toy-market points are re-chosen for
+  g_s 0.006.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/params.json`, `calibration/econ_calib.arrow`,
+  `reference/solution.json`: the static digest and `storage_gain` only; every column is bit for
+  bit the same (`ceteris pack compare`).
+- `tests/golden/p2-econ.txt`: every hash (static digest).
+
+### Added: competitive storage for storable goods, off by default (ADR 0091)
+
+- `Markets::store` at T3: the origins of goods 0, 1, 2, 5 lose delta S of their stock (destroyed,
+  tallied) and the merchants order b = max(delta S + psi D x, -(1 - delta) S), x the expected
+  return of holding with a convenience yield in cover; the price step reads D + b with kappa2 off
+  there, and each such market keeps an expectation pi^e_og (gain g_s). Spoilage replacement in
+  the calibration (stage 1 profits, stage 2 sales targets, stage 5 stocks at s D) and the GE
+  reference; J and the block map carry the storage order's response. Parameters P56 (delta, k),
+  P144 (psi), P145 (zeta), P146 (g_s) in DESIGN 17.
+- Off by default (owner ruling 2026-10-31): psi and delta default to 0, since at the approved
+  values (`TradeParams::with_storage`) the fixture's default mode grows by 1.0069 a tick from a
+  perturbed steady state and frictionless V1 fails. With storage off every price and quantity is
+  as before; the storage tests run with it on.
+- `Markets` carries `expectation` and `storage` in the snapshot; export format 14
+  (`goods.storage_loss`, the storage parameters in `params.json`); calibration format 8 (every
+  calibrated pack is recalibrated). `ceteris calibrate stability --storage` prints the storage
+  loop's kappa1 limits at the approved values.
+
+### BEHAVIOUR: golden hashes move with the snapshot layout and the static digest (ADR 0091)
+
+- No price, quantity or money moves (storage is off by default); the state hash covers the two
+  new market vectors and the static digest the five storage parameters.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: export format 14, `goods.storage_loss` (0), the storage parameters
+  in `params.json`, a new static digest; every other value is bit for bit the same.
+- `tests/golden/p2-fixture/calibration/` and `reference/`: calibration format 8 and the new
+  static digest; every column is bit for bit the same (`ceteris pack compare` against 7ca3a2b).
+- `tests/golden/p2-econ.txt`: every hash (snapshot layout and static digest).
+
 ### BEHAVIOUR: the block cap linearizes each country's tick and caps at its limit gain (ADR 0267, block review)
 
 - The block map now carries the wage (frictionless clearing, the wage rule at the gains of a

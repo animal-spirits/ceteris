@@ -5,15 +5,17 @@
 //! Destinations spend on traded goods E_dg = households' PIGL spending at q_d of their income
 //! (their province's wages s_L VA by effective labour share; their country's profits (1 - s_L) VA
 //! and tariff rebate by population, national ownership) plus sum a_kg V of the province's
-//! enterprises. One scalar r_g per traded good rescales its V (and VA) so that world spending net
-//! of tariffs equals world output value. Spending scales with the r, so that fixes them only up to
+//! enterprises; country profits carry the spoilage of competitively stored goods, V delta s / (1 +
+//! delta s) at their origins (ADR 0091). One scalar r_g per traded good rescales its V (and VA)
+//! so that world spending net of tariffs equals world sales value, V / (1 + delta s). Spending scales with the r, so that fixes them only up to
 //! one common factor; each pass rescales them so that world traded value added, sum_e r_g VA_e, is
 //! the data's (ADR 0106: the fixed point is then unique, not one of a ray). Rebates depend on
 //! sourcing, local output on income and income on local output, so passes of stages 1, 2 and 4
 //! repeat until rebates, r, buyer prices and the PIGL weights settle ([`PASS_TOL`]).
 //!
 //! Stage 2, origin prices. Per traded good, the balanced scaling
-//! w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o, Phi_d = sum_o K_od w_o, on the two-level
+//! w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o / (1 + delta_g s_g), Phi_d = sum_o K_od w_o,
+//! on the two-level
 //! kernel ([`sinkhorn`]), unique up to scale (Sinkhorn 1967). Then p_o = w_o^(-1/theta), one
 //! scale per good, set so that the good's part of the world price index (base consumption
 //! weights at the calibrated incomes) is 1; local goods take p = 1, so the index is 1. q_d, the
@@ -33,7 +35,8 @@
 //!
 //! Stage 5, the state at the start of a tick (Rust `systems`): input stocks (1 + COVER) months
 //! of use; the pipeline holds, j ticks ahead, one month of shipments of every arrival slot j or
-//! later; merchant stocks coverage times output (S* = coverage D at D = Q); pops hold one month
+//! later; merchant stocks coverage times sales (S* = coverage D; D = Q, or Q / (1 + delta s) for
+//! the competitively stored goods, ADR 0091); pops hold one month
 //! of income less the wages of the tick (dividends and rebates); pi^e = 0.
 //!
 //! Sums run in a fixed order (sequential per index, pairwise row sums), so the steady state is
@@ -79,7 +82,10 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "8";
+/// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
+/// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
+/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge.
+pub const FORMAT: &str = "9";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -242,12 +248,15 @@ pub struct Steady {
     pub spend_hh: Mat,
     /// (P, G) traded input spending.
     pub spend_int: Mat,
-    /// (P, G) Q = D = sales of every active cell.
+    /// (P, G) Q of every active cell: D = sales, but (1 + delta s) D at the origins of the
+    /// competitively stored goods (ADR 0091).
     pub supply: Mat,
     /// Traded orders at the origin in units (P, G): intermediate, household.
     pub orders: [Mat; 2],
     /// (G,) P02.
     pub coverage: Vec<f64>,
+    /// (G,) delta_g s_g (P56, P02) of the competitively stored goods, 0 elsewhere (ADR 0091).
+    pub spoilage: Vec<f64>,
     /// Goods in flight at the start of a tick, (K * G) rows of SLOTS, as `ent_pipeline`.
     pub pop_pipeline: Vec<[f64; SLOTS]>,
     /// (E * G) rows of SLOTS: index j due j + 1 ticks ahead, the shipments of every slot j + 1
@@ -264,10 +273,18 @@ impl Steady {
         })
     }
 
-    /// (P, G) merchant stocks: coverage times output at traded origin markets.
-    pub fn inventory(&self) -> Mat {
+    /// (P, G) D = sales of every active cell: Q / (1 + delta s).
+    pub fn sales(&self) -> Mat {
         Mat::from_fn(self.supply.rows, self.supply.cols, |p, g| {
-            self.coverage[g] * self.supply[(p, g)]
+            self.supply[(p, g)] / (1.0 + self.spoilage[g])
+        })
+    }
+
+    /// (P, G) merchant stocks: coverage times sales at traded origin markets.
+    pub fn inventory(&self) -> Mat {
+        let sales = self.sales();
+        Mat::from_fn(self.supply.rows, self.supply.cols, |p, g| {
+            self.coverage[g] * sales[(p, g)]
         })
     }
 
@@ -686,6 +703,8 @@ struct Setup<'a> {
     sigma_k: Vec<f64>,
     v_data: Vec<f64>,
     local: Vec<usize>,
+    /// (G,) delta_g s_g of the competitively stored goods (ADR 0091), 0 elsewhere.
+    spoilage: Vec<f64>,
 }
 
 impl<'a> Setup<'a> {
@@ -736,8 +755,10 @@ impl<'a> Setup<'a> {
                 }
             })
             .collect();
+        let spoilage = spoilage(inp)?;
         Ok(Setup {
             inp,
+            spoilage,
             ent_country,
             sigma_k: kc.iter().map(|&k| sigma_within[k]).collect(),
             pop_country: kc,
@@ -759,6 +780,18 @@ impl<'a> Setup<'a> {
         let mut out = Mat::zeros(inp.n_provinces(), inp.n_goods());
         for (e, v) in self.v_data.iter().enumerate() {
             out[(inp.ent_province[e], inp.ent_good[e])] += v;
+        }
+        out
+    }
+
+    /// (P, G) sales value of the data state, V / (1 + delta s): what buyers pay each origin, the
+    /// rest of its output replacing its stock's spoilage (ADR 0091).
+    fn sales_data(&self) -> Mat {
+        let mut out = self.supply_data();
+        for p in 0..out.rows {
+            for g in 0..out.cols {
+                out[(p, g)] /= 1.0 + self.spoilage[g];
+            }
         }
         out
     }
@@ -792,7 +825,23 @@ impl<'a> Setup<'a> {
             self.s_l.iter().zip(&va).map(|(s, va)| (1.0 - s) * va),
             n_c,
         );
-        let owned: Vec<f64> = pool.iter().zip(rebate).map(|(p, r)| p + r).collect();
+        // the markets' spoilage, p delta S = V delta s / (1 + delta s) at stored goods' origins
+        // (ADR 0091), which the country's profit pool carries; the index weights (`base`) keep
+        // the gross pool, as `Inputs::base_income` and the world's
+        let eg = &inp.ent_good;
+        let loss = bincount(
+            &self.ent_country,
+            (0..v.len()).map(|e| {
+                if self.traded_e[e] {
+                    let sp = self.spoilage[eg[e]];
+                    v[e] * sp / (1.0 + sp)
+                } else {
+                    0.0
+                }
+            }),
+            n_c,
+        );
+        let owned: Vec<f64> = (0..n_c).map(|c| pool[c] - loss[c] + rebate[c]).collect();
         let income: Vec<f64> = (0..kp.len())
             .map(|k| self.wage_share[k] * bill[kp[k]] + self.people_share[k] * owned[kc[k]])
             .collect();
@@ -902,6 +951,24 @@ impl<'a> Setup<'a> {
     }
 }
 
+/// (G,) delta_g s_g of every traded good (ADR 0091; P56 and P02 from the inputs), 0 for local
+/// goods.
+fn spoilage(inp: &Inputs) -> Result<Vec<f64>, CalibrationError> {
+    let coverage = inp
+        .coverage
+        .as_ref()
+        .ok_or("the inputs carry no coverage")?;
+    Ok((0..inp.n_goods())
+        .map(|g| {
+            if inp.traded[g] {
+                inp.storage_loss[g] * coverage[g]
+            } else {
+                0.0
+            }
+        })
+        .collect())
+}
+
 /// The fixed point of the passes as one vector, in the units `change` measures it in: ln q of
 /// traded goods, rebates over `rebate_unit`, ln r of traded goods, the PIGL scales over
 /// `scale_unit`, the PIGL omega and within-good weights. Anderson's least squares weighs every
@@ -995,7 +1062,8 @@ impl State {
 
 /// Stage 1 at the data state: traded spending E (P, G) of households and enterprises at r = 1, no
 /// rebates, the data state's buyer prices (`Inputs::base_price`) and the inputs' PIGL weights,
-/// with income and local output settled; and the output value V (P, G) of traded origins.
+/// with income and local output settled; and the sales value V / (1 + delta s) (P, G) of traded
+/// origins, their output value less the spoilage it replaces (ADR 0091).
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
     let setup = Setup::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
@@ -1026,7 +1094,7 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
             0.0
         }
     });
-    Ok((spend, setup.supply_data()))
+    Ok((spend, setup.sales_data()))
 }
 
 /// The steady state of ADR 0089 (module documentation) at natural rates `u_star` (C,).
@@ -1102,7 +1170,7 @@ pub fn calibrate_from(
         .filter(|&e| traded_e[e])
         .map(|e| va_target[e])
         .sum();
-    let supply_data = setup.supply_data();
+    let sales_data = setup.sales_data();
     let origin = |p: usize, g: usize| inp.active[p][g] && traded[g];
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
@@ -1143,7 +1211,7 @@ pub fn calibrate_from(
         });
 
         let mut scaling =
-            sinkhorn_limited(&m, &spend, &supply_data, lw.as_ref(), limits.max_sweeps)?;
+            sinkhorn_limited(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps)?;
         // spending scales with r, so the passes fix r only up to one common factor: pin it
         let model_va: f64 = (0..n_e)
             .filter(|&e| traded_e[e])
@@ -1420,11 +1488,17 @@ pub fn calibrate_from(
         coverage: (0..n_g)
             .map(|g| if traded[g] { coverage[g] } else { 0.0 })
             .collect(),
+        spoilage: setup.spoilage.clone(),
         pop_pipeline,
         ent_pipeline,
         info,
     };
-    let trade = TradeParams::default();
+    // the storage response at the inputs' P02 and P56 loss (ADR 0091), the rest at the defaults
+    let trade = TradeParams {
+        coverage: std::array::from_fn(|g| coverage.get(g).copied().unwrap_or(0.0)),
+        storage_loss: std::array::from_fn(|g| inp.storage_loss.get(g).copied().unwrap_or(0.0)),
+        ..TradeParams::default()
+    };
     let [default, frictionless] = [EconParams::default(), EconParams::frictionless()]
         .map(|params| block::limits(&m, &src, &steady, s_l, &params, &trade));
     steady.block_limit = [default?, frictionless?];

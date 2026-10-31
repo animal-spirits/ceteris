@@ -16,7 +16,7 @@ use ceteris_econ::world::{
     static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
-use ceteris_trade::goods::TRADED;
+use ceteris_trade::goods::{STORABLE, TRADED};
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{N_GOODS, Network, Rationing, Sourced, TradeParams, dispatch, source};
 use proptest::prelude::*;
@@ -657,6 +657,61 @@ fn from_dispatch(w: &mut EconWorld, tick: u32) {
     systems::reprice(w);
     systems::distribute(w);
     w.end_tick(tick).unwrap();
+}
+
+/// ADR 0091, with storage on at the approved values: storage purchases and releases pass
+/// through the ledger and spoilage is tallied.
+/// At T3 each stored good's origin loses exactly delta S of the stock it carried in, destroyed
+/// from its market account, and nothing else of that good leaves the account before dispatch;
+/// over 120 ticks from a disturbed data state every tick's invariants hold (goods identity,
+/// the market account holding S, money), stored goods' stocks stay nonnegative and the
+/// markets end each tick with no money.
+#[test]
+fn storage_conserves_goods_and_money() {
+    let trade = TradeParams::default().with_storage();
+    let mut w = EconWorld::new(
+        Arc::new(small_world()),
+        EconParams::default(),
+        trade.clone(),
+    );
+    for (i, p) in w.markets.price.iter_mut().enumerate() {
+        *p *= 1.0 + 0.3 * ((i * 7 % 11) as f64 / 10.0 - 0.5);
+    }
+    let acc = w.layout().accounts.clone();
+    let mut stored = false;
+    for tick in 0..120 {
+        w.begin_tick();
+        systems::deliver(&mut w);
+        systems::labour(&mut w);
+        systems::produce(&mut w);
+        systems::demand(&mut w);
+        systems::source(&mut w);
+        let cells: Vec<(usize, f64, f64)> = (0..w.markets.price.len())
+            .filter(|&c| STORABLE[c % N_GOODS] && w.markets.active[c])
+            .map(|c| {
+                let held = w.ledger.goods(acc.market[c / N_GOODS], c % N_GOODS);
+                (c, w.markets.inventory[c], held)
+            })
+            .collect();
+        systems::clear(&mut w);
+        for &(c, s, held) in &cells {
+            let (i, g) = (c / N_GOODS, c % N_GOODS);
+            let loss = trade.storage_loss[g] * s;
+            let now = w.ledger.goods(acc.market[i], g);
+            assert!(
+                (held - loss - now).abs() <= 1e-12 * held.max(1.0),
+                "tick {tick} cell {c}: {held} - {loss} != {now}"
+            );
+            assert!(w.markets.inventory[c] >= 0.0);
+            assert!(w.markets.storage[c] >= -(s - loss));
+            stored |= w.markets.storage[c] != loss;
+        }
+        from_dispatch(&mut w, tick);
+        for a in &acc.market {
+            assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
+        }
+    }
+    assert!(stored, "no storage order beyond spoilage");
 }
 
 /// A traded cell has a market only where an enterprise of the province produces the good:

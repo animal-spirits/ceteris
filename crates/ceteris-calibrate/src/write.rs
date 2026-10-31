@@ -160,6 +160,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
     let cell_p: Vec<usize> = (0..n_p * n_g).map(|i| i / n_g).collect();
     let flat = |m: &Mat| f64s(m.data.iter().copied());
     let inventory = s.inventory();
+    let sales = s.sales();
     write_table(
         &out.join("econ_calib_cells.arrow"),
         vec![
@@ -180,10 +181,10 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
             named("block_limit_default", flat(&s.block_limit[0])),
             named("block_limit_frictionless", flat(&s.block_limit[1])),
             named("supply", flat(&s.supply)),
-            named("demand", flat(&s.supply)),
+            named("demand", flat(&sales)),
             named("demand_int", flat(&s.orders[0])),
             named("demand_hh", flat(&s.orders[1])),
-            named("sales", flat(&s.supply)),
+            named("sales", flat(&sales)),
             named("inventory", flat(&inventory)),
         ],
         None,

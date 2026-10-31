@@ -430,7 +430,7 @@ fn no_cell_capped_in_the_default_mode() {
         let w = EconWorld::new(Arc::clone(&inputs), params.clone(), trade.clone());
         let (top, cell) = active
             .iter()
-            .map(|&i| (m.j(i, params.eta), i))
+            .map(|&i| (m.j(i, params.eta, &trade), i))
             .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
         let capped = w
             .layout()
