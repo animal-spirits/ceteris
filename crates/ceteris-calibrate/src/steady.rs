@@ -361,7 +361,9 @@ fn mix(f: &[f64], dx: &[Vec<f64>], dg: &[Vec<f64>], gamma: &[f64]) -> Vec<f64> {
 /// w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o, from `spend` E (P, G) and `supply` V
 /// (P, G). Log domain: the weights of each good are shifted by their largest before each pass
 /// over the kernel. The sweep is the Sinkhorn map ln w <- ln(r V) - ln(sum_d K_od / (1 + t_od)
-/// E_d / Phi_d), Anderson-accelerated. `start` (P, G) is the initial ln w (0 by default).
+/// E_d / Phi_d), Anderson-accelerated. The map is taken at the shifted weights, so the solution
+/// is the one whose largest ln w of each good is 0 (the scaling fixes ln w only up to a level per
+/// good). `start` (P, G) is the initial ln w (0 by default).
 pub fn sinkhorn(
     m: &Model,
     spend: &Mat,
@@ -448,8 +450,12 @@ pub fn sinkhorn_limited(
         let target: Vec<f64> = (0..n).map(|i| (r[good[i]] * v[i]).ln()).collect();
         let new = (0..n)
             .map(|i| {
+                // the map at the shifted weights, not shifted back: ln w of a good is free up to
+                // a common level, which would otherwise drift with the mixing until a unit in
+                // the last place of ln w passes SINKHORN_TOL (532 for coal and mining on the
+                // pack at nu 0.3, a residual stuck at 1.208e-13)
                 if origin[i] {
-                    target[i] - reach[i].ln() + top[good[i]]
+                    target[i] - reach[i].ln()
                 } else {
                     0.0
                 }
@@ -479,6 +485,14 @@ pub fn sinkhorn_limited(
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
+            // the residual does not see the level, which the mixing may leave off 0
+            let mut top = vec![f64::NEG_INFINITY; n_g];
+            for i in (0..n).filter(|&i| origin[i]) {
+                top[good[i]] = np_max(top[good[i]], lw[i]);
+            }
+            for i in (0..n).filter(|&i| origin[i]) {
+                lw[i] -= top[good[i]];
+            }
             return Ok(Scaling {
                 log_weight: model::cells(&lw, n_p, n_g),
                 r,

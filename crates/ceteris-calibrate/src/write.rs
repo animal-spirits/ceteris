@@ -364,6 +364,36 @@ pub fn read_pack_provinces(export: &Path) -> Result<Vec<usize>, String> {
     Table::open(&export.join("pack_provinces.arrow"))?.usize("pack")
 }
 
+/// P05 of each of `n_goods` goods in the calibration tables installed in `pack` (ADRs 0092,
+/// 0276): the border friction their steady state was solved at.
+pub fn read_border_nu(pack: &Path, n_goods: usize) -> Result<Vec<f64>, String> {
+    let ent = Table::open(&pack.join("econ_calib.arrow"))?;
+    if ent.metadata.get("calibration_format").map(String::as_str) != Some(FORMAT) {
+        return Err(format!(
+            "econ_calib.arrow: calibration format is not {FORMAT}"
+        ));
+    }
+    let meta: serde_json::Value = serde_json::from_str(
+        ent.metadata
+            .get("calibration")
+            .ok_or("econ_calib.arrow has no calibration metadata")?,
+    )
+    .map_err(|e| format!("econ_calib.arrow: {e}"))?;
+    border_nu_of(&meta, n_goods)
+}
+
+fn border_nu_of(meta: &serde_json::Value, n_goods: usize) -> Result<Vec<f64>, String> {
+    meta["border_nu"]
+        .as_array()
+        .and_then(|a| {
+            a.iter()
+                .map(serde_json::Value::as_f64)
+                .collect::<Option<Vec<_>>>()
+        })
+        .filter(|v| v.len() == n_goods)
+        .ok_or_else(|| "econ_calib.arrow: border_nu is not one number per good".to_owned())
+}
+
 /// [`crate::steady::reference_inputs`] and [`crate::steady::reference_point`] from the
 /// calibration tables installed in `pack`, for the export `inp` of that pack's data state
 /// (`pack_province` its `pack_provinces` column), without calibrating again; errs for tables of
@@ -390,15 +420,7 @@ pub fn read_reference(
     if meta["static_digest"].as_str() != Some(inp.static_digest.as_str()) {
         return Err("the calibration tables belong to other inputs".into());
     }
-    let border_nu: Vec<f64> = meta["border_nu"]
-        .as_array()
-        .and_then(|a| {
-            a.iter()
-                .map(serde_json::Value::as_f64)
-                .collect::<Option<Vec<_>>>()
-        })
-        .filter(|v| v.len() == inp.n_goods())
-        .ok_or("econ_calib.arrow: border_nu is not one number per good")?;
+    let border_nu = border_nu_of(&meta, inp.n_goods())?;
     // the export holds the data state's border friction; the calibration was solved at its own
     let calibrated = at_border_nu(inp, &border_nu)?;
     let inp = &calibrated;
