@@ -440,6 +440,11 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // refuses values other than the ones the network was built with
         bulk_sea: _,
         bulk_port: _,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+        storage_gain,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
@@ -470,13 +475,18 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(border_nu);
     e.f64s(coverage);
     e.f64s(time_cost);
+    e.f64s(storage_loss);
+    e.f64s(storage_cost);
+    e.f64s(speculation);
+    e.f64s(convenience);
+    e.f64(*storage_gain);
     state_hash(&e.into_bytes())
 }
 
 /// [`static_digest`] of `inputs` under the structural subset of the parameters, the rest at
 /// their defaults: the parameters a steady state (calibrated or solved) depends on, `sigma_demand`,
-/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `theta_scale`, `coverage`, `border_nu` and
-/// `time_cost`.
+/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `theta_scale`, `coverage`, `border_nu`,
+/// `time_cost` and `storage_loss` (output replaces spoilage at a steady state, ADR 0091).
 /// The adjustment speeds and the frictionless and rationing switches are free.
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
@@ -494,6 +504,7 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
             coverage: trade.coverage,
             border_nu: trade.border_nu,
             time_cost: trade.time_cost,
+            storage_loss: trade.storage_loss,
             ..TradeParams::default()
         },
     )
@@ -508,7 +519,9 @@ pub fn price_gains(inp: &EconInputs, params: &EconParams, trade: &TradeParams) -
     let n = inp.n_provinces() * N_GOODS;
     match &inp.market_elasticity {
         Some(m) => (0..n)
-            .map(|i| trade.price_gain(m.j(i, params.eta)) * m.block_scale(i, params.eta, trade))
+            .map(|i| {
+                trade.price_gain(m.j(i, params.eta, trade)) * m.block_scale(i, params.eta, trade)
+            })
             .collect(),
         None => vec![trade.kappa1; n],
     }

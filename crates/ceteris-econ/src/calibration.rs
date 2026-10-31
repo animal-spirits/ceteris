@@ -26,7 +26,9 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "7";
+/// 8: origins of competitively stored goods sell Q / (1 + delta s) and hold coverage times
+/// sales, and E_cell carries the storage response (ADR 0091).
+pub const FORMAT: &str = "8";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.

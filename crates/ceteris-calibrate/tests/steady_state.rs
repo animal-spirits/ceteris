@@ -23,6 +23,7 @@ use ceteris_pack::compare::{self, Tolerance};
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
 use ceteris_reference::model::{self, Factors, Model, max_abs};
+use ceteris_trade::TradeParams;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -448,8 +449,9 @@ fn sinkhorn_is_unique_up_to_scale() {
         let m = Model::new(inp).unwrap();
         let mut v = Mat::zeros(n_p, n_g);
         for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
+            // the stage 2 target is the sales value, V / (1 + delta s) (ADR 0091)
             v[(p, g)] += if inp.traded[g] {
-                s.value[e] / s.r[g]
+                s.value[e] / s.r[g] / (1.0 + s.spoilage[g])
             } else {
                 0.0
             };
@@ -659,12 +661,25 @@ fn every_province_produces_and_pays_a_wage() {
 
 /// Stage 5: at the start of a tick each input stock is (1 + COVER) months of use and the pipeline
 /// holds, j ticks ahead, one month of shipments of every arrival slot j or later, so the
-/// order-up-to rule of E3 orders exactly one month of use; merchant stocks are coverage times
-/// output; pops hold one month of income less this tick's wages.
+/// order-up-to rule of E3 orders exactly one month of use; merchant stocks are coverage times the
+/// orders, and output covers the orders and the stock's spoilage (ADR 0091); pops hold one month
+/// of income less this tick's wages.
 #[test]
 fn stage5_state_is_stationary_under_the_stock_rules() {
+    // the fixture with competitive storage on at the approved values (ADR 0091), beside the
+    // default worlds, where it is off
+    let mut inp = io::load(fixture()).unwrap();
+    inp.storage_loss = TradeParams::default().with_storage().storage_loss.to_vec();
+    let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    assert!(s.spoilage.iter().any(|&x| x > 0.0));
+    stage5_holds("fixture with storage", &inp, &s);
     for w in worlds() {
-        let (inp, s) = (&w.inp, &w.s);
+        stage5_holds(w.name, &w.inp, &w.s);
+    }
+}
+
+fn stage5_holds(name: &str, inp: &Inputs, s: &Steady) {
+    {
         let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
         let n_e = inp.ent_good.len();
         let ep = &inp.ent_province;
@@ -672,7 +687,7 @@ fn stage5_state_is_stationary_under_the_stock_rules() {
         let used = Mat::from_fn(n_e, n_g, |e, k| s.coef[(e, k)] * s.output[e]);
         let want_stock: Vec<f64> = used.data.iter().map(|u| (1.0 + COVER) * u).collect();
         let stock = s.stock();
-        allclose(w.name, &stock.data, &want_stock, 1e-15, 0.0);
+        allclose(name, &stock.data, &want_stock, 1e-15, 0.0);
         assert_eq!(s.arrive.len(), SLOTS + 1);
         // arrive[e][g][slot]: units arriving per month in each slot.
         let arrive =
@@ -695,24 +710,33 @@ fn stage5_state_is_stationary_under_the_stock_rules() {
                 later.push((1..=SLOTS).map(|j| arrive(e, g, j)).sum());
             }
             for g in (0..n_g).filter(|&g| !traded[g]) {
-                assert!(ahead(e, g).iter().all(|&u| u == 0.0), "{}", w.name);
+                assert!(ahead(e, g).iter().all(|&u| u == 0.0), "{}", name);
             }
         }
-        allclose(w.name, &got, &want, 1e-12, 0.0);
-        allclose(w.name, &order, &month, 1e-10, 1e-12 * use_max);
-        allclose(w.name, &first, &later, 1e-12, 0.0);
+        allclose(name, &got, &want, 1e-12, 0.0);
+        allclose(name, &order, &month, 1e-10, 1e-12 * use_max);
+        allclose(name, &first, &later, 1e-12, 0.0);
+        // merchant stocks at coverage times the orders, and output covering the orders and the
+        // stock's spoilage, Q = D + delta S (ADR 0091): the storage order is delta S at z = 1
         let inventory = s.inventory();
+        let (mut stock_got, mut stock_want, mut q_got, mut q_want) =
+            (vec![], vec![], vec![], vec![]);
         for p in 0..n_p {
             for g in (0..n_g).filter(|&g| traded[g] && inp.active[p][g]) {
-                let want = s.coverage[g] * s.supply[(p, g)];
-                allclose(w.name, &[inventory[(p, g)]], &[want], 1e-15, 0.0);
+                let d = s.orders[0][(p, g)] + s.orders[1][(p, g)];
+                stock_got.push(inventory[(p, g)]);
+                stock_want.push(s.coverage[g] * d);
+                q_got.push(s.supply[(p, g)]);
+                q_want.push(d + inp.storage_loss[g] * inventory[(p, g)]);
             }
         }
+        allclose(name, &stock_got, &stock_want, 1e-12, 0.0);
+        allclose(name, &q_got, &q_want, 1e-12, 0.0);
         let money: Vec<f64> = (0..s.pop_income.len())
             .map(|k| s.pop_income[k] - s.pop_wage[k])
             .collect();
-        allclose(w.name, &s.pop_money(), &money, 1e-15, 0.0);
-        allclose(w.name, &s.pop_spend.row_sums(), &s.pop_income, 1e-12, 0.0);
+        allclose(name, &s.pop_money(), &money, 1e-15, 0.0);
+        allclose(name, &s.pop_spend.row_sums(), &s.pop_income, 1e-12, 0.0);
     }
 }
 
@@ -1252,7 +1276,8 @@ fn cross_price_elasticity_matches_finite_difference() {
                     price[(pj, gi)] *= h.exp();
                     orders(&price)[(pi, gi)]
                 };
-                let fd = (at(H) / at(-H)).ln() / (2.0 * H);
+                // the storage order moves with the orders of a stored good (ADR 0091)
+                let fd = (at(H) / at(-H)).ln() / (2.0 * H) * trade.order_response(gi);
                 assert!(e <= 0.0, "{} cells {ci} {cj}: E_ij {e}", w.name);
                 worst = worst.max((-e - fd).abs() / fd.abs().max(1.0));
                 n += 1;
@@ -1309,7 +1334,8 @@ fn input_order_shares_match_the_flows() {
             for (i, &cell) in cells.iter().enumerate() {
                 let (p, g) = (cell % n_p, cell / n_p);
                 if total[(p, g)] > 0.0 {
-                    let want = ours[(p, g)] / total[(p, g)];
+                    // with the storage order's factor of a stored good (ADR 0091)
+                    let want = ours[(p, g)] / total[(p, g)] * trade.order_response(g);
                     assert!(
                         (share[i] - want).abs() <= 1e-10 * want.max(1.0),
                         "{} cell {cell}: {} vs {want}",

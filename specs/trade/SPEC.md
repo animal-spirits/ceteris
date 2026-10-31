@@ -240,7 +240,9 @@ price for local goods), so its signed cash flow in a tick is
 revenue minus p Q: negative while it builds stock or sells below the price it paid, positive while
 it draws stock down. At E4 it passes that cash flow, whatever its sign, to its country's profit pool
 (econ SPEC, Income), so a market carries no balance between ticks and no limited liability or
-write-off applies to it. At a steady state sales equal Q and the cash flow is 0.
+write-off applies to it. At a steady state sales equal Q and the cash flow is 0, except at the
+origins of competitively stored goods, whose output also replaces spoilage: sales are Q / (1 +
+delta_g s_g) and the cash flow is -p delta_g S (Competitive storage below).
 
 **Transit.** A shipment dispatched at tick t is delivered at t + s, s its arrival slot: home
 purchases at once (s = 0), domestic shipments and lag-0 crossings at t + 1, crossings at
@@ -286,6 +288,47 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 12.2 forecasts from the last observed price. At a steady state I is constant and pi^e = 0, so the
 GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
 (`clip_ticks`, run export).
+
+**Competitive storage (ADR 0091)** replaces the stock rule for the storable commodities, goods 0,
+1, 2 and 5 (`goods::STORABLE`), where it is on (`TradeParams::stores`: psi or delta positive). It
+is off by default (owner ruling 2026-10-31): at the approved values the fixture is unstable
+(Storage loop below), so P144 and P56's delta default to 0 and those goods run the stock rule, bit
+for bit as before ADR 0091, kappa2 included; `TradeParams::with_storage` sets the approved values. Each such origin market keeps an expected log-price change
+pi^e_og, 0 at the start of a run and at a steady state, updated after its own T4 step:
+
+```
+pi^e_og <- pi^e_og + g_s ( dlnp_og - pi^e_og )        (P146; dlnp_og the step of the cell, pi^e included)
+```
+
+At T3, before clearing, the stock S carried into the tick loses delta_g S (P56, destroyed in the
+ledger and tallied as spoilage), and the merchants place a storage order against this tick's
+buyer orders D = D_int + D_hh:
+
+```
+x_og = pi^e_og + (k_g + delta_g) ( z^(-zeta_g) - 1 ),    z = S / (s_g D)       (P56 k_g and delta_g, P145)
+b_og = max( delta_g S + psi_g D x_og,  -(1 - delta_g) S )                      (P144)
+```
+
+y(z) = (k_g + delta_g) z^-zeta_g is the convenience yield, written relative to its value at z = 1
+so that x is 0 bit for bit at z = 1 and pi^e = 0. The floor is the stock left after spoilage:
+merchants never offer more than they hold, so S' >= 0. D = 0 orders spoilage replacement only
+(b = delta S); S in z is floored at Q_floor (below), so a stockout orders a finite, very large b
+that the price clip bounds. The storage order is an order at the origin: the price step reads
+D + b in place of D,
+
+```
+dlnp = pi^e + clip( kappa1_cell (D + b - Q)/Q, -c_max_g, c_max_g )
+```
+
+and the kappa2 term of the stock rule is off for these goods. Physically the market's stock
+stays what it does not sell (S' = (1 - delta) S + Q - sales, buyers served first by S11): the
+order is filled through the price, so at a steady price D + b = Q and S' - S = psi D x exactly.
+A release (b < 0) is supply the price rule sees; a purchase is demand. At a steady state pi^e = 0
+and z = 1, so x = 0, b = delta S, and output covers sales and spoilage: Q = (1 + delta_g s_g) D,
+the market's cash flow p (sales - Q) = -p delta S each tick, passed to the country's profit pool
+(Market cash flow above). The calibration and the GE reference hold this point (econ SPEC,
+Calibration and GE reference): origins sell Q / (1 + delta_g s_g) and stocks are s_g D. With
+psi = delta = 0 (the default) storage is off and the stock rule applies.
 
 **Province market, local good** (utilities, construction, services): Q = local output. Its
 intermediate users draw from it within the tick, at E2, in the same-tick chain (ADR 0020; econ
@@ -402,6 +445,75 @@ The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30
 | 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.125 / 0.054 | 0.055 / 0.008 | 0.019 / 0.061 |
 | 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.203 / 0.074 | 0.056 / 0.050 | 0.020 / 0.113 |
 
+Storage loop (ADR 0091). A competitively stored good adds the market's expectation pi^e_og as a
+fourth state and replaces kappa2 by the storage order. Linearize around Q\* = D\* / rho, rho =
+1 / (1 + delta s), S\* = s D\*, pi^e_og = 0, with c = zeta (k + delta), the slope of the
+convenience yield at z = 1: b - delta S\* = D\* ( delta s sigma + psi pi - psi c (sigma + E x) ),
+since z - 1 = sigma + E x to first order. Following the tick as above, with pi the market's
+expectation before the step and kappa = kappa1_cell:
+
+```
+q_t         = (1 - eta) q_{t-1} + eta eps x_t
+e_t         = rho ( -E (1 + psi c) x_t + (delta s - psi c) sigma_t + psi pi_t ) - q_t
+sigma_{t+1} = (1 - delta) sigma_t + (E x_t + q_t / rho) / s
+x_{t+1}     = x_t + kappa e_t
+pi_{t+1}    = (1 - g_s) pi_t + g_s kappa e_t
+```
+
+so the state (x_t, q_{t-1}, sigma_t, pi_t) moves by
+
+```
+      [ 1 - kappa A          -kappa B          kappa C           kappa rho psi             ]
+M  =  [ eta eps              B                 0                 0                         ]
+      [ (E + eta eps/rho)/s  B / (rho s)       1 - delta         0                         ]
+      [ -g_s kappa A         -g_s kappa B      g_s kappa C       1 - g_s + g_s kappa rho psi ]
+```
+
+with A = rho E (1 + psi c) + eta eps, B = 1 - eta, C = rho (delta s - psi c). With psi = delta = 0
+the pi row decouples (its root 1 - g_s) and the rest is the 3 x 3 above at kappa2 = 0. The stock
+is now targeted: the storage order works as an inventory term of gain kappa rho (psi c - delta s),
+so the unit root of the kappa2 = 0 edge leaves (for goods 0, 1, 2, 5 at the P144 to P146 values,
+kappa rho psi c is 0.021, 0.0075, 0.005 and 0.0067 at kappa 0.05). The momentum loop through pi
+has gain 1 - g_s + g_s kappa rho psi, near 1 where kappa psi is near 1 (agriculture at the
+default kappa1: kappa psi = 1.0). Stability is the Schur-Cohn test on the characteristic
+polynomial of M (`ceteris_calibrate::stability::storage_stable`; for a quartic, the Jury
+conditions of the 3 x 3 in general form), and `stability_with_storage_matches_simulation`
+(`tests/price_rule_stability.rs`) checks it against the toy market of agriculture run through
+`Markets::store`, `clear` and `reprice`. The -1 root of the (x, q) block is J2 with E replaced by
+rho E (1 + psi c): the storage order raises the static elasticity of the orders by psi c and
+divides it by the spoilage share, so the Per-market gain below uses that J for these goods.
+
+kappa1 limit of the storage loop at the approved values (first failing value on the 0.0005 grid,
+over E in [0.6, theta_g + 1] and the fixture's eps; default mode / frictionless; `ceteris
+calibrate stability --storage`):
+
+| Good | theta_g | s_g | kappa1 limit with storage |
+|---|---|---|---|
+| 0 Agriculture | 7.68 | 3 | 0.054 / 0.170 |
+| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.103 / 0.097 |
+| 2 Coal and other mining | 16.91 | 2 | 0.104 / 0.097 |
+| 5 Chemicals and metals | 2.91 | 2 | 0.468 / 0.315 |
+
+The default kappa1 0.05 is inside for every good, but agriculture in the default mode only by
+8%: its binding case is a market facing total demand (E = 0.6) with the fixture's least elastic
+supply (eps 0.90), where the momentum loop (kappa1 psi = 1.0) nearly cancels the stock's pull
+(spectral radius 0.9995 at kappa1 0.05). Below eps of about 0.8 at E = 0.6 that market leaves the
+region (radius 1.003 at eps 0.09, the pack's lowest), and over the pack's eps range (0.09 to
+30.4) the limits are 0.0425 / 0.045 for agriculture, 0.085 / 0.0425 for goods 1 and 2 and 0.2225 /
+0.0625 for good 5, so agriculture at E near 0.6 and low eps is outside at the default kappa1 in
+both modes (B7 report; the frictionless limits of goods 1, 2, 5 come from eps 30.4, which the
+Per-market gain caps, and the agriculture case does not: J there is about 0.9). The per-market cap
+bounds the -1 side (J2) only; this is the +1 side.
+
+In the fixture world the approved values fail: from the GE reference perturbed by 1%
+(`small_perturbation_decays`) the default mode grows by 1.0069 a tick (agriculture of the island
+province, calibrated E 1.76 and eps 0.99, whose own income feeds back on its demand and leaves an
+effective E of about 0.3, below the region's sigma floor), and frictionless V1 fails (a 1.5% price
+gap, coal); with g_s = 0 both decay (0.992 a tick), with psi = 0 the stock's spoilage term alone
+grows by 1.0004 (nothing targets the stock). So storage is off by default (owner ruling
+2026-10-31) until a value set passes these checks; candidate fixes are a smaller kappa1 psi for
+agriculture, a smaller g_s, or an expectation with mean reversion (ADR 0091, As built).
+
 Per-market gain (ADR 0263). Each cell's gain is
 kappa1_cell = kappa1 min(1, J_ref / J_cell), J_ref = 2 m / kappa1 with m = P03d (start 0.5, so
 J_ref 20 at kappa1 0.05; `TradeParams::price_gain`), J_cell = E_cell + eta eps_cell / (2 - eta) at
@@ -411,7 +523,13 @@ cells, Pi_cell the cell's share of its buyers' purchases weighted by the units i
 these orders is exactly E), computed per leg with the leg factors squared (two passes over the
 kernel legs: one destination sum of the spending, one with squared leg factors; a pair joined by
 several routes leaves out the cross terms between them; a traded cell that reaches no buyer with
-spending has Pi 0, so E = 1 + theta_g); local cells E = sigma (P06). eps_cell is
+spending has Pi 0, so E = 1 + theta_g); local cells E = sigma (P06). At the origins of the
+competitively stored goods 0, 1, 2 and 5 E_cell carries the storage order's response, the factor
+(1 + psi_g zeta_g (k_g + delta_g)) / (1 + delta_g s_g) of the Storage loop above, at the default
+P56, P144, P145 and P02 of the run (`TradeParams::order_response`, `MarketElasticity::j`); on
+the calibrated fixture with storage on the largest J is 14.3 in the default mode (15.6
+frictionless), below J_ref, so no cell is capped per market; with storage off (the default) the
+factor is 1. eps_cell is
 the largest over the cell's enterprises of s_L sigma_FL / ((1 - s_L) a_VA) (ADR 0263, As built: the
 enterprise maximum, which the ADR's numbers rest on). The calibration computes E_cell and eps_cell
 at the calibrated prices and spending (`ceteris_calibrate::elasticity`) and writes them to
@@ -466,6 +584,10 @@ domestic leg o -> d, 1 at home):
   and spend_kh / value_k the input's cost share, since d ln Y = eps_k (x_own - sum_h s_kh y_h)
   at given wage (the labour target, econ SPEC). w_k is k's share of its cell's output; an
   enterprise of a local good has no own term (its province market is outside the block).
+- At a competitively stored good's origin the order terms of its row (E_ij and u_is) carry the
+  same factor (1 + psi c) / (1 + delta s) as its E_cell: every change in its buyers' orders moves
+  the storage order with it, and the row is normalized by Q = D / rho. Its stock and expectation
+  states are left out, as kappa2 is.
 - H_s = 1 + cover + L (econ SPEC, Production: the order-up-to position holds (1 + cover + L)
   months of use, so a change in use moves the order by H times the change on top of the use).
 
@@ -489,8 +611,10 @@ The calibration computes b at the default kappa1 (P03a) and m (P03d) for the def
 the b of the run's mode (`MarketElasticity::block_scale`). A run at another eta, kappa1 or m keeps
 the per-market cap alone (b is a calibrated quantity at those settings; recalibrating with them is
 the way to get it elsewhere). The steady state does not depend on the gains, so b leaves it and
-the calibration unchanged. On the calibrated fixture no block is scaled (4 blocks; largest radius
-at gains / m 0.820 at eta 0.3, 0.942 at eta 1). On this branch's scratch pack (format 7, the k263
+the calibration unchanged. On the calibrated fixture no block was scaled before competitive
+storage, nor with it off, the default (4 blocks; largest radius at gains / m 0.820 at eta 0.3,
+0.942 at eta 1); with it on at the approved values (ADR 0091) 3 of the 4 are scaled in both modes
+(largest radius at gains / m 1.075 and 1.208), 99 traded cells. On this branch's scratch pack (format 7, the k263
 pack recalibrated) 54 of 233 blocks are scaled frictionless (Lesotho 0.505, Sudan 0.530, Zambia
 0.567, Albania 0.636, radius 1.324 at gains / m; Armenia 0.949 and Bosnia 0.971, the coupled
 cases of ADR 0263's instability map) and 12 in the default mode (Sudan 0.324 and Lesotho 0.348,
@@ -560,6 +684,7 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | Sourcing | sum_o X_od = E_d for each reachable destination and good | 1e-12 relative | `source` unit and property tests |
 | Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 relative | every tick |
 | Inventory sign | S >= 0, and the market account holds S | exact; holding to 1e-9 of the turnover S + Q + D (Task 20 round 3) | every tick |
+| Storage floor | b >= -(1 - delta) S at every stored good's origin, so the stock never goes below 0; spoilage delta S destroyed in the ledger and tallied | exact | `storage_never_sells_below_zero`, `storage_conserves_goods_and_money`, every tick (ledger) |
 | Price bounds | Prices finite and positive | exact | every tick |
 | Two-level vs single-level | On small worlds, flows from the gateway kernel versus direct-path kernel: median absolute log difference reported, and both nest in their GE solutions | report only; V1 tolerances apply to each | `tests/trade_nesting.rs` |
 | Pipeline | goods in the transit accounts = goods in the pipeline, per good. True by construction right after T2b, which brings each transit account to the goods in flight (ADR 0200); the Selection invariant checks what that adjustment creates or destroys | 1e-9 relative | every tick |
@@ -576,6 +701,10 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | P03b | kappa2 | 0 to 0.5 per month, start 0: inventory term off, inventories untargeted in P2 (prior widened from 0.05 by owner decision) | Free |
 | P03c | Price and wage step clip c_max, on the gap terms only (pi^e passes through, ADR 0106) | 0.1 log points per month; every tick it binds is counted per market and per wage (`clip_ticks` in `run_prices` and `run_wages`) | Free (numerical) |
 | P03d | Share m of each market's J2 limit that its gain may use, and of each coupled block's stability limit (ADRs 0263, 0267) | 0 to 1, start 0.5: kappa1_cell = b kappa1 min(1, 2 m / (kappa1 J_cell)), b the block scale at m | Free |
+| P56 | Storage loss delta_g and money cost k_g per month, goods 0, 1, 2, 5 (ADR 0091), `TradeParams::storage_loss`, `storage_cost` | delta 0 by default (storage off, owner ruling 2026-10-31); approved (`with_storage`) 0.003, 0.0005, 0.001, 0; k 0.009, 0.011, 0.007, 0.0067 (interest 0.0047 included; DESIGN 17, P56) | Literature (weak) |
+| P144 | Speculation intensity psi_g, months, `TradeParams::speculation` | 0 by default (storage off); approved (`with_storage`) 20, 1.0, 3.571, 5.714; derived from a stock-persistence target, psi = lambda s / (zeta (k + delta)) (DESIGN 17) | Free |
+| P145 | Convenience-yield elasticity zeta_g, `TradeParams::convenience` | 1.8, 13, 3.5, 3.5 (DESIGN 17) | Free |
+| P146 | Gain g_s of the per-market expectation pi^e_og, `TradeParams::storage_gain` | 0.08 per month (0.006 to 0.3; DESIGN 17) | Free |
 | P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P154 | Bulk freight rate: multiplier on the sea cost per tonne-km per theta class, `TradeParams::bulk_sea` (ADR 0247) | 1, 1, 1 and 0.026 (class 3), on by default (owner ruling 2026-10-30; ADR 0247, As built): the slope s = 2.05e-4 USD per tonne-km (s.e. 7.0e-5) of a least-squares line through the 2000 voyage rates per tonne of class-3 cargoes in UNCTAD's Review of Maritime Transport 2001 (ch. IV, paras. 82 and 96, pp. 51 and 54) and 2002 (ch. VII, pp. 107 to 108), eight routes (iron ore and coal in Capesize bulk carriers, crude and products in tankers) against their sea km on the pack graph (Port Hedland to Rotterdam round the Cape, 19,450 km: no loaded Capesize transited Suez in 2000; no route canal-routed, so no canal fee netted), over P04c's 0.008; dry-bulk routes alone 0.039. Not fitted to the cross-border share | Literature |
@@ -652,6 +781,17 @@ miss is for the owner (B8).
   (`block_scales_of_the_calibration`), the range check on load
   (`block_scales_must_be_in_the_unit_interval`) and the scale at its calibration settings only
   (`block_scale_applies_at_its_calibration_settings`, econ crate).
+- Storage (ADR 0091; the tests run with storage on, `TradeParams::with_storage`, and the
+  default's off switch is checked in `storage_never_sells_below_zero`): orders equal spoilage at a steady state
+  (`storage_orders_equal_spoilage_at_steady_state`), the floor (`storage_never_sells_below_zero`),
+  the Deaton-Laroque asymmetry on agriculture, a 30% harvest cut for 12 months raising the price
+  more than a 30% surplus lowers it, the stock hitting zero only on the cut side
+  (`stockout_raises_price_more_than_surplus_lowers_it`), conservation with spoilage tallied on the
+  fixture world (`storage_conserves_goods_and_money`, econ `p2_properties.rs`), the stage 5 state
+  with storage (`stage5_state_is_stationary_under_the_stock_rules`, calibrate) and the storage
+  loop against the toy market (`stability_with_storage_matches_simulation`). The stock reaching
+  zero only on the cut side (`stock_hits_zero_only_on_the_cut_side`) fails at the approved
+  values and is ignored as a finding (ADR 0091, As built).
 - Property: goods and money conservation through T1-T4 under random supply and demand;
   gateway accounts net to zero; prices stay finite.
 - Nesting: two-level versus direct kernel on small worlds; sourcing versus balanced Sinkhorn at
@@ -705,6 +845,16 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   sourcing still uses posted prices (naive). Heuristic switching (12.2, P19) arrives with the
   expectations module.
 - Freight capacity and endogenous freight rates (8.4) are P8.
-- Inventories are untargeted in P2 (kappa2 = 0): stocks keep what a transient leaves (4.7 to 47 times
-  target cover on the fixture after 1,200 ticks from the data state). Revisit with
-  expectations (12.2), which can make an inventory target stable, or with P9 calibration.
+- Storage parameters (ADR 0091, DESIGN 17 P56, P144 to P146) are weakly sourced: delta_g and the
+  physical part of k_g rest on 1995 and 2017 extension rates, post-2008 tank and warehouse rents
+  and judgement for fuels and coal (no 2000-dated storage rates were found); psi_g is derived from
+  a stock-persistence target, not estimated; zeta_g of goods 2 and 5 is the owner's choice between
+  two routes that differ tenfold; g_s is judgement. P9 refits them to commodity price and stock
+  dynamics (FAO, EIA, LME).
+- Inventories of food, light manufacturing and machinery (goods 3, 4, 6) are untargeted in P2
+  (kappa2 = 0): stocks keep what a transient leaves (4.7 to 47 times target cover on the fixture
+  after 1,200 ticks from the data state, before ADR 0091). Revisit with expectations (12.2), which
+  can make an inventory target stable, or with P9 calibration. Goods 0, 1, 2 and 5 target their
+  stock through competitive storage (ADR 0091) where it is on; it is off by default (owner ruling
+  2026-10-31), so in the default all seven traded goods are untargeted. Which storage values pass
+  the stability checks is open (Storage loop).

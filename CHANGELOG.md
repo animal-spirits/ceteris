@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added: competitive storage for storable goods, off by default (ADR 0091)
+
+- `Markets::store` at T3: the origins of goods 0, 1, 2, 5 lose delta S of their stock (destroyed,
+  tallied) and the merchants order b = max(delta S + psi D x, -(1 - delta) S), x the expected
+  return of holding with a convenience yield in cover; the price step reads D + b with kappa2 off
+  there, and each such market keeps an expectation pi^e_og (gain g_s). Spoilage replacement in
+  the calibration (stage 1 profits, stage 2 sales targets, stage 5 stocks at s D) and the GE
+  reference; J and the block map carry the storage order's response. Parameters P56 (delta, k),
+  P144 (psi), P145 (zeta), P146 (g_s) in DESIGN 17.
+- Off by default (owner ruling 2026-10-31): psi and delta default to 0, since at the approved
+  values (`TradeParams::with_storage`) the fixture's default mode grows by 1.0069 a tick from a
+  perturbed steady state and frictionless V1 fails. With storage off every price and quantity is
+  as before; the storage tests run with it on.
+- `Markets` carries `expectation` and `storage` in the snapshot; export format 14
+  (`goods.storage_loss`, the storage parameters in `params.json`); calibration format 8 (every
+  calibrated pack is recalibrated). `ceteris calibrate stability --storage` prints the storage
+  loop's kappa1 limits at the approved values.
+
 ### Changed: the pack's steady-state money tolerance scales with income (P156)
 
 - `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full

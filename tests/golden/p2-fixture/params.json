@@ -1,6 +1,6 @@
 {
-  "format": "13",
-  "static_digest": "ad307c83ffe25d1c6e5aa0217a20d1c3d41e14a858b2ffff0d310230ec2b3074",
+  "format": "14",
+  "static_digest": "1d9a442da5f9151505e73d3fd1e7c48691b300c71ea766c663c762724cf286e6",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -28,6 +28,11 @@
     "time_cost": "P43",
     "bulk_sea": "P154",
     "bulk_port": "P155",
+    "storage_loss": "P56",
+    "storage_cost": "P56",
+    "speculation": "P144",
+    "convenience": "P145",
+    "storage_gain": "P146",
     "expectation_gain": "P45",
     "rationing": "S11",
     "technology": "S09",
@@ -65,6 +70,11 @@
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0],
     "bulk_sea": [1.0, 1.0, 1.0, 0.026],
     "bulk_port": [1.0, 1.0, 1.0, 0.4],
+    "storage_loss": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "storage_cost": [0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
+    "speculation": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "convenience": [1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
+    "storage_gain": 0.08,
     "bulk_classes": [false, false, false, true]
   }
 }

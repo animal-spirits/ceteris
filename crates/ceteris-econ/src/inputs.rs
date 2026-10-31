@@ -26,9 +26,11 @@ pub struct MarketElasticity {
 }
 
 impl MarketElasticity {
-    /// J of cell `i` at employment speed `eta` (P41): E + eta eps / (2 - eta).
-    pub fn j(&self, i: usize, eta: f64) -> f64 {
-        self.demand[i] + eta * self.supply[i] / (2.0 - eta)
+    /// J of cell `i` at employment speed `eta` (P41) under `trade`: E r + eta eps / (2 - eta), r
+    /// the storage order's factor on the orders' elasticity at a competitively stored good's
+    /// origin ([`TradeParams::order_response`], ADR 0091; 1 elsewhere).
+    pub fn j(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
+        self.demand[i] * trade.order_response(i % N_GOODS) + eta * self.supply[i] / (2.0 - eta)
     }
 
     /// The employment speeds (P41) the calibration computes the block scales at: the default
@@ -38,11 +40,17 @@ impl MarketElasticity {
     }
 
     /// Block scale of cell `i` in a run at employment speed `eta` under `trade` (ADR 0267):
-    /// the calibrated b where eta is one of [`MarketElasticity::block_etas`] and kappa1 and
-    /// P03d are the defaults it was computed at, else 1 (the per-market cap alone).
+    /// the calibrated b where eta is one of [`MarketElasticity::block_etas`] and kappa1, P03d and
+    /// the storage response (P56 money cost, P144, P145) are the defaults it was computed at, else
+    /// 1 (the per-market cap alone).
     pub fn block_scale(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
         let base = TradeParams::default();
-        if trade.kappa1 != base.kappa1 || trade.gain_share != base.gain_share {
+        if trade.kappa1 != base.kappa1
+            || trade.gain_share != base.gain_share
+            || trade.storage_cost != base.storage_cost
+            || trade.speculation != base.speculation
+            || trade.convenience != base.convenience
+        {
             return 1.0;
         }
         Self::block_etas()

@@ -74,3 +74,70 @@ the relative and aggregate terms apply unchanged.
 - psi, zeta and g_s are not identified in P2 (no shocks); P9 fits them to commodity price and
   stock dynamics (FAO, EIA, LME).
 - ADR 0028's OPEC rule reads the same stocks for crude.
+
+## As built (pre-P3 B7, 2026-10-31)
+
+- **Off by default** (owner ruling 2026-10-31, after the stop below): P144 psi and P56 delta
+  default to 0, so `TradeParams::stores` is false and goods 0, 1, 2, 5 run the stock rule as
+  before this ADR, bit for bit in prices and quantities (the fixture's calibration and GE
+  reference are unchanged to the last bit; the snapshot and the export carry the new state and
+  parameters). The mechanism is complete and tested at the approved values
+  (`TradeParams::with_storage`); turning it on is setting those parameters and recalibrating.
+  The ADR stays proposed until a value set passes the stability checks.
+- **The stop.** At the approved values the fixture world is unstable: from the GE reference
+  perturbed by 1% the default mode grows by 1.0069 a tick (agriculture of the island province,
+  whose income feedback leaves an effective E of about 0.3) and frictionless V1 fails (1.5%,
+  coal); with g_s = 0 both decay (0.992), with psi = 0 the spoilage term alone grows (1.0004).
+  Candidate fixes for the owner: a smaller kappa1 psi for agriculture, a smaller g_s, or a
+  mean-reverting expectation (option c above), each needing approval.
+
+- **Parameters** (owner approval 2026-10-30T22:51Z; DESIGN 17 rows P56, P144 to P146): per month,
+  delta 0.003, 0.0005, 0.001, 0 and k 0.009, 0.011, 0.007, 0.0067 (interest 0.0047 included) for
+  goods 0, 1, 2, 5; zeta 1.8, 13, 3.5, 3.5; psi 20, 1.0, 3.571, 5.714 (derived from a
+  stock-persistence target, not estimated); g_s 0.08; s_g unchanged (3, 1, 2, 2). The weak
+  sources are an open question for P9 (trade SPEC). `TradeParams::storage_loss`, `storage_cost`,
+  `speculation`, `convenience`, `storage_gain`; storage applies to `goods::STORABLE`.
+- **The order** (`Markets::store`, T3 before clearing): the stock S carried in loses delta S
+  (destroyed in the ledger, tallied); b = max(delta S + psi D x, -(1 - delta) S) with D this tick's
+  buyer orders and x = pi^e + (k + delta)(z^-zeta - 1), the convenience yield written relative to
+  its value at z = 1 so that x is 0 bit for bit at the steady state. D = 0 orders delta S; S in z
+  is floored at Q_floor, so a stockout orders a finite, very large b that the P151 clip bounds.
+  The order enters the price step as orders (dlnp = pi^e + clip(kappa1_cell (D + b - Q) / Q)) and
+  the kappa2 term is off for these goods. The stock stays what the market does not sell (buyers
+  first, S11 unchanged), so the order is filled through the price: at a steady price D + b = Q and
+  S' - S = psi D x. pi^e_og (`Markets::expectation`) moves by g_s toward the cell's own step after
+  T4. Both vectors are in the snapshot.
+- **Steady state** (with storage on). Output covers sales and spoilage, Q = (1 + delta s) D, and the market's cash
+  flow -p delta S goes to the country's profit pool (merchant rule, ADR 0112). The calibration
+  targets sales value V / (1 + delta s) in stage 2, charges the spoilage to profits in stage 1 and
+  holds stocks at s D in stage 5; the GE reference orders D (1 + delta s) at stored origins and
+  charges p Q delta s / (1 + delta s) to profits. delta joins the structural digest. Export format
+  14 (`goods.storage_loss`, the storage parameters in `params.json`), calibration format 8: every
+  calibrated pack is recalibrated (B8). With storage on the fixture's calibration moves by up to
+  0.8% (output, stocks, VA) and the calibrated state holds to 1e-9 over its run
+  (`fixture_calibrated_state_holds_to_1e_9`; `stage5_state_is_stationary_under_the_stock_rules`
+  calibrates the fixture with storage on beside the default worlds).
+- **J includes the storage response** (ADR 0263 interaction): b moves with every change in the
+  buyers' orders through z, so the static elasticity of the market's orders is E (1 + psi zeta (k
+  + delta)) / (1 + delta s): 1.42, 1.15, 1.10 and 1.13 times E for goods 0, 1, 2, 5. The per-market
+  J uses it at the run's parameters (`MarketElasticity::j`), and the block map of ADR 0267 scales
+  a stored good's order terms by the same factor (`block::blocks`); with storage off the factor
+  is 1. With storage on, on the calibrated fixture no
+  cell is capped per market (largest J 14.3 default, 15.6 frictionless, against 20), but 3 of its
+  4 blocks are now scaled in both modes (99 traded cells; largest radius at gains / m 1.075 and
+  1.208, against 0.820 and 0.942 before), where none was.
+- **Stability** (trade SPEC, Storage loop): the 4 x 4 map of (x, q, sigma, pi^e_og), checked by
+  Schur-Cohn and against the toy market (`stability_with_storage_matches_simulation`). Over the
+  fixture's eps the default kappa1 0.05 is inside for every good; agriculture's limit in the
+  default mode is 0.054. Over the pack's eps (down to 0.09) agriculture's limit is 0.0425 in both
+  modes: an agriculture market facing total demand (E near 0.6) with an inelastic supply has a
+  slow growing root (1.003), the momentum loop kappa1 psi = 1.0 beating the stock's pull. The
+  per-market cap does not reach it (it bounds J2). Recorded for B8; no value changed.
+- **Stockout asymmetry**: a 30% harvest cut held 12 months raises agriculture's price by 0.73 in
+  logs, a 30% surplus lowers it by 0.35 (`stockout_raises_price_more_than_surplus_lowers_it`).
+  The second claim does not hold at these values: the stock does not reach zero on the cut side
+  (lowest 0.89 of 3 months), since the convenience yield and the momentum make merchants hold back
+  as the stock falls, and the price overshoots after the shock (stock to 3.4 times its target,
+  price -0.31 by tick 60). Without storage the same cut raises the price by 0.21 and a 24-month
+  cut empties the stock. `stock_hits_zero_only_on_the_cut_side` is kept and ignored as a finding
+  for the owner.

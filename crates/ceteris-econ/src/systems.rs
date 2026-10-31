@@ -631,7 +631,9 @@ pub fn source(w: &mut EconWorld) {
     }
 }
 
-/// T3: clears every active market. Origin markets of traded goods clear their orders
+/// T3: clears every active market. The origin markets of the storable goods first lose their
+/// stock's spoilage, destroyed in the ledger, and place the merchants' storage orders
+/// (`Markets::store`, ADR 0091). Origin markets of traded goods clear their orders
 /// against output and merchant stock (S' = S + Q - sales), a shortfall shared between buyer
 /// classes by `EconParams::rationing`; the fills are dispatched at T2b. Province markets of
 /// local goods hand out what the same-tick chain left of their output (E2): enterprise input
@@ -641,6 +643,13 @@ pub fn source(w: &mut EconWorld) {
 pub fn clear(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
+    w.markets.store(&w.trade, &mut w.scratch.spoiled);
+    for (cell, &loss) in w.scratch.spoiled.iter().enumerate() {
+        if loss > 0.0 {
+            w.ledger
+                .destroy(acc.market[cell / N_GOODS], cell % N_GOODS, loss);
+        }
+    }
     w.markets.clear(w.params.rationing, &mut w.scratch.fill);
     w.markets.clear_local(&mut w.scratch.spoiled);
     let mut buyers: Vec<(AccountId, f64, bool)> = Vec::new();

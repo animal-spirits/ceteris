@@ -386,14 +386,20 @@ pub fn blocks(
     }
     pairs.sort_by_key(|&(i, j, _)| (i, j));
 
+    // the storage order's factor on each stored good's order terms (ADR 0091; trade SPEC, Block
+    // gain), by good
+    let response: Vec<f64> = (0..n_g).map(|g| trade.order_response(g)).collect();
     let mut countries: Vec<Country> = (0..inp.n_countries()).map(|_| Country::default()).collect();
     let mut local = vec![usize::MAX; n_pg];
     for j in (0..n_pg).filter(|&j| traded_cell(j)) {
         let c = &mut countries[country[j % n_p]];
         local[j] = c.cells.len();
         c.cells.push(j);
-        c.demand
-            .push((local[j], local[j], s.demand_elasticity[(j % n_p, j / n_p)]));
+        c.demand.push((
+            local[j],
+            local[j],
+            s.demand_elasticity[(j % n_p, j / n_p)] * response[j / n_p],
+        ));
     }
     let mut k = 0;
     while k < pairs.len() {
@@ -404,7 +410,7 @@ pub fn blocks(
             k += 1;
         }
         if t[i] > 0.0 {
-            let v = -(1.0 + inp.theta[i / n_p]) * src.w[j] * t2 / t[i];
+            let v = -(1.0 + inp.theta[i / n_p]) * src.w[j] * t2 / t[i] * response[i / n_p];
             countries[country[i % n_p]]
                 .demand
                 .push((local[i], local[j], v));
@@ -432,7 +438,11 @@ pub fn blocks(
                 slot_of[d] = c.hold.len();
                 c.hold.push(1.0 + COVER + s.lead[(p, h)]);
                 for &(i, kid) in &incoming[d] {
-                    let u = if t[i] > 0.0 { kid / t[i] } else { 0.0 };
+                    let u = if t[i] > 0.0 {
+                        kid / t[i] * response[i / n_p]
+                    } else {
+                        0.0
+                    };
                     c.routes
                         .push((slot_of[d], local[i], src.w[i] * kid / src.phi[d], u));
                 }
@@ -446,7 +456,8 @@ pub fn blocks(
     let gain = |j: usize| {
         let (p, g) = (j % n_p, j / n_p);
         trade.price_gain(
-            s.demand_elasticity[(p, g)] + eta * s.supply_elasticity[(p, g)] / (2.0 - eta),
+            s.demand_elasticity[(p, g)] * response[g]
+                + eta * s.supply_elasticity[(p, g)] / (2.0 - eta),
         )
     };
     countries.into_iter().flat_map(|c| c.split(gain)).collect()
