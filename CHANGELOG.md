@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### BEHAVIOUR: the 2000 pack rebuilt and recalibrated on pre-P3 B (B8)
+
+- `data/packs/2000` is the full pack build of 82d411f (ADR 0251's whole provinces, gateways
+  600: 286 port, 171 airport, 143 land) with the econ tables rebuilt at 46532ba (ADR 0270's
+  extraction column) and calibrated at calibration format 10 with the border friction per
+  friction group (ADR 0276): nu 2.5940 (class 0), 0.8002 (class 1), 0.3954 (class 2), 0.06591
+  (good 1), 0 (good 2, clamped: ICIO target 0.2583 above the model's 0.2198 at nu 0). The
+  calibration settles in 68 passes (change 3.2e-13, Sinkhorn residual 9.9e-14, 766 s). The old
+  pack (manifest sha256 3bd495a1...) is in the Trash; the new manifest is 3c7895d1....
+
+Goldens re-blessed:
+
+- `tests/golden/p2-pack.txt`: every econ table (rebuilt), `econ_home_shares.arrow` (new to the
+  installed pack, ADR 0092) and every calibration table. `p1-pack.txt` and `p1-geo.txt` do not
+  move: they are main's whole-province values since the merge.
+
 ### BEHAVIOUR: border friction per good in theta class 3 (ADR 0276, proposed)
 
 - P05 is one value per good (`TradeParams::border_nu`, `EconInputs::border_nu`, reference
