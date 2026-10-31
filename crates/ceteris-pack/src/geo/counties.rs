@@ -341,8 +341,8 @@ mod clip {
     }
 
     /// Counties each clipped to the province it overlaps most, ordered by province (stable),
-    /// with their anchors; the misfit between the sources over counties that fit a province,
-    /// as the summed areas of those counties whole and clipped; and how many counties overlap
+    /// with their anchors; the misfit between the sources, as the summed areas of the assigned
+    /// counties whole and clipped; and how many counties overlap
     /// no province of their country.
     pub struct Clipped {
         pub province: Vec<u32>,
@@ -352,11 +352,7 @@ mod clip {
         pub unassigned: usize,
     }
 
-    pub fn clip(
-        units: &[County],
-        provinces: &[Province],
-        split_area_km2: f64,
-    ) -> Result<Clipped, String> {
+    pub fn clip(units: &[County], provinces: &[Province]) -> Result<Clipped, String> {
         let geoms: Vec<Geometry> = provinces.iter().map(|p| p.geom.clone()).collect();
         let countries: Vec<[&str; 2]> = provinces
             .iter()
@@ -372,11 +368,8 @@ mod clip {
                 continue;
             };
             let piece = polygonal(&intersection(&c.geom, &pg[h])?)?;
-            let whole = area_km2(&to_multipolygon(&c.geom)?);
-            if whole <= split_area_km2 / 2.0 {
-                fits += whole;
-                fits_inside += area_km2(&to_multipolygon(&piece)?);
-            }
+            fits += area_km2(&to_multipolygon(&c.geom)?);
+            fits_inside += area_km2(&to_multipolygon(&piece)?);
             if !is_empty(&piece)? {
                 let h = u32::try_from(h).map_err(|e| e.to_string())?;
                 clipped.push((
