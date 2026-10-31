@@ -112,7 +112,9 @@ pub struct TradeParams {
     /// P144 speculation intensity psi_g in months (ADR 0091), 0 by default (storage off); the
     /// approved values ([`TradeParams::with_storage`]) are 20, 1.0, 3.571, 5.714, derived as
     /// lambda s_g / (zeta (k + delta)) from the stock-persistence target lambda = 1 - rho of
-    /// Gorton, Hayashi and Rouwenhorst (2013, Table 2); not estimated (DESIGN 17).
+    /// Gorton, Hayashi and Rouwenhorst (2013, Table 2); not estimated (DESIGN 17). Good 5's
+    /// 5.714 is the source sheet's 40 at zeta 0.5 rescaled to zeta 3.5 (40 x 0.5 / 3.5), where
+    /// the formula gives 5.54; approved as rescaled.
     pub speculation: [f64; N_GOODS],
     /// P145 convenience-yield elasticity zeta_g (ADR 0091): 1.8, 13, 3.5, 3.5, the slope of the
     /// basis in inventory of Gorton, Hayashi and Rouwenhorst (2013, Table 3) over k + delta, 3.5
@@ -188,6 +190,22 @@ impl TradeParams {
     /// stock rule applies, kappa2 term included.
     pub fn stores(&self, g: usize) -> bool {
         STORABLE[g] && (self.speculation[g] > 0.0 || self.storage_loss[g] > 0.0)
+    }
+
+    /// Refuses a storable good with a storage loss and no speculation (P56 delta > 0, P144 psi
+    /// = 0): its stock would spoil with nothing targeting it, a slowly growing root of the
+    /// storage loop (trade SPEC, Competitive storage).
+    pub fn check_storage(&self) -> Result<(), String> {
+        match (0..N_GOODS)
+            .find(|&g| STORABLE[g] && self.storage_loss[g] > 0.0 && self.speculation[g] <= 0.0)
+        {
+            Some(g) => Err(format!(
+                "good {g} has a storage loss {} and no speculation intensity: an untargeted \
+                 stock that spoils; set P144 psi or P56 delta 0",
+                self.storage_loss[g]
+            )),
+            None => Ok(()),
+        }
     }
 
     /// The storage order's factor on the static elasticity of an origin's orders (trade SPEC,
