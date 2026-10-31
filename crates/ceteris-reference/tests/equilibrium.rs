@@ -846,6 +846,7 @@ fn two_provinces(
         },
         ent_va_target: None,
         coverage: None,
+        storage_loss: vec![0.0],
         pop_edu: None,
         static_digest: String::new(),
         calibrated_coef: None,

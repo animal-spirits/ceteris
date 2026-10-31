@@ -1,6 +1,6 @@
 {
   "format": "1",
-  "static_digest": "ad307c83ffe25d1c6e5aa0217a20d1c3d41e14a858b2ffff0d310230ec2b3074",
+  "static_digest": "1d9a442da5f9151505e73d3fd1e7c48691b300c71ea766c663c762724cf286e6",
   "price_index": 0.9999999999999998,
   "method": "newton_krylov",
   "iterations": 11,

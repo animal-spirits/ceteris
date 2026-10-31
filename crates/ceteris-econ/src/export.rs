@@ -8,7 +8,7 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
+//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, storage_loss f64 (P56 delta, 0 for goods without competitive storage), time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
 //! | `gateways` | gateway u32, country u32, mass f64 (share of the country's trade throughput, ADR 0092) |
 //! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
@@ -79,8 +79,10 @@ use crate::world::{
 /// `border_nu` is a list, one per theta class (ADR 0092). 12: `legs` has `bulk_cost_per_t` and
 /// `bulk_hours`, and `params.json` has `bulk_sea` (P154), `bulk_port` (P155) and the network's
 /// `bulk_classes` (ADR 0247). 13: `provinces` has the selection constants `gamma_g`, and
-/// `run_prices.price_index` is the buyer price Gamma P_d (ADR 0200).
-pub const EXPORT_FORMAT: &str = "13";
+/// `run_prices.price_index` is the buyer price Gamma P_d (ADR 0200). 14: `goods` has
+/// `storage_loss` (P56), and `params.json` has the storage parameters (P56, P144 to P146) of
+/// competitive storage (ADR 0091).
+pub const EXPORT_FORMAT: &str = "14";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -218,6 +220,7 @@ pub fn write_inputs(
             ),
             f64s("weight", inputs.weight),
             f64s("coverage", trade.coverage),
+            f64s("storage_loss", trade.storage_loss),
             f64s("time_cost", trade.time_cost),
             f64s("theta", trade.theta),
             u8s("theta_class", trade.theta_class),
@@ -513,6 +516,11 @@ fn params_json(
         ("time_cost", "P43"),
         ("bulk_sea", "P154"),
         ("bulk_port", "P155"),
+        ("storage_loss", "P56"),
+        ("storage_cost", "P56"),
+        ("speculation", "P144"),
+        ("convenience", "P145"),
+        ("storage_gain", "P146"),
         ("expectation_gain", "P45"),
         ("rationing", "S11"),
         ("technology", "S09"),
@@ -569,6 +577,11 @@ fn params_json(
         ("time_cost", nums(&t.time_cost)),
         ("bulk_sea", nums(&t.bulk_sea)),
         ("bulk_port", nums(&t.bulk_port)),
+        ("storage_loss", nums(&t.storage_loss)),
+        ("storage_cost", nums(&t.storage_cost)),
+        ("speculation", nums(&t.speculation)),
+        ("convenience", nums(&t.convenience)),
+        ("storage_gain", num(t.storage_gain)),
         (
             "bulk_classes",
             format!("{:?}", bulk_classes.unwrap_or_default()),
@@ -773,6 +786,7 @@ mod tests {
         );
         assert_eq!(f64s(&goods, "weight").unwrap(), inputs.weight);
         assert_eq!(f64s(&goods, "coverage").unwrap(), trade.coverage);
+        assert_eq!(f64s(&goods, "storage_loss").unwrap(), trade.storage_loss);
         assert_eq!(f64s(&goods, "time_cost").unwrap(), trade.time_cost);
         assert_eq!(f64s(&goods, "theta").unwrap(), trade.theta);
         assert_eq!(u8s(&goods, "theta_class").unwrap(), trade.theta_class);

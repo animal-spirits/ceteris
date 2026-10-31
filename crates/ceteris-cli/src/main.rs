@@ -10,7 +10,7 @@
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
-//! ceteris calibrate stability [FIXTURE_DIR]
+//! ceteris calibrate stability [--storage] [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -88,7 +88,7 @@ const USAGE: &str = "usage:
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
-  ceteris calibrate stability [FIXTURE_DIR]
+  ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -471,8 +471,10 @@ fn reference(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate stability [FIXTURE_DIR]`.
-fn stability(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+/// `calibrate stability [--storage] [FIXTURE_DIR]`.
+fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut args = args.peekable();
+    let storage = args.next_if(|a| a == "--storage").is_some();
     let fixture = args.next().map_or_else(
         || sources::workspace_root().join("tests/golden/p2-fixture"),
         PathBuf::from,
@@ -480,7 +482,12 @@ fn stability(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     if let Some(a) = args.next() {
         return Err(format!("unknown argument '{a}'"));
     }
-    for row in ceteris_calibrate::stability::table(&fixture)? {
+    let rows = if storage {
+        ceteris_calibrate::stability::storage_table(&fixture)?
+    } else {
+        ceteris_calibrate::stability::table(&fixture)?
+    };
+    for row in rows {
         println!("{row}");
     }
     Ok(ExitCode::SUCCESS)

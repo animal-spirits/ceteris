@@ -228,6 +228,7 @@ fn bench(c: &mut Criterion) {
         b.iter_batched(
             || markets.clone(),
             |mut m| {
+                m.store(&trade, &mut spoiled);
                 m.clear(rationing, &mut fill);
                 m.clear_local(&mut spoiled);
                 m.reprice(&trade, &gain, pi);
