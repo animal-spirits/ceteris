@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed: the dispatch-mass tolerance carries the rounding below the normal range (owner ruling on x10, ADR 0090)
+
+- A product below 2^-1022 rounds by up to 2^-1074 absolute, and the route factors after it scale
+  that error into the units, so dispatched units and sales could differ by far more than 1e-12
+  of either at normal flows (x10 border run: 1.3e-9 at sales of 1.5e-297, from a fill times an
+  origin weight of 2.8e-310; the reach rescale was 0 throughout). `source` and `dispatch` now
+  carry a bound on that rounding (`Sourced::orders_rounding`, `Sourced::shipped_rounding`), and
+  `end_tick` allows 1e-12 of the larger plus that bound plus 2^-1022 (trade SPEC, Invariants).
+- No hash moves: the bound is scratch and only widens the check. The x10 run now stops at tick 61
+  on a payment that does not fit the ledger (block scratch pack), beyond P2's range (ADR 0090).
+
 ### Changed: the pack's steady-state money tolerance scales with income (P156)
 
 - `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full

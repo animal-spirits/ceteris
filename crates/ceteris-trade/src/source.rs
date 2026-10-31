@@ -51,6 +51,11 @@ pub const ARRIVAL_SLOTS: usize = 5;
 pub struct Sourced {
     /// Units ordered at each origin by class, at its price `p_o`. Per province.
     pub orders: Vec<[f64; 2]>,
+    /// A bound on the rounding of `orders` from products below the normal range, which round
+    /// by up to 2^-1075 absolute (trade SPEC, Invariants, Dispatch mass): per product of an
+    /// order that carries the origin's weight, 2^-1075 times the factors after it. 0 where every
+    /// such product is normal. Per province and class.
+    pub orders_rounding: Vec<[f64; 2]>,
     /// Delivered price index `P_d = Phi_d^(-1/theta)` in price units, tariff included;
     /// `f64::INFINITY` where no active origin is reachable. Per province.
     pub price_index: Vec<f64>,
@@ -59,6 +64,9 @@ pub struct Sourced {
     /// Units leaving each origin market, home purchases included: the filled orders. Per
     /// province.
     pub shipped: Vec<f64>,
+    /// The bound of `orders_rounding` for `shipped`, from the products of [`dispatch`]'s routes
+    /// below the normal range. Per province.
+    pub shipped_rounding: Vec<f64>,
     /// Delivered units arriving at each destination by class, by [`ARRIVAL_SLOTS`] slot: what
     /// the class paid on the routes of the slot over `q_d`.
     pub arrive: [Vec<[f64; 2]>; ARRIVAL_SLOTS],
@@ -306,20 +314,27 @@ pub fn source(
     // classes go through each loop together; every accumulator is per class, so each sees
     // the additions of a pass of its own. Loops over origins and over origin gateways write
     // only their own entries and run in parallel.
-    let orders = &mut out.orders;
+    let (orders, rounding) = (&mut out.orders, &mut out.orders_rounding);
     zeroed2(orders, np);
+    zeroed2(rounding, np);
     // home and domestic routes
-    orders
-        .par_iter_mut()
+    (orders.par_iter_mut(), rounding.par_iter_mut())
+        .into_par_iter()
         .enumerate()
         .with_min_len(ROWS)
         .filter(|(o, _)| w[*o] > 0.0)
-        .for_each(|(o, order)| {
+        .for_each(|(o, (order, round))| {
             let mut x = [w[o] * reach[o][0], w[o] * reach[o][1]];
+            for c in 0..2 {
+                round[c] += below_normal(x[c]);
+            }
             for e in gk.domestic.row(o) {
                 let (kw, r) = (e.k * w[o], reach[e.col as usize]);
                 x[0] += kw * r[0];
                 x[1] += kw * r[1];
+                for c in 0..2 {
+                    round[c] += below_normal(kw) * r[c] + below_normal(kw * r[c]);
+                }
             }
             order[0] += x[0];
             order[1] += x[1];
@@ -362,27 +377,43 @@ pub fn source(
         });
     let at_a = &s.at_origin_gateway;
     // origin gateways to origins, then value to units
-    orders
-        .par_iter_mut()
+    (orders.par_iter_mut(), rounding.par_iter_mut())
+        .into_par_iter()
         .enumerate()
         .with_min_len(ROWS)
         .filter(|(o, _)| w[*o] > 0.0)
-        .for_each(|(o, order)| {
+        .for_each(|(o, (order, round))| {
             for e in gk.access.row(o) {
                 let a = e.col as usize;
                 let t = at_a[a];
                 if t == [0.0; 2] {
                     continue;
                 }
-                let factor = e.k * w[o] / v[a];
+                let kw = e.k * w[o];
+                let factor = kw / v[a];
                 for c in (0..2).filter(|&c| t[c] != 0.0) {
                     order[c] += t[c] * factor;
+                    round[c] += (below_normal(kw) / v[a] + below_normal(factor)) * t[c]
+                        + below_normal(t[c] * factor);
                 }
             }
-            for x in order {
-                *x = times_two_to(*x / price[o], up);
+            for (x, r) in order.iter_mut().zip(round) {
+                let units = *x / price[o];
+                *r = times_two_to(*r, up) / price[o] + times_two_to(below_normal(units), up);
+                *x = times_two_to(units, up);
             }
         });
+}
+
+/// The smallest subnormal f64, 2^-1074, where `v` is below the normal range (0 included, as a
+/// product may underflow to it), else 0: the most a product rounds to that range loses,
+/// absolute (trade SPEC, Invariants, Dispatch mass).
+fn below_normal(v: f64) -> f64 {
+    if v.abs() < f64::MIN_POSITIVE {
+        f64::from_bits(1)
+    } else {
+        0.0
+    }
 }
 
 /// `x 2^n`, exact unless it leaves the normal range.
@@ -449,6 +480,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     let gk = k.good(g);
     let Sourced {
         shipped,
+        shipped_rounding,
         arrive,
         home,
         survived,
@@ -467,6 +499,7 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         ..
     } = out;
     zeroed(shipped, np);
+    zeroed(shipped_rounding, np);
     arrive.iter_mut().for_each(|a| zeroed2(a, np));
     zeroed2(home, np);
     survived.iter_mut().for_each(|v| zeroed(v, np));
@@ -526,7 +559,14 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
             }
             // reach is 2^-up of E_d / Phi_d; every flow below is linear in m
             let (m, inv_p) = (times_two_to(f * w[o], s.up), 1.0 / price[o]);
+            // the rounding of m, then of each route's products below the normal range, times
+            // the factors after them, in units (`Sourced::shipped_rounding`)
+            let dm = times_two_to(below_normal(f * w[o]), s.up) + below_normal(m);
+            let units_of = |value: f64, err: f64| {
+                (err + below_normal(value)) * inv_p + below_normal(value * inv_p)
+            };
             let x = m * reach[o][c];
+            shipped_rounding[o] += units_of(x, dm * reach[o][c]);
             if x > 0.0 {
                 let units = x * inv_p;
                 let got = x * inv_q[o];
@@ -543,6 +583,8 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
             for (i, e) in gk.domestic.row(o).iter().enumerate() {
                 let d = e.col as usize;
                 let x = m * e.k * reach[d][c];
+                let mk = (dm * e.k + below_normal(m * e.k)) * reach[d][c];
+                shipped_rounding[o] += units_of(x, mk);
                 if x == 0.0 {
                     continue;
                 }
@@ -563,6 +605,9 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
             for (i, e) in gk.access.row(o).iter().enumerate() {
                 let a = e.col as usize;
                 let x = m * e.k * s.z[a];
+                let mk = ((dm * e.k + below_normal(m * e.k)) * s.z[a] + below_normal(x))
+                    * s.net_ratio[a];
+                shipped_rounding[o] += units_of(x * s.net_ratio[a], mk);
                 if x == 0.0 {
                     continue;
                 }
@@ -1364,6 +1409,49 @@ mod tests {
         {
             assert!(close(*paid, *want, 1e-12), "{paid} vs {want}");
         }
+    }
+
+    /// Trade SPEC, Invariants, Dispatch mass: fills that make f w_o subnormal leave the
+    /// shipments off the filled orders by far more than 1e-12 of either, at units in the normal
+    /// range, and within the rounding the kernel carries for them.
+    #[test]
+    fn dispatch_carries_the_rounding_below_the_normal_range() {
+        let (net, wedges) = random_world(42);
+        let n = net.n_provinces();
+        let k = kernel(&net, &wedges);
+        let mut rng = rng(42);
+        let price = draw(&mut rng, n, 0.5, 1.5);
+        let spend = draw2(&mut rng, n, 1e290, 1e300);
+        let active = vec![true; n];
+        let mut out = Sourced::new();
+        source(&k, 6, &price, &active, &gammas(n), &spend, &mut out);
+        let fill: Vec<[f64; 2]> = out
+            .scratch
+            .weight
+            .iter()
+            .map(|&w| [1e-318 / w, 3e-320 / w])
+            .collect();
+        dispatch(&k, 6, &price, &fill, &mut out);
+        let mut beyond = 0;
+        for (o, f) in fill.iter().enumerate() {
+            let sold = f[0] * out.orders[o][0] + f[1] * out.orders[o][1];
+            let sent = out.shipped[o];
+            let gap = (sent - sold).abs();
+            let rounding = out.shipped_rounding[o]
+                + f[0] * out.orders_rounding[o][0]
+                + f[1] * out.orders_rounding[o][1];
+            let relative = 1e-12 * sent.max(sold);
+            assert!(
+                sold > 1e-200,
+                "origin {o}: sales {sold} in the normal range"
+            );
+            beyond += usize::from(gap > relative + f64::MIN_POSITIVE);
+            assert!(
+                gap <= relative + rounding + f64::MIN_POSITIVE,
+                "origin {o}: shipped {sent}, sales {sold}, rounding {rounding}"
+            );
+        }
+        assert!(beyond > 0, "no shipment beyond 1e-12 of its sales");
     }
 
     #[test]

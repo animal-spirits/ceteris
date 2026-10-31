@@ -46,6 +46,14 @@ const MARKET_DRAIN_TOLERANCE: f64 = 2.0 * (N_GOODS as f64 + 1.0) * f64::EPSILON;
 /// Dispatch mass).
 const DISPATCH_TOLERANCE: f64 = 1e-12;
 
+/// How far an origin cell's dispatched units `sent` may lie from its sales `sold` (trade SPEC,
+/// Invariants, Dispatch mass): [`DISPATCH_TOLERANCE`] of the larger, the `rounding` of products
+/// below the normal range that the kernel carries for the cell, and 2^-1022 for results below
+/// that range.
+fn dispatch_tolerance(sent: f64, sold: f64, rounding: f64) -> f64 {
+    DISPATCH_TOLERANCE * sent.abs().max(sold.abs()) + rounding + f64::MIN_POSITIVE
+}
+
 pub const WAGE: Flow = Flow(1);
 pub const SALE: Flow = Flow(2);
 pub const PURCHASE: Flow = Flow(3);
@@ -1380,7 +1388,8 @@ impl State for EconWorld {
     /// coef_k Y and what was available: the stock, and this tick's draws of a local good; a
     /// local good also [`CHAIN_STOP_TOLERANCE`] of the same and [`MARKET_DRAIN_TOLERANCE`] of
     /// its province's draws),
-    /// dispatch mass (units dispatched = origin sales, 1e-12)
+    /// dispatch mass (units dispatched = origin sales, 1e-12 of the larger plus the rounding below
+    /// the normal range the kernel carries, [`dispatch_tolerance`])
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
     /// its recorded income, exact in minor units).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
@@ -1529,13 +1538,31 @@ impl State for EconWorld {
             }
         }
 
-        for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&self.markets.sales).enumerate() {
-            if !TRADED[cell % N_GOODS] {
+        let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+        let m = &self.markets;
+        for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&m.sales).enumerate() {
+            let (o, g) = (cell / N_GOODS, cell % N_GOODS);
+            let Ok(t) = traded.binary_search(&g) else {
                 continue;
-            }
-            // the absolute floor only matters for subnormal sales, which have no relative precision
+            };
+            // products below the normal range round absolutely: what the kernel carries for
+            // them, and a subnormal fill's own rounding of avail / D
+            let r = &sc.sourced[t];
+            let f = sc.fill[cell];
+            let below = |x: f64| {
+                if x < f64::MIN_POSITIVE {
+                    f64::from_bits(1)
+                } else {
+                    0.0
+                }
+            };
+            let rounding = r.shipped_rounding[o]
+                + f[0] * r.orders_rounding[o][0]
+                + f[1] * r.orders_rounding[o][1]
+                + below(f[0]) * m.demand_int[cell]
+                + below(f[1]) * m.demand_hh[cell];
             let gap = (sent - sold).abs();
-            if gap.is_nan() || gap > DISPATCH_TOLERANCE * sold + f64::MIN_POSITIVE {
+            if gap.is_nan() || gap > dispatch_tolerance(sent, sold, rounding) {
                 let detail = format!("cell {cell}: dispatched {sent} of sales {sold}");
                 return fail("dispatch mass", detail);
             }
@@ -1679,6 +1706,22 @@ mod tests {
     use ceteris_core::snapshot::{canonical, decode_canonical_with};
     use ceteris_trade::N_GOODS;
     use ceteris_trade::goods::TRADED;
+
+    /// Trade SPEC, Invariants, Dispatch mass: the x10 stop (block pack, tick 55, cell 33982)
+    /// differs by 1.3e-9 of its sales, far beyond 1e-12 and the 2^-1022 floor, and passes with
+    /// the rounding the kernel carries for it (here twice the gap); without it, it still fails,
+    /// as does a real mismatch of 1e-6 at normal flows.
+    #[test]
+    fn dispatch_tolerance_covers_the_carried_rounding() {
+        let (sent, sold): (f64, f64) = (1.4717616895918719e-297, 1.4717616915516175e-297);
+        let gap = (sent - sold).abs();
+        assert!(gap > DISPATCH_TOLERANCE * sold + f64::MIN_POSITIVE);
+        assert!(gap <= dispatch_tolerance(sent, sold, 2.0 * gap));
+        assert!(gap > dispatch_tolerance(sent, sold, 0.0));
+        let (sent, sold): (f64, f64) = (1.0, 1.000001);
+        assert!((sent - sold).abs() > dispatch_tolerance(sent, sold, 0.0));
+        assert!((sent - sold).abs() > dispatch_tolerance(sent, sold, 1e-300));
+    }
 
     /// Owner decision, 2026-10-25: ICIO coefficients are cost shares at base delivered prices.
     /// The base prices are the world's buyer prices at tick 0, and at them every input's cost
