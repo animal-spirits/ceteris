@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### BEHAVIOUR: main's whole first-level provinces (ADR 0251) merged into pre-P3 B
+
+- Merges main 2d41a65 (ADR 0251; 27 files, geo only, since main 6fe4c2f). The geo layer is
+  main's: 4,594 whole first-level provinces (4,796 split), so every province index moves. The
+  econ layer is this branch's: gateway masses (ADR 0092), refined fuels in good 1, calibration
+  format 7 with the block scales (ADR 0267).
+- Neither side's pack is valid for the merge: main's pack has no gateway mass and calibration
+  format 3, this branch's scratch pack (k263) has the split provinces. The merged pack is rebuilt
+  and recalibrated at B8 (pre-P3 PLAN, B8 Step 2a); until then every pack-dependent test skips
+  or reads a stale pack, and the numbers below that need the pack are not yet measured.
+- `crates/ceteris-pack/tests/econ_build.rs` pins main's gateway kinds (286 port, 171 airport,
+  143 land crossing) and value-added count (4,368) with this branch's imputed share 0.0754. The
+  share is predicted from this branch's change on the split pack (0.0759 to 0.0754), not
+  measured on the merged pack.
+- Figures this branch measured on the split pack are stale after the merge: ADR 0267's scaled
+  blocks (54 of 233 frictionless, 12 default; Albania 0.636, Sudan 0.324, Lesotho 0.348) and
+  the Sudan provinces 3464 and 3474; the 4,555 provinces with value added and H2 -0.753 in
+  earlier entries. B8 re-measures them.
+- Goldens not re-blessed here: `tests/golden/p1-pack.txt` and `p2-pack.txt` carry main's
+  hashes, built without this branch's pack changes, and are re-blessed at B8. `p0-toy.txt`,
+  `p2-econ.txt`, `p2-as-built-rule.txt` and `tests/golden/p2-fixture` do not read the pack and
+  do not move (core and econ golden tests pass).
+
 ### Changed: the pack's steady-state money tolerance scales with income (P156)
 
 - `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full
