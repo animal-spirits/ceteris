@@ -63,7 +63,14 @@ the relative and aggregate terms apply unchanged.
 - Linearized stability: the storage loop adds one state per market; re-derive the region with
   psi and zeta and check it on the toy market.
 - Stockout asymmetry: a 30% harvest cut in agriculture raises the price more than a 30% surplus
-  lowers it, and stocks hit zero only on the cut side.
+  lowers it.
+- Smoothing (amended 2026-10-31, owner): a 3-month 30% cut raises the price by less than half the
+  flow-clearing price without stock, Deaton and Laroque's benchmark; and a 12-month cut draws the
+  stock below half its target while it stays above zero. This replaces "stocks hit zero only on
+  the cut side": the Working-Kaldor yield z^-zeta grows without bound as cover falls, so
+  merchants keep a pipeline stock (Working 1949), and the stock rule with storage off is not the
+  benchmark, since at kappa2 = 0 its price does not read the stock. A mean-reverting expectation
+  (option c) is left to P9, where psi, zeta and g_s are fitted.
 - Conservation: storage purchases and releases pass through the ledger; spoilage is tallied.
 
 ## Consequences
@@ -139,5 +146,15 @@ the relative and aggregate terms apply unchanged.
   (lowest 0.89 of 3 months), since the convenience yield and the momentum make merchants hold back
   as the stock falls, and the price overshoots after the shock (stock to 3.4 times its target,
   price -0.31 by tick 60). Without storage the same cut raises the price by 0.21 and a 24-month
-  cut empties the stock. `stock_hits_zero_only_on_the_cut_side` is kept and ignored as a finding
-  for the owner.
+  cut empties the stock. `stock_hits_zero_only_on_the_cut_side` was kept and ignored as a finding
+  for the owner (replaced by the amended Tests, 2026-10-31).
+- **g_s 0.006** (owner approval 2026-10-31, B7 follow-up): P146 moves from 0.08 to P45's start, the
+  constant learning gain of Milani (2007), 0.0183 a quarter. det(I - M) of the storage loop is
+  c eta g_s kappa psi (E + eps) / s > 0, so it leaves the region through a slow complex pair that the
+  momentum drives; g_s scales that loop and leaves the stock's pull alone. Agriculture's psi limit
+  (E down to 0.3, the pack's eps, per-market cap applied) rises from 14.7 to 43.5, and the approved
+  psi of goods 0, 1, 2, 5 sit at 46%, 48%, 16% and 22% of theirs. The fixture's perturbed run
+  decays (0.991 frictionless, 0.992 default). Storage stays off by default: V1 from the data state
+  fails at 1,200 ticks at every value set tried (slow convergence, about 0.9986 a tick; prices
+  within 0.06% at 3,600). The stockout claim is restated in Tests (the stock stops at 0.23 of
+  target at the 12-month cut; a 3-month cut moves the price by 0.10 against 0.59 without stock).

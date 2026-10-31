@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### BEHAVIOUR: storage expectation gain g_s 0.006 (P146, ADR 0091)
+
+- `TradeParams::storage_gain` 0.08 to 0.006, P45's start (Milani 2007; owner approval
+  2026-10-31): at 0.08 agriculture's storage loop leaves the stability region, at 0.006 the
+  approved values pass the fixture's perturbation test. Storage stays off by default, so no
+  price, quantity or money moves.
+- ADR 0091's Tests amended (owner, 2026-10-31): `storage_smooths_a_short_cut_below_flow_clearing`
+  and `cut_draws_the_stock_to_a_pipeline_floor` replace the ignored
+  `stock_hits_zero_only_on_the_cut_side`; the storage loop's toy-market points are re-chosen for
+  g_s 0.006.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/params.json`, `calibration/econ_calib.arrow`,
+  `reference/solution.json`: the static digest and `storage_gain` only; every column is bit for
+  bit the same (`ceteris pack compare`).
+- `tests/golden/p2-econ.txt`: every hash (static digest).
+
 ### Added: competitive storage for storable goods, off by default (ADR 0091)
 
 - `Markets::store` at T3: the origins of goods 0, 1, 2, 5 lose delta S of their stock (destroyed,

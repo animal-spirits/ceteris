@@ -1,6 +1,6 @@
 {
   "format": "14",
-  "static_digest": "1d9a442da5f9151505e73d3fd1e7c48691b300c71ea766c663c762724cf286e6",
+  "static_digest": "ab28855a6f2727fad72e436bc1dca6f55c194abf489f49ff13a78652790aca28",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -74,7 +74,7 @@
     "storage_cost": [0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
     "speculation": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     "convenience": [1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
-    "storage_gain": 0.08,
+    "storage_gain": 0.006,
     "bulk_classes": [false, false, false, true]
   }
 }

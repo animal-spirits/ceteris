@@ -118,8 +118,9 @@ pub struct TradeParams {
     /// basis in inventory of Gorton, Hayashi and Rouwenhorst (2013, Table 3) over k + delta, 3.5
     /// for goods 2 and 5 by owner choice (DESIGN 17).
     pub convenience: [f64; N_GOODS],
-    /// P146 gain g_s of each stored good's market expectation pi^e_og per month (ADR 0091): 0.08,
-    /// a 12-month mean lag (DESIGN 17; weak).
+    /// P146 gain g_s of each stored good's market expectation pi^e_og per month (ADR 0091): 0.006,
+    /// P45's start, the constant learning gain of Milani (2007), 0.0183 a quarter (DESIGN 17;
+    /// owner approval 2026-10-31).
     pub storage_gain: f64,
 }
 
@@ -242,7 +243,7 @@ impl Default for TradeParams {
             storage_cost: [0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
             speculation: [0.0; N_GOODS],
             convenience: [1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
-            storage_gain: 0.08,
+            storage_gain: 0.006,
         }
     }
 }

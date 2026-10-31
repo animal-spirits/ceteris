@@ -281,9 +281,10 @@ fn simulate_storage(e: f64, eta: f64, eps: f64, kappa: f64, x0: f64, steps: usiz
 }
 
 /// ADR 0091: the storage loop's linearized region against the toy market of agriculture, points
-/// at least 0.3% from the unit circle. At the default kappa1 the market facing total demand
-/// with an inelastic supply (E 0.6, eps 0.09, as the full pack's lowest) lies just outside: the
-/// momentum of the expectation (kappa1 psi = 1.0) beats the stock's pull.
+/// at least 0.3% from the unit circle. At g_s 0.006 the market facing total demand with an
+/// inelastic supply (E 0.6, eps 0.09, as the full pack's lowest) is inside at the default kappa1
+/// (at g_s 0.08 the expectation's momentum put it just outside); the outside points are on the
+/// -1 side.
 #[test]
 fn stability_with_storage_matches_simulation() {
     const X0: f64 = 1e-9;
@@ -293,10 +294,10 @@ fn stability_with_storage_matches_simulation() {
         (8.68, 0.3, 1.5, 0.05, true),
         (4.0, 1.0, 1.5, 0.1, true),
         (2.0, 0.3, 1.0, 0.02, true),
-        (8.68, 1.0, 2.0, 0.15, true),
-        (0.6, 0.3, 0.09, 0.05, false),
+        (0.6, 0.3, 0.09, 0.05, true),
+        (8.68, 1.0, 2.0, 0.15, false),
         (8.68, 0.3, 1.5, 0.2, false),
-        (0.6, 1.0, 0.2, 0.08, false),
+        (0.6, 1.0, 0.2, 2.5, false),
     ];
     for (e, eta, eps, kappa, inside) in points {
         let r = storage_radius(e, eta, eps, kappa);
@@ -318,10 +319,10 @@ fn stability_with_storage_matches_simulation() {
     }
 }
 
-/// Agriculture's market at the approved storage values through a 12-month harvest shock of `shock` times
-/// output (exogenous during the shock, a harvest), household demand at E 0.6, 48 ticks: the
-/// largest |ln p| and the lowest stock.
-fn harvest(shock: f64) -> (f64, f64) {
+/// Agriculture's market at the approved storage values through a harvest shock of `shock` times
+/// output held `months` ticks (exogenous during the shock, a harvest), household demand at E 0.6,
+/// 48 ticks: the largest |ln p| and the lowest stock over its target.
+fn harvest(shock: f64, months: usize) -> (f64, f64) {
     let p = TradeParams::default().with_storage();
     let s_star = p.coverage[AG];
     let q_star = 1.0 + p.storage_loss[AG] * s_star;
@@ -333,7 +334,7 @@ fn harvest(shock: f64) -> (f64, f64) {
     let (mut peak, mut low_stock) = (0.0f64, f64::INFINITY);
     for t in 0..48 {
         let x = libm::log(m.price[AG]);
-        m.supply[AG] = q_star * if t < 12 { shock } else { 1.0 };
+        m.supply[AG] = q_star * if t < months { shock } else { 1.0 };
         m.demand_int[AG] = 0.0;
         m.demand_hh[AG] = libm::exp(-0.6 * x);
         m.store(&p, &mut spoiled);
@@ -342,28 +343,33 @@ fn harvest(shock: f64) -> (f64, f64) {
         peak = peak.max(libm::log(m.price[AG]).abs());
         low_stock = low_stock.min(m.inventory[AG]);
     }
-    (peak, low_stock)
+    (peak, low_stock / s_star)
 }
 
 /// ADR 0091 (Deaton and Laroque 1992): on agriculture a 30% harvest cut held for a year raises
 /// the price more than a 30% surplus held as long lowers it.
 #[test]
 fn stockout_raises_price_more_than_surplus_lowers_it() {
-    let (rise, _) = harvest(0.7);
-    let (fall, _) = harvest(1.3);
+    let (rise, _) = harvest(0.7, 12);
+    let (fall, _) = harvest(1.3, 12);
     assert!(rise > fall, "rise {rise} fall {fall}");
 }
 
-/// ADR 0091's second claim: the stock reaches zero only on the cut side. It does not at the
-/// defaults: the convenience yield and the expectation's momentum (kappa1 psi = 1.0) make
-/// merchants hold back as the stock falls, so the cut stops at 0.89 of 3 months while the price
-/// rises by 0.73 in logs (0.21 without storage, which empties the stock in a 24-month cut). A
-/// finding for the owner (B7 report), not a test to adjust.
+/// ADR 0091 Tests, as amended: a cut shorter than the cover moves the price by less than half
+/// the flow-clearing price without stock, ln(1 / 0.7) / 0.6, Deaton and Laroque's benchmark
+/// (0.10 against 0.59 at the approved values).
 #[test]
-#[ignore = "ADR 0091 finding: stock does not reach zero on the cut side at the approved storage values"]
-fn stock_hits_zero_only_on_the_cut_side() {
-    let (_, cut_stock) = harvest(0.7);
-    let (_, surplus_stock) = harvest(1.3);
-    assert_eq!(cut_stock, 0.0);
-    assert!(surplus_stock > 0.0);
+fn storage_smooths_a_short_cut_below_flow_clearing() {
+    let (rise, _) = harvest(0.7, 3);
+    let clearing = libm::log(1.0 / 0.7) / 0.6;
+    assert!(rise < 0.5 * clearing, "rise {rise} clearing {clearing}");
+}
+
+/// ADR 0091 Tests, as amended: a 12-month cut draws the stock below half its target, and the
+/// convenience yield z^-zeta, unbounded as cover falls, keeps a pipeline stock above zero (0.23
+/// of target at the approved values).
+#[test]
+fn cut_draws_the_stock_to_a_pipeline_floor() {
+    let (_, low) = harvest(0.7, 12);
+    assert!(low < 0.5 && low > 0.0, "lowest stock {low} of target");
 }
