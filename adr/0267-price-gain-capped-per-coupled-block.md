@@ -142,6 +142,15 @@ Trade SPEC, Stability region, Block gain:
     (2.35 times; the check allows 2), at Pitcairn (province 3015), a country no block caps, and
     prices drift 1.9 times at Macedonia's cells. It stays open for B8 on the rebuilt pack.
 - p2_acceptance on the scratch pack: 10 passed, 1 ignored.
+- Competitive storage (ADR 0091; B7 review round, I1 and I2): at a stored good's origin the map
+  carries the storage order's factor r on the order terms, takes revenue from the buyers'
+  orders o / r (the merge's R (x + q + e) overstated it by r), and has the cell's stock and
+  expectation as states, as the Storage loop does. The limits are computed at the export's
+  storage parameters, and the structural digest carries them (P56 delta and money cost, P144,
+  P145, P146), so a run under other storage parameters refuses the calibration's limits rather
+  than keeping them. With storage off nothing changes, bit for bit. On the fixture calibrated
+  with storage on, the default mode caps no block and frictionless caps 1 of 4 (57 cells,
+  radius 1.0077 at gains / m; 1.152 without the two states).
 
 ## First build (2026-10-30, superseded by the review round above)
 
