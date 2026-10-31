@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed: V1's horizon is 6,000 ticks where competitive storage is on (ADR 0091)
+
+- `v1_fixture_frictionless_matches_reference` runs 6,000 ticks when any good stores, 1,200
+  otherwise (owner, 2026-10-31): from the data state the stored goods converge slowly and not
+  monotonically (flows 1.5% off at 3,600 ticks, 2.1% at 4,800, 1.4e-4 at 6,000). Storage is off by
+  default, so the test and every golden are unchanged.
+
 ### Changed: B7 competitive storage (ADR 0091) merged into pre-P3 B, calibration format 9
 
 - Merges claude/storage-bounds (edc2e8d, ee79611, ae1473d: B7 with g_s 0.006). Both sides had bumped the calibration
