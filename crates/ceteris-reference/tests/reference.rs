@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use arrow_array::RecordBatch;
 use arrow_array::cast::AsArray;
-use arrow_array::types::{Float64Type, UInt32Type};
+use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
@@ -501,4 +501,65 @@ fn v1_mode() {
     assert_eq!(uniqueness::v1_mode(1.0_f64.next_up()), Report);
     assert_eq!(uniqueness::v1_mode(1.5), Report);
     assert_eq!(uniqueness::v1_mode(f64::INFINITY), Report);
+}
+
+/// The fixture's one-market loops at the calibration's E and eps, frictionless (eta 1) at
+/// kappa1 in every cell, the uncapped gain and so the largest a run uses.
+fn fixture_gains(inp: &Inputs) -> uniqueness::Gains {
+    let cells = table("calibration/econ_calib_cells");
+    let province = cells
+        .column_by_name("province")
+        .unwrap()
+        .as_primitive::<UInt32Type>()
+        .values()
+        .to_vec();
+    let good = cells
+        .column_by_name("good")
+        .unwrap()
+        .as_primitive::<UInt8Type>()
+        .values()
+        .to_vec();
+    let (e, eps) = (
+        f64s(&cells, "demand_elasticity"),
+        f64s(&cells, "supply_elasticity"),
+    );
+    let params: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(fixture().join("params.json")).unwrap())
+            .unwrap();
+    let kappa1 = params["trade"]["kappa1"].as_f64().unwrap();
+    let eta = 1.0;
+    let mut j = Mat::filled(inp.n_provinces(), inp.n_goods(), 0.0);
+    for r in 0..province.len() {
+        j[(province[r] as usize, usize::from(good[r]))] = e[r] + eta * eps[r] / (2.0 - eta);
+    }
+    uniqueness::Gains {
+        kappa: Mat::filled(inp.n_provinces(), inp.n_goods(), kappa1),
+        j,
+    }
+}
+
+/// No fixture market is outside one-market J2 even at the uncapped gain; a cell pushed past it
+/// is the one named.
+#[test]
+fn cells_outside_region_is_empty_on_the_fixture() {
+    let inp = inputs();
+    let mut gains = fixture_gains(&inp);
+    let active = (0..inp.n_provinces())
+        .map(|p| (0..inp.n_goods()).filter(|&g| inp.active[p][g]).count())
+        .sum::<usize>();
+    assert!(active > 0);
+    let largest = (0..inp.n_provinces())
+        .flat_map(|p| (0..inp.n_goods()).map(move |g| (p, g)))
+        .filter(|&(p, g)| inp.active[p][g])
+        .map(|c| gains.kappa[c] * gains.j[c])
+        .fold(0.0, f64::max);
+    println!("largest kappa1 J over {active} active cells: {largest}");
+    assert!(largest > 0.0);
+    assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![]);
+    let pushed = (0..inp.n_provinces())
+        .flat_map(|p| (0..inp.n_goods()).map(move |g| (p, g)))
+        .find(|&(p, g)| inp.active[p][g] && gains.j[(p, g)] > 0.0)
+        .unwrap();
+    gains.kappa[pushed] = 2.5 / gains.j[pushed];
+    assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![pushed]);
 }

@@ -1062,6 +1062,19 @@ four classes. All run V1 in tolerance mode (Task 20). The restatement above was 
 (Theorem 1 p. 6, Remarks 4 and 5 pp. 10 to 11, Online Appendix A.3 pp. 6 to 9 with Gamma, B and
 the radius on p. 9, footnote 10 p. 7).
 
+**Cells outside one-market J2.** The bound above is about the equilibrium; whether the run's
+price rule reaches it is a second question. A market whose own loop gain kappa_cell J_cell is at
+or beyond 2 (J2, trade SPEC Stability region; J at the run's eta, kappa_cell the run's gain, ADRs
+0263 and 0267) does not contract on its own, so V1's tolerances do not apply to it:
+`uniqueness::cells_outside_region(inp, gains)` lists those active cells (`uniqueness::Gains`, per
+cell the run's gain and J), and V1 in `p2_gate.rs` leaves their prices out of the 1% comparison,
+prints each with its gap, and fails when they are more than 1% of the active cells. Under the
+per-market cap kappa_cell J <= 2 m with m = 0.5 (P03d), so a run of the calibrated rule has none:
+the list is a check that the cap holds, not a fallback. The fixture has none even at the
+uncapped kappa1 (largest kappa1 J 0.692 frictionless over 177 active cells,
+`cells_outside_region_is_empty_on_the_fixture`); `v1_excludes_cells_outside_region` pushes one
+fixture cell past 2 / J and checks that it alone is left out and reported.
+
 ## P2 gate (21.1)
 
 - V0: zero invariant violations; determinism, 1 vs 8 threads, replay.
