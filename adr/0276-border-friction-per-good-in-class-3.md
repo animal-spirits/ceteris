@@ -87,3 +87,9 @@ Option 1 (owner, 2026-10-31: option A of the B8 report, nu per good within class
   interior was a good-1 cycle on an earlier pack). H2 per class measures class 3 with both goods
   pooled; the gate reports it by good as well.
 - Register P05 is five values on the 2000 pack (classes 0 to 2, goods 1 and 2).
+- Main's ADRs change the classes at P4: 0271 (goods at the 50 ICIO industries; proposed on main
+  at 3e2a36e), 0274 (up to seven theta classes; accepted) and 0272 (a log-distance factor on the
+  crossing beside nu, amending 0092; accepted, built and fitted in P4). This ADR holds for the
+  10-good world until then. The P4 recalibration revisits per-good nu wherever a class mixes
+  goods with different own cross-border shares: main's class 5 holds C16, C27, B05, B06, B07,
+  B08 and C17_18, mining (B05 to B08) with manufactures, the coupling this ADR splits in class 3.
