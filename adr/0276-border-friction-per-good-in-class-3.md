@@ -56,7 +56,7 @@ target: 0.7158, 0.6845, 0.3113, 0.4709), and the calibration settles with the cl
 
 ## Decision
 
-Option 1 (proposed; the owner rules between A, B, C and D of the B8 report, this is A).
+Option 1 (owner, 2026-10-31: option A of the B8 report, nu per good within class 3).
 
 - P05 is stored per good (`TradeParams::border_nu`, one per good; local goods never cross).
 - The fit runs over friction groups (`ceteris_calibrate::border::friction_groups`): each theta
@@ -87,5 +87,3 @@ Option 1 (proposed; the owner rules between A, B, C and D of the B8 report, this
   interior was a good-1 cycle on an earlier pack). H2 per class measures class 3 with both goods
   pooled; the gate reports it by good as well.
 - Register P05 is five values on the 2000 pack (classes 0 to 2, goods 1 and 2).
-- If the owner picks another option this ADR is withdrawn and its commits revert cleanly (ADR and
-  specs, tests, code, re-bless are separate).
