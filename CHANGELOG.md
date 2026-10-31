@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### BEHAVIOUR: calibration passes settle to 1e-13 (P158, owner, 2026-10-31; B8e)
+
+- `steady::PASS_TOL` 1e-12 to 1e-13 (register P158). Stage 5's check (1e-12) compares Q, settled
+  at the last pass's values, with D, the orders those values' spending gives; its gap is about
+  3.8 times the last pass change plus about 3e-13 of rounding (B8d: 1.34e-12 at a last change of
+  3.55e-13 on the B8 pack), so the tolerance must be at most 1.8e-13. Nothing else changes.
+- Fixture: settles at pass 27 (change 3.06e-14; before at pass 24, 8.0e-13); every column within
+  the iterative tolerance of the old tables (largest move pipeline units 3.2e-12).
+- 2000 pack (manifest 3c7895d1... unchanged, recalibrated at e9099a9): the same fitted nu
+  (2.5940, 0.8002, 0.3954, 0.06591, 0 clamped), 71 passes (68 before), last change 8.39e-14,
+  Sinkhorn residual 9.06e-14, 24 min. Against the old tables all 80 columns are within the
+  iterative tolerance (largest moves: pipeline units 3.6e-10, lead 1.9e-11, merchant stocks
+  1.0e-11). The old tables are in the Trash.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: every table (the later pass).
+- `tests/golden/p2-pack.txt`: the six calibration tables. The econ tables, `p2-econ.txt`,
+  `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
+
 ### BEHAVIOUR: data-state merchant stocks at coverage times own base output (B8e)
 
 - The data state's merchant stock of each active traded cell is s_g Y0, coverage times the
