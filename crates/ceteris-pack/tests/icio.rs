@@ -35,13 +35,23 @@ fn with<T: Clone>(base: &[(&str, T)], more: &[(&str, T)]) -> BTreeMap<String, T>
 
 /// A donor whose VA is `DONOR_VA` and whose inputs take `colsum` of every column's output.
 fn country(colsum: f64, fd: [f64; N_GOODS]) -> CountryIo {
-    CountryIo {
+    let mut c = CountryIo {
         output: DONOR_VA.map(|v| v / (1.0 - colsum)),
         va: DONOR_VA,
         io: [[colsum / 10.0; N_GOODS]; N_GOODS],
         final_demand_shares: fd,
         coal_share: 0.0,
-    }
+        extraction: [0.0; N_GOODS],
+        extraction_output: 0.0,
+    };
+    extraction_is_good_one(&mut c);
+    c
+}
+
+/// All of good 1 is extraction (no refining in it).
+fn extraction_is_good_one(c: &mut CountryIo) {
+    c.extraction_output = c.output[1];
+    c.extraction = std::array::from_fn(|k| c.io[k][1] * c.output[1]);
 }
 
 fn donors() -> BTreeMap<String, CountryIo> {
@@ -324,6 +334,7 @@ fn oil_donors() -> BTreeMap<String, CountryIo> {
     let c = icio.get_mut("CCC").unwrap();
     c.va = [10.0, 40.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 41.0];
     c.output = c.va.map(|v| v / 0.7);
+    extraction_is_good_one(c);
     icio
 }
 
@@ -411,6 +422,7 @@ fn a_donor_without_oil_and_gas_still_gives_oil_and_gas_output() {
     for row in &mut b.io {
         row[1] = 0.0;
     }
+    extraction_is_good_one(b);
     let got = run(
         &[("XXX", "XXX")],
         &icio,
@@ -446,6 +458,20 @@ fn world_oil_gas_column_weights_inputs_by_oil_and_gas_output() {
             .iter()
             .all(|&x| approx(x, want, 1e-12))
     );
+}
+
+#[test]
+fn world_oil_gas_column_leaves_out_refining() {
+    // Refining in good 1 (ADR 0092) changes its column but not the extraction one (ADR 0270).
+    let mut icio = oil_donors();
+    let want = world_oil_gas_column(&icio);
+    for c in icio.values_mut() {
+        c.output[1] *= 3.0;
+        for row in &mut c.io {
+            row[1] = 0.06;
+        }
+    }
+    assert_eq!(world_oil_gas_column(&icio), want);
 }
 
 #[test]
@@ -1121,7 +1147,8 @@ fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
         let io = &d.imputed[code].table.io;
         assert!(io.iter().zip(world).all(|(row, w)| row[1] == w), "{code}");
     }
-    assert!(1.0 - world.iter().sum::<f64>() > 0.5);
+    // Extraction only (ADR 0270): 0.666 on 2000 data, against 0.418 with refining.
+    assert!((0.6..0.7).contains(&(1.0 - world.iter().sum::<f64>())));
     for (code, low) in [("KWT", 10.0), ("LBY", 5.0), ("DZA", 8.0), ("VEN", 15.0)] {
         let va = d.imputed[code].table.va[1] / 1e3;
         assert!(va > low, "{code} {va}");

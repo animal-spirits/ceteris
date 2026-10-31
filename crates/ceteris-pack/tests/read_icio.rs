@@ -434,3 +434,44 @@ fn real_2000_economies_coefficients_totals_and_goods() {
     assert!(real["SAU"].va[1] > real["SAU"].va[6]); // oil and gas against machinery
     assert!(deu.final_demand_shares[9] > 0.3);
 }
+
+#[test]
+fn extraction_sums_b06_and_b09_without_refining() {
+    // One economy: A01, B06, B09, C19, G and one final demand column.
+    let cols = ["AAA_A01", "AAA_B06", "AAA_B09", "AAA_C19", "AAA_G"];
+    let goods = [0, 1, 1, 1, 9];
+    let n = cols.len();
+    let mut rng = Uniform::new(3);
+    let z: Vec<Vec<f64>> = (0..n)
+        .map(|_| (0..n).map(|_| rng.next(1.0, 10.0)).collect())
+        .collect();
+    let va: Vec<f64> = (0..n).map(|_| rng.next(10.0, 30.0)).collect();
+    let out: Vec<f64> = (0..n)
+        .map(|j| (0..n).map(|i| z[i][j]).sum::<f64>() + va[j])
+        .collect();
+    let join = |xs: &[f64]| {
+        xs.iter()
+            .map(|x| repr_f64(*x))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let mut lines = vec![format!("V1,{},AAA_HFCE,OUT", cols.join(","))];
+    for (i, c) in cols.iter().enumerate() {
+        lines.push(format!("{c},{},1,0", join(&z[i])));
+    }
+    for (label, row) in [("TLS", &vec![0.0; n]), ("VA", &va), ("OUT", &out)] {
+        lines.push(format!("{label},{},0,0", join(row)));
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("2000_SML.csv");
+    fs::write(&path, lines.join("\n") + "\n").unwrap();
+    let got = &aggregate(&path, 2000).unwrap()["AAA"];
+    assert!(approx(got.extraction_output, out[1] + out[2], 1e-12));
+    for g in 0..N_GOODS {
+        let want: f64 = (0..n)
+            .filter(|&i| goods[i] == g)
+            .map(|i| z[i][1] + z[i][2])
+            .sum();
+        assert!(approx(got.extraction[g], want, 1e-12), "{g}");
+    }
+}

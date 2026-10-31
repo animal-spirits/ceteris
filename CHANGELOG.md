@@ -88,6 +88,16 @@ Goldens re-blessed:
   static digest; every column is bit for bit the same (`ceteris pack compare` against 7ca3a2b).
 - `tests/golden/p2-econ.txt`: every hash (snapshot layout and static digest).
 
+### BEHAVIOUR: crude oil and gas from rents produce with the world extraction column (ADR 0270)
+
+- `world_oil_gas_column` sums the ICIO extraction industries (B06, B09) only, which
+  `aggregate` now keeps per economy (`CountryIo::extraction`, `extraction_output`). With
+  refining in good 1 (ADR 0092) the good-1 column has a_VA 0.418 on 2000 data; extraction has
+  0.666, as before refining moved. WDI rents measure extraction, so the merged column gave rent
+  economies 1.59 times the gross output and 5 times the own use of good 1.
+- `econ_io` moves for the non-ICIO economies with a rent, and so do the calibration and the
+  `p2-pack` goldens (to re-bless with the B8 rebuild); the fixture goldens do not move.
+
 ### BEHAVIOUR: the block cap linearizes each country's tick and caps at its limit gain (ADR 0267, block review)
 
 - The block map now carries the wage (frictionless clearing, the wage rule at the gains of a
