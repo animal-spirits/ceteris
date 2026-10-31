@@ -26,7 +26,7 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "7";
+pub const FORMAT: &str = "8";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -339,14 +339,14 @@ impl EconInputs {
 }
 
 /// The market elasticities E and eps of `econ_calib_cells.arrow` (ADR 0263), finite and not
-/// negative.
+/// negative, and the block limit gains (ADR 0267), positive (infinite where no block caps).
 fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError> {
     let m = MarketElasticity {
         demand: f64s(cells, "demand_elasticity")?,
         supply: f64s(cells, "supply_elasticity")?,
-        block: [
-            f64s(cells, "block_scale_default")?,
-            f64s(cells, "block_scale_frictionless")?,
+        limit: [
+            f64s(cells, "block_limit_default")?,
+            f64s(cells, "block_limit_frictionless")?,
         ],
     };
     for (name, v) in [("demand", &m.demand), ("supply", &m.supply)] {
@@ -357,10 +357,10 @@ fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError>
             )));
         }
     }
-    for v in &m.block {
-        if let Some(c) = v.iter().position(|&x| !(x > 0.0 && x <= 1.0)) {
+    for v in &m.limit {
+        if let Some(c) = v.iter().position(|&x| x.is_nan() || x <= 0.0) {
             return Err(err(format!(
-                "econ_calib_cells.arrow: cell {c} has block scale {}",
+                "econ_calib_cells.arrow: cell {c} has block limit gain {}",
                 v[c]
             )));
         }
@@ -434,21 +434,26 @@ mod tests {
         assert!(calibrated_digest(&t).is_err());
     }
 
-    fn elasticity_cells(demand: f64, supply: f64, block: f64) -> RecordBatch {
+    fn elasticity_cells(demand: f64, supply: f64, limit: f64) -> RecordBatch {
         let schema = Arc::new(Schema::new(vec![
             Field::new("demand_elasticity", DataType::Float64, false),
             Field::new("supply_elasticity", DataType::Float64, false),
-            Field::new("block_scale_default", DataType::Float64, false),
-            Field::new("block_scale_frictionless", DataType::Float64, false),
+            Field::new("block_limit_default", DataType::Float64, false),
+            Field::new("block_limit_frictionless", DataType::Float64, false),
         ]));
         let column = |x: f64| Arc::new(Float64Array::from(vec![1.0, x])) as _;
-        let columns = vec![column(demand), column(supply), column(1.0), column(block)];
+        let columns = vec![
+            column(demand),
+            column(supply),
+            column(f64::INFINITY),
+            column(limit),
+        ];
         RecordBatch::try_new(schema, columns).unwrap()
     }
 
     #[test]
     fn market_elasticities_must_be_finite_and_not_negative() {
-        let cells = |demand: f64, supply: f64| elasticity_cells(demand, supply, 1.0);
+        let cells = |demand: f64, supply: f64| elasticity_cells(demand, supply, f64::INFINITY);
         let m = market_elasticity(&cells(11.57, 0.0)).unwrap();
         assert_eq!((m.demand, m.supply), (vec![1.0, 11.57], vec![1.0, 0.0]));
         for (demand, supply, name) in [
@@ -468,16 +473,17 @@ mod tests {
         }
     }
 
-    /// ADR 0267: a block scale is in (0, 1].
+    /// ADR 0267: a block limit gain is positive, infinite where no block caps.
     #[test]
-    fn block_scales_must_be_in_the_unit_interval() {
-        let m = market_elasticity(&elasticity_cells(1.0, 1.0, 0.25)).unwrap();
-        assert_eq!(m.block, [vec![1.0, 1.0], vec![1.0, 0.25]]);
-        for b in [0.0, -0.1, 1.5, f64::NAN] {
+    fn block_limits_must_be_positive() {
+        let m = market_elasticity(&elasticity_cells(1.0, 1.0, 0.025)).unwrap();
+        assert_eq!(m.limit[1], vec![1.0, 0.025]);
+        assert_eq!(m.limit[0], vec![1.0, f64::INFINITY]);
+        for b in [0.0, -0.1, f64::NAN] {
             let message = market_elasticity(&elasticity_cells(1.0, 1.0, b))
                 .unwrap_err()
                 .to_string();
-            assert!(message.contains("cell 1 has block scale"), "{message}");
+            assert!(message.contains("cell 1 has block limit gain"), "{message}");
         }
     }
 

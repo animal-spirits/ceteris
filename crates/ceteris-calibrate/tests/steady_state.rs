@@ -1216,7 +1216,7 @@ fn cross_price_elasticity_matches_finite_difference() {
             &physical.sourcing(&s.price),
             s,
             &inp.ent_s_l(),
-            1.0,
+            &ceteris_econ::EconParams::frictionless(),
             &trade,
         );
         let reference = steady::reference_inputs(inp, s);
@@ -1280,7 +1280,8 @@ fn input_order_shares_match_the_flows() {
         let (inp, s) = (&w.inp, &w.s);
         let m = Model::physical(inp).unwrap();
         let src = m.sourcing(&s.price);
-        let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), 1.0, &trade);
+        let params = ceteris_econ::EconParams::frictionless();
+        let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), &params, &trade);
         let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
         let traded = |g: usize, x: f64| if inp.traded[g] { x } else { 0.0 };
         let all = Mat::from_fn(n_p, n_g, |p, g| {
@@ -1299,12 +1300,12 @@ fn input_order_shares_match_the_flows() {
             });
             let ours = m.flows(&s.price, &of_country, &src).orders;
             let mut slot_v = vec![0.0; b.hold.len()];
-            for &(_, slot, v, _) in &b.inputs {
-                slot_v[slot] += v;
+            for input in b.inputs.iter().filter(|i| i.place >= cells.len()) {
+                slot_v[input.place - cells.len()] += input.v;
             }
             let mut share = vec![0.0; cells.len()];
-            for &(slot, i, _, u) in &b.routes {
-                share[i] += u * slot_v[slot];
+            for r in &b.routes {
+                share[r.cell] += r.u * slot_v[r.slot];
             }
             for (i, &cell) in cells.iter().enumerate() {
                 let (p, g) = (cell % n_p, cell / n_p);
@@ -1324,50 +1325,139 @@ fn input_order_shares_match_the_flows() {
     }
 }
 
-/// ADR 0267: the calibration's block scales are those of `block::scales` at each employment
-/// speed, 1 outside every block, and on the fixture no block is scaled in either mode (its
-/// markets are far from their limits: largest J 12.5 at eta 0.3, 13.8 at eta 1). The pack's
-/// scaled blocks are reported.
+/// ADR 0267: the calibration's block limit gains are those of `block::limits` in each mode,
+/// infinite outside every block and for a block within its margin, and b kappa_cell / m with b
+/// in (0, 1) elsewhere; on the fixture no block is beyond its margin in either mode. The pack's
+/// capped blocks are reported.
 #[test]
-fn block_scales_of_the_calibration() {
+fn block_limits_of_the_calibration() {
     let trade = ceteris_trade::TradeParams::default();
     for w in worlds() {
         let (inp, s) = (&w.inp, &w.s);
         let m = Model::physical(inp).unwrap();
         let src = m.sourcing(&s.price);
-        for (mode, eta) in ceteris_econ::inputs::MarketElasticity::block_etas()
-            .into_iter()
-            .enumerate()
-        {
-            let want = block::scales(&m, &src, s, &inp.ent_s_l(), eta, &trade);
-            assert_eq!(s.block_scale[mode], want, "{} eta {eta}", w.name);
-            let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), eta, &trade);
-            let (mut scaled, mut top) = (0, 0.0f64);
-            for (_, b) in &blocks {
+        let n_p = inp.n_provinces();
+        let modes = [
+            ceteris_econ::EconParams::default(),
+            ceteris_econ::EconParams::frictionless(),
+        ];
+        for (mode, params) in modes.iter().enumerate() {
+            let eta = params.eta;
+            let want = block::limits(&m, &src, s, &inp.ent_s_l(), params, &trade).unwrap();
+            assert_eq!(s.block_limit[mode], want, "{} eta {eta}", w.name);
+            let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), params, &trade);
+            let (mut capped, mut top) = (0, 0.0f64);
+            for (cells, b) in &blocks {
                 top = top.max(b.spectral_radius(1.0 / trade.gain_share, eta));
-                if b.scale(eta, trade.gain_share) < 1.0 {
-                    scaled += 1;
+                let scale = b.scale(eta, trade.gain_share);
+                if scale < 1.0 {
+                    capped += 1;
+                }
+                for (&j, &kappa) in cells.iter().zip(&b.gain) {
+                    let limit = want[(j % n_p, j / n_p)];
+                    if scale < 1.0 {
+                        assert_eq!(
+                            limit,
+                            scale * kappa / trade.gain_share,
+                            "{} cell {j}",
+                            w.name
+                        );
+                    } else {
+                        assert_eq!(limit, f64::INFINITY, "{} cell {j}", w.name);
+                    }
                 }
             }
             eprintln!(
-                "{} eta {eta}: {} blocks, {scaled} scaled, largest radius at gains / m {top:.4}",
+                "{} eta {eta}: {} blocks, {capped} beyond their margin, largest radius at gains / \
+                 m {top:.4}",
                 w.name,
                 blocks.len()
             );
-            let n_p = inp.n_provinces();
-            for (c, &b) in want.data.iter().enumerate() {
+            for (c, &l) in want.data.iter().enumerate() {
                 let (p, g) = (c / inp.n_goods(), c % inp.n_goods());
                 let in_block = blocks
                     .iter()
                     .any(|(cells, _)| cells.contains(&(g * n_p + p)));
-                assert!(in_block || b == 1.0, "{} cell {c}", w.name);
-                assert!(b > 0.0 && b <= 1.0, "{} cell {c}: {b}", w.name);
+                assert!(in_block || l == f64::INFINITY, "{} cell {c}", w.name);
+                assert!(l > 0.0, "{} cell {c}: {l}", w.name);
             }
             if w.pack_province.is_none() {
-                assert_eq!(scaled, 0, "{} eta {eta}", w.name);
+                assert_eq!(capped, 0, "{} eta {eta}", w.name);
             }
         }
     }
+}
+
+/// ADR 0267: the measured radius against the Gelfand limit of the map's matrix, ||M^k||^(1/k)
+/// at k = 2^40 by repeated squaring (every direction, no start vector), on each of the fixture's
+/// blocks (57 cells, about 240 states), at gains / m and twice that, under every wage gain of
+/// both modes. They agree to the 1e-3 the measurement reads a radius to.
+#[test]
+fn block_radius_matches_the_matrix_powers() {
+    let w = &worlds()[0];
+    let (inp, s) = (&w.inp, &w.s);
+    let m = Model::physical(inp).unwrap();
+    let src = m.sourcing(&s.price);
+    let trade = ceteris_trade::TradeParams::default();
+    let mut worst = 0.0f64;
+    for params in [
+        ceteris_econ::EconParams::default(),
+        ceteris_econ::EconParams::frictionless(),
+    ] {
+        let gains = match params.frictionless {
+            true => vec![0.0],
+            false => vec![params.kappa_w, (1.0 - params.delta_w) * params.kappa_w],
+        };
+        for (_, b) in block::blocks(&m, &src, s, &inp.ent_s_l(), &params, &trade) {
+            let n = b.dimension();
+            for scale in [1.0 / trade.gain_share, 2.0 / trade.gain_share] {
+                for &g in &gains {
+                    let mut a = Mat::zeros(n, n);
+                    let mut unit = vec![0.0; n];
+                    for col in 0..n {
+                        unit[col] = 1.0;
+                        let next = b.apply(scale, params.eta, g, &unit);
+                        unit[col] = 0.0;
+                        for (row, v) in next.into_iter().enumerate() {
+                            a[(row, col)] = v;
+                        }
+                    }
+                    let mut log_norm = 0.0;
+                    const SQUARINGS: i32 = 40;
+                    for j in 0..=SQUARINGS {
+                        if j > 0 {
+                            let mut sq = Mat::zeros(n, n);
+                            for r in 0..n {
+                                for k in 0..n {
+                                    let x = a[(r, k)];
+                                    if x != 0.0 {
+                                        for c in 0..n {
+                                            sq[(r, c)] += x * a[(k, c)];
+                                        }
+                                    }
+                                }
+                            }
+                            a = sq;
+                            log_norm *= 2.0;
+                        }
+                        let norm = a.data.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                        log_norm += norm.ln();
+                        a.data.iter_mut().for_each(|v| *v /= norm);
+                    }
+                    let gelfand = (log_norm / 2f64.powi(SQUARINGS)).exp();
+                    let measured = b.radius_at(scale, params.eta, g);
+                    worst = worst.max((measured - gelfand).abs());
+                    assert!(
+                        (measured - gelfand).abs() < 1e-3,
+                        "eta {} scale {scale} wage gain {g}: measured {measured}, Gelfand \
+                         {gelfand}",
+                        params.eta
+                    );
+                }
+            }
+        }
+    }
+    eprintln!("block radius against the matrix powers: worst gap {worst:.3e}");
 }
 
 /// ADR 0263 (As built): eps of a cell is the largest s_L sigma_FL / ((1 - s_L) a_VA) of its
