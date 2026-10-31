@@ -494,7 +494,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
 /// [`static_digest`] of `inputs` under the structural subset of the parameters, the rest at
 /// their defaults: the parameters a steady state (calibrated or solved) depends on, `sigma_demand`,
 /// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `theta_scale`, `coverage`, `border_nu`,
-/// `time_cost` and `storage_loss` (output replaces spoilage at a steady state, ADR 0091).
+/// `time_cost` and `storage_loss` (output replaces spoilage at a steady state, ADR 0091), and the
+/// other storage parameters `storage_cost`, `speculation`, `convenience` and `storage_gain`,
+/// which leave the steady state but enter the calibration's block map and market elasticities
+/// (ADRs 0091, 0267): a run under other storage parameters would keep stale price-gain limits.
 /// The adjustment speeds and the frictionless and rationing switches are free.
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
@@ -513,6 +516,10 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
             border_nu: trade.border_nu,
             time_cost: trade.time_cost,
             storage_loss: trade.storage_loss,
+            storage_cost: trade.storage_cost,
+            speculation: trade.speculation,
+            convenience: trade.convenience,
+            storage_gain: trade.storage_gain,
             ..TradeParams::default()
         },
     )
@@ -866,11 +873,13 @@ impl EconWorld {
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
     /// per enterprise) minted to each pop: tick 0 wages are paid at E2, so tick 0 spending is
     /// one month of base income. Panics on invalid inputs or a base point other than base
-    /// employment = (1 - u*) L^s under `params.edu_eff`, and on a calibrated start under structural
+    /// employment = (1 - u*) L^s under `params.edu_eff`, on a storage loss without speculation
+    /// ([`TradeParams::check_storage`]), and on a calibrated start under structural
     /// parameters other than the defaults with the calibrated border friction
     /// ([`structural_digest`], [`EconInputs::trade_params`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
+        trade.check_storage().unwrap_or_else(|e| panic!("{e}"));
         let inp = &*inputs;
         let (np, nc) = (inp.n_provinces(), inp.n_countries());
         let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
@@ -2180,6 +2189,34 @@ mod tests {
         unscaled.market_elasticity.as_mut().unwrap().limit =
             [vec![f64::INFINITY; n], vec![f64::INFINITY; n]];
         assert_ne!(digest(&inputs), digest(&unscaled));
+    }
+
+    /// A storage loss without speculation is an untargeted stock that spoils (ADR 0091; trade
+    /// SPEC, Competitive storage): refused.
+    #[test]
+    #[should_panic(expected = "no speculation intensity")]
+    fn storage_loss_without_speculation_is_refused() {
+        let mut trade = TradeParams::default();
+        trade.storage_loss[0] = 0.003;
+        EconWorld::new(Arc::new(small_world()), EconParams::default(), trade);
+    }
+
+    /// A data-state start keeps the calibration's price gains, whose block limits were
+    /// computed at its storage parameters (ADR 0267): a speculation intensity of its own is
+    /// refused.
+    #[test]
+    #[should_panic(expected = "market elasticities were computed under the default structural")]
+    fn data_state_start_refuses_elasticities_of_other_storage_parameters() {
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand: vec![1.0; n],
+            supply: vec![0.0; n],
+            limit: [vec![f64::INFINITY; n], vec![f64::INFINITY; n]],
+        });
+        let mut trade = TradeParams::default();
+        trade.speculation[5] = 5.714;
+        EconWorld::new(Arc::new(inputs), EconParams::default(), trade);
     }
 
     #[test]

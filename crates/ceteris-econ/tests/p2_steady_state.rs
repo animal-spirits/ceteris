@@ -355,6 +355,37 @@ fn calibrated_start_rejects_other_theta() {
     EconWorld::new(calibrated_fixture(), EconParams::default(), trade);
 }
 
+/// The storage parameters are structural (ADRs 0091, 0267): the calibration's block map and
+/// market elasticities were computed at them, so a run with a speculation intensity, a
+/// convenience elasticity, a money cost or an expectation gain of its own is refused, though
+/// none of them moves the steady state.
+#[test]
+fn calibrated_start_rejects_other_storage_parameters() {
+    let changes: [fn(&mut TradeParams); 4] = [
+        |t| t.speculation[5] = 5.714,
+        |t| t.convenience[0] *= 1.1,
+        |t| t.storage_cost[1] *= 1.1,
+        |t| t.storage_gain = 0.08,
+    ];
+    for (k, change) in changes.iter().enumerate() {
+        let mut trade = TradeParams::default();
+        change(&mut trade);
+        let err = std::panic::catch_unwind(|| {
+            EconWorld::new(calibrated_fixture(), EconParams::default(), trade)
+        })
+        .map(|_| ())
+        .expect_err(&format!("change {k} was not refused"));
+        let message = err
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .unwrap_or_default();
+        assert!(
+            message.contains("calibrated steady state"),
+            "change {k}: {message}"
+        );
+    }
+}
+
 /// A calibration solved at other border frictions than the defaults (ADR 0092).
 fn fixture_at_other_nu() -> Arc<EconInputs> {
     let mut inputs = small_world();

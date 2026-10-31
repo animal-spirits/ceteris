@@ -662,10 +662,14 @@ fn from_dispatch(w: &mut EconWorld, tick: u32) {
 /// ADR 0091, with storage on at the approved values: storage purchases and releases pass
 /// through the ledger and spoilage is tallied.
 /// At T3 each stored good's origin loses exactly delta S of the stock it carried in, destroyed
-/// from its market account, and nothing else of that good leaves the account before dispatch;
-/// over 120 ticks from a disturbed data state every tick's invariants hold (goods identity,
-/// the market account holding S, money), stored goods' stocks stay nonnegative and the
-/// markets end each tick with no money.
+/// from its market account (the ledger's goods arithmetic, bit for bit), the ledger's tally of
+/// destroyed goods rises by the sum of those losses and by nothing else at T3, and nothing else
+/// of that good leaves the account before dispatch. At tick 0 every stored cell expects a large
+/// fall (pi^e -10 for its order alone): where the unfloored order delta S + psi D x would sell
+/// more than the stock left after spoilage, the order sits exactly at its floor -(1 - delta) S,
+/// elsewhere above it, and at least one cell is floored. Over 120 ticks from a disturbed data
+/// state every tick's invariants hold (goods identity, the market account holding S, money) and
+/// the markets end each tick with no money.
 #[test]
 fn storage_conserves_goods_and_money() {
     let trade = TradeParams::default().with_storage();
@@ -678,7 +682,7 @@ fn storage_conserves_goods_and_money() {
         *p *= 1.0 + 0.3 * ((i * 7 % 11) as f64 / 10.0 - 0.5);
     }
     let acc = w.layout().accounts.clone();
-    let mut stored = false;
+    let (mut stored, mut floored) = (false, 0);
     for tick in 0..120 {
         w.begin_tick();
         systems::deliver(&mut w);
@@ -693,22 +697,49 @@ fn storage_conserves_goods_and_money() {
                 (c, w.markets.inventory[c], held)
             })
             .collect();
+        let expected = w.markets.expectation.clone();
+        if tick == 0 {
+            for &(c, _, _) in &cells {
+                w.markets.expectation[c] = -10.0;
+            }
+        }
+        let tally: Vec<f64> = (0..N_GOODS).map(|g| w.ledger.destroyed(g)).collect();
         systems::clear(&mut w);
+        w.markets.expectation = expected;
+        let mut want = tally;
         for &(c, s, held) in &cells {
             let (i, g) = (c / N_GOODS, c % N_GOODS);
             let loss = trade.storage_loss[g] * s;
-            let now = w.ledger.goods(acc.market[i], g);
-            assert!(
-                (held - loss - now).abs() <= 1e-12 * held.max(1.0),
-                "tick {tick} cell {c}: {held} - {loss} != {now}"
+            if loss > 0.0 {
+                want[g] += loss;
+            }
+            assert_eq!(
+                w.ledger.goods(acc.market[i], g),
+                held - loss,
+                "tick {tick} cell {c}"
             );
-            assert!(w.markets.inventory[c] >= 0.0);
-            assert!(w.markets.storage[c] >= -(s - loss));
-            stored |= w.markets.storage[c] != loss;
+            let order = w.markets.storage[c];
+            assert!(order >= -(s - loss), "tick {tick} cell {c}: {order}");
+            let d = w.markets.demand[c];
+            if tick == 0 && s > 0.0 && d > 0.0 {
+                // the unfloored order at this cover; oil's convenience yield (zeta 13) still
+                // holds stock where cover is short
+                let x = trade.storage_return(g, s / (trade.coverage[g] * d), -10.0);
+                let below = loss + trade.speculation[g] * d * x < -(s - loss);
+                assert_eq!(order == -(s - loss), below, "tick 0 cell {c}: {order}");
+                floored += usize::from(below);
+            }
+            stored |= order != loss;
+        }
+        for g in (0..N_GOODS).filter(|&g| STORABLE[g]) {
+            assert_eq!(w.ledger.destroyed(g), want[g], "tick {tick} good {g}");
         }
         from_dispatch(&mut w, tick);
         for a in &acc.market {
             assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
+        }
+        if tick == 0 {
+            assert!(floored > 0, "tick 0: no order at its floor");
         }
     }
     assert!(stored, "no storage order beyond spoilage");

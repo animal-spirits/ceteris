@@ -214,6 +214,11 @@ impl Ledger {
         self.destroyed[good] += qty;
     }
 
+    /// Quantity of `good` destroyed this tick (the tally the goods identity checks).
+    pub fn destroyed(&self, good: usize) -> f64 {
+        self.destroyed[good]
+    }
+
     pub fn journal(&self) -> &[Entry] {
         &self.journal
     }
