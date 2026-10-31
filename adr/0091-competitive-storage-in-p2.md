@@ -101,7 +101,10 @@ the relative and aggregate terms apply unchanged.
 - **Parameters** (owner approval 2026-10-30T22:51Z; DESIGN 17 rows P56, P144 to P146): per month,
   delta 0.003, 0.0005, 0.001, 0 and k 0.009, 0.011, 0.007, 0.0067 (interest 0.0047 included) for
   goods 0, 1, 2, 5; zeta 1.8, 13, 3.5, 3.5; psi 20, 1.0, 3.571, 5.714 (derived from a
-  stock-persistence target, not estimated); g_s 0.08; s_g unchanged (3, 1, 2, 2). The weak
+  stock-persistence target, not estimated; good 5's 5.714 is the source sheet's 40 at zeta 0.5
+  rescaled to zeta 3.5, 40 x 0.5 / 3.5, where the formula psi = lambda s / (zeta (k + delta))
+  gives 5.54: approved as rescaled); g_s 0.08 at first, 0.006 since the B7 follow-up (below);
+  s_g unchanged (3, 1, 2, 2). The weak
   sources are an open question for P9 (trade SPEC). `TradeParams::storage_loss`, `storage_cost`,
   `speculation`, `convenience`, `storage_gain`; storage applies to `goods::STORABLE`.
 - **The order** (`Markets::store`, T3 before clearing): the stock S carried in loses delta S
@@ -121,27 +124,37 @@ the relative and aggregate terms apply unchanged.
   charges p Q delta s / (1 + delta s) to profits. delta joins the structural digest. Export format
   14 (`goods.storage_loss`, the storage parameters in `params.json`), calibration format 8 (9 after the merge
   into pre-p3/econ-review with ADR 0267's limit gains): every calibrated pack is recalibrated (B8). With storage on the fixture's calibration moves by up to
-  0.8% (output, stocks, VA) and the calibrated state holds to 1e-9 over its run
-  (`fixture_calibrated_state_holds_to_1e_9`; `stage5_state_is_stationary_under_the_stock_rules`
-  calibrates the fixture with storage on beside the default worlds).
+  0.8% (output, stocks, VA), and its stage 5 state is stationary under the stock and storage
+  rules (`stage5_state_is_stationary_under_the_stock_rules` calibrates the fixture with storage
+  on beside the default worlds). No test runs `EconWorld` from a storage-on calibration:
+  `fixture_calibrated_state_holds_to_1e_9` runs the default calibration, storage off (the first
+  As built said otherwise; B7 review I4), and a storage-on calibration does not load into
+  `EconInputs`, whose `trade_params` carry no storage parameters (gate below).
 - **J includes the storage response** (ADR 0263 interaction): b moves with every change in the
   buyers' orders through z, so the static elasticity of the market's orders is E (1 + psi zeta (k
   + delta)) / (1 + delta s): 1.42, 1.15, 1.10 and 1.13 times E for goods 0, 1, 2, 5. The per-market
   J uses it at the run's parameters (`MarketElasticity::j`), and the block map of ADR 0267 scales
   a stored good's order terms by the same factor (`block::blocks`); with storage off the factor
   is 1. With storage on, on the calibrated fixture no
-  cell is capped per market (largest J 14.3 default, 15.6 frictionless, against 20), but 3 of its
-  4 blocks are now scaled in both modes (99 traded cells; largest radius at gains / m 1.075 and
-  1.208, against 0.820 and 0.942 before), where none was. Measured on ADR 0267's first-build map (traded cells, block
-  scales); the merged map of limit gains has not been measured with storage on.
+  cell is capped per market (largest J 14.3 default, 15.6 frictionless, against 20). The first
+  build's block map (traded cells only) scaled 3 of its 4 blocks in both modes (largest radius
+  at gains / m 1.075 and 1.208). The B7 review round (I1, I2) corrected the merged map: a
+  stored cell's revenue follows its buyers' orders, o / r, not the storage order (the merge
+  read R (x + q + e), overstating it by r), and its stock and expectation are states of the map
+  (trade SPEC, Block gain). On the fixture calibrated with storage on at g_s 0.006
+  (`block_limits_with_storage_on`) the default mode caps no block (largest radius at gains / m
+  0.994) and frictionless caps 1 of 4 (57 cells, 1.0077); without the two states the map reads
+  1.022 and 1.152.
 - **Stability** (trade SPEC, Storage loop): the 4 x 4 map of (x, q, sigma, pi^e_og), checked by
-  Schur-Cohn and against the toy market (`stability_with_storage_matches_simulation`). Over the
+  Schur-Cohn and against the toy market (`stability_with_storage_matches_simulation`). At the
+  first g_s 0.08 (superseded by the g_s 0.006 bullet below): over the
   fixture's eps the default kappa1 0.05 is inside for every good; agriculture's limit in the
   default mode is 0.054. Over the pack's eps (down to 0.09) agriculture's limit is 0.0425 in both
   modes: an agriculture market facing total demand (E near 0.6) with an inelastic supply has a
   slow growing root (1.003), the momentum loop kappa1 psi = 1.0 beating the stock's pull. The
   per-market cap does not reach it (it bounds J2). Recorded for B8; no value changed.
-- **Stockout asymmetry**: a 30% harvest cut held 12 months raises agriculture's price by 0.73 in
+- **Stockout asymmetry** (at g_s 0.08; the g_s 0.006 values are in the last bullets and in
+  Tests): a 30% harvest cut held 12 months raises agriculture's price by 0.73 in
   logs, a 30% surplus lowers it by 0.35 (`stockout_raises_price_more_than_surplus_lowers_it`).
   The second claim does not hold at these values: the stock does not reach zero on the cut side
   (lowest 0.89 of 3 months), since the convenience yield and the momentum make merchants hold back
@@ -159,3 +172,19 @@ the relative and aggregate terms apply unchanged.
   fails at 1,200 ticks at every value set tried (slow convergence, about 0.9986 a tick; prices
   within 0.06% at 3,600). The stockout claim is restated in Tests (the stock stops at 0.23 of
   target at the 12-month cut; a 3-month cut moves the price by 0.10 against 0.59 without stock).
+- **Storage parameters are structural** (B7 review round, I2; ADR 0267): the calibration builds
+  the block map at the export's storage parameters (`goods.storage_loss`, and the P56 money
+  cost, P144, P145 and P146 of `params.json`), and `structural_digest` carries all five, so a
+  run under storage parameters other than its calibration's is refused at a calibrated start
+  and at a data-state start of calibrated inputs: storage-off limits never cap a storage-on run.
+  Recomputing at the run, or a second storage-on column, were the alternatives; refusing keeps
+  one map per calibration, and turning storage on is recalibrating anyway. A storage loss
+  without speculation (delta > 0, psi = 0), an untargeted stock that spoils (root 1.0004 above),
+  is refused (`TradeParams::check_storage`, in `EconWorld::new` and the calibration).
+- **Gate for switching storage on** (B7 review I5; none of these is met yet): an ablation test
+  (DESIGN 15.7) with a falsification target (price skew, stockout spikes, stock persistence);
+  the P9 fit against the 2011 to 2018 holdout (ADR 0107); 100-year invariants with storage on;
+  V1 from the data state at 1,200 ticks; 1 against 8 threads with storage on; the psi limit per
+  good derived and tested (its own thread); a storage-on calibration that loads
+  (`EconInputs::trade_params` carrying the calibration's storage parameters) and a
+  calibrated-state test from it; and the review's I1 and I2, fixed above.
