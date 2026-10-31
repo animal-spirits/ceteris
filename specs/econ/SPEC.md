@@ -281,7 +281,16 @@ has no bound where a good's U - R is about 0 along the ray); a last pass that si
 reaching only just below the limit has a fixed point far below it, off its pieces, which is not
 taken (seed 13067305529229119429 translated to 0.3 ended at [0.267, 0, 0] against t when it was,
 before the stock floor; no translated collapse or random province under the floor reaches that
-case, 3,000,000 and 1,000,000 probed)
+case, 3,000,000 and 1,000,000 probed; the hand-built regression is a user whose stock comes to
+cover it between f and the fixed point, `local::tests::the_stop_refuses_a_fixed_point_past_a_cover_point`)
+non-uniqueness at gain exactly 1: where the province has a direction of loop gain exactly 1 (a
+line of fixed points, as where a good's producer supplies exactly what its users without stock
+need along a ray), the fills are not unique: the stop may take any fixed point on the last
+pass's pieces, which need not be the limit of the iteration from 1 defined above. Every good fits
+there and the invariants hold, and the result is deterministic, but it can over-cut: a
+translated collapse balanced at t = 0.1 by an extra user ends at [0.093, 0.013, 0.013], every
+user's output at most its output at t (`neutral_good_stop_takes_a_fixed_point_on_its_line`).
+Such provinces are of measure zero; the translated collapses exclude them (`translatable`)
 draws: with output enough, every user draws n_ek = coef_ek Y_e from output; short, each draws
 its uncovered need u_ek = coef_ek cap_e max(min over its inputs k' of (G_ek' - s_ek), 0), at most
 n_ek (n_ek where b_ek = 0; G_ek' - s_ek written (1 - s_ek) F_k for k itself and
@@ -320,10 +329,13 @@ the threshold where its own fill fell to b / (coef cap)), each local good beyond
 starts to fall, and each pair of local goods some
 user takes both of (a switch of the binding fill, taken once per pair: an assumption, not
 derived; a pair can switch more than once, and the allowance of two passes per kink has held
-those seen). The most is 14 passes, against a bound of at least 15: province 10 at tick 76, where
-utilities and construction collapse to 0 across the floors of users holding residues of earlier
-collapses (1e-52 to 1e-12 of their needs). Before the stock floor the most was 4 passes. Before
-ADR 0266's split order rule the most was 6 passes, both
+those seen; under the stock floor each user of both goods switches on its own line,
+s_j + (1 - s_j) F_j = s_k + (1 - s_k) F_k, so a fall may cross one switch per such user, not per
+pair, and the bound does not count the others). The most is 14 passes, against its own bound
+of 25: province 10 at tick 76, where utilities and construction collapse to 0 across the floors
+of users holding residues of earlier collapses (1e-52 to 1e-12 of their needs). The smallest
+margin over the 482 binding province ticks is 11 (that tick), the smallest bound 15. Before
+the stock floor the most was 4 passes. Before ADR 0266's split order rule the most was 6 passes, both
 before the input cap and with it: province 5 at tick 79, against a bound of 21, where utilities
 and construction, inputs of each other with no stocks but residues from earlier collapses, fall
 at a loop gain of 0.7 to 0.9 per pass to 0 across the residue thresholds. Before a jump ahead found the last whole cycle (it ended at
@@ -1206,8 +1218,8 @@ texture fed from core columns.
   good before households, and Priority fills intermediate orders first at origins
   (`local_chain_respects_intermediate_priority`); cutting coal output leaves downstream output
   unchanged in that tick and lowers it once stocks run out (`traded_shortage_still_lags`); cycles
-  among local goods settle within the passes their kinks allow (at most 14, against bounds of 15
-  and up; `local_chain_terminates_on_cycles`); a user whose stock covers its local needs runs at
+  among local goods settle within the passes their kinks allow (at most 14, against its bound of 25;
+  smallest margin 11; `local_chain_terminates_on_cycles`); a user whose stock covers its local needs runs at
   its cap when a local producer makes nothing, while the users without stock are cut to nothing
   (`a_stocked_user_is_not_cut_by_the_fill`, `local::tests::stock_is_a_floor_under_the_fill`);
   the exact fills equal

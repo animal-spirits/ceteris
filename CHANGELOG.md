@@ -54,7 +54,10 @@ Goldens re-blessed:
   gave (`translate`, `translated_original`, `translatable`), with the sample and full run
   re-measured; pinned seeds that the floor changes are re-measured or replaced, each with its
   reason; `translated_collapse_stop_refuses_an_off_piece_fixed_point` is removed (no province
-  under the floor reaches that case).
+  under the floor reaches that case) and replaced by a hand-built regression
+  (`local::tests::the_stop_refuses_a_fixed_point_past_a_cover_point`); the stop's result on a
+  line of fixed points of gain exactly 1 is pinned and the SPEC records that the fills are not
+  unique there (`neutral_good_stop_takes_a_fixed_point_on_its_line`).
 
 ### Fixed: the write-off's country total is i128 (ADR 0106)
 
