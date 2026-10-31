@@ -1271,7 +1271,15 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
     provinces with only local goods 7 to 9 the debtors buy nothing, prices stay below input
     cost, no wage clears labour, so the frictionless wage halves every tick, 1e-30 to 1e-116 of
     w0 by tick 900; B8d), Albania 0.368. Neither cap drives it: with the block limits off 1.36e3, with both caps off
-    1.38e3 (France then 6.9). H2 distance -0.4539 (s.e. 0.0105, pseudo-R2 0.964), reported (ADR
+    1.38e3 (France then 6.9). With the data state's merchants at coverage times own base output
+    (Initial state, amendment 2026-10-31, B8e; storage off) V1 from the data state still misses
+    frictionless: price 0.762 at tick 1,200 (Taiwan province 3903 good 9, wage 0.737; Paraguay
+    0.723, Albania 0.403; 233 countries with a cell over 1%), 0.670 at 3,600 (Taiwan; Albania
+    0.368; two countries over 1%), 0.295 at 6,000 (Albania province 62 good 8 alone; next Malawi
+    1.9e-3), flow units 0.728, 0.304, 0.121. Pitcairn's gap is 1.3e-2, 2.5e-4 and 2.2e-4, and
+    North Macedonia's wages are 0.984 to 1.085 of the reference at 1,200 and 0.9996 to 1.0008
+    at 6,000. The default run from the data state passes V1's 1% at 1,200 (price 9.29e-3,
+    Malawi; wage 9.34e-3; flow units 4.40e-3) and reaches 1.4e-7 at 3,600 and 8.2e-8 at 6,000. H2 distance -0.4539 (s.e. 0.0105, pseudo-R2 0.964), reported (ADR
     0264). H2 per class passes (theta within 2.0e-8 relative); with ln distance as the cost
     control class 0 2.453, 1 3.561, 2 7.630, 3 16.039, and in class 3 good 1 alone 16.275 (s.e.
     0.417), good 2 alone 14.443 (0.739). 100 years: no violation, index 1.0000000000000067. 1 vs
