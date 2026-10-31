@@ -155,17 +155,13 @@ pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
         .fold(0.0, f64::max)
 }
 
-/// Inputs per unit of crude oil and gas output over all ICIO economies, weighted by their crude
-/// oil and gas output.
+/// Inputs per unit of crude oil and gas extraction output (B06, B09, without refining) over all
+/// ICIO economies, weighted by their extraction output (ADR 0270).
 pub fn world_oil_gas_column(icio: &BTreeMap<String, CountryIo>) -> [f64; N_GOODS] {
-    let output: Vec<f64> = icio.values().map(|c| c.output[OIL_GAS]).collect();
+    let output: Vec<f64> = icio.values().map(|c| c.extraction_output).collect();
     let total = pairwise_sum(&output);
     std::array::from_fn(|k| {
-        let inputs: Vec<f64> = icio
-            .values()
-            .zip(&output)
-            .map(|(c, x)| c.io[k][OIL_GAS] * x)
-            .collect();
+        let inputs: Vec<f64> = icio.values().map(|c| c.extraction[k]).collect();
         pairwise_sum(&inputs) / total
     })
 }
@@ -394,7 +390,7 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
 /// its group (all of industry where industry less manufacturing is too small) and at most the
 /// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
-/// world crude oil and gas inputs per unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
+/// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP, population (WDI, else the WorldPop
 /// national total) times the donor's VA per person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
@@ -522,6 +518,8 @@ pub fn impute(
                     io,
                     final_demand_shares: d.final_demand_shares,
                     coal_share: d.coal_share,
+                    extraction: [0.0; N_GOODS],
+                    extraction_output: 0.0,
                 },
                 donor: Some(name),
                 va_basis: basis,

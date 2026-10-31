@@ -1,6 +1,6 @@
 # 0256. World technology for crude oil and gas set by rents
 
-Status: proposed
+Status: proposed; amended by ADR 0270 (extraction column, without refining)
 Date: 2026-10-30
 Design sections: 16.1, 22.2; amends ADR 0249
 
