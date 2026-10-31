@@ -1876,7 +1876,7 @@ mod tests {
                 assert!((held - inp.coef(e, k) * y0).abs() <= 1e-12 * y0);
             }
         }
-        // origin inventories at coverage times initial demand; local goods and cells
+        // origin inventories at coverage times own base output; local goods and cells
         // without a market hold none
         for i in 0..25 {
             for (g, &traded) in TRADED.iter().enumerate() {
@@ -1884,6 +1884,21 @@ mod tests {
                 let held = w.ledger.goods(w.layout.accounts.market[i], g);
                 assert_eq!(held, w.markets.inventory[cell]);
                 assert_eq!(held > 0.0, traded && w.markets.active[cell], "cell {cell}");
+            }
+        }
+        for e in 0..inp.n_enterprises() {
+            let (i, g) = (
+                inp.enterprises.province[e] as usize,
+                usize::from(inp.enterprises.good[e]),
+            );
+            if TRADED[g] {
+                let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / w.layout.a_va[e];
+                let held = w.markets.inventory[i * N_GOODS + g];
+                let want = w.trade.coverage[g] * y0;
+                assert!(
+                    (held - want).abs() <= 1e-12 * want,
+                    "{i} {g}: {held} {want}"
+                );
             }
         }
         // nothing in flight; the price index starts at the data state's prices
@@ -1899,6 +1914,67 @@ mod tests {
                     assert_eq!(p, 1.0);
                 }
             }
+        }
+    }
+
+    /// Econ SPEC, Initial state (merchant stocks of the data state): a one-province economy
+    /// of Pitcairn's scale, the fixture's island at 1e-4 of its population and value added,
+    /// gets no windfall at tick 1. Its pops may hold at most their money before, one month of
+    /// its base value added, and the value of its whole stock and a month's output at the
+    /// step-clipped price. When merchants stocked coverage times the world's orders at prices 1
+    /// they held about 5,850 times their money.
+    #[test]
+    fn a_tiny_economy_has_no_tick_one_windfall() {
+        const ISLAND: u32 = 24;
+        const SCALE: f64 = 1e-4;
+        let mut inp = small_world();
+        for k in 0..inp.n_pops() {
+            if inp.pops.province[k] == ISLAND {
+                inp.pops.population[k] *= SCALE;
+                inp.pops.labour_force[k] *= SCALE;
+            }
+        }
+        inp.provinces.population[ISLAND as usize] *= SCALE;
+        for e in 0..inp.n_enterprises() {
+            if inp.enterprises.province[e] == ISLAND {
+                inp.enterprises.va0[e] *= SCALE;
+                inp.enterprises.va_target[e] *= SCALE;
+            }
+        }
+        inp.set_base_point(&EconParams::default().edu_eff);
+        let inp = Arc::new(inp);
+        let trade = TradeParams::default();
+        let c = inp.country_of(ISLAND as usize);
+        for params in [EconParams::default(), EconParams::frictionless()] {
+            let mut sim = EconWorld::sim(Arc::clone(&inp), params, trade.clone());
+            let money = |w: &EconWorld| -> f64 {
+                let lay = &w.layout;
+                lay.country_pops[c]
+                    .iter()
+                    .map(|&k| to_numeraire(w.ledger.money(lay.accounts.pop[k as usize])))
+                    .sum()
+            };
+            let before = money(sim.world());
+            let lay = Arc::clone(&sim.world().layout);
+            let (mut va, mut traded) = (0.0, 0.0);
+            for e in lay.enterprises(ISLAND as usize) {
+                va += inp.enterprises.va0[e];
+                if TRADED[usize::from(inp.enterprises.good[e])] {
+                    traded += inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
+                }
+            }
+            let cover = trade.coverage.iter().copied().fold(0.0, f64::max);
+            let clip = (0..N_GOODS)
+                .map(|g| trade.price_clip(g))
+                .fold(0.0, f64::max);
+            let bound = before + va + (1.0 + cover) * libm::exp(clip) * traded;
+            sim.step().unwrap();
+            let after = money(sim.world());
+            assert!(
+                after <= bound,
+                "island pops hold {after:.4e} after tick 1 against {before:.4e} before, \
+                 bound {bound:.4e}"
+            );
         }
     }
 
