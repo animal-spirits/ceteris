@@ -13,7 +13,7 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
+use ceteris_trade::source::{INTERMEDIATE, dispatch, source};
 use ceteris_trade::{Kernel, Markets, N_GOODS, Network, Pipeline, Sourced, TradeParams};
 
 use crate::calibration::Steady;
@@ -868,8 +868,8 @@ impl EconWorld {
     /// steady state of `EconInputs::steady` (ADR 0089, [`EconWorld::start_steady`]) when the
     /// inputs carry one, else the 2000 data state: prices 1, base wages w0 and employment L0
     /// from the inputs, unemployment at the natural rate u*, input stocks at one month of base
-    /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times initial demand
-    /// (see [`EconWorld::stock_base_demand`]), nothing in flight, and one month of base
+    /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times own base
+    /// output (see [`EconWorld::stock_base_output`]), nothing in flight, and one month of base
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
     /// per enterprise) minted to each pop: tick 0 wages are paid at E2, so tick 0 spending is
     /// one month of base income. Panics on invalid inputs or a base point other than base
@@ -1039,33 +1039,27 @@ impl EconWorld {
         let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
         let (inp, lay) = (&*inp, &*lay);
         let accounts = &lay.accounts;
-        let edu_eff = |k: usize| self.params.edu_eff[usize::from(inp.pops.edu[k])];
-        // base income, minted: the national profit pool now, wages at E2
+        // one month of base dividends, minted: the national profit pool now, wages at E2
         let pool = base_profit_pool(inp);
-        let mut base_income = vec![0.0; inp.n_pops()];
-        for (k, income) in base_income.iter_mut().enumerate() {
+        for k in 0..inp.n_pops() {
             let i = inp.pops.province[k] as usize;
             let dividends = lay.ownership[k] * pool[inp.country_of(i)];
             self.ledger
                 .transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
-            *income = inp.provinces.w0[i] * edu_eff(k) * self.employed[k] + dividends;
         }
         // input stocks at one month of base use (Y0 = A VA0 / a_VA)
-        let n_ent = inp.n_enterprises();
-        let mut base_use = vec![0.0; n_ent * N_GOODS];
-        for e in 0..n_ent {
+        for e in 0..inp.n_enterprises() {
             let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
             for k in 0..N_GOODS {
                 let q = lay.coef[e][k] * y0;
                 if q > 0.0 {
                     self.ledger.create(accounts.enterprise[e], k, q);
-                    base_use[e * N_GOODS + k] = q;
                 }
             }
         }
         self.refresh_price_index();
         self.price_level = self.world_price_index();
-        self.stock_base_demand(&base_income, &base_use);
+        self.stock_base_output();
     }
 
     /// The calibrated steady state at the start of a tick (ADR 0089, stage 5), on a world
@@ -1205,55 +1199,22 @@ impl EconWorld {
         self.price_level = level;
     }
 
-    /// Origin inventories of the data state at coverage times initial demand: the orders
-    /// that one month of base demand places at each origin market at the data state's
-    /// prices, households spending their base income with PIGL at the price index and
-    /// enterprises buying one month of base use at the index.
-    fn stock_base_demand(&mut self, base_income: &[f64], base_use: &[f64]) {
+    /// Origin inventories of the data state at coverage times the origin's own base output
+    /// of the good, s_g Y0 with Y0 = A VA0 / a_VA, at every active traded cell; local goods
+    /// hold none.
+    fn stock_base_output(&mut self) {
         let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
         let (inp, lay) = (&*inp, &*lay);
-        let np = inp.n_provinces();
-        let mut spend = vec![[0.0; 2]; np * N_GOODS];
-        let mut x = [0.0; N_GOODS];
-        for d in 0..np {
-            let row: [f64; N_GOODS] = self.price_index[d * N_GOODS..(d + 1) * N_GOODS]
-                .try_into()
-                .expect("one row of goods");
-            for k in lay.pops(d) {
-                lay.pop_demand(inp, &self.params, k, &row, base_income[k], &mut x);
-                for g in (0..N_GOODS).filter(|&g| TRADED[g] && x[g] > 0.0) {
-                    spend[d * N_GOODS + g][HOUSEHOLD] += x[g] * row[g];
-                }
-            }
-            for e in lay.enterprises(d) {
-                for g in (0..N_GOODS).filter(|&g| TRADED[g] && row[g].is_finite()) {
-                    spend[d * N_GOODS + g][INTERMEDIATE] += base_use[e * N_GOODS + g] * row[g];
-                }
-            }
-        }
-        let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
-        let mut sourced = Sourced::new();
-        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-            for o in 0..np {
-                price[o] = self.markets.price[o * N_GOODS + g];
-                active[o] = self.markets.active[o * N_GOODS + g];
-            }
-            let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
-            source(
-                &self.kernel,
-                g,
-                &price,
-                &active,
-                &lay.gamma[g],
-                &s,
-                &mut sourced,
+        for e in 0..inp.n_enterprises() {
+            let (o, g) = (
+                inp.enterprises.province[e] as usize,
+                usize::from(inp.enterprises.good[e]),
             );
-            for o in (0..np).filter(|&o| active[o]) {
-                let stock = self.trade.coverage[g] * (sourced.orders[o][0] + sourced.orders[o][1]);
-                if stock > 0.0 {
-                    self.markets.inventory[o * N_GOODS + g] = stock;
-                    self.ledger.create(lay.accounts.market[o], g, stock);
-                }
+            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
+            let stock = self.trade.coverage[g] * y0;
+            if TRADED[g] && self.markets.active[o * N_GOODS + g] && stock > 0.0 {
+                self.markets.inventory[o * N_GOODS + g] += stock;
+                self.ledger.create(lay.accounts.market[o], g, stock);
             }
         }
     }

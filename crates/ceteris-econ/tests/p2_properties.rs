@@ -505,9 +505,21 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
 
 /// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0112),
 /// so scaling every nominal value moves losses past the cap in one run and not the other.
+///
+/// The frictionless run is compared at tick 6. From the data state its coal shortage holds
+/// most mainland enterprises at their coal caps from tick 3 (`frictionless_unemployment_is_the_
+/// natural_rate`), and its clearing wage puts some exactly there, target = cap, where ADR 0266's
+/// split order rule is discontinuous: whether the cap cut the target, and so whether E3 orders
+/// coal on notional or capped output, is decided by rounding. At tick 7 the two runs decide it
+/// otherwise for enterprises 8 and 53 (their stocks agree to every printed digit), and from tick
+/// 8 they differ by 16% in employment, 0.5% at tick 120. Before the data state's merchants
+/// held coverage times their own base output (B8e) the run reached no such tie in 120 ticks.
 #[test]
 fn homogeneity_of_degree_zero() {
-    for params in [EconParams::default(), EconParams::frictionless()] {
+    for (params, ticks) in [
+        (EconParams::default(), 120),
+        (EconParams::frictionless(), 6),
+    ] {
         let params = EconParams {
             write_off_months: f64::INFINITY,
             ..params
@@ -518,8 +530,8 @@ fn homogeneity_of_degree_zero() {
         // the two runs is about 1e-11, except that under PIGL demand (MIGRATION Task 7) the
         // default run passes a transient between ticks 40 and 90 where it peaks at 7.5e-9
         // (the island's sales and input stocks), back to 2e-10 by tick 100
-        base.run_until(120).unwrap();
-        big.run_until(120).unwrap();
+        base.run_until(ticks).unwrap();
+        big.run_until(ticks).unwrap();
         // 1e-9, not bit for bit: payments round half to even to minor units and 1e4 is not
         // a power of two, so nominal roundings differ between the two runs
         for ((what, a, size), (_, b, _)) in real_state(base.world())
@@ -1068,16 +1080,21 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
 /// (1 - u*_i) L^s_i, so unemployment is u* in every province at every tick unless enterprises
 /// held to the labour their inputs allow (ADR 0266) leave more unemployed; it is never below u*.
 /// At tick 0 every enterprise is at its cap (one month of stocks is base output), which clears
-/// at u* exactly. On the fixture more are unemployed in two places:
+/// at u* exactly. On the fixture more are unemployed at 87 province ticks, all in ticks 1 to 11:
 ///
 /// - Province 24 at tick 1, whose one month of input stocks the first tick used up, with its
 ///   orders still in transit: every cap is 0, no enterprise would hire, demand is 0 at every
 ///   wage, and the wage halves (the no-root bound of the frictionless search).
-/// - Province 20 at ticks 8 and 9, where every enterprise that would hire is held by its stock
-///   of good 2, under a month of use, and the caps sum below (1 - u*) L^s: no wage clears, and
-///   the rationed rule sets min(w_{t-1}, w_top), w_top the lowest p_VA dVA/dL at the caps (it
-///   cuts the wage at tick 8 and keeps it at tick 9). This appeared once the cap counted each
-///   enterprise's own good and E3 ordered the short input on notional output (ADR 0266).
+/// - The other 86, in 20 mainland provinces and in province 24 at ticks 8 to 10, where every
+///   enterprise that would hire is held by its stock of coal (good 2), under a month of use, and
+///   the caps sum below (1 - u*) L^s: no wage clears, and the rationed rule sets min(w_{t-1},
+///   w_top), w_top the lowest p_VA dVA/dL at the caps; up to 0.81 above u* (province 20, tick
+///   6). The data state's merchants hold coverage times their own base output (econ SPEC,
+///   Initial state, B8e), and the fixture's world orders about twice its base coal output at
+///   prices 1 (the coal-led shortage of the data state), so its coal stocks are about half what
+///   coverage times those orders gave. Under that rule only province 20 at ticks 8 and 9 was
+///   held, once the cap counted each enterprise's own good and E3 ordered the short input on
+///   notional output (ADR 0266).
 #[test]
 fn frictionless_unemployment_is_the_natural_rate() {
     let mut sim = sim_of(world(EconParams::frictionless()));
@@ -1148,7 +1165,19 @@ fn frictionless_unemployment_is_the_natural_rate() {
             }
         }
     }
-    assert_eq!(rationed, [(1, 24), (8, 20), (9, 20)]);
+    #[rustfmt::skip]
+    let want = [
+        (1, 13), (1, 18), (1, 24), (3, 0), (3, 16), (3, 18), (3, 22), (4, 0), (4, 2), (4, 4),
+        (4, 16), (4, 18), (4, 19), (4, 20), (4, 22), (5, 0), (5, 2), (5, 4), (5, 6), (5, 16),
+        (5, 17), (5, 18), (5, 19), (5, 20), (5, 22), (5, 23), (6, 0), (6, 1), (6, 2), (6, 4),
+        (6, 6), (6, 7), (6, 16), (6, 17), (6, 18), (6, 19), (6, 20), (6, 21), (6, 22), (6, 23),
+        (7, 0), (7, 1), (7, 2), (7, 3), (7, 4), (7, 5), (7, 6), (7, 7), (7, 16), (7, 17),
+        (7, 18), (7, 19), (7, 20), (7, 21), (7, 22), (7, 23), (8, 0), (8, 1), (8, 2), (8, 3),
+        (8, 4), (8, 5), (8, 6), (8, 7), (8, 11), (8, 15), (8, 18), (8, 19), (8, 22), (8, 23),
+        (8, 24), (9, 0), (9, 1), (9, 2), (9, 4), (9, 5), (9, 6), (9, 11), (9, 15), (9, 24),
+        (10, 2), (10, 6), (10, 9), (10, 13), (10, 24), (11, 9), (11, 13),
+    ];
+    assert_eq!(rationed, want);
 }
 
 /// Capacity output VA(L) / a_VA of enterprise `e` at its current employment.
@@ -1759,13 +1788,20 @@ fn kink_bound(p: &Province) -> usize {
 }
 
 /// Local-good chains: services feeding services, and construction and services feeding each
-/// other. From the data state the chain binds in every mainland province at tick 1; over 120
+/// other. From the data state the chain binds at tick 1 in every mainland province but 13 and
+/// 18, whose enterprises all produce at 0.59 and 0.60 of base output, held by their coal (good
+/// 2): the data state's merchants hold coverage times their own base output (econ SPEC, Initial
+/// state, B8e), about half the coal the world orders at prices 1; over 120
 /// ticks every province tick ends within the passes its kinks allow ([`kink_bound`]) without a
-/// stall, and every local input used equals coef Y (the Leontief invariant, exactly, at every
-/// tick).
+/// stall, and every local input used equals coef Y at every tick, to 1e-12 of it plus the
+/// rounding of the market draws, 2 (N_GOODS + 1) eps of the units drawn at the province (the
+/// Leontief invariant's drain term, spec Invariants): at tick 50 enterprise 69 needs 3.8e-79 of
+/// good 8, a residue of a collapse, and misses it by 2.1e-12 of that.
 ///
-/// The most is 14 passes against its bound of 25 (482 binding province ticks, the smallest margin
-/// 11 at that tick, the smallest bound 15): province 10 at tick 76, where utilities
+/// The most is 2 passes (2,972 binding province ticks). Before the data state's merchants held
+/// coverage times their own base output (B8e) it was 14 passes against its bound of 25 (482
+/// binding province ticks, the smallest margin 11 at that tick, the smallest bound 15):
+/// province 10 at tick 76, where utilities
 /// and construction collapse to 0 and the fall crosses the floors of users holding residues of
 /// earlier collapses (stocks of 1e-52 to 1e-12 of their needs), each a kink under the stock floor
 /// (ADR 0093, amendment of 2026-10-30), where the user's stock comes to cover it. Before the floor
@@ -1814,7 +1850,12 @@ fn local_chain_terminates_on_cycles() {
             "tick {tick}: stalled"
         );
         if tick == 1 {
-            assert!(passes[..24].iter().all(|&n| n > 1));
+            let bound: Vec<usize> = (0..24).filter(|&i| passes[i] > 1).collect();
+            let held = [13, 18];
+            assert_eq!(
+                bound,
+                (0..24).filter(|i| !held.contains(i)).collect::<Vec<_>>()
+            );
         }
         binding += passes.iter().filter(|&&n| n > 1).count();
         most = most.max(*passes.iter().max().unwrap());
@@ -1822,8 +1863,10 @@ fn local_chain_terminates_on_cycles() {
             for k in LOCAL {
                 let want = w.layout().coef[e][k] * w.scratch.produced[e];
                 let used = w.scratch.input_used[e * N_GOODS + k];
+                let i = w.inputs().enterprises.province[e] as usize;
+                let drain = 2.0 * (N_GOODS as f64 + 1.0) * f64::EPSILON;
                 assert!(
-                    (used - want).abs() <= 1e-12 * want,
+                    (used - want).abs() <= 1e-12 * want + drain * w.scratch.drawn[i * N_GOODS + k],
                     "tick {tick} enterprise {e} good {k}"
                 );
             }
