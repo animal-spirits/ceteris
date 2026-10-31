@@ -225,14 +225,33 @@ fn inversion_at_given_prices_reproduces_the_shares() {
 }
 
 /// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its
-/// province's buyer prices and its income, are each country's final demand shares Omega.
+/// province's buyer prices and its income, are each country's final demand shares Omega. A
+/// country with no pops (on the pack, ICIO territories without an economy province, such as the
+/// Ashmore and Cartier Islands) has no spending to share.
 #[test]
 fn aggregate_data_state_shares_match_omega() {
     for w in worlds() {
         let (inp, s) = (&w.inp, &w.s);
         let price = s.consumer.select_rows(&inp.pop_province);
         let got = aggregate_shares(inp, &s.weights, &price, &s.pop_income);
-        allclose(w.name, &got.data, &omega_shares(inp).data, 0.0, 1e-12);
+        let want = omega_shares(inp);
+        let with_pops: Vec<usize> = (0..inp.n_countries())
+            .filter(|c| inp.pop_country().contains(c))
+            .collect();
+        let rows = |m: &Mat| -> Vec<f64> {
+            with_pops
+                .iter()
+                .flat_map(|&c| (0..inp.n_goods()).map(move |g| m[(c, g)]))
+                .collect()
+        };
+        allclose(w.name, &rows(&got), &rows(&want), 0.0, 1e-12);
+        if w.pack_province.is_none() {
+            assert_eq!(
+                with_pops.len(),
+                inp.n_countries(),
+                "every fixture country has pops"
+            );
+        }
     }
 }
 
