@@ -792,9 +792,18 @@ rescales the traded r so that world traded value added sum_e r_g VA_e equals the
 without it the level depended on the start and the mixing path, by up to 4e-4 from starts at
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
-repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-12 relative
-(Anderson-mixed; `PASS_TOL`), so the returned state is a fixed point to the 1e-12 its checks
-claim (`sinkhorn_is_unique_up_to_scale`). The mixing runs on a state in the units `change` uses:
+repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-13 relative
+(Anderson-mixed; `PASS_TOL`, P158; 1e-12 until 2026-10-31), so the returned state is a fixed
+point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
+`stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
+settled at the last pass's r, rebates, buyer prices and PIGL weights, with D, the orders at the
+settled prices from the spending those values give; the Sinkhorn of that pass fitted the orders
+to the previous pass's spending, so D - Q carries the last pass change, about 3.8 times on the
+B8 pack (worst cell 1.34e-12 at a last change of 3.55e-13, B8d), plus a rounding term of about
+3e-13 (the sums' operation count, as in the uniqueness bound below). At 1e-12 the check's gap
+may reach about 3.8e-12 + 3e-13, above its 1e-12; the tolerance must be at most (1e-12 - 3e-13)
+/ 3.8 = 1.8e-13, and 1e-13 is the decade below (gap at most about 6.8e-13; 5.25e-13 measured in
+B8d at pass 71). The mixing runs on a state in the units `change` uses:
 ln q, ln r, the PIGL omega and within-good weights as they are, and the rebates and the PIGL
 scales each divided by their block's largest magnitude (the rebates' from the first pass, the
 scales' from the start), fixed for the whole run. In money units the rebates' residual (about
@@ -804,7 +813,8 @@ undamped pass map is not a contraction (it locks onto a period-6 cycle in the go
 the DR Congo's interior and that country's PIGL weights), so settling rests on the mixing, and
 the mixing only saw the rebates. The passes still stop on `change` alone; the units change no
 equation and no fixed point. The stopping tolerance is a solver setting, not a model
-parameter, so it has no register ID. Within a pass the income and local-output fixed point is
+parameter; it is in the register (P158) since its value is derived from the stage-5 check.
+Within a pass the income and local-output fixed point is
 iterated until no local output changes by more than 1e-14 relative.
 
 **Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
@@ -1440,14 +1450,14 @@ texture fed from core columns.
   per tick and the largest pop balance 1.4e10, so single sale entries bind at a uniform scale of
   about 1.3e4 and pop money at about 6.5e4 (`nominal_scale_beyond_the_ledger_fails_loudly`: on the
   fixture too a payment fails first). The currency scale is a P5 decision (core SPEC, Money scale).
-- Stage 5 on the full pack (B8d, open): `stage5_state_is_stationary_under_the_stock_rules`
-  misses its 1e-12 on merchant stock and supply, S* = coverage D and Q = D (81 of 24,230 cells,
-  worst 1.34e-12, province 2436 good 3; the first failing cell 1.12e-12). It is not rounding:
-  Q is the settled output and D the orders at the settled prices from the spending the last
-  pass's values give, which moved by up to the pass change (3.55e-13 at pass 68, PASS_TOL
-  1e-12), and D carries that change about four times. With PASS_TOL 1e-13 (settled at pass 71,
-  change 8.3e-14) the worst cell is 5.25e-13 and the check passes. The tolerance is unchanged;
-  whether to tighten PASS_TOL or derive the check's bound from the pass tolerance is open.
+- Stage 5 on the full pack (B8d; B8e, the owner has not ruled yet):
+  `stage5_state_is_stationary_under_the_stock_rules` missed its 1e-12 on merchant stock and
+  supply, S* = coverage D and Q = D (81 of 24,230 cells, worst 1.34e-12, province 2436 good 3;
+  the first failing cell 1.12e-12). It is not rounding: Q is the settled output and D the
+  orders at the settled prices from the spending the last pass's values give, which moved by up
+  to the pass change (3.55e-13 at pass 68, PASS_TOL 1e-12), and D carries that change about four
+  times. PASS_TOL is now 1e-13 (P158; Calibration, stage 1). The other option, a check bound
+  derived from the pass tolerance, needs D's sensitivity to the pass inputs and was not taken.
 
 ## Changes for the next design-doc snapshot
 
