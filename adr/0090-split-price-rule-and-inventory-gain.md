@@ -157,3 +157,28 @@ is redesigned around money in P5 (12.2), as Consequences anticipated.
   a design change for P5, not a gain.
 
 The work in progress is parked on local branch `pre-p3/b6-wip`. The as-built rule is unchanged.
+
+**The x10 border shock is beyond P2's valid range (owner ruling 2026-10-31T01:37Z, "A").** Every
+crossing's tau x 10, frictionless, on the scratch pack (pre-P3 v1 diagnosis and write-off
+round, `.superpowers/sdd/PLAN-pre-p3-rust/v1-diagnosis.md`, `writeoff-fill-report.md`), does not
+converge. One producer's own-good input draws all of its province's labour, the other
+producers fall to near 0, local inputs run out, and from tick 18 supply is 0 nearly everywhere.
+Prices with no supply rise at the clip every tick, the Walrasian wage follows them, and the
+wages of enterprises that produce nothing are paid from overdraft. The world index doubles
+about every 2.5 ticks after tick 40. Nothing in the P2 model anchors the nominal level, so this
+is the missing anchor of the section above, not a defect of the chain, the write-off or the
+dispatch. After the i128 write-off total (ADR 0106) and the stock floor (ADR 0093) the run
+passed the write-off and stopped at tick 54 on the dispatch-mass invariant. That stop was a
+tolerance defect: flows computed through partial products below the smallest normal f64
+(trade SPEC, Invariants). With the tolerance fixed, the run stops later on a payment that
+does not fit the ledger (the econ SPEC records where). No restart floor or other new mechanism
+is added for it in P2 (option B, not taken).
+
+Known limits left for P5, where the money anchor is designed:
+
+- the ADR 0207 x10 benchmark point: it is reported (`benchmark_cases_are_reported`), not
+  asserted, until P5;
+- shocks that collapse a country's output: the same no-anchor spiral, wages paid for no output
+  from overdraft;
+- the structured perturbations that still overflow the ledger or market cash: 4 of 24 in the
+  default mode and 3 of 24 frictionless (write-off round, 2026-10-30).
