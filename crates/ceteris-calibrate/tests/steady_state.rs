@@ -15,7 +15,7 @@ use ceteris_calibrate::steady::{
     self, COVER, CalibrationError, Limits, PASS_TOL, SINKHORN_TOL, SLOTS, Steady,
 };
 use ceteris_calibrate::write;
-use ceteris_calibrate::{border, elasticity};
+use ceteris_calibrate::{block, border, elasticity};
 use ceteris_core::entity::{EntityId, Kind};
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::SystemId;
@@ -1196,6 +1196,178 @@ fn traded_cell_with_no_buyer_has_the_study_elasticity() {
         }
     }
     assert!(cells > 1, "{cells} cells of good {none}");
+}
+
+/// ADR 0267: the cross-price entries of each block, E_ij = -(1 + theta) w_j T2_ij / t_i for two
+/// origins of a good in one country, are the elasticity of the units ordered at i to the price
+/// of j, against central finite differences of the orders of buyers that need fixed delivered
+/// units. Like E they leave out the cross terms of routes that do not share their last leg: the
+/// fixture has none that matter, and the entries hold there to the finite difference's
+/// precision; on the pack the gap is reported.
+#[test]
+fn cross_price_elasticity_matches_finite_difference() {
+    const H: f64 = 1e-6;
+    let trade = ceteris_trade::TradeParams::default();
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let physical = Model::physical(inp).unwrap();
+        let blocks = block::blocks(
+            &physical,
+            &physical.sourcing(&s.price),
+            s,
+            &inp.ent_s_l(),
+            1.0,
+            &trade,
+        );
+        let reference = steady::reference_inputs(inp, s);
+        let m = Model::new(&reference).unwrap();
+        let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+        let spend = Mat::from_fn(n_p, n_g, |p, g| {
+            if inp.traded[g] {
+                s.spend_int[(p, g)] + s.spend_hh[(p, g)]
+            } else {
+                0.0
+            }
+        });
+        let orders = |price: &Mat| {
+            let src = m.sourcing(price);
+            let fixed_units = Mat::from_fn(n_p, n_g, |p, g| {
+                let q = src.index[(p, g)];
+                if q.is_finite() {
+                    spend[(p, g)] * q / s.consumer[(p, g)]
+                } else {
+                    0.0
+                }
+            });
+            m.flows(price, &fixed_units, &src).orders
+        };
+        let (mut worst, mut n) = (0.0f64, 0);
+        for (cells, b) in &blocks {
+            for &(i, j, e) in b.demand.iter().filter(|d| d.0 != d.1) {
+                let (ci, cj) = (cells[i], cells[j]);
+                let (pi, gi, pj) = (ci % n_p, ci / n_p, cj % n_p);
+                assert_eq!(gi, cj / n_p, "{}: a cross entry joins one good", w.name);
+                let at = |h: f64| {
+                    let mut price = s.price.clone();
+                    price[(pj, gi)] *= h.exp();
+                    orders(&price)[(pi, gi)]
+                };
+                let fd = (at(H) / at(-H)).ln() / (2.0 * H);
+                assert!(e <= 0.0, "{} cells {ci} {cj}: E_ij {e}", w.name);
+                worst = worst.max((-e - fd).abs() / fd.abs().max(1.0));
+                n += 1;
+            }
+        }
+        eprintln!(
+            "{}: cross-price E against the finite difference, {n} pairs, worst {worst:.3e}",
+            w.name
+        );
+        assert!(n > 0, "{}", w.name);
+        if w.pack_province.is_none() {
+            assert!(worst < 1e-8, "{}: worst {worst:e}", w.name);
+        }
+    }
+}
+
+/// ADR 0267: the input orders a block's slots carry, sum over slots of u_is sum_k v_ks, are the
+/// share of market i's orders that its own country's enterprises place, against the flows of
+/// that country's input spending alone (paths that leave the country and return are left out:
+/// none on the fixture).
+#[test]
+fn input_order_shares_match_the_flows() {
+    let trade = ceteris_trade::TradeParams::default();
+    for w in worlds().iter().filter(|w| w.pack_province.is_none()) {
+        let (inp, s) = (&w.inp, &w.s);
+        let m = Model::physical(inp).unwrap();
+        let src = m.sourcing(&s.price);
+        let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), 1.0, &trade);
+        let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+        let traded = |g: usize, x: f64| if inp.traded[g] { x } else { 0.0 };
+        let all = Mat::from_fn(n_p, n_g, |p, g| {
+            traded(g, s.spend_int[(p, g)] + s.spend_hh[(p, g)])
+        });
+        let total = m.flows(&s.price, &all, &src).orders;
+        let mut checked = 0;
+        for (cells, b) in &blocks {
+            let c = inp.province_country[cells[0] % n_p];
+            let of_country = Mat::from_fn(n_p, n_g, |p, g| {
+                if inp.province_country[p] == c {
+                    traded(g, s.spend_int[(p, g)])
+                } else {
+                    0.0
+                }
+            });
+            let ours = m.flows(&s.price, &of_country, &src).orders;
+            let mut slot_v = vec![0.0; b.hold.len()];
+            for &(_, slot, v, _) in &b.inputs {
+                slot_v[slot] += v;
+            }
+            let mut share = vec![0.0; cells.len()];
+            for &(slot, i, _, u) in &b.routes {
+                share[i] += u * slot_v[slot];
+            }
+            for (i, &cell) in cells.iter().enumerate() {
+                let (p, g) = (cell % n_p, cell / n_p);
+                if total[(p, g)] > 0.0 {
+                    let want = ours[(p, g)] / total[(p, g)];
+                    assert!(
+                        (share[i] - want).abs() <= 1e-10 * want.max(1.0),
+                        "{} cell {cell}: {} vs {want}",
+                        w.name,
+                        share[i]
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0);
+    }
+}
+
+/// ADR 0267: the calibration's block scales are those of `block::scales` at each employment
+/// speed, 1 outside every block, and on the fixture no block is scaled in either mode (its
+/// markets are far from their limits: largest J 12.5 at eta 0.3, 13.8 at eta 1). The pack's
+/// scaled blocks are reported.
+#[test]
+fn block_scales_of_the_calibration() {
+    let trade = ceteris_trade::TradeParams::default();
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let m = Model::physical(inp).unwrap();
+        let src = m.sourcing(&s.price);
+        for (mode, eta) in ceteris_econ::inputs::MarketElasticity::block_etas()
+            .into_iter()
+            .enumerate()
+        {
+            let want = block::scales(&m, &src, s, &inp.ent_s_l(), eta, &trade);
+            assert_eq!(s.block_scale[mode], want, "{} eta {eta}", w.name);
+            let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), eta, &trade);
+            let (mut scaled, mut top) = (0, 0.0f64);
+            for (_, b) in &blocks {
+                top = top.max(b.spectral_radius(1.0 / trade.gain_share, eta));
+                if b.scale(eta, trade.gain_share) < 1.0 {
+                    scaled += 1;
+                }
+            }
+            eprintln!(
+                "{} eta {eta}: {} blocks, {scaled} scaled, largest radius at gains / m {top:.4}",
+                w.name,
+                blocks.len()
+            );
+            let n_p = inp.n_provinces();
+            for (c, &b) in want.data.iter().enumerate() {
+                let (p, g) = (c / inp.n_goods(), c % inp.n_goods());
+                let in_block = blocks
+                    .iter()
+                    .any(|(cells, _)| cells.contains(&(g * n_p + p)));
+                assert!(in_block || b == 1.0, "{} cell {c}", w.name);
+                assert!(b > 0.0 && b <= 1.0, "{} cell {c}: {b}", w.name);
+            }
+            if w.pack_province.is_none() {
+                assert_eq!(scaled, 0, "{} eta {eta}", w.name);
+            }
+        }
+    }
 }
 
 /// ADR 0263 (As built): eps of a cell is the largest s_L sigma_FL / ((1 - s_L) a_VA) of its

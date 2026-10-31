@@ -499,14 +499,16 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
     )
 }
 
-/// kappa1_cell of every cell (ADR 0263; trade SPEC, Per-market gain): kappa1 capped at the share
-/// P03d of the cell's J2 limit, J from the calibration's market elasticities at the run's
-/// employment speed eta (P41); kappa1 in every cell of inputs without a calibration.
+/// kappa1_cell of every cell (ADRs 0263, 0267; trade SPEC, Per-market gain and Block gain):
+/// kappa1 capped at the share P03d of the cell's J2 limit, J from the calibration's market
+/// elasticities at the run's employment speed eta (P41), times the block scale b of the cell's
+/// coupled block ([`MarketElasticity::block_scale`]); kappa1 in every cell of inputs without a
+/// calibration.
 pub fn price_gains(inp: &EconInputs, params: &EconParams, trade: &TradeParams) -> Vec<f64> {
     let n = inp.n_provinces() * N_GOODS;
     match &inp.market_elasticity {
         Some(m) => (0..n)
-            .map(|i| trade.price_gain(m.j(i, params.eta)))
+            .map(|i| trade.price_gain(m.j(i, params.eta)) * m.block_scale(i, params.eta, trade))
             .collect(),
         None => vec![trade.kappa1; n],
     }
@@ -2035,7 +2037,11 @@ mod tests {
         // cell 0: E 11.57, eps 30.4 (J 16.92 default, 41.97 frictionless); cell 1: E 25, eps 0
         let (mut demand, mut supply) = (vec![1.0; n], vec![0.0; n]);
         (demand[0], supply[0], demand[1]) = (11.57, 30.4, 25.0);
-        inputs.market_elasticity = Some(MarketElasticity { demand, supply });
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand,
+            supply,
+            block: [vec![1.0; n], vec![1.0; n]],
+        });
         assert_ne!(digest(&inputs, &trade), digest(&inputs, &other_share));
         let default = price_gains(&inputs, &EconParams::default(), &trade);
         let frictionless = price_gains(&inputs, &EconParams::frictionless(), &trade);
@@ -2055,6 +2061,58 @@ mod tests {
         assert_eq!(w.layout().price_gain, frictionless);
     }
 
+    /// ADR 0267: the block scale b multiplies the per-market gain in runs at the employment
+    /// speed, kappa1 and P03d it was calibrated at, each mode its own; elsewhere the per-market
+    /// cap alone applies.
+    #[test]
+    fn block_scale_applies_at_its_calibration_settings() {
+        let trade = TradeParams::default();
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        // cell 0: J 16.92 default (uncapped), 41.97 frictionless (capped at 1 / 41.97)
+        let (mut demand, mut supply) = (vec![1.0; n], vec![0.0; n]);
+        (demand[0], supply[0]) = (11.57, 30.4);
+        let (mut default, mut frictionless) = (vec![1.0; n], vec![1.0; n]);
+        (default[0], frictionless[0], frictionless[1]) = (0.75, 0.5, 0.25);
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand,
+            supply,
+            block: [default, frictionless],
+        });
+        let gain = |params: &EconParams, trade: &TradeParams| price_gains(&inputs, params, trade);
+        let at_default = gain(&EconParams::default(), &trade);
+        assert_eq!(at_default[0], 0.75 * trade.kappa1);
+        assert!(at_default[1..].iter().all(|&k| k == trade.kappa1));
+        let at_frictionless = gain(&EconParams::frictionless(), &trade);
+        assert!((at_frictionless[0] - 0.5 / (11.57 + 30.4)).abs() < 1e-16);
+        assert_eq!(at_frictionless[1], 0.25 * trade.kappa1);
+        let other_eta = EconParams {
+            eta: 0.5,
+            ..EconParams::default()
+        };
+        let g = gain(&other_eta, &trade);
+        assert_eq!(g[0], trade.price_gain(11.57 + 0.5 * 30.4 / 1.5));
+        assert_eq!(g[1], trade.kappa1);
+        for other in [
+            TradeParams {
+                kappa1: 0.02,
+                ..trade.clone()
+            },
+            TradeParams {
+                gain_share: 0.25,
+                ..trade.clone()
+            },
+        ] {
+            let g = gain(&EconParams::frictionless(), &other);
+            assert_eq!(g[1], other.kappa1);
+            assert_eq!(g[0], other.price_gain(11.57 + 30.4));
+        }
+        let digest = |inp: &EconInputs| inp.digest();
+        let mut unscaled = inputs.clone();
+        unscaled.market_elasticity.as_mut().unwrap().block = [vec![1.0; n], vec![1.0; n]];
+        assert_ne!(digest(&inputs), digest(&unscaled));
+    }
+
     #[test]
     #[should_panic(expected = "market elasticities were computed under the default structural")]
     fn data_state_start_refuses_elasticities_of_other_structural_parameters() {
@@ -2063,6 +2121,7 @@ mod tests {
         inputs.market_elasticity = Some(MarketElasticity {
             demand: vec![1.0; n],
             supply: vec![0.0; n],
+            block: [vec![1.0; n], vec![1.0; n]],
         });
         let params = EconParams {
             sigma_demand: EconParams::default().sigma_demand + 0.5,

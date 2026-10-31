@@ -43,12 +43,14 @@ use std::f64::consts::LN_10;
 use std::fmt;
 use std::time::Instant;
 
+use ceteris_econ::inputs::MarketElasticity;
 use ceteris_reference::demand::{self, N_CATEGORIES, Weights};
 use ceteris_reference::io::{Inputs, Mat};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
+use ceteris_trade::TradeParams;
 
-use crate::elasticity;
+use crate::{block, elasticity};
 
 /// `systems::COVER`.
 pub const COVER: f64 = 1.0;
@@ -76,7 +78,7 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "6";
+pub const FORMAT: &str = "7";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -207,6 +209,10 @@ pub struct Steady {
     /// loop (ADR 0263, [`crate::elasticity`]), 0 where no market is active.
     pub demand_elasticity: Mat,
     pub supply_elasticity: Mat,
+    /// (P, G) the gain scale b of each market's coupled block (ADR 0267, [`crate::block`]) at
+    /// the employment speeds of `MarketElasticity::block_etas` (the default mode, frictionless),
+    /// 1 outside every block.
+    pub block_scale: [Mat; 2],
     /// SLOTS + 1 matrices (P, G): units arriving per unit spent, by arrival slot.
     pub arrive: Vec<Mat>,
     pub weights: Weights,
@@ -1365,7 +1371,7 @@ pub fn calibrate_from(
         .collect();
     let pop_pipeline = in_flight(&arrive, &hh.pop_spend, kp);
     let ent_pipeline = in_flight(&arrive, &ent_spend, ep);
-    Ok(Steady {
+    let mut steady = Steady {
         u_star: u_star.to_vec(),
         r,
         price: Mat::from_fn(n_p, n_g, |p, g| {
@@ -1387,6 +1393,7 @@ pub fn calibrate_from(
         lead,
         demand_elasticity,
         supply_elasticity,
+        block_scale: [Mat::filled(n_p, n_g, 1.0), Mat::filled(n_p, n_g, 1.0)],
         arrive,
         weights,
         rebate,
@@ -1412,7 +1419,11 @@ pub fn calibrate_from(
         pop_pipeline,
         ent_pipeline,
         info,
-    })
+    };
+    let trade = TradeParams::default();
+    steady.block_scale = MarketElasticity::block_etas()
+        .map(|eta| block::scales(&m, &src, &steady, s_l, eta, &trade));
+    Ok(steady)
 }
 
 /// (buyers * G) rows of SLOTS: goods in flight at the start of a tick for buyers spending

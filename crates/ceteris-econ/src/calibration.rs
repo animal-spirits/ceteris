@@ -26,7 +26,7 @@ use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "6";
+pub const FORMAT: &str = "7";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -344,11 +344,23 @@ fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError>
     let m = MarketElasticity {
         demand: f64s(cells, "demand_elasticity")?,
         supply: f64s(cells, "supply_elasticity")?,
+        block: [
+            f64s(cells, "block_scale_default")?,
+            f64s(cells, "block_scale_frictionless")?,
+        ],
     };
     for (name, v) in [("demand", &m.demand), ("supply", &m.supply)] {
         if let Some(c) = v.iter().position(|&x| !(x >= 0.0 && x.is_finite())) {
             return Err(err(format!(
                 "econ_calib_cells.arrow: cell {c} has {name} elasticity {}",
+                v[c]
+            )));
+        }
+    }
+    for v in &m.block {
+        if let Some(c) = v.iter().position(|&x| !(x > 0.0 && x <= 1.0)) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has block scale {}",
                 v[c]
             )));
         }
@@ -422,16 +434,21 @@ mod tests {
         assert!(calibrated_digest(&t).is_err());
     }
 
+    fn elasticity_cells(demand: f64, supply: f64, block: f64) -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("demand_elasticity", DataType::Float64, false),
+            Field::new("supply_elasticity", DataType::Float64, false),
+            Field::new("block_scale_default", DataType::Float64, false),
+            Field::new("block_scale_frictionless", DataType::Float64, false),
+        ]));
+        let column = |x: f64| Arc::new(Float64Array::from(vec![1.0, x])) as _;
+        let columns = vec![column(demand), column(supply), column(1.0), column(block)];
+        RecordBatch::try_new(schema, columns).unwrap()
+    }
+
     #[test]
     fn market_elasticities_must_be_finite_and_not_negative() {
-        let cells = |demand: f64, supply: f64| {
-            let schema = Arc::new(Schema::new(vec![
-                Field::new("demand_elasticity", DataType::Float64, false),
-                Field::new("supply_elasticity", DataType::Float64, false),
-            ]));
-            let column = |x: f64| Arc::new(Float64Array::from(vec![1.0, x])) as _;
-            RecordBatch::try_new(schema, vec![column(demand), column(supply)]).unwrap()
-        };
+        let cells = |demand: f64, supply: f64| elasticity_cells(demand, supply, 1.0);
         let m = market_elasticity(&cells(11.57, 0.0)).unwrap();
         assert_eq!((m.demand, m.supply), (vec![1.0, 11.57], vec![1.0, 0.0]));
         for (demand, supply, name) in [
@@ -448,6 +465,19 @@ mod tests {
                 message.contains(&format!("cell 1 has {name} elasticity")),
                 "{message}"
             );
+        }
+    }
+
+    /// ADR 0267: a block scale is in (0, 1].
+    #[test]
+    fn block_scales_must_be_in_the_unit_interval() {
+        let m = market_elasticity(&elasticity_cells(1.0, 1.0, 0.25)).unwrap();
+        assert_eq!(m.block, [vec![1.0, 1.0], vec![1.0, 0.25]]);
+        for b in [0.0, -0.1, 1.5, f64::NAN] {
+            let message = market_elasticity(&elasticity_cells(1.0, 1.0, b))
+                .unwrap_err()
+                .to_string();
+            assert!(message.contains("cell 1 has block scale"), "{message}");
         }
     }
 
