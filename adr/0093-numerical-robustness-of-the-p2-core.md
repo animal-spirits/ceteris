@@ -528,9 +528,12 @@ it with the passes outside the accounting: 12 at the stall rule, 1 with a root r
 The 10 of the 22 before the floor that cut a good by rounding every other pass, at its limit with
 U = R where stocks covered needs at their thresholds, are gone: a user bound by a good draws
 (1 - s) F of its need, which no stock zeroes along the fall. On the cycle fixture the chain binds
-in 482 of 3,000 province ticks (483 before), the most 14 passes against a bound of at least 15
-(province 10, tick 76: utilities and construction collapse to 0 across the floors of residues of
-earlier collapses, 1e-52 to 1e-12 of their users' needs); 4 before.
+in 482 of 3,000 province ticks (483 before), the most 14 passes against its bound of 25, the
+smallest margin 11 (province 10, tick 76: utilities and construction collapse to 0 across the
+floors of residues of earlier collapses, 1e-52 to 1e-12 of their users' needs); 4 before. The
+bound counts a switch of the binding fill once per pair of goods, an assumption: under the floor
+each user of both goods switches on its own line, s_j + (1 - s_j) F_j = s_k + (1 - s_k) F_k, so a
+fall may cross one switch per such user, which the bound does not count.
 
 **Tests.** `local::tests::stock_is_a_floor_under_the_fill` (a user with two months of every local
 input runs at its cap when a local producer makes nothing; a half-stocked user at half; the
@@ -559,8 +562,16 @@ test's documentation:
   floor but for one. The first two take new cases from the sample (the longest, the furthest from
   t, the first with rejected mutants). The third is removed: no translated collapse of 3,000,000
   draws and no random province of 1,000,000 has a last pass whose fixed point lies off its pieces,
-  so the rule stays without a regression case (`translated_family_leaves_out_a_neutral_good`
-  records the exclusion above instead);
+  so the rule's regression is hand-built (review, 2026-10-31):
+  `local::tests::the_stop_refuses_a_fixed_point_past_a_cover_point`, a cycle of gain 1 - 1e-13
+  whose only constant is a small user's deficit through its binding good, its fixed point past
+  the user's cover point (s_j - s_k) / (1 - s_k); without the deficit's sign in the piece check
+  the stop takes that point, which the confirming pass returns to 1e-12.
+  `translated_family_leaves_out_a_neutral_good` records the exclusion above, and
+  `neutral_good_stop_takes_a_fixed_point_on_its_line` pins the stop's result there: every good
+  fits at [0.093, 0.013, 0.013], a fixed point of the passes on the line of gain 1, though the
+  iteration from 1 ends at t; the fills are not unique there, and the SPEC records the
+  over-cut;
 - the chain bound's pinned passes and exceedances are re-measured; the collapse and stall cases
   that drew stocks and no longer collapse or stall are replaced by draws that do, with the old
   ones named; the jump-ahead province (`a_jump_ahead_ends_after_the_last_whole_cycle_on_the_pieces`)
