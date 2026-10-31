@@ -26,7 +26,7 @@ use arrow_array::types::Float64Type;
 use arrow_cast::cast;
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
-use ceteris_calibrate::write;
+use ceteris_calibrate::{border, write};
 use ceteris_econ::{EconInputs, EconParams};
 use ceteris_pack::fetch;
 use ceteris_pack::read::natural_earth::read_codes;
@@ -691,8 +691,22 @@ fn h2_theta_by_class() {
         n_classes, N_CLASSES,
         "the export has {n_classes} theta classes"
     );
-    for c in 0..N_CLASSES {
-        let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
+    // each class, gated; and each good of a class whose goods take their own border friction
+    // (ADR 0276), reported
+    let mut sets: Vec<(String, Vec<usize>, bool)> = (0..N_CLASSES)
+        .map(|c| {
+            let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
+            (format!("class {c} goods {goods:?}"), goods, true)
+        })
+        .collect();
+    for k in (0..N_TRADED).filter(|&k| of[k] == border::PER_GOOD_CLASS) {
+        sets.push((
+            format!("class {} good {k} alone (diagnostic)", of[k]),
+            vec![k],
+            false,
+        ));
+    }
+    for (label, goods, gated) in sets {
         let theta_c = theta_good[goods[0]];
         let rows_of = |keep: &dyn Fn(usize, usize, usize) -> bool| -> Vec<(usize, usize, usize)> {
             foreign
@@ -728,7 +742,7 @@ fn h2_theta_by_class() {
         let se = fit.se("ln_tariff");
         let tol = (2.0 * se).max(H2_THETA_TOL * theta_c);
         let line = format!(
-            "class {c} goods {goods:?}: theta {theta:.7} (pair-clustered s.e. {se:.3e}), deviation \
+            "{label}: theta {theta:.7} (pair-clustered s.e. {se:.3e}), deviation \
              from theta_c {:.3e} ({:.3e} relative) against tolerance {tol:.3e} (max of 2 s.e. and \
              {H2_THETA_TOL} theta_c), ln kernel {:.4}, pseudo-R2 {:.4}, n {} ({} separated)",
             theta - theta_c,
@@ -740,8 +754,8 @@ fn h2_theta_by_class() {
         );
         println!("H2 per class: {line}");
         lines.push(line);
-        if (theta - theta_c).abs() > tol || theta.is_nan() {
-            misses.push(c);
+        if gated && ((theta - theta_c).abs() > tol || theta.is_nan()) {
+            misses.push(label.clone());
         }
 
         let rows = rows_of(&|e, m, _| dist[e * n_c + m].is_finite() && dist[e * n_c + m] > 0.0);
@@ -757,7 +771,7 @@ fn h2_theta_by_class() {
         let theta = -fit.coef("ln_tariff");
         let se = clustered.se("ln_tariff");
         let mut line = format!(
-            "class {c} with ln distance as the cost control (diagnostic): theta {theta:.4} (s.e. \
+            "{label} with ln distance as the cost control (diagnostic): theta {theta:.4} (s.e. \
              {:.4}, pair-clustered {se:.4}), ln distance {:.4} (s.e. {:.4}), pseudo-R2 {:.4}, n \
              {} ({} separated); theta_c {theta_c} against {:.4} to {:.4}; FOB value: tariff \
              coefficient {:.4} (s.e. {:.4})",
