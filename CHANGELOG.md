@@ -6,8 +6,8 @@
 
 - The data state's merchant stock of each active traded cell is s_g Y0, coverage times the
   origin enterprise's own base output (Y0 = A VA0 / a_VA), not coverage times the orders one
-  month of base demand placed there at prices 1 (econ SPEC, Initial state; the owner has not
-  ruled yet). At prices 1 the origin weights are the kernel alone, so tiny economies held
+  month of base demand placed there at prices 1 (econ SPEC, Initial state; owner,
+  2026-10-31). At prices 1 the origin weights are the kernel alone, so tiny economies held
   months of the world's orders and sold them at tick 1: Pitcairn's pops got 58,800 times their
   money, Western Sahara 10,100, and North Macedonia's sale ended in pop debt and eight provinces
   at a zero wage (B8d). A calibrated start does not change (`start_steady` is untouched; its
