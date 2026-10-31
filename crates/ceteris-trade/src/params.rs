@@ -98,6 +98,30 @@ pub struct TradeParams {
     /// per theta class. 1 for classes 0 to 2; class 3 0.40, half the fixed part of the same
     /// rates over the listed-port fee (on by default, as P154).
     pub bulk_port: [f64; N_CLASSES],
+    /// P56 physical storage loss delta_g per month at the origin markets of the storable goods
+    /// (ADR 0091; `goods::STORABLE`, 0 elsewhere). Competitive storage is off by default (owner
+    /// ruling 2026-10-31: the approved values destabilize the fixture, ADR 0091 As built), so
+    /// the default is 0; [`TradeParams::with_storage`] sets the approved values: agriculture 0.003, a world blend of commercial
+    /// grain shrink (Hofstrand, ISU A2-33, 1995) and smallholder post-harvest losses (APHLIS);
+    /// fuels 0.0005 and coal and mining 0.001 by judgement; chemicals and metals 0 (base metals do
+    /// not deteriorate, Cafiero et al. 2011). Owner approval 2026-10-30; refit in P9.
+    pub storage_loss: [f64; N_GOODS],
+    /// P56 money cost k_g of holding a unit for a month, interest 0.0047 (FRED TB3MS, 2000 mean
+    /// 5.82% a year) plus physical storage: 0.009, 0.011, 0.007, 0.0067 (DESIGN 17, P56; weak).
+    pub storage_cost: [f64; N_GOODS],
+    /// P144 speculation intensity psi_g in months (ADR 0091), 0 by default (storage off); the
+    /// approved values ([`TradeParams::with_storage`]) are 20, 1.0, 3.571, 5.714, derived as
+    /// lambda s_g / (zeta (k + delta)) from the stock-persistence target lambda = 1 - rho of
+    /// Gorton, Hayashi and Rouwenhorst (2013, Table 2); not estimated (DESIGN 17).
+    pub speculation: [f64; N_GOODS],
+    /// P145 convenience-yield elasticity zeta_g (ADR 0091): 1.8, 13, 3.5, 3.5, the slope of the
+    /// basis in inventory of Gorton, Hayashi and Rouwenhorst (2013, Table 3) over k + delta, 3.5
+    /// for goods 2 and 5 by owner choice (DESIGN 17).
+    pub convenience: [f64; N_GOODS],
+    /// P146 gain g_s of each stored good's market expectation pi^e_og per month (ADR 0091): 0.006,
+    /// P45's start, the constant learning gain of Milani (2007), 0.0183 a quarter (DESIGN 17;
+    /// owner approval 2026-10-31).
+    pub storage_gain: f64,
 }
 
 impl TradeParams {
@@ -146,6 +170,45 @@ impl TradeParams {
         self.kappa1 * (2.0 * self.gain_share / (self.kappa1 * j)).min(1.0)
     }
 
+    /// These parameters with competitive storage on at the owner-approved values (2026-10-30;
+    /// DESIGN 17 P56, P144 to P146): delta 0.003, 0.0005, 0.001, 0 and psi 20, 1.0, 3.571, 5.714
+    /// for goods 0, 1, 2, 5. Off by default until a value set passes the stability checks
+    /// (ADR 0091, As built).
+    #[must_use]
+    pub fn with_storage(self) -> Self {
+        Self {
+            storage_loss: [0.003, 0.0005, 0.001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            speculation: [20.0, 1.0, 3.571, 0.0, 0.0, 5.714, 0.0, 0.0, 0.0, 0.0],
+            ..self
+        }
+    }
+
+    /// Whether good `g`'s origin markets hold stock by competitive storage (ADR 0091): a
+    /// storable good with a positive speculation intensity or storage loss. Otherwise the
+    /// stock rule applies, kappa2 term included.
+    pub fn stores(&self, g: usize) -> bool {
+        STORABLE[g] && (self.speculation[g] > 0.0 || self.storage_loss[g] > 0.0)
+    }
+
+    /// The storage order's factor on the static elasticity of an origin's orders (trade SPEC,
+    /// Storage loop): (1 + psi zeta (k + delta)) / (1 + delta s) where good `g` is stored, 1
+    /// otherwise.
+    pub fn order_response(&self, g: usize) -> f64 {
+        if !self.stores(g) {
+            return 1.0;
+        }
+        let c = self.convenience[g] * (self.storage_cost[g] + self.storage_loss[g]);
+        (1.0 + self.speculation[g] * c) / (1.0 + self.storage_loss[g] * self.coverage[g])
+    }
+
+    /// The expected net return x of holding a unit of storable good `g` a month (ADR 0091) at
+    /// cover `z` = S / (s_g D) and expectation `pi`: pi + (k + delta) (z^-zeta - 1), the
+    /// convenience yield relative to its value at z = 1, so x is 0 bit for bit there at pi = 0.
+    pub fn storage_return(&self, g: usize, z: f64, pi: f64) -> f64 {
+        let carry = self.storage_cost[g] + self.storage_loss[g];
+        pi + carry * (libm::pow(z, -self.convenience[g]) - 1.0)
+    }
+
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
     pub fn price_clip(&self, g: usize) -> f64 {
         if STORABLE[g] {
@@ -176,6 +239,11 @@ impl Default for TradeParams {
             theta_r: 111.5,
             bulk_sea: [1.0, 1.0, 1.0, 0.026],
             bulk_port: [1.0, 1.0, 1.0, 0.40],
+            storage_loss: [0.0; N_GOODS],
+            storage_cost: [0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
+            speculation: [0.0; N_GOODS],
+            convenience: [1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
+            storage_gain: 0.006,
         }
     }
 }

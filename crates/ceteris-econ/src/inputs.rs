@@ -27,18 +27,21 @@ pub struct MarketElasticity {
 }
 
 impl MarketElasticity {
-    /// J of cell `i` at employment speed `eta` (P41): E + eta eps / (2 - eta).
-    pub fn j(&self, i: usize, eta: f64) -> f64 {
-        self.demand[i] + eta * self.supply[i] / (2.0 - eta)
+    /// J of cell `i` at employment speed `eta` (P41) under `trade`: E r + eta eps / (2 - eta), r
+    /// the storage order's factor on the orders' elasticity at a competitively stored good's
+    /// origin ([`TradeParams::order_response`], ADR 0091; 1 elsewhere).
+    pub fn j(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
+        self.demand[i] * trade.order_response(i % N_GOODS) + eta * self.supply[i] / (2.0 - eta)
     }
 
     /// kappa1_cell of cell `i` in a run under `params` and `trade` (ADRs 0263, 0267): the
     /// per-market cap at the run's eta, kappa1 and P03d, capped again at the share P03d of the
-    /// block limit gain of the run's wage regime (frictionless or the wage rule).
+    /// block limit gain of the run's wage regime (frictionless or the wage rule). J carries the
+    /// storage response of `trade`; the limit is the calibration's, at its storage parameters.
     pub fn price_gain(&self, i: usize, params: &EconParams, trade: &TradeParams) -> f64 {
         let mode = usize::from(params.frictionless);
         trade
-            .price_gain(self.j(i, params.eta))
+            .price_gain(self.j(i, params.eta, trade))
             .min(trade.gain_share * self.limit[mode][i])
     }
 }

@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "13";
+pub const EXPORT_FORMAT: &str = "14";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -251,6 +251,9 @@ pub struct Inputs {
     pub ent_va_target: Option<Vec<f64>>,
     /// (G,) P02 merchant stock target in months of orders.
     pub coverage: Option<Vec<f64>>,
+    /// (G,) P56 storage loss delta per month of the competitively stored goods (ADR 0091), 0
+    /// elsewhere: at a steady state their origins' output covers sales and spoilage.
+    pub storage_loss: Vec<f64>,
     /// (K,) education level.
     pub pop_edu: Option<Vec<usize>>,
     pub static_digest: String,
@@ -743,6 +746,7 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         crossing: crossings(&Table::open(d, "kernel_crossing")?)?,
         ent_va_target: Some(ent.f64("va_target")?),
         coverage: Some(goods.f64("coverage")?),
+        storage_loss: goods.f64("storage_loss")?,
         pop_edu: Some(pop_edu),
         static_digest: params["static_digest"]
             .as_str()

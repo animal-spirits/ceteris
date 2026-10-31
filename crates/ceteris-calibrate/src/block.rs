@@ -585,6 +585,9 @@ pub fn blocks(
     }
     pairs.sort_by_key(|&(i, j, _)| (i, j));
 
+    // the storage order's factor on each stored good's order terms (ADR 0091; trade SPEC, Block
+    // gain), by good
+    let response: Vec<f64> = (0..n_g).map(|g| trade.order_response(g)).collect();
     // The country's profit pool, its denominator: sum (1 - s_L) a_VA V.
     let n_c = inp.n_countries();
     let mut pool0 = vec![0.0; n_c];
@@ -594,6 +597,8 @@ pub fn blocks(
     let per_pool = |c: usize, x: f64| if pool0[c] > 0.0 { x / pool0[c] } else { 0.0 };
 
     let mut countries: Vec<Country> = (0..n_c).map(|_| Country::default()).collect();
+    // revenue at the steady state is p D, D = Q / (1 + delta s) at a stored good's origin
+    let sales = s.sales();
     let mut local = vec![usize::MAX; n_pg];
     for j in (0..n_pg).filter(|&j| traded_cell(j) || local_cell(j)) {
         let (p, g) = (j % n_p, j / n_p);
@@ -601,10 +606,13 @@ pub fn blocks(
         local[j] = c.cells.len();
         c.cells.push(j);
         c.revenue
-            .push(per_pool(country[p], s.price[(p, g)] * s.supply[(p, g)]));
+            .push(per_pool(country[p], s.price[(p, g)] * sales[(p, g)]));
         if traded_cell(j) {
-            c.demand
-                .push((local[j], local[j], s.demand_elasticity[(p, g)]));
+            c.demand.push((
+                local[j],
+                local[j],
+                s.demand_elasticity[(p, g)] * response[g],
+            ));
         }
     }
     let mut k = 0;
@@ -616,7 +624,7 @@ pub fn blocks(
             k += 1;
         }
         if t[i] > 0.0 {
-            let v = -(1.0 + inp.theta[i / n_p]) * src.w[j] * t2 / t[i];
+            let v = -(1.0 + inp.theta[i / n_p]) * src.w[j] * t2 / t[i] * response[i / n_p];
             countries[country[i % n_p]]
                 .demand
                 .push((local[i], local[j], v));
@@ -646,7 +654,11 @@ pub fn blocks(
             slot_of[d] = c.hold.len();
             c.hold.push(1.0 + COVER + s.lead[(p, h)]);
             for &(i, kid) in &incoming[d] {
-                let u = if t[i] > 0.0 { kid / t[i] } else { 0.0 };
+                let u = if t[i] > 0.0 {
+                    kid / t[i] * response[i / n_p]
+                } else {
+                    0.0
+                };
                 let a = src.w[i] * kid / src.phi[d];
                 let lag = if i % n_p == p { 0.0 } else { 1.0 };
                 c.routes.push(Route {
@@ -780,7 +792,8 @@ pub fn blocks(
     let gain = |j: usize| {
         let (p, g) = (j % n_p, j / n_p);
         trade.price_gain(
-            s.demand_elasticity[(p, g)] + eta * s.supply_elasticity[(p, g)] / (2.0 - eta),
+            s.demand_elasticity[(p, g)] * response[g]
+                + eta * s.supply_elasticity[(p, g)] / (2.0 - eta),
         )
     };
     let wage = if params.frictionless {
