@@ -65,5 +65,9 @@ the input-output one is in the band, and asserts nothing on it.
 - On `k263/pack` the median passes (1.064) and the correlation does not (0.865 < 0.9); whether
   the correlation holds on a settled baseline is C7's question at B8. A miss there is a tier 1
   item under ADR 0257.
+- On the settled B8 baseline (the 2000 pack installed at manifest 3c7895d1, drift probe max
+  |dlnp| 3.78e-8 over the last 50 ticks) the input-output median passes (1.077; p10 0.931, p90
+  1.325) and the correlation misses (0.862 < 0.9), 0 wrong signs over 80 countries: the tier 1
+  item stands, for C7.
 - The cost shares are the data's, not the run's: the formula is first order, as the welfare
   measure's buyer price and Omega are.
