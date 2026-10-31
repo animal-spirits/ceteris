@@ -229,15 +229,19 @@ Test changes C7 must record (what each no longer checks):
 5. ADR 0090 amendment, x10: convergence under large border shocks is no longer a pre-P3
    criterion.
 
-## 6. Decisions for the owner
+## 6. Owner rulings (2026-10-31, "B a a a")
 
-1. ACR correlation: diagnose first (option C) and grade the run against the reference's exact
-   counterfactual (A); province-level ACR (B) only by ADR if C points to geography.
-   Recommended.
-2. Brexit: compare with Dhingra et al.'s NTB and tariff parts (-0.53%, -1.44%), record services
-   trade as the unbuilt mechanism, and name its phase.
-3. P04: literature ratios now (A), mode-share estimation with option F at P9 (B, D).
-4. Tier 3: add the four moments of section 4 to the benchmark report (report only).
+1. ACR correlation: **province-level ACR now** (section 2, option B). The input-output formula
+   is computed per province from province home shares and cost shares and income-weighted to
+   countries (Ramondo et al. 2016), by a new ADR amending 0265; same band [0.8, 1.25] and
+   correlation 0.9. The country-level `acr_io` and the plain `acr` stay reported.
+2. Brexit: compare with Dhingra et al.'s NTB and tariff parts (-0.53% soft, -1.44% hard), report
+   the ratio, check the Brexit runs against the model's own ACR, record services trade as the
+   unbuilt mechanism, no tuning. The phase that builds services trade is still to be named.
+3. P04: literature ratios now (BTS 2000, Donaldson 2018), registered with ranges for P9; the
+   mode-share fit with option F at P9. Moves the calibration and goldens in C7 (CHANGELOG
+   BEHAVIOUR, register entry).
+4. Tier 3: the four moments of section 4 in the benchmark report, report only.
 
 ## References
 
