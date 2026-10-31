@@ -659,6 +659,25 @@ fn every_province_produces_and_pays_a_wage() {
     }
 }
 
+/// The fixture with competitive storage on at the approved values (ADR 0091), as an export of
+/// those parameters would carry them, calibrated once.
+fn fixture_with_storage() -> &'static (Inputs, Steady) {
+    static WORLD: OnceLock<(Inputs, Steady)> = OnceLock::new();
+    WORLD.get_or_init(|| {
+        let on = TradeParams::default().with_storage();
+        let mut inp = io::load(fixture()).unwrap();
+        inp.storage_loss = on.storage_loss.to_vec();
+        inp.storage = io::Storage {
+            cost: on.storage_cost.to_vec(),
+            speculation: on.speculation.to_vec(),
+            convenience: on.convenience.to_vec(),
+            gain: on.storage_gain,
+        };
+        let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        (inp, s)
+    })
+}
+
 /// Stage 5: at the start of a tick each input stock is (1 + COVER) months of use and the pipeline
 /// holds, j ticks ahead, one month of shipments of every arrival slot j or later, so the
 /// order-up-to rule of E3 orders exactly one month of use; merchant stocks are coverage times the
@@ -668,11 +687,9 @@ fn every_province_produces_and_pays_a_wage() {
 fn stage5_state_is_stationary_under_the_stock_rules() {
     // the fixture with competitive storage on at the approved values (ADR 0091), beside the
     // default worlds, where it is off
-    let mut inp = io::load(fixture()).unwrap();
-    inp.storage_loss = TradeParams::default().with_storage().storage_loss.to_vec();
-    let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    let (inp, s) = fixture_with_storage();
     assert!(s.spoilage.iter().any(|&x| x > 0.0));
-    stage5_holds("fixture with storage", &inp, &s);
+    stage5_holds("fixture with storage", inp, s);
     for w in worlds() {
         stage5_holds(w.name, &w.inp, &w.s);
     }
@@ -1412,6 +1429,61 @@ fn block_limits_of_the_calibration() {
             }
         }
     }
+}
+
+/// ADRs 0091 and 0267: with storage on, the calibration's block limits are those of the map at
+/// the export's storage parameters, whose stored cells carry their stock and expectation as
+/// states; a storage loss without speculation is refused. The radii with and without those
+/// states are reported (trade SPEC, Block gain).
+#[test]
+fn block_limits_with_storage_on() {
+    let (inp, s) = fixture_with_storage();
+    let trade = TradeParams {
+        coverage: std::array::from_fn(|g| {
+            inp.coverage
+                .as_ref()
+                .unwrap()
+                .get(g)
+                .copied()
+                .unwrap_or(0.0)
+        }),
+        ..TradeParams::default().with_storage()
+    };
+    let m = Model::physical(inp).unwrap();
+    let src = m.sourcing(&s.price);
+    let modes = [
+        ceteris_econ::EconParams::default(),
+        ceteris_econ::EconParams::frictionless(),
+    ];
+    for (mode, params) in modes.iter().enumerate() {
+        let eta = params.eta;
+        let want = block::limits(&m, &src, s, &inp.ent_s_l(), params, &trade).unwrap();
+        assert_eq!(s.block_limit[mode], want, "eta {eta}");
+        let blocks = block::blocks(&m, &src, s, &inp.ent_s_l(), params, &trade);
+        let stored: usize = blocks.iter().map(|(_, b)| b.stored.len()).sum();
+        assert!(stored > 0, "no stored cell");
+        let (mut capped, mut with, mut without) = (0, 0.0f64, 0.0f64);
+        for (_, b) in &blocks {
+            with = with.max(b.spectral_radius(1.0 / trade.gain_share, eta));
+            let mut bare = b.clone();
+            bare.stored.clear();
+            without = without.max(bare.spectral_radius(1.0 / trade.gain_share, eta));
+            if b.scale(eta, trade.gain_share) < 1.0 {
+                capped += 1;
+            }
+        }
+        let limited = want.data.iter().filter(|l| l.is_finite()).count();
+        eprintln!(
+            "storage on, eta {eta}: {} blocks, {stored} stored cells, {capped} beyond their \
+             margin ({limited} cells limited), largest radius at gains / m {with:.4} with the \
+             stock and expectation states, {without:.4} without",
+            blocks.len()
+        );
+    }
+    let mut bad = inp.clone();
+    bad.storage.speculation = vec![0.0; bad.storage.speculation.len()];
+    let err = steady::calibrate(&bad, &bad.u_star.clone(), &mut quiet()).unwrap_err();
+    assert!(err.to_string().contains("no speculation"), "{err}");
 }
 
 /// ADR 0267: the measured radius against the Gelfand limit of the map's matrix, ||M^k||^(1/k)

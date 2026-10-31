@@ -110,6 +110,24 @@ pub struct Household {
     pub prices: Vec<(usize, f64)>,
 }
 
+/// A competitively stored good's origin cell (ADR 0091; trade SPEC, Storage loop and Block gain):
+/// its stock deviation sigma = dS / S* and its expectation pi^e_og are states of the map.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stored {
+    pub cell: usize,
+    /// rho = 1 / (1 + delta s), the share of output that buyers take at the steady state.
+    pub rho: f64,
+    /// P56 delta and P02 s.
+    pub delta: f64,
+    pub cover: f64,
+    /// psi c = psi zeta (k + delta), the storage order's response to cover (P144, P145).
+    pub pull: f64,
+    /// P144 psi.
+    pub psi: f64,
+    /// P146 g_s.
+    pub gain: f64,
+}
+
 /// The linearized tick of one country's cells (trade SPEC, Block gain). With x the log price
 /// deviations of the cells, q the output deviations of the enterprises, omega the provinces'
 /// log wage deviations, W the wage bills', P the profit pool's, y the buyer prices of the slots
@@ -124,10 +142,16 @@ pub struct Household {
 /// W_p     = omega_p,t + sum_(k at p) L_k q_k / employed_p
 /// L_s,t   = sum_(o -> s) l_os x_o,t                              expected months in transit
 /// z_s     = sum_(k at s) v_ks (q_k + H_s (q_k - q_k,t-1) + L_s,t - L_s,t-1) + households
-/// e_i     = - sum_j E_ij x_j + sum_s u_is z_s + draws + households - sum_(k own i) w_k q_k
-/// P_t     = sum_i R_i (x_i + q_i + e_i) - sum_p B_p W_p - sum_inputs spend (price + units)
+/// o_i     = - sum_j E_ij x_j + sum_s u_is z_s + draws + households       orders over Q
+/// e_i     = o_i - sum_(k own i) w_k q_k [+ rho ((delta s - psi c) sigma_i + psi pi_i) stored]
+/// P_t     = sum_i R_i (x_i + o_i / r_i) - sum_p B_p W_p - sum_inputs spend (price + units)
 /// x_i,t+1 = x_i,t + kappa_i e_i
+/// sigma_i,t+1 = (1 - delta) sigma_i + (q_i / rho - o_i / r_i) / s                    stored
+/// pi_i,t+1    = (1 - g_s) pi_i + g_s kappa_i e_i                                     stored
 /// ```
+///
+/// with r_i the storage order's factor on a stored cell's orders (1 elsewhere): o_i / r_i is
+/// the relative change of its buyers' orders D, which its sales and so its revenue follow.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     /// kappa_cell of each cell (ADR 0263).
@@ -144,6 +168,11 @@ pub struct Block {
     pub households: Vec<Household>,
     /// R_i of each cell, its sales over the country's profit pool.
     pub revenue: Vec<f64>,
+    /// r_i of each cell: the storage order's factor on its orders' elasticity
+    /// (`TradeParams::order_response`), 1 for a cell whose good is not stored.
+    pub response: Vec<f64>,
+    /// The stored cells, whose stock and expectation are states.
+    pub stored: Vec<Stored>,
     pub wage: Wage,
 }
 
@@ -174,6 +203,7 @@ struct Work {
     lead: Vec<f64>,
     e: Vec<f64>,
     made: Vec<f64>,
+    orders: Vec<f64>,
 }
 
 impl Block {
@@ -181,9 +211,10 @@ impl Block {
         self.gain.len()
     }
 
-    /// Length of the state: x, x_t-1, q_t-1, omega_t-1 and P_t-1.
+    /// Length of the state: x, x_t-1, q_t-1, omega_t-1, P_t-1, then (sigma, pi) of each stored
+    /// cell.
     pub fn dimension(&self) -> usize {
-        2 * self.cells() + self.enterprises.len() + self.provinces.len() + 1
+        2 * self.cells() + self.enterprises.len() + self.provinces.len() + 1 + 2 * self.stored.len()
     }
 
     /// The gains of the wage rule the map is measured at: one, or a rise and a cut.
@@ -211,6 +242,7 @@ impl Block {
             lead: vec![0.0; self.hold.len()],
             e: vec![0.0; n],
             made: vec![0.0; n],
+            orders: vec![0.0; n],
         }
     }
 
@@ -229,7 +261,7 @@ impl Block {
         let (x, rest) = state.split_at(n);
         let (xp, rest) = rest.split_at(n);
         let (qp, rest) = rest.split_at(n_e);
-        let (wp, pool) = (&rest[..n_p], rest[n_p]);
+        let (wp, pool, held) = (&rest[..n_p], rest[n_p], &rest[n_p + 1..]);
         w.now[..n].copy_from_slice(x);
         w.then[..n].copy_from_slice(xp);
         w.now[n..].iter_mut().for_each(|v| *v = 0.0);
@@ -310,9 +342,22 @@ impl Block {
                 w.made[i] += share * w.q[k];
             }
         }
-        for (((e, &made), &r), &x) in w.e.iter_mut().zip(&w.made).zip(&self.revenue).zip(x) {
+        w.orders.copy_from_slice(&w.e);
+        // revenue follows the buyers' orders o / r_i (sales), not the storage order in o; at
+        // r_i = 1 this is x + made + e bit for bit
+        for ((((e, &made), &r), &x), &resp) in
+            w.e.iter_mut()
+                .zip(&w.made)
+                .zip(&self.revenue)
+                .zip(x)
+                .zip(&self.response)
+        {
             *e -= made;
-            new_pool += r * (x + made + *e);
+            new_pool += r * (x + made / resp + *e / resp);
+        }
+        for (k, st) in self.stored.iter().enumerate() {
+            let (sigma, pi) = (held[2 * k], held[2 * k + 1]);
+            w.e[st.cell] += st.rho * ((st.delta * st.cover - st.pull) * sigma + st.psi * pi);
         }
         for (p, prov) in self.provinces.iter().enumerate() {
             new_pool -= prov.bill * w.bill[p];
@@ -327,6 +372,14 @@ impl Block {
         nqp.copy_from_slice(&w.q);
         rest[..n_p].copy_from_slice(&w.omega);
         rest[n_p] = new_pool;
+        let next_held = &mut rest[n_p + 1..];
+        for (k, st) in self.stored.iter().enumerate() {
+            let (i, resp) = (st.cell, self.response[st.cell]);
+            let (sigma, pi) = (held[2 * k], held[2 * k + 1]);
+            next_held[2 * k] =
+                (1.0 - st.delta) * sigma + (w.made[i] / st.rho - w.orders[i] / resp) / st.cover;
+            next_held[2 * k + 1] = (1.0 - st.gain) * pi + st.gain * scale * self.gain[i] * w.e[i];
+        }
     }
 
     /// One tick of the map from `state` (for tests of the measurement).
@@ -466,6 +519,8 @@ struct Country {
     provinces: Vec<Province>,
     households: Vec<Household>,
     revenue: Vec<f64>,
+    response: Vec<f64>,
+    stored: Vec<Stored>,
 }
 
 /// The blocks of a calibrated steady state under the employment speed and wage regime of
@@ -607,6 +662,19 @@ pub fn blocks(
         c.cells.push(j);
         c.revenue
             .push(per_pool(country[p], s.price[(p, g)] * sales[(p, g)]));
+        c.response.push(response[g]);
+        if traded_cell(j) && trade.stores(g) {
+            let (delta, cover) = (trade.storage_loss[g], trade.coverage[g]);
+            c.stored.push(Stored {
+                cell: local[j],
+                rho: 1.0 / (1.0 + delta * cover),
+                delta,
+                cover,
+                pull: trade.speculation[g] * trade.convenience[g] * (trade.storage_cost[g] + delta),
+                psi: trade.speculation[g],
+                gain: trade.storage_gain,
+            });
+        }
         if traded_cell(j) {
             c.demand.push((
                 local[j],
@@ -818,6 +886,8 @@ pub fn blocks(
                 provinces: c.provinces,
                 households: c.households,
                 revenue: c.revenue,
+                response: c.response,
+                stored: c.stored,
                 wage: wage.clone(),
             };
             (c.cells, block)
@@ -893,6 +963,8 @@ mod tests {
             }],
             households: vec![],
             revenue: vec![0.0],
+            response: vec![1.0],
+            stored: vec![],
             wage: Wage::Given,
         }
     }
@@ -921,6 +993,7 @@ mod tests {
                 lead: 0.0,
             }],
             revenue: vec![0.0, 0.0],
+            response: vec![1.0, 1.0],
             ..market(0.0, 0.0)
         }
     }
@@ -1006,6 +1079,97 @@ mod tests {
         for eta in [0.3, 1.0] {
             assert_eq!(b.scale(eta, SHARE), 1.0);
         }
+    }
+
+    /// Agriculture's origin market with competitive storage at the approved values (ADR 0091):
+    /// its orders' elasticity carries the factor r, its stock and expectation are states.
+    fn stored_market(e: f64, eps: f64, kappa: f64) -> Block {
+        let p = TradeParams::default().with_storage();
+        let (delta, cover) = (p.storage_loss[0], p.coverage[0]);
+        let r = p.order_response(0);
+        Block {
+            gain: vec![kappa],
+            response: vec![r],
+            stored: vec![Stored {
+                cell: 0,
+                rho: 1.0 / (1.0 + delta * cover),
+                delta,
+                cover,
+                pull: p.speculation[0] * p.convenience[0] * (p.storage_cost[0] + delta),
+                psi: p.speculation[0],
+                gain: p.storage_gain,
+            }],
+            ..market(e * r, eps)
+        }
+    }
+
+    /// One stored market at given wages is the Storage loop's 4 x 4 map of (x, q, sigma, pi)
+    /// (trade SPEC; `stability::storage_matrix`): the radii agree, inside and outside.
+    #[test]
+    fn stored_market_is_the_storage_loop() {
+        let p = TradeParams::default().with_storage();
+        let st = crate::stability::Storage {
+            delta: p.storage_loss[0],
+            cost: p.storage_cost[0],
+            zeta: p.convenience[0],
+            psi: p.speculation[0],
+            gain: p.storage_gain,
+        };
+        let radius4 = |m: [[f64; 4]; 4]| {
+            let mut v = [1.0, 0.3, -0.7, 0.2];
+            let mut log = 0.0;
+            for t in 0..8000 {
+                let w: [f64; 4] = std::array::from_fn(|i| (0..4).map(|j| m[i][j] * v[j]).sum());
+                let norm = w.iter().fold(0.0f64, |a, x| a.max(x.abs()));
+                if t >= 4000 {
+                    log += norm.ln();
+                }
+                v = w.map(|x| x / norm);
+            }
+            (log / 4000.0).exp()
+        };
+        for (e, eta, eps, kappa) in [
+            (0.6, 0.3, 2.61, 0.05),
+            (8.68, 0.3, 1.5, 0.05),
+            (4.0, 1.0, 1.5, 0.1),
+            (8.68, 1.0, 2.0, 0.15),
+            (8.68, 0.3, 1.5, 0.2),
+        ] {
+            let want = radius4(crate::stability::storage_matrix(
+                e,
+                eta,
+                eps,
+                p.coverage[0],
+                kappa,
+                st,
+            ));
+            let got = stored_market(e, eps, kappa).spectral_radius(1.0, eta);
+            assert!(
+                (got - want).abs() < 1e-3,
+                "E {e} eta {eta} eps {eps} kappa {kappa}: block {got}, storage loop {want}"
+            );
+        }
+    }
+
+    /// A stored cell's revenue follows its buyers' orders D, not the storage order that the
+    /// factor r adds to its orders (ADR 0091; trade SPEC, Block gain): from a price deviation x
+    /// with no supply response, the pool moves by R (x - E x), E the buyers' elasticity, where
+    /// the orders' gap e = -r E x.
+    #[test]
+    fn stored_revenue_follows_the_buyers_orders() {
+        let (e, x) = (2.0, 0.01);
+        let mut b = stored_market(e, 0.0, KAPPA1);
+        b.revenue = vec![0.3];
+        let r = b.response[0];
+        assert!(r > 1.2, "factor {r}");
+        let mut state = vec![0.0; b.dimension()];
+        state[0] = x;
+        let next = b.apply(1.0, 0.3, 0.0, &state);
+        let pool = next[2 * b.cells() + b.enterprises.len() + b.provinces.len()];
+        let want = 0.3 * (x - e * x);
+        assert!((pool - want).abs() < 1e-15, "pool {pool}, want {want}");
+        // the price moves on the whole gap, storage order included
+        assert!((next[0] - (x - KAPPA1 * r * e * x)).abs() < 1e-15);
     }
 
     /// Under the wage rule the map is measured at the gain of a rise and of a cut, and the

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed: B7 review round on competitive storage (ADRs 0091, 0267)
+
+- The block map takes a stored cell's revenue from its buyers' orders (o / r, the merge read
+  R (x + q + e), r times too large) and carries its stock and expectation as states (trade
+  SPEC, Block gain). The calibration builds it at the export's storage parameters, and the
+  structural digest now carries P56's money cost, P144, P145 and P146 beside P56's delta, so a
+  run under storage parameters other than its calibration's is refused. A storage loss without
+  speculation is refused (`TradeParams::check_storage`).
+- With storage off (the default) nothing moves: the fixture's limits, its calibration and every
+  golden hash are unchanged.
+- The storage loop's toy test moved to `ceteris-calibrate/tests/storage_loop.rs` and runs on
+  `stability::storage_matrix`; the conservation test asserts the spoilage tally and the release
+  floor exactly.
+
 ### Changed: B7 competitive storage (ADR 0091) merged into pre-P3 B, calibration format 9
 
 - Merges claude/storage-bounds (edc2e8d, ee79611, ae1473d: B7 with g_s 0.006). Both sides had bumped the calibration

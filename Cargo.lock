@@ -370,6 +370,7 @@ dependencies = [
  "ceteris-pack",
  "ceteris-reference",
  "ceteris-trade",
+ "libm",
  "rayon",
  "serde_json",
  "tempfile",
