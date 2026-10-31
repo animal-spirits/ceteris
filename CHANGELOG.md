@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### BEHAVIOUR: the 2000 pack's calibration tables recalibrated with the pinned Sinkhorn (B8d)
+
+- The installed calibration tables came from code before the Sinkhorn level pin (B8c). They are
+  recalibrated at b1786a7 from the same pack (manifest sha256 3c7895d1... unchanged): the same
+  fitted nu (2.5940, 0.8002, 0.3954, 0.06591, 0), 68 passes, change 3.59e-13, Sinkhorn residual
+  9.9e-14. Against the old tables every column agrees within the iterative tolerance (largest
+  relative moves: pipeline units 2.3e-11, input stocks 3.9e-12, wages and w0 1.2e-12). The old
+  tables are in the Trash.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-pack.txt`: the six calibration tables. The econ tables, `p1-pack.txt` and
+  `p1-geo.txt` do not move.
+
 ### Changed: V1 runs three perturbation seeds; B8 pack figures
 
 - `v1_full_pack_from_the_perturbed_steady_state` runs seeds 20, 21 and 22 and fails if any
