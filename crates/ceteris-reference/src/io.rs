@@ -13,7 +13,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "14";
+pub const EXPORT_FORMAT: &str = "15";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -197,8 +197,8 @@ pub struct Inputs {
     pub theta: Vec<f64>,
     /// (G,) P01 theta class of each good (ADR 0023; 0 for local goods).
     pub theta_class: Vec<usize>,
-    /// P05 per theta class (ADR 0092), the border friction the crossings' `k` and `inv_loss`
-    /// carry.
+    /// (G,) P05 per good (ADRs 0092, 0276), the border friction the crossings' `k` and
+    /// `inv_loss` carry.
     pub border_nu: Vec<f64>,
     /// P06, within a PIGL category.
     pub sigma_demand: f64,
@@ -802,13 +802,11 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
     if !gini.is_empty() {
         return Err(format!("Gini outside [0, 1) in countries {gini:?}"));
     }
-    if let Some(g) =
-        (0..inp.traded.len()).find(|&g| inp.traded[g] && inp.theta_class[g] >= inp.border_nu.len())
-    {
+    if inp.border_nu.len() != inp.traded.len() {
         return Err(format!(
-            "good {g} is in theta class {}, the inputs have {} border frictions",
-            inp.theta_class[g],
-            inp.border_nu.len()
+            "{} border frictions for {} goods",
+            inp.border_nu.len(),
+            inp.traded.len()
         ));
     }
     if inp.gateway_mass.len() != inp.gateway_country.len() {

@@ -4,7 +4,7 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `econ_calib` | province u32, good u8, a, va0, l0, a_va, price, output, sales, profit, coef_0 to coef_9, stock_0 to stock_9 f64; schema metadata `calibration` (JSON: format, r, border_nu (P05 per theta class, ADR 0092), passes, sinkhorn_residual, static_digest) |
+//! | `econ_calib` | province u32, good u8, a, va0, l0, a_va, price, output, sales, profit, coef_0 to coef_9, stock_0 to stock_9 f64; schema metadata `calibration` (JSON: format, r, border_nu (P05 per good, ADRs 0092, 0276), passes, sinkhorn_residual, static_digest) |
 //! | `econ_calib_cells` | province u32, good u8, active bool, price, consumer_price, gamma, lead, demand_elasticity, supply_elasticity, block_limit_default, block_limit_frictionless, supply, demand, demand_int, demand_hh, sales, inventory f64 |
 //! | `econ_calib_provinces` | province u32, w0, employment, income f64 |
 //! | `econ_calib_pops` | province u32, edu u8, money, income, wage f64 |
@@ -31,7 +31,7 @@ use arrow_schema::{DataType, Field, Schema};
 use ceteris_reference::demand::{N_CATEGORIES, Weights};
 use ceteris_reference::io::{Inputs, Mat};
 
-use crate::border::{N_CLASSES, at_border_nu};
+use crate::border::at_border_nu;
 use crate::json::Json;
 use crate::steady::{FORMAT, SLOTS, Steady};
 
@@ -390,15 +390,15 @@ pub fn read_reference(
     if meta["static_digest"].as_str() != Some(inp.static_digest.as_str()) {
         return Err("the calibration tables belong to other inputs".into());
     }
-    let border_nu: [f64; N_CLASSES] = meta["border_nu"]
+    let border_nu: Vec<f64> = meta["border_nu"]
         .as_array()
         .and_then(|a| {
             a.iter()
                 .map(serde_json::Value::as_f64)
                 .collect::<Option<Vec<_>>>()
         })
-        .and_then(|v| v.try_into().ok())
-        .ok_or("econ_calib.arrow: border_nu is not one number per theta class")?;
+        .filter(|v| v.len() == inp.n_goods())
+        .ok_or("econ_calib.arrow: border_nu is not one number per good")?;
     // the export holds the data state's border friction; the calibration was solved at its own
     let calibrated = at_border_nu(inp, &border_nu)?;
     let inp = &calibrated;

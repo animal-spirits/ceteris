@@ -38,8 +38,8 @@
 //! `--out` (default `target/calibration/<pack name>`, never the pack), printing one line per
 //! pass and the summary. Copying the tables into the pack installs them: `EconInputs::from_pack`
 //! loads them at their `calibration_format` and the static digest of the export they were
-//! solved from. Before the steady state it fits the border friction per theta class to ICIO's
-//! cross-border shares (ADR 0092); `--no-border-fit` keeps the default instead, for comparisons.
+//! solved from. Before the steady state it fits the border friction per friction group to ICIO's
+//! cross-border shares (ADRs 0092, 0276); `--no-border-fit` keeps the default instead, for comparisons.
 //! `--inputs DIR` calibrates an export directory at its own u*, its provinces serving as their
 //! own pack provinces, and needs `--out`.
 //!
@@ -589,11 +589,15 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let icio = match &pack {
         Some(pack) => {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
-            let (target, icio) = border::target_shares(pack, &inp.theta_class[..n_traded])?;
-            println!("border friction: ICIO cross-border share by class {target:?}");
+            let groups = border::friction_groups(&inp.theta_class[..n_traded]);
+            let (target, icio) = border::target_shares(pack, &groups)?;
+            println!(
+                "border friction: ICIO cross-border share by group {groups:?}: {target:?}"
+            );
             if fit_border {
                 let fit = match border::fit_border_nu(
                     &inp,
+                    &groups,
                     &target,
                     &icio,
                     Limits::default(),
@@ -609,14 +613,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                     "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
                     fit.nu, fit.share, fit.clamped, fit.evaluations
                 );
-                inp = border::at_border_nu(&inp, &fit.nu)?;
+                inp = border::at_border_nu(&inp, &fit.nu_of_goods(&inp.border_nu))?;
             } else {
                 println!(
                     "border friction: kept at {:?} (--no-border-fit)",
                     inp.border_nu
                 );
             }
-            Some(icio)
+            Some((icio, groups))
         }
         None => None,
     };
@@ -634,12 +638,12 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             return Ok(ExitCode::FAILURE);
         }
     };
-    if let Some(icio) = icio {
+    if let Some((icio, groups)) = icio {
         let mut spend = s.spend_hh.clone();
         for (a, b) in spend.data.iter_mut().zip(&s.spend_int.data) {
             *a += b;
         }
-        let share = border::cross_border_shares(&inp, &s.price, &spend, &icio)?;
+        let share = border::cross_border_shares(&inp, &s.price, &spend, &icio, &groups)?;
         println!("border friction at the steady state: cross-border share {share:?}");
     }
     println!("{}", summary::summary(&inp, &s).pretty());

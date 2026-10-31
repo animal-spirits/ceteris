@@ -81,8 +81,9 @@ use crate::world::{
 /// `bulk_classes` (ADR 0247). 13: `provinces` has the selection constants `gamma_g`, and
 /// `run_prices.price_index` is the buyer price Gamma P_d (ADR 0200). 14: `goods` has
 /// `storage_loss` (P56), and `params.json` has the storage parameters (P56, P144 to P146) of
-/// competitive storage (ADR 0091).
-pub const EXPORT_FORMAT: &str = "14";
+/// competitive storage (ADR 0091). 15: `params.json` `border_nu` is a list, one per good
+/// (ADR 0276).
+pub const EXPORT_FORMAT: &str = "15";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;

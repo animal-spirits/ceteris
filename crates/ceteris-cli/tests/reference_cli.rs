@@ -192,7 +192,7 @@ fn assert_routing_matches_rust(inp: &Inputs, export: &Path) -> f64 {
         worst = worst.max(r);
     };
     for g in (0..inp.n_goods()).filter(|&g| inp.traded[g]) {
-        let nu = border_nu[class[g] as usize];
+        let nu = border_nu[g];
         // ADR 0247: goods of a class with bulk legs are priced on them
         let (cost, hours) = if bulk_class[class[g] as usize] {
             (&bulk_cost, &bulk_hours)
