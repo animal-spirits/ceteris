@@ -87,7 +87,9 @@ fn worlds() -> &'static [World] {
 /// holds the data state's (P05 defaults), the CLI fits its own before the steady state (ADR 0092),
 /// and the steady state the pack's tables hold is the one at the fitted values.
 fn pack_inputs(dir: &Path) -> Inputs {
-    io::load(dir).unwrap()
+    let inp = io::load(dir).unwrap();
+    let nu = write::read_border_nu(&pack(), inp.n_goods()).unwrap();
+    border::at_border_nu(&inp, &nu).unwrap()
 }
 
 /// The pack world is calibrated at the border friction of the pack's calibration, so its steady
