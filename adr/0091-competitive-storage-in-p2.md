@@ -3,6 +3,7 @@
 Status: proposed (owner chose the options, 2026-10-25)
 Date: 2026-10-25
 Design sections: 8.2, 12.2, 17 (P02, P56, S04); trade SPEC Origin market; ADRs 0016, 0019, 0029
+Amended by ADR 0278 (proposed, 2026-10-31): the storage order is a partial adjustment toward a target stock, b = delta S + lambda (S* - S).
 
 ## Context
 
