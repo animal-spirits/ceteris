@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### BEHAVIOUR: the block cap linearizes each country's tick and caps at its limit gain (ADR 0267, block review)
+
+- The block map now carries the wage (frictionless clearing, the wage rule at the gains of a
+  rise and a cut), local markets and their draws, the households' PIGL and CES demand on this
+  tick's wages and last tick's dividends, the profit pool and the move of each slot's months in
+  transit with the origins' shares (`ceteris_calibrate::block`): a block is a country, local
+  cells included. On the fixture a coupled block beyond its limit grows in `EconWorld` at the
+  map's radius to within 2e-3 (`block_map_growth_matches_the_tick`); the first build's map read
+  it 0.05 too unstable.
+- The calibration stores each capped block's limit gain, b kappa_cell / m (infinite elsewhere),
+  in `block_limit_default` and `block_limit_frictionless` (calibration format 8: format-7 tables
+  must be recalibrated), and a run caps each cell at min(kappa1, 2 m / J, m L)
+  (`MarketElasticity::price_gain`). The cap is continuous in kappa1, P03d and eta: the first
+  build dropped it at any setting off the defaults (kappa1 0.0500000001 ran uncapped).
+- The calibration checks each capped block stable at its own gains and stops otherwise; the
+  stability tolerance 2e-3 is registered (P157).
+- Behaviour moves only in capped blocks of calibrated packs; the steady state does not move. On
+  the k263 scratch pack (format 8) 11 of 233 blocks are capped in the default mode (Sudan
+  0.244, Lesotho 0.333) and 41 frictionless (Sudan 0.341, Albania 0.706, France 0.721). Default
+  mode, seed 20: Sudan 2.06 to 1.3e-2 (the first build took it from 1.17 to 2.16). Regression
+  against the first build: frictionless Sudan at seed 20 stays far off, 10.75 to 8.37 (0.34
+  under the first build's cap of traded cells only). The pack steady-state test now fails on
+  the wage's boundedness (Pitcairn, 0.10 of its tolerance, 2.35 times its early drift), no
+  longer on the world price index.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: calibration format 8, the block columns renamed to the
+  limit gains (all infinite on the fixture, which caps no block); every other column is bit for
+  bit the same (`ceteris pack compare` against the format-7 tables). p2-econ.txt, p0-toy.txt
+  and the core goldens do not move.
+
 ### Changed: the dispatch-mass tolerance carries the rounding below the normal range (owner ruling on x10, ADR 0090)
 
 - A product below 2^-1022 rounds by up to 2^-1074 absolute, and the route factors after it scale
