@@ -48,6 +48,8 @@ fn io(va: [f64; N_GOODS], basis: Basis) -> Economy {
             io: [[0.0; N_GOODS]; N_GOODS],
             final_demand_shares: [1.0 / N_GOODS as f64; N_GOODS],
             coal_share: 0.4,
+            extraction: [0.0; N_GOODS],
+            extraction_output: 0.0,
         },
         donor: None,
         va_basis: basis,
