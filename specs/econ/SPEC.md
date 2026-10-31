@@ -1239,7 +1239,11 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
     start (Western Sahara 10,100 times, Indian Ocean Territories 5,600, Niue 4,600) and keep less
     of it (B8d); without Pitcairn the worst is Uganda good
     9, 0.897 (0.83 on the old pack), then Sierra Leone 0.629, North Macedonia 0.532 (its wage at
-    0), Albania 0.368. Neither cap drives it: with the block limits off 1.36e3, with both caps off
+    0: the same tick-1 sale, 345 times its pops' money, then wages far above w0 whose losses
+    the write-off and the markets' signed cash flow turn into pop debt by tick 30; in its eight
+    provinces with only local goods 7 to 9 the debtors buy nothing, prices stay below input
+    cost, no wage clears labour, so the frictionless wage halves every tick, 1e-30 to 1e-116 of
+    w0 by tick 900; B8d), Albania 0.368. Neither cap drives it: with the block limits off 1.36e3, with both caps off
     1.38e3 (France then 6.9). H2 distance -0.4539 (s.e. 0.0105, pseudo-R2 0.964), reported (ADR
     0264). H2 per class passes (theta within 2.0e-8 relative); with ln distance as the cost
     control class 0 2.453, 1 3.561, 2 7.630, 3 16.039, and in class 3 good 1 alone 16.275 (s.e.
