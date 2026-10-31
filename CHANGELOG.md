@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Changed: a user's stock is a floor under the local fill (ADR 0093, amendment of 2026-10-30)
+
+- Defect fix of the as-built chain rule: each user's output was cap min_k F_k, the common fill
+  applied even to users whose own stock covers their need, against the split's own rule (the
+  stock covers the remainder). Now Y = cap min_k G_k(F_k), G = s + (1 - s) F with s the share of
+  the user's need at capacity its stock covers: F is the share of each user's uncovered need that
+  the good's output serves. A user fully covered by its stock is not cut, and with no output of
+  the good a user runs on its stock. A user without stock is as before, bit for bit.
+- Each user's uncovered need is computed from its levels, not as coef Y - b, which cancels to the
+  rounding of b where a user runs mostly on its stock (133 of 100,000 stocked random provinces
+  stalled that way). The split draws it.
+- No golden moves: the chain never binds on the fixture's golden runs, and the steady state never
+  rations. Outputs move wherever a stocked user of a short local good was cut below its stock
+  (pack: an Algerian enterprise with 2.2 months of every local input in stock produced nothing).
+- Fill tests: the translated collapses take producers' floors for the constant stock thresholds
+  gave (`translate`, `translated_original`, `translatable`), with the sample and full run
+  re-measured; pinned seeds that the floor changes are re-measured or replaced, each with its
+  reason; `translated_collapse_stop_refuses_an_off_piece_fixed_point` is removed (no province
+  under the floor reaches that case).
+
 ### Fixed: the write-off's country total is i128 (ADR 0106)
 
 - `systems::write_off` narrowed the country total to i64 and panicked where the pops' money and
