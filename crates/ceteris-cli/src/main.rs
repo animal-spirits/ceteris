@@ -591,9 +591,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
             let groups = border::friction_groups(&inp.theta_class[..n_traded]);
             let (target, icio) = border::target_shares(pack, &groups)?;
-            println!(
-                "border friction: ICIO cross-border share by group {groups:?}: {target:?}"
-            );
+            println!("border friction: ICIO cross-border share by group {groups:?}: {target:?}");
             if fit_border {
                 let fit = match border::fit_border_nu(
                     &inp,
