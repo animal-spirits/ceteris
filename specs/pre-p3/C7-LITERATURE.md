@@ -162,16 +162,22 @@ mode cost ratios are weakly identified: geo SPEC records rail/road 52.6 (s.e. 24
 dearer than road, against every price source. The literature identifies mode costs from
 **mode-specific** moments: Allen and Arkolakis (2014) estimate relative mode costs from the
 2007 Commodity Flow Survey's mode-specific bilateral shares in a discrete-choice step;
-Donaldson (2018) from salt price gaps along the network, reporting road, river and coastal
-costs relative to rail of roughly 4.5 to 7.9, 3 to 3.8 and 2.25 to 3.9 by specification (check
-the AER table before citing a single value).
+Donaldson (2018, Table 2, p. 917) from salt price gaps along the network: road, river and
+coastal costs relative to rail of 2.375 [1.750, 10.000], 2.250 [1.500, 6.250] and 6.188
+[5.875, 10.000] (NLS, bootstrapped 95% intervals), against historical freight rates of 4.5, 3.0
+and 2.25 (column 1; p. 905). An earlier draft quoted 4.5 to 7.9, 3 to 3.8 and 2.25 to 3.9 from
+working-paper slides; the published table does not have them.
 
 Price evidence on the priors (P04a to d: road 0.10, rail 0.04, sea 0.008, air 0.80 USD per
-tonne-km, ratios road/rail 2.5, road/sea 12.5): US freight revenue per ton-mile around 2000 was
-26.2 cents truck (1998), 2.26 rail and 0.73 barge (BTS National Transportation Statistics,
-Table 3-17), about 0.163, 0.014 and 0.0045 USD per tonne-km, ratios road/rail about 12 and
-road/barge about 36. Revenue per ton-mile mixes haul length and cargo mix, so it overstates the
-pure cost gap, but it places the priors' road/rail ratio low, not high.
+tonne-km, ratios road/rail 2.5, road/sea 12.5): US freight revenue per ton-mile in 2000 was
+13.75 cents truck (general freight common carriers, mostly LTL), 2.26 Class I rail, 1.67 barge
+and 73.85 air (BTS National Transportation Statistics, Table 3-21, archived edition of
+3 February 2017), about 0.094, 0.0155, 0.0114 and 0.506 USD per tonne-km, ratios road/rail
+about 6.1, road/barge about 8.2 and air/road 5.4. An earlier draft quoted 26.2 cents truck
+(1998) and 0.73 barge from the 2000 edition's Table 3-17, which was not reachable to check;
+the current series differs. Revenue per ton-mile mixes haul length and cargo mix, so it
+overstates the pure cost gap, but it places the priors' road/rail ratio low, not high. ADR 0269
+registers these ratios.
 
 Options:
 
@@ -260,8 +266,9 @@ Verified against the source text in this session unless marked.
   (Not re-read.)
 - Boehm, C., A. Levchenko and N. Pandalai-Nayar (2023). The long and short (run) of trade
   elasticities. AER 113(4), 861-905. (Values from the abstract.)
-- Bureau of Transportation Statistics. National Transportation Statistics, Table 3-17, Average
-  freight revenue per ton-mile (2000 and 2005 editions).
+- Bureau of Transportation Statistics. National Transportation Statistics, Table 3-21, Average
+  freight revenue per ton-mile, current cents (archived edition of 3 February 2017; Table 3-17
+  in editions to 2010). Read.
 - Caliendo, L. and F. Parro (2015). Estimates of the trade and welfare effects of NAFTA. ReStud
   82(1), 1-44.
 - Chaney, T. (2018). The gravity equation in international trade: an explanation. JPE 126(1),
@@ -274,8 +281,8 @@ Verified against the source text in this session unless marked.
 - Dhingra, S., H. Huang, G. Ottaviano, J. P. Pessoa, T. Sampson and J. Van Reenen (2017). The
   costs and benefits of leaving the EU: trade effects. Economic Policy 32(92), 651-705; CEP DP
   1478, Tables 3 and 4 read.
-- Donaldson, D. (2018). Railroads of the Raj. AER 108(4-5), 899-934. (Mode ratios from two
-  presentations; published table not read.)
+- Donaldson, D. (2018). Railroads of the Raj. AER 108(4-5), 899-934. Table 2 and
+  section IB read.
 - Eaton, J. and S. Kortum (2002). Technology, geography, and trade. Econometrica 70(5),
   1741-1779.
 - Fajgelbaum, P., P. Goldberg, P. Kennedy and A. Khandelwal (2020). The return to
@@ -288,8 +295,8 @@ Verified against the source text in this session unless marked.
 - Hummels, D. (2007). Transportation costs and international trade in the second era of
   globalization. JEP 21(3), 131-154; working version, Table 1 read.
 - Ramondo, N., A. Rodriguez-Clare and M. Saborio-Rodriguez (2016). Trade, domestic frictions,
-  and scale effects. AER 106(10), 3159-3184. (Result from the abstract and NBER WP 18532
-  summary; generalised formula not read.)
+  and scale effects. AER 106(10), 3159-3184. NBER WP 18532, section 2.6
+  (Proposition 4, eqs. (17) to (20), fn. 11) read.
 - Redding, S. (2016). Goods trade, factor mobility and welfare. JIE 101, 148-167. (Abstract.)
 - Rogoff, K. (1996). The purchasing power parity puzzle. JEL 34(2), 647-668. (Not re-read.)
 - Santos Silva, J. M. C. and S. Tenreyro (2006). The log of gravity. REStat 88(4), 641-658;

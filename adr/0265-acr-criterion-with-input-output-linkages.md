@@ -4,6 +4,8 @@ Status: proposed
 Date: 2026-10-30
 Design sections: 15.2, 21 (pre-P3 benchmark); amends ADR 0207 (pre-P3 benchmark, "the ACR
 formula holding"); ADRs 0200, 0257
+Amended by ADR 0268 (proposed, 2026-10-31): the input-output formula is graded per province and
+income-weighted to countries; the country-level `acr_io` and `acr` stay reported.
 
 ## Context
 
