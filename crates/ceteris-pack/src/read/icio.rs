@@ -54,6 +54,11 @@ pub struct CountryIo {
     pub final_demand_shares: [f64; N_GOODS],
     /// Coal (B05) in the value added of good 2.
     pub coal_share: f64,
+    /// Million USD: inputs by good of crude oil and gas extraction (B06, B09), good 1 without
+    /// refining (ADR 0270); zero outside ICIO.
+    pub extraction: [f64; N_GOODS],
+    /// Million USD: output of crude oil and gas extraction.
+    pub extraction_output: f64,
 }
 
 /// One year of ICIO: row labels, column names and the numeric columns (without the last, OUT).
@@ -152,6 +157,7 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
     let mut fin: BTreeMap<&str, [f64; N_GOODS]> = BTreeMap::new();
     let mut coal: BTreeMap<&str, f64> = BTreeMap::new();
     let mut mining: BTreeMap<&str, f64> = BTreeMap::new();
+    let mut extraction: BTreeMap<&str, ([f64; N_GOODS], f64)> = BTreeMap::new();
     let mut picked = vec![0.0; rows.len()];
     for (name, x) in table.names.iter().zip(&table.columns) {
         let (code, tail) = split_once(name);
@@ -173,6 +179,13 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
                 m[k][g] += b;
             }
             output.entry(code).or_insert([0.0; N_GOODS])[g] += x[out_row];
+            if matches!(tail, "B06" | "B09") {
+                let e = extraction.entry(code).or_insert(([0.0; N_GOODS], 0.0));
+                for (a, b) in e.0.iter_mut().zip(add) {
+                    *a += b;
+                }
+                e.1 += x[out_row];
+            }
             if g == 2 {
                 let va = x[out_row] - pairwise_sum(&picked);
                 *mining.entry(code).or_insert(0.0) += va;
@@ -209,6 +222,10 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
             0.0
         };
         let va = std::array::from_fn(|g| x[g] - used[g]);
+        let (extraction, extraction_output) = extraction
+            .get(code)
+            .copied()
+            .unwrap_or(([0.0; N_GOODS], 0.0));
         result.insert(
             code.to_owned(),
             CountryIo {
@@ -217,6 +234,8 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
                 io,
                 final_demand_shares: shares,
                 coal_share,
+                extraction,
+                extraction_output,
             },
         );
     }
