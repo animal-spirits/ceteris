@@ -170,8 +170,9 @@ is the missing anchor of the section above, not a defect of the chain, the write
 dispatch. After the i128 write-off total (ADR 0106) and the stock floor (ADR 0093) the run
 passed the write-off and stopped at tick 54 on the dispatch-mass invariant. That stop was a
 tolerance defect: flows computed through partial products below the smallest normal f64
-(trade SPEC, Invariants). With the tolerance fixed, the run stops later on a payment that
-does not fit the ledger (the econ SPEC records where). No restart floor or other new mechanism
+(trade SPEC, Invariants). With the tolerance fixed (2026-10-31), the run stops at tick 61
+on a payment that does not fit the ledger, at a world index of 1.2e3 (the block scratch pack;
+the k263 pack is calibration format 6 and no longer loads). No restart floor or other new mechanism
 is added for it in P2 (option B, not taken).
 
 Known limits left for P5, where the money anchor is designed:

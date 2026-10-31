@@ -558,12 +558,41 @@ The full order with econ systems is in `specs/econ/SPEC.md`.
 | Buyer price | Spending q_d at d, fully filled, delivers one unit; q_d = Gamma_d P_d | 1e-12 relative | `buyers_pay_the_ces_index` |
 | Gateway clearing | Each gateway's money and goods net to zero every tick | exact money, 1e-9 goods | every tick |
 | Sourcing | sum_o X_od = E_d for each reachable destination and good | 1e-12 relative | `source` unit and property tests |
-| Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 relative | every tick |
+| Dispatch mass | units dispatched = origin sales, each origin and good | 1e-12 of the larger, plus the rounding of products below the normal range that the kernel carries, plus 2^-1022 (derivation below) | every tick; `dispatch_carries_the_rounding_below_the_normal_range`, `dispatch_tolerance_covers_the_carried_rounding` |
 | Inventory sign | S >= 0, and the market account holds S | exact; holding to 1e-9 of the turnover S + Q + D (Task 20 round 3) | every tick |
 | Price bounds | Prices finite and positive | exact | every tick |
 | Two-level vs single-level | On small worlds, flows from the gateway kernel versus direct-path kernel: median absolute log difference reported, and both nest in their GE solutions | report only; V1 tolerances apply to each | `tests/trade_nesting.rs` |
 | Pipeline | goods in the transit accounts = goods in the pipeline, per good. True by construction right after T2b, which brings each transit account to the goods in flight (ADR 0200); the Selection invariant checks what that adjustment creates or destroys | 1e-9 relative | every tick |
 | Thread independence | 1 and 8 threads, identical hashes | exact | P2 acceptance |
+
+Dispatch mass tolerance (2026-10-31, owner ruling on x10, ADR 0090). Origin o's sales of good g
+are S_o = sum_c f_c D_c, the fill f_c of each class times its orders, and `dispatch` ships the
+same units along the routes again: each route starts from m = 2^up f_c w_o (w_o the origin's
+weight, 2^up the reach rescale) and multiplies by the route's factors (K_oa, reach_d or z_a, the
+net ratio, 1 / p_o). In the normal range each product rounds by at most eps / 2 relative, a few
+per route, inside 1e-12 of the flows. A product below 2^-1022 (subnormal) rounds by up to
+2^-1075 absolute, and every factor applied after it scales that error into the units, so its
+relative error is 2^-1075 over the product, not eps: no tolerance relative to the cell's own
+flows bounds it. The kernel carries the bound instead:
+
+    |dispatched_o - S_o| <= 1e-12 max(dispatched_o, S_o) + R_o + 2^-1022
+    R_o = shipped_rounding_o + sum_c f_c orders_rounding_oc + sum_c [f_c < 2^-1022] 2^-1075 D_c
+
+shipped_rounding_o (`Sourced::shipped_rounding`, written by `dispatch`) adds, for each product
+of a route below 2^-1022, 2^-1075 times the factors after it (2^up times them for f_c w_o, which
+is formed before the rescale); orders_rounding_oc (`Sourced::orders_rounding`, written by
+`source`) does the same for the products of the orders that carry w_o (w_o reach_o, K w_o, K w_o
+/ v_a, then the division by p_o, before the rescale back by 2^up); and a subnormal fill holds
+avail / D to 2^-1075 only. The destination-side sums the two passes compute separately (reach,
+y, z and the backward gateway sums) are taken to be normal or 0: they scale with spending per
+unit of access and are not tracked, an assumption. 2^-1022 is the floor for results below the
+normal range, as before. On the x10 run (frictionless, every crossing's tau x 10) the reach
+rescale is 0 at every tick; the stop at tick 55 (`scratchpad/block/pack`; tick 54 on the k263
+pack) was a cell with fill 2.1e-303 and weight 1.3e-7, so m = 2.8e-310, its routes' first
+products subnormal and multiplied back up to sales of 1.5e-297: dispatched and sales differed
+by 1.3e-9 relative, which the bound covers. Under this tolerance the run passes the dispatch
+check and stops at tick 61 on a payment that does not fit the ledger (world index 1.2e3), the
+collapse ADR 0090 places beyond P2's range.
 
 ## Parameters
 
