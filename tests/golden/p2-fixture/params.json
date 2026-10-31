@@ -1,6 +1,6 @@
 {
-  "format": "14",
-  "static_digest": "ab28855a6f2727fad72e436bc1dca6f55c194abf489f49ff13a78652790aca28",
+  "format": "15",
+  "static_digest": "b33c1bee6f4445885cbd96700c867d03535f65fb3fd4bb1d305d22b148555c6b",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -66,7 +66,7 @@
     "c_max": 0.1,
     "c_max_storable": 0.3,
     "expectation_gain": 0.006,
-    "border_nu": [0.3, 0.3, 0.3, 0.3],
+    "border_nu": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
     "time_cost": [0.002, 0.002, 0.002, 0.005, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0],
     "bulk_sea": [1.0, 1.0, 1.0, 0.026],
     "bulk_port": [1.0, 1.0, 1.0, 0.4],

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### BEHAVIOUR: border friction per good in theta class 3 (ADR 0276, proposed)
+
+- P05 is one value per good (`TradeParams::border_nu`, `EconInputs::border_nu`, reference
+  `Inputs::border_nu`). `ceteris calibrate --pack` fits it over friction groups
+  (`border::friction_groups`): the theta classes, with class 3 split into good 1 (crude oil, gas
+  and refined fuels) and good 2 (coal and other mining), each clamped at nu 0 where its ICIO
+  target is above its share there (ADR 0092's rule). On the rebuilt pack the class value 0.0524,
+  set by crude oil, took coal and mining below its own share and the calibration failed.
+- Export format 15 (`params.json` `border_nu` per good), calibration format 10 (`econ_calib.arrow`
+  metadata `border_nu` per good): exports and calibration tables of earlier formats are refused.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: export format 15 in every table, `border_nu` of ten values and a
+  new static digest in `params.json`, `reference/solution.json` and the calibration (format 10);
+  every column of every table is bit for bit the same (`ceteris pack compare` against 0e25521).
+  The fixture keeps 0.3 for every good, so no price, quantity or money moves.
+- `tests/golden/p2-econ.txt`: every hash (the static digest carries ten border frictions, not
+  four). The hashes are the same at 1, 3 and all threads. p0-toy.txt and the core goldens do not
+  move.
+
 ### Changed: B7 review round on competitive storage (ADRs 0091, 0267)
 
 - The block map takes a stored cell's revenue from its buyers' orders (o / r, the merge read
