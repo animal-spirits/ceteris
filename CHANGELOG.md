@@ -20,6 +20,19 @@
   calibrated pack is recalibrated). `ceteris calibrate stability --storage` prints the storage
   loop's kappa1 limits at the approved values.
 
+### BEHAVIOUR: golden hashes move with the snapshot layout and the static digest (ADR 0091)
+
+- No price, quantity or money moves (storage is off by default); the state hash covers the two
+  new market vectors and the static digest the five storage parameters.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/`: export format 14, `goods.storage_loss` (0), the storage parameters
+  in `params.json`, a new static digest; every other value is bit for bit the same.
+- `tests/golden/p2-fixture/calibration/` and `reference/`: calibration format 8 and the new
+  static digest; every column is bit for bit the same (`ceteris pack compare` against 7ca3a2b).
+- `tests/golden/p2-econ.txt`: every hash (snapshot layout and static digest).
+
 ### Changed: the pack's steady-state money tolerance scales with income (P156)
 
 - `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full
