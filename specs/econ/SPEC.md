@@ -1221,13 +1221,32 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
     violation, world price index 1.0000000000000124, no negative money, pool, retained loss or
     stockout. 1 vs 8 threads, 120 ticks: identical hashes (20.1 s and 6.1 s). Tick about
     53.5 ms (12 ticks from the data state, not a benchmark median).
+  - On the B8 pack (pre-P3, 2026-10-31; ADR 0251's whole provinces with the rebuilt econ tables,
+    4,368 provinces with value added, ADR 0276's nu per good; 68 passes, Sinkhorn residual
+    9.9e-14, manifest 3c7895d1): V1 from the perturbed steady state passes at seeds 20, 21 and 22
+    (price 1.939e-4, 1.536e-4, 1.245e-4, all Malawi province 2699 good 9; wage 2.027e-4,
+    1.607e-4, 1.302e-4; flow units 7.85e-5, 6.457e-5, 5.601e-5; value 8.37e-5, 6.887e-5,
+    5.974e-5; bound 0.9843; reference residual 1.238e-12; 0 of 37,334 cells outside J2). V1
+    from the data state misses (price 1.31e3, wage 1.32e3), all of it Pitcairn (province 2892,
+    local goods 7 to 9; pop money 8.9e3 to 7.8e7 by tick 60, its wage 601 to 4.3e6 by tick 240 at
+    fixed employment, falling to 8.6e5 by tick 1,200); without Pitcairn the worst is Uganda good
+    9, 0.897 (0.83 on the old pack), then Sierra Leone 0.629, North Macedonia 0.532 (its wage at
+    0), Albania 0.368. Neither cap drives it: with the block limits off 1.36e3, with both caps off
+    1.38e3 (France then 6.9). H2 distance -0.4539 (s.e. 0.0105, pseudo-R2 0.964), reported (ADR
+    0264). H2 per class passes (theta within 2.0e-8 relative); with ln distance as the cost
+    control class 0 2.453, 1 3.561, 2 7.630, 3 16.039, and in class 3 good 1 alone 16.275 (s.e.
+    0.417), good 2 alone 14.443 (0.739). 100 years: no violation, index 1.0000000000000067. 1 vs
+    8 threads identical (120 ticks 22.9 s and 6.9 s). ACR as above. Gravity re-estimates (`ceteris
+    gravity`, not written): P01 by class 12.82, 14.45, 11.34, 22.88; P05 0.2001 (by class 0.262,
+    0.117, 0.329, 0.208); P04 stops (air not identified, 3 country pairs; road and rail 8.714,
+    sea 64.79 against the order water < rail < road < air), so P04 keeps its values.
   - Commands (M4 Pro, `data/packs/2000` built and calibrated, `PACK=$PWD/data/packs/2000`,
     `EXPORT` a scratch directory):
     - `cargo run --release --bin ceteris -- export --pack $PACK --out $EXPORT`, the export the
       gate reads.
     - V1 (both starts), H2 distance and H2 per class, about 265 s:
       `CETERIS_PACK=$PACK CETERIS_PACK_EXPORT=$EXPORT cargo test -p ceteris-cli --release --test p2_gate -- --nocapture`;
-      `v1_full_pack_from_the_perturbed_steady_state` gives the 9.086e-3 line,
+      `v1_full_pack_from_the_perturbed_steady_state` gives one line per seed (20, 21, 22),
       `v1_full_pack_from_the_data_state_stays_open` the stress test, `h2_distance_elasticity` the
       -0.753 line, `h2_theta_by_class` one line per class.
     - 100 years and 1 vs 8 threads (`hundred_years_without_violation`,
