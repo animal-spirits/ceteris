@@ -80,7 +80,7 @@ Option A (owner ruling 3, 2026-10-31; nothing fitted is this ADR's proposal with
   fees and times, the canal fee and terrain (P04e-q) are unchanged. The ordering sea < rail <
   road < air of DESIGN 5.3 holds (0.0121, 0.0164, 0.10, 0.537).
 - ADR 0247's bulk freight rate multiplies the new P04c, as it multiplied the old one. P154 is
-  a ratio to P04c, so it is rescaled to keep class 3's sourced slope (see Proposed revisions).
+  a ratio to P04c, so it is rescaled to keep class 3's sourced slope (see Revisions).
 - The PPML estimate of ADR 0022 stays computed and recorded as a diagnostic; it no longer sets
   P04. The register class of P04 becomes "Literature (borrowed, ADR 0269); calibrated in P9".
 - P9 replaces the borrowed ratios with a fit to mode-specific moments (Allen and Arkolakis
@@ -107,9 +107,9 @@ Option A (owner ruling 3, 2026-10-31; nothing fitted is this ADR's proposal with
 - The geo SPEC (Parameters), DESIGN 17.1 (P04 row) and ADR 0022 (Amendment) state the values
   and the class with C7's code.
 
-## Proposed revisions (C7, 2026-10-31; not yet ruled by the owner)
+## Revisions (owner ruling 2026-10-31, "Go with your recommendations")
 
-Two findings from the ocean freight research for C7, coded on the C7 branch as proposals:
+Two findings from the ocean freight research for C7, adopted by the owner:
 
 - **Sea range.** Ocean rates bound P04c on both sides: register the P9 range for sea as 0.05 to
   0.20 per road, in place of 0.103 to 0.133 with the lower end open. 0.121 sits inside it. The

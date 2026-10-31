@@ -94,8 +94,8 @@ pub struct TradeParams {
     /// canal edges) for the legs of each theta class. 1 for classes 0 to 2; class 3 (fuels and
     /// mining) 0.017, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
     /// km, 2.05e-4 USD (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC,
-    /// Parameters), over P04c's 0.0121 (ADR 0269, proposed). On by default by owner ruling (2026-10-30). It reaches the kernel only through
-    /// `Network::bulk`.
+    /// Parameters), over P04c's 0.0121 (ADR 0269, owner ruling 2026-10-31). On by default by
+    /// owner ruling (2026-10-30). It reaches the kernel only through `Network::bulk`.
     pub bulk_sea: [f64; N_CLASSES],
     /// P155 bulk freight rate (ADR 0247): multiplier on the listed and minor port fees (P04m)
     /// per theta class. 1 for classes 0 to 2; class 3 0.40, half the fixed part of the same

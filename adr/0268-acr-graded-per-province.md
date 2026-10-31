@@ -70,7 +70,10 @@ Option B (owner, 2026-10-31), with income weights on both sides (point 2).
    sum_g Omega_cg sum_p (s_p - pi_p) d ln q_pg, pi_p the population share: the covariance
    between income per head and price changes inside the country, which is the geography this
    ADR grades. Comparing an income-weighted prediction with a population-weighted outcome would
-   leave that term in the residual. The current reduction stays reported.
+   leave that term in the residual. The current reduction stays reported. A province with no
+   buyer price for a good with Omega_cg > 0 makes its country's model welfare NaN (owner ruling
+   2026-10-31, "Go with your recommendations"): the criterion grades only countries where both
+   sides are finite, and the report counts the rest.
 
 3. **The criterion is unchanged otherwise.** Under every crossing tau x 1.1, every ICIO country
    with |ACR| above 1e-4 has the ACR sign, the median model / ACR ratio is in [0.8, 1.25] and
