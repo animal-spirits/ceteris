@@ -4,6 +4,7 @@
 //! measures welfare (ADRs 0200, 0207).
 
 pub mod benchmark;
+pub mod block;
 pub mod border;
 pub mod costs;
 pub mod dta;

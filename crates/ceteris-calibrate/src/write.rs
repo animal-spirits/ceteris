@@ -5,7 +5,7 @@
 //! | file | columns |
 //! |---|---|
 //! | `econ_calib` | province u32, good u8, a, va0, l0, a_va, price, output, sales, profit, coef_0 to coef_9, stock_0 to stock_9 f64; schema metadata `calibration` (JSON: format, r, border_nu (P05 per theta class, ADR 0092), passes, sinkhorn_residual, static_digest) |
-//! | `econ_calib_cells` | province u32, good u8, active bool, price, consumer_price, gamma, lead, demand_elasticity, supply_elasticity, supply, demand, demand_int, demand_hh, sales, inventory f64 |
+//! | `econ_calib_cells` | province u32, good u8, active bool, price, consumer_price, gamma, lead, demand_elasticity, supply_elasticity, block_scale_default, block_scale_frictionless, supply, demand, demand_int, demand_hh, sales, inventory f64 |
 //! | `econ_calib_provinces` | province u32, w0, employment, income f64 |
 //! | `econ_calib_pops` | province u32, edu u8, money, income, wage f64 |
 //! | `econ_calib_pipeline` | buyer u8 (0 pops, 1 enterprises), province u32, key u8 (edu or good), good u8, ahead u8, units f64 |
@@ -177,6 +177,8 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
             named("lead", flat(&s.lead)),
             named("demand_elasticity", flat(&s.demand_elasticity)),
             named("supply_elasticity", flat(&s.supply_elasticity)),
+            named("block_scale_default", flat(&s.block_scale[0])),
+            named("block_scale_frictionless", flat(&s.block_scale[1])),
             named("supply", flat(&s.supply)),
             named("demand", flat(&s.supply)),
             named("demand_int", flat(&s.orders[0])),
