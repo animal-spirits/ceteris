@@ -1061,6 +1061,21 @@ fn shares_at(inp: &Inputs, groups: &[Vec<usize>], per_group: &[f64], icio: &[boo
     border::data_state_shares(inp, &nu, groups, icio, Limits::default()).unwrap()
 }
 
+/// ADR 0276: the friction groups are the theta classes, class 3 split into its goods.
+#[test]
+fn friction_groups_split_class_3_per_good() {
+    let inp = io::load(fixture()).unwrap();
+    let class = traded_classes(&inp);
+    assert_eq!(
+        border::class_groups(&class),
+        vec![vec![3, 5], vec![6], vec![0, 4], vec![1, 2]]
+    );
+    assert_eq!(
+        border::friction_groups(&class),
+        vec![vec![3, 5], vec![6], vec![0, 4], vec![1], vec![2]]
+    );
+}
+
 /// ADRs 0092, 0276: on the fixture, the border friction fitted to cross-border shares that the
 /// model produces at known nu returns those shares per friction group (1e-6) and those nu, goods
 /// 1 and 2 of class 3 each at its own.
@@ -1101,6 +1116,98 @@ fn nu_fit_matches_cross_border_share() {
     let per_good = fit.nu_of_goods(&inp.border_nu);
     assert_eq!((per_good[1], per_good[2]), (fit.nu[3], fit.nu[4]));
     assert_eq!((per_good[3], per_good[5]), (fit.nu[0], fit.nu[0]));
+}
+
+/// ADR 0276: a class with one good, or whose goods share a nu, fits as it did per class: at
+/// targets made with goods 1 and 2 at one nu, the per-good fit gives classes 0 to 2 the class
+/// fit's nu (to the root's resolution) and goods 1 and 2 class 3's.
+#[test]
+fn per_good_fit_keeps_the_class_fit_where_goods_agree() {
+    let inp = io::load(fixture()).unwrap();
+    let icio = vec![true; inp.n_countries()];
+    let class = traded_classes(&inp);
+    let (by_class, by_group) = (
+        border::class_groups(&class),
+        border::friction_groups(&class),
+    );
+    let known = [0.15, 0.6, 0.35, 1.2];
+    let fit_class = border::fit_border_nu(
+        &inp,
+        &by_class,
+        &shares_at(&inp, &by_class, &known, &icio),
+        &icio,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    for c in 0..4 {
+        assert!(
+            (fit_class.nu[c] - known[c]).abs() <= 1e-6 * known[c],
+            "class {c}: {fit_class:?}"
+        );
+    }
+    let same = [0.15, 0.6, 0.35, 1.2, 1.2];
+    let fit = border::fit_border_nu(
+        &inp,
+        &by_group,
+        &shares_at(&inp, &by_group, &same, &icio),
+        &icio,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    println!("per class {fit_class:?}\nper group {fit:?}");
+    for c in 0..3 {
+        assert!(
+            (fit.nu[c] - fit_class.nu[c]).abs() <= 1e-8 * fit_class.nu[c],
+            "class {c}: {} vs {}",
+            fit.nu[c],
+            fit_class.nu[c]
+        );
+    }
+    for k in [3, 4] {
+        assert!(
+            (fit.nu[k] - fit_class.nu[3]).abs() <= 1e-6 * fit_class.nu[3],
+            "good {:?}: {} vs class 3's {}",
+            by_group[k],
+            fit.nu[k],
+            fit_class.nu[3]
+        );
+    }
+}
+
+/// ADRs 0092 (Amendment 2026-10-30), 0276: a good of class 3 whose own target is above its share
+/// at nu 0 clamps at nu = 0 alone; the other good of the class still hits its own target.
+#[test]
+fn per_good_fit_clamps_one_good_of_class_3() {
+    let inp = io::load(fixture()).unwrap();
+    let icio = vec![true; inp.n_countries()];
+    let groups = border::friction_groups(&traded_classes(&inp));
+    let at_zero = shares_at(&inp, &groups, &[0.0; 5], &icio);
+    let mut target = shares_at(&inp, &groups, &[0.3; 5], &icio);
+    target[4] = 0.5 * (1.0 + at_zero[4]);
+    let fit = border::fit_border_nu(
+        &inp,
+        &groups,
+        &target,
+        &icio,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    assert_eq!(fit.clamped, vec![false, false, false, false, true]);
+    assert_eq!(fit.nu[4], 0.0);
+    assert!(
+        (fit.share[4] - at_zero[4]).abs() <= 1e-12 * at_zero[4],
+        "{fit:?}"
+    );
+    for k in 0..4 {
+        assert!(
+            (fit.share[k] / target[k] - 1.0).abs() <= 1e-6,
+            "group {k}: {fit:?}"
+        );
+        assert!((fit.nu[k] - 0.3).abs() <= 1e-6 * 0.3, "group {k}: {fit:?}");
+    }
 }
 
 /// Each group's share falls as its nu rises and does not depend on the other groups' nu; a
