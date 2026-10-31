@@ -63,8 +63,8 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
   0.05, adds SVN at 0.06, HKG and ARM at 0.08; capped, nothing fails at 0.05, ALB alone at 0.06,
   ALB and ARM at 0.08, BIH at 0.10. The cap removes the single-market cases (STP, SVN, HKG) but
   J2 is a one-market bound: coupled modes across goods (Albania's g5 feeding g1 and g2, Armenia,
-  Bosnia) remain, so Albania's margin at 0.05 is under 20 percent. A bound on coupled modes is left
-  open.
+  Bosnia) remain, so Albania's margin at 0.05 is under 20 percent. Coupled modes are bounded by
+  ADR 0267's block cap, on the linearized tick of each country.
 - The pre-P3 B branch changes demand elasticities (ADRs 0200, 0247, gateway masses), so the code
   lands after it, and B8 recomputes J and reruns the gate.
 - P03d is a new free parameter (DESIGN 17 register): m in (0, 1), start 0.5.
@@ -103,5 +103,6 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
   ICIO good-1 column, which BEN, CAF, COM, GIN, GMB, GNB, LSO, MDG, SDN, SEN, TGO, TZA, ZMB and
   ZWE share. ADR 0256 replaces the donor good-1 column only for economies with a rent, so the
   rebuilt pack may still cap these cells. The claim is pending: B8 lists the default-capped
-  cells on the rebuilt pack (in particular the no-rent economies on a donor g1 column), and if
-  any remain the owner rules whether to accept default-mode capping or change m.
+  cells on the rebuilt pack (in particular the no-rent economies on a donor g1 column) and the
+  blocks ADR 0267 caps in the default mode (11 on the scratch pack, led by Sudan and Lesotho),
+  and if any remain the owner rules whether to accept default-mode capping or change m.

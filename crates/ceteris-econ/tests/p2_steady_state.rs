@@ -14,8 +14,8 @@
 //! rebates in and spending out, each carrying the relative error eps of the real drift:
 //! |dm| <= eps (W + Div + Reb + S) ~ 2 eps y, y the monthly income. A tolerance relative to the
 //! balance itself reads that error against the non-wage share of income only (0.22 in Albania,
-//! 0.32 in Pitcairn), so it scales with income y_k; the factor 2 is not taken, and 2e-6 y_k is
-//! kept as the conservative bound (owner approval 2026-10-30). Every quantity's
+//! 0.32 in Pitcairn), so it scales with income y_k; the factor 2 is not taken, so 2e-6 y_k is
+//! the tighter of the two bounds (owner approval 2026-10-30). Every quantity's
 //! drift stays bounded: its largest value over the second half of the run, scaled by its
 //! tolerance, is at most twice that over ticks 5 to the half (ticks 1 to 4, where prices and
 //! wages settle onto the rounding lattice, left out). The fixture's rounding drift peaks near
