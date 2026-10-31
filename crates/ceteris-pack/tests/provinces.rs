@@ -12,11 +12,6 @@ use serde_json::Value;
 const ADMIN1: &str = "ne_10m_admin_1_states_provinces.zip";
 const ADMIN0: &str = "ne_10m_admin_0_countries.zip";
 
-/// The pack's region of each province: its id without the part suffix.
-fn region(id: &str) -> &str {
-    id.split('.').next().unwrap()
-}
-
 #[test]
 fn loading_gives_the_regions_of_the_pack() {
     let (Some(admin1), Some(admin0), Some(pack)) = (
@@ -28,15 +23,9 @@ fn loading_gives_the_regions_of_the_pack() {
     };
     let base = provinces::regions(&admin1, &admin0).unwrap();
     let ids = strings(&pack, "id");
-    let mut regions: Vec<&str> = ids.iter().map(|id| region(id)).collect();
-    regions.dedup();
-    assert_eq!(
-        base.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-        regions
-    );
+    assert_eq!(base.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ids);
     let by_id: BTreeMap<&str, &provinces::Province> =
         base.iter().map(|p| (p.id.as_str(), p)).collect();
-    let names = strings(&pack, "name");
     for (column, get) in [
         (
             "country",
@@ -46,15 +35,11 @@ fn loading_gives_the_regions_of_the_pack() {
         ("country_now", |p| p.country_now.clone()),
     ] {
         for (id, value) in ids.iter().zip(strings(&pack, column)) {
-            assert_eq!(get(by_id[region(id)]), value, "{column} of {id}");
+            assert_eq!(get(by_id[id.as_str()]), value, "{column} of {id}");
         }
     }
-    for (id, name) in ids.iter().zip(names) {
-        let base_name = &by_id[region(id)].name;
-        match id.split_once('.') {
-            None => assert_eq!(&name, base_name),
-            Some((_, k)) => assert_eq!(name, format!("{base_name} ({k})")),
-        }
+    for (id, name) in ids.iter().zip(strings(&pack, "name")) {
+        assert_eq!(by_id[id.as_str()].name, name);
     }
 }
 
@@ -107,8 +92,7 @@ fn recording_the_cached_files_reproduces_the_lock() {
 }
 
 /// The owner-side build: the provinces and clipped counties of the cache, as the pack holds
-/// them. Areas differ in the last bits where a split's Voronoi seeds are H3 cell centres, which
-/// h3o and h3 compute differently.
+/// them.
 #[cfg(feature = "geos")]
 #[test]
 #[cfg_attr(
@@ -156,19 +140,10 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
         .unwrap()
         .parse()
         .unwrap();
-    let split_area = ceteris_pack::build::split_area_km2(&config).unwrap();
     let res = Resolution::try_from(u8::try_from(config["land_res"].as_integer().unwrap()).unwrap())
         .unwrap();
     let units = counties::load(&root).unwrap();
-    let provs = provinces::build(
-        &admin1,
-        &admin0,
-        split_area,
-        res,
-        &units,
-        &provinces::Centres::H3o,
-    )
-    .unwrap();
+    let provs = provinces::build(&admin1, &admin0).unwrap();
     let ids: Vec<&str> = provs.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, strings(&pack, "id"));
     let names: Vec<&str> = provs.iter().map(|p| p.name.as_str()).collect();
@@ -196,7 +171,7 @@ fn the_geo_build_gives_the_provinces_counties_and_cells_of_the_pack() {
     assert_eq!(ids, column::<UInt64Type>(&cells, "cell"));
     assert_eq!(owner, column::<UInt32Type>(&cells, "province"));
 
-    let clipped = counties::clip(&units, &provs, split_area).unwrap();
+    let clipped = counties::clip(&units, &provs).unwrap();
     assert_eq!(
         clipped.province,
         column::<UInt32Type>(&pack_counties, "province")
