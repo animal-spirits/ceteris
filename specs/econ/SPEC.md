@@ -201,7 +201,34 @@ the pipeline, each pop's money (dividends and rebates; wages come at E2) and las
 enterprise's last output, sales and profit; wages w0, employment L0, unemployment u*, pi^e = 0
 and buyer prices refreshed at the posted prices. Otherwise it starts from the data state: prices
 1, the same base point, input stocks at one month of base use, merchant stocks at coverage times
-initial demand, nothing in flight and one month of base dividends minted to each pop.
+the origin's own base output of the good (s_g Y0 at every active traded cell, Y0 = A VA0 / a_VA
+of the province's enterprise of that good, the base output that sizes the input stocks; local
+goods hold none, as before), nothing in flight and one month of base dividends minted to each
+pop.
+
+Merchant stocks of the data state (amendment 2026-10-31, B8e; the owner has not ruled yet). The
+data state stocked each origin at coverage times the orders one month of base demand placed there
+at prices 1, where the origin weights are the kernel alone, so an origin's stock did not scale
+with what it makes. A tiny economy then held months of the world's orders and sold them at tick
+1: Pitcairn (province 2892, 25.6 workers) started with 5.209e8 units of goods 0 to 6 against a
+pop money of 8.85e3, the world bought them at tick 1 (TRADE 5.2087e8 numeraire at price 1), and
+E4 paid the market's cash flow to its pops, 58,800 times their money; Western Sahara 10,100
+times, the Indian Ocean Territories 5,600, Niue 4,600, Norfolk Island 2,100 and St Helena 2,100
+(B8d). North Macedonia's tick-1 sale (345 times its pops' money) ran its wages far above w0,
+whose losses the write-off and the markets' signed cash flow turned into pop debt, and its eight
+provinces with only local goods locked at a zero wage. Money and goods are conserved through all
+of it (the stocks are created at load), so no invariant sees it. Inventories scale with the
+holder's own sales (inventory-to-sales ratios), and at the steady state the two rules agree
+(Calibration, stage 5: S* = coverage D with D = Q), so the data state now stocks coverage times
+the origin's own base output, what it can supply. Output, not sales, since the data state has no
+sales yet; base output, since the data state's prices are 1 and Y0 is its output at base
+employment. A calibrated start does not change: its stocks are the calibration tables'. Test
+(`a_tiny_economy_has_no_tick_one_windfall`, both modes): the fixture's island at 1e-4 of its
+population and value added (60 people, Pitcairn's scale), from the data state. After tick 1 its
+pops may hold at most their money before, plus one month of the island's base value added, plus
+(1 + max s_g) e^(max c_g) times its base traded output at prices 1: what a month of its own
+activity, and the sale of its whole stock and a month's output at the step-clipped price, can pay
+them. Under the old rule they held 5,850 times their money before.
 
 Enterprises exist for every (province, traded good) with VA > 0 and every (province, local
 good). About 4,594 x 10 rows at most, sorted by province (CSR offsets, 19.4). Every pop and
