@@ -957,17 +957,18 @@ mod tests {
         assert!(refused(&world(&mut Rng(9)), &bulk_params(0.5, 0.25)));
     }
 
-    /// ADR 0092: each good's crossings carry its theta class's border friction.
+    /// ADRs 0092, 0276: each good's crossings carry its own border friction, so goods of one
+    /// theta class may differ.
     #[test]
-    fn border_nu_follows_the_theta_class() {
+    fn border_nu_follows_the_good() {
         let p = TradeParams {
-            border_nu: [0.1, 0.25, 0.5, 2.0],
+            border_nu: [0.1, 0.25, 0.5, 2.0, 0.75, 1.5, 0.05, 0.3, 0.3, 0.3],
             ..TradeParams::default().bulk_off()
         };
         let net = world(&mut Rng(9));
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
         for g in (0..N_GOODS).filter(|&g| crate::goods::TRADED[g]) {
-            let nu = 1.0 + p.border_nu[usize::from(p.theta_class[g])];
+            let nu = 1.0 + p.border_nu[g];
             for l in &net.crossings {
                 let e = crossing(&k.good(g).crossings, l);
                 let loss = leg_tau(&p, g, l) * nu;

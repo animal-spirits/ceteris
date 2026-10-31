@@ -1,14 +1,15 @@
-//! The border friction per theta class (P05, ADR 0092; `specs/econ/SPEC.md`, Calibration): nu_c
-//! solves, given theta_c, the cross-border share of the class's goods in ICIO 2000.
+//! The border friction (P05; ADRs 0092, 0276; `specs/econ/SPEC.md`, Calibration): one nu per
+//! friction group, a theta class's goods, except class [`PER_GOOD_CLASS`], each of whose goods
+//! is a group of its own. nu solves, given theta, the cross-border share of the group's goods in
+//! ICIO 2000.
 //!
-//! The moment of class c is the share of the ICIO economies' use of the class's goods that comes
-//! from abroad, sum over those economies and goods of (1 - home share) absorption over sum of
+//! The moment of a group is the share of the ICIO economies' use of its goods that comes from
+//! abroad, sum over those economies and goods of (1 - home share) absorption over sum of
 //! absorption: from `econ_home_shares.arrow` for the target ([`target_shares`]), and from the
 //! value the model's destinations buy, at origin prices, for the model ([`cross_border_shares`]).
 //! Each evaluation is stage 2 of ADR 0089 (the scaling that makes every origin sell its output)
-//! at stage 1's spending of the data state, held for every trial: a
-//! class's share then depends on its own nu only, and the four classes are four 1-D roots,
-//! found together by Brent's method in nu.
+//! at stage 1's spending of the data state, held for every trial: a group's share then depends
+//! on its own nu only, and the groups are 1-D roots, found together by Brent's method in nu.
 
 use std::path::Path;
 
@@ -19,44 +20,98 @@ use crate::steady::{self, CalibrationError, Limits};
 use crate::write::Table;
 
 pub use ceteris_trade::N_CLASSES;
+/// The theta class whose goods take a border friction each (ADR 0276): crude oil, gas and
+/// refined fuels, and coal and other mining, whose ICIO cross-border shares differ and whose
+/// one class value chokes the second's trade.
+pub const PER_GOOD_CLASS: usize = 3;
 /// The bracket of nu searched: no friction, and a friction ten times the good's value, which cuts
 /// the frictionless kernel to 9e-4 at theta 2.91 and 2e-18 at 16.91.
 pub const NU_MAX: f64 = 10.0;
-/// Brent ends when every class's bracket is this narrow in nu on the computed shares. The root
+/// Brent ends when every group's bracket is this narrow in nu on the computed shares. The root
 /// itself is known only to the scaling's noise in the share over the share's slope in nu: on the
 /// fixture about 7e-9 for class 3, whose share moves by 2.7e-7 per unit nu (the scaling stops
 /// at 1e-13, which leaves about 1e-15 in that share), and 2e-10 or better for the others.
 pub const NU_TOL: f64 = 1e-9;
-/// Halvings of the upper end of a class's bracket where the scaling fails there.
+/// Halvings of the upper end of a group's bracket where the scaling fails there.
 pub const MAX_HALVINGS: usize = 10;
 /// Rounds of Brent's method before the fit gives up.
 pub const MAX_ROUNDS: usize = 200;
 
-/// The P05 of each class and the moments at it.
+/// The goods of each theta class, `theta_class` given per traded good; classes without goods
+/// are left out.
+pub fn class_groups(theta_class: &[usize]) -> Vec<Vec<usize>> {
+    (0..N_CLASSES)
+        .map(|c| {
+            (0..theta_class.len())
+                .filter(|&g| theta_class[g] == c)
+                .collect()
+        })
+        .filter(|goods: &Vec<usize>| !goods.is_empty())
+        .collect()
+}
+
+/// The friction groups (ADR 0276): [`class_groups`] with class [`PER_GOOD_CLASS`] split into one
+/// group per good.
+pub fn friction_groups(theta_class: &[usize]) -> Vec<Vec<usize>> {
+    class_groups(theta_class)
+        .into_iter()
+        .flat_map(|goods| {
+            if theta_class[goods[0]] == PER_GOOD_CLASS {
+                goods.into_iter().map(|g| vec![g]).collect()
+            } else {
+                vec![goods]
+            }
+        })
+        .collect()
+}
+
+/// The P05 of each friction group and the moments at it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fit {
-    pub nu: [f64; N_CLASSES],
-    pub target: [f64; N_CLASSES],
+    /// The goods of each group.
+    pub groups: Vec<Vec<usize>>,
+    pub nu: Vec<f64>,
+    pub target: Vec<f64>,
     /// The model's share at `nu`, stage 1 at the data state.
-    pub share: [f64; N_CLASSES],
+    pub share: Vec<f64>,
     /// Evaluations, each one scaling of every good: the bracket's ends, the rounds and the
     /// share at the result.
     pub evaluations: usize,
-    /// Classes whose target is above their share at nu 0, held at nu = 0 (ADR 0092, Amendment
+    /// Groups whose target is above their share at nu 0, held at nu = 0 (ADR 0092, Amendment
     /// 2026-10-30); `share` then falls short of `target`.
-    pub clamped: [bool; N_CLASSES],
+    pub clamped: Vec<bool>,
 }
 
-/// The inputs with every crossing at the border friction `nu` of its good's class in place of
-/// the inputs' own (`Inputs::border_nu`): K scaled by ((1 + nu) / (1 + nu_0))^-theta, the share of
-/// units arriving by (1 + nu_0) / (1 + nu), and the base buyer prices (sourcing at prices 1)
+impl Fit {
+    /// The border friction of every good: its group's nu, `own` for a good in no group.
+    pub fn nu_of_goods(&self, own: &[f64]) -> Vec<f64> {
+        nu_of_goods(&self.groups, &self.nu, own)
+    }
+}
+
+/// The border friction of every good, `nu` per group of `groups`, `own` for a good in no group.
+pub fn nu_of_goods(groups: &[Vec<usize>], nu: &[f64], own: &[f64]) -> Vec<f64> {
+    let mut out = own.to_vec();
+    for (goods, &v) in groups.iter().zip(nu) {
+        for &g in goods {
+            out[g] = v;
+        }
+    }
+    out
+}
+
+/// The inputs with every crossing at the border friction `nu` of its good (one per good) in place
+/// of the inputs' own (`Inputs::border_nu`): K scaled by ((1 + nu) / (1 + nu_0))^-theta, the share
+/// of units arriving by (1 + nu_0) / (1 + nu), and the base buyer prices (sourcing at prices 1)
 /// and their selection constants Gamma (ADR 0200) recomputed; the inputs as they are at their
 /// own nu.
-pub fn at_border_nu(inp: &Inputs, nu: &[f64; N_CLASSES]) -> Result<Inputs, String> {
-    if inp.border_nu.len() != N_CLASSES {
+pub fn at_border_nu(inp: &Inputs, nu: &[f64]) -> Result<Inputs, String> {
+    let n_g = inp.n_goods();
+    if inp.border_nu.len() != n_g || nu.len() != n_g {
         return Err(format!(
-            "the inputs have {} border frictions, not {N_CLASSES}",
-            inp.border_nu.len()
+            "{} border frictions in the inputs and {} given, not one per good of {n_g}",
+            inp.border_nu.len(),
+            nu.len()
         ));
     }
     if nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
@@ -65,14 +120,13 @@ pub fn at_border_nu(inp: &Inputs, nu: &[f64; N_CLASSES]) -> Result<Inputs, Strin
         ));
     }
     let mut out = inp.clone();
-    if nu.as_slice() == inp.border_nu.as_slice() {
+    if nu == inp.border_nu.as_slice() {
         return Ok(out);
     }
     let cro = &mut out.crossing;
     for j in 0..cro.good.len() {
         let g = cro.good[j];
-        let c = inp.theta_class[g];
-        let ratio = (1.0 + nu[c]) / (1.0 + inp.border_nu[c]);
+        let ratio = (1.0 + nu[g]) / (1.0 + inp.border_nu[g]);
         cro.k[j] *= ratio.powf(-inp.theta[g]);
         cro.inv_loss[j] /= ratio;
     }
@@ -93,32 +147,56 @@ pub fn at_border_nu(inp: &Inputs, nu: &[f64; N_CLASSES]) -> Result<Inputs, Strin
     Ok(out)
 }
 
-/// The cross-border share of each class over the countries flagged `icio`: the value the
-/// destinations of those countries buy from other countries over all they buy, at origin prices
-/// (net of tariffs), for spending `spend` (P, G) at posted prices `price` (P, G). A class without
-/// purchases in those countries has NaN.
+/// The group of every good of `n_goods`, if any.
+fn group_of(groups: &[Vec<usize>], n_goods: usize) -> Result<Vec<Option<usize>>, String> {
+    let mut of = vec![None; n_goods];
+    for (k, goods) in groups.iter().enumerate() {
+        for &g in goods {
+            if g >= n_goods || of[g].is_some() {
+                return Err(format!("good {g} is not a good, or in two friction groups"));
+            }
+            of[g] = Some(k);
+        }
+    }
+    Ok(of)
+}
+
+fn ratio(abroad: &[f64], total: &[f64]) -> Vec<f64> {
+    abroad
+        .iter()
+        .zip(total)
+        .map(|(&a, &t)| if t > 0.0 { a / t } else { f64::NAN })
+        .collect()
+}
+
+/// The cross-border share of each group of `groups` over the countries flagged `icio`: the value
+/// the destinations of those countries buy from other countries over all they buy, at origin
+/// prices (net of tariffs), for spending `spend` (P, G) at posted prices `price` (P, G). A group
+/// without purchases in those countries has NaN.
 pub fn cross_border_shares(
     inp: &Inputs,
     price: &Mat,
     spend: &Mat,
     icio: &[bool],
-) -> Result<[f64; N_CLASSES], String> {
+    groups: &[Vec<usize>],
+) -> Result<Vec<f64>, String> {
     let m = Model::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     if icio.len() != n_c {
         return Err(format!("{} ICIO flags for {n_c} countries", icio.len()));
     }
+    let of = group_of(groups, n_g)?;
     let src = m.sourcing(price);
     let flows = m.flows(price, spend, &src);
-    let (mut abroad, mut total) = ([0.0; N_CLASSES], [0.0; N_CLASSES]);
+    let (mut abroad, mut total) = (vec![0.0; groups.len()], vec![0.0; groups.len()]);
     for g in (0..n_g).filter(|&g| inp.traded[g]) {
-        let c = inp.theta_class[g];
+        let Some(k) = of[g] else { continue };
         for e in 0..n_c {
             for i in (0..n_c).filter(|&i| icio[i]) {
                 let v = flows.pair_value[(e * n_c + i) * n_g + g];
-                total[c] += v;
+                total[k] += v;
                 if e != i {
-                    abroad[c] += v;
+                    abroad[k] += v;
                 }
             }
         }
@@ -126,53 +204,39 @@ pub fn cross_border_shares(
         for p in (0..n_p).filter(|&p| icio[inp.province_country[p]]) {
             let i = g * n_p + p;
             if src.phi[i] > 0.0 {
-                total[c] += src.w[i] * spend[(p, g)] / src.phi[i];
+                total[k] += src.w[i] * spend[(p, g)] / src.phi[i];
             }
         }
     }
-    Ok(std::array::from_fn(|c| {
-        if total[c] > 0.0 {
-            abroad[c] / total[c]
-        } else {
-            f64::NAN
-        }
-    }))
+    Ok(ratio(&abroad, &total))
 }
 
-/// ICIO 2000 cross-border share of each class (`econ_home_shares.arrow` of `pack`): absorption
-/// weighted over the ICIO economies, for the classes of `theta_class` (per traded good). Also
-/// returns the ICIO flag of every pack country.
-pub fn target_shares(
-    pack: &Path,
-    theta_class: &[usize],
-) -> Result<([f64; N_CLASSES], Vec<bool>), String> {
+/// ICIO 2000 cross-border share of each group of `groups` (`econ_home_shares.arrow` of `pack`):
+/// absorption weighted over the ICIO economies. Also returns the ICIO flag of every pack country.
+pub fn target_shares(pack: &Path, groups: &[Vec<usize>]) -> Result<(Vec<f64>, Vec<bool>), String> {
     let t = Table::open(&pack.join("econ_home_shares.arrow"))?;
     let (country, good) = (t.usize("country")?, t.usize("good")?);
     let (share, absorption, icio) = (t.f64("home_share")?, t.f64("absorption")?, t.bool("icio")?);
     let n_c = country.iter().max().map_or(0, |c| c + 1);
+    let n_g = good.iter().max().map_or(0, |g| g + 1);
+    let of = group_of(
+        groups,
+        n_g.max(groups.iter().flatten().max().map_or(0, |g| g + 1)),
+    )?;
     let mut flag = vec![false; n_c];
-    let (mut abroad, mut total) = ([0.0; N_CLASSES], [0.0; N_CLASSES]);
+    let (mut abroad, mut total) = (vec![0.0; groups.len()], vec![0.0; groups.len()]);
     for r in 0..country.len() {
         flag[country[r]] = icio[r];
-        let g = good[r];
-        if g >= theta_class.len() {
-            return Err(format!("econ_home_shares.arrow names good {g}"));
-        }
         // an ICIO economy without use of the good has a NaN share and no weight
-        if icio[r] && absorption[r] > 0.0 {
-            let c = theta_class[g];
-            total[c] += absorption[r];
-            abroad[c] += (1.0 - share[r]) * absorption[r];
+        if let Some(k) = of[good[r]]
+            && icio[r]
+            && absorption[r] > 0.0
+        {
+            total[k] += absorption[r];
+            abroad[k] += (1.0 - share[r]) * absorption[r];
         }
     }
-    let target = std::array::from_fn(|c| {
-        if total[c] > 0.0 {
-            abroad[c] / total[c]
-        } else {
-            f64::NAN
-        }
-    });
-    Ok((target, flag))
+    Ok((ratio(&abroad, &total), flag))
 }
 
 /// Why an evaluation of the shares failed: the scaling of stage 2 (it did not converge or left
@@ -190,17 +254,19 @@ impl From<Failure> for CalibrationError {
     }
 }
 
-/// Shares of every class at border frictions `nu`, stage 2 at `spend` and `supply` (P, G), the
-/// scaling started from `start`; and the scaling's log weights.
+/// Shares of every group at border frictions `nu` (per good), stage 2 at `spend` and `supply`
+/// (P, G), the scaling started from `start`; and the scaling's log weights.
+#[allow(clippy::too_many_arguments)]
 fn shares_at(
     inp: &Inputs,
-    nu: &[f64; N_CLASSES],
+    nu: &[f64],
+    groups: &[Vec<usize>],
     spend: &Mat,
     supply: &Mat,
     icio: &[bool],
     start: Option<&Mat>,
     limits: Limits,
-) -> Result<([f64; N_CLASSES], Mat), Failure> {
+) -> Result<(Vec<f64>, Mat), Failure> {
     let other = |e: String| Failure::Other(e.into());
     let at = at_border_nu(inp, nu).map_err(other)?;
     let m = Model::new(&at).map_err(other)?;
@@ -223,22 +289,23 @@ fn shares_at(
             1.0
         }
     });
-    let share = cross_border_shares(&at, &price, spend, icio).map_err(other)?;
+    let share = cross_border_shares(&at, &price, spend, icio, groups).map_err(other)?;
     Ok((share, scaling.log_weight))
 }
 
-/// The cross-border share of every class at border frictions `nu`, over the countries flagged
-/// `icio`: stage 2 at the stage 1 spending of the data state of `inp`, as the fit evaluates it.
+/// The cross-border share of every group at border frictions `nu` (per good), over the countries
+/// flagged `icio`: stage 2 at the stage 1 spending of the data state of `inp`, as the fit
+/// evaluates it.
 pub fn data_state_shares(
     inp: &Inputs,
-    nu: &[f64; N_CLASSES],
+    nu: &[f64],
+    groups: &[Vec<usize>],
     icio: &[bool],
     limits: Limits,
-) -> Result<[f64; N_CLASSES], CalibrationError> {
+) -> Result<Vec<f64>, CalibrationError> {
     let (spend, supply) = steady::data_state_spending(inp, limits)?;
-    Ok(shares_at(inp, nu, &spend, &supply, icio, None, limits)?.0)
+    Ok(shares_at(inp, nu, groups, &spend, &supply, icio, None, limits)?.0)
 }
-
 /// Brent's method (Brent 1973, `zeroin`) on one bracket, driven from outside: [`Brent::next`]
 /// names the point to evaluate, [`Brent::update`] takes f there, so several brackets can share
 /// one evaluation.
@@ -331,50 +398,59 @@ impl Brent {
     }
 }
 
-/// nu per class such that the model's cross-border share of the class equals `target`, over the
-/// countries flagged `icio`, at the stage 1 spending of the data state of `inp`. Each class's
-/// share falls as its nu rises. A target above the share at nu 0 clamps the class at nu = 0, the
-/// corner of nu >= 0 (`Fit::clamped`; ADR 0092, Amendment 2026-10-30); a target below the share at
-/// the bracket's upper end ([`NU_MAX`], lower where the scaling fails there) is an error naming
-/// the class. A class with a
-/// NaN target (no ICIO use) keeps the inputs' nu. Brent's method per class, its bracket to
-/// [`NU_TOL`] in nu (the root's resolution is coarser where a class's share is flat, see
-/// [`NU_TOL`]); the classes share each evaluation, and every scaling starts from the scaling at
-/// nu 0, so the fit does not depend on the order of its evaluations.
+/// nu per group of `groups` such that the model's cross-border share of the group equals
+/// `target`, over the countries flagged `icio`, at the stage 1 spending of the data state of
+/// `inp`. Each group's share falls as its nu rises. A target above the share at nu 0 clamps the
+/// group at nu = 0, the corner of nu >= 0 (`Fit::clamped`; ADR 0092, Amendment 2026-10-30); a
+/// target below the share at the bracket's upper end ([`NU_MAX`], lower where the scaling fails
+/// there) is an error naming the group. A group with a NaN target (no ICIO use) keeps the
+/// inputs' nu of its first good. Brent's method per group, its bracket to [`NU_TOL`] in nu (the
+/// root's resolution is coarser where a group's share is flat, see [`NU_TOL`]); the groups share
+/// each evaluation, and every scaling starts from the scaling at nu 0, so the fit does not depend
+/// on the order of its evaluations.
 pub fn fit_border_nu(
     inp: &Inputs,
-    target: &[f64; N_CLASSES],
+    groups: &[Vec<usize>],
+    target: &[f64],
     icio: &[bool],
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Fit, CalibrationError> {
-    if inp.border_nu.len() != N_CLASSES {
+    let n = groups.len();
+    if target.len() != n || inp.border_nu.len() != inp.n_goods() {
         return Err(format!(
-            "the inputs have {} border frictions, not {N_CLASSES}",
-            inp.border_nu.len()
+            "{} targets for {n} friction groups, {} border frictions for {} goods",
+            target.len(),
+            inp.border_nu.len(),
+            inp.n_goods()
         )
         .into());
     }
+    group_of(groups, inp.n_goods())?;
     let (spend, supply) = steady::data_state_spending(inp, limits)?;
-    let own: [f64; N_CLASSES] = std::array::from_fn(|c| inp.border_nu[c]);
-    let mut fitted: Vec<usize> = (0..N_CLASSES).filter(|&c| !target[c].is_nan()).collect();
+    let own: Vec<f64> = groups.iter().map(|goods| inp.border_nu[goods[0]]).collect();
+    let mut fitted: Vec<usize> = (0..n).filter(|&k| !target[k].is_nan()).collect();
     let mut evaluations = 0;
     let target_of = fitted.clone();
-    let at = |nu: &[f64; N_CLASSES]| -> [f64; N_CLASSES] {
-        std::array::from_fn(|c| {
-            if target_of.contains(&c) {
-                nu[c]
-            } else {
-                own[c]
-            }
-        })
+    let at = |nu: &[f64]| -> Vec<f64> {
+        let per_group: Vec<f64> = (0..n)
+            .map(|k| {
+                if target_of.contains(&k) {
+                    nu[k]
+                } else {
+                    own[k]
+                }
+            })
+            .collect();
+        nu_of_goods(groups, &per_group, &inp.border_nu)
     };
     // Every scaling starts from that at nu 0, so an evaluation depends on nu alone, not on the
     // path of the search.
     evaluations += 1;
     let (at_zero, start) = shares_at(
         inp,
-        &at(&[0.0; N_CLASSES]),
+        &at(&vec![0.0; n]),
+        groups,
         &spend,
         &supply,
         icio,
@@ -382,101 +458,119 @@ pub fn fit_border_nu(
         limits,
     )?;
     progress(&format!("border friction: shares at nu 0 {at_zero:?}"));
-    let mut shares = |nu: &[f64; N_CLASSES]| {
+    let mut shares = |nu: &[f64]| {
         evaluations += 1;
-        shares_at(inp, &at(nu), &spend, &supply, icio, Some(&start), limits).map(|s| s.0)
+        shares_at(
+            inp,
+            &at(nu),
+            groups,
+            &spend,
+            &supply,
+            icio,
+            Some(&start),
+            limits,
+        )
+        .map(|s| s.0)
     };
+    let name = |k: usize| format!("group {k} (goods {:?})", groups[k]);
     // f = share - target, falling in nu
-    let mut hi = [NU_MAX; N_CLASSES];
-    let mut brent: Vec<Option<Brent>> = vec![None; N_CLASSES];
-    // The upper end, one class at a time: where the scaling fails there (its log-domain weights
-    // leave the range of f64 when a class's imports are cut that far), the end comes down by
+    let mut hi = vec![NU_MAX; n];
+    let mut brent: Vec<Option<Brent>> = vec![None; n];
+    // The upper end, one group at a time: where the scaling fails there (its log-domain weights
+    // leave the range of f64 when a group's imports are cut that far), the end comes down by
     // halves until it solves.
-    if let Some(&c) = fitted.iter().find(|&&c| at_zero[c].is_nan()) {
-        return Err(format!("class {c}: no cross-border share at nu 0").into());
+    if let Some(&k) = fitted.iter().find(|&&k| at_zero[k].is_nan()) {
+        return Err(format!("{}: no cross-border share at nu 0", name(k)).into());
     }
-    // a target above the share at nu 0, the largest, has no root: the class stays at the corner
-    let clamped: [bool; N_CLASSES] =
-        std::array::from_fn(|c| target_of.contains(&c) && at_zero[c] < target[c]);
-    for c in (0..N_CLASSES).filter(|&c| clamped[c]) {
+    // a target above the share at nu 0, the largest, has no root: the group stays at the corner
+    let clamped: Vec<bool> = (0..n)
+        .map(|k| target_of.contains(&k) && at_zero[k] < target[k])
+        .collect();
+    for k in (0..n).filter(|&k| clamped[k]) {
         progress(&format!(
-            "border friction: class {c} clamped at nu 0, target {} above the model's {}",
-            target[c], at_zero[c]
+            "border friction: {} clamped at nu 0, target {} above the model's {}",
+            name(k),
+            target[k],
+            at_zero[k]
         ));
     }
-    fitted.retain(|&c| !clamped[c]);
-    for &c in &fitted {
+    fitted.retain(|&k| !clamped[k]);
+    for &k in &fitted {
         let mut halvings = 0;
         let f_hi = loop {
-            let mut nu = [0.0; N_CLASSES];
-            nu[c] = hi[c];
+            let mut nu = vec![0.0; n];
+            nu[k] = hi[k];
             match shares(&nu) {
                 Ok(share) => {
                     progress(&format!(
-                        "border friction: class {c} share {} at nu {}",
-                        share[c], hi[c]
+                        "border friction: {} share {} at nu {}",
+                        name(k),
+                        share[k],
+                        hi[k]
                     ));
-                    break share[c] - target[c];
+                    break share[k] - target[k];
                 }
                 Err(Failure::Scaling(e)) if halvings < MAX_HALVINGS => {
                     progress(&format!(
-                        "class {c}: no scaling at nu {} ({e}); halving",
-                        hi[c]
+                        "{}: no scaling at nu {} ({e}); halving",
+                        name(k),
+                        hi[k]
                     ));
-                    hi[c] *= 0.5;
+                    hi[k] *= 0.5;
                     halvings += 1;
                 }
                 Err(Failure::Scaling(e) | Failure::Other(e)) => {
-                    return Err(format!("class {c}: {e}").into());
+                    return Err(format!("{}: {e}", name(k)).into());
                 }
             }
         };
-        let f_lo = at_zero[c] - target[c];
+        let f_lo = at_zero[k] - target[k];
         if !(f_lo >= 0.0 && f_hi <= 0.0) {
             return Err(format!(
-                "class {c}: target cross-border share {} outside the model's {} (nu 0) to {} \
-                 (nu {})",
-                target[c],
-                at_zero[c],
-                f_hi + target[c],
-                hi[c]
+                "{}: target cross-border share {} outside the model's {} (nu 0) to {} (nu {})",
+                name(k),
+                target[k],
+                at_zero[k],
+                f_hi + target[k],
+                hi[k]
             )
             .into());
         }
-        brent[c] = Some(Brent::new(0.0, f_lo, hi[c], f_hi));
+        brent[k] = Some(Brent::new(0.0, f_lo, hi[k], f_hi));
     }
-    let mut nu = own;
-    for c in (0..N_CLASSES).filter(|&c| clamped[c]) {
-        nu[c] = 0.0;
+    let mut nu = own.clone();
+    for k in (0..n).filter(|&k| clamped[k]) {
+        nu[k] = 0.0;
     }
     for round in 1..=MAX_ROUNDS {
         let mut open = Vec::new();
-        for &c in &fitted {
-            let b = brent[c].as_mut().expect("a bracket per fitted class");
+        for &k in &fitted {
+            let b = brent[k].as_mut().expect("a bracket per fitted group");
             match b.next(NU_TOL) {
                 Some(x) => {
-                    nu[c] = x;
-                    open.push(c);
+                    nu[k] = x;
+                    open.push(k);
                 }
-                None => nu[c] = b.root(),
+                None => nu[k] = b.root(),
             }
         }
         if open.is_empty() {
             let share = shares(&nu)?;
             return Ok(Fit {
+                groups: groups.to_vec(),
                 nu,
-                target: *target,
+                target: target.to_vec(),
                 share,
                 evaluations,
                 clamped,
             });
         }
         let share = shares(&nu)?;
-        for &c in &open {
-            brent[c]
+        for &k in &open {
+            brent[k]
                 .as_mut()
-                .expect("a bracket per fitted class")
-                .update(share[c] - target[c]);
+                .expect("a bracket per fitted group")
+                .update(share[k] - target[k]);
         }
         progress(&format!("border round {round}: nu {nu:?}, share {share:?}"));
     }

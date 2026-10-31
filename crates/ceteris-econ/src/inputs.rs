@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, LegTaus, N_CLASSES, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
@@ -150,9 +150,9 @@ pub struct EconInputs {
     /// The calibrated steady state a world starts from (ADR 0089, stage 5); `None` starts
     /// from the data state. Not in the digest: snapshots carry the state.
     pub steady: Option<Arc<Steady>>,
-    /// P05 per theta class of the calibration (ADR 0092), which its steady state was solved at;
+    /// P05 per good of the calibration (ADRs 0092, 0276), which its steady state was solved at;
     /// `None` uncalibrated. [`EconInputs::trade_params`] carries it into the trade parameters.
-    pub border_nu: Option<[f64; N_CLASSES]>,
+    pub border_nu: Option<[f64; N_GOODS]>,
     /// The calibration's elasticities of each market's price loop (ADR 0263), which cap its
     /// price gain; `None` uncalibrated, where every market runs kappa1.
     pub market_elasticity: Option<MarketElasticity>,

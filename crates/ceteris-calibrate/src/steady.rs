@@ -84,8 +84,9 @@ pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
 /// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
 /// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
-/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge.
-pub const FORMAT: &str = "9";
+/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge. 10: the
+/// metadata's `border_nu` is one value per good (ADR 0276).
+pub const FORMAT: &str = "10";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]

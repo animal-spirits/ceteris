@@ -18,7 +18,7 @@ use arrow_array::cast::AsArray;
 use ceteris_core::snapshot::hex;
 use ceteris_geo::pack::{PackError, f64s, read_table, u8s, u32s};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{N_CLASSES, N_GOODS, TradeParams};
+use ceteris_trade::{N_GOODS, TradeParams};
 
 use crate::demand::{N_CATEGORIES, PiglWeights};
 use crate::inputs::{EconInputs, MarketElasticity};
@@ -28,8 +28,9 @@ use crate::world::{active_cells, static_digest};
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
 /// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
 /// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
-/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge.
-pub const FORMAT: &str = "9";
+/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge. 10: the
+/// metadata's `border_nu` is one value per good (ADR 0276).
+pub const FORMAT: &str = "10";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -115,9 +116,9 @@ fn calibrated_digest(t: &RecordBatch) -> Result<String, PackError> {
     Ok(value.split('"').next().unwrap_or_default().to_owned())
 }
 
-/// The P05 per theta class in the JSON metadata `calibration` of `econ_calib.arrow` (ADR 0092):
+/// The P05 per good in the JSON metadata `calibration` of `econ_calib.arrow` (ADRs 0092, 0276):
 /// the border friction the steady state was solved at.
-fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_CLASSES], PackError> {
+fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_GOODS], PackError> {
     let json = t
         .schema()
         .metadata()
@@ -127,7 +128,7 @@ fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_CLASSES], PackError> 
     let key = "\"border_nu\"";
     let bad = || {
         err(format!(
-            "calibration metadata has no border_nu of {N_CLASSES} finite nonnegative values"
+            "calibration metadata has no border_nu of {N_GOODS} finite nonnegative values"
         ))
     };
     let after_key = &json[json.find(key).ok_or_else(bad)? + key.len()..];
@@ -142,7 +143,7 @@ fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_CLASSES], PackError> 
         .map(|v| v.trim().parse::<f64>())
         .collect::<Result<_, _>>()
         .map_err(|_| bad())?;
-    let nu: [f64; N_CLASSES] = nu.try_into().map_err(|_| bad())?;
+    let nu: [f64; N_GOODS] = nu.try_into().map_err(|_| bad())?;
     if nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
         return Err(bad());
     }
@@ -407,23 +408,24 @@ mod tests {
     }
 
     #[test]
-    fn border_nu_is_read_per_class() {
+    fn border_nu_is_read_per_good() {
         for json in [
-            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05], "static_digest": "abc"}"#,
-            r#"{ "static_digest":"abc","border_nu" :[ 0.25,1.5 , 0.0625,3e-05 ] }"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, 0.3], "static_digest": "abc"}"#,
+            r#"{ "static_digest":"abc","border_nu" :[ 0.25,1.5 , 0.0625,3e-05,0.25,0.0,2,0.3,0.3,0.3 ] }"#,
         ] {
             let t = batch(&[("calibration", json)]);
             assert_eq!(
                 calibrated_border_nu(&t).unwrap(),
-                [0.25, 1.5, 0.0625, 3e-05],
+                [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2.0, 0.3, 0.3, 0.3],
                 "{json}"
             );
         }
         for json in [
             r#"{"static_digest": "abc"}"#,
-            r#"{"border_nu": [0.25, 1.5, 0.0625]}"#,
-            r#"{"border_nu": [0.25, 1.5, 0.0625, -1.0]}"#,
-            r#"{"border_nu": [0.25, 1.5, 0.0625, "x"]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, -1.0]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, "x"]}"#,
         ] {
             let t = batch(&[("calibration", json)]);
             assert!(calibrated_border_nu(&t).is_err(), "{json}");

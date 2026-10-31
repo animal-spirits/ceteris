@@ -386,13 +386,16 @@ fn calibrated_start_rejects_other_storage_parameters() {
     }
 }
 
-/// A calibration solved at other border frictions than the defaults (ADR 0092).
+/// A calibration solved at other border frictions than the defaults (ADRs 0092, 0276), goods 1
+/// and 2 of one theta class at different values.
+const OTHER_NU: [f64; 10] = [0.6, 0.8, 0.05, 0.2, 0.6, 0.2, 0.4, 0.3, 0.3, 0.3];
+
 fn fixture_at_other_nu() -> Arc<EconInputs> {
     let mut inputs = small_world();
     inputs
         .calibrate(&fixture_dir().join("calibration"))
         .unwrap();
-    inputs.border_nu = Some([0.2, 0.4, 0.6, 0.8]);
+    inputs.border_nu = Some(OTHER_NU);
     Arc::new(inputs)
 }
 
@@ -402,7 +405,7 @@ fn fixture_at_other_nu() -> Arc<EconInputs> {
 fn calibrated_start_takes_the_calibrated_border_nu() {
     let inputs = fixture_at_other_nu();
     let trade = inputs.trade_params();
-    assert_eq!(trade.border_nu, [0.2, 0.4, 0.6, 0.8]);
+    assert_eq!(trade.border_nu, OTHER_NU);
     assert_eq!(
         TradeParams {
             border_nu: TradeParams::default().border_nu,

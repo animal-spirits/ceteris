@@ -74,11 +74,12 @@ pub struct TradeParams {
     /// Table 1) weights the last observation 0.65 per period. Start 0.006, the Poledna end
     /// (owner decision, 2026-10-24, MIGRATION Task 6).
     pub expectation_gain: f64,
-    /// P05 non-tariff border friction nu per theta class, ad valorem equivalent (ADR 0092): the
+    /// P05 non-tariff border friction nu per good, ad valorem equivalent (ADRs 0092, 0276): the
     /// default is the prior's start; a calibrated pack carries the values that match the ICIO
-    /// 2000 cross-border share of each class (`ceteris_calibrate::border`), which
-    /// `EconInputs::trade_params` puts here.
-    pub border_nu: [f64; N_CLASSES],
+    /// 2000 cross-border share of each friction group, a theta class or, in class 3, a good
+    /// (`ceteris_calibrate::border`), which `EconInputs::trade_params` puts here. Local goods
+    /// never cross a border.
+    pub border_nu: [f64; N_GOODS],
     /// P43 ad valorem cost of a day in transit, lambda_g.
     pub time_cost: [f64; N_GOODS],
     /// P44 route-choice dispersion theta_r (ADR 0017): edge factors `a = t^-theta_r`, route
@@ -127,9 +128,9 @@ pub struct TradeParams {
 }
 
 impl TradeParams {
-    /// The border friction of good `g`'s theta class.
+    /// The border friction of good `g`.
     pub fn border_nu_of(&self, g: usize) -> f64 {
-        self.border_nu[usize::from(self.theta_class[g])]
+        self.border_nu[g]
     }
 
     /// The bulk freight rate (ADR 0247) as the theta classes that use it and their (sea, port)
@@ -250,7 +251,7 @@ impl Default for TradeParams {
             c_max: 0.1,
             c_max_storable: 0.3,
             expectation_gain: 0.006,
-            border_nu: [0.3; N_CLASSES],
+            border_nu: [0.3; N_GOODS],
             time_cost: [
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],

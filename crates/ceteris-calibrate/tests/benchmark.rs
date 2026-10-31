@@ -505,12 +505,12 @@ fn benchmark_cases_are_reported() {
         .iter()
         .map(|&c| usize::from(c))
         .collect();
-    let (target, icio) = border::target_shares(&pack, &class).unwrap();
-    for (c, t) in target.iter().enumerate() {
-        let goods: Vec<usize> = (0..N_GOODS)
-            .filter(|&g| TRADED[g] && class[g] == c)
-            .collect();
-        let model = benchmark::foreign_share(base, &goods);
+    let n_traded = (0..N_GOODS).filter(|&g| TRADED[g]).count();
+    let groups = border::class_groups(&class[..n_traded]);
+    let (target, icio) = border::target_shares(&pack, &groups).unwrap();
+    for (goods, t) in groups.iter().zip(&target) {
+        let c = class[goods[0]];
+        let model = benchmark::foreign_share(base, goods);
         eprintln!(
             "openness class {c}: model {model:.4}, ICIO {t:.4}, ratio {:.3}",
             model / t

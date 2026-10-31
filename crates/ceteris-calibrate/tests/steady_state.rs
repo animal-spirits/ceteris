@@ -1049,92 +1049,110 @@ fn pack_world_loads_the_written_tables() {
     );
 }
 
-/// ADR 0092: on the fixture, the border friction fitted to cross-border shares that the model
-/// produces at known nu returns those shares per class (1e-6) and those nu.
+/// The traded goods' theta classes of the fixture.
+fn traded_classes(inp: &Inputs) -> Vec<usize> {
+    let n_traded = inp.traded.iter().filter(|&&t| t).count();
+    inp.theta_class[..n_traded].to_vec()
+}
+
+/// Shares of `groups` at nu `per_group`, stage 2 at the data state, as the fit evaluates them.
+fn shares_at(inp: &Inputs, groups: &[Vec<usize>], per_group: &[f64], icio: &[bool]) -> Vec<f64> {
+    let nu = border::nu_of_goods(groups, per_group, &inp.border_nu);
+    border::data_state_shares(inp, &nu, groups, icio, Limits::default()).unwrap()
+}
+
+/// ADRs 0092, 0276: on the fixture, the border friction fitted to cross-border shares that the
+/// model produces at known nu returns those shares per friction group (1e-6) and those nu, goods
+/// 1 and 2 of class 3 each at its own.
 #[test]
 fn nu_fit_matches_cross_border_share() {
     let inp = io::load(fixture()).unwrap();
     let icio = vec![true; inp.n_countries()];
-    let known = [0.15, 0.6, 0.35, 1.2];
-    let target = border::data_state_shares(&inp, &known, &icio, Limits::default()).unwrap();
-    let fit = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet()).unwrap();
+    let groups = border::friction_groups(&traded_classes(&inp));
+    let known = [0.15, 0.6, 0.35, 1.2, 0.5];
+    let target = shares_at(&inp, &groups, &known, &icio);
+    let fit = border::fit_border_nu(
+        &inp,
+        &groups,
+        &target,
+        &icio,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
     println!("fit: {fit:?}");
-    for c in 0..border::N_CLASSES {
-        // relative, not the PLAN's absolute 1e-6: class 3's share moves by about 2.6e-7 per unit
-        // of nu here, so an absolute 1e-6 would accept any nu from 0 to about 4
+    assert_eq!(fit.clamped, vec![false; groups.len()]);
+    for k in 0..groups.len() {
+        // relative, not the PLAN's absolute 1e-6: class 3's shares move by about 1e-7 per unit
+        // of nu here, so an absolute 1e-6 would accept any nu from 0 to several
         assert!(
-            (fit.share[c] / target[c] - 1.0).abs() <= 1e-6,
-            "class {c}: share {} vs target {}",
-            fit.share[c],
-            target[c]
+            (fit.share[k] / target[k] - 1.0).abs() <= 1e-6,
+            "group {k}: share {} vs target {}",
+            fit.share[k],
+            target[k]
         );
         assert!(
-            (fit.nu[c] - known[c]).abs() <= 1e-6 * known[c],
-            "class {c}: nu {} vs {}",
-            fit.nu[c],
-            known[c]
+            (fit.nu[k] - known[k]).abs() <= 1e-6 * known[k],
+            "group {k}: nu {} vs {}",
+            fit.nu[k],
+            known[k]
         );
     }
+    let per_good = fit.nu_of_goods(&inp.border_nu);
+    assert_eq!((per_good[1], per_good[2]), (fit.nu[3], fit.nu[4]));
+    assert_eq!((per_good[3], per_good[5]), (fit.nu[0], fit.nu[0]));
 }
 
-/// Each class's share falls as its nu rises and does not depend on the other classes' nu; a
-/// target outside the shares at nu 0 and `NU_MAX` is an error naming the class.
+/// Each group's share falls as its nu rises and does not depend on the other groups' nu; a
+/// target outside the shares at nu 0 and `NU_MAX` is an error naming the group.
 #[test]
 fn nu_fit_is_monotone_and_bracketed() {
     let inp = io::load(fixture()).unwrap();
     let icio = vec![true; inp.n_countries()];
-    let at = |nu: [f64; border::N_CLASSES]| {
-        border::data_state_shares(&inp, &nu, &icio, Limits::default()).unwrap()
-    };
+    let groups = border::friction_groups(&traded_classes(&inp));
+    let n = groups.len();
+    let at = |nu: &[f64]| shares_at(&inp, &groups, nu, &icio);
     let steps = [0.0, 0.3, 1.0, 3.0];
-    let shares: Vec<_> = steps.iter().map(|&v| at([v; border::N_CLASSES])).collect();
-    for c in 0..border::N_CLASSES {
+    let shares: Vec<_> = steps.iter().map(|&v| at(&vec![v; n])).collect();
+    for k in 0..n {
         for w in shares.windows(2) {
-            assert!(w[1][c] < w[0][c], "class {c}: {shares:?}");
+            assert!(w[1][k] < w[0][k], "group {k}: {shares:?}");
         }
     }
-    // the classes are independent: moving class 2's nu leaves the others' shares unchanged, up
-    // to the scaling's tolerance (Anderson mixing runs over all goods at once)
-    let moved = at([0.3, 0.3, 3.0, 0.3]);
-    for c in [0, 1, 3] {
-        assert!(
-            (moved[c] - shares[1][c]).abs() <= 1e-12 * shares[1][c],
-            "class {c}: {} vs {}",
-            moved[c],
-            shares[1][c]
-        );
-    }
-    let fit_err = |target: [f64; border::N_CLASSES]| {
-        border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet())
-            .unwrap_err()
-            .to_string()
-    };
-    // above the share at nu 0: clamped at nu = 0 (ADR 0092, Amendment 2026-10-30), the other
-    // classes fitted to the shares made at 0.3
-    let mut target = shares[1];
-    target[0] = 0.5 * (1.0 + shares[0][0]);
-    let fit = border::fit_border_nu(&inp, &target, &icio, Limits::default(), &mut quiet()).unwrap();
-    assert_eq!(fit.clamped, [true, false, false, false]);
-    assert_eq!(fit.nu[0], 0.0);
-    assert!(
-        (fit.share[0] - shares[0][0]).abs() <= 1e-12 * shares[0][0],
-        "{fit:?}"
-    );
-    for (c, t) in target.iter().enumerate().skip(1) {
-        assert!((fit.share[c] / t - 1.0).abs() <= 1e-6, "class {c}: {fit:?}");
-        assert!((fit.nu[c] - 0.3).abs() <= 1e-6 * 0.3, "class {c}: {fit:?}");
+    // the groups are independent: moving class 2's nu or good 2's leaves the others' shares
+    // unchanged, up to the scaling's tolerance (Anderson mixing runs over all goods at once)
+    for moved_group in [2, 4] {
+        let mut nu = vec![0.3; n];
+        nu[moved_group] = 3.0;
+        let moved = at(&nu);
+        for k in (0..n).filter(|&k| k != moved_group) {
+            assert!(
+                (moved[k] - shares[1][k]).abs() <= 1e-12 * shares[1][k],
+                "group {k} with {moved_group} moved: {} vs {}",
+                moved[k],
+                shares[1][k]
+            );
+        }
     }
     // below the share at the bracket's upper end
-    let top = at([border::NU_MAX; border::N_CLASSES]);
-    let mut target = shares[1];
+    let top = at(&vec![border::NU_MAX; n]);
+    let mut target = shares[1].clone();
     target[2] = 0.5 * top[2];
-    let err = fit_err(target);
+    let err = border::fit_border_nu(
+        &inp,
+        &groups,
+        &target,
+        &icio,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap_err()
+    .to_string();
     assert!(
-        err.starts_with("class 2:") && err.contains("outside"),
+        err.starts_with("group 2 (goods [0, 4]):") && err.contains("outside"),
         "{err}"
     );
 }
-
 /// ADR 0263: E of each traded origin against the finite difference of its orders in its own
 /// price, at the calibrated point with buyers at Gamma P_d who keep their delivered units fixed
 /// (Leontief, so each destination's spending moves with its buyer price), by central
