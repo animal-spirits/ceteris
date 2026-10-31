@@ -11,7 +11,7 @@
 //! and root come from the calibration tables (`write::read_reference`), and the test checks that
 //! the point solves the model. V1 runs from two starts, so that a run that never left the steady
 //! state cannot pass trivially: (a) the steady state with every price, wage and stock moved by
-//! its own draw in [-10%, 10%] (`EconWorld::perturb`, seed [`PERTURB_SEED`]) and (b) the 2000
+//! its own draw in [-10%, 10%] (`EconWorld::perturb`, each of the seeds [`PERTURB_SEEDS`]) and (b) the 2000
 //! data state of the calibrated inputs (prices 1, base wages, one month of base use in stock,
 //! nothing in flight), the start before ADR 0089.
 
@@ -39,7 +39,8 @@ use ceteris_reference::uniqueness::{self, Gains, V1Mode};
 
 const TICKS: u32 = 1200;
 const HISTORY_EVERY: u32 = 12;
-const PERTURB_SEED: u64 = 20;
+/// The perturbation seeds V1 runs from: 20, and 21 and 22 so that one draw cannot pass alone.
+const PERTURB_SEEDS: [u64; 3] = [20, 21, 22];
 /// V1's 1% (Equilibrium nesting).
 const V1_TOL: f64 = 0.01;
 /// Flows compared: above this share of world trade.
@@ -451,9 +452,15 @@ fn v1_excludes_cells_outside_region() {
 #[test]
 fn v1_full_pack_from_the_perturbed_steady_state() {
     let Some(r) = reference() else { return };
-    let seed = PERTURB_SEED.to_string();
-    let (holds, summary) = v1(r, "perturbed", &["--frictionless", "--perturb", &seed]);
-    assert!(holds, "{summary}");
+    let failed: Vec<String> = PERTURB_SEEDS
+        .iter()
+        .filter_map(|seed| {
+            let seed = seed.to_string();
+            let (holds, summary) = v1(r, "perturbed", &["--frictionless", "--perturb", &seed]);
+            (!holds).then_some(summary)
+        })
+        .collect();
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
 }
 
 /// V1 from the shocked data state is a stress test, not the gate's V1 (owner, 2026-10-26):
