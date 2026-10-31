@@ -1,6 +1,6 @@
 # 0268. The ACR criterion graded per province
 
-Status: proposed
+Status: accepted (owner, 2026-10-31)
 Date: 2026-10-31
 Design sections: 15.2, 21 (pre-P3 benchmark); amends ADR 0265 (the ACR criterion with
 input-output linkages); ADRs 0207, 0257

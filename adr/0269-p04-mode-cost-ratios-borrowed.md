@@ -1,6 +1,6 @@
 # 0269. P04 mode cost ratios borrowed from freight rates
 
-Status: proposed
+Status: accepted (owner, 2026-10-31)
 Date: 2026-10-31
 Design sections: 5.3, 17.1 (P04), 21 (pre-P3); amends ADR 0022 (direct estimation of P04);
 ADRs 0247, 0257, 0264
