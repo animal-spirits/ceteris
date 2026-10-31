@@ -1140,9 +1140,9 @@ fn per_good_fit_keeps_the_class_fit_where_goods_agree() {
         &mut quiet(),
     )
     .unwrap();
-    for c in 0..4 {
+    for (c, k) in known.iter().enumerate() {
         assert!(
-            (fit_class.nu[c] - known[c]).abs() <= 1e-6 * known[c],
+            (fit_class.nu[c] - k).abs() <= 1e-6 * k,
             "class {c}: {fit_class:?}"
         );
     }
@@ -1201,11 +1201,8 @@ fn per_good_fit_clamps_one_good_of_class_3() {
         (fit.share[4] - at_zero[4]).abs() <= 1e-12 * at_zero[4],
         "{fit:?}"
     );
-    for k in 0..4 {
-        assert!(
-            (fit.share[k] / target[k] - 1.0).abs() <= 1e-6,
-            "group {k}: {fit:?}"
-        );
+    for (k, t) in target.iter().enumerate().take(4) {
+        assert!((fit.share[k] / t - 1.0).abs() <= 1e-6, "group {k}: {fit:?}");
         assert!((fit.nu[k] - 0.3).abs() <= 1e-6 * 0.3, "group {k}: {fit:?}");
     }
 }
