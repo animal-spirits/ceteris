@@ -43,7 +43,7 @@ use std::f64::consts::LN_10;
 use std::fmt;
 use std::time::Instant;
 
-use ceteris_econ::inputs::MarketElasticity;
+use ceteris_econ::EconParams;
 use ceteris_reference::demand::{self, N_CATEGORIES, Weights};
 use ceteris_reference::io::{Inputs, Mat};
 use ceteris_reference::linalg::lstsq;
@@ -52,8 +52,9 @@ use ceteris_trade::TradeParams;
 
 use crate::{block, elasticity};
 
-/// `systems::COVER`.
-pub const COVER: f64 = 1.0;
+/// P149, the order rule's cover (`systems::COVER`): stage 5's stocks and the block gain's
+/// order-up-to position hold the months of use the run's order rule holds.
+pub const COVER: f64 = ceteris_econ::systems::COVER;
 /// `pipeline::SLOTS`: arrival slots 1 to 4 enter the pipeline, slot 0 is home.
 pub const SLOTS: usize = 4;
 /// Largest |ln(received / target)| over origins that ends the scaling.
@@ -78,7 +79,7 @@ pub const MAX_PASSES: usize = 100;
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
 /// The `calibration_format` of the tables (`ceteris_econ::calibration::FORMAT`).
-pub const FORMAT: &str = "7";
+pub const FORMAT: &str = "8";
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -209,10 +210,10 @@ pub struct Steady {
     /// loop (ADR 0263, [`crate::elasticity`]), 0 where no market is active.
     pub demand_elasticity: Mat,
     pub supply_elasticity: Mat,
-    /// (P, G) the gain scale b of each market's coupled block (ADR 0267, [`crate::block`]) at
-    /// the employment speeds of `MarketElasticity::block_etas` (the default mode, frictionless),
-    /// 1 outside every block.
-    pub block_scale: [Mat; 2],
+    /// (P, G) the limit gain of each market's coupled block (ADR 0267, [`crate::block::limits`])
+    /// in the default mode and frictionless, infinite for a block within its margin and outside
+    /// every block.
+    pub block_limit: [Mat; 2],
     /// SLOTS + 1 matrices (P, G): units arriving per unit spent, by arrival slot.
     pub arrive: Vec<Mat>,
     pub weights: Weights,
@@ -1393,7 +1394,10 @@ pub fn calibrate_from(
         lead,
         demand_elasticity,
         supply_elasticity,
-        block_scale: [Mat::filled(n_p, n_g, 1.0), Mat::filled(n_p, n_g, 1.0)],
+        block_limit: [
+            Mat::filled(n_p, n_g, f64::INFINITY),
+            Mat::filled(n_p, n_g, f64::INFINITY),
+        ],
         arrive,
         weights,
         rebate,
@@ -1421,8 +1425,9 @@ pub fn calibrate_from(
         info,
     };
     let trade = TradeParams::default();
-    steady.block_scale = MarketElasticity::block_etas()
-        .map(|eta| block::scales(&m, &src, &steady, s_l, eta, &trade));
+    let [default, frictionless] = [EconParams::default(), EconParams::frictionless()]
+        .map(|params| block::limits(&m, &src, &steady, s_l, &params, &trade));
+    steady.block_limit = [default?, frictionless?];
     Ok(steady)
 }
 

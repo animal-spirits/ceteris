@@ -19,10 +19,11 @@ pub struct MarketElasticity {
     pub demand: Vec<f64>,
     /// eps: the largest supply elasticity of the market's enterprises.
     pub supply: Vec<f64>,
-    /// b: the gain scale of the market's coupled block (ADR 0267; trade SPEC, Block gain) at
-    /// the employment speeds of [`MarketElasticity::block_etas`], computed at the default
-    /// kappa1 (P03a) and P03d; 1 for a market in no block or one its block leaves unscaled.
-    pub block: [Vec<f64>; 2],
+    /// The limit gain of the market's coupled block (ADR 0267; trade SPEC, Block gain) in the
+    /// default mode and frictionless: the gain at which the block is at the edge of stability,
+    /// computed at the default kappa1 (P03a), P03d and wage parameters; infinite for a market in
+    /// no block or one whose block is within its margin.
+    pub limit: [Vec<f64>; 2],
 }
 
 impl MarketElasticity {
@@ -31,24 +32,14 @@ impl MarketElasticity {
         self.demand[i] + eta * self.supply[i] / (2.0 - eta)
     }
 
-    /// The employment speeds (P41) the calibration computes the block scales at: the default
-    /// mode's and frictionless.
-    pub fn block_etas() -> [f64; 2] {
-        [EconParams::default().eta, EconParams::frictionless().eta]
-    }
-
-    /// Block scale of cell `i` in a run at employment speed `eta` under `trade` (ADR 0267):
-    /// the calibrated b where eta is one of [`MarketElasticity::block_etas`] and kappa1 and
-    /// P03d are the defaults it was computed at, else 1 (the per-market cap alone).
-    pub fn block_scale(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
-        let base = TradeParams::default();
-        if trade.kappa1 != base.kappa1 || trade.gain_share != base.gain_share {
-            return 1.0;
-        }
-        Self::block_etas()
-            .iter()
-            .position(|&e| e == eta)
-            .map_or(1.0, |mode| self.block[mode][i])
+    /// kappa1_cell of cell `i` in a run under `params` and `trade` (ADRs 0263, 0267): the
+    /// per-market cap at the run's eta, kappa1 and P03d, capped again at the share P03d of the
+    /// block limit gain of the run's wage regime (frictionless or the wage rule).
+    pub fn price_gain(&self, i: usize, params: &EconParams, trade: &TradeParams) -> f64 {
+        let mode = usize::from(params.frictionless);
+        trade
+            .price_gain(self.j(i, params.eta))
+            .min(trade.gain_share * self.limit[mode][i])
     }
 }
 
@@ -631,8 +622,8 @@ impl EconInputs {
             b"market-elasticity".iter().for_each(|&b| e.u8(b));
             e.f64s(&m.demand);
             e.f64s(&m.supply);
-            e.f64s(&m.block[0]);
-            e.f64s(&m.block[1]);
+            e.f64s(&m.limit[0]);
+            e.f64s(&m.limit[1]);
         }
         // appended only when present, so generated worlds keep their digest
         if !pack.is_empty() {
