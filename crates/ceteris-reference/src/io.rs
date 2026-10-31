@@ -254,6 +254,9 @@ pub struct Inputs {
     /// (G,) P56 storage loss delta per month of the competitively stored goods (ADR 0091), 0
     /// elsewhere: at a steady state their origins' output covers sales and spoilage.
     pub storage_loss: Vec<f64>,
+    /// The other storage parameters of the export (ADR 0091): they move only the dynamics, which
+    /// the calibration's block map linearizes.
+    pub storage: Storage,
     /// (K,) education level.
     pub pop_edu: Option<Vec<usize>>,
     pub static_digest: String,
@@ -262,6 +265,16 @@ pub struct Inputs {
     pub calibrated_coef: Option<Mat>,
     pub calibrated_a_va: Option<Vec<f64>>,
     pub calibrated_weights: Option<Weights>,
+}
+
+/// Competitive storage's parameters besides P56 delta (ADR 0091), per good: P56 money cost k,
+/// P144 psi, P145 zeta, and P146 g_s; empty where the inputs carry none.
+#[derive(Clone, Debug, Default)]
+pub struct Storage {
+    pub cost: Vec<f64>,
+    pub speculation: Vec<f64>,
+    pub convenience: Vec<f64>,
+    pub gain: f64,
 }
 
 fn bincount(index: &[usize], weights: &[f64], n: usize) -> Vec<f64> {
@@ -747,6 +760,12 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         ent_va_target: Some(ent.f64("va_target")?),
         coverage: Some(goods.f64("coverage")?),
         storage_loss: goods.f64("storage_loss")?,
+        storage: Storage {
+            cost: json_f64s(&params["trade"], "storage_cost")?,
+            speculation: json_f64s(&params["trade"], "speculation")?,
+            convenience: json_f64s(&params["trade"], "convenience")?,
+            gain: json_f64(&params["trade"], "storage_gain")?,
+        },
         pop_edu: Some(pop_edu),
         static_digest: params["static_digest"]
             .as_str()
