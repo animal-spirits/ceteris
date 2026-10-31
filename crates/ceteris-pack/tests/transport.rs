@@ -63,7 +63,7 @@ fn provinces_lead_the_nodes_and_edges_run_from_lower_to_higher_nodes() {
 )]
 fn the_transport_build_gives_the_graph_of_the_pack() {
     use arrow_array::types::Float64Type;
-    use ceteris_pack::geo::{counties, provinces, transport};
+    use ceteris_pack::geo::{provinces, transport};
     use ceteris_pack::sources::{CONFIG_DIR, workspace_root};
     use common::{cached, strings};
     use h3o::Resolution;
@@ -86,18 +86,8 @@ fn the_transport_build_gives_the_graph_of_the_pack() {
     let res = |key: &str| {
         Resolution::try_from(u8::try_from(config[key].as_integer().unwrap()).unwrap()).unwrap()
     };
-    let split_area = ceteris_pack::build::split_area_km2(&config).unwrap();
-    let units = counties::load(&root).unwrap();
     let centres = provinces::Centres::H3o;
-    let provs = provinces::build(
-        &admin1,
-        &admin0,
-        split_area,
-        res("land_res"),
-        &units,
-        &centres,
-    )
-    .unwrap();
+    let provs = provinces::build(&admin1, &admin0).unwrap();
     let tri = column::<Float64Type>(&pack_provinces, "tri_m");
     let cache = root.join(ceteris_pack::fetch::CACHE_DIR);
     let t = transport::build(

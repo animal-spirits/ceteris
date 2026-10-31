@@ -148,12 +148,6 @@ pub fn union_all(geoms: Vec<Geometry>) -> Result<Geometry, String> {
         .map_err(fail)
 }
 
-/// Applies `f` to every coordinate, as `shapely.transform` does.
-pub fn transform(g: &impl Geom, f: impl Fn(f64, f64) -> (f64, f64)) -> Result<Geometry, String> {
-    g.transform_xy(|x, y| Ok::<_, geos::Error>(f(x, y)))
-        .map_err(fail)
-}
-
 /// The points and lines that intersections leave behind dropped; the polygons unioned.
 pub fn polygonal(g: &impl Geom) -> Result<Geometry, String> {
     let mut keep = Vec::new();
@@ -185,50 +179,9 @@ pub fn rectangle(xmin: f64, ymin: f64, xmax: f64, ymax: f64) -> Result<Geometry,
     ))
 }
 
-/// Western-hemisphere parts shifted east by 360 degrees so the geometry is contiguous.
-pub fn unwrap(g: &impl Geom) -> Result<Geometry, String> {
-    let mut out = Vec::new();
-    for p in parts(g)? {
-        let x = p.get_centroid().and_then(|c| c.get_x()).map_err(fail)?;
-        out.push(if x < 0.0 {
-            transform(&p, |x, y| (x + 360.0, y + 0.0))?
-        } else {
-            p
-        });
-    }
-    union_all(out)
-}
-
-pub fn wrap(g: &impl Geom) -> Result<Geometry, String> {
-    let west = intersection(g, &rectangle(-180.0, -90.0, 180.0, 90.0)?)?;
-    let east = intersection(g, &rectangle(180.0, -90.0, 540.0, 90.0)?)?;
-    let east = transform(&east, |x, y| (x - 360.0, y - 0.0))?;
-    polygonal(&union_all(vec![west, east])?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geo::sphere::{area_km2, crosses_antimeridian};
-
-    fn area(g: &Geometry) -> f64 {
-        area_km2(&to_multipolygon(g).unwrap())
-    }
-
-    #[test]
-    fn unwrap_then_wrap_keeps_area_across_the_antimeridian() {
-        let g = Geometry::create_multipolygon(vec![
-            rectangle(178.0, 60.0, 180.0, 62.0).unwrap(),
-            rectangle(-180.0, 60.0, -177.0, 62.0).unwrap(),
-        ])
-        .unwrap();
-        assert!(crosses_antimeridian(&to_multipolygon(&g).unwrap()));
-        let u = unwrap(&g).unwrap();
-        let (x0, x1) = (u.get_x_min().unwrap(), u.get_x_max().unwrap());
-        assert!(x0 >= 178.0 && x1 <= 183.0, "{x0} {x1}");
-        let (a, b) = (area(&wrap(&u).unwrap()), area(&g));
-        assert!((a / b - 1.0).abs() < 1e-9, "{a} {b}");
-    }
 
     #[test]
     fn polygonal_drops_lines_and_points_and_unions_the_polygons() {
