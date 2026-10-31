@@ -50,6 +50,11 @@ Goldens re-blessed:
 - No golden moves: the chain never binds on the fixture's golden runs, and the steady state never
   rations. Outputs move wherever a stocked user of a short local good was cut below its stock
   (pack: an Algerian enterprise with 2.2 months of every local input in stock produced nothing).
+- Each user's floor of each local good is computed once, when the province is built
+  (`Province::new`, `Province::from_parts`), not in the chain's inner loops: on 100,000 random
+  provinces `local::fills` takes 0.43 us per province with stocks (0.80 before) and 0.37 without
+  (0.42), the passes the same. A province whose `cap`, `coef` or `stock` changes after it is
+  built is rebuilt (`Province::rebuilt`).
 - Fill tests: the translated collapses take producers' floors for the constant stock thresholds
   gave (`translate`, `translated_original`, `translatable`), with the sample and full run
   re-measured; pinned seeds that the floor changes are re-measured or replaced, each with its

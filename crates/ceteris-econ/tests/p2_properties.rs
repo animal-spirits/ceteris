@@ -2076,13 +2076,7 @@ fn random_province_with(seed: u64, extra: usize, coef_max: f64, no_stock: f64) -
         })
         .collect();
     let own = std::array::from_fn(|_| 0.3 * next());
-    Province {
-        cap,
-        coef,
-        stock,
-        producer,
-        own,
-    }
+    Province::from_parts(cap, coef, stock, producer, own)
 }
 
 proptest! {
@@ -2171,13 +2165,13 @@ fn balanced_province(seed: u64) -> Option<Province> {
     }
     let who = (next() * n as f64) as usize;
     cap[who] *= 0.3 + 0.69 * next();
-    Some(Province {
+    Some(Province::from_parts(
         cap,
         coef,
-        stock: vec![[0.0; 3]; n],
-        producer: [Some(0), Some(1), Some(2)],
+        vec![[0.0; 3]; n],
+        [Some(0), Some(1), Some(2)],
         own,
-    })
+    ))
 }
 
 /// The original of the translated collapses from `seed`: [`random_province`] with the producers'
@@ -2200,7 +2194,7 @@ fn translated_original(seed: u64) -> Province {
             }
         }
     }
-    p
+    p.rebuilt()
 }
 
 /// Whether [`translate`] applies to `p`: every local good with a user has a producer, and where
@@ -2274,7 +2268,7 @@ fn translate(p: &Province, t: f64) -> Province {
             }
         }
     }
-    q
+    q.rebuilt()
 }
 
 /// A two-good cycle with loop gain 1 - eps: enterprise 0 makes good 7 from good 8, enterprise 1
@@ -2283,17 +2277,17 @@ fn translate(p: &Province, t: f64) -> Province {
 fn near_singular(eps: f64) -> (Province, [f64; 3]) {
     let d = 1.0 - eps;
     let s = 2.0 / d;
-    let p = Province {
-        cap: vec![1.0, 1.0, 3.0],
-        coef: vec![
+    let p = Province::from_parts(
+        vec![1.0, 1.0, 3.0],
+        vec![
             [0.0, 0.5, 0.0],
             [0.5, 0.0, 0.0],
             [(s - 0.5) / 3.0, 0.0, 0.0],
         ],
-        stock: vec![[0.0, 0.3 * eps, 0.0], [0.0; 3], [0.0; 3]],
-        producer: [Some(0), Some(1), None],
-        own: [0.0; 3],
-    };
+        vec![[0.0, 0.3 * eps, 0.0], [0.0; 3], [0.0; 3]],
+        [Some(0), Some(1), None],
+        [0.0; 3],
+    );
     (p, [0.6 / s, 0.6, 1.0])
 }
 
@@ -2728,7 +2722,7 @@ fn neutral_good_stop_takes_a_fixed_point_on_its_line() {
             p.stock.push([0.0; 3]);
         }
     }
-    let q = translate(&p, t);
+    let q = translate(&p.rebuilt(), t);
     let out = local::fills(&q);
     let plain = converged_fills(&q).expect("the plain iteration converges");
     assert_eq!(q.cap.len(), n + 2, "two goods balanced by an extra user");
@@ -2786,7 +2780,7 @@ fn stalled_provinces_end_within_the_pass_cap() {
         kinks.coef.push([1e-3, 0.0, 0.0]);
         kinks.stock.push([1e-3 * threshold, 0.0, 0.0]);
     }
-    cases.push(("200 kinks".into(), kinks));
+    cases.push(("200 kinks".into(), kinks.rebuilt()));
     for (what, p) in &cases {
         let out = local::fills(p);
         println!("{what}: {out:?}");
