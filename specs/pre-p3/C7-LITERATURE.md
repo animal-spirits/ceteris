@@ -237,7 +237,9 @@ Test changes C7 must record (what each no longer checks):
    correlation 0.9. The country-level `acr_io` and the plain `acr` stay reported.
 2. Brexit: compare with Dhingra et al.'s NTB and tariff parts (-0.53% soft, -1.44% hard), report
    the ratio, check the Brexit runs against the model's own ACR, record services trade as the
-   unbuilt mechanism, no tuning. The phase that builds services trade is still to be named.
+   unbuilt mechanism, no tuning. Services trade is ADR 0168 (country-pair services kernel on
+   BaTiS), built in P5a (owner, 2026-10-31, "Ok"); the P5a gate rerun should show the ratio
+   rise from about 0.45.
 3. P04: literature ratios now (BTS 2000, Donaldson 2018), registered with ranges for P9; the
    mode-share fit with option F at P9. Moves the calibration and goldens in C7 (CHANGELOG
    BEHAVIOUR, register entry).
