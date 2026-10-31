@@ -794,7 +794,7 @@ without it the level depended on the start and the mixing path, by up to 4e-4 fr
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-13 relative
-(Anderson-mixed; `PASS_TOL`, P158; 1e-12 until 2026-10-31), so the returned state is a fixed
+(Anderson-mixed; `PASS_TOL`, P158, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
 point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
 `stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
 settled at the last pass's r, rebates, buyer prices and PIGL weights, with D, the orders at the
@@ -1451,7 +1451,7 @@ texture fed from core columns.
   per tick and the largest pop balance 1.4e10, so single sale entries bind at a uniform scale of
   about 1.3e4 and pop money at about 6.5e4 (`nominal_scale_beyond_the_ledger_fails_loudly`: on the
   fixture too a payment fails first). The currency scale is a P5 decision (core SPEC, Money scale).
-- Stage 5 on the full pack (B8d; B8e, the owner has not ruled yet):
+- Stage 5 on the full pack (B8d; resolved in B8e, owner, 2026-10-31):
   `stage5_state_is_stationary_under_the_stock_rules` missed its 1e-12 on merchant stock and
   supply, S* = coverage D and Q = D (81 of 24,230 cells, worst 1.34e-12, province 2436 good 3;
   the first failing cell 1.12e-12). It is not rounding: Q is the settled output and D the
