@@ -106,3 +106,10 @@ kappa1 0.05: 298 traded cells slow, the rest keep today's speed.
   cells on the rebuilt pack (in particular the no-rent economies on a donor g1 column) and the
   blocks ADR 0267 caps in the default mode (11 on the scratch pack, led by Sudan and Lesotho),
   and if any remain the owner rules whether to accept default-mode capping or change m.
+- B8 (2026-10-31, the 2000 pack installed at manifest 3c7895d1, ADR 0276's per-good nu): the
+  default mode caps 284 traded cells in 11 countries, Slovenia 177, Switzerland 24, Portugal 20,
+  Sweden 19, Senegal 14, Andorra 7, Belgium 7, Cyprus 5, Spain 5, Singapore 5, Northern Cyprus 1.
+  Of the 14 economies on Senegal's donor good-1 column only Senegal is left; the largest traded J
+  is 24.5 (Slovenia, pack province 3421, good 1), 55.4 frictionless, where 998 cells are capped.
+  Cells remain capped in the default mode, so the owner's ruling above (accept default-mode
+  capping or change m) is open.

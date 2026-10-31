@@ -151,6 +151,25 @@ Trade SPEC, Stability region, Block gain:
   than keeping them. With storage off nothing changes, bit for bit. On the fixture calibrated
   with storage on, the default mode caps no block and frictionless caps 1 of 4 (57 cells,
   radius 1.0077 at gains / m; 1.152 without the two states).
+- B8 (2026-10-31, the 2000 pack installed at manifest 3c7895d1, ADR 0276's per-good nu): the
+  default mode caps 5 blocks (Slovenia 0.815, Switzerland 0.907, Singapore 0.932, Andorra 0.958,
+  Belgium 0.975); Albania, Sudan, Lesotho and France are not capped. Frictionless caps 26:
+  Albania 0.531 (103 cells), Sudan 0.943 (223), France 0.458 (842); Lesotho none. Sudan is pack
+  provinces 3455 to 3481 (export provinces 3281 to 3307) since ADR 0251's whole provinces; the
+  ids 3464 and 3474 above are the scratch pack's (pack 3474 is now Western Equatoria, export
+  3300).
+- V1 on this pack from the perturbed steady state, seeds 20, 21 and 22 (largest price gap over
+  the world index at tick 1,200): frictionless 1.94e-4, 1.54e-4, 1.24e-4 (Malawi, province 2699,
+  good 9, every seed); default mode 2.43e-4, 7.31e-5, 6.93e-5 (Malawi, then Ethiopia). Sudan's
+  largest gap is 2.29e-5, 2.16e-5, 1.91e-5 frictionless and 3.92e-5, 2.78e-5, 2.54e-5 default
+  (8.37 frictionless and 1.3e-2 default at seed 20 on the scratch pack above).
+- A separate read-only Sudan diagnosis on this pack (coordinator, 2026-10-31) found the same
+  range (1.9e-5 to 3.9e-5 over seeds 20 to 22 in both modes) and the cause: the Senegal donor
+  mix before ADR 0256 gave Sudan value added of 0.072 of its oil output, ADRs 0256 and 0270 give
+  0.666, so the loop that the block cap held is gone with the data, not with the cap. It reads
+  Sudan's frictionless block scale as 0.957 against 0.943 here (both not binding in the default
+  mode); the difference is not reconciled (the two reads may scale different block
+  partitions).
 
 ## First build (2026-10-30, superseded by the review round above)
 
