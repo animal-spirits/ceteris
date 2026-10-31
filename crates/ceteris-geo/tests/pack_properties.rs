@@ -77,7 +77,7 @@ fn closing_suez_raises_europe_asia_costs_and_reopening_restores_them() {
     let suez = pack.chokepoint("Suez Canal").expect("Suez in pack");
     let (rotterdam, mumbai) = (
         province(&pack, "NLD-3485"),
-        province(&pack, "IND-2447.1") as usize,
+        province(&pack, "IND-2447") as usize,
     );
     let mut cache = PathCache::default();
     let open = cache.tree(&pack.graph, rotterdam).cost[mumbai];
