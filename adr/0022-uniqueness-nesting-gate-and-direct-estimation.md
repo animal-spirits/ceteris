@@ -217,6 +217,11 @@ sea 0.102, air -1.59) was a local stationary point: the profile deviance there i
 remove the small barrier in front of the corner. Diagnosis:
 `.superpowers/sdd/PLAN-pre-p3-rust/p04-diagnosis.md`.
 
+**Amendment (2026-10-31, ADR 0269): P04 borrowed.** The PPML estimate no longer sets P04a-d. The
+defaults are road 0.10 USD per tonne-km (prior kept) and rail, sea and air at BTS 2000 freight
+revenue per ton-mile relative to truck: 0.0164, 0.0121, 0.537. The fit above stays computed and
+recorded as a diagnostic; P9 refits the mode costs to mode-specific moments.
+
 ## Consequences
 
 The P2 gate is well posed, and fewer parameters enter joint inference in P9.

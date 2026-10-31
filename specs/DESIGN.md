@@ -1070,7 +1070,7 @@ The register lists every parameter that is not pinned by data, with its prior an
 | P03b | Inventory term kappa2 of the price rule | Markets | 0.05 to 0.5 per month when on; start 0 (off) | Price volatility and autocorrelation; stability region (ADR 0019) | Free |
 | P03c | Step clip c\_max of the price and wage rules | Markets | 0.1 in log per month | Bounds one tick's move; binding ticks counted per province | Free |
 | P03d | Share m of each market's stability limit used by its price gain (ADR 0263), and of its coupled block's, the country's linearized tick (ADR 0267) | Markets | 0 to 1, start 0.5 | Frictionless stability (V1); per-market speed; a capped block keeps the same margin of its own limit | Free |
-| P04 | Mode cost ratios (water, rail, road, track) | Transport | Ordered, log-uniform | Freight rates, price gaps | Literature + calibrated |
+| P04 | Mode cost ratios (water, rail, road, track) | Transport | Road 0.10 USD per tonne-km; rail, sea, air 0.164, 0.121, 5.37 per road (BTS 2000); P9 ranges per ADR 0269 | Freight rates (BTS NTS Table 3-21), price gaps (Donaldson 2018) | Literature (borrowed, ADR 0269); calibrated in P9 |
 | P05 | Non-tariff border frictions | Trade | Log-uniform | Gravity border effects; fitted per theta class to ICIO 2000 cross-border shares (ADR 0092), per good in class 3 (ADR 0276, proposed), a good below its own share at nu 0 clamped at 0 | Calibrated |
 | P06 | Goods substitution sigma within a PIGL category | Demand | 0.3 to 0.9, start 0.6 | Comin-Lashkari-Mestieri (2021) | Literature |
 | P07 | Income elasticities by category | Demand | Food below 1, services above 1 | Comin-Lashkari-Mestieri; budget surveys | Literature |

@@ -73,7 +73,9 @@ pub enum PathChoice {
 /// ordering sea < rail < road < air is imposed (Section 5.3); magnitudes are calibrated in P9.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransportParams {
-    /// P04a-d: cost per tonne-km by road, rail, sea and air.
+    /// P04a-d: cost per tonne-km by road, rail, sea and air. Borrowed (ADR 0269): road at the
+    /// prior 0.10, the others at BTS 2000 freight revenue per ton-mile relative to truck (NTS
+    /// Table 3-21): rail 0.164, barge 0.121, domestic air 5.37.
     pub per_tkm: [f64; 4],
     /// P04e-h: path length over great-circle length (circuity) by road, rail, sea and air.
     pub circuity: [f64; 4],
@@ -96,7 +98,7 @@ pub struct TransportParams {
 impl Default for TransportParams {
     fn default() -> Self {
         Self {
-            per_tkm: [0.10, 0.04, 0.008, 0.80],
+            per_tkm: [0.10, 0.0164, 0.0121, 0.537],
             circuity: [1.3, 1.3, 1.0, 1.05],
             speed_kmh: [40.0, 25.0, 25.0, 500.0],
             fee: [5.0, 8.0, 20.0, 60.0],
@@ -327,6 +329,29 @@ mod tests {
         let p = TransportParams::default();
         let [road, rail, sea, air] = p.per_tkm;
         assert!(sea < rail && rail < road && road < air);
+    }
+
+    /// ADR 0269: rail, sea and air per road are BTS 2000 freight revenue per ton-mile over the
+    /// truck row (NTS Table 3-21, cents: truck 13.75, Class I rail 2.26, barge 1.67, domestic air
+    /// 73.85) to three figures, inside the ranges registered for P9.
+    #[test]
+    fn default_mode_cost_ratios_are_bts_2000() {
+        let p = TransportParams::default();
+        let road = p.per_tkm[ROAD];
+        assert_eq!(road, 0.10);
+        let ranges = [
+            (RAIL, 2.26, 0.10, 0.57),
+            (SEA, 1.67, 0.103, 0.133),
+            (AIR, 73.85, 3.87, 5.37),
+        ];
+        for (m, cents, lo, hi) in ranges {
+            let (ratio, bts) = (p.per_tkm[m] / road, cents / 13.75);
+            assert!(
+                (ratio / bts - 1.0).abs() < 5e-3,
+                "mode {m}: {ratio} vs {bts}"
+            );
+            assert!((lo..=hi).contains(&ratio), "mode {m}: {ratio}");
+        }
     }
 
     #[test]

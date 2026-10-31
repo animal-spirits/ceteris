@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### BEHAVIOUR: P04 mode cost ratios borrowed from BTS 2000 (ADR 0269)
+
+- P04a-d default to road 0.10, rail 0.0164, sea 0.0121 and air 0.537 USD per tonne-km: road at
+  the prior, the others at BTS 2000 freight revenue per ton-mile over the truck row (National
+  Transportation Statistics Table 3-21). Against the placeholders rail falls to 0.41 times, sea
+  rises to 1.51 times and air falls to 0.67 times; least-cost paths shift towards rail. The PPML
+  estimate of ADR 0022 is a diagnostic only.
+- Every pack golden that prices edges moves (`tests/golden/p1-geo.txt` and the econ pack
+  goldens); they are re-blessed on the B8 pack, not here. The P2 fixture prices its legs
+  directly and does not move.
+
+### ACR criterion graded per province (ADR 0268)
+
+- The flow window records each province's absorption at origin prices; `benchmark::Outcome`
+  carries province income, buyer prices and home shares. `acr_io_province` and
+  `welfare_province` reduce the input-output ACR formula and the real income change from
+  provinces with base income weights; the report prints them beside the country forms with
+  the per-country gap. The flow window is scratch: no golden hash moves.
+
 ### The goods count is a pack value (P3 G2)
 
 - `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,

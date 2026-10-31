@@ -297,10 +297,9 @@ mod tests {
         let mut g = graph(3, &[(0, 1, 100.0), (1, 2, 100.0)]);
         let mut cache = PathCache::default();
         let before = cache.tree(&g, 0).cost[2];
-        g.reprice(&TransportParams {
-            per_tkm: [0.1, 0.04, 0.016, 0.8],
-            ..Default::default()
-        });
+        let mut doubled = TransportParams::default();
+        doubled.per_tkm[Mode::Sea as usize] *= 2.0;
+        g.reprice(&doubled);
         let after = cache.tree(&g, 0).cost[2];
         assert_eq!(after, 2.0 * before);
         assert_eq!(cache.len(), 1);
