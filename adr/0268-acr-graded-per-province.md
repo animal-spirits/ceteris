@@ -41,7 +41,7 @@ threshold, the country forms still reported.
 
 ## Decision
 
-Option B (owner, 2026-10-31).
+Option B (owner, 2026-10-31), with income weights on both sides (point 2).
 
 1. **The graded prediction.** For province p in country c and the base and shocked runs,
 
@@ -61,7 +61,9 @@ Option B (owner, 2026-10-31).
    it, as in ADR 0265; a province with no absorption of g in either run adds nothing for g.
    The function is `benchmark::acr_io_province`.
 
-2. **The model side on the same weights.** The model's welfare is reduced the same way:
+2. **The model side on the same weights** (owner, 2026-10-31: the choice closer to the
+   literature; country welfare as aggregate real income, as in Dhingra et al. 2017 and the ACR
+   country measure). The model's welfare is reduced the same way:
    d ln W_c = sum_p s_p (d ln I_p - Omega_c' d ln q_p), q_pg the province's buyer price. The
    current reduction (`benchmark::welfare`: d ln I_c less Omega_c' times the d ln of the
    population-weighted mean price) differs from it at first order by
