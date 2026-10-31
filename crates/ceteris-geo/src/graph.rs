@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(road, 0.10);
         let ranges = [
             (RAIL, 2.26, 0.10, 0.57),
-            (SEA, 1.67, 0.103, 0.133),
+            (SEA, 1.67, 0.05, 0.20),
             (AIR, 73.85, 3.87, 5.37),
         ];
         for (m, cents, lo, hi) in ranges {

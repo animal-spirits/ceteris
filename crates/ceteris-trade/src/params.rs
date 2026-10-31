@@ -92,9 +92,9 @@ pub struct TradeParams {
     pub theta_r: f64,
     /// P154 bulk freight rate (ADR 0247): multiplier on the sea cost per tonne-km (P04c, sea and
     /// canal edges) for the legs of each theta class. 1 for classes 0 to 2; class 3 (fuels and
-    /// mining) 0.026, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
-    /// km (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC, Parameters) over
-    /// P04c. On by default by owner ruling (2026-10-30). It reaches the kernel only through
+    /// mining) 0.017, the slope of 2000 tanker and dry-bulk voyage rates per tonne against sea
+    /// km, 2.05e-4 USD (UNCTAD Review of Maritime Transport 2001 and 2002; trade SPEC,
+    /// Parameters), over P04c's 0.0121 (ADR 0269, proposed). On by default by owner ruling (2026-10-30). It reaches the kernel only through
     /// `Network::bulk`.
     pub bulk_sea: [f64; N_CLASSES],
     /// P155 bulk freight rate (ADR 0247): multiplier on the listed and minor port fees (P04m)
@@ -310,7 +310,7 @@ impl Default for TradeParams {
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
-            bulk_sea: [1.0, 1.0, 1.0, 0.026],
+            bulk_sea: [1.0, 1.0, 1.0, 0.017],
             bulk_port: [1.0, 1.0, 1.0, 0.40],
             storage_loss: vec![0.0; p2::N],
             storage_cost: vec![0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
@@ -331,7 +331,7 @@ mod tests {
     fn bulk_rate_is_on_for_class_3_by_default() {
         assert_eq!(
             TradeParams::default().bulk_rate(),
-            Some(([false, false, false, true], 0.026, 0.40))
+            Some(([false, false, false, true], 0.017, 0.40))
         );
     }
 

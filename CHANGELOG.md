@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### BEHAVIOUR: P154 rescaled to the borrowed P04c (ADR 0269, proposed revision)
+
+- Class 3's bulk sea multiplier is 0.017, 2.05e-4 / 0.0121, so its sea cost per tonne-km stays
+  at the sourced UNCTAD slope; at 0.026 it would sit 1.51 times above it on the new P04c. The P9
+  range for sea per road is 0.05 to 0.20. Both await the owner's ruling.
+- Goldens to re-bless: the fixture export (`legs`, `kernel_crossing`, `provinces`, `params.json`
+  for class 3 only), its calibration and reference, and every `tests/golden/p2-econ.txt` hash
+  (the inputs digest carries the bulk legs); the pack goldens with them.
+
 ### BEHAVIOUR: P04 mode cost ratios borrowed from BTS 2000 (ADR 0269)
 
 - P04a-d default to road 0.10, rail 0.0164, sea 0.0121 and air 0.537 USD per tonne-km: road at
