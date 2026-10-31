@@ -127,9 +127,8 @@ fn the_build_writes_its_tables_in_order() {
     assert_eq!(names, TABLES);
 }
 
-/// The stats the Python build wrote to the pack manifest, with the imputed VA share after refined
-/// petroleum moved into good 1 and the partial WDI shares and oil and gas rents of ADRs 0249 and
-/// 0256 (0.0743 before both, 0.0739 with the first alone, 0.0759 with the second alone).
+/// The stats the build writes to the pack manifest (whole provinces, ADR 0251), with the imputed
+/// VA share after refined petroleum moved into good 1 and ADRs 0249 and 0256.
 #[test]
 fn build_stats_match_the_python_build() {
     let Some(f) = full() else { return };
@@ -137,17 +136,17 @@ fn build_stats_match_the_python_build() {
         f.report.stats,
         BuildStats {
             gateways: 600,
-            gateway_kinds: [287, 168, 145],
+            gateway_kinds: [286, 171, 143],
             tariff_importers_own: 172,
             tariff_agreement_pairs: 1321,
             dose_match_rate: 0.8339,
-            provinces_with_va: 4555,
+            provinces_with_va: 4368,
             va_imputed_share: 0.0754,
         }
     );
     assert_eq!(
         f.report.stats.json().text(),
-        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":168,"land crossing":145,"port":287},"gateways":600,"provinces_with_va":4555,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0754}"#
+        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":171,"land crossing":143,"port":286},"gateways":600,"provinces_with_va":4368,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0754}"#
     );
 }
 

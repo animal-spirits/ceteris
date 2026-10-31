@@ -11,11 +11,11 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_array::{ArrowPrimitiveType, RecordBatch};
 use arrow_ipc::reader::FileReader;
-use ceteris_pack::build::{country_names, split_area_km2};
+use ceteris_pack::build::country_names;
 use ceteris_pack::econ::build::TABLES;
 use ceteris_pack::geo::provinces::borders;
 use ceteris_pack::read::natural_earth::ADMIN0;
-use ceteris_pack::sources::{CONFIG_DIR, workspace_root};
+use ceteris_pack::sources::workspace_root;
 use common::{cached, pack_table, strings};
 
 const GOLDEN_P1: &str = "tests/golden/p1-pack.txt";
@@ -33,11 +33,6 @@ fn column<T: ArrowPrimitiveType>(path: &Path, name: &str) -> Vec<T::Native> {
                 .to_vec()
         })
         .collect()
-}
-
-fn config() -> toml::Table {
-    let path = workspace_root().join(CONFIG_DIR).join("pack.toml");
-    std::fs::read_to_string(path).unwrap().parse().unwrap()
 }
 
 #[test]
@@ -74,8 +69,6 @@ fn the_pack_tables_hold_their_invariants() {
     let area = column::<Float64Type>(&provinces, "area_km2");
     let total: f64 = area.iter().sum();
     assert!((total - 134.5e6).abs() <= 0.01 * 134.5e6, "{total}");
-    let largest = area.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    assert!(largest < 2.0 * split_area_km2(&config()).unwrap());
     let home = column::<UInt32Type>(&counties, "province");
     assert!(home.iter().all(|&h| (h as usize) < ids.len()));
     assert!(home.windows(2).all(|w| w[0] <= w[1]));
@@ -87,9 +80,6 @@ fn the_pack_tables_hold_their_invariants() {
         serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
     let stats = &manifest["stats"];
     assert!(stats["county_area_outside_province"].as_f64().unwrap() < 0.05);
-    assert!(
-        stats["split_by_counties"].as_u64().unwrap() > stats["split_by_voronoi"].as_u64().unwrap()
-    );
 }
 
 /// The P1 table digests the manifest records (all but the econ tables). Regenerate deliberately

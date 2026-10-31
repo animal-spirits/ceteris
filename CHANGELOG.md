@@ -13,6 +13,29 @@
 - No hash moves: the bound is scratch and only widens the check. The x10 run now stops at tick 61
   on a payment that does not fit the ledger (block scratch pack), beyond P2's range (ADR 0090).
 
+### BEHAVIOUR: main's whole first-level provinces (ADR 0251) merged into pre-P3 B
+
+- Merges main 2d41a65 (ADR 0251; 27 files, geo only, since main 6fe4c2f). The geo layer is
+  main's: 4,594 whole first-level provinces (4,796 split), so every province index moves. The
+  econ layer is this branch's: gateway masses (ADR 0092), refined fuels in good 1, calibration
+  format 7 with the block scales (ADR 0267).
+- Neither side's pack is valid for the merge: main's pack has no gateway mass and calibration
+  format 3, this branch's scratch pack (k263) has the split provinces. The merged pack is rebuilt
+  and recalibrated at B8 (pre-P3 PLAN, B8 Step 2a); until then every pack-dependent test skips
+  or reads a stale pack, and the numbers below that need the pack are not yet measured.
+- `crates/ceteris-pack/tests/econ_build.rs` pins main's gateway kinds (286 port, 171 airport,
+  143 land crossing) and value-added count (4,368) with this branch's imputed share 0.0754. The
+  share is predicted from this branch's change on the split pack (0.0759 to 0.0754), not
+  measured on the merged pack.
+- Figures this branch measured on the split pack are stale after the merge: ADR 0267's scaled
+  blocks (54 of 233 frictionless, 12 default; Albania 0.636, Sudan 0.324, Lesotho 0.348) and
+  the Sudan provinces 3464 and 3474; the 4,555 provinces with value added and H2 -0.753 in
+  earlier entries. B8 re-measures them.
+- Goldens not re-blessed here: `tests/golden/p1-pack.txt` and `p2-pack.txt` carry main's
+  hashes, built without this branch's pack changes, and are re-blessed at B8. `p0-toy.txt`,
+  `p2-econ.txt`, `p2-as-built-rule.txt` and `tests/golden/p2-fixture` do not read the pack and
+  do not move (core and econ golden tests pass).
+
 ### Changed: the pack's steady-state money tolerance scales with income (P156)
 
 - `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full
@@ -428,6 +451,49 @@ Goldens re-blessed:
 - `tests/golden/p2-fixture/params.json` (P151) and `tests/golden/p2-fixture/calibration` (the
   nominal level). The fixture reference is unchanged.
 - `tests/golden/p1-geo.txt`, `p1-pack.txt` and `p2-pack.txt` do not move.
+### BEHAVIOUR: provinces are whole first-level regions (ADR 0251)
+
+- `data/packs/2000` is rebuilt without the 250,000 km² split: 4,594 provinces (from 4,796; the
+  295 pieces of 93 regions are whole again), largest 3,053,172 km² (from 402,129). Counties
+  (53,084, 357 unassigned), cells (78,483), sea zones (725), ports (1,001), airports (1,154) are
+  unchanged; nodes 40,187 (40,534), edges 133,907 (134,810), minor ports 1,233 (1,283), coastal
+  provinces 1,864 (1,934), county area outside its province 0.0274 (0.0302). Gateways stay 600
+  (286 port, 171 airport, 143 land crossing; were 287, 168, 145); provinces with value added
+  4,368 (4,555); `va_imputed_share` 0.0759.
+- Recalibrated by `ceteris calibrate --pack` with ADRs 0256 and 0263 (41 passes, Sinkhorn
+  residual 8.3e-14).
+- Every province index moves, so every province-indexed table, the calibration tables and the
+  least-cost trees move. `crates/ceteris-pack/tests/data/pixel_cells.txt` maps each old index to
+  the whole province's new index; the build stats pinned in `tests/econ_build.rs` follow the
+  new gateway kinds, value-added count and imputed share.
+- P2 gate on the new pack: H2 distance -0.745 (s.e. 0.015, pseudo-R2 0.982, 47,306 pairs)
+  passes; H2 per class passes (food 1.662, s.e. 0.176; machinery 3.502, 0.525; the five-good
+  class 9.173, 0.323). 100 years: no violation, world price index 1.000000000000006. 1 vs 8
+  threads, 120 ticks: identical hashes. V1 from the data state stays open (price 0.907, wage
+  0.749).
+- V1 from the perturbed steady state FAILS on flows: seed 20 price 9.27e-3, wage 4.10e-3, flow
+  units 2.71e-2, value 2.53e-2 (Albania to Italy, coal and other mining); seed 21 8.34e-3,
+  2.62e-3, 2.02e-2, 1.87e-2; seed 22 1.157e-2 (ALB-1524), 4.23e-3, 3.78e-2, 3.73e-2. Sudan
+  (SDS-871 Unity, SDN-882 South Kordufan) now converges under every seed. The miss is main's:
+  main's split pack, built and calibrated fresh, fails seed 20 in Albania by more (price
+  1.047e-2, wage 1.191e-2, flow units 3.10e-2). Albania's pops hold 0.22 ticks of income and
+  their money moves 10 to 16% after the perturbation.
+- `p2_steady_state::pack_calibrated_state_holds_to_2e_6_and_4_minor_units` FAILS: pop money
+  reaches 1.493 times its tolerance at tick 10 (0.729 after tick 60), on Pitcairn's tertiary pop
+  (1,700 units, against the floor of 4 minor units); every other series stays within 0.6. Main
+  passes it.
+
+Goldens re-blessed:
+
+- `tests/golden/p1-pack.txt`, `tests/golden/p2-pack.txt`: every province-indexed table
+  (provinces, cells, counties, nodes, edges, gateways, `econ_provinces`, `econ_pops`), every
+  calibration table and the web fills, attributes and tile layers. Against main, `sea_zones`,
+  `countries`, `chokepoints`, `econ_goods`, `econ_countries`, `econ_io` and `econ_tariffs` are
+  unchanged.
+- `tests/golden/p1-geo.txt`: every source, since the network changes; `IND-2447.1` is now
+  `IND-2447`.
+- `tests/golden/p0-toy.txt` and `tests/golden/p2-econ.txt` do not read the pack and are
+  unchanged.
 
 ### BEHAVIOUR: world technology for crude oil and gas set by rents (ADR 0256)
 
