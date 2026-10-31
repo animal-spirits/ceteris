@@ -72,11 +72,12 @@ pub const MAX_SWEEPS: usize = 100_000;
 pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
 pub const ANDERSON_STALL: usize = 20;
-/// Largest relative change of rebates, r, buyer prices and PIGL weights that ends the passes:
-/// 1e-12, so the returned state is a fixed point to the 1e-12 its checks claim (r against the
-/// scaling at its own spending, `sinkhorn_is_unique_up_to_scale`); a solver tolerance, not a
-/// model parameter. The Sinkhorn tolerance leaves a floor near 1e-12 on the full pack.
-pub const PASS_TOL: f64 = 1e-12;
+/// Largest relative change of rebates, r, buyer prices and PIGL weights that ends the passes
+/// (P158): 1e-13, so the returned state is a fixed point to the 1e-12 its checks claim (r
+/// against the scaling at its own spending, `sinkhorn_is_unique_up_to_scale`; stage 5's
+/// Q = D, whose gap is about 3.8 times the last pass change plus about 3e-13 of rounding, so
+/// the tolerance must be at most 1.8e-13); a solver tolerance, not a model parameter.
+pub const PASS_TOL: f64 = 1e-13;
 pub const MAX_PASSES: usize = 100;
 /// Largest relative change of any local output that ends the income fixed point.
 pub const LOCAL_TOL: f64 = 1e-14;
