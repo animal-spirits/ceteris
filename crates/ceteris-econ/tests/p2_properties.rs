@@ -1486,6 +1486,59 @@ fn local_shortage_reaches_downstream_same_tick() {
     assert!(now < 0.95 * was, "construction {now} against {was}");
 }
 
+/// ADR 0093, stock floor (amendment of 2026-10-30): a user whose own stock covers its local
+/// needs is not cut by the chain's fill. Services feed every sector at 0.3; in province 0 the
+/// local buffers are drained, services hires no one (no output), and one enterprise gets two
+/// months of every local input at its capped output. It runs at its cap; the other users of
+/// services, without stock, are cut to nothing; the invariants (Leontief, conservation) hold.
+#[test]
+fn a_stocked_user_is_not_cut_by_the_fill() {
+    let coefficients: Vec<_> = (0..N_GOODS).map(|g| (SERVICES, g, 0.3)).collect();
+    let mut w = EconWorld::new(
+        Arc::new(fixture_with(&coefficients)),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let services = producer(&w, 0, SERVICES);
+    let lay = w.layout().clone();
+    let stocked = lay
+        .enterprises(0)
+        .find(|&e| !LOCAL.contains(&usize::from(w.inputs().enterprises.good[e])))
+        .expect("a user making a traded good");
+    let cut = |w: &mut EconWorld| {
+        drain_local_buffers(w, 0);
+        w.employment[services] = 0.0;
+    };
+    let mut probe = w.clone();
+    probe.begin_tick();
+    systems::deliver(&mut probe);
+    systems::labour(&mut probe);
+    cut(&mut probe);
+    systems::cap_output(&mut probe);
+    let cap = probe.scratch.produced[stocked];
+    assert!(cap > 0.0);
+    step_with(&mut w, 0, |w| {
+        cut(w);
+        for k in LOCAL {
+            let need = w.layout().coef[stocked][k] * cap;
+            if need > 0.0 {
+                w.ledger
+                    .create(lay.accounts.enterprise[stocked], k, 2.0 * need);
+            }
+        }
+    });
+    assert_eq!(w.output[services], 0.0);
+    assert_eq!(w.output[stocked], cap, "the stocked user runs at its cap");
+    let others: Vec<usize> = lay
+        .enterprises(0)
+        .filter(|&e| e != stocked && e != services && lay.coef[e][SERVICES] > 0.0)
+        .collect();
+    assert!(!others.is_empty());
+    for &e in &others {
+        assert_eq!(w.output[e], 0.0, "enterprise {e} without stock");
+    }
+}
+
 /// Intermediate users of a local good are served before households: in the shortage they
 /// draw all of services output and households get none; without it households buy the rest.
 /// At origin markets the default Priority fills intermediate orders before households.
@@ -1593,14 +1646,16 @@ fn a_tiny_local_user_left_without_its_input_breaks_leontief() {
 /// the pieces change, so the passes are: one from F = 1, which cuts only the goods short there;
 /// at most two per kink, the pass that crosses it and one more where that pass straddles the
 /// kink, so that its map does not repeat; and at the limit up to `PERIOD` confirming passes and
-/// the pass that changes nothing. The kinks are a user's stock threshold of a good, inside
-/// (0, 1) (b < coef cap; crossed at most once, since needs only fall with the fills), each local
-/// good beyond the first that starts to fall, and each pair of local goods some user takes
-/// both of (a switch of the users' binding fill, taken to happen once per pair).
+/// the pass that changes nothing. The kinks are a user's floor of a good inside (0, 1)
+/// (0 < b < coef cap; under the stock floor, ADR 0093, amendment of 2026-10-30, the user's stock
+/// covers it from where its smallest other level falls to that floor, crossed at most once since
+/// the fills only fall; before it, the stock threshold where its own fill fell to b / (coef cap)),
+/// each local good beyond the first that starts to fall, and each pair of local goods some user
+/// takes both of (a switch of the users' binding level, taken to happen once per pair).
 fn kink_bound(p: &Province) -> usize {
     let n = p.cap.len();
     let uses = |u: usize, j: usize| p.cap[u] > 0.0 && p.coef[u][j] > 0.0;
-    let thresholds = (0..n)
+    let floors = (0..n)
         .flat_map(|u| (0..3).map(move |j| (u, j)))
         .filter(|&(u, j)| uses(u, j) && p.stock[u][j] > 0.0)
         .filter(|&(u, j)| p.stock[u][j] < p.coef[u][j] * p.cap[u])
@@ -1610,7 +1665,7 @@ fn kink_bound(p: &Province) -> usize {
         .iter()
         .filter(|&&(j, k)| (0..n).any(|u| uses(u, j) && uses(u, k)))
         .count();
-    let kinks = thresholds + goods.saturating_sub(1) + pairs;
+    let kinks = floors + goods.saturating_sub(1) + pairs;
     1 + 2 * kinks + local::PERIOD + 1
 }
 
@@ -1620,8 +1675,12 @@ fn kink_bound(p: &Province) -> usize {
 /// stall, and every local input used equals coef Y (the Leontief invariant, exactly, at every
 /// tick).
 ///
-/// The most is 4 passes (483 binding province ticks). Before ADR 0266's split order rule it was
-/// 6 passes (province 5 at tick 79, where the kink bound allows 21): a collapse of utilities and
+/// The most is 14 passes (482 binding province ticks): province 10 at tick 76, where utilities
+/// and construction collapse to 0 and the fall crosses the floors of users holding residues of
+/// earlier collapses (stocks of 1e-52 to 1e-12 of their needs), each a kink under the stock floor
+/// (ADR 0093, amendment of 2026-10-30), where the user's stock comes to cover it. Before the floor
+/// the most was 4 passes (483 binding province ticks), the residues then thresholds below the
+/// fall's end. Before ADR 0266's split order rule it was 6 passes (province 5 at tick 79, where the kink bound allows 21): a collapse of utilities and
 /// construction, inputs of each other with no stocks but residues of earlier collapses, at a
 /// loop gain of 0.7 to 0.9 per pass, the fall to 0 crossing the residue thresholds. Before the jump found the last whole cycle on the pieces (it returned the last
 /// point the doubling checked), a jump could stop short of a kink and cost passes no kink
@@ -1719,70 +1778,71 @@ proptest! {
     }
 }
 
-/// ADR 0093, jump ahead to the last whole cycle: the 22 provinces of 1,000,000 (200,000 of each
+/// ADR 0093, jump ahead to the last whole cycle: the 13 provinces of 1,000,000 (200,000 of each
 /// family, seeds k x 0x9E3779B97F4A7C15 for k = 1 to 200,000; k in the comments) whose passes
 /// exceed [`kink_bound`], each within it once the passes outside its accounting are added:
-/// - a good cut by rounding alone every other pass (10): it sits at its limit with U = R along
-///   the rest of the fall, so each such cut changes the pieces where no kink lies and ends the
-///   jump of the pass before after a few cycles (175527: 88 passes against 25, 39 such cuts;
-///   3779: 68 against 27). Some have mixed causes: 135641 (28 such cuts) and 12446 (15) also
-///   have falls no jump resolves (19 and 9), and 175527 and 56969 a pair of goods whose binding
-///   switches three and two times, beyond the bound's one switch per pair;
-/// - the stall rule (11): pieces that repeat over 4 or more passes or binding fills that switch
+/// - the stall rule (12): pieces that repeat over 4 or more passes or binding fills that switch
 ///   every pass (99418: goods 0 and 1 switch 204 times), so no jump of up to 3 passes applies and
 ///   the stall rule ends the fall at 257 passes (73799 stalls, 792 passes, and is within the
-///   bound only by the charge for every pass after a stall: without it, 521 passes over);
+///   bound only by the charge for every pass after a stall);
 /// - a root rounded onto a kink (1, 170254: 14 against 11): good 0's step lands on good 2's
 ///   fill every other pass, so the cycle's map is undefined and no jump applies there.
+///
+/// Before the stock floor (ADR 0093, amendment of 2026-10-30) there were 22: the 10 more cut a
+/// good by rounding alone every other pass, sitting at its limit with U = R where users' stocks
+/// covered their needs at a threshold (175527: 88 passes against 25). Under the floor a user
+/// bound by a good draws (1 - s) F of its need, which no stock zeroes along the fall, and none of
+/// the 10 exceeds the bound.
 #[test]
 fn chain_passes_beyond_their_kinks_are_uncovered() {
     for (family, seed) in [
-        (0, 9079438926617766920u64), // 185832
-        (1, 9445586431414458203),    // 45487
-        (1, 7755772308687514728),    // 101576
-        (1, 12026231257191621299),   // 175527
-        (1, 13337483376192305907),   // 177383
-        (1, 1491518143059507267),    // 196855
-        (2, 1532048138609151479),    // 2267
-        (2, 10068621952487064433),   // 38125
-        (2, 1643254794265822703),    // 50931
-        (2, 16419583651343627261),   // 51785
-        (2, 12969786537767039842),   // 99418
-        (2, 13995925185394726438),   // 170254
-        (2, 16771139658170358534),   // 189038
-        (3, 10153890110564051455),   // 3779
-        (3, 14357194857401195837),   // 56969
-        (3, 13803108746253734605),   // 135641
-        (4, 1532048138609151479),    // 2267
-        (4, 941226322657314038),     // 12446
-        (4, 16419583651343627261),   // 51785
-        (4, 5355749340075788755),    // 73799
-        (4, 12969786537767039842),   // 99418
-        (4, 13546262730378525300),   // 199076
+        (1, 14587390709483492012u64), // 95996
+        (2, 1532048138609151479),     // 2267
+        (2, 10068621952487064433),    // 38125
+        (2, 1643254794265822703),     // 50931
+        (2, 16419583651343627261),    // 51785
+        (2, 12969786537767039842),    // 99418
+        (2, 13995925185394726438),    // 170254
+        (2, 16771139658170358534),    // 189038
+        (3, 4922913425195756184),     // 175672
+        (4, 1532048138609151479),     // 2267
+        (4, 16419583651343627261),    // 51785
+        (4, 5355749340075788755),     // 73799
+        (4, 12969786537767039842),    // 99418
     ] {
         let (extra, coef_max, no_stock) = FAMILIES[family];
         let p = random_province_with(seed, extra, coef_max, no_stock);
+        let out = local::fills(&p);
+        assert!(
+            out.passes > kink_bound(&p),
+            "family {family} seed {seed}: {out:?}"
+        );
         assert_within_kinks(&p, &format!("family {family} seed {seed}"));
     }
 }
 
 /// ADR 0093, jump ahead to the last whole cycle: (passes, uncovered) pinned for a few provinces,
 /// so that a solver change that adds passes the counter charges is seen, though the property
-/// [`chain_passes_within_their_kinks`] still holds. Exceeding their kink bound: 175527 (bound
-/// 25), 3779 (27), 170254 (11), 99418 (15, stall rule), 73799 (15, stalled). Within it, no pass
-/// uncovered: k = 6, 320, 419 and 461 (6 and 7 passes against bounds of 15 to 29).
+/// [`chain_passes_within_their_kinks`] still holds. Exceeding their kink bound: 170254 (bound
+/// 11), 99418 (15, stall rule), 73799 (15, stalled), 95996 (21, stall rule, stocks drawn).
+/// Within it, no pass uncovered: k = 6, 320, 419 and 461 (4 to 11 passes against bounds of 15
+/// to 29).
+/// The stocked provinces 175527 and 3779 were pinned at 88 and 68 passes before the stock floor
+/// (ADR 0093, amendment of 2026-10-30), and 320, 419 and 461 at 7; they now take 3, 4, 5, 4 and
+/// 11.
 #[test]
 fn chain_passes_and_uncovered_are_pinned() {
     for (family, seed, passes, uncovered) in [
-        (1, 12026231257191621299u64, 88, 78),
-        (3, 10153890110564051455, 68, 60),
-        (2, 13995925185394726438, 14, 3),
+        (2, 13995925185394726438u64, 14, 3),
         (2, 12969786537767039842, 257, 256),
         (4, 5355749340075788755, 792, 791),
+        (1, 14587390709483492012, 257, 256),
+        (1, 12026231257191621299, 3, 0),
+        (3, 10153890110564051455, 4, 0),
         (2, 13064056694810536062, 6, 0),
-        (1, 14220159662641846848, 7, 0),
-        (3, 17639538279355848287, 7, 0),
-        (3, 16854214774481842641, 7, 0),
+        (1, 14220159662641846848, 5, 0),
+        (3, 17639538279355848287, 4, 0),
+        (3, 16854214774481842641, 11, 0),
     ] {
         let (extra, coef_max, no_stock) = FAMILIES[family];
         let out = local::fills(&random_province_with(seed, extra, coef_max, no_stock));
@@ -1794,25 +1854,82 @@ fn chain_passes_and_uncovered_are_pinned() {
     }
 }
 
-/// Outputs at fills `f`, as ADR 0093's Amendment defines them, written out here independently.
+/// Outputs at fills `f`, as ADR 0093's Amendment defines them (each user's stock a floor under
+/// the fill, amendment of 2026-10-30), written out here independently: Y = cap min_j G_j(F_j),
+/// G = s + (1 - s) F with s the share of the need at capacity the stock covers, 1 at F = 1.
 fn outputs_at(p: &Province, f: &[f64; 3]) -> Vec<f64> {
     (0..p.cap.len())
         .map(|u| {
-            let least = (0..3)
-                .filter(|&j| p.coef[u][j] > 0.0)
-                .fold(1.0f64, |m, j| m.min(f[j]));
+            let least = (0..3).filter(|&j| p.coef[u][j] > 0.0).fold(1.0f64, |m, j| {
+                let (need, b) = (p.coef[u][j] * p.cap[u], p.stock[u][j]);
+                let level = if f[j] >= 1.0 || b >= need {
+                    1.0
+                } else {
+                    // rounded down until the stock alone covers the need at cap s
+                    let mut s = b / need;
+                    while s > 0.0 && p.coef[u][j] * (p.cap[u] * s) > b {
+                        s = s.next_down();
+                    }
+                    (s + (1.0 - s) * f[j]).min(1.0)
+                };
+                m.min(level)
+            });
             p.cap[u] * least
         })
         .collect()
 }
 
+/// What the users' stocks of good j cannot cover at fills `f` (ADR 0093, amendment of
+/// 2026-10-30), written out independently: each user's coef cap max(min_k (G_k - s_j), 0) with
+/// G_k - s_j as (1 - s_j) F_j for j itself and (s_k - s_j) + (1 - s_k) F_k for its other goods,
+/// so that the stock's share does not cancel, at most its need coef Y; a user without stock has
+/// its whole need uncovered.
+fn uncovered_at(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
+    let y = outputs_at(p, f);
+    (0..p.cap.len())
+        .map(|u| {
+            let a = p.coef[u][j] * p.cap[u];
+            let need = p.coef[u][j] * y[u];
+            if need <= 0.0 {
+                return 0.0;
+            }
+            if p.stock[u][j] == 0.0 {
+                return need;
+            }
+            let floor = |k: usize| {
+                let (need, b) = (p.coef[u][k] * p.cap[u], p.stock[u][k]);
+                if b >= need {
+                    return 1.0;
+                }
+                let mut s = b / need;
+                while s > 0.0 && p.coef[u][k] * (p.cap[u] * s) > b {
+                    s = s.next_down();
+                }
+                s
+            };
+            let sj = floor(j);
+            let d = (0..3)
+                .filter(|&k| p.coef[u][k] > 0.0)
+                .map(|k| {
+                    let sk = floor(k);
+                    if k == j {
+                        (1.0 - sj) * f[j].min(1.0)
+                    } else if f[k] >= 1.0 || sk >= 1.0 {
+                        1.0 - sj
+                    } else {
+                        ((sk - sj) + (1.0 - sk) * f[k]).min(1.0 - sj)
+                    }
+                })
+                .fold(1.0 - sj, f64::min);
+            (a * d.max(0.0)).min(need)
+        })
+        .sum()
+}
+
 fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
     let y = outputs_at(p, f);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
-    let uncovered: f64 = (0..y.len())
-        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
-        .sum();
-    uncovered <= rest
+    uncovered_at(p, j, f) <= rest
 }
 
 /// Whether good j fits at fills f up to rounding (ADR 0093, bounded work): where the passes stop
@@ -1821,9 +1938,7 @@ fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
 fn fits_up_to_rounding(p: &Province, j: usize, f: &[f64; 3]) -> bool {
     let y = outputs_at(p, f);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
-    let uncovered: f64 = (0..y.len())
-        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
-        .sum();
+    let uncovered = uncovered_at(p, j, f);
     uncovered <= rest + 1e-12 * (uncovered + rest)
 }
 
@@ -2061,46 +2176,97 @@ fn balanced_province(seed: u64) -> Option<Province> {
     })
 }
 
-/// The collapse of `p` towards 0 moved to a limit at fills t: users with stock fully covered,
-/// the others given stocks so that U - R is homogeneous in F - t (an extra user where the
-/// producer alone would exceed the needs).
-fn translate(p: &Province, t: f64) -> Province {
-    let mut q = p.clone();
-    for k in 0..3 {
-        let mut total = 0.0;
-        for u in 0..p.cap.len() {
-            let a = p.coef[u][k] * p.cap[u];
-            if a > 0.0 {
-                if p.stock[u][k] > 0.0 {
-                    q.stock[u][k] = a * 1.01;
+/// The original of the translated collapses from `seed`: [`random_province`] with the producers'
+/// stocks removed and every other stock raised to cover its user's whole need (1.01 coef cap), as
+/// [`translate`] has them. Under the stock floor a partial stock gives the fall a constant, and a
+/// producer covered on its inputs is not cut, so its good does not fall: the province must be free
+/// of both to collapse along the same map as its translation (a quarter of the draws before the
+/// floor, about 1% with the stocks as drawn).
+fn translated_original(seed: u64) -> Province {
+    let mut p = random_province(seed);
+    for u in 0..p.cap.len() {
+        let producer = p.producer.contains(&Some(u));
+        for k in 0..3 {
+            if p.stock[u][k] > 0.0 {
+                p.stock[u][k] = if producer {
+                    0.0
                 } else {
-                    total += a;
-                }
+                    1.01 * p.coef[u][k] * p.cap[u]
+                };
             }
         }
-        let rest = match p.producer[k] {
-            None => 0.0,
+    }
+    p
+}
+
+/// Whether [`translate`] applies to `p`: every local good with a user has a producer, and where
+/// that producer uses local goods without stock, its users without stock need at least what it
+/// supplies at capacity (A >= R in [`translate`]). Under the stock floor (ADR 0093, amendment of
+/// 2026-10-30) a good without a producer has fill 0 whatever the stocks (each user bound by it
+/// draws (1 - s) F of its need, and nothing supplies that), so there is no collapse to move. Where
+/// A < R, balancing the good at t takes an extra user, which makes U - R = R ((F_k - t) - (F_p -
+/// t)) where the users bind on the good's own fill and the producer on another: a direction of
+/// gain exactly 1, a line of fixed points, of which the stop may take any on the pieces
+/// (`near_singular_cycle_keeps_its_limit` is the same rule at gain 1 - 1e-15). Seed
+/// 1997589725841679792 at 0.1 ended at [0.093, 0.013, 0.013] that way.
+fn translatable(p: &Province) -> bool {
+    let n = p.cap.len();
+    let uncovered = |u: usize, k: usize| p.coef[u][k] > 0.0 && p.stock[u][k] == 0.0;
+    (0..3).all(|k| {
+        let used = p.coef.iter().any(|c| c[k] > 0.0);
+        match p.producer[k] {
+            None => !used,
             Some(pp) => {
-                let uses = (0..3).any(|j| p.coef[pp][j] > 0.0);
-                (1.0 - p.own[k]) * p.cap[pp] * if uses { t } else { 1.0 }
+                let total: f64 = (0..n)
+                    .filter(|&u| uncovered(u, k))
+                    .map(|u| p.coef[u][k] * p.cap[u])
+                    .sum();
+                let share = (1.0 - p.own[k]) * p.cap[pp];
+                !(0..3).any(|j| uncovered(pp, j)) || total == 0.0 || total >= share
             }
+        }
+    })
+}
+
+/// The collapse of `p` towards 0 moved to a limit at fills t, under the stock floor (ADR 0093,
+/// amendment of 2026-10-30): users with stock fully covered; then per good k, A the needs at
+/// capacity of its users without stock and R its producer's share (1 - own) cap, so that U - R is
+/// homogeneous in F - t with the original's slopes. A producer that uses local goods without
+/// stock gets a floor s = r / (1 + r) under them, r = t (A - R) / R, and capacity (1 + r) cap: its
+/// needs beyond its stocks stay cap F, and its output adds the constant R r to good k's supply
+/// (A >= R: [`translatable`]). A producer that uses none (its output does not depend on the
+/// fills) gets the capacity at which it supplies A t.
+fn translate(p: &Province, t: f64) -> Province {
+    let mut q = p.clone();
+    let n = p.cap.len();
+    let uncovered = |u: usize, k: usize| p.coef[u][k] > 0.0 && p.stock[u][k] == 0.0;
+    for k in 0..3 {
+        let total: f64 = (0..n)
+            .filter(|&u| uncovered(u, k))
+            .map(|u| p.coef[u][k] * p.cap[u])
+            .sum();
+        let Some(pp) = p.producer[k] else {
+            continue;
         };
         if total == 0.0 {
             continue;
         }
-        let mut lambda = 1.0 - rest / (total * t);
-        if lambda < 0.0 {
-            q.cap.push((rest / t - total) / 0.5);
-            let mut c = [0.0; 3];
-            c[k] = 0.5;
-            q.coef.push(c);
-            q.stock.push([0.0; 3]);
-            lambda = 0.0;
+        let share = (1.0 - p.own[k]) * p.cap[pp];
+        if !(0..3).any(|j| uncovered(pp, j)) {
+            q.cap[pp] = total * t / (1.0 - p.own[k]);
+            continue;
         }
-        for u in 0..p.cap.len() {
-            let a = p.coef[u][k] * p.cap[u];
-            if a > 0.0 && p.stock[u][k] == 0.0 {
-                q.stock[u][k] = lambda * a * t;
+        let r = t * (total - share) / share;
+        assert!(r >= 0.0, "translatable: A >= R");
+        q.cap[pp] = (1.0 + r) * p.cap[pp];
+        for j in (0..3).filter(|&j| uncovered(pp, j)) {
+            q.stock[pp][j] = r * p.coef[pp][j] * p.cap[pp];
+        }
+    }
+    for u in 0..n {
+        for k in 0..3 {
+            if p.coef[u][k] > 0.0 && p.stock[u][k] > 0.0 {
+                q.stock[u][k] = 1.01 * p.coef[u][k] * q.cap[u];
             }
         }
     }
@@ -2128,17 +2294,24 @@ fn near_singular(eps: f64) -> (Province, [f64; 3]) {
 }
 
 /// ADR 0093, bounded work: provinces whose fills fall towards 0 settle in bounded passes and
-/// work, at fills exactly 0 (never subnormal), every good fitting. Seed 13622680876955865696
-/// falls at a rate near 1 on one pass map (781 passes and seconds when every cycle was followed);
-/// seed 709302389291714235 switches irregularly between two maps (15,678 passes before the stall
-/// rule).
+/// work, at fills exactly 0 (never subnormal), every good fitting. Without stocks (family 2),
+/// seed 13622680876955865696 falls in 4 passes and 16771139658170358534 ends at the stall rule
+/// (257 passes); with stocks, 709302389291714235 in 5 and 14587390709483492012 at the stall
+/// rule. Before the stock floor (ADR 0093, amendment of 2026-10-30) the first and third, drawn
+/// with stocks, were the pinned cases: 13622680876955865696 fell at a rate near 1 on one pass map
+/// (781 passes when every cycle was followed), 709302389291714235 switched irregularly between two
+/// maps (15,678 passes before the stall rule); under the floor the first no longer collapses.
 #[test]
 fn collapsing_provinces_settle_in_bounded_passes() {
-    for (seed, bound) in [
-        (13622680876955865696u64, 16),
-        (709302389291714235, 4 * local::STALL_PASSES + 16),
+    let stall = 4 * local::STALL_PASSES + 16;
+    for (family, seed, bound) in [
+        (2, 13622680876955865696u64, 16),
+        (2, 16771139658170358534, stall),
+        (0, 709302389291714235, 16),
+        (1, 14587390709483492012, stall),
     ] {
-        let p = random_province(seed);
+        let (extra, coef_max, no_stock) = FAMILIES[family];
+        let p = random_province_with(seed, extra, coef_max, no_stock);
         let out = local::fills(&p);
         assert!(out.passes <= bound, "seed {seed}: {out:?}");
         assert!(out.work <= local::WORK_BOUND, "seed {seed}: {out:?}");
@@ -2172,8 +2345,8 @@ fn balanced_markets_keep_their_fills() {
 
 /// The exact limit of `translate(p, t)` where it is degenerate, a heuristic read from the
 /// construction, not a logical consequence (ADR 0093, bounded work). `translate` makes U - R of
-/// every good homogeneous in F - t, but the province is not `p` shifted: stocked users are fully
-/// covered, producers without local inputs get a constant, an extra user may be added. The goods
+/// every good homogeneous in F - t, but the province is not `p` shifted: producers get a stock
+/// floor and more capacity, producers without local inputs the capacity that balances. The goods
 /// whose fill the bisection iteration on `p` takes to 0 (a fill below 1e-200 taken as 0) are
 /// taken to fall to t, where supply equals need and the plain iteration's own result depends on
 /// rounding; the goods it never cuts (fill 1) are taken to stay at 1, though rounding at the
@@ -2195,31 +2368,34 @@ fn degenerate_limit(original: &[f64; 3], t: f64) -> [Option<f64>; 3] {
 
 /// How close to its exact limit a degenerate good is held (ADR 0093, bounded work). At the limit,
 /// U - R is a difference of terms of the size of the gross flows that vanishes linearly in F - t,
-/// so its rounding decides the fit near t. The cap is empirical: the worst observed over the
-/// translated collapses is 1.81e-12. The per-case eps (U + R) / |slope of U - R| has no bound
-/// where a good's U - R is about 0 along the ray (seed 7252145407610438004: slope 1.1e-12, yet
-/// the other goods pin it within 1.03e-12 of t).
+/// so its rounding decides the fit near t. The cap is empirical: under the stock floor the worst
+/// observed over 3,000,000 draws of the translated collapses is 1.08e-13 on the goods the oracle
+/// holds, 1.72e-12 on any good within 1e-9 of t (seed 705654478377484459 at 0.3, good 2, which
+/// it loosens); before the floor, 1.81e-12. The per-case eps (U + R) / |slope of U - R| has no
+/// bound where a good's U - R is about 0 along the ray.
 const RESOLUTION: f64 = 1e-11;
 
-/// The fills of `translate(random_province(seed), t)`, which must be held to the exact limits.
+/// The fills of `translate(translated_original(seed), t)`, which must be held to the exact limits.
 /// Where the province is degenerate (some good of the original falls to 0, by
 /// [`degenerate_limit`]), each good whose heuristic limit the plain iteration on the translated
 /// province confirms (within [`RESOLUTION`]) and resolves ([`loosened`]) is within
 /// [`RESOLUTION`] of it, and each other good lies in [t, 1] to that resolution (the fills only
 /// fall, and no good can fall below t: with the others at t or above, a good at t fits by the
 /// construction of the stocks). The heuristic is not a logical consequence, so a good where the
-/// two disagree, or where the plain iteration does not converge, gets the loose check only: seed
-/// 1122501757669556625 at 0.3, where the heuristic says good 0 stays at 1 and the plain iteration
-/// and the fills both take it to t. Which goods are loosened is decided at the plain iteration's
-/// limit, never at the fills under test. Otherwise every good is at the plain iteration's limit
-/// (1e-12). Every good fits to 1e-12 of its flows. On top of that oracle, every good with a
-/// heuristic limit, loosened or not, is held to it here: the pinned cases end there.
+/// two disagree, or where the plain iteration does not converge, gets the loose check only. Which
+/// goods are loosened is decided at the plain iteration's limit, never at the fills under test.
+/// Otherwise every good is at the plain iteration's limit (1e-12). Every good fits to 1e-12 of
+/// its flows. On top of that oracle, every good with a heuristic limit that the oracle does not
+/// loosen is held to it here.
 fn assert_translated_limit(seed: u64, t: f64) -> local::Fills {
-    let original = random_province(seed);
+    let original = translated_original(seed);
+    assert!(translatable(&original), "seed {seed}");
     let limit = bisection_iteration(&original, true).expect("the original iteration converges");
     let out = assert_translated_limit_of(seed, &original, &limit, t);
+    let p = translate(&original, t);
+    let loose = loosened(&p, converged_fills(&p), t);
     for (j, want) in degenerate_limit(&limit, t).into_iter().enumerate() {
-        if let Some(want) = want {
+        if let Some(want) = want.filter(|_| !loose[j]) {
             assert!(
                 (out.fills[j] - want).abs() <= RESOLUTION,
                 "seed {seed} t {t}: good {j}: {out:?} against {want}"
@@ -2317,29 +2493,19 @@ fn loosened(p: &Province, plain: Option<[f64; 3]>, t: f64) -> [bool; 3] {
 
 /// What good j of `p` lacks at fills `f` with its own raised to 1, U - R, relative to its flows
 /// at F = 1. Where this is within [`RESOLUTION`] of 0 at the plain iteration's limit, the good's
-/// users bind on the other goods and sit at their stock thresholds when those are at t, and its
-/// producer falls with them: its balance is rounding whatever its own fill, so whether it falls
-/// to t, stays at 1 or stops between is decided by the rounding of the other fills and of the
-/// stocks, and its limit is not resolved; nor are the limits of goods whose choice between 1 and
-/// a cut turns on where it ends ([`loosened`]). Each of these is held by that rule, none by name:
-/// - Seed 1097310483361641164 at 0.1: good 2 has no producer and every user's stock covers
-///   its need at t (balance 1.9e-18 at the plain limit). The plain iteration ends a unit above t
-///   on good 0 and cuts good 2 to t; the fills end on t and keep good 2 at 1.
-/// - Seed 7641237549142102837 at 0.1: good 2's balance is 5.6e-17 at any fill of its own.
-///   The plain iteration keeps it at 1; the fills cut it to t. Good 1's users take good 2.
-/// - Seed 13946236107313884973 at 0.1: as 1097310483361641164 for good 2, which the fills keep
-///   at 1; good 1's producer takes good 2, so with good 2 at 1 good 1 fits at 1 too, where the
-///   plain iteration cuts both to t.
-/// - Seed 1122501757669556625 at 0.3: good 2's balance is -1.9e-17 at the plain limit; good 0's
-///   heuristic limit 1 is not confirmed (above).
+/// users bind on the other goods at t and its producer falls with them: its balance is rounding
+/// whatever its own fill, so whether it falls to t, stays at 1 or stops between is decided by the
+/// rounding of the other fills, and its limit is not resolved; nor are the limits of goods whose
+/// choice between 1 and a cut turns on where it ends ([`loosened`]). Each of these is held by
+/// that rule, none by name. The examples measured before the stock floor (seeds
+/// 1097310483361641164, 7641237549142102837, 13946236107313884973 at 0.1) are not translatable
+/// under it: each has a local good without a producer.
 fn shortage_at_one(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
     let mut g = *f;
     g[j] = 1.0;
     let y = outputs_at(p, &g);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
-    let uncovered: f64 = (0..y.len())
-        .map(|u| (p.coef[u][j] * y[u] - p.stock[u][j]).max(0.0))
-        .sum();
+    let uncovered = uncovered_at(p, j, &g);
     let flows: f64 = (0..p.cap.len())
         .map(|u| p.coef[u][j] * p.cap[u])
         .sum::<f64>()
@@ -2347,34 +2513,22 @@ fn shortage_at_one(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
     (uncovered - rest) / flows
 }
 
-/// ADR 0093, bounded work: collapses moved to a limit at t, every good with a heuristic limit at
-/// it to the resolution bound, those the oracle loosens included.
-/// - 14411755600342564334 and 9578761762967406418 at 0.1: a jump once overshot them to 0.
-/// - 14707373548302171422 at 0.1: its first step lands one unit below 1 (a midpoint of the
-///   piece rounded onto its end, a panic before).
-/// - 7252145407610438004 at 0.3 and 13596793787635918054 at 0.5: the fills stop 1.0e-12 and
-///   1.8e-12 above t, where rounding of U - R decides the fit.
-/// - 12318889963466380618 at 0.3 and 16703400009402685098 at 0.5: the plain iteration stops
-///   3.6e-12 and 1.4e-12 above t on a good whose original limit is neither 0 nor 1.
-/// - 6603813906490728229 at 0.3: good 1 fits strictly above t in exact arithmetic (its balance
-///   there is delta (a - r) with a <= r), so its limit is 1; the plain iteration rounds it down
-///   to 0.3 once the other goods reach t to rounding.
+/// ADR 0093, bounded work: collapses moved to a limit at t, every good with a heuristic limit the
+/// oracle does not loosen held to it. The cases pinned before the stock floor (ADR 0093, amendment
+/// of 2026-10-30; jumps that overshot to 0, a root rounded onto a piece's end, stops 1e-12 above
+/// t) are not translatable under it, but for 1122501757669556625 at 0.3, kept. The others are the
+/// longest of 3,000,000 draws (9 passes: 5311499786894156349 at 0.1, 11108278234816594936 at
+/// 0.3) and the one whose fill ends furthest from t (705654478377484459 at 0.3, good 2 1.72e-12
+/// above it, loosened).
 #[test]
 fn translated_collapses_stop_at_their_limit() {
     for (seed, t) in [
-        (14411755600342564334u64, 0.1),
-        (9578761762967406418, 0.1),
-        (14707373548302171422, 0.1),
-        (7252145407610438004, 0.3),
-        (13596793787635918054, 0.5),
-        (12318889963466380618, 0.3),
-        (16703400009402685098, 0.5),
-        (6603813906490728229, 0.3),
+        (1122501757669556625u64, 0.3),
+        (5311499786894156349, 0.1),
+        (11108278234816594936, 0.3),
+        (705654478377484459, 0.3),
     ] {
-        let out = assert_translated_limit(seed, t);
-        if seed == 6603813906490728229 {
-            assert_eq!(out.fills[1], 1.0, "{out:?}");
-        }
+        assert_translated_limit(seed, t);
     }
 }
 
@@ -2391,12 +2545,17 @@ struct Sample {
     /// Mutants accepted: the good's own balance is rounding at the plain limit
     /// ([`shortage_at_one`]), where the fills may end at t, at 1 or between.
     unresolved: usize,
+    /// The largest distance from t of a fill whose heuristic limit is t, which the plain iteration
+    /// confirms there and resolves ([`loosened`]).
+    worst: f64,
 }
 
 /// The collapsing provinces among `n` random draws from `offset` (SplitMix64 seeds), each moved
 /// to limits at 0.1, 0.3 and 0.5, every one held to [`assert_translated_limit`]. A collapse is
-/// chosen without the code under test: the plain fill iteration ([`bisection_iteration`], fills
-/// below 1e-200 flushed to 0) ends with at least two fills of 0, about 23% of the draws. The
+/// chosen without the code under test: a [`translatable`] draw ([`translated_original`]) whose
+/// plain fill iteration ([`bisection_iteration`], fills below 1e-200 flushed to 0) ends with at
+/// least two fills of 0, about 0.4% of the draws (about 23% before the stock floor, which drops
+/// the goods without a producer and those whose producer supplies more than they need). The
 /// oracle is tested too: each good the plain iteration confirms at 1 and the fills keep there is
 /// lowered to t, and [`translated_verdict`] must reject that, unless the good's own limit is not
 /// resolved at the plain limit.
@@ -2410,7 +2569,10 @@ fn translated_sample(n: u64, offset: u64) -> Sample {
     let mut sample = Sample::default();
     for i in 0..n {
         let seed = mix(i + offset);
-        let original = random_province(seed);
+        let original = translated_original(seed);
+        if !translatable(&original) {
+            continue;
+        }
         let Some(limit) = bisection_iteration(&original, true) else {
             continue;
         };
@@ -2429,6 +2591,12 @@ fn translated_sample(n: u64, offset: u64) -> Sample {
             let Some(at) = plain else {
                 continue;
             };
+            let loose = loosened(&p, plain, t);
+            for j in 0..3 {
+                if heuristic[j] == Some(t) && !loose[j] && (at[j] - t).abs() <= RESOLUTION {
+                    sample.worst = sample.worst.max((out.fills[j] - t).abs());
+                }
+            }
             for j in 0..3 {
                 if heuristic[j] != Some(1.0) || (at[j] - 1.0).abs() > RESOLUTION {
                     continue;
@@ -2453,51 +2621,53 @@ fn translated_sample(n: u64, offset: u64) -> Sample {
     sample
 }
 
-/// ADR 0093, bounded work: a sample of the translated collapses (5,000 draws: 3,552 cases, 1,107
-/// held to every heuristic limit; 858 mutants rejected, 239 at goods whose own limit is
-/// rounding). The minimums are these counts. The selection alone fixes the cases, so a case fails
-/// rather than drops out; the held count turns on the plain iteration and the heuristic only.
+/// ADR 0093, bounded work: a sample of the translated collapses (75,000 draws: 969 cases, 546
+/// held to every heuristic limit; 393 mutants rejected, 10 at goods whose own limit is rounding;
+/// before the stock floor 5,000 draws gave 3,552 cases). The minimums are these counts. The
+/// selection alone fixes the cases, so a case fails rather than drops out; the held count turns
+/// on the plain iteration and the heuristic only.
 #[test]
 fn translated_collapses_sample() {
-    let s = translated_sample(5_000, 12 << 40);
+    let s = translated_sample(75_000, 12 << 40);
     println!("{s:?}");
     assert!(
-        s.checked >= 3_552 && s.held >= 1_107 && s.rejected >= 858,
+        s.checked >= 969 && s.held >= 546 && s.rejected >= 393,
         "{s:?}"
     );
 }
 
-/// ADR 0093, bounded work: the translated collapses of 300,000 draws (207,054 cases, 65,073 held
-/// to every heuristic limit; 51,078 mutants rejected, 13,020 at goods whose own limit is
-/// rounding; minimums as in [`translated_collapses_sample`]; about 45 s in release); slow, so run
-/// on request.
+/// ADR 0093, bounded work: the translated collapses of 3,000,000 draws (38,187 cases, 19,947 held
+/// to every heuristic limit; 14,277 mutants rejected, 553 at goods whose own limit is rounding;
+/// minimums as in [`translated_collapses_sample`]; about 56 s in release); slow, so run on
+/// request.
 #[test]
-#[ignore = "slow: 300,000 draws; run on request"]
+#[ignore = "slow: 3,000,000 draws; run on request"]
 fn translated_collapses_full() {
-    let s = translated_sample(300_000, 12 << 40);
+    let s = translated_sample(3_000_000, 12 << 40);
     println!("{s:?}");
     assert!(
-        s.checked >= 207_054 && s.held >= 65_073 && s.rejected >= 51_078,
+        s.checked >= 38_187 && s.held >= 19_947 && s.rejected >= 14_277,
         "{s:?}"
     );
 }
 
-/// ADR 0093, bounded work: the oracle's loosening is decided without the fills under test. While
-/// it read the fills, lowering a good at 1 to t in these exact limits was accepted (a review's
-/// mutants, 3,898 of 6,418 accepted): in 9896657790763124343 good 1's balance is 0 at any fill of
-/// its own, which loosened every good; in 17141039903868238212 the wrong fills made a good's
-/// balance rounding. Read at the plain limit, the good at 1 fits by a margin wherever the
-/// unresolved goods end, so it is held to 1 and the wrong fills are rejected.
+/// ADR 0093, bounded work: the oracle's loosening is decided without the fills under test.
+/// While it read the fills, lowering a good at 1 to t in these exact limits was accepted (a
+/// review's mutants, 3,898 of 6,418 accepted, on seeds 9896657790763124343 and
+/// 17141039903868238212, which have a local good without a producer and are not translatable
+/// under the stock floor). Read at the plain limit, the good at 1 fits by a margin wherever the
+/// unresolved goods end, so it is held to 1 and the wrong fills are rejected: here on the first
+/// two seeds of the sample with a rejected mutant.
 #[test]
 fn translated_oracle_rejects_a_good_lowered_from_one() {
     for (seed, t, j) in [
-        (9896657790763124343u64, 0.1, 0),
-        (9896657790763124343, 0.3, 0),
-        (9896657790763124343, 0.5, 0),
-        (17141039903868238212, 0.1, 2),
-        (17141039903868238212, 0.3, 2),
+        (10705095954986202167u64, 0.1, 0),
+        (10705095954986202167, 0.3, 0),
+        (10705095954986202167, 0.5, 0),
+        (7502845947401349490, 0.1, 2),
+        (7502845947401349490, 0.3, 2),
     ] {
-        let original = random_province(seed);
+        let original = translated_original(seed);
         let limit = bisection_iteration(&original, true).expect("the original iteration converges");
         let out = assert_translated_limit_of(seed, &original, &limit, t);
         assert_eq!(out.fills[j], 1.0, "seed {seed} t {t}: {out:?}");
@@ -2516,44 +2686,28 @@ fn translated_oracle_rejects_a_good_lowered_from_one() {
     }
 }
 
-/// ADR 0093, bounded work: seed 13067305529229119429 at 0.3, a collapse whose plain iteration
-/// ends at [0.3, 0.3, 0.3] to rounding (and its exact limit is t: no good can fall below it). The
-/// fills reach t to rounding in 3 passes, the third a rounding pass, whose good-0 step sits on a
-/// piece that holds only at f. Its fixed point, [0.267, 0, 0], lies off that piece; every good
-/// fits there and the confirming passes return it, so the stop took it while the last pass's
-/// fixed point was taken wherever it lies. Restricting it to 9.3e-10 of f, as the cycles of two
-/// and three passes are, would fail [`near_singular_cycle_keeps_its_limit`], whose fixed point
-/// lies on its pass's pieces. The heuristic gives good 1 the limit 1, which the plain iteration
-/// does not confirm (as seed 1122501757669556625), so the case is not held to every heuristic
-/// limit; every good is checked at t here instead.
+/// ADR 0093, bounded work: seed 1997589725841679792 at 0.1, where good 1's users need less than
+/// its producer supplies, is not [`translatable`]: balanced at t by an extra user, it has a line of
+/// fixed points along which the stop took [0.093, 0.013, 0.013], below t.
 #[test]
-fn translated_collapse_stop_refuses_an_off_piece_fixed_point() {
-    let seed = 13067305529229119429;
-    let original = random_province(seed);
-    let limit = bisection_iteration(&original, true).expect("the original iteration converges");
-    let out = assert_translated_limit_of(seed, &original, &limit, 0.3);
-    assert_eq!(
-        out.fills.map(|x| (x - 0.3).abs() <= RESOLUTION),
-        [true; 3],
-        "{out:?}"
-    );
+fn translated_family_leaves_out_a_neutral_good() {
+    let p = translated_original(1997589725841679792);
+    assert!(!translatable(&p));
 }
 
 /// ADR 0093, bounded work: provinces whose collapse outlasts the stall rule end within
-/// `local::PASS_CAP` passes, every good fitting to 1e-12 of its flows, the stall reported. The
-/// four took 818 to 1,518 passes with no bound after the stall was reported: seed
-/// 17368639463330687291 (random), 15714615364009314852 and 17705091116894527464 (no stocks),
-/// 14824132916395666595 (up to 10 enterprises). The fifth case is a two-good cycle of gain
-/// 1 - 1e-6 with 200 small users whose stock thresholds lie on its path, where every piece costs
-/// a jump (a review measured 10,600,518 passes on an earlier build; here it settles in about 124
-/// passes, and it is held to the cap only).
+/// `local::PASS_CAP` passes, every good fitting to 1e-12 of its flows, the stall reported. Seeds
+/// 15714615364009314852 and 17705091116894527464 (no stocks) took 818 to 1,518 passes with no
+/// bound after the stall was reported; 5355749340075788755 (scarce stocks) stalls at 792. Seeds
+/// 17368639463330687291 (random) and 14824132916395666595 (up to 10 enterprises) stalled before
+/// the stock floor (ADR 0093, amendment of 2026-10-30) and settle in 2 and 8 passes under it. The
+/// last case is a two-good cycle of gain 1 - 1e-6 with 200 small users with stock on its path:
+/// before the floor their thresholds were 200 kinks, each costing a jump (a review measured
+/// 10,600,518 passes on an earlier build); under it each stock is a floor and no kink, and the
+/// case is held to the cap only.
 #[test]
 fn stalled_provinces_end_within_the_pass_cap() {
     let mut cases: Vec<(String, Province)> = vec![
-        (
-            "17368639463330687291".into(),
-            random_province(17368639463330687291),
-        ),
         (
             "15714615364009314852".into(),
             random_province_with(15714615364009314852, 5, 0.6, 1.0),
@@ -2563,8 +2717,8 @@ fn stalled_provinces_end_within_the_pass_cap() {
             random_province_with(17705091116894527464, 5, 0.6, 1.0),
         ),
         (
-            "14824132916395666595".into(),
-            random_province_with(14824132916395666595, 9, 0.6, 0.5),
+            "5355749340075788755".into(),
+            random_province_with(5355749340075788755, 5, 0.6, 0.9),
         ),
     ];
     let (mut kinks, _) = near_singular(1e-6);
@@ -2627,8 +2781,9 @@ fn near_singular_cycle_keeps_its_limit() {
 /// they equal the fill iteration run to convergence (1e-12) wherever it converges. Where a fill
 /// collapses below 1e-200 the bisection iteration underflows good by good and gives no limit to
 /// compare with, so the bound on the compared ticks is coverage, not model: at least 400 of the
-/// binding province ticks: 480 of 483 (534 of 547 before ADR 0266's split order rule, 410 of
-/// 415 before its input cap, 411 of 413 before the gateway masses).
+/// binding province ticks: 476 of 482 (480 of 483 before the stock floor of ADR 0093's
+/// amendment of 2026-10-30, 534 of 547 before ADR 0266's split order rule, 410 of 415 before its
+/// input cap, 411 of 413 before the gateway masses).
 #[test]
 fn exact_fill_equals_converged_iteration() {
     let cycles = [

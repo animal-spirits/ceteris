@@ -14,12 +14,13 @@ use crate::world::{EconWorld, Layout};
 /// Local goods, in input-output order.
 pub const LOCAL: [usize; 3] = [7, 8, 9];
 
-/// Splits `rest` units of output among users with needs n and stocks b, writing each user's
-/// draw from output into `out`: output first, so with enough output every need is met from
-/// it; short, each user gets what its stock cannot cover, max(n - b, 0), and the rest of the
-/// output pro rata to min(b, n), its stock covering the remainder. Where even the uncovered
-/// needs exceed the output (never at the chain's fills), they share it pro rata.
-fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
+/// Splits `rest` units of output among users given as (need n, uncovered need u, stock b),
+/// writing each user's draw from output into `out`: output first, so with enough output every
+/// need is met from it; short, each user gets what its stock cannot cover, u (max(n - b, 0)
+/// computed without cancelling, [`Province::uncovered`]), and the rest of the output pro rata to
+/// min(b, n), its stock covering the remainder. Where even the uncovered needs exceed the output
+/// (never at the chain's fills), they share it pro rata.
+fn split(rest: f64, users: &[(f64, f64, f64)], out: &mut [f64]) {
     let need: f64 = users.iter().map(|u| u.0).sum();
     if need <= rest {
         for (o, u) in out.iter_mut().zip(users) {
@@ -27,7 +28,7 @@ fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
         }
         return;
     }
-    let uncovered: f64 = users.iter().map(|&(n, b)| (n - b).max(0.0)).sum();
+    let uncovered: f64 = users.iter().map(|u| u.1).sum();
     if uncovered >= rest {
         // uncovered = 0 here means rest = 0: stocks cover every need and nothing is drawn
         let share = if uncovered > 0.0 {
@@ -35,15 +36,15 @@ fn split(rest: f64, users: &[(f64, f64)], out: &mut [f64]) {
         } else {
             0.0
         };
-        for (o, &(n, b)) in out.iter_mut().zip(users) {
-            *o = (n - b).max(0.0) * share;
+        for (o, u) in out.iter_mut().zip(users) {
+            *o = u.1 * share;
         }
         return;
     }
-    let usable: f64 = users.iter().map(|&(n, b)| b.min(n)).sum();
+    let usable: f64 = users.iter().map(|&(n, _, b)| b.min(n)).sum();
     let extra = (rest - uncovered) / usable;
-    for (o, &(n, b)) in out.iter_mut().zip(users) {
-        *o = (n - b).max(0.0) + extra * b.min(n);
+    for (o, &(n, u, b)) in out.iter_mut().zip(users) {
+        *o = u + extra * b.min(n);
     }
 }
 
@@ -91,42 +92,137 @@ impl Province {
         }
     }
 
-    /// Smallest fill of enterprise `u`'s local inputs, 1 if it uses none.
+    /// The share s of user `u`'s need of good j at capacity that its stock covers, in [0, 1]
+    /// (1 where the stock covers all of it, or the need is 0). Rounded down until the need at
+    /// output cap s, as [`Province::users`] evaluates it, is at most the stock, so that at fill
+    /// 0 the user's uncovered need is exactly 0.
+    fn floor(&self, u: usize, j: usize) -> f64 {
+        let (coef, cap) = (self.coef[u][j], self.cap[u]);
+        let b = self.stock[u][j];
+        if b >= coef * cap {
+            return 1.0;
+        }
+        let mut s = b / (coef * cap);
+        while s > 0.0 && coef * (cap * s) > b {
+            s = s.next_down();
+        }
+        s
+    }
+
+    /// User `u`'s level of good j at fill x, G = s + (1 - s) x with s its [`Province::floor`]:
+    /// the share of its capped output that good j allows, its stock covering s of its need and
+    /// the fill x of the rest. 1 at x = 1 exactly; monotone in x as evaluated (a constant plus a
+    /// constant times x, then a min with 1).
+    fn level(&self, u: usize, j: usize, x: f64) -> f64 {
+        let s = self.floor(u, j);
+        if x >= 1.0 || s >= 1.0 {
+            1.0
+        } else {
+            (s + (1.0 - s) * x).min(1.0)
+        }
+    }
+
+    /// Smallest level of enterprise `u`'s local inputs at fills `f`, 1 if it uses none.
     fn least(&self, u: usize, f: &[f64; 3]) -> f64 {
         (0..3)
             .filter(|&j| self.coef[u][j] > 0.0)
-            .fold(1.0, |m, j| m.min(f[j]))
+            .fold(1.0, |m, j| m.min(self.level(u, j, f[j])))
     }
 
-    /// Outputs at fills `f`: Y_e = cap_e min_k F_k over the local goods e uses.
+    /// User `u`'s deficit of good j through its input k at fill x: its level of k less its floor
+    /// of j, G_k(x) - s_j, the share of its capped output beyond what its stock of j covers where
+    /// k binds it. Written so that it does not cancel: (1 - s_j) x for k = j, and
+    /// (s_k - s_j) + (1 - s_k) x otherwise (at most 1 - s_j, which it is at a level of 1).
+    fn deficit(&self, u: usize, j: usize, k: usize, x: f64) -> f64 {
+        let sj = self.floor(u, j);
+        if k == j {
+            return (1.0 - sj) * x.min(1.0);
+        }
+        let sk = self.floor(u, k);
+        if x >= 1.0 || sk >= 1.0 {
+            1.0 - sj
+        } else {
+            ((sk - sj) + (1.0 - sk) * x).min(1.0 - sj)
+        }
+    }
+
+    /// User `u`'s smallest deficit of good j ([`Province::deficit`]) through its local inputs
+    /// other than j at fills `f`: 1 - s_j where every other level is 1 or it uses no other.
+    fn other(&self, u: usize, j: usize, f: &[f64; 3]) -> f64 {
+        (0..3)
+            .filter(|&k| k != j && self.coef[u][k] > 0.0)
+            .fold(1.0 - self.floor(u, j), |d, k| {
+                d.min(self.deficit(u, j, k, f[k]))
+            })
+    }
+
+    /// What user `u`'s stock of good j cannot cover at fills `f`, max(coef cap G - b, 0) with G
+    /// its smallest level, as coef cap max(min_k deficit_k, 0): coef cap G - b would cancel to
+    /// the rounding of b where the user runs mostly on its stock (a small fill), and the jumps
+    /// could not follow a collapse there.
+    fn uncovered(&self, u: usize, j: usize, f: &[f64; 3]) -> f64 {
+        let a = self.coef[u][j] * self.cap[u];
+        if a == 0.0 {
+            return 0.0;
+        }
+        a * self
+            .deficit(u, j, j, f[j])
+            .min(self.other(u, j, f))
+            .max(0.0)
+    }
+
+    /// The fill of good j at which user `u`'s deficit through j reaches `d`, its smallest
+    /// deficit through its other goods (ADR 0093, amendment of 2026-10-30): d / (1 - s_j). None
+    /// where j never binds it below 1 (its stock covers the whole need, or d is that of a level
+    /// of 1) or never does (d <= 0: its stock covers it whatever j's fill).
+    fn crossing(&self, u: usize, j: usize, d: f64) -> Option<f64> {
+        let s = self.floor(u, j);
+        (s < 1.0 && d > 0.0 && d < 1.0 - s).then(|| d / (1.0 - s))
+    }
+
+    /// Outputs at fills `f`: Y_e = cap_e min_k G_ek(F_k) over the local goods e uses.
     pub fn outputs(&self, f: &[f64; 3], y: &mut Vec<f64>) {
         y.clear();
         y.extend((0..self.cap.len()).map(|u| self.cap[u] * self.least(u, f)));
     }
 
-    /// Output left for the users of good j, its users as (need, stock), at outputs y.
-    fn users(&self, j: usize, y: &[f64], out: &mut Vec<(f64, f64)>) -> f64 {
+    /// Output left for the users of good j, its users as (need, uncovered need, stock), at fills
+    /// f and their outputs y. A user without stock has its whole need uncovered, as before the
+    /// stock floor; any other's uncovered need is [`Province::uncovered`], at most its need.
+    fn users(&self, j: usize, f: &[f64; 3], y: &[f64], out: &mut Vec<(f64, f64, f64)>) -> f64 {
         out.clear();
         for (u, &yu) in y.iter().enumerate() {
             let need = self.coef[u][j] * yu;
             if need > 0.0 {
-                out.push((need, self.stock[u][j]));
+                let b = self.stock[u][j];
+                let uncovered = if b == 0.0 {
+                    need
+                } else {
+                    self.uncovered(u, j, f).min(need)
+                };
+                out.push((need, uncovered, b));
             }
         }
         self.producer[j].map_or(0.0, |p| (1.0 - self.own[j]) * y[p])
     }
 
-    /// What good j's users' stocks cannot cover, sum max(n - b, 0), and the output its
-    /// producer leaves, at outputs y.
-    fn balance(&self, j: usize, y: &[f64], users: &mut Vec<(f64, f64)>) -> (f64, f64) {
-        let rest = self.users(j, y, users);
-        (users.iter().map(|&(n, b)| (n - b).max(0.0)).sum(), rest)
+    /// What good j's users' stocks cannot cover, sum of [`Province::uncovered`], and the output
+    /// its producer leaves, at fills f and their outputs y.
+    fn balance(
+        &self,
+        j: usize,
+        f: &[f64; 3],
+        y: &[f64],
+        users: &mut Vec<(f64, f64, f64)>,
+    ) -> (f64, f64) {
+        let rest = self.users(j, f, y, users);
+        (users.iter().map(|u| u.1).sum(), rest)
     }
 
-    /// Whether good j fits at outputs y: the first of [`Province::balance`] is at most the
-    /// second.
-    fn fits(&self, j: usize, y: &[f64], users: &mut Vec<(f64, f64)>) -> bool {
-        let (uncovered, rest) = self.balance(j, y, users);
+    /// Whether good j fits at fills f and their outputs y: the first of [`Province::balance`] is
+    /// at most the second.
+    fn fits(&self, j: usize, f: &[f64; 3], y: &[f64], users: &mut Vec<(f64, f64, f64)>) -> bool {
+        let (uncovered, rest) = self.balance(j, f, y, users);
         uncovered <= rest
     }
 }
@@ -135,7 +231,7 @@ impl Province {
 #[derive(Default)]
 struct Work {
     y: Vec<f64>,
-    users: Vec<(f64, f64)>,
+    users: Vec<(f64, f64, f64)>,
     kinks: Vec<f64>,
     /// The cycle's composed map squared k times, k = 0, 1, ..., in [`jump`].
     powers: Vec<[Affine; 3]>,
@@ -185,11 +281,11 @@ impl Affine {
 /// How a user of the good being stepped enters U on the step's piece.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Role {
-    /// Its need exceeds its stock and its smallest fill is the step's own.
+    /// Its smallest level is the step's own good's: it adds (1 - s) a x.
     OnStep,
-    /// Its need exceeds its stock and its smallest fill is good k's.
+    /// Its smallest level is good k's, above its floor of the step's good.
     On(usize),
-    /// Its stock covers its need.
+    /// Its stock covers its need: its floor is at least its smallest other level.
     Covered,
 }
 
@@ -201,74 +297,72 @@ struct Piece {
     producer: Option<usize>,
 }
 
-/// The good whose fill is user `u`'s smallest at fills `f` among its local inputs other than
+/// The good whose level is user `u`'s smallest at fills `f` among its local inputs other than
 /// `but`, the lowest on a tie; None if it uses none.
 fn binding(p: &Province, u: usize, f: &[f64; 3], but: Option<usize>) -> Option<usize> {
     (0..3)
         .filter(|&k| p.coef[u][k] > 0.0 && Some(k) != but)
         .fold(None, |best: Option<usize>, k| match best {
-            Some(b) if f[b] <= f[k] => Some(b),
+            Some(b) if p.level(u, b, f[b]) <= p.level(u, k, f[k]) => Some(b),
             _ => Some(k),
         })
 }
 
 /// Whether the step of good j that sets its fill to `x` from fills `f` (the other goods'
-/// current values) lies on `piece`. Comparisons are not strict: on a tie or at a stock
-/// threshold both sides give the same U.
+/// current values) lies on `piece`. Comparisons are not strict: on a tie, or where a user's
+/// smallest other level meets its floor, both sides give the same U.
 fn on_piece(p: &Province, j: usize, piece: &Piece, f: &[f64; 3], x: f64) -> bool {
-    let smallest =
-        |u: usize, k: usize| (0..3).all(|i| i == j || p.coef[u][i] == 0.0 || f[k] <= f[i]);
+    let level = |u: usize, k: usize| p.level(u, k, f[k]);
+    let smallest = |u: usize, k: usize| {
+        (0..3).all(|i| i == j || p.coef[u][i] == 0.0 || level(u, k) <= level(u, i))
+    };
     let producer = match (p.producer[j], piece.producer) {
         (Some(q), Some(k)) => smallest(q, k),
         _ => true,
     };
     producer
         && piece.roles.iter().all(|&(u, role)| {
-            let (a, b) = (p.coef[u][j] * p.cap[u], p.stock[u][j]);
-            let m = p.least(u, &{
-                let mut o = *f;
-                o[j] = 1.0;
-                o
-            });
+            let d = p.other(u, j, f);
+            let at = p.deficit(u, j, j, x);
             match role {
-                Role::OnStep => m >= x && a * x >= b,
-                Role::On(k) => f[k] <= x && smallest(u, k) && a * f[k] >= b,
-                Role::Covered => a * x.min(m) <= b,
+                Role::OnStep => d >= at,
+                Role::On(k) => {
+                    let dk = p.deficit(u, j, k, f[k]);
+                    dk <= at && smallest(u, k) && dk >= 0.0
+                }
+                Role::Covered => at.min(d) <= 0.0,
             }
         })
 }
 
 /// One step of the fill iteration for good j: the largest x <= f_j at which j fits, the other
 /// fills as they stand. What the users' stocks cannot cover, U(x) = sum_e max(a_e cap_e
-/// min(x, m_e) - b_e, 0) with m_e the user's smallest other fill, is continuous,
-/// nondecreasing and piecewise linear in x, and the producer's output does not depend on x
-/// (its own good is not its input): the root lies on one piece, found from its kinks.
+/// min(G_e(x), m_e) - b_e, 0) with G_e the user's level of j and m_e its smallest other level,
+/// is continuous, nondecreasing and piecewise linear in x (a user j binds adds (a_e cap_e - b_e)
+/// x), and the producer's output does not depend on x (its own good is not its input): the
+/// root lies on one piece, found from its kinks, where a user's level of j meets m_e.
 ///
 /// Returns None where j already fits. Otherwise the piece and the root on it as an affine
 /// function of the other fills, x = (R - level) / slope; the affine has NaN coefficients where
 /// rounding put the root on a kink.
 fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affine, Piece)> {
     p.outputs(f, &mut w.y);
-    if p.fits(j, &w.y, &mut w.users) {
+    if p.fits(j, f, &w.y, &mut w.users) {
         return None;
     }
-    let mut others = *f;
-    others[j] = 1.0;
     let users = || (0..p.cap.len()).filter(|&u| p.coef[u][j] > 0.0);
     let uncovered = |x: f64| -> f64 {
         users()
             .map(|u| {
-                let m = p.least(u, &others);
-                (p.coef[u][j] * p.cap[u] * x.min(m) - p.stock[u][j]).max(0.0)
+                let d = p.deficit(u, j, j, x).min(p.other(u, j, f));
+                p.coef[u][j] * p.cap[u] * d.max(0.0)
             })
             .sum()
     };
     w.kinks.clear();
     for u in users() {
-        let slope = p.coef[u][j] * p.cap[u];
-        w.kinks.push(p.least(u, &others));
-        if slope > 0.0 {
-            w.kinks.push(p.stock[u][j] / slope);
+        if let Some(x) = p.crossing(u, j, p.other(u, j, f)) {
+            w.kinks.push(x);
         }
     }
     w.kinks.retain(|&x| x > 0.0 && x < f[j]);
@@ -294,26 +388,33 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
         let share = (1.0 - p.own[j]) * p.cap[q];
         piece.producer = binding(p, q, f, None);
         match piece.producer {
-            Some(k) => num.d[k] += share,
+            Some(k) => {
+                let s = p.floor(q, k);
+                num.d[k] += share * (1.0 - s);
+                num.c += share * s;
+            }
             None => num.c += share,
         }
     }
-    // No kink lies inside (lo, hi), so each user's smallest other fill m and stock threshold
-    // b / a lie at or below lo or at or above hi: its role on the piece follows from comparing
-    // them with the ends, with no midpoint to round onto an end.
+    // No kink lies inside (lo, hi), so each user's crossing, where its level of j meets its
+    // smallest other level m, lies at or below lo or at or above hi: its role on the piece
+    // follows from comparing it with the ends, with no midpoint to round onto an end. A user
+    // whose stock covers its need (s = 1), or whose m is at most s, is covered on every piece.
     let mut slope = 0.0;
     for u in users() {
-        let (a, b) = (p.coef[u][j] * p.cap[u], p.stock[u][j]);
-        let m = p.least(u, &others);
-        let role = if a > 0.0 && m >= hi && b / a <= lo {
-            slope += a;
-            num.c += b;
+        let a = p.coef[u][j] * p.cap[u];
+        let d = p.other(u, j, f);
+        let s = p.floor(u, j);
+        let crossing = p.crossing(u, j, d);
+        let role = if s < 1.0 && d > 0.0 && crossing.is_none_or(|x| x >= hi) {
+            slope += a * (1.0 - s);
             Role::OnStep
-        } else if a > 0.0 && m <= lo && a * m > b {
-            // m <= lo < hi <= 1, so another of the user's fills is below 1
-            let k = binding(p, u, f, Some(j)).expect("a smaller fill than x");
-            num.d[k] -= a;
-            num.c += b;
+        } else if crossing.is_some_and(|x| x <= lo) {
+            // d < 1 - s, so another of the user's levels is below 1
+            let k = binding(p, u, f, Some(j)).expect("a smaller level than j's");
+            let sk = p.floor(u, k);
+            num.d[k] -= a * (1.0 - sk);
+            num.c -= a * (sk - s);
             Role::On(k)
         } else {
             Role::Covered
@@ -354,10 +455,11 @@ const DESCENT: usize = 8;
 /// [`step`] rounds, so its root may not fit: the fill steps down a unit in the last place at a
 /// time, and after [`DESCENT`] units searches the bit patterns of [0, x] by bisection. The
 /// search returns what stepping down would: the evaluated fit is monotone in the fill (each
-/// user's need is a product of a min over the fills, and rounded products, maxima and sums are
-/// monotone; the producer's output does not depend on its own good), 0 always fits (every
-/// uncovered need is then 0) and positive f64 order as their bits. A root above a flat piece,
-/// where U - R is rounding at a stock threshold, could otherwise take up to 2^62 steps.
+/// user's uncovered need is a product of a min over its levels or deficits, each a constant plus
+/// a constant times the fill, and rounded products, sums, minima and maxima are monotone; the
+/// producer's output does not depend on its own good), 0 always fits (every uncovered need is
+/// then 0: the deficit through j is 0) and positive f64 order as their bits. A root above a flat
+/// piece, where U - R is rounding, could otherwise take up to 2^62 steps.
 fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f64 {
     debug_assert!(
         p.producer[j].is_none_or(|q| p.coef[q][j] == 0.0),
@@ -369,7 +471,7 @@ fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f6
         debug_assert!(w.descent <= DESCENT + 65, "descent unbounded");
         f[j] = x;
         p.outputs(f, &mut w.y);
-        x == 0.0 || p.fits(j, &w.y, &mut w.users)
+        x == 0.0 || p.fits(j, f, &w.y, &mut w.users)
     };
     let mut x = x;
     for _ in 0..DESCENT {
@@ -689,7 +791,7 @@ fn follow(
         let mut state = through;
         for j in 0..3 {
             p.outputs(&state, &mut w.y);
-            let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+            let (uncovered, rest) = p.balance(j, &state, &w.y, &mut w.users);
             let slack = ROUNDING * (uncovered + rest);
             let on = match &q.pieces[j] {
                 None => uncovered <= rest + slack,
@@ -850,7 +952,7 @@ fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
     let mut state = *at;
     for j in 0..3 {
         p.outputs(&state, &mut w.y);
-        let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+        let (uncovered, rest) = p.balance(j, &state, &w.y, &mut w.users);
         let on = match &pass.pieces[j] {
             None => uncovered <= rest + ROUNDING * (uncovered + rest),
             Some(piece) => {
@@ -871,7 +973,8 @@ fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
 /// `tail` (oldest first), clamped to [0, f], where it lowers some good resolvably and the
 /// cycle's passes from it return it to [`CONFIRMED`]. The last pass's fixed point is taken
 /// within [`TAIL`] of f, or beyond where it lies on that pass's pieces ([`on_pieces`]): a
-/// threshold on one fill (a stock threshold, a covered user's min) that holds at f and at g
+/// threshold on one fill (a user's floor against its other levels, a covered user's min) that
+/// holds at f and at g
 /// holds on any path falling monotonely from f to g, so the passes from f run on the pieces to
 /// it, to first order. Not exactly: the passes follow g + M^k (f - g), not the segment, but
 /// along one near-unit direction (as at a stop; at the stall rule two slow directions may
@@ -932,7 +1035,7 @@ fn capped(p: &Province, mut f: [f64; 3], w: &mut Work) -> [f64; 3] {
     loop {
         p.outputs(&f, &mut w.y);
         let short = (0..3).find(|&j| {
-            let (uncovered, rest) = p.balance(j, &w.y, &mut w.users);
+            let (uncovered, rest) = p.balance(j, &f, &w.y, &mut w.users);
             uncovered > rest + FIT * (uncovered + rest)
         });
         match short {
@@ -991,7 +1094,7 @@ pub fn chain(
     let mut users = Vec::new();
     let mut draws = Vec::new();
     for (j, &k) in LOCAL.iter().enumerate() {
-        let rest = province.users(j, &y, &mut users);
+        let rest = province.users(j, &f, &y, &mut users);
         draws.resize(users.len(), 0.0);
         split(rest, &users, &mut draws);
         let mut d = draws.iter();
@@ -1044,25 +1147,26 @@ mod tests {
     #[test]
     fn split_draws_output_first_and_stock_for_the_rest() {
         let mut out = [0.0; 2];
-        split(20.0, &[(6.0, 3.0), (4.0, 0.0)], &mut out);
+        split(20.0, &[(6.0, 3.0, 3.0), (4.0, 4.0, 0.0)], &mut out);
         assert_eq!(out, [6.0, 4.0]);
         // short: the user without stock gets its whole need, the other the rest of output
-        split(5.0, &[(4.0, 4.0), (4.0, 0.0)], &mut out);
+        split(5.0, &[(4.0, 0.0, 4.0), (4.0, 4.0, 0.0)], &mut out);
         assert_eq!(out, [1.0, 4.0]);
         // stocks cover the residues exactly
-        split(4.0, &[(4.0, 6.0), (4.0, 0.0)], &mut out);
+        split(4.0, &[(4.0, 0.0, 6.0), (4.0, 4.0, 0.0)], &mut out);
         assert_eq!(out, [0.0, 4.0]);
         // no output and stocks covering every need: nothing drawn, not 0 * (0 / 0)
-        split(0.0, &[(4.0, 6.0), (2.0, 2.0)], &mut out);
+        split(0.0, &[(4.0, 0.0, 6.0), (2.0, 0.0, 2.0)], &mut out);
         assert_eq!(out, [0.0, 0.0]);
     }
 
     /// A province of the installed pack under the B6 split rule, frictionless, where good 8's
-    /// producer has no capacity (R = 0) and, at fills [0.9776, 1, 1], user 3 sits exactly at its
-    /// stock threshold of good 8: (coef cap) F_7 - b is 0, while coef (cap F_7) - b, as
-    /// `Province::fits` evaluates it, is 1.8e-12. The closed form puts the root at 1 on a piece
-    /// where U is flat at 0 and the evaluated fit fails by rounding, so the fill must cross the
-    /// whole piece down to F_7. Stepping down one unit at a time took about 2e14 steps (over 40 minutes).
+    /// producer has no capacity (R = 0) and, at fills [0.9776, 1, 1], user 3 sat exactly at its
+    /// stock threshold of good 8 before the stock floor: (coef cap) F_7 - b was 0, while
+    /// coef (cap F_7) - b, as `Province::fits` evaluated it, was 1.8e-12. The closed form put the
+    /// root at 1 on a piece where U was flat at 0 and the evaluated fit failed by rounding, so the
+    /// fill had to cross the whole piece down to F_7. Stepping down one unit at a time took about
+    /// 2e14 steps (over 40 minutes).
     fn flat_piece_province() -> Province {
         let b = f64::from_bits;
         Province {
@@ -1157,17 +1261,20 @@ mod tests {
         }
     }
 
-    /// Utilities and construction inputs of each other at a loop gain of 0.995 per pass, and a
-    /// third user of utilities whose stock covers its need below fill 1e-3: the fall reaches
-    /// that kink after about 1,500 cycles, past the 64 followed one at a time and between two
-    /// points the doubling checks (1,088 and 2,112 cycles).
+    /// Construction and services inputs of each other at a loop gain of 0.995 per pass, and a
+    /// third user of construction which also takes utilities, of which nobody makes any (fill
+    /// 0), and holds a thousandth of its need of them: it runs at 1e-3 of its capacity on that
+    /// stock, and construction binds it below fill 1e-3. The fall reaches that kink after about
+    /// 1,500 cycles, past the 64 followed one at a time and between two points the doubling
+    /// checks (1,088 and 2,112 cycles). Before the stock floor (ADR 0093, amendment of
+    /// 2026-10-30) the kink was the third user's own stock covering its need below fill 1e-3.
     fn slow_fall_province() -> Province {
         Province {
             cap: vec![1.0, 1.0, 1.0],
-            coef: vec![[0.0, 0.5, 0.0], [0.50151, 0.0, 0.0], [0.001, 0.0, 0.0]],
+            coef: vec![[0.0, 0.0, 0.5], [0.0, 0.50151, 0.0], [0.001, 0.001, 0.0]],
             stock: vec![[0.0; 3], [0.0; 3], [1e-6, 0.0, 0.0]],
-            producer: [Some(0), Some(1), None],
-            own: [0.5, 0.5, 0.0],
+            producer: [None, Some(0), Some(1)],
+            own: [0.0, 0.5, 0.5],
         }
     }
 
@@ -1186,38 +1293,81 @@ mod tests {
             panic!("no jump ahead from {f:?}");
         };
         let kink = 1e-6 / 0.001;
-        assert!(h[0] > kink, "{h:?} past the kink");
+        assert!(h[1] > kink, "{h:?} past the kink");
         assert!(
             follow(&p, cycle, &h, 0.0, &mut w).is_none(),
             "a whole cycle from {h:?} stays on the pieces"
         );
-        // the pass from F = 1 (both goods short), a jump to the kink, the pass across it, a
-        // jump to the limit and its confirming pass, and the pass that changes nothing
+        // the pass from F = 1 (every good short, utilities cut to 0), one more on the cycle's
+        // pieces so that its map repeats, a jump to the kink, the pass across it, a jump to the
+        // limit and its confirming pass, and the pass that changes nothing (4 before the floor,
+        // where the third good was never cut)
         let out = fills(&p);
-        assert_eq!((out.fills, out.passes), ([0.0, 0.0, 1.0], 4), "{out:?}");
+        assert_eq!((out.fills, out.passes), ([0.0; 3], 5), "{out:?}");
     }
 
+    /// The stock floor (ADR 0093, amendment of 2026-10-30): good 7's producer (0) makes
+    /// nothing. User 1 holds two months of every local input, user 2 half its need of good 7,
+    /// user 3 none; 8 and 9 come from producers 4 and 5 with no local inputs. Good 7's fill is 0:
+    /// user 1 runs at its cap, user 2 on its stock at half, user 3 not at all, and nobody draws
+    /// good 7 from output.
+    #[test]
+    fn stock_is_a_floor_under_the_fill() {
+        let c = 0.1;
+        let p = Province {
+            cap: vec![0.0, 10.0, 10.0, 10.0, 100.0, 100.0],
+            coef: vec![
+                [0.0, c, c],
+                [c, c, c],
+                [c, 0.0, 0.0],
+                [c, c, 0.0],
+                [0.0; 3],
+                [0.0; 3],
+            ],
+            stock: vec![
+                [0.0; 3],
+                [2.0, 2.0, 2.0],
+                [0.5, 0.0, 0.0],
+                [0.0; 3],
+                [0.0; 3],
+                [0.0; 3],
+            ],
+            producer: [Some(0), Some(4), Some(5)],
+            own: [0.0; 3],
+        };
+        let out = fills(&p);
+        assert_eq!(out.fills, [0.0, 1.0, 1.0], "{out:?}");
+        let mut y = Vec::new();
+        p.outputs(&out.fills, &mut y);
+        assert_eq!(y, [0.0, 10.0, 5.0, 0.0, 100.0, 100.0]);
+        let (mut users, mut draws) = (Vec::new(), Vec::new());
+        let rest = p.users(0, &out.fills, &y, &mut users);
+        draws.resize(users.len(), 0.0);
+        split(rest, &users, &mut draws);
+        assert_eq!(rest, 0.0);
+        assert!(draws.iter().all(|&d| d == 0.0), "{draws:?}");
+    }
+
+    /// Bounded descent from a fill far above where the good fits: the captured province's good 8
+    /// at fills [0.9776, 1, 1], its producer without capacity (R = 0). Before the stock floor the
+    /// closed form put the root at 1 on a flat piece and the descent had to cross it; under the
+    /// floor (ADR 0093, amendment of 2026-10-30) the step's root is exact to a few units, so the
+    /// descent is called here from 1 directly.
     #[test]
     fn a_root_above_a_flat_piece_descends_in_bounded_work() {
         let p = flat_piece_province();
         let mut w = Work::default();
-        let lo = 0.9776130665525171;
-        let mut f = [lo, 1.0, 1.0];
-        let (_, piece) = step(&p, 1, &mut f, &mut w).expect("good 8 is short at fill 1");
-        assert!(
-            piece.roles.iter().all(|&(_, r)| r != Role::OnStep),
-            "{piece:?}"
-        );
-        // the largest f64 at most 1 at which good 8 fits: below the piece, the next one up not
-        let x = f[1];
+        let mut f = [0.9776130665525171, 1.0, 1.0];
+        let x = descend(&p, 1, &mut f, 1.0, &mut w);
         let fits_at = |x: f64| {
             let mut g = f;
             g[1] = x;
             let mut y = Vec::new();
             p.outputs(&g, &mut y);
-            p.fits(1, &y, &mut Vec::new())
+            p.fits(1, &g, &y, &mut Vec::new())
         };
-        assert!(x < lo && fits_at(x) && !fits_at(x.next_up()), "{x}");
+        // the largest f64 at most 1 at which good 8 fits, far below 1
+        assert!(x < 0.99 && fits_at(x) && !fits_at(x.next_up()), "{x}");
         // DESCENT steps and the check after them, then at most 64 bisections; one unit at a time
         // took about 2e14
         assert!(
