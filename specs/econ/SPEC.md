@@ -206,7 +206,8 @@ of the province's enterprise of that good, the base output that sizes the input 
 goods hold none, as before), nothing in flight and one month of base dividends minted to each
 pop.
 
-Merchant stocks of the data state (amendment 2026-10-31, B8e; the owner has not ruled yet). The
+Merchant stocks of the data state (amendment 2026-10-31, B8e; owner, 2026-10-31, relayed by the
+coordinator). The
 data state stocked each origin at coverage times the orders one month of base demand placed there
 at prices 1, where the origin weights are the kernel alone, so an origin's stock did not scale
 with what it makes. A tiny economy then held months of the world's orders and sold them at tick
