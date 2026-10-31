@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed: the Sinkhorn level is pinned; the pack world calibrates at its fitted nu (B8c)
+
+- `steady::sinkhorn` takes the map at the shifted weights and returns each good's largest ln w
+  at 0. The scaling fixes ln w only up to a level per good, and the mixing and the warm start of
+  the next pass moved it freely: at the export's nu 0.3 coal and mining's level reached 532 by
+  pass 3, where one unit in the last place of ln w is 1.1e-13, and pass 9's residual froze at
+  1.208e-13 until the 100,000-sweep cap (a rounding floor, not conditioning). The tolerance is
+  unchanged.
+- `ceteris-calibrate --test steady_state`'s pack world was the export at the data state's P05
+  defaults (0.3 for every good), not at the installed calibration's fitted nu, so it solved
+  another economy than the installed one; it now applies the calibration's `border_nu`
+  (`write::read_border_nu`). B8b's "same nu, different start" was this.
+- No golden hash moves. The fixture calibration moves by at most 4.1e-13 relative (inside the
+  committed tables' iterative tolerance; the tables are not re-blessed). The pack calibration at
+  ADR 0276's nu has the same pass history (68 passes, change 3.55e-13 against 3.18e-13) with
+  51,297 sweeps against 41,022; the installed tables are not recomputed.
+
 ### BEHAVIOUR: the 2000 pack rebuilt and recalibrated on pre-P3 B (B8)
 
 - `data/packs/2000` is the full pack build of 82d411f (ADR 0251's whole provinces, gateways
