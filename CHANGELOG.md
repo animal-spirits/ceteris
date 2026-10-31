@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### BEHAVIOUR: data-state merchant stocks at coverage times own base output (B8e)
+
+- The data state's merchant stock of each active traded cell is s_g Y0, coverage times the
+  origin enterprise's own base output (Y0 = A VA0 / a_VA), not coverage times the orders one
+  month of base demand placed there at prices 1 (econ SPEC, Initial state; the owner has not
+  ruled yet). At prices 1 the origin weights are the kernel alone, so tiny economies held
+  months of the world's orders and sold them at tick 1: Pitcairn's pops got 58,800 times their
+  money, Western Sahara 10,100, and North Macedonia's sale ended in pop debt and eight provinces
+  at a zero wage (B8d). A calibrated start does not change (`start_steady` is untouched; its
+  stocks are the calibration tables').
+- New test `a_tiny_economy_has_no_tick_one_windfall` (the fixture's island at 1e-4 of its size:
+  1.88e7 against a bound of 2.29e4 before, now within it), and `world_starts_in_the_data_state`
+  checks s_g Y0.
+- The fixture's world orders about twice its base coal output at prices 1, so its coal stocks
+  are now about half: the frictionless run is held by coal in 87 province ticks of ticks 1 to
+  11 (3 before), up to 0.81 above u*. `frictionless_unemployment_is_the_natural_rate` lists
+  them; `local_chain_terminates_on_cycles` now binds at tick 1 in every mainland province but
+  13 and 18 (held at 0.59 and 0.60 of base output by coal), at most 2 passes over 120 ticks
+  (14 before), and checks local input use with the Leontief invariant's drain term (a residue
+  user of 3.8e-79 misses by 2.1e-12 of it); `homogeneity_of_degree_zero` compares the
+  frictionless run at tick 6, since at tick 7 the scaled run decides two target-equals-cap ties
+  of ADR 0266's split order rule otherwise (16% apart in employment from tick 8).
+- Full pack, storage off, V1 from the data state: frictionless price gap 0.762 at tick 1,200
+  (Taiwan province 3903 good 9; Paraguay 0.723, Albania 0.403), 0.670 at 3,600 (Taiwan, Albania
+  0.368), 0.295 at 6,000 (Albania only; next Malawi 1.9e-3); default 9.29e-3 at 1,200 (Malawi;
+  it passes V1's 1% there), 1.4e-7 at 3,600, 8.2e-8 at 6,000. Pitcairn 1.3e-2, 2.5e-4, 2.2e-4
+  frictionless (was 1.31e3 at 1,200); North Macedonia's wages 0.984 to 1.085 of the reference
+  at 1,200, 0.9996 to 1.0008 at 6,000 frictionless (was 0 in eight provinces).
+
+Goldens re-blessed:
+
+- `tests/golden/p2-econ.txt`: every hash from tick 0 (the merchant stocks are state). The
+  hashes are the same at 1, 3 and all threads. The calibration tables, `p2-pack.txt`,
+  `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move.
+
 ### BEHAVIOUR: the 2000 pack's calibration tables recalibrated with the pinned Sinkhorn (B8d)
 
 - The installed calibration tables came from code before the Sinkhorn level pin (B8c). They are
