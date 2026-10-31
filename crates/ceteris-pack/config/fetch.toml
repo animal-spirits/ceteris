@@ -499,7 +499,9 @@ source = "meti-census-manufactures"
 name = "sa-200.xls"
 optional = true
 manual = true
-url = "https://www.meti.go.jp/statistics/tyo/kougyo/library/library_1.html"
+sha256 = "4494f0446c9c63caecee8149309e88f95471d07e3232943311cca1774d639dfd"
+bytes = 921088
+url = "https://www.meti.go.jp/statistics/tyo/kougyo/library/library_1/xls/sa-200.xls"
 
 # Hansen treecover2000 (GFC-2025-v1.13), 504 10-degree tiles, 56 GB: the A02 forestry proxy (ADR 0275).
 [[file]]
