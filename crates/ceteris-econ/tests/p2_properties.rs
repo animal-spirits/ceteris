@@ -677,9 +677,8 @@ fn from_dispatch(w: &mut EconWorld, tick: u32) {
 /// from its market account (the ledger's goods arithmetic, bit for bit), the ledger's tally of
 /// destroyed goods rises by the sum of those losses and by nothing else at T3, and nothing else
 /// of that good leaves the account before dispatch. At tick 0 every stored cell expects a large
-/// fall (pi^e -10 for its order alone): where the unfloored order delta S + psi D x would sell
-/// more than the stock left after spoilage, the order sits exactly at its floor -(1 - delta) S,
-/// elsewhere above it, and at least one cell is floored. Over 120 ticks from a disturbed data
+/// fall (pi^e -10 for its order alone): its target stock is 0, so the order is the release
+/// delta S - lambda S (ADR 0278), above the floor -(1 - delta) S. Over 120 ticks from a disturbed data
 /// state every tick's invariants hold (goods identity, the market account holding S, money) and
 /// the markets end each tick with no money.
 #[test]
@@ -694,7 +693,7 @@ fn storage_conserves_goods_and_money() {
         *p *= 1.0 + 0.3 * ((i * 7 % 11) as f64 / 10.0 - 0.5);
     }
     let acc = w.layout().accounts.clone();
-    let (mut stored, mut floored) = (false, 0);
+    let (mut stored, mut released) = (false, 0);
     for tick in 0..120 {
         w.begin_tick();
         systems::deliver(&mut w);
@@ -732,14 +731,11 @@ fn storage_conserves_goods_and_money() {
             );
             let order = w.markets.storage[c];
             assert!(order >= -(s - loss), "tick {tick} cell {c}: {order}");
-            let d = w.markets.demand[c];
-            if tick == 0 && s > 0.0 && d > 0.0 {
-                // the unfloored order at this cover; oil's convenience yield (zeta 13) still
-                // holds stock where cover is short
-                let x = trade.storage_return(g, s / (trade.coverage[g] * d), -10.0);
-                let below = loss + trade.speculation[g] * d * x < -(s - loss);
-                assert_eq!(order == -(s - loss), below, "tick 0 cell {c}: {order}");
-                floored += usize::from(below);
+            if tick == 0 && s > 0.0 {
+                let release = loss - trade.storage_adjustment(g) * s;
+                assert_eq!(order, release, "tick 0 cell {c}");
+                assert!(order > -(s - loss), "tick 0 cell {c}: {order}");
+                released += 1;
             }
             stored |= order != loss;
         }
@@ -751,7 +747,7 @@ fn storage_conserves_goods_and_money() {
             assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
         }
         if tick == 0 {
-            assert!(floored > 0, "tick 0: no order at its floor");
+            assert!(released > 0, "tick 0: no stored cell with stock");
         }
     }
     assert!(stored, "no storage order beyond spoilage");

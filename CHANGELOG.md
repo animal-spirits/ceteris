@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Storage order by partial adjustment (ADR 0278; storage off by default, no golden moves)
+
+- The competitive-storage order is b = max(delta S + lambda (S* - S), -(1 - delta) S), S* = s D
+  max(0, 1 + pi^e / (zeta (k + delta))), lambda = psi zeta (k + delta) / s (Lovell 1961; owner,
+  2026-10-31), in place of ADR 0091's delta S + psi D x with the convenience yield z^-zeta.
+  lambda is derived from psi (0.144, 0.15, 0.05, 0.067 a month at the approved values); the
+  linearisation at the steady state is unchanged (`partial_adjustment_keeps_the_storage_loop`).
+  A stockout peaks below the flow-clearing price (fuels 0.057 against 0.062; 0.600 before) and a
+  market without output or buyers releases its stock instead of bidding its price up.
+  `TradeParams::storage_return` is replaced by `storage_adjustment` and `storage_target`.
+
 ### BEHAVIOUR: calibration passes settle to 1e-13 (P158, owner, 2026-10-31; B8e)
 
 - `steady::PASS_TOL` 1e-12 to 1e-13 (register P158). Stage 5's check (1e-12) compares Q, settled
