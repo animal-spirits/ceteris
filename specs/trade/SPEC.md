@@ -33,7 +33,7 @@ them only as quantities offered to and demanded from each market.
 | Component | Entity | Type | Units | Initialized from |
 |---|---|---|---|---|
 | Price p | (province, good) | `f64` | numeraire per unit | 1.0 (2000 world reference price) in the data state; the calibrated posted price in the calibrated steady state (econ SPEC, Initial state; ADR 0089) |
-| Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x initial demand; the calibrated S = s_g Q in the steady state (econ SPEC, Initial state) |
+| Inventory S | (province, traded good) | `f64`, also held in the ledger | units | s_g x the origin's own base output Y0 in the data state; the calibrated S = s_g Q in the steady state (econ SPEC, Initial state) |
 | Last demand D (orders by class at origins), last supply Q, last sales | (province, good) | `f64` | units per month | zero; the calibrated D = Q = sales in the steady state |
 | Clip ticks: ticks at which the price step clip bound | (province, good) | `u32` | ticks | zero |
 | Expected inflation pi^e and the world price index I of its last update | world | `f64` | log points per month; numeraire | 0 and the index at the initial prices (the data state's, or the calibrated steady state's) |
