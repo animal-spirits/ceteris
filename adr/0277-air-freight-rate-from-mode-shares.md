@@ -1,6 +1,6 @@
 # 0277. Air freight rate from 2000 mode shares
 
-Status: proposed (owner picks 2026-10-31: mode shares now; build now, value at the next rebuild)
+Status: accepted (owner, 2026-10-31: mode shares now; build now, value at the next rebuild; gateway sum, route choice off)
 Date: 2026-10-31
 Design sections: 5.3, 8.3 (two-level kernel), 17.1 (P04d), 21 (pre-P3, P9); amends ADR 0269
 (P04d row) and ADR 0022 (direct estimation of P04); ADRs 0017, 0092, 0247, 0257, 0264, 0271
@@ -63,7 +63,7 @@ amendment).
 
 ## Decision
 
-C (owner, 2026-10-31). Route choice over edges (ADR 0017) stays off. The shares come from the
+C (owner, 2026-10-31; the gateway-sum reading confirmed the same day). Route choice over edges (ADR 0017) stays off. The shares come from the
 kernel's gateway-pair sum, as described above.
 
 ### Moment
