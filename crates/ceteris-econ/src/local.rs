@@ -48,7 +48,9 @@ fn split(rest: f64, users: &[(f64, f64, f64)], out: &mut [f64]) {
     }
 }
 
-/// A province's enterprises as the chain sees them, by position in the province.
+/// A province's enterprises as the chain sees them, by position in the province. Built by
+/// [`Province::new`] or [`Province::from_parts`], which cache each user's floors; a province
+/// whose `cap`, `coef` or `stock` is changed afterwards needs [`Province::rebuilt`].
 #[derive(Clone, Debug)]
 pub struct Province {
     /// Output capped by capacity and traded input stocks.
@@ -60,6 +62,9 @@ pub struct Province {
     pub producer: [Option<usize>; 3],
     /// The producer's own coefficient of each local good.
     pub own: [f64; 3],
+    /// Each user's [`Province::floor`] of each local good, from `cap`, `coef` and `stock` when
+    /// the province is built.
+    floors: Vec<[f64; 3]>,
 }
 
 impl Province {
@@ -69,10 +74,9 @@ impl Province {
         let first = ents.start;
         let good = |e: usize| usize::from(inp.enterprises.good[e]);
         let producer = LOCAL.map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first));
-        Province {
-            cap: cap.to_vec(),
-            coef: ents
-                .clone()
+        Province::from_parts(
+            cap.to_vec(),
+            ents.clone()
                 .map(|e| {
                     let mut c = LOCAL.map(|k| lay.coef[e][k]);
                     if let Some(j) = LOCAL.iter().position(|&k| k == good(e)) {
@@ -81,32 +85,44 @@ impl Province {
                     c
                 })
                 .collect(),
-            stock: ents
-                .clone()
+            ents.clone()
                 .map(|e| LOCAL.map(|k| ledger.goods(lay.accounts.enterprise[e], k)))
                 .collect(),
             producer,
-            own: std::array::from_fn(|j| {
-                producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])
-            }),
+            std::array::from_fn(|j| producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])),
+        )
+    }
+
+    /// A province from its enterprises' capped outputs, local coefficients and stocks, the
+    /// producer of each local good and its own coefficient.
+    pub fn from_parts(
+        cap: Vec<f64>,
+        coef: Vec<[f64; 3]>,
+        stock: Vec<[f64; 3]>,
+        producer: [Option<usize>; 3],
+        own: [f64; 3],
+    ) -> Self {
+        let floors = (0..cap.len())
+            .map(|u| std::array::from_fn(|j| floor_of(cap[u], coef[u][j], stock[u][j])))
+            .collect();
+        Province {
+            cap,
+            coef,
+            stock,
+            producer,
+            own,
+            floors,
         }
     }
 
-    /// The share s of user `u`'s need of good j at capacity that its stock covers, in [0, 1]
-    /// (1 where the stock covers all of it, or the need is 0). Rounded down until the need at
-    /// output cap s, as [`Province::users`] evaluates it, is at most the stock, so that at fill
-    /// 0 the user's uncovered need is exactly 0.
+    /// The province with its floors recomputed, after `cap`, `coef` or `stock` changed.
+    pub fn rebuilt(self) -> Self {
+        Province::from_parts(self.cap, self.coef, self.stock, self.producer, self.own)
+    }
+
+    /// The share s of user `u`'s need of good j at capacity that its stock covers ([`floor_of`]).
     fn floor(&self, u: usize, j: usize) -> f64 {
-        let (coef, cap) = (self.coef[u][j], self.cap[u]);
-        let b = self.stock[u][j];
-        if b >= coef * cap {
-            return 1.0;
-        }
-        let mut s = b / (coef * cap);
-        while s > 0.0 && coef * (cap * s) > b {
-            s = s.next_down();
-        }
-        s
+        self.floors[u][j]
     }
 
     /// User `u`'s level of good j at fill x, G = s + (1 - s) x with s its [`Province::floor`]:
@@ -225,6 +241,21 @@ impl Province {
         let (uncovered, rest) = self.balance(j, f, y, users);
         uncovered <= rest
     }
+}
+
+/// The share s of a user's need of a good at capacity, coef cap, that its stock b covers, in
+/// [0, 1] (1 where the stock covers all of it, or the need is 0). Rounded down until the need at
+/// output cap s, as [`Province::users`] evaluates it, is at most the stock, so that at fill 0 the
+/// user's uncovered need is exactly 0.
+fn floor_of(cap: f64, coef: f64, b: f64) -> f64 {
+    if b >= coef * cap {
+        return 1.0;
+    }
+    let mut s = b / (coef * cap);
+    while s > 0.0 && coef * (cap * s) > b {
+        s = s.next_down();
+    }
+    s
 }
 
 /// Working buffers of [`fills`].
@@ -1169,8 +1200,8 @@ mod tests {
     /// 2e14 steps (over 40 minutes).
     fn flat_piece_province() -> Province {
         let b = f64::from_bits;
-        Province {
-            cap: vec![
+        Province::from_parts(
+            vec![
                 b(0x412ca1b14416c37a),
                 b(0x0),
                 b(0x0),
@@ -1180,7 +1211,7 @@ mod tests {
                 b(0x0),
                 b(0x41843e5a458416d9),
             ],
-            coef: vec![
+            vec![
                 [
                     b(0x3f85a6f0b9b3de98),
                     b(0x3f7e92ae222c96b8),
@@ -1210,7 +1241,7 @@ mod tests {
                 [b(0x3f6e4a140d81724a), b(0x0), b(0x3fc4d72654a714d9)],
                 [b(0x3f890a0d967c814b), b(0x3f8e3b0f260305de), b(0x0)],
             ],
-            stock: vec![
+            vec![
                 [
                     b(0x40d421b1e80faeb2),
                     b(0x40f18cd85b25b322),
@@ -1252,13 +1283,13 @@ mod tests {
                     b(0x41a0c1d444f73464),
                 ],
             ],
-            producer: [Some(5), Some(6), Some(7)],
-            own: [
+            [Some(5), Some(6), Some(7)],
+            [
                 b(0x3fb5c42c41795521),
                 b(0x3fbbac4c897bd664),
                 b(0x3fcf61ba23120be3),
             ],
-        }
+        )
     }
 
     /// Construction and services inputs of each other at a loop gain of 0.995 per pass, and a
@@ -1269,13 +1300,13 @@ mod tests {
     /// checks (1,088 and 2,112 cycles). Before the stock floor (ADR 0093, amendment of
     /// 2026-10-30) the kink was the third user's own stock covering its need below fill 1e-3.
     fn slow_fall_province() -> Province {
-        Province {
-            cap: vec![1.0, 1.0, 1.0],
-            coef: vec![[0.0, 0.0, 0.5], [0.0, 0.50151, 0.0], [0.001, 0.001, 0.0]],
-            stock: vec![[0.0; 3], [0.0; 3], [1e-6, 0.0, 0.0]],
-            producer: [None, Some(0), Some(1)],
-            own: [0.0, 0.5, 0.5],
-        }
+        Province::from_parts(
+            vec![1.0, 1.0, 1.0],
+            vec![[0.0, 0.0, 0.5], [0.0, 0.50151, 0.0], [0.001, 0.001, 0.0]],
+            vec![[0.0; 3], [0.0; 3], [1e-6, 0.0, 0.0]],
+            [None, Some(0), Some(1)],
+            [0.0, 0.5, 0.5],
+        )
     }
 
     /// `Jump::Ahead` ends after the last whole cycle on the cycle's pieces: one more cycle from
@@ -1314,9 +1345,9 @@ mod tests {
     #[test]
     fn stock_is_a_floor_under_the_fill() {
         let c = 0.1;
-        let p = Province {
-            cap: vec![0.0, 10.0, 10.0, 10.0, 100.0, 100.0],
-            coef: vec![
+        let p = Province::from_parts(
+            vec![0.0, 10.0, 10.0, 10.0, 100.0, 100.0],
+            vec![
                 [0.0, c, c],
                 [c, c, c],
                 [c, 0.0, 0.0],
@@ -1324,7 +1355,7 @@ mod tests {
                 [0.0; 3],
                 [0.0; 3],
             ],
-            stock: vec![
+            vec![
                 [0.0; 3],
                 [2.0, 2.0, 2.0],
                 [0.5, 0.0, 0.0],
@@ -1332,9 +1363,9 @@ mod tests {
                 [0.0; 3],
                 [0.0; 3],
             ],
-            producer: [Some(0), Some(4), Some(5)],
-            own: [0.0; 3],
-        };
+            [Some(0), Some(4), Some(5)],
+            [0.0; 3],
+        );
         let out = fills(&p);
         assert_eq!(out.fills, [0.0, 1.0, 1.0], "{out:?}");
         let mut y = Vec::new();
@@ -1368,18 +1399,18 @@ mod tests {
         let d = 1.0 - a7 * (1.0 - s8);
         let b = 0.5 + a8 * (1.0 - s8);
         let cap1 = (1.0 - eps) * b / 1.6;
-        let p = Province {
-            cap: vec![1.0, cap1, 1.0, 1.0],
-            coef: vec![
+        let p = Province::from_parts(
+            vec![1.0, cap1, 1.0, 1.0],
+            vec![
                 [0.0, 0.5, 0.0],
                 [1.0, 0.0, 0.0],
                 [d / 1.6 - cap1, 0.0, 0.0],
                 [a7, a8, 0.0],
             ],
-            stock: vec![[0.0; 3], [0.0; 3], [0.0; 3], [s7 * a7, s8 * a8, 0.0]],
-            producer: [Some(0), Some(1), None],
-            own: [0.0; 3],
-        };
+            vec![[0.0; 3], [0.0; 3], [0.0; 3], [s7 * a7, s8 * a8, 0.0]],
+            [Some(0), Some(1), None],
+            [0.0; 3],
+        );
         let cover = (s7 - s8) / (1.0 - s8);
         // the second pass's fixed point, off its pieces
         let mut w = Work::default();
