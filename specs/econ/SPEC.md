@@ -1229,7 +1229,15 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
     5.974e-5; bound 0.9843; reference residual 1.238e-12; 0 of 37,334 cells outside J2). V1
     from the data state misses (price 1.31e3, wage 1.32e3), all of it Pitcairn (province 2892,
     local goods 7 to 9; pop money 8.9e3 to 7.8e7 by tick 60, its wage 601 to 4.3e6 by tick 240 at
-    fixed employment, falling to 8.6e5 by tick 1,200); without Pitcairn the worst is Uganda good
+    fixed employment, falling to 8.6e5 by tick 1,200). The money is the data state's merchant
+    stocks (Initial state: coverage times initial demand): at prices 1 every active origin
+    draws world orders by the kernel alone, so Pitcairn's market starts with 5.209e8 units of
+    traded goods 0 to 6 against a pop money of 8.85e3; the world buys them at tick 1 (TRADE into
+    the market, 5.2087e8 at price 1) and E4 pays the market's cash flow to its pops (DIVIDEND),
+    58,800 times their money. Money and goods are conserved (the stocks are created at load,
+    before the first tick), so no invariant sees it; the other small territories carry the same
+    start (Western Sahara 10,100 times, Indian Ocean Territories 5,600, Niue 4,600) and keep less
+    of it (B8d); without Pitcairn the worst is Uganda good
     9, 0.897 (0.83 on the old pack), then Sierra Leone 0.629, North Macedonia 0.532 (its wage at
     0), Albania 0.368. Neither cap drives it: with the block limits off 1.36e3, with both caps off
     1.38e3 (France then 6.9). H2 distance -0.4539 (s.e. 0.0105, pseudo-R2 0.964), reported (ADR
@@ -1393,6 +1401,14 @@ texture fed from core columns.
   per tick and the largest pop balance 1.4e10, so single sale entries bind at a uniform scale of
   about 1.3e4 and pop money at about 6.5e4 (`nominal_scale_beyond_the_ledger_fails_loudly`: on the
   fixture too a payment fails first). The currency scale is a P5 decision (core SPEC, Money scale).
+- Stage 5 on the full pack (B8d, open): `stage5_state_is_stationary_under_the_stock_rules`
+  misses its 1e-12 on merchant stock and supply, S* = coverage D and Q = D (81 of 24,230 cells,
+  worst 1.34e-12, province 2436 good 3; the first failing cell 1.12e-12). It is not rounding:
+  Q is the settled output and D the orders at the settled prices from the spending the last
+  pass's values give, which moved by up to the pass change (3.55e-13 at pass 68, PASS_TOL
+  1e-12), and D carries that change about four times. With PASS_TOL 1e-13 (settled at pass 71,
+  change 8.3e-14) the worst cell is 5.25e-13 and the check passes. The tolerance is unchanged;
+  whether to tighten PASS_TOL or derive the check's bound from the pass tolerance is open.
 
 ## Changes for the next design-doc snapshot
 
