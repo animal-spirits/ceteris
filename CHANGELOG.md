@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed: the pack's steady-state money tolerance scales with income (P156)
+
+- `p2_steady_state.rs`: pop income and money hold to max(4 minor units, 2e-6 y_k) on the full
+  pack, y_k the pop's steady monthly income (was 2e-6 of the quantity itself; owner approval
+  2026-10-30T23:19Z, DESIGN 17 P156). The fixture keeps 1e-9 relative. On the k263 scratch pack
+  (format 7) pop money reads 0.511 of its tolerance (1.130 under the old rule); pop income 0.734
+  under both.
+
 ### BEHAVIOUR: price gain capped per coupled block of commodity markets (ADR 0267)
 
 - Each country's traded cells are linearized together at the calibrated steady state: cross-price

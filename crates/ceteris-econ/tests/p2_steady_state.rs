@@ -8,9 +8,14 @@
 //! form, ADR 0089 As built): on the fixture every quantity holds to 1e-9 relative. On the full
 //! pack money is integer minor units (1e-4 USD), and national dividends and domestic trade
 //! carry each pop's rounding through its country, so prices and flows hold to 2e-6 relative,
-//! money (pop income and balances, which drift as real drift times income) to 2e-6 relative or
-//! 4 minor units per pop, whichever is larger, and world aggregates (price index, income,
-//! unemployment) to 1e-9. Every quantity's
+//! money (pop income and balances) to 2e-6 of the pop's steady monthly income or 4 minor units,
+//! whichever is larger (P156), and world aggregates (price index, income, unemployment) to
+//! 1e-9. A balance's error accumulates from one tick's flows through it, wage, dividends and
+//! rebates in and spending out, each carrying the relative error eps of the real drift:
+//! |dm| <= eps (W + Div + Reb + S) ~ 2 eps y, y the monthly income. A tolerance relative to the
+//! balance itself reads that error against the non-wage share of income only (0.22 in Albania,
+//! 0.32 in Pitcairn), so it scales with income y_k; the factor 2 is not taken, and 2e-6 y_k is
+//! kept as the conservative bound (owner approval 2026-10-30). Every quantity's
 //! drift stays bounded: its largest value over the second half of the run, scaled by its
 //! tolerance, is at most twice that over ticks 5 to the half (ticks 1 to 4, where prices and
 //! wages settle onto the rounding lattice, left out). The fixture's rounding drift peaks near
@@ -66,6 +71,8 @@ struct Tolerance {
     money: f64,
     minor: f64,
     world: f64,
+    /// Money relative to the pop's steady monthly income (P156) instead of the quantity itself.
+    money_of_income: bool,
 }
 
 /// Every quantity at 1e-9 relative (the fixture).
@@ -74,12 +81,14 @@ const FIXTURE: Tolerance = Tolerance {
     money: EXACT,
     minor: 0.0,
     world: EXACT,
+    money_of_income: false,
 };
 const PACK: Tolerance = Tolerance {
     real: PACK_RELATIVE,
     money: PACK_RELATIVE,
     minor: PACK_MINOR,
     world: EXACT,
+    money_of_income: true,
 };
 
 /// A drift over its tolerance; no drift is 0 even where the tolerance is 0 (a zero balance
@@ -223,7 +232,14 @@ fn run(inputs: EconInputs, ticks: u32, tol: Tolerance, what: &str) -> Vec<Record
                 let scaled = match kind {
                     Kind::Real => over(relative, tol.real),
                     Kind::World => over(relative, tol.world),
-                    Kind::Money => over(minor, tol.minor.max(tol.money * b.abs() * MINOR_PER_UNIT)),
+                    Kind::Money => {
+                        let of = if tol.money_of_income {
+                            steady.income[entry]
+                        } else {
+                            b
+                        };
+                        over(minor, tol.minor.max(tol.money * of.abs() * MINOR_PER_UNIT))
+                    }
                 };
                 if relative > r.relative {
                     (r.relative, r.tick, r.entry) = (relative, tick, entry);
