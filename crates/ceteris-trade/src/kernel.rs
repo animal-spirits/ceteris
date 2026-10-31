@@ -10,7 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rayon::prelude::*;
 
-use crate::goods::{N_GOODS, TRADED, tariff_group};
+use ceteris_core::rows::Rows;
+
+use crate::goods::Goods;
 use crate::network::{Leg, Network, Wedges};
 use crate::params::TradeParams;
 
@@ -148,8 +150,8 @@ pub struct Kernel {
     /// P01 per good times P150, as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
     /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
     /// (ADR 0018).
-    theta: [f64; N_GOODS],
-    goods: [Option<GoodKernel>; N_GOODS],
+    theta: Vec<f64>,
+    goods: Vec<Option<GoodKernel>>,
     /// Crossings by destination gateway and access legs by gateway, the same for every good:
     /// all goods share the network's legs and their order.
     crossings_by_target: ByColumn,
@@ -249,16 +251,16 @@ impl Access {
 }
 
 impl Kernel {
-    /// `weight` is tonnes per unit of value per good. Panics on legs that break the
-    /// [`Network`] contract. Tariffs are looked up with the country count implied by `wedges`.
-    pub fn build(
-        net: &Network,
-        weight: &[f64; N_GOODS],
-        wedges: &Wedges,
-        p: &TradeParams,
-    ) -> Kernel {
+    /// `weight` is tonnes per unit of value per good of `p.goods`. Panics on legs that break
+    /// the [`Network`] contract, and on parameters or weights not sized to the goods. Tariffs
+    /// are looked up with the country count implied by `wedges`.
+    pub fn build(net: &Network, weight: &[f64], wedges: &Wedges, p: &TradeParams) -> Kernel {
+        if let Err(e) = p.check_goods() {
+            panic!("{e}");
+        }
+        assert_eq!(weight.len(), p.goods.n(), "weight per good");
         let (np, ng) = (net.n_provinces(), net.n_gateways());
-        validate(net, np, ng);
+        validate(net, np, ng, &p.goods);
         let (want, built) = (
             p.bulk_rate(),
             net.bulk.as_ref().map(|b| (b.classes, b.sea, b.port)),
@@ -287,11 +289,14 @@ impl Kernel {
             .chain(&net.gateway_country)
             .max()
             .map_or(0, |&c| usize::from(c) + 1);
-        let theta = p.theta.map(|t| t * p.theta_scale);
-        let goods = std::array::from_fn(|g| {
-            TRADED[g]
-                .then(|| good_kernel(net, np, ng, n_countries, g, weight[g], theta[g], wedges, p))
-        });
+        let theta: Vec<f64> = p.theta.iter().map(|t| t * p.theta_scale).collect();
+        let goods: Vec<Option<GoodKernel>> = (0..p.goods.n())
+            .map(|g| {
+                p.goods.is_traded(g).then(|| {
+                    good_kernel(net, np, ng, n_countries, g, weight[g], theta[g], wedges, p)
+                })
+            })
+            .collect();
         let first: Option<&GoodKernel> = goods.iter().flatten().next();
         let (crossings_by_target, access_by_gateway, domestic_by_destination) =
             first.map_or_else(Default::default, |gk| {
@@ -335,6 +340,11 @@ impl Kernel {
 
     pub fn gateway_country(&self) -> &[u16] {
         &self.gateway_country
+    }
+
+    /// Goods the kernel was built for, traded and local.
+    pub fn n_goods(&self) -> usize {
+        self.theta.len()
     }
 
     /// P01 of good `g` times P150, as the kernel of `g` was built with.
@@ -477,7 +487,7 @@ impl Kernel {
     }
 }
 
-fn validate(net: &Network, np: usize, ng: usize) {
+fn validate(net: &Network, np: usize, ng: usize, goods: &Goods) {
     assert_eq!(
         net.gateway_mass.len(),
         ng,
@@ -583,7 +593,7 @@ fn validate(net: &Network, np: usize, ng: usize) {
                 hours.len()
             );
             for (i, (t, h)) in taus.iter().zip(hours).enumerate() {
-                for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+                for g in goods.traded_goods() {
                     // t >= 1 also rejects NaN; below 1 a leg would create goods
                     assert!(
                         t[g] >= 1.0,
@@ -622,7 +632,7 @@ fn good_kernel(
         _ => (&net.domestic, &net.access, &net.crossings),
     };
     let k_of = |total: f64| libm::pow(total, -theta);
-    let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
+    let plain = |taus: Option<&Rows<f64>>, i: usize, l: &Leg| {
         let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
         Entry {
             col: l.to,
@@ -630,7 +640,7 @@ fn good_kernel(
             inv_tau: 1.0 / tau,
         }
     };
-    let group = tariff_group(g);
+    let group = p.goods.tariff_group(g);
     let border_tau = 1.0 + p.border_nu_of(g);
     let mass = &net.gateway_mass;
     let crossing = |i: usize, l: &Leg| {
@@ -669,9 +679,11 @@ fn good_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::goods::{N_GOODS, tariff_group};
+    use crate::goods::Goods;
+    use crate::goods::p2::{N as N_GOODS, TRADED};
     use crate::network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
     use crate::params::TradeParams;
+    use ceteris_core::rows::Rows;
 
     const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
 
@@ -857,7 +869,7 @@ mod tests {
         let bulk = net.bulk.as_ref().unwrap();
         let wedges = Wedges::none(2);
         let k = Kernel::build(&net, &W, &wedges, &p);
-        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+        for g in 0..TRADED {
             let on = p.theta_class[g] == 3;
             let pick = |b: &Vec<Leg>, n: &Vec<Leg>| if on { b.clone() } else { n.clone() };
             let gk = k.good(g);
@@ -893,7 +905,7 @@ mod tests {
             Kernel::build(&base, &W, &wedges, &TradeParams::default().bulk_off()),
             Kernel::build(&same, &W, &wedges, &p),
         );
-        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+        for g in 0..TRADED {
             assert_eq!(a.good(g).crossings.entries, b.good(g).crossings.entries);
             assert_eq!(a.good(g).domestic.entries, b.good(g).domestic.entries);
             assert_eq!(a.good(g).access.entries, b.good(g).access.entries);
@@ -962,12 +974,12 @@ mod tests {
     #[test]
     fn border_nu_follows_the_good() {
         let p = TradeParams {
-            border_nu: [0.1, 0.25, 0.5, 2.0, 0.75, 1.5, 0.05, 0.3, 0.3, 0.3],
+            border_nu: vec![0.1, 0.25, 0.5, 2.0, 0.75, 1.5, 0.05, 0.3, 0.3, 0.3],
             ..TradeParams::default().bulk_off()
         };
         let net = world(&mut Rng(9));
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
-        for g in (0..N_GOODS).filter(|&g| crate::goods::TRADED[g]) {
+        for g in 0..TRADED {
             let nu = 1.0 + p.border_nu[g];
             for l in &net.crossings {
                 let e = crossing(&k.good(g).crossings, l);
@@ -994,7 +1006,7 @@ mod tests {
             Kernel::build(&net, &W, &wedges, &scaled),
             Kernel::build(&net, &W, &wedges, &multiplied),
         );
-        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+        for g in 0..TRADED {
             assert_eq!(a.theta(g).to_bits(), b.theta(g).to_bits(), "good {g}");
             let (ga, gb) = (a.good(g), b.good(g));
             assert_eq!(ga.domestic.entries, gb.domestic.entries, "good {g}");
@@ -1095,7 +1107,7 @@ mod tests {
         assert!(close(e.inv_duty, 1.0 / (1.0 + f64::from(0.40f32))));
         // good 4 in the same direction carries no tariff
         assert_eq!(k.good(4).crossings.row(1)[0].inv_duty, 1.0);
-        assert_eq!(tariff_group(4), 1);
+        assert_eq!(Goods::p2().tariff_group(4), 1);
 
         // forced lags change nothing but the lags
         let mut forced = k.clone();
@@ -1117,15 +1129,25 @@ mod tests {
         let mut net = world(&mut Rng(11));
         let least = Kernel::build(&net, &W, &Wedges::none(2), &p);
         // per-good factors unrelated to the least-cost legs; hours give lags 0 to 3
-        let taus = |n: usize, base: f64| -> Vec<[f64; N_GOODS]> {
-            (0..n)
-                .map(|i| std::array::from_fn(|g| base + 0.01 * i as f64 + 0.1 * g as f64))
-                .collect()
+        let taus = |n: usize, base: f64| -> Rows<f64> {
+            Rows::from_rows(
+                N_GOODS,
+                (0..n).map(|i| {
+                    (0..N_GOODS)
+                        .map(|g| base + 0.01 * i as f64 + 0.1 * g as f64)
+                        .collect::<Vec<_>>()
+                }),
+            )
         };
-        let hours = |n: usize| -> Vec<[f64; N_GOODS]> {
-            (0..n)
-                .map(|i| std::array::from_fn(|g| 730.0 * ((i + g) % 4) as f64))
-                .collect()
+        let hours = |n: usize| -> Rows<f64> {
+            Rows::from_rows(
+                N_GOODS,
+                (0..n).map(|i| {
+                    (0..N_GOODS)
+                        .map(|g| 730.0 * ((i + g) % 4) as f64)
+                        .collect::<Vec<_>>()
+                }),
+            )
         };
         let (nd, na, nc) = (net.domestic.len(), net.access.len(), net.crossings.len());
         let rt = LegTaus {
@@ -1174,8 +1196,8 @@ mod tests {
     fn route_taus_below_one_are_rejected() {
         let mut net = two_provinces(10.0, 10.0);
         net.route_taus = Some(LegTaus {
-            domestic: vec![[0.9; N_GOODS]; 2],
-            domestic_hours: vec![[1.0; N_GOODS]; 2],
+            domestic: Rows::filled(2, N_GOODS, 0.9),
+            domestic_hours: Rows::filled(2, N_GOODS, 1.0),
             ..LegTaus::default()
         });
         Kernel::build(
@@ -1263,7 +1285,11 @@ mod tests {
                                             .iter()
                                             .find(|l| (l.from, l.to) == (d as u32, b as u32))
                                             .unwrap();
-                                        let t = f64::from(wedges.rate(cb, ca, tariff_group(g)));
+                                        let t = f64::from(wedges.rate(
+                                            cb,
+                                            ca,
+                                            Goods::p2().tariff_group(g),
+                                        ));
                                         let m = net.gateway_mass[a] * net.gateway_mass[b];
                                         s += leg_k(&p, g, oa, 1.0)
                                             * m
@@ -1306,11 +1332,11 @@ mod tests {
         // tau 1e4 at theta 64.85: tau^-theta is about 4e-260, below f32 and far below what an
         // f32 ln K resolves to 1e-7 (1.5e-5)
         let p = TradeParams {
-            theta: [64.85; N_GOODS],
+            theta: vec![64.85; N_GOODS],
             ..TradeParams::default().bulk_off()
         };
         let mut net = world(&mut Rng(3));
-        let taus = |n: usize| vec![[1e4; N_GOODS]; n];
+        let taus = |n: usize| Rows::filled(n, N_GOODS, 1e4);
         net.route_taus = Some(LegTaus {
             domestic: taus(net.domestic.len()),
             access: taus(net.access.len()),
@@ -1346,24 +1372,23 @@ mod tests {
         // stays in its own scale, and the closed crossings add nothing, not 0 times infinity
         let mut net = world(&mut Rng(9));
         let n = |legs: &Vec<Leg>| legs.len();
-        let closed: Vec<[f64; N_GOODS]> = net
-            .crossings
-            .iter()
-            .map(|l| {
+        let closed = Rows::from_rows(
+            N_GOODS,
+            net.crossings.iter().map(|l| {
                 [if net.gateway_country[l.from as usize] == 0 {
                     f64::INFINITY
                 } else {
                     1.5
                 }; N_GOODS]
-            })
-            .collect();
+            }),
+        );
         net.route_taus = Some(LegTaus {
-            domestic: vec![[1.2; N_GOODS]; n(&net.domestic)],
-            access: vec![[1.1; N_GOODS]; n(&net.access)],
+            domestic: Rows::filled(n(&net.domestic), N_GOODS, 1.2),
+            access: Rows::filled(n(&net.access), N_GOODS, 1.1),
             crossings: closed,
-            domestic_hours: vec![[0.0; N_GOODS]; n(&net.domestic)],
-            access_hours: vec![[0.0; N_GOODS]; n(&net.access)],
-            crossing_hours: vec![[0.0; N_GOODS]; n(&net.crossings)],
+            domestic_hours: Rows::filled(n(&net.domestic), N_GOODS, 0.0),
+            access_hours: Rows::filled(n(&net.access), N_GOODS, 0.0),
+            crossing_hours: Rows::filled(n(&net.crossings), N_GOODS, 0.0),
         });
         let k = Kernel::build(
             &net,

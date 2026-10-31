@@ -691,7 +691,8 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::goods::{N_GOODS, tariff_group};
+    use crate::goods::Goods;
+    use crate::goods::p2::N as N_GOODS;
     use crate::network::{Leg, Network, Wedges};
     use crate::params::TradeParams;
     use proptest::prelude::*;
@@ -797,7 +798,7 @@ mod tests {
     /// Kernel at `theta` for every good.
     fn kernel_at(net: &Network, wedges: &Wedges, theta: f64) -> Kernel {
         let p = TradeParams {
-            theta: [theta; N_GOODS],
+            theta: vec![theta; N_GOODS],
             ..TradeParams::default().bulk_off()
         };
         Kernel::build(net, &W, wedges, &p)
@@ -868,7 +869,8 @@ mod tests {
                     continue;
                 };
                 let ab = find(&net.crossings, a, b);
-                let t = f64::from(wedges.rate(cd as usize, co as usize, tariff_group(g)));
+                let t =
+                    f64::from(wedges.rate(cd as usize, co as usize, Goods::p2().tariff_group(g)));
                 let m = net.gateway_mass[a] * net.gateway_mass[b];
                 hs.push(Hop {
                     k: k_leg(g, &oa, 1.0, theta)
@@ -890,7 +892,7 @@ mod tests {
         if co == cd {
             0.0
         } else {
-            f64::from(wedges.rate(cd as usize, co as usize, tariff_group(g)))
+            f64::from(wedges.rate(cd as usize, co as usize, Goods::p2().tariff_group(g)))
         }
     }
 

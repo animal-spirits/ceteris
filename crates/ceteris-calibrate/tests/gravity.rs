@@ -744,7 +744,8 @@ fn bulk_class_country_costs_match_the_kernel() {
         gateway_country: vec![0, 1],
         province_country: vec![0, 0, 1],
         n_countries: 2,
-        va: vec![[1.0; 10]; 3],
+        va: ceteris_core::rows::Rows::filled(3, 10, 1.0),
+        traded: 7,
     };
     let trade = TradeParams::default();
     let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
