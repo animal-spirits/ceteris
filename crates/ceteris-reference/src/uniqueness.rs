@@ -218,3 +218,27 @@ pub fn v1_mode(bound: f64) -> V1Mode {
         V1Mode::Report
     }
 }
+
+/// A run's one-market price loops (trade SPEC, Stability region): per cell (P, G) the price gain
+/// kappa_cell the run moves the market by (ADRs 0263, 0267) and the market's J at the run's
+/// employment speed, E + eta eps / (2 - eta).
+pub struct Gains {
+    pub kappa: Mat,
+    pub j: Mat,
+}
+
+/// The active cells (province, good) outside the one-market region J2 at the run's gains,
+/// kappa_cell J >= 2: there the market's own price step does not contract, the equilibrium is
+/// not an attractor of the rule, and V1's tolerances do not apply. Under the per-market cap
+/// kappa_cell J <= 2 m with m < 1 (P03d), so a run of the calibrated rule has none.
+pub fn cells_outside_region(inp: &Inputs, gains: &Gains) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for p in 0..inp.n_provinces() {
+        for g in (0..inp.n_goods()).filter(|&g| inp.active[p][g]) {
+            if gains.kappa[(p, g)] * gains.j[(p, g)] >= 2.0 {
+                out.push((p, g));
+            }
+        }
+    }
+    out
+}

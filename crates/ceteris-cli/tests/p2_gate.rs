@@ -27,6 +27,7 @@ use arrow_cast::cast;
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
 use ceteris_calibrate::write;
+use ceteris_econ::{EconInputs, EconParams};
 use ceteris_pack::fetch;
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
@@ -34,7 +35,7 @@ use ceteris_reference::io::{self, Inputs, Mat, pairwise_sum};
 use ceteris_reference::model::{self, Model, max_abs};
 use ceteris_reference::ppml::{self, GravityTable, RunFlows};
 use ceteris_reference::solve::{self, Equilibrium, Info};
-use ceteris_reference::uniqueness::{self, V1Mode};
+use ceteris_reference::uniqueness::{self, Gains, V1Mode};
 
 const TICKS: u32 = 1200;
 const HISTORY_EVERY: u32 = 12;
@@ -186,6 +187,7 @@ fn worst(dev: &[f64], label: impl Fn(usize) -> String) -> (f64, String) {
 struct Gaps {
     index: f64,
     price: (f64, String),
+    excluded: CellGaps,
     wage: (f64, String),
     flow_value: (f64, String),
     flow_units: (f64, String),
@@ -195,10 +197,67 @@ struct Gaps {
     negative_money_pops: f64,
 }
 
+/// The frictionless run's one-market loops (`uniqueness::Gains`): each cell's price gain and J
+/// at eta 1, from the calibration's market elasticities (ADRs 0263, 0267).
+fn frictionless_gains(inputs: &EconInputs) -> Gains {
+    let m = inputs
+        .market_elasticity
+        .as_ref()
+        .expect("a calibration with market elasticities");
+    let (params, trade) = (EconParams::frictionless(), inputs.trade_params());
+    let n_g = ceteris_trade::N_GOODS;
+    let at =
+        |f: &dyn Fn(usize) -> f64| Mat::from_fn(inputs.n_provinces(), n_g, |p, g| f(p * n_g + g));
+    Gains {
+        kappa: at(&|i| m.price_gain(i, &params, &trade)),
+        j: at(&|i| m.j(i, params.eta, &trade)),
+    }
+}
+
+/// The calibrated pack's frictionless gains.
+fn pack_gains() -> &'static Gains {
+    static GAINS: OnceLock<Gains> = OnceLock::new();
+    GAINS.get_or_init(|| {
+        let pack = pack();
+        let graph =
+            ceteris_geo::pack::Pack::load(&pack, &ceteris_geo::graph::TransportParams::default())
+                .unwrap();
+        frictionless_gains(&EconInputs::from_pack(&graph, &pack).unwrap())
+    })
+}
+
+/// The price gap of each listed cell (province, good).
+type CellGaps = Vec<((usize, usize), f64)>;
+
+/// The largest price gap over the active cells `cells` (`p * G + g`) not in `excluded`, with its
+/// cell, and the gap of every excluded cell: `price` over `index` against `want`.
+fn price_gaps(
+    price: &[f64],
+    index: f64,
+    want: &[f64],
+    cells: &[usize],
+    n_g: usize,
+    excluded: &[(usize, usize)],
+) -> ((f64, String), CellGaps) {
+    let gap = |c: usize| (price[c] / index / want[c] - 1.0).abs();
+    let out = |c: usize| excluded.contains(&(c / n_g, c % n_g));
+    let kept: Vec<usize> = cells.iter().copied().filter(|&c| !out(c)).collect();
+    let dev: Vec<f64> = kept.iter().map(|&c| gap(c)).collect();
+    let worst_gap = worst(&dev, |i| {
+        format!("province {} good {}", kept[i] / n_g, kept[i] % n_g)
+    });
+    let gaps_out = excluded
+        .iter()
+        .map(|&(p, g)| ((p, g), gap(p * n_g + g)))
+        .collect();
+    (worst_gap, gaps_out)
+}
+
 /// V1's largest gaps at the final tick, prices and wages over the world price index, flows of
 /// the last 12 ticks with flow values over the index; and the path of the largest price gap per
-/// history row.
-fn gaps(out: &Path, r: &Reference) -> Gaps {
+/// history row. Prices skip the cells in `excluded`, outside one-market J2 at the run's gains,
+/// whose gaps are returned instead.
+fn gaps(out: &Path, r: &Reference, excluded: &[(usize, usize)]) -> Gaps {
     let (inp, eq) = (&r.inputs, &r.eq);
     let world = table(&out.join("run_history_world.arrow"));
     let levels = column(&world, "world_price_index");
@@ -206,13 +265,8 @@ fn gaps(out: &Path, r: &Reference) -> Gaps {
     let n_g = inp.n_goods();
     let price = column(&table(&out.join("run_prices.arrow")), "price");
     let cells = inp.active_cells();
-    let dev: Vec<f64> = cells
-        .iter()
-        .map(|&c| (price[c] / index / eq.price.data[c] - 1.0).abs())
-        .collect();
-    let price_gap = worst(&dev, |i| {
-        format!("province {} good {}", cells[i] / n_g, cells[i] % n_g)
-    });
+    let (price_gap, excluded_gaps) =
+        price_gaps(&price, index, &eq.price.data, &cells, n_g, excluded);
     let wage = column(&table(&out.join("run_wages.arrow")), "wage");
     let dev: Vec<f64> = wage
         .iter()
@@ -273,6 +327,7 @@ fn gaps(out: &Path, r: &Reference) -> Gaps {
                 .collect();
             let dev: Vec<f64> = cells
                 .iter()
+                .filter(|&&c| !excluded.contains(&(c / n_g, c % n_g)))
                 .map(|&c| (p[c] / level / eq.price.data[c] - 1.0).abs())
                 .collect();
             (t as u64, max_abs(&dev))
@@ -281,6 +336,7 @@ fn gaps(out: &Path, r: &Reference) -> Gaps {
     Gaps {
         index,
         price: price_gap,
+        excluded: excluded_gaps,
         wage: wage_gap,
         flow_value,
         flow_units,
@@ -296,8 +352,10 @@ fn gaps(out: &Path, r: &Reference) -> Gaps {
 /// V1 (SPEC, P2 gate) from `start`: the uniqueness bound at the pack's thetas and value-added
 /// shares picks the mode; the frictionless run of 1,200 ticks is then compared with the
 /// reference: in tolerance mode every price and wage (index-normalized) and every flow above
-/// 1e-6 of world trade within 1%, in report mode the gaps are printed instead. Whether V1 holds,
-/// and the summary.
+/// 1e-6 of world trade within 1%, in report mode the gaps are printed instead. Prices leave out
+/// the cells outside one-market J2 at the run's gains (`uniqueness::cells_outside_region`),
+/// printed with their gaps; more than 1% of the active cells excluded fails V1. Whether V1
+/// holds, and the summary.
 fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
     let bound = uniqueness::spectral_bound(
         &r.inputs.theta,
@@ -307,9 +365,11 @@ fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
     )
     .unwrap();
     let mode = uniqueness::v1_mode(bound);
+    let excluded = uniqueness::cells_outside_region(&r.inputs, pack_gains());
+    let active = r.inputs.active_cells().len();
     let tmp = tempfile::tempdir().unwrap();
     let stdout = run(tmp.path(), flags);
-    let g = gaps(tmp.path(), r);
+    let g = gaps(tmp.path(), r, &excluded);
     let step = (120 / HISTORY_EVERY) as usize;
     let path: Vec<String> = g
         .path
@@ -330,7 +390,7 @@ fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
         "V1 from {start} ({perturbation}): bound {bound:.4}, {mode_name} mode; at tick {TICKS} \
          price {:.3e} ({}), wage {:.3e} ({}), flow units {:.3e} ({}), flow value {:.3e} ({}); \
          {} flows compared, {} missing; world price index {}; most pops with negative money {}; \
-         largest price gap every 120 ticks: {}",
+         cells outside J2 excluded {} of {active} ({:?}); largest price gap every 120 ticks: {}",
         g.price.0,
         g.price.1,
         g.wage.0,
@@ -343,15 +403,49 @@ fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
         g.flows_missing,
         g.index,
         g.negative_money_pops,
+        g.excluded.len(),
+        g.excluded,
         path.join(" ")
     );
     println!("{summary}");
-    let holds = mode == V1Mode::Report
-        || (g.flows_missing == 0
-            && [g.price.0, g.wage.0, g.flow_units.0, g.flow_value.0]
-                .iter()
-                .all(|&d| d < V1_TOL));
+    let holds = (excluded.len() as f64) <= 0.01 * active as f64
+        && (mode == V1Mode::Report
+            || (g.flows_missing == 0
+                && [g.price.0, g.wage.0, g.flow_units.0, g.flow_value.0]
+                    .iter()
+                    .all(|&d| d < V1_TOL)));
     (holds, summary)
+}
+
+/// V1 leaves out a cell outside one-market J2 at the run's gains: on the fixture's frictionless
+/// gains (none outside) with one cell's gain pushed past 2 / J, that cell alone is excluded, its
+/// gap reported, and the largest gap is the other cells'. Runs without a pack.
+#[test]
+fn v1_excludes_cells_outside_region() {
+    let fixture = root().join("tests/golden/p2-fixture");
+    let inp = io::load(&fixture).unwrap();
+    let mut world = ceteris_econ::fixture::small_world();
+    world.calibrate(&fixture.join("calibration")).unwrap();
+    let mut gains = frictionless_gains(&world);
+    assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![]);
+    let cells = inp.active_cells();
+    let n_g = inp.n_goods();
+    let c = cells[cells.len() / 2];
+    let pushed = (c / n_g, c % n_g);
+    gains.kappa[pushed] = 2.5 / gains.j[pushed];
+    let excluded = uniqueness::cells_outside_region(&inp, &gains);
+    assert_eq!(excluded, vec![pushed]);
+    let want = vec![1.0; inp.n_provinces() * n_g];
+    let mut price = want.clone();
+    price[c] = 1.5;
+    price[cells[0]] = 1.002;
+    let (all, _) = price_gaps(&price, 1.0, &want, &cells, n_g, &[]);
+    assert!((all.0 - 0.5).abs() < 1e-12, "{all:?}");
+    let (kept, out) = price_gaps(&price, 1.0, &want, &cells, n_g, &excluded);
+    assert!((kept.0 - 0.002).abs() < 1e-12, "{kept:?}");
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].0, pushed);
+    assert!((out[0].1 - 0.5).abs() < 1e-12);
 }
 
 #[test]
