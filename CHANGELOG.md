@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### BEHAVIOUR: price gain capped per coupled block of commodity markets (ADR 0267)
+
+- Each country's traded cells are linearized together at the calibrated steady state: cross-price
+  substitution between its origins of a good, input orders of its enterprises through the
+  order-up-to position, and their output's answer to last tick's input prices. A connected
+  block whose map is unstable at gains kappa_cell / m (m = P03d) is scaled by the largest b on a
+  2^-12 grid that makes it stable there; kappa1_cell = b kappa1 min(1, J_ref / J_cell)
+  (`ceteris_calibrate::block`, `world::price_gains`, `MarketElasticity::block_scale`).
+- b is computed at the default kappa1 and m for the default mode and frictionless and written to
+  `econ_calib_cells.arrow` (`block_scale_default`, `block_scale_frictionless`); calibration
+  format 7, so format-6 tables (every calibrated pack, `data/packs/2000` included) must be
+  recalibrated. It loads into `EconInputs::market_elasticity` (inputs digest). A run at another
+  eta, kappa1 or m keeps the per-market cap alone.
+- Behaviour moves only in scaled blocks of calibrated packs. The steady state does not move. On
+  the k263 scratch pack 54 of 233 blocks are scaled frictionless (Albania 0.636) and 12 in the
+  default mode (Sudan 0.324, Lesotho 0.348); the calibrated fixture scales none.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: calibration format 7 and the two new columns (all 1 on
+  the fixture); every existing column is bit for bit the same (`ceteris pack compare` against the
+  format-6 tables).
+- `tests/golden/p2-econ.txt`, `p0-toy.txt` and the core goldens do not move (the fixture runs from
+  its data state, without a calibration, and the calibrated fixture scales no block).
+  `p2-pack.txt` waits for the pack recalibration (pre-P3 B8).
+
 ### Changed: a user's stock is a floor under the local fill (ADR 0093, amendment of 2026-10-30)
 
 - Defect fix of the as-built chain rule: each user's output was cap min_k F_k, the common fill
