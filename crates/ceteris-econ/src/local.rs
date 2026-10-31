@@ -1348,6 +1348,66 @@ mod tests {
         assert!(draws.iter().all(|&d| d == 0.0), "{draws:?}");
     }
 
+    /// The stop refuses a fixed point off its pass's pieces (ADR 0093, bounded work): a two-good
+    /// cycle of gain 1 - 1e-13 (0 makes good 7 from good 8, 1 good 8 from good 7, 2 uses good
+    /// 7) and a small user 3 of goods 7 and 8 with floors s_8 = 0.1 < s_7 = 0.46, good 8 binding
+    /// it. Its deficit of good 7 through good 8, (s_8 - s_7) + (1 - s_8) F_8, is the only
+    /// constant of the cycle's map, which puts the fixed point at F_8 = 0.3, below the user's
+    /// cover point (s_7 - s_8) / (1 - s_8) = 0.4. The first pass cuts good 8 to 0.625; the second
+    /// falls by rounding alone, so the passes stop. Below the cover point the user's stock covers
+    /// its need and the constant is gone: the cycle has no fixed point there but 0, and the passes
+    /// from f never reach F_8 = 0.3. The user is small enough (A = 8.3e-14) that the confirming
+    /// pass returns that point to 1e-12 nonetheless, so only the deficit's sign in `on_piece`
+    /// (the user covered there) keeps the stop at f.
+    #[test]
+    fn the_stop_refuses_a_fixed_point_past_a_cover_point() {
+        let eps = 1e-13;
+        let (s7, s8) = (0.46, 0.1);
+        let a7 = 0.3 * eps / (s7 - s8);
+        let a8 = 1e-13;
+        let d = 1.0 - a7 * (1.0 - s8);
+        let b = 0.5 + a8 * (1.0 - s8);
+        let cap1 = (1.0 - eps) * b / 1.6;
+        let p = Province {
+            cap: vec![1.0, cap1, 1.0, 1.0],
+            coef: vec![
+                [0.0, 0.5, 0.0],
+                [1.0, 0.0, 0.0],
+                [d / 1.6 - cap1, 0.0, 0.0],
+                [a7, a8, 0.0],
+            ],
+            stock: vec![[0.0; 3], [0.0; 3], [0.0; 3], [s7 * a7, s8 * a8, 0.0]],
+            producer: [Some(0), Some(1), None],
+            own: [0.0; 3],
+        };
+        let cover = (s7 - s8) / (1.0 - s8);
+        // the second pass's fixed point, off its pieces
+        let mut w = Work::default();
+        let mut f = [1.0; 3];
+        pass(&p, &mut f, &mut w);
+        let start = f;
+        let last = pass(&p, &mut f, &mut w);
+        assert!(
+            f[1] < start[1] && !resolvable(start[1], f[1]),
+            "{start:?} {f:?}"
+        );
+        let fp = fixed_point(std::slice::from_ref(&last), &f).expect("a fixed point");
+        assert!(fp.limit && fp.g[1] < cover, "{:?}", fp.g);
+        assert!(!on_pieces(&p, &last, &fp.g, &mut w), "{:?}", fp.g);
+        let out = fills(&p);
+        assert!(out.fills[1] > cover, "{out:?}");
+        assert!((out.fills[1] - 0.625).abs() < 1e-9, "{out:?}");
+        let mut y = Vec::new();
+        p.outputs(&out.fills, &mut y);
+        for j in 0..3 {
+            let (uncovered, rest) = p.balance(j, &out.fills, &y, &mut w.users);
+            assert!(
+                uncovered <= rest + FIT * (uncovered + rest),
+                "good {j}: {out:?}"
+            );
+        }
+    }
+
     /// Bounded descent from a fill far above where the good fits: the captured province's good 8
     /// at fills [0.9776, 1, 1], its producer without capacity (R = 0). Before the stock floor the
     /// closed form put the root at 1 on a flat piece and the descent had to cross it; under the

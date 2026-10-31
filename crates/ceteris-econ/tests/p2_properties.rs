@@ -1651,7 +1651,10 @@ fn a_tiny_local_user_left_without_its_input_breaks_leontief() {
 /// covers it from where its smallest other level falls to that floor, crossed at most once since
 /// the fills only fall; before it, the stock threshold where its own fill fell to b / (coef cap)),
 /// each local good beyond the first that starts to fall, and each pair of local goods some user
-/// takes both of (a switch of the users' binding level, taken to happen once per pair).
+/// takes both of (a switch of the users' binding level, taken to happen once per pair: an
+/// assumption, not derived; under the stock floor each user of both goods switches on its own
+/// line, s_j + (1 - s_j) F_j = s_k + (1 - s_k) F_k, so a fall may cross one switch per such user,
+/// and the others are not counted).
 fn kink_bound(p: &Province) -> usize {
     let n = p.cap.len();
     let uses = |u: usize, j: usize| p.cap[u] > 0.0 && p.coef[u][j] > 0.0;
@@ -1675,7 +1678,8 @@ fn kink_bound(p: &Province) -> usize {
 /// stall, and every local input used equals coef Y (the Leontief invariant, exactly, at every
 /// tick).
 ///
-/// The most is 14 passes (482 binding province ticks): province 10 at tick 76, where utilities
+/// The most is 14 passes against its bound of 25 (482 binding province ticks, the smallest margin
+/// 11 at that tick, the smallest bound 15): province 10 at tick 76, where utilities
 /// and construction collapse to 0 and the fall crosses the floors of users holding residues of
 /// earlier collapses (stocks of 1e-52 to 1e-12 of their needs), each a kink under the stock floor
 /// (ADR 0093, amendment of 2026-10-30), where the user's stock comes to cover it. Before the floor
@@ -2693,6 +2697,60 @@ fn translated_oracle_rejects_a_good_lowered_from_one() {
 fn translated_family_leaves_out_a_neutral_good() {
     let p = translated_original(1997589725841679792);
     assert!(!translatable(&p));
+}
+
+/// ADR 0093, bounded work: the neutral good of [`translated_family_leaves_out_a_neutral_good`]
+/// balanced at t = 0.1 by an extra user without stock that takes its producer's surplus over its
+/// users' needs (coef 0.5, the capacity at which it needs that surplus). The province has a
+/// direction of gain exactly 1, a line of fixed points through t, and the fills are not unique
+/// there: the stop takes the last pass's fixed point on its pieces, [0.093, 0.013, 0.013], every
+/// good fitting, so a fixed point of the passes, though the plain iteration from 1 ends at t to
+/// rounding. Below t every user bound by the goods runs less than at the limit the SPEC defines:
+/// an over-cut, deterministic, with every invariant holding.
+#[test]
+fn neutral_good_stop_takes_a_fixed_point_on_its_line() {
+    let t = 0.1;
+    let mut p = translated_original(1997589725841679792);
+    let n = p.cap.len();
+    for k in 0..3 {
+        let Some(pp) = p.producer[k] else { continue };
+        let total: f64 = (0..n)
+            .filter(|&u| p.coef[u][k] > 0.0 && p.stock[u][k] == 0.0)
+            .map(|u| p.coef[u][k] * p.cap[u])
+            .sum();
+        let share = (1.0 - p.own[k]) * p.cap[pp];
+        let uncovered = (0..3).any(|j| p.coef[pp][j] > 0.0 && p.stock[pp][j] == 0.0);
+        if uncovered && total > 0.0 && total < share {
+            let mut c = [0.0; 3];
+            c[k] = 0.5;
+            p.cap.push((share - total) / 0.5);
+            p.coef.push(c);
+            p.stock.push([0.0; 3]);
+        }
+    }
+    let q = translate(&p, t);
+    let out = local::fills(&q);
+    let plain = converged_fills(&q).expect("the plain iteration converges");
+    assert_eq!(q.cap.len(), n + 2, "two goods balanced by an extra user");
+    // a fixed point of the passes: every good fits there, so no step moves it
+    for j in 0..3 {
+        assert!(fits_at(&q, j, &out.fills), "good {j} short at {out:?}");
+    }
+    let want = [0.0933514012111659, 0.0129778015608787, 0.0129778015608787];
+    for j in 0..3 {
+        assert!((plain[j] - t).abs() <= 1e-12, "{plain:?}");
+        assert!((out.fills[j] - want[j]).abs() <= 1e-12, "{out:?}");
+    }
+    // the over-cut: no user runs above its output at t, and some run below
+    let (at, limit) = (outputs_at(&q, &out.fills), outputs_at(&q, &plain));
+    assert!(
+        at.iter().zip(&limit).all(|(a, l)| a <= l),
+        "{at:?} {limit:?}"
+    );
+    assert!(
+        at.iter().zip(&limit).any(|(a, l)| a < &(0.5 * l)),
+        "{at:?} {limit:?}"
+    );
 }
 
 /// ADR 0093, bounded work: provinces whose collapse outlasts the stall rule end within
