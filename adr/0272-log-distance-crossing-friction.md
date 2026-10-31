@@ -1,6 +1,6 @@
 # 0272. Log-distance trade cost on the border crossing
 
-Status: proposed
+Status: accepted (owner, 2026-10-31)
 Date: 2026-10-31
 Design sections: 5.4 (nu_od, non-policy frictions), 8.3 (two-level kernel), 17.1 (P05; new P158),
 18 (H2), 21 (P4, P9); amends ADR 0092 (nu per class) and ADR 0264 (Decision 3, option F);
@@ -28,9 +28,10 @@ distance cost is mostly not freight, so it should not go into the freight legs.
   controls: ocean 0.220 (s.e. 0.002, US imports), air 0.459 (0.003), truck 0.275 (0.006) and rail
   0.388 (0.010) (US transborder), 0.267 (0.002) pooled across importers. At the mean weight per
   value, US freight is 7.1% of value at 2,500 km and 11.4% at 15,000 km. Limao and Venables
-  (2001, WBER 15(3)) find the same concavity in shipping quotes, with land km dearer than sea
-  km by a multiple (their quoted per-1,000-km figures are to be checked against the text before
-  this ADR is accepted).
+  (2001, WBER 15(3), pp. 451-479) find the same in shipping-company quotes for a standard
+  container from Baltimore: "An extra 1,000 km by sea adds $190, whereas a similar increase in
+  land distance adds $1,380" (p. 456; Table 1, specification 2), land about seven times dearer
+  per km; and log distance coefficients of 0.21 to 0.38 in CIF/FOB ratios (Table 2).
 - **The S05 form reproduces it.** A leg's cost per tonne is a fixed part (port and access fees,
   P04m-n) plus a per-km part, so its elasticity to distance, s l / (F + s l), rises from 0
   towards 1 with length. ADR 0247's sourced bulk line (F 6.47 USD/t, s 2.05e-4 USD/tkm) gives
@@ -110,7 +111,8 @@ nothing and a sea crossing at a lot, for reasons of gateway geometry.
 ## Decision
 
 Owner rulings (2026-10-31): phase P4 and placement A, the country-pair factor beside nu (both
-recommended options). Status stays proposed until the Limao and Venables figures are checked.
+recommended options). Accepted (owner, 2026-10-31) once the Limao and Venables figures were checked against the
+paper (WBER 15(3), p. 456 and Tables 1 and 2).
 
 1. **Form.** On every crossing a -> b between countries A and B, for good g of class c:
 
