@@ -265,9 +265,12 @@ pub struct Pwt {
     pub income: BTreeMap<String, ByYear>,
     /// Population, millions.
     pub population: BTreeMap<String, ByYear>,
+    /// Price level of output-side GDP (pl_gdpo, PPP over the market rate; the US is 0.66 in 2000,
+    /// not 1).
+    pub price_level: BTreeMap<String, ByYear>,
 }
 
-/// PWT 11 Data sheet: labour share, GDP per person and population by year.
+/// PWT 11 Data sheet: labour share, GDP per person, population and the GDP price level by year.
 pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
     let origin = path.display().to_string();
     let number = |c: &Cell, name: &str| {
@@ -287,6 +290,12 @@ pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
                 .entry(code.clone())
                 .or_default()
                 .insert(year, number(c, "labsh")?);
+        }
+        if let Some(c) = r.get("pl_gdpo") {
+            out.price_level
+                .entry(code.clone())
+                .or_default()
+                .insert(year, number(c, "pl_gdpo")?);
         }
         if let Some(c) = r.get("pop") {
             let pop = number(c, "pop")?;
@@ -323,6 +332,8 @@ pub struct Observed {
     pub gini_wdi: BTreeMap<String, f64>,
     pub gini_swiid: BTreeMap<String, f64>,
     pub gdp_per_capita: BTreeMap<String, f64>,
+    /// PWT GDP price level (pl_gdpo) by year, not relative to the US.
+    pub price_level_pwt: BTreeMap<String, ByYear>,
     /// WDI population in `YEAR`.
     pub population: BTreeMap<String, f64>,
     /// UN WPP population in `YEAR`, for economies WDI does not list.
@@ -342,7 +353,7 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
     let (region, table_names) = read_wdi_regions(&gini_zip)?;
     let mut names = iso_by_name(admin0)?;
     names.extend(table_names);
-    let pwt = read_pwt(&cache.join("pwt110.xlsx"))?;
+    let mut pwt = read_pwt(&cache.join("pwt110.xlsx"))?;
     let pop = read_wdi(&cache.join("wdi_SP.POP.TOTL.zip"))?;
     Ok(Observed {
         participation: read_ilostat(
@@ -369,6 +380,7 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
         gini_wdi: scaled(nearest(&read_wdi(&gini_zip)?), 100.0),
         gini_swiid: nearest(&read_swiid(&cache.join("swiid9_92.zip"), &names)?),
         gdp_per_capita: nearest(&pwt.income),
+        price_level_pwt: std::mem::take(&mut pwt.price_level),
         population: pop
             .into_iter()
             .filter_map(|(k, v)| Some((k, *v.get(&YEAR)?)))

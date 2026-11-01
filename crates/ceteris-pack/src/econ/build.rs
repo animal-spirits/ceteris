@@ -15,7 +15,7 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::theta::{self, ClassTable};
-use super::{goods, icio, people, tariffs};
+use super::{goods, icio, people, price_level, tariffs};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
@@ -24,9 +24,9 @@ use crate::read::YEAR;
 use crate::read::baci::trade_by_country;
 use crate::read::icio::{aggregate, home_use, load_wdi};
 use crate::read::natural_earth::read_codes;
-use crate::read::people::load_observed;
+use crate::read::people::{load_observed, parts};
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
-use crate::read::wdi::read_rates;
+use crate::read::wdi::{read_rates, read_wdi};
 use crate::table;
 
 /// The written tables, in writing order.
@@ -227,22 +227,6 @@ fn va_columns(placed: &Downscaled) -> Vec<(String, ArrayRef)> {
     cols
 }
 
-/// `econ_countries.arrow` price level columns (ADR 0098): `price_level`, p_c, the base price of
-/// the country's local goods, and `price_level_imputed`. The source rule waits on the owner (econ
-/// SPEC, Open questions), so every country has 1, flagged imputed.
-fn price_level_columns(n: usize) -> Vec<(String, ArrayRef)> {
-    vec![
-        (
-            "price_level".into(),
-            Arc::new(Float64Array::from(vec![1.0; n])) as ArrayRef,
-        ),
-        (
-            "price_level_imputed".into(),
-            Arc::new(BooleanArray::from(vec![true; n])) as ArrayRef,
-        ),
-    ]
-}
-
 fn read_graph(pack: &Path) -> Result<(Nodes, Edges), String> {
     let (nodes, edges) = (pack.join("nodes.arrow"), pack.join("edges.arrow"));
     Ok((
@@ -359,6 +343,18 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &worldpop,
     )?;
 
+    let pwt_levels = price_level::relative(&obs.price_level_pwt, "PWT")?;
+    let screen = price_level::Screen::fit(&pwt_levels, &wdi.income)?;
+    let levels = price_level::price_levels(
+        &codes,
+        &|c| parts(c, &iso),
+        &|c| world.get(c).and_then(|e| e.donor.clone()),
+        &pwt_levels,
+        &price_level::relative(&read_wdi(&cache.join(price_level::WDI_PRICE_LEVEL))?, "WDI")?,
+        &wdi.income,
+        &screen,
+    )?;
+
     let working_age = population
         .iter()
         .zip(&country)
@@ -422,7 +418,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
     countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
-    countries_columns.extend(price_level_columns(codes.len()));
+    countries_columns.extend(price_level::columns(&levels));
     let [
         goods_t,
         countries_t,
@@ -458,6 +454,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             downscale::report(&placed, &matched),
             tariffs::report(&rates, &codes, &trade),
             gateways::report(&gw, &codes),
+            price_level::report(&levels, &screen),
         ],
     })
 }

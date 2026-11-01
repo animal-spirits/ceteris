@@ -227,26 +227,48 @@ fn missing_manual_icio_stops_the_build() {
     assert!(!cache.path().join(ICIO).exists());
 }
 
-/// ADR 0098: every country's price level p_c is 1, flagged imputed, until the owner rules on its
-/// source (econ SPEC, Open questions).
+/// ADR 0282: p_c from PWT pl_gdpo over the US's for 179 pack countries, WDI for 17, the donor for
+/// 46; Bermuda's PWT level (1,059) gives way to WDI's, and WDI's unit errors (New Caledonia 0.027,
+/// the US Virgin Islands 0.117) to the donor's.
 #[test]
-fn price_level_is_one_and_imputed_until_its_source_is_ruled() {
+fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     let Some(f) = full() else { return };
     let path = f.out.path().join("econ_countries.arrow");
     let level = values::<Float64Type>(&path, "price_level");
-    assert_eq!(level.len(), rows(&path));
-    assert!(level.iter().all(|&p| p == 1.0));
-    let imputed: Vec<Option<bool>> = batches(&path)
+    let source = strings(&path, "price_level_source");
+    let code = strings(&path, "code");
+    let imputed: Vec<bool> = batches(&path)
         .iter()
         .flat_map(|b| {
             b.column_by_name("price_level_imputed")
                 .unwrap()
                 .as_boolean()
                 .iter()
+                .map(Option::unwrap)
+                .collect::<Vec<_>>()
         })
         .collect();
-    assert_eq!(imputed.len(), level.len());
-    assert!(imputed.iter().all(|&x| x == Some(true)));
+    assert_eq!(level.len(), rows(&path));
+    assert!(level.iter().all(|p| p.is_finite() && *p > 0.0));
+    let count = |s: &str| source.iter().filter(|x| *x == s).count();
+    assert_eq!((count("pwt"), count("wdi"), count("donor")), (179, 17, 46));
+    for i in 0..code.len() {
+        assert_eq!(imputed[i], source[i] != "pwt", "{}", code[i]);
+    }
+    let at = |c: &str| code.iter().position(|x| x == c).unwrap();
+    assert_eq!((level[at("USA")], source[at("USA")].as_str()), (1.0, "pwt"));
+    for (c, s) in [
+        ("BMU", "wdi"),
+        ("NCL", "donor"),
+        ("VIR", "donor"),
+        ("TUR", "pwt"),
+    ] {
+        assert_eq!(source[at(c)], s, "{c}");
+    }
+    let (lo, hi) = level
+        .iter()
+        .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(*p), b.max(*p)));
+    assert!(lo > 0.09 && hi < 1.5, "{lo} {hi}");
 }
 
 #[test]
