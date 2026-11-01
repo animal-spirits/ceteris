@@ -399,8 +399,8 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// its group (all of industry where industry less manufacturing is too small) and at most the
 /// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
 /// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP,
-/// population (WDI, else the WorldPop national total) times the donor's VA per person, scaled by
-/// own over donor income (donor).
+/// population (WDI, else UN WPP, else the WorldPop national total) times the donor's VA per
+/// person, scaled by own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
 pub fn impute(
@@ -484,6 +484,12 @@ pub fn impute(
             ps.iter()
                 .map(|p| obs.population.get(p).copied().unwrap_or(0.0)),
         );
+        if people == 0.0 {
+            people = py_sum(
+                ps.iter()
+                    .map(|p| obs.population_wpp.get(p).copied().unwrap_or(0.0)),
+            );
+        }
         if people == 0.0 {
             people = worldpop.get(code).copied().unwrap_or(0.0);
         }

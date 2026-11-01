@@ -1,6 +1,7 @@
 //! 2000 population, education, labour and Gini (specs/econ/SPEC.md, Pack additions; ADR 0014).
 //!
-//! Provinces get WorldPop 2000 summed through the H3 cells, scaled to the WDI national totals.
+//! Provinces get WorldPop 2000 summed through the H3 cells, scaled to the WDI national totals
+//! (UN WPP's where WDI has none).
 //! Countries get education shares (WIC, else Barro-Lee), participation, unemployment and the
 //! natural rate u* (ILOSTAT; ADR 0089), the working-age share (WDI), the labour share (PWT) and
 //! the Gini (WDI, else SWIID). A country with no value from any source takes the value of its
@@ -292,17 +293,26 @@ pub fn country_columns(
 }
 
 /// WDI population in 2000 (UN World Population Prospects) of each pack country, summing split
-/// economies; countries without a positive total are left out.
+/// economies, else the UN WPP total (WDI leaves out Western Sahara); countries without a positive
+/// total in either are left out.
 pub fn national_population(codes: &[String], obs: &Observed, iso: &Names) -> BTreeMap<String, f64> {
+    let total = |series: &BTreeMap<String, f64>, c: &str| {
+        py_sum(
+            parts(c, iso)
+                .iter()
+                .map(|p| series.get(p).copied().unwrap_or(0.0)),
+        )
+    };
     codes
         .iter()
         .filter_map(|c| {
-            let total = py_sum(
-                parts(c, iso)
-                    .iter()
-                    .map(|p| obs.population.get(p).copied().unwrap_or(0.0)),
-            );
-            (total > 0.0).then(|| (c.clone(), total))
+            let wdi = total(&obs.population, c);
+            let t = if wdi > 0.0 {
+                wdi
+            } else {
+                total(&obs.population_wpp, c)
+            };
+            (t > 0.0).then(|| (c.clone(), t))
         })
         .collect()
 }

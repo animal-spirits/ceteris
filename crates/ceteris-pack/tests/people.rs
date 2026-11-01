@@ -62,6 +62,7 @@ fn observed() -> Observed {
         gini_swiid: map(&[("AAA", 0.9), ("BBB", 0.35)]),
         gdp_per_capita: map(&income),
         population: map(&[("AAA", 1.0), ("BBB", 3.0)]),
+        population_wpp: BTreeMap::new(),
         region: income
             .iter()
             .zip(region)
@@ -290,6 +291,18 @@ fn national_population_sums_split_economies_and_drops_unknown_ones() {
     let out = national_population(&s(&["YUG", "FRA", "CLP"]), &obs, &iso);
     assert_eq!(out.len(), 2);
     assert!(approx(out["YUG"], 7.6, 1e-12) && out["FRA"] == 59.0);
+}
+
+#[test]
+fn national_population_falls_back_to_wpp() {
+    let obs = Observed {
+        population: map(&[("AAA", 1.0)]),
+        population_wpp: map(&[("CCC", 4.0), ("AAA", 9.0)]),
+        ..Observed::default()
+    };
+    let totals = national_population(&s(&["AAA", "CCC", "DDD"]), &obs, &Names::new());
+    // WDI's AAA wins over WPP's; CCC has WPP only; DDD has neither.
+    assert_eq!(totals, map(&[("AAA", 1.0), ("CCC", 4.0)]));
 }
 
 /// A float32 band in memory with WorldPop's nodata, the largest float32 (which is positive).

@@ -68,7 +68,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
 | `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else SWIID (disposable-income Gini, CC0; WIID is non-commercial) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
-| `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
+| `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
 | `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing), mass (share of the country's trade throughput, ADR 0092) | P1 graph, BACI 2000 trade by country |
@@ -119,8 +119,8 @@ extraction VA (B06, B09 output less their inputs, without refining; ADR 0281, pr
 out of its group (all of industry where industry less manufacturing is too small) and at most the
 largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
-weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WorldPop national
-total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
+weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WDI, else UN WPP,
+else the WorldPop national total) times the donor's VA per person scaled by income. A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
 basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.

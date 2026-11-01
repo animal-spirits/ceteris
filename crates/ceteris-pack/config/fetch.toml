@@ -303,6 +303,29 @@ sha256 = "e77b29f91026cee0df109141c15be90a6e268915f64255f5551293772cea1f60"
 bytes = 72497
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.NGAS.RT.ZS?downloadformat=csv"
 
+# Price level and official exchange rate (ADR 0098).
+[[file]]
+source = "wdi"
+name = "wdi_PA.NUS.PPPC.RF.zip"
+sha256 = "5b3908bf663254c71a24dd720222c9c10882ffd25733a18973bad1841ea42bbd"
+bytes = 98588
+url = "https://api.worldbank.org/v2/en/indicator/PA.NUS.PPPC.RF?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_PA.NUS.FCRF.zip"
+sha256 = "1d1be3c600d944debe490c71b0a81028cef87ee6a273c17c38233dfd8e6b9b2a"
+bytes = 68682
+url = "https://api.worldbank.org/v2/en/indicator/PA.NUS.FCRF?downloadformat=csv"
+
+# National population where WDI has none, such as Western Sahara (ADR 0098).
+[[file]]
+source = "un-wpp"
+name = "WPP2024_TotalPopulationBySex.csv.gz"
+sha256 = "66b84489fd7875b62de9b40d960b803b8c8439367c98deab89c2f770970925b9"
+bytes = 16980593
+url = "https://population.un.org/wpp/assets/Excel%20Files/1_Indicator%20(Standard)/CSV_FILES/WPP2024_TotalPopulationBySex.csv.gz"
+
 # GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
 [[file]]
 source = "adb-kidb"
