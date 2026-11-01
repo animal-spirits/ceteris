@@ -22,12 +22,15 @@ pub const GROUPS: [&[usize]; 4] = [&[0], &[1, 2, 7, 8], &[3, 4, 5, 6], &[9]];
 /// Territories whose people and product WDI counts in the parent's totals, by pack code
 /// (territory, parent).
 pub const INSIDE: [(&str, &str); 3] = [("SOL", "SOM"), ("ALD", "FIN"), ("CYN", "CYP")];
-/// World Bank regions for pack countries the World Bank does not classify (and whose sovereign
-/// it does not either).
-pub const REGIONS: [(&str, &str); 3] = [
+/// World Bank regions for pack countries the World Bank does not classify: ones whose sovereign
+/// it does not classify either, and dependencies whose sovereign's region is not theirs (ADR
+/// 0098).
+pub const REGIONS: [(&str, &str); 5] = [
     ("SAH", "Middle East & North Africa"),
     ("CYN", "Europe & Central Asia"),
     ("SOL", "Sub-Saharan Africa"),
+    ("AIA", "Latin America & Caribbean"),
+    ("MSR", "Latin America & Caribbean"),
 ];
 
 /// Where a country's VA level and split come from.
