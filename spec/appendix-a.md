@@ -286,4 +286,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0279 | [Leg paths minimise the full iceberg cost per good](../rfcs/0279-least-iceberg-paths-per-good.md) | 5.3, 5.4, 8.3, 17.2, 19.4 |
 | 0280 | [Storage order by partial adjustment toward a target stock](../rfcs/0280-storage-order-by-partial-adjustment.md) | 8.2, 12.2, 17 |
 | 0281 | [Rents-to-VA factor from extraction value added](../rfcs/0281-rents-to-value-added-from-extraction.md) | 16.1, 22.2 |
+| 0288 | [Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md) | 21 |
 <!-- rows:end -->
