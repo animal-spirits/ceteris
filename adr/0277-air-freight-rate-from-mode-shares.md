@@ -160,7 +160,11 @@ the value:
 - Mode 0 (not declared, about 9.5% of 2002 EU15 import value) is left out of the share's
   denominator and counted.
 
-## Amendment (proposed, pending owner pick, 2026-11-01): path-consistent estimator
+## Amendment (deferred, owner, 2026-11-01: keep BTS 5.37, revisit on the 50-goods pack, ADR 0271): path-consistent estimator
+
+**Ruling.** P04d stays at ADR 0269's value, the BTS ratio of 5.37 times road. The fit is revisited
+on the 50-goods pack (ADR 0271), where the path-consistent estimator below is the method to try
+first. The evidence and results below are kept as the record.
 
 On the per-good least-iceberg paths of ADR 0279 the estimator of Decision (Fisher scoring on
 paths held fixed, then the paths solved again at the fitted r until the set of air crossings
@@ -179,7 +183,7 @@ most of them stop flying, and the next fit runs r to the floor. Evidence on the 
 Solved at each r instead (`ceteris air-share --profile`, 25 points from 0.5 to 32), the
 fixed-set quasi-likelihood has an interior maximum in every set: r 2.83 pooled and EU, 3.36 US.
 
-**Proposed:** maximise that profile, with the paths solved at every r (geo SPEC, Air rate from
+**Method (built, `ceteris air-share`; not used for the value):** maximise that profile, with the paths solved at every r (geo SPEC, Air rate from
 mode shares, Estimator): the grid's best point, then golden section in ln r between its
 neighbours to 1e-4. Errors of ln r by a cluster bootstrap over (importer, origin), 200
 replications with a fixed seed, on a 1/32-octave grid across the bracket, with a 90% percentile
@@ -202,5 +206,5 @@ undershoots for agriculture, light manufacturing and chemicals (goods 0, 4, 5), 
 coal and other mining (good 2, data 0.19). That is the within-good dispersion of value per kg
 noted under Consequences, which the 50 goods of ADR 0271 address.
 
-Options for the owner: this estimator (coordinator's recommendation); or keep Decision's
-estimator and report no value on this pack.
+The owner kept the BTS value instead of either estimate on this pack: with 7 goods the fit is a
+level match with large offsetting errors by good.

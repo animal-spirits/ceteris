@@ -133,7 +133,9 @@ q_ab[air] > 0. The weights are province VA: of the good at the origin, of all go
 destination, as in `country_costs`. nu_AB and the tariff multiply every K_ab of a country pair
 alike, so they cancel.
 
-Estimator (ADR 0277, Amendment 2026-11-01, estimator; proposed, pending owner pick): Bernoulli
+Estimator (ADR 0277, Amendment 2026-11-01, estimator; deferred, owner 2026-11-01: P04d stays at
+ADR 0269's BTS 5.37 times road, and this estimator is the first method on the 50-goods pack of
+ADR 0271): Bernoulli
 quasi-likelihood for fractional data (Papke and Wooldridge 1996), with weights equal to the
 cell's import value, maximised over ln r with the paths solved again at every r, so that the
 shares at each r are those on the paths air at r chooses. The objective is summed over a set
