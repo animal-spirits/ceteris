@@ -506,19 +506,18 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
 /// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0112),
 /// so scaling every nominal value moves losses past the cap in one run and not the other.
 ///
-/// The frictionless run is compared at tick 6. From the data state its coal shortage holds
-/// most mainland enterprises at their coal caps from tick 3 (`frictionless_unemployment_is_the_
-/// natural_rate`), and its clearing wage puts some exactly there, target = cap, where ADR 0266's
-/// split order rule is discontinuous: whether the cap cut the target, and so whether E3 orders
-/// coal on notional or capped output, is decided by rounding. At tick 7 the two runs decide it
-/// otherwise for enterprises 8 and 53 (their stocks agree to every printed digit), and from tick
-/// 8 they differ by 16% in employment, 0.5% at tick 120. Before the data state's merchants
-/// held coverage times their own base output (B8e) the run reached no such tie in 120 ticks.
+/// Frictionless, from the data state, the coal shortage holds most mainland enterprises at
+/// their coal caps from tick 3 (`frictionless_unemployment_is_the_natural_rate`), and the
+/// rationed wage puts the marginal one exactly at its cap, target = cap. Whether the cap cut it,
+/// and so whether E3 orders coal on notional or capped output, is decided with the margin of
+/// `systems::cap_cuts`, not by rounding: compared at tick 6 while it was `f > cap` (the two
+/// runs decided it otherwise for enterprises 8 and 53 at tick 7 and differed by 16% in
+/// employment from tick 8).
 #[test]
 fn homogeneity_of_degree_zero() {
     for (params, ticks) in [
         (EconParams::default(), 120),
-        (EconParams::frictionless(), 6),
+        (EconParams::frictionless(), 120),
     ] {
         let params = EconParams {
             write_off_months: f64::INFINITY,
