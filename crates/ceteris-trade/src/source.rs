@@ -1355,7 +1355,7 @@ mod tests {
         let (net, wedges) = complete_world(&mut r, provinces, gateways);
         let k = kernel(&net, &wedges);
         let np = net.n_provinces();
-        assert!(np > 4 * ROWS && np > ORIGIN_CHUNK && net.n_gateways() > GATEWAY_CHUNK);
+        assert!(np > (4 * ROWS).max(ORIGIN_CHUNK) && net.n_gateways() > GATEWAY_CHUNK);
         let price = draw(&mut r, np, 0.5, 2.0);
         let active: Vec<bool> = (0..np).map(|o| o % 7 != 3).collect();
         let spend = draw2(&mut r, np, 0.0, 10.0);
