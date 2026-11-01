@@ -227,6 +227,28 @@ fn missing_manual_icio_stops_the_build() {
     assert!(!cache.path().join(ICIO).exists());
 }
 
+/// ADR 0098: every country's price level p_c is 1, flagged imputed, until the owner rules on its
+/// source (econ SPEC, Open questions).
+#[test]
+fn price_level_is_one_and_imputed_until_its_source_is_ruled() {
+    let Some(f) = full() else { return };
+    let path = f.out.path().join("econ_countries.arrow");
+    let level = values::<Float64Type>(&path, "price_level");
+    assert_eq!(level.len(), rows(&path));
+    assert!(level.iter().all(|&p| p == 1.0));
+    let imputed: Vec<Option<bool>> = batches(&path)
+        .iter()
+        .flat_map(|b| {
+            b.column_by_name("price_level_imputed")
+                .unwrap()
+                .as_boolean()
+                .iter()
+        })
+        .collect();
+    assert_eq!(imputed.len(), level.len());
+    assert!(imputed.iter().all(|&x| x == Some(true)));
+}
+
 #[test]
 fn pack_econ_tables_are_consistent() {
     let (Some(countries), Some(provinces)) = (
