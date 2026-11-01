@@ -168,14 +168,28 @@ pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
     Ok(fit)
 }
 
-// ---------------------------------------------------------------- data: US imports 2000
+// ---------------------------------------------------------------- data: 2000 import shares
 
 /// The fetched files (ADR 0277, Build), under `data/raw/air-shares-2000`.
-pub const US_IMPORTS: &str = "imp_detl_2000_12n.dta";
-pub const CENSUS_COUNTRIES: &str = "country.txt";
+pub const US_2000: &str = "us-census-schott/imp_detl_2000_12n.dta";
+pub const US_2002: &str = "us-census-schott/imp_detl_2002_12n.dta";
+pub const CENSUS_COUNTRIES: &str = "census-country.txt";
+pub const EU_MODES_2002: &str = "eurostat-comext/extracted/trhs_200252.dat";
+pub const EU_VALUES: &str = "eurostat-ds045409/ds045409_eu15_imports_hs6_2000_2002.csv";
 const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
-/// The BTiGE key's version for HS 1996, the US 2000 nomenclature.
-const HS_1996: u8 = 1;
+/// BTiGE key versions: HS 1996 (2000 data) and HS 2002 (2002 data).
+pub const HS_1996: u8 = 1;
+pub const HS_2002: u8 = 2;
+const EU15: [&str; 15] = [
+    "AT", "BE", "DE", "DK", "ES", "FI", "FR", "GB", "GR", "IE", "IT", "LU", "NL", "PT", "SE",
+];
+/// Comext partner codes inside intra-EU trade, dropped so totals match EXT_EU.
+const INTRA_SPECIAL: [&str; 2] = ["QV", "QY"];
+/// Comext transport mode: air, and not declared.
+const MODE_AIR: &str = "4";
+const MODE_UNDECLARED: &str = "0";
+/// USD per EUR, 2000 average of the ECB reference rate, to weight EU cells beside US ones.
+pub const USD_PER_EUR_2000: f64 = 0.9236;
 
 /// Air and total import value of one (importer, origin, traded good) cell, USD.
 #[derive(Clone, Debug, PartialEq)]
@@ -187,15 +201,20 @@ pub struct Obs {
     pub total: f64,
 }
 
-/// What the US reader kept and left out, USD of general imports.
-#[derive(Clone, Debug, PartialEq)]
-pub struct UsNotes {
+/// What a reader kept and left out, in the file's currency.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Notes {
     pub total: f64,
     pub air: f64,
     pub unmatched_country: f64,
     pub unmatched_codes: Vec<String>,
     pub unmatched_hs: f64,
     pub local_goods: f64,
+    /// EU hindcast: 2000 value whose HS line has no 2002 share (the cell's share stands in),
+    /// 2000 value of cells with no 2002 record (dropped), and 2002 value with no declared mode.
+    pub fallback: f64,
+    pub dropped: f64,
+    pub undeclared: f64,
 }
 
 /// The pack's country codes, in pack order.
@@ -215,21 +234,54 @@ fn census_iso2(text: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// US general imports of 2000 by origin and traded good, summed over districts: air is
-/// `air_val_yr`, the total `gen_val_yr`, land and vessel the rest. HS 1996 lines go to goods by
-/// the BTiGE key; origins to pack countries by ISO code.
+/// Pack country by ISO alpha-2, through Natural Earth's alpha-2 to alpha-3 codes.
+fn pack_by_iso2(cache: &Path, codes: &[String]) -> Result<BTreeMap<String, usize>, String> {
+    let admin0 = cache.join(ADMIN0);
+    let (iso, _) = read_codes(&admin0)?;
+    let index = pack_index(codes, &iso);
+    Ok(Dbf::from_zip(&admin0)?
+        .select(["ISO_A2_EH", "ISO_A3_EH"])?
+        .into_iter()
+        .filter_map(|[a2, a3]| {
+            let (a2, a3) = (a2?, a3?);
+            (a2 != "-99").then_some(())?;
+            Some((a2.to_owned(), *index.get(a3)?))
+        })
+        .collect())
+}
+
+/// Traded or local good of each HS 6-digit line of the key's `version`.
+fn goods_of(cache: &Path, version: u8) -> Result<BTreeMap<i64, usize>, String> {
+    let key = read_hs_cpa_version(&cache.join(HS_KEY), version)?;
+    Ok(hs_goods(&key)
+        .into_iter()
+        .filter(|(k, _)| !k.is_empty() && k.bytes().all(|c| c.is_ascii_digit()))
+        .map(|(k, g)| (k.parse().expect("digits"), g))
+        .collect())
+}
+
+/// Six digits as a number; None for Comext's special codes.
+fn hs6(code: &str) -> Option<i64> {
+    (code.len() == 6 && code.bytes().all(|c| c.is_ascii_digit())).then(|| code.parse().ok())?
+}
+
+/// US general imports of one year by origin and traded good, summed over districts: air is
+/// `air_val_yr`, the total `gen_val_yr`, land and vessel the rest. HS lines go to goods by the
+/// BTiGE key at `hs_version`; origins to pack countries by ISO code.
 pub fn us_imports(
     data: &Path,
+    file: &str,
+    hs_version: u8,
     cache: &Path,
     codes: &[String],
-) -> Result<(Vec<Obs>, UsNotes), String> {
-    let path = data.join(US_IMPORTS);
+) -> Result<(Vec<Obs>, Notes), String> {
+    let path = data.join(file);
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let d = read_dta(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     let numbers = |n: &str| {
         d.get(n)
             .and_then(|c| c.numbers())
-            .ok_or_else(|| format!("{US_IMPORTS}: no numeric {n}"))
+            .ok_or_else(|| format!("{file}: no numeric {n}"))
     };
     let (hs10, total, air) = (
         numbers("commodity")?,
@@ -239,43 +291,17 @@ pub fn us_imports(
     let cty = d
         .get("cty_code")
         .and_then(|c| c.strings())
-        .ok_or_else(|| format!("{US_IMPORTS}: no text cty_code"))?;
-
+        .ok_or_else(|| format!("{file}: no text cty_code"))?;
     let countries_path = data.join(CENSUS_COUNTRIES);
     let text = std::fs::read_to_string(&countries_path)
         .map_err(|e| format!("{}: {e}", countries_path.display()))?;
     let iso2 = census_iso2(&text);
-    let admin0 = cache.join(ADMIN0);
-    let iso3_of_iso2: BTreeMap<String, String> = Dbf::from_zip(&admin0)?
-        .select(["ISO_A2_EH", "ISO_A3_EH"])?
-        .into_iter()
-        .filter_map(|[a2, a3]| {
-            let (a2, a3) = (a2?, a3?);
-            (a2 != "-99" && a3 != "-99").then(|| (a2.to_owned(), a3.to_owned()))
-        })
-        .collect();
-    let (iso, _) = read_codes(&admin0)?;
-    let index = pack_index(codes, &iso);
-    let us = *index.get("USA").ok_or("no USA in the pack")?;
-    let origin_of =
-        |c: &str| -> Option<usize> { index.get(iso3_of_iso2.get(iso2.get(c)?)?).copied() };
-
-    let key = read_hs_cpa_version(&cache.join(HS_KEY), HS_1996)?;
-    let good_of: BTreeMap<i64, usize> = hs_goods(&key)
-        .into_iter()
-        .filter(|(k, _)| !k.is_empty() && k.bytes().all(|c| c.is_ascii_digit()))
-        .map(|(k, g)| (k.parse().expect("digits"), g))
-        .collect();
+    let by_iso2 = pack_by_iso2(cache, codes)?;
+    let us = *by_iso2.get("US").ok_or("no US in the pack")?;
+    let good_of = goods_of(cache, hs_version)?;
 
     let mut cells: BTreeMap<(usize, usize), (f64, f64)> = BTreeMap::new();
-    let mut notes = UsNotes {
-        total: 0.0,
-        air: 0.0,
-        unmatched_country: 0.0,
-        unmatched_codes: Vec::new(),
-        unmatched_hs: 0.0,
-        local_goods: 0.0,
-    };
+    let mut notes = Notes::default();
     for i in 0..hs10.len() {
         let (t, a) = (total[i], air[i]);
         if t.is_nan() || t <= 0.0 {
@@ -284,7 +310,8 @@ pub fn us_imports(
         let a = if a.is_nan() { 0.0 } else { a };
         notes.total += t;
         notes.air += a;
-        let Some(origin) = origin_of(&cty[i]).filter(|&o| o != us) else {
+        let origin = iso2.get(&cty[i]).and_then(|c| by_iso2.get(c)).copied();
+        let Some(origin) = origin.filter(|&o| o != us) else {
             notes.unmatched_country += t;
             if !notes.unmatched_codes.contains(&cty[i]) {
                 notes.unmatched_codes.push(cty[i].clone());
@@ -312,6 +339,169 @@ pub fn us_imports(
             good,
             air,
             total,
+        })
+        .collect();
+    Ok((obs, notes))
+}
+
+/// Per traded good, the log-odds change of the US air share from `later` back to `earlier`,
+/// import-value weighted over the origins with that good in both years.
+pub fn trend(earlier: &[Obs], later: &[Obs]) -> [f64; N_TRADED] {
+    let by_cell = |obs: &[Obs]| -> BTreeMap<(usize, usize), (f64, f64)> {
+        obs.iter()
+            .map(|o| ((o.origin, o.good), (o.air, o.total)))
+            .collect()
+    };
+    let (a, b) = (by_cell(earlier), by_cell(later));
+    std::array::from_fn(|g| {
+        let (mut sa, mut sb) = ([0.0; 2], [0.0; 2]);
+        for ((o, h), x) in &a {
+            if *h != g {
+                continue;
+            }
+            if let Some(y) = b.get(&(*o, g)) {
+                sa[0] += x.0;
+                sa[1] += x.1;
+                sb[0] += y.0;
+                sb[1] += y.1;
+            }
+        }
+        let logit = |s: [f64; 2]| (s[0] / (s[1] - s[0])).ln();
+        let d = logit(sa) - logit(sb);
+        if d.is_finite() { d } else { 0.0 }
+    })
+}
+
+/// Comma-separated rows of `path`, header skipped, each split into fields.
+fn csv_rows(path: &Path, mut f: impl FnMut(&[&str])) -> Result<(), String> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut lines = std::io::BufReader::new(file).lines();
+    lines.next();
+    for line in lines {
+        let line = line.map_err(|e| format!("{}: {e}", path.display()))?;
+        let fields: Vec<&str> = line.split(',').collect();
+        f(&fields);
+    }
+    Ok(())
+}
+
+/// EU15 imports from outside the EU15, hindcast to 2000 (ADR 0277, Amendment 2026-11-01): each
+/// (member, origin, HS6) line keeps its 2002 air share of declared value, weighted by its 2000
+/// value. A 2000 line with no 2002 share takes its (member, origin, good) cell's 2002 share
+/// (HS 1996 and HS 2002 differ on some lines); a cell with no 2002 record is dropped. Each
+/// good's shares are then shifted in log-odds by `shift` (the US change, [`trend`]). Values in
+/// USD at [`USD_PER_EUR_2000`].
+pub fn eu_hindcast(
+    data: &Path,
+    cache: &Path,
+    codes: &[String],
+    shift: &[f64; N_TRADED],
+) -> Result<(Vec<Obs>, Notes), String> {
+    let by_iso2 = pack_by_iso2(cache, codes)?;
+    let member = |c: &str| EU15.contains(&c).then(|| by_iso2.get(c).copied()).flatten();
+    let origin = |c: &str| -> Option<usize> {
+        (c.len() == 2 && !EU15.contains(&c) && !INTRA_SPECIAL.contains(&c))
+            .then(|| by_iso2.get(c).copied())
+            .flatten()
+    };
+    let (g96, g02) = (goods_of(cache, HS_1996)?, goods_of(cache, HS_2002)?);
+    let mut notes = Notes::default();
+
+    // 2002: air and declared value by (member, origin, line) and by (member, origin, good).
+    let mut line02: BTreeMap<(usize, usize, i64), (f64, f64)> = BTreeMap::new();
+    let mut cell02: BTreeMap<(usize, usize, usize), (f64, f64)> = BTreeMap::new();
+    csv_rows(&data.join(EU_MODES_2002), |f| {
+        let [rep, par, prod, flow, mode, _, value, ..] = f else {
+            return;
+        };
+        if *flow != "1" {
+            return;
+        }
+        let (Some(d), Some(o), Some(k)) = (member(rep), origin(par), hs6(prod)) else {
+            return;
+        };
+        let v: f64 = value.parse().unwrap_or(0.0);
+        if *mode == MODE_UNDECLARED {
+            notes.undeclared += v;
+            return;
+        }
+        let air = if *mode == MODE_AIR { v } else { 0.0 };
+        let l = line02.entry((d, o, k)).or_default();
+        l.0 += air;
+        l.1 += v;
+        if let Some(&g) = g02.get(&k).filter(|&&g| g < N_TRADED) {
+            let c = cell02.entry((d, o, g)).or_default();
+            c.0 += air;
+            c.1 += v;
+        }
+    })?;
+
+    // 2000: value by line, and the hindcast share by cell.
+    let mut cells: BTreeMap<(usize, usize, usize), (f64, f64)> = BTreeMap::new();
+    csv_rows(&data.join(EU_VALUES), |f| {
+        let [_, _, _, rep, par, prod, flow, ind, year, value, ..] = f else {
+            return;
+        };
+        if *flow != "1" || *year != "2000" || *ind != "VALUE_IN_EUROS" {
+            return;
+        }
+        let (Some(d), Some(k)) = (member(rep), hs6(prod)) else {
+            return;
+        };
+        let v: f64 = value.parse().unwrap_or(0.0);
+        if v <= 0.0 {
+            return;
+        }
+        let Some(o) = origin(par) else {
+            if par.len() == 2 && !EU15.contains(par) && !INTRA_SPECIAL.contains(par) {
+                notes.unmatched_country += v;
+            }
+            return;
+        };
+        notes.total += v;
+        let Some(&g) = g96.get(&k) else {
+            notes.unmatched_hs += v;
+            return;
+        };
+        if g >= N_TRADED {
+            notes.local_goods += v;
+            return;
+        }
+        let share = match line02.get(&(d, o, k)).filter(|l| l.1 > 0.0) {
+            Some(l) => l.0 / l.1,
+            None => match cell02.get(&(d, o, g)).filter(|c| c.1 > 0.0) {
+                Some(c) => {
+                    notes.fallback += v;
+                    c.0 / c.1
+                }
+                None => {
+                    notes.dropped += v;
+                    return;
+                }
+            },
+        };
+        let c = cells.entry((d, o, g)).or_default();
+        c.0 += v * share;
+        c.1 += v;
+    })?;
+    let obs = cells
+        .into_iter()
+        .map(|((importer, origin, good), (air, total))| {
+            let s = air / total;
+            let shifted = if s > 0.0 && s < 1.0 {
+                1.0 / (1.0 + (-((s / (1.0 - s)).ln() + shift[good])).exp())
+            } else {
+                s
+            };
+            notes.air += shifted * total;
+            Obs {
+                importer,
+                origin,
+                good,
+                air: shifted * total * USD_PER_EUR_2000,
+                total: total * USD_PER_EUR_2000,
+            }
         })
         .collect();
     Ok((obs, notes))
@@ -539,6 +729,37 @@ pub fn estimate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trend_is_the_log_odds_change_over_shared_origins() {
+        let o = |origin, good, air, total| Obs {
+            importer: 0,
+            origin,
+            good,
+            air,
+            total,
+        };
+        let earlier = [
+            o(1, 4, 30.0, 100.0),
+            o(2, 4, 10.0, 100.0),
+            o(3, 4, 99.0, 100.0),
+        ];
+        let later = [o(1, 4, 20.0, 100.0), o(2, 4, 20.0, 100.0)];
+        let t = trend(&earlier, &later);
+        // Shared origins 1 and 2: 40 of 200 in 2000, 40 of 200 in 2002.
+        assert!(t[4].abs() < 1e-15);
+        assert_eq!(t[0], 0.0);
+        let later = [o(1, 4, 10.0, 100.0), o(2, 4, 10.0, 100.0)];
+        let t = trend(&earlier, &later);
+        assert!((t[4] - ((40.0_f64 / 160.0).ln() - (20.0_f64 / 180.0).ln())).abs() < 1e-12);
+    }
+
+    #[test]
+    fn six_digit_lines_only() {
+        assert_eq!(hs6("010110"), Some(10110));
+        assert_eq!(hs6("0101X"), None);
+        assert_eq!(hs6("01011"), None);
+    }
 
     #[test]
     fn reads_schedule_c_rows() {

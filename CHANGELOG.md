@@ -41,6 +41,8 @@ Goldens re-blessed:
   general imports by origin and traded good, through the kernel's gateway-pair sum, by a
   Bernoulli quasi-likelihood with errors clustered by country pair (geo SPEC, Air rate from mode
   shares). Nothing reads its output yet; P04d lands at the next goldens re-bless.
+- The EU15 2002 mode shares are hindcast to 2000 (2000 HS6 values from DS-045409, plus the US
+  2000-2002 log-odds change by good) and pooled with the US (`--set pooled|us|eu`).
 - `dta::read_dta` reads Stata format 118 (Schott's US import files);
   `read_hs_cpa_version` reads the BTiGE key for HS 1996 and HS 2002. No golden moves.
 
