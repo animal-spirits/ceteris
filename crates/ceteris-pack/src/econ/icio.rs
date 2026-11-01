@@ -134,23 +134,31 @@ pub fn median_va_over_gdp(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 
     .unwrap_or(f64::NAN)
 }
 
-/// ICIO crude oil and gas VA over WDI oil and gas rents, summed over the ICIO economies with GDP
-/// and a rent.
+/// Million USD: VA of crude oil and gas extraction (B06, B09), its output less its inputs, as
+/// `CountryIo::va` is for a good; good 1's VA less refining's (C19).
+pub fn extraction_va(c: &CountryIo) -> f64 {
+    c.extraction_output - pairwise_sum(&c.extraction)
+}
+
+/// ICIO crude oil and gas extraction VA over WDI oil and gas rents, summed over the ICIO
+/// economies with GDP and a rent. Extraction, not good 1 with refining, since the rents measure
+/// extraction and the rents path produces with the extraction column (ADRs 0270, 0281).
 pub fn oil_gas_va_over_rents(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 {
     let (va, rents): (Vec<f64>, Vec<f64>) = icio
         .iter()
         .filter_map(|(k, c)| {
             let r = rents(wdi, k)?;
-            Some((c.va[OIL_GAS] * 1e6, wdi.gdp.get(k)? * r))
+            Some((extraction_va(c) * 1e6, wdi.gdp.get(k)? * r))
         })
         .unzip();
     pairwise_sum(&va) / pairwise_sum(&rents)
 }
 
-/// The largest share of crude oil and gas in the VA of goods 1 to 8 among the ICIO economies.
+/// The largest share of crude oil and gas extraction in the VA of goods 1 to 8 among the ICIO
+/// economies (ADR 0281).
 pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
     icio.values()
-        .map(|c| c.va[OIL_GAS] / pairwise_sum(&c.va[1..9]))
+        .map(|c| extraction_va(c) / pairwise_sum(&c.va[1..9]))
         .filter(|x| x.is_finite())
         .fold(0.0, f64::max)
 }
