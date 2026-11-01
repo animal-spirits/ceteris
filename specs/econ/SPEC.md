@@ -963,13 +963,42 @@ the flow window. Two ACR predictions sit beside it:
   inverse. With one good using itself at cost share a the change is 1 / (1 - a) times `acr`
   (fn. 20 there). The model has Leontief intermediates, so its welfare follows `acr_io`.
 
-A good bought at home in one run only makes the country's ACR NaN in both forms. ADR 0207's
-criterion grades `acr_io` (ADR 0265): under every crossing tau x 1.1, every ICIO country with
-|ACR| above 1e-4 has its sign, the median model / ACR ratio is in [0.8, 1.25] and the correlation
-across countries is at least 0.9; `acr` stays reported. C7 asserts it at B8 on the final pack.
-On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) `acr_io` has median 1.077
-(p10 0.931, p90 1.325), correlation 0.862 (misses 0.9: ADR 0265's tier 1 item, for C7) and 0
-wrong signs over 80; `acr` median 2.417 (p10 1.868, p90 3.016), correlation 0.855.
+A good bought at home in one run only makes the country's ACR NaN in both forms.
+
+`Outcome` also carries each province's pop income I_p, buyer prices q_pg and home share
+lambda_pg: what p buys from itself over what p buys from every origin, domestic and foreign, by
+value at origin prices over the flow window (the province's payment net of tariff,
+`flows::MeanFlows::absorption`). Both sides of the graded pair are reduced from provinces with
+base-run income weights s_p = I_p / I_c (ADR 0268; Ramondo, Rodriguez-Clare and
+Saborio-Rodriguez 2016, section 2.6, Proposition 4), provinces with no base income left out:
+
+- `acr_io_province`: sum_p s_p d ln W_p, d ln W_p = -Omega_c' (I - A_c')^-1 diag(1/theta)
+  d ln lambda_p with the country's Omega and A. A province NaN makes its country NaN.
+- `welfare_province`: sum_p s_p (d ln I_p - sum_g Omega_cg d ln q_pg). It differs from
+  `welfare` at first order by -sum_g Omega_cg sum_p (s_p - pi_p) d ln q_pg, pi_p the population
+  share: the covariance of income per head with price changes inside the country. A province
+  with no buyer price for a good with Omega_cg > 0 makes its country NaN (`welfare` averages the
+  finite prices instead); the report counts such countries with the NaN ACR ones and grades
+  neither.
+
+With one province per country the province forms are the country forms bit for bit. ADR 0207's
+criterion grades `welfare_province` against `acr_io_province` (ADR 0268, amending ADR 0265):
+under every crossing tau x 1.1, every ICIO country with |ACR| above 1e-4 has its sign, the median
+model / ACR ratio is in [0.8, 1.25] and the correlation across countries is at least 0.9. `acr`
+and `acr_io` against `welfare` stay reported, with each country's gap `acr_io -
+acr_io_province`. C7 asserts the criterion at B8 on the final pack.
+On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) the country forms read:
+`acr_io` median 1.077 (p10 0.931, p90 1.325), correlation 0.862 and 0 wrong signs over 80;
+`acr` median 2.417 (p10 1.868, p90 3.016), correlation 0.855 (before ADR 0268 and 0269).
+
+| Test | Checks |
+|---|---|
+| `province_forms_weight_provinces_by_base_income` | hand-computed two-province forms to 1e-14; a zero-income province adds nothing, as does a good a province absorbs in neither run; a vanishing province home share gives NaN |
+| `income_weights_differ_from_population_weights_by_the_price_covariance` | the first-order gap of point 2 of ADR 0268, remainder below (d ln q)^2 |
+| `province_forms_reduce_to_each_province_country` | two countries with interleaved provinces: each reduces to its own provinces and income |
+| `welfare_and_acr_match_the_hand_computed_toy` | one province: province forms equal the country forms bit for bit |
+| `outcome_aggregates_the_flow_window` | province incomes add to the country's; lambda_p is home over absorption, in [0, 1] |
+| `flows::tests::pairs_account_for_everything_dispatched` | province absorption adds to the country's home purchases and pairs into it, to 1e-12 |
 
 ## GE reference model (`ceteris-reference`)
 
