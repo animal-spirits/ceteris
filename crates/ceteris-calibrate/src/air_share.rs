@@ -44,23 +44,60 @@ pub struct Cell {
     pub crossings: Vec<Crossing>,
 }
 
+/// A cell's share in logs: ln S, ln (1 - S), and g = d ln N / dr, N the air part of the sum.
+/// Non-air crossings do not depend on r, so dS/dr = S (1 - S) g and the quasi-likelihood's
+/// score is w (s - S) g: no ratio of underflowing shares is formed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LogShare {
+    ln_s: f64,
+    ln_1s: f64,
+    g: f64,
+}
+
+/// ln of a sum of exp(terms) and the terms' softmax-weighted mean of `d`.
+fn log_sum(terms: &[(f64, f64)]) -> (f64, f64) {
+    let m = terms.iter().fold(f64::NEG_INFINITY, |a, t| a.max(t.0));
+    let (mut z, mut zd) = (0.0, 0.0);
+    for &(l, d) in terms {
+        let e = (l - m).exp();
+        z += e;
+        zd += e * d;
+    }
+    (m + z.ln(), zd / z)
+}
+
 impl Cell {
-    /// The model's air share and its derivative in r.
-    pub fn model_share(&self, r: f64) -> (f64, f64) {
-        let (mut n, mut d, mut dn, mut dd) = (0.0, 0.0, 0.0, 0.0);
+    fn log_share(&self, r: f64) -> LogShare {
+        let (mut air, mut other) = (Vec::new(), Vec::new());
         for x in &self.crossings {
+            let (va, ub) = (self.v[x.a], self.u[x.b]);
+            if va <= 0.0 || ub <= 0.0 {
+                continue;
+            }
             let tau = x.beta + x.slope * r;
-            let vku = self.v[x.a] * tau.powf(-self.theta) * self.u[x.b];
-            let dvku = -self.theta * vku * x.slope / tau;
-            d += vku;
-            dd += dvku;
+            let ln = va.ln() - self.theta * tau.ln() + ub.ln();
             if x.air() {
-                n += vku;
-                dn += dvku;
+                air.push((ln, -self.theta * x.slope / tau));
+            } else {
+                other.push((ln, 0.0));
             }
         }
-        let s = n / d;
-        (s, (dn - s * dd) / d)
+        let (ln_n, g) = log_sum(&air);
+        let (ln_m, _) = log_sum(&other);
+        let hi = ln_n.max(ln_m);
+        let ln_d = hi + ((ln_n - hi).exp() + (ln_m - hi).exp()).ln();
+        LogShare {
+            ln_s: ln_n - ln_d,
+            ln_1s: ln_m - ln_d,
+            g,
+        }
+    }
+
+    /// The model's air share and its derivative in r.
+    pub fn model_share(&self, r: f64) -> (f64, f64) {
+        let l = self.log_share(r);
+        let (s, s1) = (l.ln_s.exp(), l.ln_1s.exp());
+        (s, s * s1 * l.g)
     }
 
     /// False when the share is 0 or 1 at every r: no air crossing, or no other.
@@ -71,6 +108,22 @@ impl Cell {
                 .any(|x| x.air() == air && self.v[x.a] * self.u[x.b] > 0.0)
         };
         reached(true) && reached(false)
+    }
+
+    fn quasi_loglik(&self, r: f64) -> f64 {
+        let l = self.log_share(r);
+        self.weight * (self.share * l.ln_s + (1.0 - self.share) * l.ln_1s)
+    }
+
+    /// Score and Fisher information in x = ln r.
+    fn score_info(&self, r: f64) -> (f64, f64) {
+        let l = self.log_share(r);
+        let (s, s1) = (l.ln_s.exp(), l.ln_1s.exp());
+        let gx = r * l.g;
+        (
+            self.weight * (self.share - s) * gx,
+            self.weight * s * s1 * gx * gx,
+        )
     }
 }
 
@@ -90,13 +143,7 @@ pub const AIR_TOL: f64 = 1e-12;
 pub const AIR_MAX_ITER: usize = 100;
 
 fn quasi_loglik(cells: &[&Cell], r: f64) -> f64 {
-    cells
-        .iter()
-        .map(|c| {
-            let s = c.model_share(r).0;
-            c.weight * (c.share * s.ln() + (1.0 - c.share) * (1.0 - s).ln())
-        })
-        .sum()
+    cells.iter().map(|c| c.quasi_loglik(r)).sum()
 }
 
 /// Fisher scoring in ln r from `r0`, halving a step that lowers the quasi-likelihood. Fails
@@ -113,11 +160,12 @@ pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
         let r = x.exp();
         let (mut score, mut info) = (0.0, 0.0);
         for c in &used {
-            let (s, ds) = c.model_share(r);
-            let dsx = r * ds;
-            let var = s * (1.0 - s);
-            score += c.weight * (c.share - s) / var * dsx;
-            info += c.weight * dsx * dsx / var;
+            let (sc, i) = c.score_info(r);
+            score += sc;
+            info += i;
+        }
+        if !(info > 0.0 && info.is_finite()) {
+            return Err(format!("air share: information {info} at r {r}"));
         }
         let mut step = score / info;
         let mut next = quasi_loglik(&used, (x + step).exp());
@@ -144,11 +192,9 @@ pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
     let mut info = 0.0;
     let mut by_cluster: std::collections::BTreeMap<usize, f64> = Default::default();
     for c in &used {
-        let (s, ds) = c.model_share(r);
-        let dsx = r * ds;
-        let var = s * (1.0 - s);
-        info += c.weight * dsx * dsx / var;
-        *by_cluster.entry(c.cluster).or_default() += c.weight * (c.share - s) / var * dsx;
+        let (sc, i) = c.score_info(r);
+        info += i;
+        *by_cluster.entry(c.cluster).or_default() += sc;
     }
     let meat: f64 = by_cluster.values().map(|g| g * g).sum();
     let fit = AirFit {
@@ -456,6 +502,9 @@ pub fn eu_hindcast(
         let Some(o) = origin(par) else {
             if par.len() == 2 && !EU15.contains(par) && !INTRA_SPECIAL.contains(par) {
                 notes.unmatched_country += v;
+                if !notes.unmatched_codes.iter().any(|c| c == par) {
+                    notes.unmatched_codes.push((*par).to_owned());
+                }
             }
             return;
         };
@@ -485,6 +534,7 @@ pub fn eu_hindcast(
         c.0 += v * share;
         c.1 += v;
     })?;
+    notes.unmatched_codes.sort();
     let obs = cells
         .into_iter()
         .map(|((importer, origin, good), (air, total))| {
@@ -752,6 +802,19 @@ mod tests {
         let later = [o(1, 4, 10.0, 100.0), o(2, 4, 10.0, 100.0)];
         let t = trend(&earlier, &later);
         assert!((t[4] - ((40.0_f64 / 160.0).ln() - (20.0_f64 / 180.0).ln())).abs() < 1e-12);
+    }
+
+    #[test]
+    fn an_underflowing_air_share_stays_finite() {
+        // theta 60 and an air tau near 1e6: the air term is about 1e-360, below f64.
+        let mut c = cell(0, 9000.0, 2e-4, 60.0);
+        c.crossings[2].beta = 1e6;
+        c.share = 0.2;
+        let (s, ds) = c.model_share(3.0);
+        assert!(s == 0.0 && ds == 0.0);
+        let (sc, i) = c.score_info(3.0);
+        assert!(sc.is_finite() && i.is_finite());
+        assert!(c.quasi_loglik(3.0).is_finite());
     }
 
     #[test]
