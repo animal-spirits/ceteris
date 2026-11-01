@@ -1338,13 +1338,13 @@ sections = "8.2"
 
 [[entry]]
 rows = "0268"
-topic = "Per-province ACR with income weights (held by open branch)"
-sections = "15"
+topic = "[The ACR criterion graded per province](../rfcs/0268-acr-graded-per-province.md)"
+sections = "15.2, 21"
 
 [[entry]]
 rows = "0269"
-topic = "P04 mode ratios from 2000 shares (held by open branch)"
-sections = "17"
+topic = "[P04 mode cost ratios borrowed from freight rates](../rfcs/0269-p04-mode-cost-ratios-borrowed.md)"
+sections = "5.3, 17.1, 21"
 
 [[entry]]
 rows = "0270"

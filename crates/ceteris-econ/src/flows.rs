@@ -6,7 +6,8 @@
 //! shipment between two provinces of one country is a domestic pair (exporter = importer);
 //! international value and units are the crossing columns of `Sourced`, attributed to the
 //! countries of the two gateways of the crossing. Home purchases are valued at the
-//! province's own price.
+//! province's own price. A province's absorption is everything it buys, at origin prices: home
+//! purchases, domestic pairs and imports, its payment net of tariff.
 
 use ceteris_trade::{Kernel, Sourced};
 
@@ -23,6 +24,8 @@ pub struct GoodFlows {
     /// Home purchases, bought in the origin province, per province.
     home_value: Vec<f64>,
     home_units: Vec<f64>,
+    /// Absorption, per province.
+    absorption: Vec<f64>,
 }
 
 impl GoodFlows {
@@ -34,6 +37,7 @@ impl GoodFlows {
             pair_units: vec![0.0; pairs],
             home_value: vec![0.0; n_provinces],
             home_units: vec![0.0; n_provinces],
+            absorption: vec![0.0; n_provinces],
         }
     }
 
@@ -43,6 +47,7 @@ impl GoodFlows {
             &mut self.pair_units,
             &mut self.home_value,
             &mut self.home_units,
+            &mut self.absorption,
         ] {
             v.fill(0.0);
         }
@@ -67,6 +72,7 @@ impl GoodFlows {
             let home = r.home[o][0] + r.home[o][1];
             self.home_value[o] += price[o] * home;
             self.home_units[o] += home;
+            self.absorption[o] += r.paid[o] - r.tariff[o];
             let at = pair(province_country[o], province_country[o]);
             let legs = gk.domestic.offsets[o] as usize..gk.domestic.offsets[o + 1] as usize;
             for j in legs {
@@ -94,6 +100,8 @@ pub struct MeanFlows {
     /// Home purchases, `[province * n_goods + g]`.
     pub home_value: Vec<f64>,
     pub home_units: Vec<f64>,
+    /// Absorption, `[province * n_goods + g]`.
+    pub absorption: Vec<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -161,6 +169,7 @@ impl FlowWindow {
             pair_units: vec![0.0; nc * nc * ng],
             home_value: vec![0.0; np * ng],
             home_units: vec![0.0; np * ng],
+            absorption: vec![0.0; np * ng],
         };
         if self.ticks == 0 {
             return out;
@@ -173,6 +182,7 @@ impl FlowWindow {
                     (&mut out.pair_units, &f.pair_units),
                     (&mut out.home_value, &f.home_value),
                     (&mut out.home_units, &f.home_units),
+                    (&mut out.absorption, &f.absorption),
                 ] {
                     for (i, y) in add.iter().enumerate() {
                         sum[i * ng + g] += y;
@@ -186,6 +196,7 @@ impl FlowWindow {
             &mut out.pair_units,
             &mut out.home_value,
             &mut out.home_units,
+            &mut out.absorption,
         ] {
             v.iter_mut().for_each(|x| *x /= n);
         }
@@ -260,6 +271,28 @@ mod tests {
         let domestic: f64 = (0..nc).map(|c| m.pair_value[at(c, c)]).sum();
         let domestic_legs: f64 = r.domestic_value.iter().sum();
         assert!(relative(domestic, domestic_legs) < 1e-12);
+
+        // tariffs are paid, so absorption nets them out of what provinces pay
+        assert!(r.tariff.iter().any(|&t| t > 0.0));
+        // province absorption adds up to the country's: home purchases and every pair into it
+        let mut by_country = vec![0.0; nc];
+        for i in 0..np {
+            let c = usize::from(w.network.province_country[i]);
+            by_country[c] += m.absorption[i * N_GOODS + g];
+            assert!(m.absorption[i * N_GOODS + g] >= m.home_value[i * N_GOODS + g]);
+        }
+        for (im, &got) in by_country.iter().enumerate() {
+            let home: f64 = (0..np)
+                .filter(|&i| usize::from(w.network.province_country[i]) == im)
+                .map(|i| m.home_value[i * N_GOODS + g])
+                .sum();
+            let pairs: f64 = (0..nc).map(|ex| m.pair_value[at(ex, im)]).sum();
+            assert!(
+                relative(got, home + pairs) < 1e-12,
+                "{im}: {got} {}",
+                home + pairs
+            );
+        }
     }
 
     #[test]
