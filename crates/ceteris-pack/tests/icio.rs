@@ -360,6 +360,38 @@ fn oil_gas_va_over_rents_sums_the_icio_economies_with_a_rent() {
     ));
 }
 
+/// Gives donor `code` refining in good 1: its crude oil and gas extraction (B06, B09) has output
+/// `output` and inputs summing to `inputs`, the rest of good 1 being refining (C19).
+fn refines(icio: &mut BTreeMap<String, CountryIo>, code: &str, output: f64, inputs: f64) {
+    let c = icio.get_mut(code).unwrap();
+    c.extraction_output = output;
+    c.extraction = [0.0; N_GOODS];
+    (c.extraction[1], c.extraction[3]) = (0.5 * inputs, 0.5 * inputs);
+}
+
+/// The rents measure extraction, so the factor is extraction VA (B06, B09 output less their
+/// inputs) over rents, not good 1's VA with refining in it (ADR 0281): AAA's good-1 VA is 4, of
+/// which extraction 3 - 0.5 = 2.5, against rents of 2.
+#[test]
+fn oil_gas_va_over_rents_takes_extraction_value_added() {
+    let mut icio = donors();
+    refines(&mut icio, "AAA", 3.0, 0.5);
+    assert!(approx(
+        oil_gas_va_over_rents(&icio, &with_rents(0.0, 0.0)),
+        1.25,
+        1e-12
+    ));
+}
+
+/// The cap is the largest extraction VA over the VA of goods 1 to 8 (refining stays in
+/// industry): CCC's good 1 holds 40 of its industry's 49, extraction 30 of it.
+#[test]
+fn oil_gas_most_of_industry_takes_extraction_value_added() {
+    let mut icio = oil_donors();
+    refines(&mut icio, "CCC", 36.0, 6.0);
+    assert!(approx(oil_gas_most_of_industry(&icio), 30.0 / 49.0, 1e-12));
+}
+
 #[test]
 fn oil_and_gas_rents_set_crude_oil_and_gas_out_of_its_group() {
     let got = oil(&with_rents(0.05, 0.01));
@@ -1137,8 +1169,25 @@ fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
 #[test]
 fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
     let Some(d) = data() else { return };
+    // Extraction VA over rents (ADR 0281). Below: a rent, (price - unit cost) times output, is
+    // at most the output's value, so k is at least the extraction column's a_VA, 0.666 in the
+    // world totals of ADR 0270. Above: good 1's VA holds refining's as well, which is not
+    // negative, so k is below the same sum over good 1's VA. 2000: 0.991 against 1.430.
     let k = oil_gas_va_over_rents(&d.real, &d.wdi);
-    assert!((0.5..3.0).contains(&k), "{k}");
+    let (va_1, rents): (Vec<f64>, Vec<f64>) = d
+        .real
+        .iter()
+        .filter_map(|(code, c)| {
+            let r = match (d.wdi.oil_rents.get(code), d.wdi.gas_rents.get(code)) {
+                (None, None) => return None,
+                (oil, gas) => oil.unwrap_or(&0.0) + gas.unwrap_or(&0.0),
+            };
+            Some((c.va[1] * 1e6, d.wdi.gdp.get(code)? * r))
+        })
+        .unzip();
+    let with_refining = va_1.iter().sum::<f64>() / rents.iter().sum::<f64>();
+    let a_va = 1.0 - world_oil_gas_column(&d.real).iter().sum::<f64>();
+    assert!(a_va < k && k < with_refining, "{a_va} {k} {with_refining}");
     // Billion USD of crude oil and gas VA, against about 21, 14, 20 and 33 of 2000 crude output.
     // Crude oil and gas from rents produce with the world column, not the donor's (Sudan's
     // donor Senegal has a value-added share of 0.07 in it).
