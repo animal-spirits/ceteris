@@ -294,7 +294,8 @@ GE reference is unchanged. Every tick the clip binds on the gap terms at a cell 
 1, 2 and 5 (`goods::STORABLE`), where it is on (`TradeParams::stores`: psi or delta positive;
 a positive delta with psi 0, a stock that spoils with nothing targeting it, the slowly growing
 root of the Storage loop below, is refused by `TradeParams::check_storage` in `EconWorld::new`
-and in the calibration). It
+and in the calibration, as is a stored good without a positive cover s, zeta or k + delta, by
+which the order of ADR 0280 divides). It
 is off by default (owner ruling 2026-10-31; since g_s 0.006 the approved values pass the checks of
 the Storage loop below, and turning storage on is the owner's call), so P144 and P56's delta
 default to 0 and those goods run the stock rule, bit for bit as before ADR 0091, kappa2 included; `TradeParams::with_storage` sets the approved values. Each such origin market keeps an expected log-price change
@@ -698,14 +699,15 @@ the block keeps the margin m of its stability limit that the Per-market gain giv
 else the lower end of a bisection of (0, 1] to 2^-12: a value at which the map is stable at
 gains b kappa_cell / m and unstable one grid step above. The stable set need not be an interval,
 so b is the boundary the bisection finds, not the largest stable value of the grid. A block
-unstable at every scale of the grid keeps the smallest, 2^-12. The map is stable when its
+unstable at every scale of the grid has no stable scale, b = 0, and the calibration stops on
+it (B9 review; it kept the smallest, 2^-12, at which it is unstable). The map is stable when its
 spectral radius, measured as the growth rate of its iterates over the second half of 4,000
 ticks from a fixed start vector, is at most 1 + 2e-3 (P157: a market at its own cap has radius 1
 there; on the fixture's blocks the measurement is within 5.4e-4 of the Gelfand limit
 ||M^k||^(1/k) at k = 2^40, `block_radius_matches_the_matrix_powers`). ITERATIONS and BISECTIONS
 are numerical constants of the measurement; the tolerance decides which blocks are capped, so
 it is registered. The calibration checks every capped block's map stable at its gains
-b kappa_cell (radius below 1) and stops otherwise.
+b kappa_cell by the same criterion (radius at most 1 + 2e-3) and stops otherwise.
 
 The block's limit gain is b kappa_cell / m per cell, infinite for a block within its margin and
 for a cell in no block. The calibration computes it at the default kappa1 (P03a), m (P03d),

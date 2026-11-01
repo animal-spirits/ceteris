@@ -84,13 +84,20 @@ pub fn demand(m: &Model, src: &Sourcing, spend: &Mat) -> Mat {
 /// eps per cell (P, G): the largest over the cell's enterprises of s_L sigma_FL / ((1 - s_L)
 /// a_VA), the elasticity of the labour target's output to the own price (ADR 0263, As built: the
 /// maximum, not the output-weighted mean); 0 where no enterprise produces. `s_l` and `a_va` per
-/// enterprise.
-pub fn supply(inp: &Inputs, s_l: &[f64], a_va: &[f64]) -> Mat {
+/// enterprise. An enterprise with s_L >= 1 or a_VA <= 0 has no finite eps and is an error.
+pub fn supply(inp: &Inputs, s_l: &[f64], a_va: &[f64]) -> Result<Mat, String> {
     let mut eps = Mat::zeros(inp.n_provinces(), inp.n_goods());
     for e in 0..inp.ent_good.len() {
+        if s_l[e].is_nan() || s_l[e] >= 1.0 || a_va[e].is_nan() || a_va[e] <= 0.0 {
+            return Err(format!(
+                "enterprise {e} has labour share {} and value-added share {}: its supply \
+                 elasticity s_L sigma_FL / ((1 - s_L) a_VA) needs s_L < 1 and a_VA > 0",
+                s_l[e], a_va[e]
+            ));
+        }
         let x = s_l[e] * inp.sigma_fl / ((1.0 - s_l[e]) * a_va[e]);
         let cell = &mut eps[(inp.ent_province[e], inp.ent_good[e])];
         *cell = cell.max(x);
     }
-    eps
+    Ok(eps)
 }

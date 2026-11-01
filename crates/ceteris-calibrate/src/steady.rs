@@ -86,8 +86,9 @@ pub const MAX_LOCAL: usize = 1_000;
 /// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
 /// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
 /// block map (ADR 0091). Each branch numbered its own tables 8 before the merge. 10: the
-/// metadata's `border_nu` is one value per good (ADR 0276).
-pub const FORMAT: &str = "10";
+/// metadata's `border_nu` is one value per good (ADR 0276). The tables' reader's constant, so
+/// writer and reader cannot drift apart.
+pub const FORMAT: &str = ceteris_econ::calibration::FORMAT;
 
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
@@ -1441,7 +1442,7 @@ pub fn calibrate_from(
         }
     });
     let demand_elasticity = elasticity::demand(&m, &src, &spend_traded);
-    let supply_elasticity = elasticity::supply(inp, s_l, &a_va);
+    let supply_elasticity = elasticity::supply(inp, s_l, &a_va)?;
     let ent_spend = Mat::from_fn(
         n_e,
         n_g,
@@ -1587,6 +1588,16 @@ pub fn reference_point(inp: &Inputs, s: &Steady) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The export the reference model reads is the one the simulator writes (the reference
+    /// crate does not depend on econ, so the two constants are checked here).
+    #[test]
+    fn export_format_matches_the_reference_reader() {
+        assert_eq!(
+            ceteris_econ::export::EXPORT_FORMAT,
+            ceteris_reference::io::EXPORT_FORMAT
+        );
+    }
 
     #[test]
     fn sci_matches_python_format() {
