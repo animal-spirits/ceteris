@@ -2,7 +2,7 @@
 
 Status: draft | approved (by, date)
 Phase: P<n>
-Design sections: <links into DESIGN.md>
+Design sections: <links into spec/>
 
 ## Purpose
 

@@ -9,7 +9,7 @@ anything. Your job is to find where the code disagrees with the written design.
 
 You are given a module (or a diff summary) and the files changed. Then:
 
-1. Read `specs/<module>/SPEC.md` and only the DESIGN.md sections and ADRs it cites for the
+1. Read `specs/<module>/SPEC.md` and only the `spec/` sections, ADRs and RFCs it cites for the
    changed systems.
 2. For each equation the change implements, compare the code term by term: symbols, units,
    signs, timing (which tick's value is read), parameter IDs, and the system's position in the
