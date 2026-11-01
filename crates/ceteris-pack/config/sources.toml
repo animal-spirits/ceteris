@@ -1020,7 +1020,7 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS. ADR 0098 series, CC BY-4.0 in the API metadata on 2026-11-01: PA.NUS.PPPC.RF; PA.NUS.FCRF (its source line names the IMF IFS, but the licence type is the World Bank's)."
 
 [[source]]
 id = "wb-gem"
@@ -1476,6 +1476,7 @@ policy = "bundle"
 reason = "CC BY 3.0 IGO notice on the data overrides the general un.org terms"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 reads WPP2024_TotalPopulationBySex.csv.gz (CC BY 3.0 IGO in downloads.json, rechecked 2026-11-01) for the 2000 national population of economies WDI does not list, such as Western Sahara (ADR 0098)."
 
 [[source]]
 id = "un-ims"

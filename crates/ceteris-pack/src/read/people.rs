@@ -1,5 +1,5 @@
-//! Population, education, labour and Gini sources: ILOSTAT, WIC, Barro-Lee, SWIID, PWT and the
-//! WDI series of the people module.
+//! Population, education, labour and Gini sources: ILOSTAT, WIC, Barro-Lee, SWIID, PWT, UN WPP
+//! and the WDI series of the people module.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -12,6 +12,8 @@ use super::xlsx::{self, Cell};
 use super::{ByYear, Csv, YEAR, cell, float, int, nearest, open_csv, with_member};
 use crate::numeric::{fsum, pairwise_sum};
 
+/// UN World Population Prospects 2024 total population by sex and year (gzip CSV).
+pub const WPP: &str = "WPP2024_TotalPopulationBySex.csv.gz";
 /// Number of education levels: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
 /// Years whose mean unemployment rate is the natural rate u*.
@@ -225,6 +227,35 @@ pub fn read_swiid(
     )
 }
 
+/// UN WPP total population (gzip CSV): persons in `YEAR`, medium variant, by ISO code (rows
+/// without one are aggregates).
+pub fn read_wpp(path: &Path) -> Result<BTreeMap<String, f64>, String> {
+    let file = std::fs::File::open(path).map_err(|e| super::err(path, e))?;
+    // The file is several gzip members back to back.
+    let mut csv = Csv::new(
+        flate2::read::MultiGzDecoder::new(std::io::BufReader::new(file)),
+        path,
+    )?;
+    let (iso, variant, time, total) = (
+        csv.col("ISO3_code")?,
+        csv.col("Variant")?,
+        csv.col("Time")?,
+        csv.col("PopTotal")?,
+    );
+    let origin = path.display().to_string();
+    let year = YEAR.to_string();
+    let mut out = BTreeMap::new();
+    let mut row = StringRecord::new();
+    while csv.next(&mut row)? {
+        let code = cell(&row, iso);
+        if !code.is_empty() && cell(&row, variant) == "Medium" && cell(&row, time) == year {
+            // WPP counts in thousands.
+            out.insert(code.to_owned(), float(cell(&row, total), &origin)? * 1000.0);
+        }
+    }
+    Ok(out)
+}
+
 /// PWT 11 series by economy and year.
 #[derive(Debug, Default)]
 pub struct Pwt {
@@ -292,7 +323,10 @@ pub struct Observed {
     pub gini_wdi: BTreeMap<String, f64>,
     pub gini_swiid: BTreeMap<String, f64>,
     pub gdp_per_capita: BTreeMap<String, f64>,
+    /// WDI population in `YEAR`.
     pub population: BTreeMap<String, f64>,
+    /// UN WPP population in `YEAR`, for economies WDI does not list.
+    pub population_wpp: BTreeMap<String, f64>,
     pub region: BTreeMap<String, String>,
 }
 
@@ -339,6 +373,7 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
             .into_iter()
             .filter_map(|(k, v)| Some((k, *v.get(&YEAR)?)))
             .collect(),
+        population_wpp: read_wpp(&cache.join(WPP))?,
         region,
     })
 }

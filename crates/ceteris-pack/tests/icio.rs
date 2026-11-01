@@ -720,6 +720,24 @@ fn people_come_from_worldpop_when_wdi_has_none() {
 }
 
 #[test]
+fn people_come_from_wpp_before_worldpop() {
+    let mut o = obs_with(None, &[("WWW", "R1")], &[]);
+    o.population_wpp = map(&[("WWW", 3e6)]);
+    let w = Wdi {
+        gdp: map(&DONOR_GDP),
+        ..wdi()
+    };
+    let case = Case {
+        worldpop: &[("WWW", 2e6)],
+        ..PLAIN
+    };
+    let got = &run(&[("WWW", "WWW")], &donors(), &w, &o, &case)["WWW"];
+    // WPP's 3 million people at donor AAA's 100 USD per person, not WorldPop's 2 million.
+    assert_eq!(got.va_basis, Basis::Donor);
+    assert!(approx(total(&got.table.va), 300.0, 1e-6));
+}
+
+#[test]
 fn uninhabited_territory_keeps_zero_value_added() {
     let o = obs_with(None, &[("ZZZ", "R1")], &[("ZZZ", 0.0)]);
     let w = Wdi {
