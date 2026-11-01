@@ -836,6 +836,77 @@ pub fn estimate(
     ))
 }
 
+/// The profile grid of r = P04d / P04a: 25 points from 0.5 to 32, a quarter octave apart.
+pub fn profile_grid() -> [f64; 25] {
+    std::array::from_fn(|i| 0.5 * 2f64.powf(i as f64 / 4.0))
+}
+
+/// One point of [`profile`]: at r, on the paths solved at r.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProfilePoint {
+    pub r: f64,
+    /// Import-value weighted air share over every cell (a cell without an air crossing counts 0,
+    /// one without another 1), model and data.
+    pub model_all: f64,
+    pub data_all: f64,
+    /// The same over the informative cells, as the fit weighs them.
+    pub model_used: f64,
+    pub data_used: f64,
+    /// The quasi-likelihood over the informative cells.
+    pub quasi_loglik: f64,
+    /// Per good: (informative cells, model share, data share) over the informative cells.
+    pub by_good: [(usize, f64, f64); N_TRADED],
+}
+
+/// A diagnostic profile (ADR 0277): at every point of [`profile_grid`] the per-good
+/// least-iceberg legs are solved with air at r times road, and the model's shares and the
+/// quasi-likelihood are evaluated on them, in grid order.
+pub fn profile(
+    pack: &Path,
+    obs: &[Obs],
+    theta: &[f64; N_TRADED],
+    base: &Transport,
+) -> Result<Vec<ProfilePoint>, String> {
+    let weight = Table::open(&pack.join("econ_goods.arrow"))?.f64("weight")?;
+    let trade = TradeParams::default();
+    profile_grid()
+        .into_iter()
+        .map(|r| {
+            let mut p = base.clone();
+            p.per_tkm[AIR as usize] = r * p.per_tkm[0];
+            let cs = cells(&legs(pack, &p, &weight, &trade)?, &p, theta, &weight, obs);
+            let mean = |used: &[&Cell]| {
+                let total: f64 = used.iter().map(|c| c.weight).sum();
+                let model = used
+                    .iter()
+                    .map(|c| c.weight * c.model_share(r).0)
+                    .sum::<f64>()
+                    / total;
+                let data = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
+                (model, data)
+            };
+            let all: Vec<&Cell> = cs.iter().collect();
+            let used: Vec<&Cell> = cs.iter().filter(|c| c.informative()).collect();
+            let (model_all, data_all) = mean(&all);
+            let (model_used, data_used) = mean(&used);
+            let by_good = std::array::from_fn(|g| {
+                let of: Vec<&Cell> = used.iter().copied().filter(|c| c.good == g).collect();
+                let (m, d) = mean(&of);
+                (of.len(), m, d)
+            });
+            Ok(ProfilePoint {
+                r,
+                model_all,
+                data_all,
+                model_used,
+                data_used,
+                quasi_loglik: quasi_loglik(&used, r),
+                by_good,
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -886,6 +957,16 @@ mod tests {
             c.crossings[2].beta *= 50.0;
         }
         assert!(fit(&cells, 5.0).unwrap_err().contains("ran to"));
+    }
+
+    #[test]
+    fn profile_grid_spans_half_to_thirty_two() {
+        let g = profile_grid();
+        assert_eq!((g[0], g[24]), (0.5, 32.0));
+        assert!(
+            g.windows(2)
+                .all(|w| (w[1] / w[0] - 2f64.powf(0.25)).abs() < 1e-12)
+        );
     }
 
     #[test]
