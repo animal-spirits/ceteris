@@ -13,9 +13,13 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_array::{ArrowPrimitiveType, RecordBatch};
 use arrow_ipc::reader::FileReader;
+use ceteris_pack::econ::build::{BACI, HS_KEY};
 use ceteris_pack::econ::build::{BuildReport, BuildStats, TABLES, WORLDPOP, build};
 use ceteris_pack::econ::downscale::{GEM, KUMMU, Level};
-use ceteris_pack::econ::icio::ICIO;
+use ceteris_pack::econ::goods::hs_goods;
+use ceteris_pack::econ::icio::{ICIO, INSIDE};
+use ceteris_pack::read::baci::{read_hs_cpa, trade_by_good};
+use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::tariffs::{DTA, GRAVITY};
 use ceteris_pack::sources;
 use common::{cached, pack_table, strings};
@@ -269,6 +273,64 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
         .iter()
         .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(*p), b.max(*p)));
     assert!(lo > 0.09 && hi < 1.5, "{lo} {hi}");
+}
+
+/// Donor tables balanced by RAS (ADR 0286): every `ras` economy's use table [Z | F] meets its
+/// domestic use X + M - E by good, its intermediate inputs X - VA and final demand VA + M - E. A
+/// parent is balanced with the territories counted inside it, which share its coefficients;
+/// ICIO's 80 and the two territories inside ICIO economies (Aland, Northern Cyprus) are `icio`.
+#[test]
+fn donor_tables_are_balanced_to_domestic_use() {
+    let Some(f) = full() else { return };
+    let path = f.out.path().join("econ_countries.arrow");
+    let (code, io_basis) = (strings(&path, "code"), strings(&path, "io_basis"));
+    let count = |s: &str| io_basis.iter().filter(|x| *x == s).count();
+    assert_eq!((count("icio"), count("ras"), count("donor")), (82, 88, 72));
+    let (iso, _) = read_codes(&f.cache.join("ne_10m_admin_0_countries.zip")).unwrap();
+    let hs = read_hs_cpa(&f.cache.join(HS_KEY)).unwrap();
+    let trade = trade_by_good(&f.cache.join(BACI), &hs_goods(&hs), &iso, &code).unwrap();
+    let a = values::<Float64Type>(&f.out.path().join("econ_io.arrow"), "a");
+    let per_good = |name: &str| -> Vec<Vec<f64>> {
+        (0..N_GOODS)
+            .map(|g| values::<Float64Type>(&path, &format!("{name}_{g}")))
+            .collect()
+    };
+    let (mut va, fd) = (per_good("va"), per_good("fd"));
+    let at_code = |c: &str| code.iter().position(|x| x == c).unwrap();
+    for (territory, parent) in INSIDE {
+        let (t, p) = (at_code(territory), at_code(parent));
+        for v in &mut va {
+            v[p] += v[t];
+        }
+    }
+    let mut worst = 0.0f64;
+    let inside = |c: usize| INSIDE.iter().any(|(t, _)| *t == code[c]);
+    for c in (0..code.len()).filter(|&c| io_basis[c] == "ras" && !inside(c)) {
+        let t = &trade[&code[c]];
+        let at = |k: usize, g: usize| a[(c * N_GOODS + k) * N_GOODS + g];
+        // X_g = VA_g / (1 - sum_k a_kg).
+        let x: Vec<f64> = (0..N_GOODS)
+            .map(|g| va[g][c] / (1.0 - (0..N_GOODS).map(|k| at(k, g)).sum::<f64>()))
+            .collect();
+        let (m, e): (Vec<f64>, Vec<f64>) = (0..N_GOODS)
+            .map(|k| (t.imports[k] / 1e6, t.exports[k] / 1e6))
+            .unzip();
+        let total_fd = (0..N_GOODS).map(|g| va[g][c] + m[g] - e[g]).sum::<f64>();
+        for k in 0..N_GOODS {
+            let used: f64 =
+                (0..N_GOODS).map(|g| at(k, g) * x[g]).sum::<f64>() + fd[k][c] * total_fd;
+            let want = x[k] + m[k] - e[k];
+            let miss = (used - want).abs() / want.max(1.0);
+            worst = worst.max(miss);
+            // ADR 0098: imputed economies hit their trade totals within 1e-8.
+            assert!(
+                miss <= 1e-8,
+                "{} good {k}: use {used} against {want}",
+                code[c]
+            );
+        }
+    }
+    eprintln!("donor tables: worst domestic-use miss {worst:e}");
 }
 
 #[test]

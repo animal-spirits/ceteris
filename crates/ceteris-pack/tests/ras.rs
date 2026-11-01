@@ -1,5 +1,5 @@
-//! Biproportional (RAS) balancing of a donor's input-output table to an economy's own row and
-//! column totals (ADR 0098).
+//! Biproportional (RAS) balancing of a donor's table to an economy's own row and column totals
+//! (ADRs 0098, 0286).
 
 use ceteris_pack::econ::ras::balance;
 use ceteris_pack::read::icio::N_GOODS;
@@ -44,7 +44,7 @@ fn rel(a: f64, b: f64) -> f64 {
 #[test]
 fn ras_matches_targets() {
     let (rows, cols) = targets();
-    let got = balance(&seed(), &rows, &cols, 1e-10, 200).unwrap();
+    let got = balance(&seed(), &rows, &cols, 1e-10, 200).unwrap().table;
     let (r, c) = sums(&got);
     for i in 0..N_GOODS {
         assert!(
@@ -74,7 +74,7 @@ fn ras_matches_targets() {
 fn ras_returns_the_seed_when_it_already_matches() {
     let s = seed();
     let (rows, cols) = sums(&s);
-    let got = balance(&s, &rows, &cols, 1e-10, 200).unwrap();
+    let got = balance(&s, &rows, &cols, 1e-10, 200).unwrap().table;
     for k in 0..N_GOODS {
         for g in 0..N_GOODS {
             assert!(rel(got[k][g], s[k][g]) <= 1e-12 || s[k][g] == 0.0);
@@ -87,7 +87,7 @@ fn ras_zero_target_empties_its_row() {
     let mut t = scaled();
     t[4] = [0.0; N_GOODS];
     let (rows, cols) = sums(&t);
-    let got = balance(&seed(), &rows, &cols, 1e-10, 200).unwrap();
+    let got = balance(&seed(), &rows, &cols, 1e-10, 200).unwrap().table;
     assert!(got[4].iter().all(|&x| x == 0.0));
     let (_, c) = sums(&got);
     assert!((0..N_GOODS).all(|g| rel(c[g], cols[g]) <= 1e-10));
@@ -113,4 +113,32 @@ fn ras_reports_no_convergence_within_the_cap() {
     let (rows, cols) = targets();
     let err = balance(&seed(), &rows, &cols, 1e-10, 1).unwrap_err();
     assert!(err.contains("iterations"), "{err}");
+}
+
+/// A use table [Z | F]: more columns than rows, scaled unevenly so a solution exists.
+#[test]
+fn ras_balances_a_rectangular_table() {
+    let seed: [[f64; 4]; 3] = [
+        [1.0, 2.0, 0.0, 4.0],
+        [3.0, 1.0, 2.0, 1.0],
+        [0.5, 0.0, 1.0, 6.0],
+    ];
+    let (r, c) = ([2.0, 0.5, 1.5], [1.0, 3.0, 0.7, 1.2]);
+    let want: [[f64; 4]; 3] =
+        std::array::from_fn(|k| std::array::from_fn(|g| r[k] * seed[k][g] * c[g]));
+    let rows: [f64; 3] = std::array::from_fn(|k| want[k].iter().sum());
+    let cols: [f64; 4] = std::array::from_fn(|g| want.iter().map(|w| w[g]).sum());
+    let got = balance(&seed, &rows, &cols, 1e-10, 200).unwrap();
+    assert!(got.passes >= 1 && got.passes <= 200);
+    for ((row, w), total) in got.table.iter().zip(&want).zip(rows) {
+        assert!(rel(row.iter().sum(), total) <= 1e-10);
+        for (x, y) in row.iter().zip(w) {
+            // The biproportional solution is unique: the seed scaled by r and c.
+            assert!(rel(*x, *y) <= 1e-8 || *y == 0.0);
+        }
+    }
+    for (g, total) in cols.iter().enumerate() {
+        assert!(rel(got.table.iter().map(|t| t[g]).sum(), *total) <= 1e-10);
+    }
+    assert!(balance(&seed, &rows[..2], &cols, 1e-10, 200).is_err());
 }

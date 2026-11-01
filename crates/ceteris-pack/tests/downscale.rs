@@ -15,7 +15,7 @@ use ceteris_pack::econ::downscale::{
     Provinces, Proxies, allocate, coverage, eia_oil_gas, gridded_gdp, load_proxies, match_dose,
     mineral_sites, point_sums, report,
 };
-use ceteris_pack::econ::icio::{Basis, Economy, IncomeSource, impute_pack};
+use ceteris_pack::econ::icio::{Basis, Economy, IncomeSource, IoBasis, impute_pack};
 use ceteris_pack::econ::people::{country_labour, national_population, scale_to_national};
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, cell_of, province_population};
@@ -55,6 +55,8 @@ fn io(va: [f64; N_GOODS], basis: Basis) -> Economy {
         va_basis: basis,
         region: None,
         income_source: IncomeSource::None,
+        io_basis: IoBasis::Icio,
+        ras_passes: 0,
         shed: 0.0,
     }
 }
@@ -724,6 +726,7 @@ fn real() -> Option<&'static Real> {
             &obs,
             &iso,
             &worldpop,
+            &BTreeMap::new(),
         )
         .unwrap();
         let gem = GEM.map(|n| cache.join(n));
