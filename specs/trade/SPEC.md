@@ -1034,5 +1034,7 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   can make an inventory target stable, or with P9 calibration. Goods 0, 1, 2 and 5 target their
   stock through competitive storage (ADR 0091) where it is on; it is off by default (owner ruling
   2026-10-31), so in the default all seven traded goods are untargeted. The approved values with
-  g_s 0.006 pass the stability checks and V1 at 6,000 ticks; turning it on is open
-  (Storage loop).
+  g_s 0.006 pass the stability checks and V1 at 6,000 ticks on the fixture; on the 2000 pack,
+  under ADR 0278's order, the default mode passes V1 and the frictionless mode misses it (seed 20,
+  Switzerland's good-1 cells; the data state, France's province 1094; ADR 0278 As built). Turning
+  it on is open (Storage loop).
