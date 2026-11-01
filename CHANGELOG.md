@@ -52,6 +52,21 @@
   gone; `goods::p2` keeps P2's values for the fixture, the defaults and tests.
 - No golden moves: the inputs digest adds the goods table only where it differs from P2's.
 
+### Local base price p_c (ADR 0098; C1b, p_c = 1 until the source is ruled)
+
+- `econ_countries` gains `price_level` and `price_level_imputed`, written 1 and true for every
+  country (the source rule waits on the owner); packs without the column load at 1.
+- Econ: `Countries::price_level` and `EconInputs::set_price_levels`. Local goods start at p_c
+  (base price, market price, PIGL inversion prices); local enterprises have A = 1 / p_c and
+  coef = a_kg p_o / q, a_VA = 1 - sum coef q / p_o, so values, cost shares and the base point
+  are the data's. The inputs digest adds p_c only where some country's is not 1.
+- Reference: reads p_c as the base price of local goods (`Inputs::data_state_price`), in the
+  coefficients, a_VA, the PIGL inversion and the solve's start.
+- Calibration: local goods stay at p_c through the passes, stage 3 and the tables; the
+  normalization of each traded good's prices is unchanged (traded goods only); the block gain
+  divides a household's local spending by the value of the cell's output.
+- No golden moves: with p_c = 1 every quantity is bit for bit the one before.
+
 ### Pack build: ADR 0098 source corrections (C1; built, not installed)
 
 - Gini: SWIID first (178 countries), WDI fallback (none needed in 2000), else the donor (64);
