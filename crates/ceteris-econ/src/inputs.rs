@@ -4,15 +4,16 @@
 
 use std::sync::Arc;
 
+use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{Goods, Leg, LegSet, LegTaus, Network, TradeParams, Wedges};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
 use crate::params::EconParams;
 
 /// The elasticities of each market's price loop at the calibrated point (ADR 0263; trade SPEC,
-/// Stability region, Per-market gain), `[province * N_GOODS + g]`, 0 where no market is active.
+/// Stability region, Per-market gain), `[province * n_goods + g]`, 0 where no market is active.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MarketElasticity {
     /// E: the own-price elasticity of the orders the market receives.
@@ -31,7 +32,8 @@ impl MarketElasticity {
     /// the storage order's factor on the orders' elasticity at a competitively stored good's
     /// origin ([`TradeParams::order_response`], ADR 0091; 1 elsewhere).
     pub fn j(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
-        self.demand[i] * trade.order_response(i % N_GOODS) + eta * self.supply[i] / (2.0 - eta)
+        self.demand[i] * trade.order_response(i % trade.goods.n())
+            + eta * self.supply[i] / (2.0 - eta)
     }
 
     /// kappa1_cell of cell `i` in a run under `params` and `trade` (ADRs 0263, 0267): the
@@ -53,9 +55,9 @@ pub const N_EDU: usize = 3;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Countries {
     /// Final demand shares Omega_g from all 2000 final demand.
-    pub omega: Vec<[f64; N_GOODS]>,
-    /// Input coefficients a_kg, units of k per unit of g, at `[k * N_GOODS + g]`.
-    pub io: Vec<[f64; N_GOODS * N_GOODS]>,
+    pub omega: Rows<f64>,
+    /// Input coefficients a_kg, units of k per unit of g, at `[k * n_goods + g]`.
+    pub io: Rows<f64>,
     /// Labour share s_L, used for every sector.
     pub s_l: Vec<f64>,
     /// 2000 unemployment rate (data; the model runs on `u_star`).
@@ -85,13 +87,13 @@ pub struct ProvinceData {
     /// Base delivered unit price q_d of every good at the province: 1 for local goods; for
     /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
     /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
-    pub base_price: Vec<[f64; N_GOODS]>,
+    pub base_price: Rows<f64>,
     /// Selection constant Gamma of every good at the province (ADR 0200): buyers of a traded
     /// good pay Gamma times the CES index P_d. Fixed where the world is calibrated, so that the
     /// buyer price there is the delivered unit price of the physical arrivals: the data state's
     /// `base_price / P_d` at prices 1 ([`EconInputs::set_base_prices`]), or the calibration
     /// tables' value. 1 for local goods and where no origin is reachable.
-    pub gamma: Vec<[f64; N_GOODS]>,
+    pub gamma: Rows<f64>,
 }
 
 /// Pops, one per (province, education level), sorted by province.
@@ -120,11 +122,11 @@ pub struct EntData {
     pub va_target: Vec<f64>,
     /// Putty-clay input coefficients (ADR 0020): units of each good per unit of output,
     /// aggregated over the enterprise's capacity vintages. P2 has one vintage, `column`.
-    pub coef: Vec<[f64; N_GOODS]>,
+    pub coef: Rows<f64>,
     /// The 2000 vintage, which S09 FixedLeontief runs on: the country's ICIO cost shares at
     /// base delivered prices ([`EconInputs::set_coefficients`]) or at the calibrated prices
     /// (ADR 0089, [`EconInputs::calibrate`]).
-    pub column: Vec<[f64; N_GOODS]>,
+    pub column: Rows<f64>,
     /// Value-added coefficient a_VA, real VA per unit of output: 1 - sum_k coef_k q_k at base
     /// prices for the base column, 1 - sum_k a_kg (the cost shares at the calibrated prices)
     /// for a calibrated one.
@@ -139,9 +141,11 @@ pub struct EntData {
 /// it as given.
 #[derive(Clone, Debug, Default)]
 pub struct EconInputs {
+    /// The goods of the pack (`econ_goods`); every goods-indexed field has one entry per good.
+    pub goods: Goods,
     pub network: Network,
     /// Weight per value w_g, tonnes per unit.
-    pub weight: [f64; N_GOODS],
+    pub weight: Vec<f64>,
     pub wedges: Wedges,
     pub countries: Countries,
     pub provinces: ProvinceData,
@@ -152,7 +156,7 @@ pub struct EconInputs {
     pub steady: Option<Arc<Steady>>,
     /// P05 per good of the calibration (ADRs 0092, 0276), which its steady state was solved at;
     /// `None` uncalibrated. [`EconInputs::trade_params`] carries it into the trade parameters.
-    pub border_nu: Option<[f64; N_GOODS]>,
+    pub border_nu: Option<Vec<f64>>,
     /// The calibration's elasticities of each market's price loop (ADR 0263), which cap its
     /// price gain; `None` uncalibrated, where every market runs kappa1.
     pub market_elasticity: Option<MarketElasticity>,
@@ -164,9 +168,14 @@ impl EconInputs {
     pub fn trade_params(&self) -> TradeParams {
         let default = TradeParams::default();
         TradeParams {
-            border_nu: self.border_nu.unwrap_or(default.border_nu),
+            goods: self.goods.clone(),
+            border_nu: self.border_nu.clone().unwrap_or(default.border_nu),
             ..default
         }
+    }
+
+    pub fn n_goods(&self) -> usize {
+        self.goods.n()
     }
 
     pub fn n_countries(&self) -> usize {
@@ -192,7 +201,7 @@ impl EconInputs {
 
     /// Input coefficient a_kg of country `c`: units of `k` per unit of `g`.
     pub fn a(&self, c: usize, k: usize, g: usize) -> f64 {
-        self.countries.io[c][k * N_GOODS + g]
+        self.countries.io[c][k * self.n_goods() + g]
     }
 
     /// Putty-clay input coefficient of enterprise `e`: units of `k` per unit of its output.
@@ -208,37 +217,54 @@ impl EconInputs {
     }
 
     /// Sets the network's route taus to the kernel's least-cost factors (S05) under `trade`,
-    /// from the bulk legs for the bulk classes' goods (ADR 0247), with each good's leg hours,
-    /// and drops the bulk legs, since route taus and bulk legs are exclusive. The world then
-    /// runs with the bulk freight rate off; its kernel is the one of these inputs at `trade`.
+    /// from each good's legs as the kernel picks them (its good legs, ADR 0279, else the bulk
+    /// legs for the bulk classes' goods, ADR 0247), with each good's leg hours, and drops the
+    /// bulk and good legs, since route taus exclude both. The world then runs with the bulk
+    /// freight rate off; its kernel is the one of these inputs at `trade`.
     pub fn fold_bulk_into_route_taus(&mut self, trade: &TradeParams) {
         let bulk = self.network.bulk.take();
-        let weight = self.weight;
+        let good_legs = self.network.good_legs.take();
+        let (weight, n) = (&self.weight, self.n_goods());
         let on_bulk = |g: usize| {
             bulk.as_ref()
                 .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
         };
-        let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>| {
-            let leg = |i: usize, g: usize| bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]);
-            let taus: Vec<[f64; N_GOODS]> = (0..base.len())
-                .map(|i| {
-                    std::array::from_fn(|g| {
-                        let l = leg(i, g);
-                        // the kernel's least-cost factor, bit for bit
-                        1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
+        let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>, pick: fn(&LegSet) -> &Vec<Leg>| {
+            let leg = |i: usize, g: usize| match &good_legs {
+                Some(gl) if g < gl.set.len() => &pick(&gl.sets[usize::from(gl.set[g])])[i],
+                _ => bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]),
+            };
+            let taus = Rows::from_flat(
+                (0..base.len())
+                    .flat_map(|i| {
+                        (0..n).map(move |g| {
+                            let l = leg(i, g);
+                            // the kernel's least-cost factor, bit for bit
+                            1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
+                        })
                     })
-                })
-                .collect();
-            let hours = (0..base.len())
-                .map(|i| std::array::from_fn(|g| leg(i, g).hours))
-                .collect();
+                    .collect(),
+                n,
+            );
+            let hours = Rows::from_flat(
+                (0..base.len())
+                    .flat_map(|i| (0..n).map(move |g| leg(i, g).hours))
+                    .collect(),
+                n,
+            );
             (taus, hours)
         };
         let net = &self.network;
-        let (domestic, domestic_hours) = factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic));
-        let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access));
+        let (domestic, domestic_hours) =
+            factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic), |s| {
+                &s.domestic
+            });
+        let (access, access_hours) =
+            factors(&net.access, bulk.as_ref().map(|b| &b.access), |s| &s.access);
         let (crossings, crossing_hours) =
-            factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings));
+            factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings), |s| {
+                &s.crossings
+            });
         self.network.route_taus = Some(LegTaus {
             domestic,
             access,
@@ -253,9 +279,10 @@ impl EconInputs {
     /// coefficients with that one vintage (ADR 0020) and a_VA with [`EconInputs::base_a_va`].
     /// Needs the base prices.
     pub fn set_coefficients(&mut self) {
-        let column: Vec<[f64; N_GOODS]> = (0..self.n_enterprises())
-            .map(|e| self.cost_share_column(e))
-            .collect();
+        let column = Rows::from_rows(
+            self.n_goods(),
+            (0..self.n_enterprises()).map(|e| self.cost_share_column(e)),
+        );
         self.enterprises.a_va = (0..self.n_enterprises())
             .map(|e| self.base_a_va(self.enterprises.province[e] as usize, &column[e]))
             .collect();
@@ -265,31 +292,33 @@ impl EconInputs {
 
     /// The ICIO column of enterprise `e`'s country and sector, a_kg for every k: cost shares
     /// of output at base prices.
-    pub fn country_column(&self, e: usize) -> [f64; N_GOODS] {
+    pub fn country_column(&self, e: usize) -> Vec<f64> {
         let c = self.country_of(self.enterprises.province[e] as usize);
         let g = usize::from(self.enterprises.good[e]);
-        std::array::from_fn(|k| self.a(c, k, g))
+        (0..self.n_goods()).map(|k| self.a(c, k, g)).collect()
     }
 
     /// The 2000 column of enterprise `e`, which S09 FixedLeontief runs on.
-    pub fn base_column(&self, e: usize) -> [f64; N_GOODS] {
-        self.enterprises.column[e]
+    pub fn base_column(&self, e: usize) -> &[f64] {
+        &self.enterprises.column[e]
     }
 
     /// Physical coefficients of enterprise `e` from its country's cost shares (owner decision,
     /// 2026-10-25): coef_k = a_kg / q_k, q_k the base delivered price of k at its province, so
     /// at base prices every input's cost share is the ICIO share; 0 where k is unreachable.
-    pub fn cost_share_column(&self, e: usize) -> [f64; N_GOODS] {
+    pub fn cost_share_column(&self, e: usize) -> Vec<f64> {
         let q = &self.provinces.base_price[self.enterprises.province[e] as usize];
         let a = self.country_column(e);
-        std::array::from_fn(|k| if a[k] > 0.0 { a[k] / q[k] } else { 0.0 })
+        (0..a.len())
+            .map(|k| if a[k] > 0.0 { a[k] / q[k] } else { 0.0 })
+            .collect()
     }
 
     /// Value-added coefficient of coefficients `coef` at the base prices of province `i`:
     /// a_VA = 1 - sum_k coef_k q_k over reachable inputs (1 - sum_k a_kg for the base column).
-    pub fn base_a_va(&self, i: usize, coef: &[f64; N_GOODS]) -> f64 {
+    pub fn base_a_va(&self, i: usize, coef: &[f64]) -> f64 {
         let q = &self.provinces.base_price[i];
-        1.0 - (0..N_GOODS)
+        1.0 - (0..coef.len())
             .filter(|&k| coef[k] > 0.0)
             .map(|k| coef[k] * q[k])
             .sum::<f64>()
@@ -303,7 +332,7 @@ impl EconInputs {
 
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
     pub fn a_va(&self, c: usize, g: usize) -> f64 {
-        1.0 - (0..N_GOODS).map(|k| self.a(c, k, g)).sum::<f64>()
+        1.0 - (0..self.n_goods()).map(|k| self.a(c, k, g)).sum::<f64>()
     }
 
     /// Effective labour supply per province, L^s_i = sum_k e_k LF_k (P42 `edu_eff`).
@@ -346,7 +375,21 @@ impl EconInputs {
 
     /// Panics with the first broken contract: lengths, sort orders, ranges.
     pub fn validate(&self) {
-        let (nc, np) = (self.n_countries(), self.n_provinces());
+        let (nc, np, n) = (self.n_countries(), self.n_provinces(), self.n_goods());
+        let widths = [
+            self.weight.len(),
+            self.border_nu.as_ref().map_or(n, Vec::len),
+            self.countries.omega.width(),
+            self.countries.io.width() / n.max(1),
+            self.provinces.base_price.width(),
+            self.provinces.gamma.width(),
+            self.enterprises.coef.width(),
+            self.enterprises.column.width(),
+        ];
+        assert!(
+            widths.iter().all(|&w| w == n),
+            "goods-indexed data not sized to the {n} goods: {widths:?}"
+        );
         let c = &self.countries;
         assert!(
             c.omega.len() == nc
@@ -386,13 +429,13 @@ impl EconInputs {
             assert!(
                 c.omega[k].iter().all(|&w| w >= 0.0) && c.omega[k].iter().any(|&w| w > 0.0),
                 "country {k}: final demand shares {:?}",
-                c.omega[k]
+                &c.omega[k]
             );
             assert!(
                 c.io[k].iter().all(|&a| a >= 0.0),
                 "country {k}: negative input coefficient"
             );
-            for g in 0..N_GOODS {
+            for g in 0..self.n_goods() {
                 assert!(
                     self.a_va(k, g) > 0.0,
                     "country {k} sector {g}: no value added"
@@ -476,7 +519,10 @@ impl EconInputs {
         );
         for k in 0..n {
             assert!((e.province[k] as usize) < np, "enterprise {k}: province");
-            assert!(usize::from(e.good[k]) < N_GOODS, "enterprise {k}: good");
+            assert!(
+                usize::from(e.good[k]) < self.n_goods(),
+                "enterprise {k}: good"
+            );
             assert!(
                 k == 0 || (e.province[k - 1], e.good[k - 1]) < (e.province[k], e.good[k]),
                 "enterprises not sorted by (province, good) or duplicated at {k}"
@@ -513,6 +559,7 @@ impl EconInputs {
     pub fn digest(&self) -> Hash {
         // destructured so a new field cannot be left out of the digest
         let EconInputs {
+            goods,
             network,
             weight,
             wedges,
@@ -534,6 +581,7 @@ impl EconInputs {
             crossings,
             route_taus,
             bulk,
+            good_legs,
         } = network;
         let Countries {
             omega,
@@ -572,6 +620,18 @@ impl EconInputs {
 
         let mut e = Encoder::default();
         b"ceteris-econ-inputs-1".iter().for_each(|&b| e.u8(b));
+        // the goods table only where it is not P2's, so P2 worlds keep their digest
+        if *goods != Goods::p2() {
+            b"goods".iter().for_each(|&b| e.u8(b));
+            e.count(goods.n());
+            for name in &goods.name {
+                e.count(name.len());
+                name.bytes().for_each(|b| e.u8(b));
+            }
+            e.count(goods.traded);
+            e.bools(&goods.storable);
+            goods.group.iter().for_each(|&g| e.u8(g));
+        }
         u16s(&mut e, province_country);
         u16s(&mut e, gateway_country);
         e.f64s(gateway_mass);
@@ -581,8 +641,8 @@ impl EconInputs {
         e.f64s(weight);
         e.count(wedges.tariff.len());
         wedges.tariff.iter().for_each(|t| e.u32(t.to_bits()));
-        e.f64s(omega.as_flattened());
-        e.f64s(io.as_flattened());
+        e.f64s(omega.as_flat());
+        e.f64s(io.as_flat());
         e.f64s(s_l);
         e.f64s(unemployment);
         e.f64s(u_star);
@@ -590,8 +650,8 @@ impl EconInputs {
         u16s(&mut e, country);
         e.f64s(population);
         e.f64s(w0);
-        e.f64s(base_price.as_flattened());
-        e.f64s(gamma.as_flattened());
+        e.f64s(base_price.as_flat());
+        e.f64s(gamma.as_flat());
         e.u32s(pop_province);
         e.count(edu.len());
         edu.iter().for_each(|&b| e.u8(b));
@@ -604,8 +664,8 @@ impl EconInputs {
         e.f64s(va0);
         e.f64s(l0);
         e.f64s(va_target);
-        e.f64s(coef.as_flattened());
-        e.f64s(column.as_flattened());
+        e.f64s(coef.as_flat());
+        e.f64s(column.as_flat());
         e.f64s(a_va);
         if let Some(weights) = pigl {
             b"pigl-weights".iter().for_each(|&b| e.u8(b));
@@ -644,7 +704,7 @@ impl EconInputs {
                 &rt.access_hours,
                 &rt.crossing_hours,
             ] {
-                e.f64s(list.as_flattened());
+                e.f64s(list.as_flat());
             }
         }
         // appended only when present, so networks without a bulk freight rate keep their digest
@@ -653,6 +713,18 @@ impl EconInputs {
             b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
             for legs in [&b.domestic, &b.access, &b.crossings] {
                 encode_legs(&mut e, legs);
+            }
+        }
+        // appended only when present, so least-cost networks keep their digest
+        if let Some(gl) = good_legs {
+            b"good-legs".iter().for_each(|&b| e.u8(b));
+            gl.set.iter().for_each(|&s| e.u8(s));
+            e.f64s(&gl.kappa);
+            e.count(gl.sets.len());
+            for s in &gl.sets {
+                for legs in [&s.domestic, &s.access, &s.crossings] {
+                    encode_legs(&mut e, legs);
+                }
             }
         }
         state_hash(&e.into_bytes())

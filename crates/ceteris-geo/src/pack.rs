@@ -75,6 +75,15 @@ pub fn u8s(batch: &RecordBatch, name: &str) -> Result<Vec<u8>, PackError> {
         .to_vec())
 }
 
+pub fn bools(batch: &RecordBatch, name: &str) -> Result<Vec<bool>, PackError> {
+    Ok(column(batch, name)?
+        .as_boolean_opt()
+        .ok_or_else(|| err(format!("'{name}' is not bool")))?
+        .iter()
+        .map(|v| v.unwrap_or(false))
+        .collect())
+}
+
 pub fn strings(batch: &RecordBatch, name: &str) -> Result<Vec<String>, PackError> {
     let a = column(batch, name)?;
     if let Some(s) = a.as_string_opt::<i32>() {

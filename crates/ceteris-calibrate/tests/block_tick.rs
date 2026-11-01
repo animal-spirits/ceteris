@@ -16,7 +16,7 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_reference::io::{self, Inputs};
 use ceteris_reference::model::Model;
 use ceteris_trade::TradeParams;
-use ceteris_trade::goods::N_GOODS;
+use ceteris_trade::goods::p2::N as N_GOODS;
 
 fn fixture() -> PathBuf {
     std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(

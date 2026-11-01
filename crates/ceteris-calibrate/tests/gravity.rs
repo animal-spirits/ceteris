@@ -744,7 +744,9 @@ fn bulk_class_country_costs_match_the_kernel() {
         gateway_country: vec![0, 1],
         province_country: vec![0, 0, 1],
         n_countries: 2,
-        va: vec![[1.0; 10]; 3],
+        va: ceteris_core::rows::Rows::filled(3, 10, 1.0),
+        traded: 7,
+        weight: vec![0.5; 10],
     };
     let trade = TradeParams::default();
     let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
@@ -805,6 +807,121 @@ fn bulk_class_country_costs_match_the_kernel() {
             "good {g}: {got:?} {want:?}"
         );
     }
+}
+
+/// ADR 0279: under `PathChoice::Iceberg` the country costs of each good are its least-iceberg
+/// chains as the kernel's good legs take them (`ceteris_geo::paths::shortest_by` at the good's
+/// kappa, on the bulk graph for the bulk class): A with provinces 0 and 1, port 3 and airport 6,
+/// B with province 2, port 4 and airport 7; 4,000 km by sea or by air. Good 6 weighs 2e-5 t per
+/// USD and flies; the others weigh 0.5 and sail.
+#[test]
+fn iceberg_country_costs_follow_the_kernel() {
+    use ceteris_geo::graph::{
+        EdgeList, Mode, NodeKind, NodeList, PathChoice, TransportGraph, TransportParams,
+    };
+    use ceteris_geo::paths::shortest_by;
+    use ceteris_trade::{TradeParams, kappa};
+
+    let edges = [
+        (0, 1, Mode::Road, 100.0),
+        (0, 3, Mode::PortAccess, 10.0),
+        (2, 4, Mode::PortAccess, 10.0),
+        (3, 5, Mode::Sea, 2000.0),
+        (5, 4, Mode::Sea, 2000.0),
+        (0, 6, Mode::AirAccess, 10.0),
+        (2, 7, Mode::AirAccess, 10.0),
+        (6, 7, Mode::Air, 4000.0),
+    ];
+    let mut weight = [0.5; 10];
+    weight[6] = 2e-5;
+    let inputs = gravity::CostInputs {
+        nodes: 8,
+        edge_a: edges.iter().map(|e| e.0).collect(),
+        edge_b: edges.iter().map(|e| e.1).collect(),
+        mode: edges.iter().map(|e| e.2 as u8).collect(),
+        length_km: edges.iter().map(|e| e.3).collect(),
+        tri_m: vec![0.0; edges.len()],
+        gateway_node: vec![3, 4, 6, 7],
+        gateway_country: vec![0, 1, 0, 1],
+        province_country: vec![0, 0, 1],
+        n_countries: 2,
+        va: ceteris_core::rows::Rows::filled(3, 10, 1.0),
+        traded: 7,
+        weight: weight.to_vec(),
+    };
+    let trade = TradeParams::default();
+    let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
+    let p = Transport {
+        path_choice: PathChoice::Iceberg,
+        ..Transport::default()
+    };
+    let costs = inputs.country_costs(&p, &trade);
+    let freight = inputs.country_costs(&Transport::default(), &trade);
+
+    let kind = [0, 0, 0, 2, 2, 4, 3, 3].map(|k| NodeKind::from_u8(k).unwrap());
+    let base = TransportGraph::new(
+        3,
+        NodeList {
+            kind: kind.to_vec(),
+            province: vec![0, 1, 2, 0, 2, 0, 0, 2],
+            lon: vec![0.0; 8],
+            lat: vec![0.0; 8],
+        },
+        EdgeList {
+            a: edges.iter().map(|e| e.0 as u32).collect(),
+            b: edges.iter().map(|e| e.1 as u32).collect(),
+            mode: edges.iter().map(|e| e.2).collect(),
+            length_km: inputs.length_km.clone(),
+            tri_m: inputs.tri_m.clone(),
+            chokepoint: vec![0; edges.len()],
+        },
+        &TransportParams::default(),
+    );
+    let mut bulk = base.clone();
+    bulk.reprice(&TransportParams::default().bulk(sea, port));
+    // the least chain over gateway pairs (a of A, b of B) by c + kappa h, as the mean over A's
+    // provinces with VA 1 everywhere
+    let chain = |g: &TransportGraph, k: f64| {
+        let from_b = shortest_by(g, 2, k);
+        let legs = |o: u32| {
+            let t = shortest_by(g, o, k);
+            let mut best = (f64::INFINITY, 0.0, 0.0);
+            for a in [3, 6] {
+                let x = shortest_by(g, a, k);
+                for b in [4, 7] {
+                    let c = t.cost[a as usize] + x.cost[b] + from_b.cost[b];
+                    let h = t.hours[a as usize] + x.hours[b] + from_b.hours[b];
+                    if c + k * h < best.0 {
+                        best = (c + k * h, c, h);
+                    }
+                }
+            }
+            (best.1, best.2)
+        };
+        let (a, b) = (legs(0), legs(1));
+        ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+    };
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * y;
+    let hours = |c: &gravity::CountryCosts, g: usize| c.at(0, 1, g)[Q_HOURS];
+    for g in 0..7 {
+        let on_bulk = classes[usize::from(trade.theta_class[g])];
+        let k = kappa(weight[g], trade.time_cost[g]);
+        let want = chain(if on_bulk { &bulk } else { &base }, k);
+        let q = costs.at(0, 1, g);
+        let got = (gravity::edge_cost(q, &p), q[Q_HOURS]);
+        assert!(
+            close(got.0, want.0) && close(got.1, want.1),
+            "good {g}: {got:?} {want:?}"
+        );
+        if g != 6 {
+            assert!(
+                close(hours(&costs, g), hours(&freight, g)),
+                "good {g} sails"
+            );
+        }
+    }
+    assert!(hours(&costs, 6) < 0.2 * hours(&freight, 6), "good 6 flies");
+    assert_eq!(costs.reach, freight.reach);
 }
 
 /// The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by

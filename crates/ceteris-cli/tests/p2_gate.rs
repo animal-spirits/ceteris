@@ -206,7 +206,7 @@ fn frictionless_gains(inputs: &EconInputs) -> Gains {
         .as_ref()
         .expect("a calibration with market elasticities");
     let (params, trade) = (EconParams::frictionless(), inputs.trade_params());
-    let n_g = ceteris_trade::N_GOODS;
+    let n_g = ceteris_trade::goods::p2::N;
     let at =
         |f: &dyn Fn(usize) -> f64| Mat::from_fn(inputs.n_provinces(), n_g, |p, g| f(p * n_g + g));
     Gains {

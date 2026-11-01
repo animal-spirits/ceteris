@@ -40,6 +40,8 @@ pub const BACI: &str = "BACI_HS92_V202601.zip";
 const ICIO: &str = "1995-2000_SML.zip";
 const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
 const YEAR: i64 = 2000;
+/// The P04 estimation reads its sources through the P2 goods' keys (`aggregate`, the HS key).
+pub const N_TRADED: usize = ceteris_trade::goods::p2::TRADED;
 
 /// P43 time cost of transit lambda_g per day, the starts of `TradeParams::default()` (trade
 /// SPEC), traded goods.
@@ -57,7 +59,7 @@ pub const TARIFF_GROUP: [usize; N_TRADED] = [0, 0, 0, 0, 1, 1, 1];
 /// The pack country index of every source economy code: each country's parts (or ISO code)
 /// and its own code, the first country to claim a code keeping it; BACI's Taiwan and Serbia and
 /// Montenegro codes follow their countries.
-fn pack_index(codes: &[String], iso: &IsoCodes) -> BTreeMap<String, usize> {
+pub(crate) fn pack_index(codes: &[String], iso: &IsoCodes) -> BTreeMap<String, usize> {
     let mut index = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         for s in parts(c, iso).into_iter().chain([c.clone()]) {
@@ -717,6 +719,12 @@ pub fn samples(pack: &Path, cache: &Path) -> Result<(Sample, Sample, Notes), Str
     }
     let p = Transport::default();
     let costs = country_costs(pack, &p, &TradeParams::default())?;
+    if costs.traded != N_TRADED {
+        return Err(format!(
+            "{} traded goods, the estimation needs P2's {N_TRADED}",
+            costs.traded
+        ));
+    }
     let weight = read("econ_goods.arrow")?.f64("weight")?;
 
     let build = |mask: &dyn Fn(usize, usize, usize) -> bool| -> Sample {

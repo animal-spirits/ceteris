@@ -20,7 +20,6 @@
 
 use ceteris_econ::EconInputs;
 use ceteris_trade::TradeParams;
-use ceteris_trade::goods::N_GOODS;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shock {
@@ -47,8 +46,9 @@ pub enum Shock {
     },
 }
 
-/// Parses a shock file; `codes` are the countries' ISO3 codes in row order.
-pub fn parse(text: &str, codes: &[String]) -> Result<Vec<Shock>, String> {
+/// Parses a shock file; `codes` are the countries' ISO3 codes in row order, `n_goods` the
+/// goods count.
+pub fn parse(text: &str, codes: &[String], n_goods: usize) -> Result<Vec<Shock>, String> {
     let mut out = Vec::new();
     for (n, line) in text.lines().enumerate() {
         let line = line.split('#').next().unwrap_or("").trim();
@@ -71,7 +71,7 @@ pub fn parse(text: &str, codes: &[String]) -> Result<Vec<Shock>, String> {
                 .ok_or_else(|| at(format!("unknown country '{}'", f[i])))
         };
         let good = |i: usize| match f[i].parse::<usize>() {
-            Ok(g) if g < N_GOODS => Ok(g),
+            Ok(g) if g < n_goods => Ok(g),
             _ => Err(at(format!("'{}' is not a good", f[i]))),
         };
         let factor = |i: usize| match f[i].parse::<f64>() {

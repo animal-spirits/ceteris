@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### The goods count is a pack value (P3 G2)
+
+- `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,
+  tariff groups, PIGL categories); `TradeParams` and `EconInputs` carry it, and every
+  goods-indexed array is sized from it (`Vec`, or `ceteris_core::rows::Rows` for rows of goods).
+  The compile-time `N_GOODS`, `TRADED`, `STORABLE`, `CATEGORY` and calibrate's `N_TRADED` are
+  gone; `goods::p2` keeps P2's values for the fixture, the defaults and tests.
+- No golden moves: the inputs digest adds the goods table only where it differs from P2's.
+
 ### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
 - Owner, 2026-11-01: ADR 0281 option A. A full pack build of c382cbf (owner-side, GEOS 3.15;
@@ -51,6 +60,36 @@ Goldens re-blessed:
 
 - `tests/golden/p2-fixture/calibration/`: every table. `p2-pack.txt` (the installed tables),
   `p2-econ.txt`, `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
+
+### Added: `ceteris air-share`, P04d from 2000 air shares (ADR 0277)
+
+- `ceteris_calibrate::air_share` fits the air to road cost ratio to the air share of US 2000
+  general imports by origin and traded good, through the kernel's gateway-pair sum, by a
+  Bernoulli quasi-likelihood with errors clustered by country pair (geo SPEC, Air rate from mode
+  shares). Nothing reads its output yet; P04d lands at the next goldens re-bless.
+- The EU15 2002 mode shares are hindcast to 2000 (2000 HS6 values from DS-045409, plus the US
+  2000-2002 log-odds change by good) and pooled with the US (`--set pooled|us|eu`).
+- `dta::read_dta` reads Stata format 118 (Schott's US import files);
+  `read_hs_cpa_version` reads the BTiGE key for HS 1996 and HS 2002. No golden moves.
+
+### Least-iceberg leg paths per good (ADR 0279; off by default, no golden moves)
+
+- `TransportParams::path_choice`: `Freight` (S05 as built, the default) or `Iceberg`. Under
+  `Iceberg` every kernel leg of a traded good takes the path minimising w_g c + lambda_g h / 24
+  (`ceteris_geo::paths::shortest_by` at kappa_g = lambda_g / (24 w_g)), one leg set per
+  distinct (kappa, bulk rate) in `Network.good_legs`; `country_costs` follows the same choice.
+- Ablation on the 2000 pack, each setting calibrated on its own legs: V1 from the perturbed
+  steady state (seeds 20 to 22) passes on both (largest price gap at tick 1200: 1.94e-4,
+  1.54e-4, 1.24e-4 Freight; 1.92e-4, 1.52e-4, 1.23e-4 Iceberg); H2 theta by class recovers every
+  theta_c on both; the 100-year P2 gate passes on both with no violation; the H2 distance
+  elasticity (diagnostic) is -0.454 Freight, -0.449 Iceberg. Fitted nu 2.594, 0.800, 0.395,
+  0.066, 0 Freight; 2.610, 0.871, 0.407, 0.068, 0 Iceberg (75 passes, 25.7 min). At P04d's
+  current default good 6 flies on 5.1% of crossings (4.0% by gateway mass) against 0.33%
+  under Freight; goods 0 to 5 within 0.3%. The default stays `Freight` (ADR 0279: it flips
+  with ADR 0277's P04d).
+- `kernel_build` 119 ms (Freight) and 121 ms (Iceberg) against the 2 s budget;
+  `network_from_graph` on the pack 3.08 s (Freight) and 13.7 s (Iceberg; benches
+  `network_freight`, `network_iceberg`, `kernel_build_iceberg`).
 
 ### Storage order by partial adjustment (ADR 0280; storage off by default, no golden moves)
 

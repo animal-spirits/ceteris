@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use ceteris_core::sim::Sim;
 use ceteris_econ::EconWorld;
-use ceteris_trade::N_GOODS;
+use ceteris_trade::Goods;
 
 /// What does not change over a run.
 pub struct Layout {
@@ -17,6 +17,7 @@ pub struct Layout {
     pub ent_good: Vec<u8>,
     pub pop_edu: Vec<u8>,
     pub labour_force: Vec<f64>,
+    pub goods: Goods,
 }
 
 impl Layout {
@@ -35,6 +36,7 @@ impl Layout {
             ent_good: inp.enterprises.good.clone(),
             pop_edu: inp.pops.edu.clone(),
             labour_force: inp.pops.labour_force.clone(),
+            goods: inp.goods.clone(),
         }
     }
 
@@ -51,7 +53,7 @@ impl Layout {
     }
 }
 
-/// One tick's values. Cells are `[province * N_GOODS + g]` over econ provinces.
+/// One tick's values. Cells are `[province * n_goods + g]` over econ provinces.
 pub struct View {
     pub tick: u32,
     pub layout: Arc<Layout>,
@@ -81,7 +83,7 @@ impl View {
         let w = sim.world();
         let n = layout.provinces();
         let s = &w.scratch;
-        let sold: Vec<f64> = (0..n * N_GOODS)
+        let sold: Vec<f64> = (0..n * layout.goods.n())
             .map(|c| s.dispatched.get(c).copied().unwrap_or(0.0) * w.markets.price[c])
             .collect();
         let net_out = sold
@@ -123,7 +125,7 @@ impl View {
     /// Buyer price of good `g` over the world price index.
     pub fn price_of(&self, provinces: usize, g: usize) -> Vec<f64> {
         self.per_pack(provinces, |i| {
-            self.buyer_price[i * N_GOODS + g] / self.world_price
+            self.buyer_price[i * self.layout.goods.n() + g] / self.world_price
         })
     }
 
@@ -133,13 +135,14 @@ impl View {
             self.layout
                 .ents_of(i)
                 .filter(|&e| usize::from(self.layout.ent_good[e]) == g)
-                .map(|e| self.output[e] * self.price[i * N_GOODS + g])
+                .map(|e| self.output[e] * self.price[i * self.layout.goods.n() + g])
                 .sum()
         })
     }
 
     pub fn net_out_of(&self, provinces: usize, g: usize) -> Vec<f64> {
-        self.per_pack(provinces, |i| self.net_out[i * N_GOODS + g])
+        let n_goods = self.layout.goods.n();
+        self.per_pack(provinces, |i| self.net_out[i * n_goods + g])
     }
 
     pub fn wages(&self, provinces: usize) -> Vec<f64> {
@@ -199,9 +202,10 @@ mod tests {
     fn net_shipments_net_out_over_the_world_but_for_delivery_margins() {
         let v = view(24);
         let n = v.layout.provinces();
-        for g in (0..N_GOODS).filter(|&g| ceteris_trade::goods::TRADED[g]) {
+        let n_goods = v.layout.goods.n();
+        for g in v.layout.goods.traded_goods() {
             let net: f64 = v.net_out_of(n, g).iter().sum();
-            let sold: f64 = (0..n).map(|i| v.sold[i * N_GOODS + g]).sum();
+            let sold: f64 = (0..n).map(|i| v.sold[i * n_goods + g]).sum();
             assert!(
                 net.abs() <= 0.15 * sold.max(1e-9),
                 "good {g}: net {net}, sold {sold}"

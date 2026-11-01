@@ -10,10 +10,12 @@ pub mod params;
 pub mod pipeline;
 pub mod source;
 
-pub use goods::N_GOODS;
+pub use goods::Goods;
 pub use kernel::{Access, Kernel};
 pub use market::{Markets, Rationing};
-pub use network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
+pub use network::{
+    BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, Wedges, equal_gateway_mass, kappa,
+};
 pub use params::{N_CLASSES, TradeParams};
 pub use pipeline::Pipeline;
 pub use source::{Sourced, arrivals, dispatch, source};

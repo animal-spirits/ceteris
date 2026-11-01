@@ -59,6 +59,16 @@ impl Mode {
     }
 }
 
+/// How the trade kernel's legs choose their paths (ADR 0279).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PathChoice {
+    /// The least freight cost per tonne (S05 as built).
+    #[default]
+    Freight,
+    /// Per traded good, the least iceberg cost `w_g c + lambda_g h / 24`.
+    Iceberg,
+}
+
 /// Per-tonne mode costs in 2000 US dollars and effective speeds. Priors for P04: the
 /// ordering sea < rail < road < air is imposed (Section 5.3); magnitudes are calibrated in P9.
 #[derive(Clone, Debug, PartialEq)]
@@ -79,6 +89,8 @@ pub struct TransportParams {
     pub terrain_slope: f64,
     /// P04q: cap on the terrain multiplier.
     pub terrain_cap: f64,
+    /// How kernel legs choose their paths (ADR 0279); edge prices do not depend on it.
+    pub path_choice: PathChoice,
 }
 
 impl Default for TransportParams {
@@ -92,6 +104,7 @@ impl Default for TransportParams {
             canal_fee: 5.0,
             terrain_slope: 0.5,
             terrain_cap: 3.0,
+            path_choice: PathChoice::Freight,
         }
     }
 }
@@ -167,6 +180,7 @@ pub struct TransportGraph {
     arc_edge: Vec<u32>,
     closed: Vec<u8>,
     version: u64,
+    params: TransportParams,
 }
 
 pub struct EdgeList {
@@ -243,6 +257,7 @@ impl TransportGraph {
             arc_edge,
             closed: Vec::new(),
             version: 0,
+            params: params.clone(),
         };
         g.reprice(params);
         g
@@ -273,6 +288,11 @@ impl TransportGraph {
         self.version
     }
 
+    /// The parameters the edges were last priced at.
+    pub fn params(&self) -> &TransportParams {
+        &self.params
+    }
+
     pub fn reprice(&mut self, params: &TransportParams) {
         for e in 0..self.edges() {
             let (c, h) = if self.closed.contains(&self.chokepoint[e]) {
@@ -283,6 +303,7 @@ impl TransportGraph {
             self.cost[e] = c;
             self.hours[e] = h;
         }
+        self.params = params.clone();
         self.version += 1;
     }
 

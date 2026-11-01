@@ -46,8 +46,12 @@ them only as quantities offered to and demanded from each market.
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 
 A unit of good g is the quantity worth one 2000 US dollar at the world reference price. Goods
-are innermost in every goods-indexed array (19.4); P2 has 10 goods, padded to 12 for `f64`
-alignment where it helps vectorization.
+are innermost in every goods-indexed array (19.4). The goods count is a pack value, not a
+compile-time constant: `Goods` (`ceteris_trade::goods`) holds the rows of `econ_goods` (names,
+the traded prefix, storable flags, tariff groups, PIGL categories), and every goods-indexed
+array is sized from it. Traded goods come first, `0..traded`, local goods after. `TradeParams`
+carries its `Goods`, and its per-good vectors have one entry per good (`check_goods`). P2 has 10
+goods, 7 traded (`goods::p2`), which the fixture and the 2000 pack use.
 
 ## Equations
 
@@ -80,6 +84,29 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   `bulk_rate_rejects_nan`, `bulk_rate_is_on_for_class_3_by_default` (params), `bulk_rate_reprices_sea_and_port_fees` (geo),
   `bulk_legs_follow_the_bulk_paths`, `bulk_rate_can_switch_the_path` (econ pack),
   `routing_matches_rust` (reference CLI).
+- Least-iceberg legs (ADR 0279, accepted 2026-11-01; built, off until its ablation test passes:
+  `TransportParams::path_choice = Iceberg`, read from the graph's parameters by
+  `EconInputs::network_from_graph`): per traded good, the leg's path minimises
+  `sum_e (w_g c_e + lambda_g h_e / 24)`, so `tau_leg,g = 1 + that minimum`; the hours come from
+  the same path. Domestic, access and crossing legs all use it. Goods with equal
+  `lambda_g / w_g` and the same bulk freight rate share one leg set (`Network.good_legs`:
+  `GoodLegs::set` names each traded good's set in `GoodLegs::sets`, one entry per traded
+  good (P3 G2: the traded prefix of the pack's goods);
+  each set has the base lists' endpoints in their order, since the weight changes no edge's
+  reachability). A bulk class's goods take their trees on the graph at the bulk rate, so the
+  kernel's bulk check is unchanged. The kernel prices a good on its set when `good_legs` is
+  present, else as above; route taus and good legs together are rejected. The inputs digest
+  appends the sets only when present. `ceteris_calibrate::costs::country_costs` follows
+  `Transport::path_choice` (default: `TransportParams::default().path_choice`) with the same
+  per-good weights, so the gravity sample sees the kernel's paths. The export's `legs` table
+  keeps the base and bulk legs only; the reference reads the kernel tables, which carry each
+  good's factors. A graph repriced at other parameters takes their `path_choice`. The freight-cost trees stay for the map mode. Tests:
+  `iceberg_flies_light_goods_and_ships_heavy_ones`, `iceberg_at_zero_time_cost_is_freight` and
+  `iceberg_tree_is_least_weight` (geo paths), `good_legs_price_each_good_on_its_set`,
+  `good_legs_must_match_the_time_costs` and `good_legs_must_match_the_base_legs` (kernel),
+  `iceberg_legs_price_each_good_on_its_paths`, `iceberg_at_zero_time_cost_is_freight` and
+  `iceberg_legs_are_thread_count_independent` (econ pack),
+  `iceberg_country_costs_follow_the_kernel` (calibrate gravity).
 - Route choice (ADR 0017, `LegTaus`; built and tested but off in P2: `Network.route_taus` stays
   `None`, route choice is deferred past P2, owner 2026-10-24): per good,
   `tau_leg,g = z^(-1/theta_r)` over every walk on the transport graph with edge factors

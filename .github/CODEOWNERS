@@ -1,0 +1,9 @@
+# Spec, decisions, research index and CI are routed to the owner, who merges them.
+
+/spec/           @atbraz
+/specs/          @atbraz
+/rfcs/           @atbraz
+/docs/research/  @atbraz
+/tools/rows/     @atbraz
+/.github/        @atbraz
+/CLAUDE.md       @atbraz

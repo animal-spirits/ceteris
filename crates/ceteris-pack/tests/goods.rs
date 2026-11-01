@@ -268,7 +268,7 @@ fn isic_divisions(span: &str) -> Vec<String> {
 #[test]
 fn caliendo_parro_values_are_transcribed() {
     let adr = std::fs::read_to_string(
-        sources::workspace_root().join("adr/0023-trade-elasticity-classes.md"),
+        sources::workspace_root().join("rfcs/0023-trade-elasticity-classes.md"),
     )
     .unwrap();
     assert!(adr.contains("Table 1") && adr.contains("p. 18") && adr.contains("99% sample"));
