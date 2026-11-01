@@ -12,11 +12,11 @@ use crate::read::wdi::Names;
 pub const TRADED: usize = 7;
 pub const NAMES: [&str; N_GOODS] = [
     "Agriculture",
-    "Crude oil and gas",
+    "Crude oil, gas and refined fuels",
     "Coal and other mining",
     "Food",
     "Light manufacturing",
-    "Chemicals, refined fuels and metals",
+    "Chemicals and metals",
     "Machinery, electronics and vehicles",
     "Electricity and utilities",
     "Construction",
@@ -43,12 +43,12 @@ const SERVICES: [&str; 20] = [
 pub fn icio_industry(code: &str) -> Option<Industry> {
     let good = match code {
         "A01" | "A02" | "A03" | "A01_02" => 0,
-        "B06" | "B09" => 1,
+        "B06" | "B09" | "C19" => 1,
         "B05" | "B07" | "B08" | "B07_08" => 2,
         "B05_06" => return Some(Industry::Split),
         "C10T12" => 3,
         "C13T15" | "C16" | "C17_18" | "C31T33" => 4,
-        "C19" | "C20" | "C21" | "C22" | "C23" | "C24" | "C24A" | "C24B" | "C25" => 5,
+        "C20" | "C21" | "C22" | "C23" | "C24" | "C24A" | "C24B" | "C25" => 5,
         "C26" | "C27" | "C28" | "C29" | "C30" | "C301" | "C302T309" => 6,
         "D" | "E" => 7,
         "F" => 8,

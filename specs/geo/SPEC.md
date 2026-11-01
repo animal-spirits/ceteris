@@ -131,7 +131,7 @@ ordering is imposed (5.3).
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P04a-d | Cost per tonne-km: road, rail, sea, air | 0.10, 0.04, 0.008, 0.80 USD. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI along S05 paths, road as numeraire; values kept, owner 2026-10-24): rail/road 52.6 (s.e. 24.1), sea/road 115.3 (46.3), air/road -2.39 (34.4), not identified (the fit drifts to a log-distance form; air on about 70 of 378,392 least-cost rows); a linear km form gives 0.12, 0.09, 3.8 | Literature + calibrated |
+| P04a-d | Cost per tonne-km: road, rail, sea, air | 0.10, 0.04, 0.008, 0.80 USD. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI along S05 paths, road as numeraire; values kept, owner 2026-10-24): rail/road 52.6 (s.e. 24.1), sea/road 115.3 (46.3), air/road -2.39 (34.4), not identified (the fit drifts to a log-distance form; air on about 70 of 378,392 least-cost rows); a linear km form gives 0.12, 0.09, 3.8. On the four theta classes, guarded fit (ADR 0022, Amendment 2026-10-29): rail/road 36.6 (19.1), sea/road 84.6 (39.5), air not identified (3 country pairs with a positive flow, fewer than 50; held at 8) | Literature + calibrated |
 | P04e-h | Circuity: road, rail, sea, air | 1.3, 1.3, 1.0, 1.05 | Literature |
 | P04i-l | Effective speed: road, rail, sea, air | 40, 25, 25, 500 km/h | Literature |
 | P04m | Handling fee: rail terminal, listed port, minor port, airport | 5, 8, 20, 60 USD/t | Literature + calibrated |
@@ -141,6 +141,10 @@ ordering is imposed (5.3).
 | P04q | Terrain cap phi_max | 3.0 | Free |
 
 Sea circuity is 1.0 because paths already follow the hexagonal sea grid.
+
+`TransportParams::bulk(sea, port)` returns these parameters with P04c sea times `sea` and the
+listed and minor port fees of P04m times `port`; the bulk freight rate of a theta class (P154,
+P155, ADR 0247; trade SPEC, Leg factors) prices its legs on a graph repriced with it.
 
 ## Equilibrium nesting
 

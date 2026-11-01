@@ -9,8 +9,8 @@
 //! ceteris pack build [--out DIR]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
-//! ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
-//! ceteris calibrate stability [FIXTURE_DIR]
+//! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
+//! ceteris calibrate stability [--storage] [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -38,11 +38,16 @@
 //! `--out` (default `target/calibration/<pack name>`, never the pack), printing one line per
 //! pass and the summary. Copying the tables into the pack installs them: `EconInputs::from_pack`
 //! loads them at their `calibration_format` and the static digest of the export they were
-//! solved from. `--inputs DIR` calibrates an export directory at its own u*, its provinces
-//! serving as their own pack provinces, and needs `--out`.
+//! solved from. Before the steady state it fits the border friction per friction group to ICIO's
+//! cross-border shares (ADRs 0092, 0276) and reports the shares at the steady state;
+//! `--no-border-fit` keeps the default instead, for comparisons, and reads no ICIO shares.
+//! `--inputs DIR` calibrates an export directory at its own u* and border friction, its
+//! provinces serving as their own pack provinces, and needs `--out` (not `--no-border-fit`).
 //!
 //! `calibrate stability` prints the stability table of the stock-flow price rule for the
-//! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`).
+//! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`); `--storage` prints the storage
+//! loop's table instead: per storable good the kappa1 limit of the storage loop and the psi
+//! limit, at the fixture's storage values or, where storage is off, the approved ones (ADR 0091).
 //!
 //! `gravity` estimates theta by class, the border friction and the mode cost ratios by PPML
 //! structural gravity on 2000 BACI and the pack's least-cost costs (`--pack`, default
@@ -55,10 +60,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use ceteris_calibrate::gravity;
 use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
+use ceteris_calibrate::{border, gravity};
 use ceteris_core::sim::Sim;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::export::{write_inputs, write_run};
@@ -85,8 +90,8 @@ const USAGE: &str = "usage:
   ceteris pack build [--out DIR]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
-  ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
-  ceteris calibrate stability [FIXTURE_DIR]
+  ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
+  ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
@@ -242,7 +247,8 @@ fn run(args: &Args) -> Result<(), String> {
     if args.data_state {
         inputs.steady = None;
     }
-    let (inputs, trade) = (Arc::new(inputs), TradeParams::default());
+    let trade = inputs.trade_params();
+    let inputs = Arc::new(inputs);
     let mut world = match &args.equilibrium {
         Some(dir) => {
             let solution = Equilibrium::read(dir).map_err(|e| e.to_string())?;
@@ -468,8 +474,10 @@ fn reference(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate stability [FIXTURE_DIR]`.
-fn stability(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+/// `calibrate stability [--storage] [FIXTURE_DIR]`.
+fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut args = args.peekable();
+    let storage = args.next_if(|a| a == "--storage").is_some();
     let fixture = args.next().map_or_else(
         || sources::workspace_root().join("tests/golden/p2-fixture"),
         PathBuf::from,
@@ -477,7 +485,12 @@ fn stability(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     if let Some(a) = args.next() {
         return Err(format!("unknown argument '{a}'"));
     }
-    for row in ceteris_calibrate::stability::table(&fixture)? {
+    let rows = if storage {
+        ceteris_calibrate::stability::storage_table(&fixture)?
+    } else {
+        ceteris_calibrate::stability::table(&fixture)?
+    };
+    for row in rows {
         println!("{row}");
     }
     Ok(ExitCode::SUCCESS)
@@ -503,9 +516,7 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     for f in &fired {
         println!("stop rule: {f}");
     }
-    if write && fired.is_empty() {
-        std::fs::write(&out, gravity::to_toml(&est))
-            .map_err(|e| format!("{}: {e}", out.display()))?;
+    if write && gravity::write_toml(&est, &out)? {
         println!("wrote {}", out.display());
     }
     Ok(if fired.is_empty() {
@@ -515,16 +526,18 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
-/// `calibrate --pack DIR | --inputs DIR [--out DIR]`: exit 1 without a calibration.
+/// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
+/// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let mut args = args.peekable();
     if args.peek().map(String::as_str) == Some("stability") {
         args.next();
         return stability(args);
     }
-    let (mut pack, mut inputs, mut out) = (None, None, None);
+    let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--no-border-fit" => fit_border = false,
             "--pack" => {
                 pack = Some(PathBuf::from(
                     args.next().ok_or("--pack needs a directory")?,
@@ -541,7 +554,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     }
     // The export of a pack lives until the reference has read it.
     let mut export = None;
-    let (dir, u_star, pack_province, out) = match (pack, inputs) {
+    let (dir, u_star, pack_province, out, pack) = match (pack, inputs) {
         (Some(pack), None) => {
             let canonical =
                 std::fs::canonicalize(&pack).map_err(|e| format!("{}: {e}", pack.display()))?;
@@ -564,16 +577,55 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let pack_province = calibration::read_pack_provinces(tmp.path())?;
             let u_star = calibration::read_u_star(&pack)?;
             let dir = export.insert(tmp).path().to_owned();
-            (dir, Some(u_star), Some(pack_province), out)
+            (dir, Some(u_star), Some(pack_province), out, Some(pack))
         }
-        (None, Some(inputs)) => (inputs, None, None, out.ok_or("--inputs needs --out")?),
+        (None, Some(_)) if !fit_border => return Err("--no-border-fit needs --pack".into()),
+        (None, Some(inputs)) => (inputs, None, None, out.ok_or("--inputs needs --out")?, None),
         _ => return Err("choose one input with --pack or --inputs".into()),
     };
-    let inp = reference_io::load(&dir)?;
+    let mut inp = reference_io::load(&dir)?;
     drop(export);
     let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
     let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
     let mut progress = |line: &str| println!("{line}");
+    // A pack's border friction is fitted to ICIO's cross-border shares (ADR 0092) before the
+    // steady state; the fixture keeps its own.
+    let icio = match &pack {
+        Some(_) if !fit_border => {
+            println!(
+                "border friction: kept at {:?} (--no-border-fit)",
+                inp.border_nu
+            );
+            None
+        }
+        Some(pack) => {
+            let n_traded = inp.traded.iter().filter(|&&t| t).count();
+            let groups = border::friction_groups(&inp.theta_class[..n_traded]);
+            let (target, icio) = border::target_shares(pack, &groups)?;
+            println!("border friction: ICIO cross-border share by group {groups:?}: {target:?}");
+            let fit = match border::fit_border_nu(
+                &inp,
+                &groups,
+                &target,
+                &icio,
+                Limits::default(),
+                &mut progress,
+            ) {
+                Ok(fit) => fit,
+                Err(e) => {
+                    eprintln!("no calibration: {e}");
+                    return Ok(ExitCode::FAILURE);
+                }
+            };
+            println!(
+                "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
+                fit.nu, fit.share, fit.clamped, fit.evaluations
+            );
+            inp = border::at_border_nu(&inp, &fit.nu_of_goods(&inp.border_nu))?;
+            Some((icio, groups))
+        }
+        None => None,
+    };
     let s = match ceteris_calibrate::run(
         &inp,
         &u_star,
@@ -588,6 +640,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             return Ok(ExitCode::FAILURE);
         }
     };
+    if let Some((icio, groups)) = icio {
+        let mut spend = s.spend_hh.clone();
+        for (a, b) in spend.data.iter_mut().zip(&s.spend_int.data) {
+            *a += b;
+        }
+        let share = border::cross_border_shares(&inp, &s.price, &spend, &icio, &groups)?;
+        println!("border friction at the steady state: cross-border share {share:?}");
+    }
     println!("{}", summary::summary(&inp, &s).pretty());
     println!("wrote {}", out.display());
     Ok(ExitCode::SUCCESS)

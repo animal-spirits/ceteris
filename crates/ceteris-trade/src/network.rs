@@ -2,6 +2,7 @@
 //! produced from `ceteris-geo` path costs, and the tariff wedges on gateway crossings.
 
 use crate::goods::N_GOODS;
+use crate::params::N_CLASSES;
 
 /// A least-cost path summary between two nodes. `cost_per_t` is USD per tonne at the
 /// reference price level, `hours` the travel time along the same path.
@@ -23,16 +24,40 @@ pub struct Leg {
 /// `from` and `to` index provinces for `domestic`, province then gateway for `access`,
 /// and gateways for `crossings`.
 ///
+/// `gateway_mass` is each gateway's share m_a of its country's trade throughput, summing to 1
+/// over the country's gateways (ADR 0092): a crossing a to b weighs `m_a m_b`, so splitting a
+/// gateway into copies that share its mass changes no access.
+///
 /// `route_taus`, when present, replaces the least-cost leg factors (S05) with route-choice
 /// factors (ADR 0017).
+///
+/// `bulk`, when present, gives the theta classes it names their own least-cost legs at the bulk
+/// freight rate (ADR 0247).
 #[derive(Clone, Debug, Default)]
 pub struct Network {
     pub province_country: Vec<u16>,
     pub gateway_country: Vec<u16>,
+    pub gateway_mass: Vec<f64>,
     pub domestic: Vec<Leg>,
     pub access: Vec<Leg>,
     pub crossings: Vec<Leg>,
     pub route_taus: Option<LegTaus>,
+    pub bulk: Option<BulkLegs>,
+}
+
+/// Least-cost legs at the bulk freight rate (P154, P155, ADR 0247), for the goods of the theta
+/// classes in `classes`: the same endpoints in the same order as the base lists of
+/// [`Network`], with the cost per tonne and hours of the least-cost path on the graph repriced
+/// at that rate. `sea` and `port` are the P154 and P155 multipliers the legs were built with;
+/// the kernel refuses parameters that give these classes another rate.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BulkLegs {
+    pub classes: [bool; N_CLASSES],
+    pub sea: f64,
+    pub port: f64,
+    pub domestic: Vec<Leg>,
+    pub access: Vec<Leg>,
+    pub crossings: Vec<Leg>,
 }
 
 /// Route-choice leg factors per good (ADR 0017, `ceteris_geo::route_choice`) and the
@@ -57,6 +82,22 @@ impl Network {
     pub fn n_gateways(&self) -> usize {
         self.gateway_country.len()
     }
+}
+
+/// Gateway masses 1 / k_A: each of the k_A gateways of country A an equal share.
+pub fn equal_gateway_mass(gateway_country: &[u16]) -> Vec<f64> {
+    let n = gateway_country
+        .iter()
+        .max()
+        .map_or(0, |&c| usize::from(c) + 1);
+    let mut count = vec![0u32; n];
+    for &c in gateway_country {
+        count[usize::from(c)] += 1;
+    }
+    gateway_country
+        .iter()
+        .map(|&c| 1.0 / f64::from(count[usize::from(c)]))
+        .collect()
 }
 
 /// Applied tariffs as ad valorem rates, indexed

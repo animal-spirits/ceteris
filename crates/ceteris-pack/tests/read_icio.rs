@@ -9,7 +9,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use ceteris_pack::numeric::repr_f64;
-use ceteris_pack::read::icio::{CountryIo, N_GOODS, aggregate, exports, income_by_year};
+use ceteris_pack::read::icio::{CountryIo, N_GOODS, aggregate, exports, home_use, income_by_year};
 use common::{Uniform, approx, cached, write_zip};
 
 // Industries of the hand-made table and their goods: A01 and A02 are good 0, B06 good 1, C10T12 good 3, G and K good 9.
@@ -25,11 +25,20 @@ struct Parts {
 
 /// An ICIO-shaped CSV (industry block, final demand block, OUT; rows then TLS, VA, OUT) and its parts.
 fn table(invnt: Option<f64>, deplete: Option<f64>, seed: u64) -> (String, Parts) {
+    table_of(&INDUSTRIES, invnt, deplete, seed)
+}
+
+fn table_of(
+    industries: &[&str],
+    invnt: Option<f64>,
+    deplete: Option<f64>,
+    seed: u64,
+) -> (String, Parts) {
     let economies = ["AAA", "BBB"];
     let mut rng = Uniform::new(seed);
     let cols: Vec<String> = economies
         .iter()
-        .flat_map(|e| INDUSTRIES.map(|i| format!("{e}_{i}")))
+        .flat_map(|e| industries.iter().map(move |i| format!("{e}_{i}")))
         .collect();
     let fd_cols: Vec<String> = economies
         .iter()
@@ -127,6 +136,36 @@ fn aggregation_preserves_output_totals() {
     }
 }
 
+/// Refined petroleum (C19) aggregates with crude oil and gas into good 1, not with chemicals into
+/// good 5.
+#[test]
+fn good_1_and_5_totals_follow_the_c19_move() {
+    let industries = ["B06", "C19", "C20", "C24A", "G", "K"];
+    let goods = [1, 1, 5, 5, 9, 9];
+    let dir = tempfile::tempdir().unwrap();
+    let (text, parts) = table_of(&industries, None, None, 3);
+    let path = dir.path().join("2000_SML.csv");
+    fs::write(&path, text).unwrap();
+    let got = aggregate(&path, 2000).unwrap();
+    let n = industries.len();
+    for (k, code) in ["AAA", "BBB"].iter().enumerate() {
+        let c = &got[*code];
+        for g in [1, 5] {
+            let cols: Vec<usize> = (0..n)
+                .filter(|j| goods[*j] == g)
+                .map(|j| k * n + j)
+                .collect();
+            let out: f64 = cols.iter().map(|&j| parts.out[j]).sum();
+            let used: f64 = cols
+                .iter()
+                .map(|&j| parts.z.iter().map(|r| r[j]).sum::<f64>())
+                .sum();
+            assert!(approx(c.output[g], out, 1e-9), "{code} good {g} output");
+            assert!(approx(c.va[g], out - used, 1e-9), "{code} good {g} va");
+        }
+    }
+}
+
 #[test]
 fn exports_sum_sales_to_foreign_columns() {
     let dir = tempfile::tempdir().unwrap();
@@ -148,6 +187,36 @@ fn exports_sum_sales_to_foreign_columns() {
         for (g, w) in got[*code].iter().zip(want) {
             assert!(approx(*g, w, 1e-12), "{code}");
         }
+    }
+}
+
+/// ADR 0092's home share: each economy's use (intermediate plus the `FINAL_DEMAND` columns, not
+/// DPABR) of goods produced at home over its use from every source economy, per good.
+#[test]
+fn home_shares_follow_the_icio_aggregation() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, parts) = write_table(dir.path(), "2000_SML.csv", None, None);
+    let got = home_use(&path, 2000).unwrap();
+    assert_eq!(got.keys().collect::<Vec<_>>(), ["AAA", "BBB"]);
+    let n_fd = FINAL.len();
+    for (k, code) in ["AAA", "BBB"].iter().enumerate() {
+        let (mut home, mut total) = ([0.0; N_GOODS], [0.0; N_GOODS]);
+        for (i, (z, fd)) in parts.z.iter().zip(&parts.fd).enumerate() {
+            let used: f64 = (k * 6..k * 6 + 6).map(|j| z[j]).sum::<f64>()
+                + (k * n_fd..k * n_fd + 5).map(|j| fd[j]).sum::<f64>();
+            total[GOOD[i % 6]] += used;
+            if i / 6 == k {
+                home[GOOD[i % 6]] += used;
+            }
+        }
+        let u = &got[*code];
+        for g in 0..N_GOODS {
+            assert!(approx(u.home[g], home[g], 1e-12), "{code} good {g} home");
+            assert!(approx(u.total[g], total[g], 1e-12), "{code} good {g} total");
+        }
+        assert!(u.share(0) > 0.0 && u.share(0) < 1.0);
+        assert!(approx(u.share(0), home[0] / total[0], 1e-12));
+        assert!(u.share(2).is_nan(), "a good without use has no share");
     }
 }
 
@@ -364,4 +433,45 @@ fn real_2000_economies_coefficients_totals_and_goods() {
     assert!(usa.io[5][5] > 0.05 && usa.io[1][5] > 0.001); // chemicals use chemicals and oil
     assert!(real["SAU"].va[1] > real["SAU"].va[6]); // oil and gas against machinery
     assert!(deu.final_demand_shares[9] > 0.3);
+}
+
+#[test]
+fn extraction_sums_b06_and_b09_without_refining() {
+    // One economy: A01, B06, B09, C19, G and one final demand column.
+    let cols = ["AAA_A01", "AAA_B06", "AAA_B09", "AAA_C19", "AAA_G"];
+    let goods = [0, 1, 1, 1, 9];
+    let n = cols.len();
+    let mut rng = Uniform::new(3);
+    let z: Vec<Vec<f64>> = (0..n)
+        .map(|_| (0..n).map(|_| rng.next(1.0, 10.0)).collect())
+        .collect();
+    let va: Vec<f64> = (0..n).map(|_| rng.next(10.0, 30.0)).collect();
+    let out: Vec<f64> = (0..n)
+        .map(|j| (0..n).map(|i| z[i][j]).sum::<f64>() + va[j])
+        .collect();
+    let join = |xs: &[f64]| {
+        xs.iter()
+            .map(|x| repr_f64(*x))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let mut lines = vec![format!("V1,{},AAA_HFCE,OUT", cols.join(","))];
+    for (i, c) in cols.iter().enumerate() {
+        lines.push(format!("{c},{},1,0", join(&z[i])));
+    }
+    for (label, row) in [("TLS", &vec![0.0; n]), ("VA", &va), ("OUT", &out)] {
+        lines.push(format!("{label},{},0,0", join(row)));
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("2000_SML.csv");
+    fs::write(&path, lines.join("\n") + "\n").unwrap();
+    let got = &aggregate(&path, 2000).unwrap()["AAA"];
+    assert!(approx(got.extraction_output, out[1] + out[2], 1e-12));
+    for g in 0..N_GOODS {
+        let want: f64 = (0..n)
+            .filter(|&i| goods[i] == g)
+            .map(|i| z[i][1] + z[i][2])
+            .sum();
+        assert!(approx(got.extraction[g], want, 1e-12), "{g}");
+    }
 }

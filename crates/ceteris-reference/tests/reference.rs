@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use arrow_array::RecordBatch;
 use arrow_array::cast::AsArray;
-use arrow_array::types::{Float64Type, UInt32Type};
+use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use ceteris_reference::demand;
 use ceteris_reference::io::{self, Inputs, Mat};
@@ -107,29 +107,123 @@ fn pigl_matches_rust() {
     assert!(share.data.iter().all(|s| (0.0..=1.0).contains(s)));
 }
 
+/// ADR 0094: at prices 1 the weights reproduce each country's final demand shares Omega as the
+/// aggregate of its pops' shares, weighted by their base spending, each pop at its base income
+/// per person and the country's within-pop dispersion.
 #[test]
 fn pigl_inversion_reproduces_base_shares() {
     let inp = inputs();
     let w = inp.pigl_weights().unwrap();
-    let n_c = inp.n_countries();
-    let c: Vec<usize> = (0..n_c).collect();
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let country = inp.pop_country();
+    let income = inp.pop_base_income();
+    let sigma: Vec<f64> = country.iter().map(|&c| w.sigma[c]).collect();
     let share = demand::shares(
         &w,
-        &c,
-        &Mat::filled(n_c, inp.n_goods(), 1.0),
-        &inp.base_spend(),
-        &inp.sigma_income(),
+        &country,
+        &Mat::filled(country.len(), n_g, 1.0),
+        &income,
+        &sigma,
         &inp.category,
         inp.sigma_demand,
         &inp.pigl,
     );
-    let total = inp.omega.row_sums();
-    for r in 0..n_c {
-        for g in 0..inp.n_goods() {
-            assert!((share[(r, g)] - inp.omega[(r, g)] / total[r]).abs() <= 1e-12);
+    let mut spent = Mat::zeros(n_c, n_g);
+    for (k, &c) in country.iter().enumerate() {
+        for g in 0..n_g {
+            spent[(c, g)] += share[(k, g)] * income[k] * inp.pop_population[k];
+        }
+    }
+    let (total, spent_total) = (inp.omega.row_sums(), spent.row_sums());
+    for c in 0..n_c {
+        for g in 0..n_g {
+            let got = spent[(c, g)] / spent_total[c];
+            let want = inp.omega[(c, g)] / total[c];
+            assert!(
+                (got - want).abs() <= 1e-12,
+                "country {c} good {g}: {got} vs {want}"
+            );
         }
     }
     assert!((0..n_c).all(|r| w.omega[(r, 0)] == 0.0 && w.scale[r] > 0.0));
+}
+
+/// ADR 0094: with one pop per country at prices 1 and the country's base spending, the joint
+/// inversion is the closed form of one lognormal (ADR 0021).
+#[test]
+fn one_pop_inversion_equals_old_at_prices_one() {
+    let inp = inputs();
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let country: Vec<usize> = (0..n_c).collect();
+    let spend = inp.base_spend();
+    let sigma = inp.within_sigma();
+    let ones = Mat::filled(n_c, n_g, 1.0);
+    let pops = demand::Pops {
+        country: &country,
+        price: &ones,
+        income: &spend,
+        spend: &spend,
+    };
+    let joint = demand::invert_pops(
+        &inp.omega,
+        &pops,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    )
+    .unwrap();
+    let old = demand::invert(&inp.omega, &spend, &sigma, &inp.category, &inp.pigl).unwrap();
+    for (what, a, b) in [
+        ("scale", &joint.scale, &old.scale),
+        ("omega", &joint.omega.data, &old.omega.data),
+        ("within", &joint.within.data, &old.within.data),
+    ] {
+        for (x, y) in a.iter().zip(b) {
+            assert!(
+                (x - y).abs() <= 1e-13 * y.abs().max(1e-300) + 1e-15,
+                "{what}: {x} vs {y}"
+            );
+        }
+    }
+    assert_eq!(joint.sigma, sigma);
+}
+
+/// ADR 0094: the within-pop dispersion and the population-weighted variance of the pops' log
+/// base income per person add up to the national s^2 = (2 erfinv G)^2, or s_w = 0 where the
+/// between-pop variance alone exceeds it.
+#[test]
+fn between_and_within_variance_add_up() {
+    let inp = inputs();
+    let national = demand::lognormal_sigma(&inp.gini);
+    let within = inp.within_sigma();
+    let (country, income) = (inp.pop_country(), inp.pop_base_income());
+    let mut zero = 0;
+    for c in 0..inp.n_countries() {
+        let pops: Vec<usize> = (0..country.len())
+            .filter(|&k| country[k] == c && inp.pop_population[k] > 0.0)
+            .collect();
+        let people: f64 = pops.iter().map(|&k| inp.pop_population[k]).sum();
+        let mean = pops
+            .iter()
+            .map(|&k| inp.pop_population[k] * income[k].ln())
+            .sum::<f64>()
+            / people;
+        let between = pops
+            .iter()
+            .map(|&k| inp.pop_population[k] * (income[k].ln() - mean).powi(2))
+            .sum::<f64>()
+            / people;
+        assert!(between > 0.0, "country {c}: pops differ in income");
+        if within[c] > 0.0 {
+            let sum = within[c].powi(2) + between;
+            assert!((sum - national[c].powi(2)).abs() <= 1e-12 * national[c].powi(2));
+        } else {
+            assert!(between >= national[c].powi(2));
+            zero += 1;
+        }
+    }
+    println!("{zero} of {} countries with s_w = 0", inp.n_countries());
 }
 
 /// A country with no economy province (the pack's uninhabited territories keep a gateway) has
@@ -179,10 +273,10 @@ fn validate_rejects_a_gini_outside_the_unit_interval() {
 fn load_rejects_another_export_format() {
     let dir = std::env::temp_dir().join(format!("ceteris-reference-format-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("params.json"), r#"{"format": "8"}"#).unwrap();
+    std::fs::write(dir.join("params.json"), r#"{"format": "9"}"#).unwrap();
     let err = io::load(&dir).unwrap_err();
     std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(err, "export format 8, expected 9");
+    assert_eq!(err, "export format 9, expected 15");
 }
 
 /// Flows of the form a_o K_od b_d are recovered from their own marginals.
@@ -407,4 +501,65 @@ fn v1_mode() {
     assert_eq!(uniqueness::v1_mode(1.0_f64.next_up()), Report);
     assert_eq!(uniqueness::v1_mode(1.5), Report);
     assert_eq!(uniqueness::v1_mode(f64::INFINITY), Report);
+}
+
+/// The fixture's one-market loops at the calibration's E and eps, frictionless (eta 1) at
+/// kappa1 in every cell, the uncapped gain and so the largest a run uses.
+fn fixture_gains(inp: &Inputs) -> uniqueness::Gains {
+    let cells = table("calibration/econ_calib_cells");
+    let province = cells
+        .column_by_name("province")
+        .unwrap()
+        .as_primitive::<UInt32Type>()
+        .values()
+        .to_vec();
+    let good = cells
+        .column_by_name("good")
+        .unwrap()
+        .as_primitive::<UInt8Type>()
+        .values()
+        .to_vec();
+    let (e, eps) = (
+        f64s(&cells, "demand_elasticity"),
+        f64s(&cells, "supply_elasticity"),
+    );
+    let params: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(fixture().join("params.json")).unwrap())
+            .unwrap();
+    let kappa1 = params["trade"]["kappa1"].as_f64().unwrap();
+    let eta = 1.0;
+    let mut j = Mat::filled(inp.n_provinces(), inp.n_goods(), 0.0);
+    for r in 0..province.len() {
+        j[(province[r] as usize, usize::from(good[r]))] = e[r] + eta * eps[r] / (2.0 - eta);
+    }
+    uniqueness::Gains {
+        kappa: Mat::filled(inp.n_provinces(), inp.n_goods(), kappa1),
+        j,
+    }
+}
+
+/// No fixture market is outside one-market J2 even at the uncapped gain; a cell pushed past it
+/// is the one named.
+#[test]
+fn cells_outside_region_is_empty_on_the_fixture() {
+    let inp = inputs();
+    let mut gains = fixture_gains(&inp);
+    let active = (0..inp.n_provinces())
+        .map(|p| (0..inp.n_goods()).filter(|&g| inp.active[p][g]).count())
+        .sum::<usize>();
+    assert!(active > 0);
+    let largest = (0..inp.n_provinces())
+        .flat_map(|p| (0..inp.n_goods()).map(move |g| (p, g)))
+        .filter(|&(p, g)| inp.active[p][g])
+        .map(|c| gains.kappa[c] * gains.j[c])
+        .fold(0.0, f64::max);
+    println!("largest kappa1 J over {active} active cells: {largest}");
+    assert!(largest > 0.0);
+    assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![]);
+    let pushed = (0..inp.n_provinces())
+        .flat_map(|p| (0..inp.n_goods()).map(move |g| (p, g)))
+        .find(|&(p, g)| inp.active[p][g] && gains.j[(p, g)] > 0.0)
+        .unwrap();
+    gains.kappa[pushed] = 2.5 / gains.j[pushed];
+    assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![pushed]);
 }

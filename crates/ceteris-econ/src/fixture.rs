@@ -6,14 +6,15 @@
 //! west gateway of the next form a land crossing, the outer gateways of countries 0 and 2
 //! are ports, joined by sea to each other and to the island port. Country 1 is landlocked.
 //! Land legs (domestic, access, land crossings) cost 0.02 USD per tonne-km, sea crossings
-//! (the three port-to-port lanes, including both island crossings) cost 0.002, bulk sea
-//! freight. All legs move at 40 km/h along the straight line.
+//! (the three port-to-port lanes, including both island crossings) cost 0.002, the sea freight
+//! rate; theta class 3 ships them at P154 times that (`Network::bulk`, ADR 0247). All legs move
+//! at 40 km/h along the straight line.
 //!
 //! Crude oil (good 1) has no final demand and is an input only to chemicals, fuels and
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{BulkLegs, Leg, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -22,7 +23,7 @@ const MAINLAND: usize = 3;
 const PER_COUNTRY: usize = 8;
 /// USD per tonne-km on land legs.
 const LAND_COST_PER_TKM: f64 = 0.02;
-/// USD per tonne-km on sea crossings (bulk freight, a tenth of land).
+/// USD per tonne-km on sea crossings (sea freight, a tenth of land).
 const SEA_COST_PER_TKM: f64 = 0.002;
 const KMH: f64 = 40.0;
 const OIL: usize = 1;
@@ -113,6 +114,7 @@ pub fn small_world() -> EconInputs {
     let mut net = Network {
         province_country: province_country.clone(),
         gateway_country: gateway_country.clone(),
+        gateway_mass: equal_gateway_mass(&gateway_country),
         ..Network::default()
     };
     for o in 0..np {
@@ -137,12 +139,29 @@ pub fn small_world() -> EconInputs {
         (2 * MAINLAND - 1, 2 * MAINLAND),
     ]
     .map(|(a, b)| (a, b, SEA_COST_PER_TKM));
+    // the default bulk freight rate (P154, ADR 0247) scales the sea cost per tonne-km; the
+    // fixture has no ports, so P155 has no fee to scale, and straight legs no other path
+    let bulk = TradeParams::default().bulk_rate();
+    let mut bulk_crossings = Vec::new();
     for (a, b, rate) in land.chain(sea) {
-        net.crossings
-            .push(leg(a, b, gateway_at[a], gateway_at[b], rate));
-        net.crossings
-            .push(leg(b, a, gateway_at[b], gateway_at[a], rate));
+        let bulk_rate = match bulk {
+            Some((_, s, _)) if rate == SEA_COST_PER_TKM => rate * s,
+            _ => rate,
+        };
+        for (x, y) in [(a, b), (b, a)] {
+            net.crossings
+                .push(leg(x, y, gateway_at[x], gateway_at[y], rate));
+            bulk_crossings.push(leg(x, y, gateway_at[x], gateway_at[y], bulk_rate));
+        }
     }
+    net.bulk = bulk.map(|(classes, sea, port)| BulkLegs {
+        classes,
+        sea,
+        port,
+        domestic: net.domestic.clone(),
+        access: net.access.clone(),
+        crossings: bulk_crossings,
+    });
 
     let mut wedges = Wedges::none(n_countries);
     for imp in 0..n_countries {
@@ -215,10 +234,13 @@ pub fn small_world() -> EconInputs {
             w0: Vec::new(),
             pack: Vec::new(),
             base_price: Vec::new(),
+            gamma: Vec::new(),
         },
         pops,
         enterprises: ent,
         steady: None,
+        border_nu: None,
+        market_elasticity: None,
     };
     inputs.set_base_prices(&TradeParams::default());
     inputs.set_coefficients();
@@ -237,39 +259,22 @@ pub const ISLAND_USER: usize = 4;
 /// only light manufacturing still uses machinery; were every sector to use it, the whole
 /// island would be input capped and its labour market would have no solution. The base point
 /// does not depend on input coefficients, so it stays that of [`small_world`], and so do the
-/// base prices: coefficients are set in the base world, the cut comes after.
+/// base prices: coefficients are set in the base world, the cut comes after. Route taus and
+/// bulk legs are exclusive (ADR 0247), so this world folds the bulk legs into the route taus of
+/// the bulk classes' goods, drops them, and runs with the bulk freight rate off: `trade` must
+/// have P154 and P155 at 1, or the kernel refuses it. Its kernel is that of [`small_world`] at
+/// the default rate but for the cut.
 pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
     let mut inputs = small_world();
+    inputs.fold_bulk_into_route_taus(trade);
     let island_port = (2 * MAINLAND) as u32;
-    let weight = inputs.weight;
-    let factors = |legs: &[Leg], crossings: bool| -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
-        legs.iter()
-            .map(|l| {
-                let cut = crossings && (l.from == island_port || l.to == island_port);
-                let tau = std::array::from_fn(|g| {
-                    if cut && g == UNREACHABLE {
-                        f64::INFINITY
-                    } else {
-                        // the kernel's least-cost factor, so every other leg is unchanged
-                        1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
-                    }
-                });
-                (tau, [l.hours; N_GOODS])
-            })
-            .unzip()
-    };
-    let net = &inputs.network;
-    let (domestic, domestic_hours) = factors(&net.domestic, false);
-    let (access, access_hours) = factors(&net.access, false);
-    let (crossings, crossing_hours) = factors(&net.crossings, true);
-    inputs.network.route_taus = Some(LegTaus {
-        domestic,
-        access,
-        crossings,
-        domestic_hours,
-        access_hours,
-        crossing_hours,
-    });
+    let crossings = &inputs.network.crossings;
+    let taus = inputs.network.route_taus.as_mut().expect("just folded");
+    for (b, t) in crossings.iter().zip(&mut taus.crossings) {
+        if b.from == island_port || b.to == island_port {
+            t[UNREACHABLE] = f64::INFINITY;
+        }
+    }
     let island = &mut inputs.countries.io[MAINLAND];
     for g in (0..N_GOODS).filter(|&g| g != ISLAND_USER) {
         island[UNREACHABLE * N_GOODS + g] = 0.0;
@@ -335,9 +340,32 @@ mod tests {
         let k = Kernel::build(&w.network, &w.weight, &w.wedges, &p);
         let coal = 2;
         for c in k.good(coal).crossings.row(island_port) {
-            let tau = 1.0 / (c.inv_loss * (1.0 + p.border_nu));
+            let tau = 1.0 / (c.inv_loss * (1.0 + p.border_nu_of(coal)));
             assert!(tau < 2.5, "island coal crossing tau {tau}");
         }
+    }
+
+    /// ADR 0247: at the default bulk freight rate, class 3's sea crossings cost P154 times the
+    /// sea rate; every other leg is the base one.
+    #[test]
+    fn fixture_bulk_legs_scale_the_sea_crossings() {
+        let net = small_world().network;
+        let (classes, sea, _) = TradeParams::default().bulk_rate().unwrap();
+        let b = net.bulk.as_ref().unwrap();
+        assert_eq!(b.classes, classes);
+        assert_eq!((&b.domestic, &b.access), (&net.domestic, &net.access));
+        let mut scaled = 0;
+        for (x, y) in b.crossings.iter().zip(&net.crossings) {
+            assert_eq!((x.from, x.to, x.hours), (y.from, y.to, y.hours));
+            if (y.cost_per_t / (y.hours * KMH) - SEA_COST_PER_TKM).abs() < 1e-12 {
+                assert!((x.cost_per_t - sea * y.cost_per_t).abs() <= 1e-12 * y.cost_per_t);
+                scaled += 1;
+            } else {
+                assert_eq!(x, y);
+            }
+        }
+        // the three sea lanes, each way
+        assert_eq!(scaled, 6);
     }
 
     #[test]
@@ -360,12 +388,18 @@ mod tests {
 
     #[test]
     fn unreachable_island_cuts_only_the_island_machinery_crossings() {
-        let p = TradeParams::default();
-        let (plain, cut) = (small_world(), unreachable_island(&p));
+        // the cut world folds the bulk legs into its route taus and runs with the rate off
+        let off = TradeParams::default().bulk_off();
+        let (plain, cut) = (small_world(), unreachable_island(&off));
         cut.validate();
         assert_eq!(cut.enterprises.l0, plain.enterprises.l0);
-        let kernel = |w: &EconInputs| Kernel::build(&w.network, &w.weight, &w.wedges, &p);
-        let (a, b) = (kernel(&plain), kernel(&cut));
+        let a = Kernel::build(
+            &plain.network,
+            &plain.weight,
+            &plain.wedges,
+            &TradeParams::default(),
+        );
+        let b = Kernel::build(&cut.network, &cut.weight, &cut.wedges, &off);
         let mut changed = 0;
         for g in (0..N_GOODS).filter(|&g| ceteris_trade::goods::TRADED[g]) {
             let (a, b) = (a.good(g), b.good(g));

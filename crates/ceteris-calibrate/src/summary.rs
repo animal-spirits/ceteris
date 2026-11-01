@@ -73,7 +73,9 @@ fn percentile(x: &[f64], q: f64) -> f64 {
     }
 }
 
-/// Full-pack report numbers: r, passes, Sinkhorn, local VA's national gap to ICIO, ln A.
+/// Full-pack report numbers: r, passes, Sinkhorn, local VA's national gap to ICIO, ln A, and the
+/// countries whose between-pop income spread already exceeds the national Gini's (within-pop
+/// dispersion s_w = 0, ADR 0094).
 pub fn summary(inp: &Inputs, s: &Steady) -> Json {
     let n_c = inp.n_countries();
     let local: Vec<usize> = (0..inp.ent_good.len())
@@ -145,6 +147,15 @@ pub fn summary(inp: &Inputs, s: &Steady) -> Json {
         ),
         ("ln_a_quantiles".into(), quantiles(&ln_a)),
         ("ln_a_quantiles_traded".into(), quantiles(&ln_a_traded)),
+        (
+            "within_sigma_zero".into(),
+            Json::List(
+                (0..n_c)
+                    .filter(|&k| s.weights.sigma[k] == 0.0)
+                    .map(|k| Json::Int(k as i64))
+                    .collect(),
+            ),
+        ),
     ]);
     Json::Object(entries)
 }

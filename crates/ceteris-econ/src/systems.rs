@@ -30,10 +30,13 @@ use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch as dispatch_good, source 
 use crate::inputs::EconInputs;
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local::{self, LOCAL};
-use crate::production::{labour_target, rho, value_added};
+use crate::production::{
+    labour_for_value_added, labour_target, labour_target_uncapped, marginal_value_added, rho,
+    value_added,
+};
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, WAGE, WRITE_OFF, to_minor, to_numeraire,
+    TRADE, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -46,6 +49,19 @@ pub const SEED: Seed = Seed(42);
 /// Relative gap between labour demand and supply above which the clearing wage is taken to
 /// have no root (all value-added prices nonpositive, say).
 const NO_ROOT: f64 = 1e-9;
+
+/// The frictionless wage (ADR 0089, 0093): the root of `demand(w) = natural`, `demand` the sum
+/// of the uncapped labour targets, so it follows the closed form where one target alone
+/// reaches the supply. With no root the search ran to an extreme, and the wage moves at most a
+/// doubling or halving from `w0`.
+fn frictionless_wage(w0: f64, natural: f64, demand: impl Fn(f64) -> f64) -> f64 {
+    let w1 = clearing_wage(w0, natural, &demand);
+    if (demand(w1) - natural).abs() > NO_ROOT * natural {
+        w1.clamp(0.5 * w0, 2.0 * w0)
+    } else {
+        w1
+    }
+}
 
 pub fn schedule() -> Schedule<EconWorld> {
     let def = |id, name, run| SystemDef {
@@ -76,22 +92,28 @@ fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: 
 
 /// Splits `total` minor units in proportion to `weights`, rounding the cumulative shares
 /// half to even, so the parts add up to `total` exactly. Without a positive weight the last
-/// part takes everything.
-fn split(total: i64, weights: impl ExactSizeIterator<Item = f64> + Clone, out: &mut Vec<i64>) {
+/// part takes everything. The total may be a wide (`i128`) balance; each part is one payment
+/// and must fit `i64`.
+fn split(
+    total: impl Into<i128>,
+    weights: impl ExactSizeIterator<Item = f64> + Clone,
+    out: &mut Vec<i64>,
+) {
+    let total: i128 = total.into();
     out.clear();
     let n = weights.len();
     let sum: f64 = weights.clone().sum();
-    let (mut cum, mut paid) = (0.0, 0i64);
+    let (mut cum, mut paid) = (0.0, 0i128);
     for (j, w) in weights.enumerate() {
         cum += w;
         let upto = if j + 1 == n {
             total
         } else if sum > 0.0 {
-            (total as f64 * (cum / sum)).round_ties_even() as i64
+            (total as f64 * (cum / sum)).round_ties_even() as i128
         } else {
             0
         };
-        out.push(upto - paid);
+        out.push(i64::try_from(upto - paid).expect("ledger overflow: a payment beyond i64"));
         paid = upto;
     }
 }
@@ -176,17 +198,64 @@ pub fn value_added_price(p_g: f64, a: impl Fn(usize) -> f64, index: &[f64], a_va
     (p_g - inputs) / a_va
 }
 
+/// The output enterprise `e`'s traded inputs allow at E1 (ADR 0266): the least, over the
+/// traded inputs k it uses, its own good included, of its stock after T1 over coef_k;
+/// infinite where it uses none. Local inputs set no cap: the same-tick chain bounds their use
+/// within the tick, and a bound from last tick's chain either rehires a cut enterprise every
+/// other tick or holds a province whose local goods all fell to zero there for good.
+pub fn input_output(w: &EconWorld, e: usize) -> f64 {
+    let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
+    let mut y = f64::INFINITY;
+    for k in (0..N_GOODS).filter(|&k| TRADED[k]) {
+        let a = lay.coef[e][k];
+        if a > 0.0 {
+            y = y.min(w.ledger.goods(account, k) / a);
+        }
+    }
+    y
+}
+
+/// The traded inputs that set enterprise `e`'s [`input_output`], a bit per good: those whose
+/// stock over coef_k is within [`SCARCEST`] (relative) of the least.
+pub fn scarcest_inputs(w: &EconWorld, e: usize) -> u16 {
+    let (lay, account) = (&*w.layout, w.layout.accounts.enterprise[e]);
+    let y = input_output(w, e);
+    (0..N_GOODS)
+        .filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0)
+        .filter(|&k| w.ledger.goods(account, k) / lay.coef[e][k] <= y * (1.0 + SCARCEST))
+        .fold(0, |bits, k| bits | 1 << k)
+}
+
+/// Relative rounding within which a traded input ties for the scarcest (ADR 0266): the data
+/// state holds one month of every input, so their ratios agree only to the last bits.
+pub const SCARCEST: f64 = 1e-9;
+
+/// Whether the input cap cut a labour target (ADR 0266, `Scratch::short`): the target without
+/// the cap exceeds the cap by more than [`SCARCEST`], relative. Frictionless, the rationed wage
+/// is the marginal value product of the marginal enterprise at its cap, so its target equals
+/// its cap up to the rounding of two closed forms; within the margin the target counts as
+/// capped by nothing, and its inputs are ordered on output that differs from notional output
+/// by at most the margin.
+pub fn cap_cuts(target: f64, cap: f64) -> bool {
+    target > cap * (1.0 + SCARCEST)
+}
+
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
-/// current wage, then the wage (wage rule on expected inflation and excess demand against the
-/// natural rate u*, or when frictionless the wage at which labour demand is (1 - u*) L^s, ADR
-/// 0089), employment toward L* and employed pops.
+/// current wage, each capped at the labour that produces the output its inputs allow
+/// ([`input_output`], ADR 0266), then the wage (wage rule on expected inflation and excess
+/// demand against the natural rate u*, or when frictionless the wage at which the capped
+/// labour demand is (1 - u*) L^s, ADR 0089), employment toward L* and employed pops. For E3 it
+/// keeps, per enterprise, the traded inputs whose cap cut its target (`Scratch::short`) and
+/// the employment it would have without the caps (`Scratch::notional`).
 pub fn labour(w: &mut EconWorld) {
+    let world = &*w;
     let (inp, lay, params) = (&*w.inputs, &*w.layout, &w.params);
     let c_max = w.trade.c_max;
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
     let (index, pi) = (&w.price_index, w.expected_inflation);
-    let results: Vec<(f64, Vec<f64>, bool)> = (0..inp.n_provinces())
+    type PerProvince = (f64, Vec<f64>, bool, Vec<f64>, Vec<u16>);
+    let results: Vec<PerProvince> = (0..inp.n_provinces())
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
@@ -202,43 +271,113 @@ pub fn labour(w: &mut EconWorld) {
                     value_added_price(p[g], |k| lay.coef[e][k], p_in, lay.a_va[e])
                 })
                 .collect();
-            let target = |e: usize, p_va: f64, w: f64| {
-                let ent = &inp.enterprises;
-                labour_target(p_va, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
-            };
+            let ent = &inp.enterprises;
+            let equipped: Vec<f64> = ents
+                .clone()
+                .map(|e| {
+                    let va = lay.a_va[e] * input_output(world, e);
+                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                })
+                .collect();
             let targets = |w: f64| -> Vec<f64> {
                 ents.clone()
-                    .zip(&p_va)
-                    .map(|(e, &pv)| target(e, pv, w))
+                    .zip(p_va.iter().zip(&equipped))
+                    .map(|(e, (&pv, &cap))| {
+                        labour_target(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                            .min(cap)
+                    })
                     .collect()
             };
             let w0 = wage[i];
             let (w1, t, clipped) = if params.frictionless {
-                let demand = |w: f64| -> f64 {
-                    ents.clone()
-                        .zip(&p_va)
-                        .map(|(e, &pv)| target(e, pv, w))
-                        .sum()
-                };
                 let natural = (1.0 - u_star) * supply;
-                let mut w1 = clearing_wage(w0, natural, demand);
-                // no root: the search ran to an extreme; take at most a doubling or halving
-                if (demand(w1) - natural).abs() > NO_ROOT * natural {
-                    w1 = w1.clamp(0.5 * w0, 2.0 * w0);
-                }
+                let free = |e: usize, pv: f64, w: f64| {
+                    labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                };
+                let hiring = || {
+                    ents.clone()
+                        .zip(p_va.iter().zip(&equipped))
+                        .filter(|&(_, (&pv, &cap))| pv > 0.0 && cap > 0.0)
+                };
+                let demand = |w: f64| -> f64 {
+                    ents.clone().zip(&p_va).map(|(e, &pv)| free(e, pv, w)).sum()
+                };
+                let w1 = frictionless_wage(w0, natural, demand);
+                // Where no input cap binds at the wage that clears without them, it clears with
+                // them: the search on the capped demand would find it too, but by another path
+                // and so to other bits. Else the wage clears on the capped targets.
+                let unbound = ents
+                    .clone()
+                    .zip(p_va.iter().zip(&equipped))
+                    .all(|(e, (&pv, &cap))| pv <= 0.0 || free(e, pv, w1) < cap);
+                let w1 = if unbound {
+                    w1
+                } else {
+                    let demand = |w: f64| -> f64 {
+                        ents.clone()
+                            .zip(p_va.iter().zip(&equipped))
+                            .map(|(e, (&pv, &cap))| free(e, pv, w).min(cap))
+                            .sum()
+                    };
+                    let w1 = frictionless_wage(w0, natural, demand);
+                    // Rationed: every enterprise that would hire is at its input cap, so demand
+                    // is flat around w1 and every wage up to the lowest marginal value product
+                    // at the caps clears; the last wage is kept where it does, else the
+                    // highest that does is taken (ADR 0266).
+                    let interior = hiring()
+                        .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
+                    let top = hiring()
+                        .map(|(e, (&pv, &cap))| {
+                            pv * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, cap)
+                        })
+                        .reduce(f64::min);
+                    match top {
+                        Some(top) if !interior => top.min(w0),
+                        _ => w1,
+                    }
+                };
                 (w1, targets(w1), false)
             } else {
                 let t = targets(w0);
                 let excess = (fixed_sum(&t) - supply) / supply;
-                let clipped = (pi + params.kappa_w * (excess + u_star)).abs() > c_max;
+                let clipped = (params.kappa_w * (excess + u_star)).abs() > c_max;
                 (wage_step(w0, excess, u_star, pi, params, c_max), t, clipped)
             };
             let mut l = vec![0.0; t.len()];
-            allocate(&t, &prev[ents], params.eta, supply, &mut l);
-            (w1, l, clipped)
+            allocate(&t, &prev[ents.clone()], params.eta, supply, &mut l);
+            // the wage the targets were set at
+            let wt = if params.frictionless { w1 } else { w0 };
+            let free: Vec<f64> = ents
+                .clone()
+                .zip(&p_va)
+                .map(|(e, &pv)| {
+                    labour_target(pv, wt, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                })
+                .collect();
+            let short: Vec<u16> = ents
+                .clone()
+                .zip(free.iter().zip(&equipped))
+                .map(|(e, (&f, &cap))| {
+                    if cap_cuts(f, cap) {
+                        scarcest_inputs(world, e)
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let notional = if short.iter().any(|&s| s != 0) {
+                let mut n = vec![0.0; t.len()];
+                allocate(&free, &prev[ents], params.eta, supply, &mut n);
+                n
+            } else {
+                l.clone()
+            };
+            (w1, l, clipped, notional, short)
         })
         .collect();
-    for (i, (w1, l, clipped)) in results.into_iter().enumerate() {
+    for (i, (w1, l, clipped, notional, short)) in results.into_iter().enumerate() {
+        w.scratch.notional[lay.enterprises(i)].copy_from_slice(&notional);
+        w.scratch.short[lay.enterprises(i)].copy_from_slice(&short);
         w.wage[i] = w1;
         w.wage_clip_ticks[i] += u32::from(clipped);
         w.employment[lay.enterprises(i)].copy_from_slice(&l);
@@ -358,17 +497,19 @@ pub fn cap_output(w: &mut EconWorld) {
 /// E3: refreshes the buyer prices at the current prices, then posts demand on top of the
 /// local goods drawn at E2, which count as demand at their province markets. Households
 /// spend their whole money balance with PIGL across categories and CES within them
-/// (`Layout::pop_demand`, ADR 0021) at the delivered unit price q_d of traded goods and the
+/// (`Layout::pop_demand`, ADR 0021) at the buyer price q_d of traded goods (ADR 0200) and the
 /// posted price of local goods. Enterprises order up to an inventory
-/// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_cap` of each input k:
-/// orders `(target - stock_k - on_order_k)`, at least zero, where Y_cap = VA(L) / a_VA is
-/// capacity output at this tick's employment and L the expected months in transit of the
-/// input to the province (0 for local goods), so where L = 0 this is a fixed two-month
-/// rule. Owner decisions, 2026-10-24: planning on realized output Y, which a short input
-/// caps, let one shortage cut the next order and the next output; a fixed target that counts
-/// goods on order cannot hold a month in transit. Traded orders are spending, units times
-/// q_d, so the units ordered are the units that arrive; local orders are units at the
-/// province market.
+/// position (stock plus goods on order) of `(1 + COVER + L) coef_k Y_plan,k` of each input k:
+/// orders `(target - stock_k - on_order_k)`, at least zero, where L is the expected months in
+/// transit of the input to the province (0 for local goods), so where L = 0 this is a fixed
+/// two-month rule. Y_plan,k is VA(L_notional) / a_VA, the output E1's employment without the
+/// input cap would give, for a traded input whose cap cut the enterprise's labour at E1
+/// (`Scratch::short`), and VA(L) / a_VA at this tick's employment for every other input
+/// (effective demand, Benassy 1975; owner decision 2026-10-30T22:43Z, ADR 0266). Owner
+/// decisions, 2026-10-24: planning on realized output Y, which a short input caps, let one
+/// shortage cut the next order and the next output; a fixed target that counts goods on order
+/// cannot hold a month in transit. Traded orders are spending, units times q_d, so the units
+/// ordered are the units that arrive; local orders are units at the province market.
 pub fn demand(w: &mut EconWorld) {
     w.refresh_price_index();
     let (inp, lay) = (&*w.inputs, &*w.layout);
@@ -400,6 +541,7 @@ pub fn demand(w: &mut EconWorld) {
             }
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
+    let (short, notional) = (&sc.short, &sc.notional);
     sc.ent_order
         .par_chunks_mut(N_GOODS)
         .zip(sc.ent_spend.par_chunks_mut(N_GOODS))
@@ -408,15 +550,26 @@ pub fn demand(w: &mut EconWorld) {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
             let (prices, s_l) = (row(i), inp.countries.s_l[inp.country_of(i)]);
-            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, w.employment[e]);
-            let capacity = va / lay.a_va[e];
+            let output =
+                |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+            let capacity = output(w.employment[e]);
+            let free = if short[e] != 0 {
+                output(notional[e])
+            } else {
+                capacity
+            };
             for k in 0..N_GOODS {
                 let a = lay.coef[e][k];
                 let order = if a > 0.0 {
                     let held = ledger.goods(acc.enterprise[e], k);
                     let on_order = pipeline.on_order(n_pops + e, k);
                     let target = 1.0 + COVER + lead[i * N_GOODS + k];
-                    (target * a * capacity - held - on_order).max(0.0)
+                    let plan = if short[e] & 1 << k != 0 {
+                        free
+                    } else {
+                        capacity
+                    };
+                    (target * a * plan - held - on_order).max(0.0)
                 } else {
                     0.0
                 };
@@ -468,7 +621,15 @@ pub fn source(w: &mut EconWorld) {
                 s
             }));
             col.gather(&markets.price, &markets.active, g);
-            source_good(kernel, g, &col.price, &col.active, &col.spend, sourced);
+            source_good(
+                kernel,
+                g,
+                &col.price,
+                &col.active,
+                &lay.gamma[g],
+                &col.spend,
+                sourced,
+            );
         });
     for (g, (sourced, col)) in sc.sourced.iter().zip(&sc.columns).enumerate() {
         for o in 0..np {
@@ -480,7 +641,9 @@ pub fn source(w: &mut EconWorld) {
     }
 }
 
-/// T3: clears every active market. Origin markets of traded goods clear their orders
+/// T3: clears every active market. The origin markets of the storable goods first lose their
+/// stock's spoilage, destroyed in the ledger, and place the merchants' storage orders
+/// (`Markets::store`, ADR 0091). Origin markets of traded goods clear their orders
 /// against output and merchant stock (S' = S + Q - sales), a shortfall shared between buyer
 /// classes by `EconParams::rationing`; the fills are dispatched at T2b. Province markets of
 /// local goods hand out what the same-tick chain left of their output (E2): enterprise input
@@ -490,6 +653,13 @@ pub fn source(w: &mut EconWorld) {
 pub fn clear(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
+    w.markets.store(&w.trade, &mut w.scratch.spoiled);
+    for (cell, &loss) in w.scratch.spoiled.iter().enumerate() {
+        if loss > 0.0 {
+            w.ledger
+                .destroy(acc.market[cell / N_GOODS], cell % N_GOODS, loss);
+        }
+    }
     w.markets.clear(w.params.rationing, &mut w.scratch.fill);
     w.markets.clear_local(&mut w.scratch.spoiled);
     let mut buyers: Vec<(AccountId, f64, bool)> = Vec::new();
@@ -611,6 +781,7 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
                 buyer: b.index,
                 household: b.class == HOUSEHOLD,
                 home: r.arrive[0][d][b.class] * share,
+                home_shipped: r.home[d][b.class] * share,
                 slots,
             });
             let amount = to_minor(r.paid_by_class[d][b.class] * share);
@@ -628,9 +799,12 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
 }
 
 /// T2b: ships the filled orders of every traded good (`ceteris_trade::dispatch`). Home
-/// purchases go straight from the market to their buyers (pops consume them); shipments
-/// enter the transit account (iceberg and border losses destroyed) and each buyer's
-/// pipeline, due at t + slot. Each buyer pays its filled spending, origin price times
+/// purchases go straight from the market to their buyers (pops consume them), the shipped
+/// units turned into delivered units by selection (ADR 0200: created or destroyed at the
+/// buyer); shipments enter the transit account and each buyer's pipeline, due at t + slot, in
+/// delivered units, so the transit account is brought to the pipeline: what the losses melt is
+/// destroyed and what selection adds is created. Both are tallied per good for the selection
+/// invariant (`Scratch::dispatch_made`). Each buyer pays its filled spending, origin price times
 /// (1 + t) per shipped unit, to its destination market, rounded half to even per buyer and
 /// good; the market passes it on: domestic legs to the origin market, international legs
 /// through the gateways of both countries (rounded per leg, gateway splits cumulatively, so
@@ -679,6 +853,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
         let transit = acc.transit[g];
+        let mut made = 0.0;
         let mut first = 0;
         for d in 0..np {
             let (cell, market) = (d * N_GOODS + g, acc.market[d]);
@@ -686,11 +861,21 @@ pub fn dispatch(w: &mut EconWorld) {
             // buyers at d: home purchases now, shipments into the pipeline
             let end = legs.order_ends[d] as usize;
             for o in &legs.orders[first..end] {
-                let home = o.home.min(w.ledger.goods(market, g));
-                if home > 0.0 {
-                    w.ledger.ship(market, o.account, g, home);
+                let shipped = o.home_shipped.min(w.ledger.goods(market, g));
+                if shipped > 0.0 {
+                    w.ledger.ship(market, o.account, g, shipped);
+                    let home = if shipped == o.home_shipped {
+                        o.home
+                    } else {
+                        o.home * (shipped / o.home_shipped)
+                    };
+                    adjust_stock(&mut w.ledger, o.account, g, home - shipped);
+                    made += home - shipped;
                     if o.household {
-                        w.ledger.destroy(o.account, g, home);
+                        // pops hold nothing between purchases, so they consume what they hold:
+                        // `home` itself can differ from it by the rounding of the adjustment
+                        let held = w.ledger.goods(o.account, g);
+                        w.ledger.destroy(o.account, g, held);
                     }
                 }
                 for (slot, &units) in o.slots.iter().enumerate() {
@@ -709,12 +894,18 @@ pub fn dispatch(w: &mut EconWorld) {
 
         // the buyers' payments, then the legs
         w.ledger.post(&legs.entries, &mut w.scratch.post);
+        w.scratch.dispatch_made[g] = made;
+        w.scratch.dispatch_due[g] = r.selected - r.lost;
+        w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
+            + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
-    // the losses take what each transit account holds beyond the goods now in flight
+    // each transit account is brought to the goods now in flight: the losses melt what it
+    // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();
     for (g, &transit) in acc.transit.iter().enumerate() {
-        let lost = (w.ledger.goods(transit, g) - in_flight[g]).max(0.0);
-        w.ledger.destroy(transit, g, lost);
+        let change = in_flight[g] - w.ledger.goods(transit, g);
+        adjust_stock(&mut w.ledger, transit, g, change);
+        w.scratch.dispatch_made[g] += change;
     }
     w.scratch.sourced = sourced;
     w.scratch.payments = payments;
@@ -792,7 +983,8 @@ fn trade_legs(
 /// without a market keep their price, which nothing reads), then the update of expected
 /// inflation from the world price index (ADR 0019).
 pub fn reprice(w: &mut EconWorld) {
-    w.markets.reprice(&w.trade, w.expected_inflation);
+    w.markets
+        .reprice(&w.trade, &w.layout.price_gain, w.expected_inflation);
     w.update_expectation();
 }
 
@@ -802,7 +994,7 @@ pub fn reprice(w: &mut EconWorld) {
 /// enterprise as retained losses, which later cash flow repays before anything is paid out;
 /// every province market pays its signed cash flow (ADR 0112, Markets). Each country pays its
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
-/// end the tick at zero. Each pool is one i64 sum, split once per tick by [`split`]: the
+/// end the tick at zero. Each pool is one i128 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
 /// parts add up to the pool exactly. Then [`write_off`]. Records each pop's income of the
 /// tick, and as each enterprise's profit its balance before the payout
@@ -823,14 +1015,15 @@ pub fn distribute(w: &mut EconWorld) {
                 cash.max(0),
             );
         }
-        let cash = w.ledger.money(acc.market[i]);
+        let cash = i64::try_from(w.ledger.money_wide(acc.market[i]))
+            .expect("ledger overflow: a market's cash beyond one payment");
         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
     }
     let mut parts = Vec::new();
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
             let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
-            split(w.ledger.money(payer), weights, &mut parts);
+            split(w.ledger.money_wide(payer), weights, &mut parts);
             for (&k, &part) in pops.iter().zip(&parts) {
                 pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
                 w.scratch.income_paid[k as usize] += part;
@@ -847,8 +1040,9 @@ pub fn distribute(w: &mut EconWorld) {
 /// loss over its cap (`Layout::ent_loss_cap`) is written off against the country's pops in
 /// proportion to their positive money, never taking a pop below zero. Where the pops hold less than the excess, what they hold is
 /// written off, shared over the holders by their excess, and the rest stays with them. Both
-/// sides are exact [`largest_remainder`] splits of one i64 per country, moved through the
-/// country's profit pool account, which ends at zero.
+/// sides are exact [`largest_remainder`] splits of one total per country, moved through the
+/// country's profit pool account, which ends at zero. The total is an aggregate, kept `i128`
+/// (ADR 0106); each part is bounded by its own weight, so it fits `i64`.
 pub fn write_off(w: &mut EconWorld) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
@@ -873,7 +1067,7 @@ pub fn write_off(w: &mut EconWorld) {
         );
         let held: i128 = weights.iter().map(|&m| i128::from(m)).sum();
         let excess: i128 = holders.iter().map(|&(_, x)| i128::from(x)).sum();
-        let total = i64::try_from(held.min(excess)).expect("write-off within i64");
+        let total = held.min(excess);
         if total == 0 {
             continue;
         }
@@ -894,17 +1088,25 @@ pub fn write_off(w: &mut EconWorld) {
 /// largest remainder: each part is the floor of its exact share, and the units left over go
 /// one each to the largest remainders, ties to the first. The parts add up to `total`, and
 /// none exceeds the ceiling of its share, so none exceeds its weight.
-fn largest_remainder(total: i64, weights: &[i64], out: &mut Vec<i64>) {
+fn largest_remainder(total: i128, weights: &[i64], out: &mut Vec<i64>) {
     let sum: i128 = weights.iter().map(|&x| i128::from(x)).sum();
-    let t = i128::from(total);
+    assert!(
+        (0..=sum).contains(&total),
+        "largest remainder: total within the weights"
+    );
+    let (total_u, sum_u) = (total.unsigned_abs(), sum.unsigned_abs());
     out.clear();
-    let mut remainders: Vec<(i128, usize)> = Vec::with_capacity(weights.len());
+    let mut remainders: Vec<(u128, usize)> = Vec::with_capacity(weights.len());
     for (j, &x) in weights.iter().enumerate() {
-        let product = t * i128::from(x);
-        out.push(i64::try_from(product / sum).expect("part within i64"));
-        remainders.push((product % sum, j));
+        let (q, r) = mul_div(
+            u64::try_from(x).expect("nonnegative weight"),
+            total_u,
+            sum_u,
+        );
+        out.push(i64::try_from(q).expect("part within its weight"));
+        remainders.push((r, j));
     }
-    let left = total - out.iter().sum::<i64>();
+    let left = total - out.iter().map(|&p| i128::from(p)).sum::<i128>();
     remainders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     for &(_, j) in remainders
         .iter()
@@ -912,6 +1114,34 @@ fn largest_remainder(total: i64, weights: &[i64], out: &mut Vec<i64>) {
     {
         out[j] += 1;
     }
+}
+
+/// x t / s as (floor, remainder), exactly, for t <= s: binary long division over the bits of x,
+/// the remainder kept below s, since x t can exceed `u128`.
+fn mul_div(x: u64, t: u128, s: u128) -> (u64, u128) {
+    if t == 0 {
+        return (0, 0);
+    }
+    let (mut q, mut r) = (0u64, 0u128);
+    for bit in (0..64).rev() {
+        // r < s throughout, so each step subtracts s at most once and never overflows
+        q <<= 1;
+        if r >= s - r {
+            r -= s - r;
+            q |= 1;
+        } else {
+            r += r;
+        }
+        if (x >> bit) & 1 == 1 {
+            if r >= s - t {
+                r -= s - t;
+                q += 1;
+            } else {
+                r += t;
+            }
+        }
+    }
+    (q, r)
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
@@ -926,6 +1156,22 @@ pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
 
 #[cfg(test)]
 mod tests {
+    use super::cap_cuts;
+
+    /// A target at its cap, one unit in the last place either side, decides as at the cap: the
+    /// cap did not cut it. Beyond the margin it did; an infinite cap never cuts.
+    #[test]
+    fn a_target_at_its_cap_decides_the_same_under_a_one_ulp_perturbation() {
+        for cap in [1.0f64, 0.37, 2.5e3, 7.1e-4] {
+            for target in [cap, cap.next_up(), cap.next_down()] {
+                assert!(!cap_cuts(target, cap), "target {target} at cap {cap}");
+            }
+            assert!(!cap_cuts(cap * (1.0 + 0.5e-9), cap));
+            assert!(cap_cuts(cap * (1.0 + 2e-9), cap));
+            assert!(!cap_cuts(cap, f64::INFINITY));
+        }
+    }
+
     use super::*;
 
     #[test]
@@ -944,9 +1190,88 @@ mod tests {
         let weights = [1, 2, 3, 1_000_000_007, i64::MAX / 4];
         for total in [0, 1, 17, 999, 1_000_000_000] {
             largest_remainder(total, &weights, &mut out);
-            assert_eq!(out.iter().sum::<i64>(), total);
+            assert_eq!(out.iter().sum::<i64>(), total as i64);
             assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
         }
+    }
+
+    /// A total beyond i64 over weights near i64::MAX (ADR 0106), where total x weight exceeds
+    /// u128: exact, and each part within its weight.
+    #[test]
+    fn largest_remainder_takes_a_wide_total() {
+        let mut out = Vec::new();
+        let weights = [i64::MAX; 64].map(|w| w - 3);
+        let mut weights = weights.to_vec();
+        weights.extend([1, 0, i64::MAX / 3, 12_345]);
+        let sum: i128 = weights.iter().map(|&x| i128::from(x)).sum();
+        for total in [sum, sum - 1, sum / 2 + 7, i128::from(i64::MAX) + 1, 5] {
+            largest_remainder(total, &weights, &mut out);
+            assert_eq!(out.iter().map(|&p| i128::from(p)).sum::<i128>(), total);
+            assert!(out.iter().zip(&weights).all(|(p, w)| 0 <= *p && p <= w));
+        }
+        largest_remainder(sum, &weights, &mut out);
+        assert_eq!(out, weights, "the whole weight: every part is its weight");
+    }
+
+    #[test]
+    fn mul_div_is_exact() {
+        for (x, t, s) in [
+            (7u64, 5u128, 9u128),
+            (u64::MAX, u128::MAX / 3, u128::MAX / 2),
+            (u64::MAX, u128::MAX, u128::MAX),
+            (12_345, 0, 1),
+        ] {
+            let (q, r) = mul_div(x, t, s);
+            // x t = q s + r, checked in 256 bits as (high, low) halves of 128
+            let wide = |a: u128, b: u128| {
+                let (al, ah, bl, bh) = (a as u64 as u128, a >> 64, b as u64 as u128, b >> 64);
+                let (ll, lh, hl, hh) = (al * bl, al * bh, ah * bl, ah * bh);
+                let mid = (ll >> 64) + (lh as u64 as u128) + (hl as u64 as u128);
+                let lo = (ll as u64 as u128) | (mid << 64);
+                let hi = hh + (lh >> 64) + (hl >> 64) + (mid >> 64);
+                (hi, lo)
+            };
+            let (h1, l1) = wide(u128::from(x), t);
+            let (h2, l2) = wide(u128::from(q), s);
+            let (l3, carry) = l2.overflowing_add(r);
+            assert_eq!((h1, l1), (h2 + u128::from(carry), l3), "{x} {t} {s}");
+            assert!(r < s);
+        }
+    }
+
+    /// Cobb-Douglas targets L* = L0 (w L0 / (p A VA0 s_L))^(1 / (s_L - 1)): with u* = 0 and a
+    /// second enterprise hiring no one, the clearing wage is where the first alone hires L^s.
+    /// Capped at L^s, its demand equals the supply on every lower wage, and the search stopped
+    /// at the first one it tried.
+    #[test]
+    fn frictionless_wage_matches_closed_form_when_one_target_reaches_supply() {
+        let (a, va0, l0, s_l, supply) = (1.3, 100.0, 50.0, 0.6, 80.0);
+        let p_va = [1.7, -0.3];
+        let closed = p_va[0] * a * va0 * s_l / l0 * libm::pow(supply / l0, s_l - 1.0);
+        let uncapped = |w: f64| -> f64 {
+            p_va.iter()
+                .map(|&p| labour_target_uncapped(p, w, a, va0, l0, s_l, 0.0))
+                .sum()
+        };
+        let capped = |w: f64| -> f64 {
+            p_va.iter()
+                .map(|&p| labour_target(p, w, a, va0, l0, s_l, 0.0, supply))
+                .sum()
+        };
+        for w0 in [
+            0.1 * closed,
+            0.9 * closed,
+            closed,
+            1.5 * closed,
+            10.0 * closed,
+        ] {
+            let w = frictionless_wage(w0, supply, uncapped);
+            assert!(
+                (w / closed - 1.0).abs() < 1e-12,
+                "from {w0}: {w} vs {closed}"
+            );
+        }
+        assert_eq!(clearing_wage(0.1 * closed, supply, capped), 0.1 * closed);
     }
 
     #[test]
@@ -974,6 +1299,178 @@ mod tests {
         assert_eq!(target, 0.0);
         let b = |k: usize| if k == 3 { 0.0 } else { a(k) };
         assert!((value_added_price(2.0, b, &index, 0.6) - 1.8 / 0.6).abs() < 1e-15);
+    }
+
+    /// ADR 0266: an enterprise with no stock of the traded inputs it uses, its own good
+    /// included, hires no one; local inputs set no cap; with inputs to spare every target, and so the wage and employment,
+    /// are the same whatever the stocks.
+    #[test]
+    fn labour_is_capped_at_what_inputs_allow() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let inputs = Arc::new(small_world());
+        for params in [EconParams::frictionless(), EconParams::default()] {
+            let fresh = EconWorld::new(Arc::clone(&inputs), params.clone(), TradeParams::default());
+            let lay = Arc::clone(&fresh.layout);
+            let e = (0..fresh.inputs.n_enterprises())
+                .find(|&e| (0..N_GOODS).any(|k| TRADED[k] && lay.coef[e][k] > 0.0))
+                .expect("an enterprise using a traded input");
+            let with_stocks = |factor: f64| {
+                let mut w = fresh.clone();
+                for (u, &account) in lay.accounts.enterprise.iter().enumerate() {
+                    for k in (0..N_GOODS).filter(|&k| lay.coef[u][k] > 0.0) {
+                        let held = w.ledger.goods(account, k);
+                        w.ledger.create(account, k, held * (factor - 1.0));
+                    }
+                }
+                w
+            };
+            let ample = |factor: f64| {
+                let mut w = with_stocks(factor);
+                labour(&mut w);
+                (w.wage, w.employment)
+            };
+            let (wage, employment) = ample(100.0);
+            assert!(employment[e] > 0.0);
+            let (wage_more, employment_more) = ample(1e4);
+            assert_eq!(wage, wage_more);
+            assert_eq!(employment, employment_more);
+
+            let mut w = with_stocks(100.0);
+            let account = lay.accounts.enterprise[e];
+            let own = usize::from(w.inputs.enterprises.good[e]);
+            for k in (0..N_GOODS).filter(|&k| TRADED[k] && lay.coef[e][k] > 0.0) {
+                let held = w.ledger.goods(account, k);
+                w.ledger.destroy(account, k, held);
+            }
+            assert_eq!(input_output(&w, e), 0.0);
+            let prev = w.employment[e];
+            labour(&mut w);
+            assert_eq!(w.employment[e], prev + params.eta * (0.0 - prev));
+
+            // local inputs: none in stock and none in the province's last output caps nothing
+            let mut w = with_stocks(100.0);
+            let i = w.inputs.enterprises.province[e] as usize;
+            let k = LOCAL
+                .into_iter()
+                .find(|&k| k != own && lay.coef[e][k] > 0.0)
+                .expect("a local input");
+            let held = w.ledger.goods(account, k);
+            w.ledger.destroy(account, k, held);
+            w.markets.supply[i * N_GOODS + k] = 0.0;
+            let traded = (0..N_GOODS)
+                .filter(|&g| TRADED[g] && lay.coef[e][g] > 0.0)
+                .map(|g| w.ledger.goods(account, g) / lay.coef[e][g])
+                .fold(f64::INFINITY, f64::min);
+            assert_eq!(input_output(&w, e), traded);
+            labour(&mut w);
+            assert_eq!((w.wage, w.employment), (wage, employment));
+        }
+    }
+
+    /// ADR 0266: the fixture's data state holds one month of base inputs, so every enterprise
+    /// is at its cap L0, and frictionless labour demand is flat at (1 - u*) L^s below the
+    /// lowest marginal value product at the caps, w_top, which there is w0. The wage stays where
+    /// it clears (not at the bottom of the flat stretch, near 1e-58) and comes down to w_top
+    /// from above it.
+    #[test]
+    fn rationed_frictionless_wage_is_the_last_one_that_clears() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let fresh = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::frictionless(),
+            TradeParams::default(),
+        );
+        let (w0, l0) = (fresh.wage.clone(), fresh.employment.clone());
+        let close = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(x, y)| (x / y - 1.0).abs() < 1e-9);
+        let mut w = fresh.clone();
+        labour(&mut w);
+        assert!(close(&w.wage, &w0), "{:?} vs {w0:?}", w.wage);
+        assert!(close(&w.employment, &l0));
+        let mut w = fresh.clone();
+        w.wage.iter_mut().for_each(|x| *x *= 2.0);
+        labour(&mut w);
+        assert!(close(&w.wage, &w0), "{:?} vs {w0:?}", w.wage);
+        assert!(close(&w.employment, &l0));
+    }
+
+    /// ADR 0266, owner decision 2026-10-30T22:43Z (Benassy 1975): an enterprise whose labour is
+    /// cut by a short traded input k orders k on its notional output, VA(L_notional) / a_VA, and
+    /// every other input on its constrained output, VA(L) / a_VA at this tick's employment.
+    /// L_notional is the employment E1 gives the same world with k to spare.
+    #[test]
+    fn short_input_is_ordered_on_notional_output_and_the_rest_on_constrained_output() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_trade::TradeParams;
+        use std::sync::Arc;
+
+        let mut w = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams::default(),
+        );
+        let lay = Arc::clone(&w.layout);
+        let coef = lay.coef.clone();
+        let used = |e: usize| {
+            let row = coef[e];
+            (0..N_GOODS).filter(move |&k| row[k] > 0.0)
+        };
+        let e = (0..w.inputs.n_enterprises())
+            .find(|&e| used(e).filter(|&k| TRADED[k]).count() >= 2)
+            .expect("an enterprise using two traded inputs");
+        let k = used(e).find(|&k| TRADED[k]).expect("a traded input");
+        // a month and a half of every input, and half a month of k
+        for (u, &account) in lay.accounts.enterprise.iter().enumerate() {
+            for g in used(u) {
+                let held = w.ledger.goods(account, g);
+                w.ledger.create(account, g, 0.5 * held);
+            }
+        }
+        let mut spare = w.clone();
+        labour(&mut spare);
+        assert!(spare.scratch.short.iter().all(|&s| s == 0));
+        let account = lay.accounts.enterprise[e];
+        let held = w.ledger.goods(account, k);
+        w.ledger.destroy(account, k, held * 2.0 / 3.0);
+        labour(&mut w);
+        assert_eq!(w.scratch.short[e], 1 << k);
+        assert_eq!(w.scratch.notional[e], spare.employment[e]);
+        assert!(w.employment[e] < 0.99 * spare.employment[e]);
+
+        produce(&mut w);
+        demand(&mut w);
+        let ent = &w.inputs.enterprises;
+        let i = ent.province[e] as usize;
+        let s_l = w.inputs.countries.s_l[w.inputs.country_of(i)];
+        let r = rho(w.params.sigma_fl);
+        let output = |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+        let (notional, constrained) = (output(spare.employment[e]), output(w.employment[e]));
+        let mut others = 0;
+        for g in used(e) {
+            let plan = if g == k { notional } else { constrained };
+            let target = 1.0 + COVER + w.scratch.lead[i * N_GOODS + g];
+            let held = w.ledger.goods(account, g);
+            let on_order = w.pipeline.on_order(w.inputs.n_pops() + e, g);
+            let want = (target * lay.coef[e][g] * plan - held - on_order).max(0.0);
+            let got = w.scratch.ent_order[e * N_GOODS + g];
+            assert!(
+                (got - want).abs() <= 1e-12 * want.max(1.0),
+                "good {g}: order {got}, want {want}"
+            );
+            others += usize::from(g != k && want > 0.0);
+        }
+        assert!(
+            others > 0,
+            "no other input ordered: the test checks nothing there"
+        );
     }
 
     #[test]

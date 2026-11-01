@@ -18,7 +18,7 @@ use ceteris_econ::systems::{self, cap_output};
 use ceteris_econ::{EconInputs, EconParams, EconWorld, local};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
-use ceteris_trade::{Kernel, TradeParams};
+use ceteris_trade::Kernel;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 type System = fn(&mut EconWorld);
@@ -74,7 +74,7 @@ fn before(base: &EconWorld, n: usize) -> EconWorld {
 
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
-    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let (params, trade) = (EconParams::default(), inputs.trade_params());
     // tick 1: its prices are those of tick 0's repricing, so the sourcing that `source`
     // keeps from tick 0 is stale at E3, as in any tick away from an exact fixed point
     let mut base = EconWorld::new(Arc::new(inputs), params, trade.clone());

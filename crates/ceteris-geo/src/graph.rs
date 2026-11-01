@@ -96,6 +96,18 @@ impl Default for TransportParams {
     }
 }
 
+impl TransportParams {
+    /// These parameters at a bulk freight rate (P154, P155, ADR 0247): the sea cost per
+    /// tonne-km (sea and canal edges) times `sea`, the listed and minor port fees times `port`.
+    pub fn bulk(&self, sea: f64, port: f64) -> Self {
+        let mut p = self.clone();
+        p.per_tkm[SEA] *= sea;
+        p.fee[1] *= port;
+        p.fee[2] *= port;
+        p
+    }
+}
+
 const ROAD: usize = 0;
 const RAIL: usize = 1;
 const SEA: usize = 2;
@@ -308,6 +320,44 @@ mod tests {
             price(Mode::Sea, 100.0, 300.0, &p),
             price(Mode::Sea, 100.0, 0.0, &p)
         );
+    }
+
+    #[test]
+    fn bulk_rate_reprices_sea_and_port_fees() {
+        let (p, b) = (
+            TransportParams::default(),
+            TransportParams::default().bulk(0.25, 0.5),
+        );
+        assert_eq!(
+            price(Mode::Sea, 100.0, 0.0, &b).0,
+            0.25 * price(Mode::Sea, 100.0, 0.0, &p).0
+        );
+        // the canal edge is the sea line plus the unchanged canal fee
+        let canal_line = |q: &TransportParams| price(Mode::Canal, 100.0, 0.0, q).0 - q.canal_fee;
+        assert!((canal_line(&b) - 0.25 * canal_line(&p)).abs() < 1e-12);
+        assert_eq!(b.canal_fee, p.canal_fee);
+        for (mode, fee) in [(Mode::PortAccess, 1), (Mode::MinorPortAccess, 2)] {
+            assert_eq!(price(mode, 0.0, 0.0, &b).0, 0.5 * p.fee[fee]);
+            assert_eq!(price(mode, 0.0, 0.0, &b).1, price(mode, 0.0, 0.0, &p).1);
+            assert_eq!(
+                price(mode, 10.0, 0.0, &b).0,
+                price(Mode::Road, 10.0, 0.0, &p).0 + 0.5 * p.fee[fee]
+            );
+        }
+        for mode in [
+            Mode::Road,
+            Mode::Rail,
+            Mode::Air,
+            Mode::RailAccess,
+            Mode::AirAccess,
+        ] {
+            assert_eq!(price(mode, 100.0, 50.0, &b), price(mode, 100.0, 50.0, &p));
+        }
+        assert_eq!(
+            price(Mode::Sea, 100.0, 0.0, &b).1,
+            price(Mode::Sea, 100.0, 0.0, &p).1
+        );
+        assert_eq!(TransportParams::default().bulk(1.0, 1.0), p);
     }
 
     #[test]

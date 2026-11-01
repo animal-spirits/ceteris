@@ -42,7 +42,7 @@ struct World {
 }
 
 /// Country 0 fills x < 0.5, country 1 x > 0.5. Each country has two gateways at its side of
-/// the border, at y = 0.25 and y = 0.75.
+/// the border, at y = 0.25 and y = 0.75, each with half its country's mass.
 fn planar_world(seed: u64) -> World {
     let mut rng = Rng(seed);
     let mut provinces = vec![];
@@ -56,6 +56,7 @@ fn planar_world(seed: u64) -> World {
     }
     let gateways: Vec<Point> = vec![(0.48, 0.25), (0.48, 0.75), (0.52, 0.25), (0.52, 0.75)];
     net.gateway_country = vec![0, 0, 1, 1];
+    net.gateway_mass = vec![0.5; 4];
     for (o, &po) in provinces.iter().enumerate() {
         for (d, &pd) in provinces.iter().enumerate() {
             if o != d && net.province_country[o] == net.province_country[d] {
@@ -93,8 +94,8 @@ fn median(mut v: Vec<f64>) -> f64 {
 
 #[test]
 fn two_level_vs_direct_report() {
-    let p = TradeParams::default();
-    let (nu, theta) = (1.0 + p.border_nu, p.theta[GOOD]);
+    let p = TradeParams::default().bulk_off();
+    let (nu, theta) = (1.0 + p.border_nu_of(GOOD), p.theta[GOOD]);
     let mut diffs_orders = vec![];
     let mut diffs_arrival = vec![];
 
@@ -110,17 +111,26 @@ fn two_level_vs_direct_report() {
 
         let kernel = Kernel::build(&w.net, &W, &w.wedges, &p);
         let mut gate = Sourced::new();
-        source(&kernel, GOOD, &price, &active, &spend, &mut gate);
+        source(
+            &kernel,
+            GOOD,
+            &price,
+            &active,
+            &vec![1.0; n],
+            &spend,
+            &mut gate,
+        );
         dispatch(&kernel, GOOD, &price, &vec![[1.0; 2]; n], &mut gate);
 
-        // gateway kernel: every destination spends E, and goods survive every loss
+        // gateway kernel: every destination spends E, and goods survive every loss but for
+        // selection (ADR 0200)
         for (d, e) in spend.iter().enumerate() {
             let rel = (gate.paid[d] - (e[0] + e[1])).abs() / (e[0] + e[1]);
             assert!(rel < 1e-12, "gateway kernel destination {d}: {rel}");
         }
         let shipped: f64 = gate.shipped.iter().sum();
         let arrived: f64 = gate.arrive.iter().flatten().flatten().sum();
-        assert!((shipped - arrived - gate.lost).abs() < 1e-12 * shipped);
+        assert!((shipped - gate.lost + gate.selected - arrived).abs() < 1e-12 * shipped);
 
         // direct kernel: the cross-border pair gets its own straight-line leg
         let wt: Vec<f64> = price.iter().map(|&q| q.powf(-theta)).collect();
@@ -155,9 +165,10 @@ fn two_level_vs_direct_report() {
                 let x = e * weight(o) / phi;
                 let units = x / (price[o] * (1.0 + tariff(o)));
                 direct_orders[o] += units;
-                direct_arrival[d] += if o == d { units } else { units / route_tau(o) };
                 spent += x;
             }
+            // buyers pay the CES index, Gamma 1 (ADR 0200)
+            direct_arrival[d] = e * phi.powf(1.0 / theta);
             assert!(
                 (spent - e).abs() < 1e-12 * e,
                 "direct kernel destination {d}"

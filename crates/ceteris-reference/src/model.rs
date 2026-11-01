@@ -1,14 +1,18 @@
 //! Steady state of the P2 tick pipeline with frictions off (`specs/econ/SPEC.md`, GE reference
 //! model). Mirrors `ceteris-trade` `source` and `dispatch` (ADRs 0015 and 0016) and `ceteris-econ`
 //! E1 to E4 at a fixed point: frictionless wage (employment at the natural rate, (1 - u*) L^s,
-//! ADR 0089), every origin market selling its output (orders = Q), every local market clearing,
+//! ADR 0089), every origin market selling its output (orders = Q; at the origins of the
+//! competitively stored goods, orders (1 + delta s) = Q, the rest of output replacing the stock's
+//! spoilage, ADR 0091), every local market clearing,
 //! input stocks never binding (orders replace use), pops spending their whole income. Expected
 //! inflation (ADR 0019) is zero at a steady state, since the world price index is constant there,
 //! so the price and wage rules' pi^e term leaves this solution unchanged.
 //!
 //! Destination d spends E_d on traded good g, households (each pop by PIGL across categories and
-//! CES within them, ADR 0021) at the delivered unit price q_d = 1 / alpha_d, alpha_d the units
-//! arriving per unit of spending, and enterprises a Y q_d, so arrivals replace use;
+//! CES within them, ADR 0021) at the buyer price q_d = Gamma_d P_d, P_d the CES index (ADR 0200,
+//! selection on trade links; `Inputs::gamma`), and enterprises a Y q_d; every unit of spending
+//! delivers 1 / q_d units, so arrivals replace use. Without Gamma ([`Model::physical`], the
+//! calibration's model) q_d is the delivered unit price of the physical arrivals, 1 / alpha_d;
 //! X_od = E_d K_od w_o / Phi_d with w_o = (p_o / p_min)^-theta_g (theta per good, ADR 0018), K
 //! carrying the tariff on crossings. Origin o ships X_od / (p_o (1 + t)) units and receives p_o
 //! per unit, the importer's rebate account t p_o. Weights are relative to one p_min per good: Rust
@@ -21,7 +25,9 @@
 //! demand of every active market, ln(D / Q) (with a floor far below market size), D the orders
 //! placed at an origin or the demand at a local market, and of every labour market,
 //! (sum L* - N) / N with N = (1 - u*) L^s employed at the natural rate. Market cash flow is zero at
-//! a fixed point and left out, and households are paid w N, so Walras' law reads
+//! a fixed point and left out, except the spoilage of stored goods, p Q delta s / (1 + delta s),
+//! which its country's profits carry (at a solution it is the market's cash flow -p delta S),
+//! and households are paid w N, so at a solution Walras' law reads
 //! sum p (D - Q) + sum w (L* - N) = 0 identically; the labour equation of the province with the
 //! largest base wage bill is replaced by ln(world price index) = 0, the index weighting consumer
 //! prices (q_d for traded goods, the local price for local goods) and leaving out cells with no
@@ -67,12 +73,13 @@ pub struct Factors<'f> {
 /// The inputs with every derived quantity an evaluation uses, computed once.
 pub struct Model<'a> {
     pub inp: &'a Inputs,
+    /// Selection constants of the buyer price (ADR 0200); `None` for [`Model::physical`].
+    gamma: Option<&'a Mat>,
     /// (E, G) physical input coefficients.
     pub ent_inputs: Mat,
     pub ent_a_va: Vec<f64>,
     pub ent_s_l: Vec<f64>,
     pub weights: Weights,
-    pub sigma_income: Vec<f64>,
     /// (P, G) weights of the world price index.
     pub index_weights: Mat,
     pub active_cells: Vec<usize>,
@@ -80,6 +87,10 @@ pub struct Model<'a> {
     pub rho: f64,
     /// MARKET_FLOOR (base demand + base output) of every active cell.
     market_floor: Vec<f64>,
+    /// (G,) delta_g s_g: spoilage of the stock per unit of orders at a steady state, which
+    /// origins of competitively stored goods produce on top of their orders (ADR 0091); 0
+    /// elsewhere and for inputs without coverage.
+    pub spoilage: Vec<f64>,
     legs: LegIndex,
     ent_country: Vec<usize>,
     pop_country: Vec<usize>,
@@ -97,16 +108,20 @@ pub struct Model<'a> {
     cro_duty: Vec<f64>,
 }
 
-/// Origin weights, Phi and delivered unit prices of every traded cell, as
+/// Origin weights, Phi, the CES index and the buyer prices of every traded cell, as
 /// `EconWorld::refresh_price_index`.
 pub struct Sourcing {
     /// Good-major (G * P): (p / p_min)^-theta_g of active traded origins, 0 elsewhere.
     pub w: Vec<f64>,
     /// Good-major (G * P).
     pub phi: Vec<f64>,
-    /// (P, G) q = 1 / alpha, infinite where no active origin is reachable.
+    /// (P, G) CES index P_d = p_min Phi_d^(-1/theta), infinite where no active origin is
+    /// reachable.
+    pub ces: Mat,
+    /// (P, G) buyer price q: Gamma P_d with selection (ADR 0200), else 1 / alpha_d of the
+    /// physical arrivals; infinite where no active origin is reachable.
     pub index: Mat,
-    /// (P, G) units arriving per unit of spending.
+    /// (P, G) units arriving per unit of spending, 1 / q.
     pub alpha: Mat,
 }
 
@@ -115,7 +130,7 @@ pub struct Flows {
     /// Origin units ordered.
     pub orders: Mat,
     pub home: Mat,
-    /// Destination units after every leg's loss.
+    /// Delivered units, 1 / q per unit paid.
     pub arrive: Mat,
     /// What each destination pays, its spending where it reaches an origin.
     pub paid: Mat,
@@ -180,6 +195,46 @@ pub fn cells(v: &[f64], n_p: usize, n_g: usize) -> Mat {
     Mat::from_fn(n_p, n_g, |p, g| v[g * n_p + p])
 }
 
+/// ln of each country pair's trade-cost kernel net of tariffs, flat (C, C, G) exporter x importer
+/// (ADR 0264): the sum over crossings a -> b of u_a K_ab (1 + t_ab)^theta v_b, where u_a is the
+/// exporter's access to gateway a averaged over its provinces by `origin` weight and v_b the
+/// importer's by `destination` weight, both (P, G). With the sourcing weights w_o and E_d / Phi_d
+/// as the weights, a pair's flow is its exporter's total weight times its importer's times
+/// (1 + t)^-theta times this kernel. -inf where no crossing links the pair, for domestic pairs
+/// and for local goods.
+pub fn ln_country_kernel(inp: &Inputs, origin: &Mat, destination: &Mat) -> Vec<f64> {
+    let (n_c, n_g, n_n) = (inp.n_countries(), inp.n_goods(), inp.n_gateways());
+    let pc = &inp.province_country;
+    let mut origin_c = vec![0.0; n_c * n_g];
+    let mut destination_c = vec![0.0; n_c * n_g];
+    for p in 0..inp.n_provinces() {
+        for g in (0..n_g).filter(|&g| inp.traded[g]) {
+            origin_c[pc[p] * n_g + g] += origin[(p, g)];
+            destination_c[pc[p] * n_g + g] += destination[(p, g)];
+        }
+    }
+    let (mut u, mut v) = (vec![0.0; n_n * n_g], vec![0.0; n_n * n_g]);
+    let acc = &inp.access;
+    for j in 0..acc.k.len() {
+        let (p, a, g) = (acc.row[j], acc.col[j], acc.good[j]);
+        let c = pc[p] * n_g + g;
+        if origin_c[c] > 0.0 {
+            u[a * n_g + g] += origin[(p, g)] / origin_c[c] * acc.k[j];
+        }
+        if destination_c[c] > 0.0 {
+            v[a * n_g + g] += destination[(p, g)] / destination_c[c] * acc.k[j];
+        }
+    }
+    let mut k = vec![0.0; n_c * n_c * n_g];
+    let (cro, gc) = (&inp.crossing, &inp.gateway_country);
+    for j in 0..cro.k.len() {
+        let (a, b, g) = (cro.row[j], cro.col[j], cro.good[j]);
+        let net = cro.k[j] * cro.inv_duty[j].powf(-inp.theta[g]);
+        k[(gc[a] * n_c + gc[b]) * n_g + g] += u[a * n_g + g] * net * v[b * n_g + g];
+    }
+    k.iter().map(|x| x.ln()).collect()
+}
+
 /// numpy's `max` of |v|: NaN wins.
 pub fn max_abs(v: &[f64]) -> f64 {
     v.iter().fold(0.0, |m: f64, &x| {
@@ -192,7 +247,19 @@ pub fn max_abs(v: &[f64]) -> f64 {
 }
 
 impl<'a> Model<'a> {
+    /// The model of `inp`, buyers at Gamma P_d where the inputs carry Gamma (ADR 0200).
     pub fn new(inp: &'a Inputs) -> Result<Model<'a>, String> {
+        Model::with_gamma(inp, inp.gamma.as_ref())
+    }
+
+    /// The model of `inp` with buyers at the delivered unit price of the physical arrivals,
+    /// 1 / alpha_d, whatever Gamma the inputs carry: the calibration's, which fixes Gamma where
+    /// it settles.
+    pub fn physical(inp: &'a Inputs) -> Result<Model<'a>, String> {
+        Model::with_gamma(inp, None)
+    }
+
+    fn with_gamma(inp: &'a Inputs, gamma: Option<&'a Mat>) -> Result<Model<'a>, String> {
         let (n_p, n_n) = (inp.n_provinces(), inp.n_gateways());
         let (dom, acc, cro) = (&inp.domestic, &inp.access, &inp.crossing);
         let flat = |good: &[usize], at: &[usize], n: usize| -> Vec<usize> {
@@ -231,8 +298,8 @@ impl<'a> Model<'a> {
             .zip(&pop_country)
             .map(|(n, &k)| n / country_people[k])
             .collect();
-        let sigma_income = inp.sigma_income();
-        let pop_sigma = pop_country.iter().map(|&k| sigma_income[k]).collect();
+        let weights = inp.pigl_weights()?;
+        let pop_sigma = pop_country.iter().map(|&k| weights.sigma[k]).collect();
 
         let active_cells = inp.active_cells();
         let (base_demand, base_output) = (inp.base_demand(), inp.base_output());
@@ -240,12 +307,18 @@ impl<'a> Model<'a> {
             .iter()
             .map(|&i| MARKET_FLOOR * (base_demand.data[i] + base_output.data[i]))
             .collect();
+        let spoilage = (0..inp.n_goods())
+            .map(|g| match &inp.coverage {
+                Some(cover) if inp.traded[g] => inp.storage_loss[g] * cover[g],
+                _ => 0.0,
+            })
+            .collect();
         Ok(Model {
+            spoilage,
             ent_inputs: inp.ent_inputs(),
             ent_a_va: inp.ent_a_va(),
             ent_s_l: inp.ent_s_l(),
-            weights: inp.pigl_weights()?,
-            sigma_income,
+            weights,
             index_weights: inp.index_weights(),
             employed_supply: inp.employed_supply(),
             rho: (inp.sigma_fl - 1.0) / inp.sigma_fl,
@@ -264,6 +337,7 @@ impl<'a> Model<'a> {
             cro_arrive,
             cro_duty,
             inp,
+            gamma,
         })
     }
 
@@ -391,13 +465,14 @@ impl<'a> Model<'a> {
         }
     }
 
-    /// Origin weights of active traded origins, Phi, alpha and the delivered unit price, at
-    /// posted prices (P, G).
+    /// Origin weights of active traded origins, Phi, the CES index, the buyer price and alpha,
+    /// at posted prices (P, G).
     pub fn sourcing(&self, price: &Mat) -> Sourcing {
         let inp = self.inp;
         let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
         let p = good_major(price);
         let mut w = vec![0.0; n_g * n_p];
+        let mut p_low = vec![f64::INFINITY; n_g];
         for g in 0..n_g {
             let act = |i: usize| inp.traded[g] && inp.active[i][g];
             // numpy's min: NaN wins.
@@ -412,6 +487,7 @@ impl<'a> Model<'a> {
             for i in (0..n_p).filter(|&i| act(i)) {
                 w[g * n_p + i] = (p[g * n_p + i] / p_min).powf(-inp.theta[g]);
             }
+            p_low[g] = p_min;
         }
         let phi = self.origin_sums(&w, self.gross());
         let per_price: Vec<f64> = w
@@ -420,16 +496,41 @@ impl<'a> Model<'a> {
             .map(|(&w, &p)| if w > 0.0 { w / p } else { 0.0 })
             .collect();
         let arrive = self.origin_sums(&per_price, self.arriving());
-        let alpha: Vec<f64> = arrive
-            .iter()
-            .zip(&phi)
-            .map(|(&a, &f)| if f > 0.0 { a / f } else { 0.0 })
+        let ces: Vec<f64> = (0..n_g * n_p)
+            .map(|j| {
+                let g = j / n_p;
+                if phi[j] > 0.0 {
+                    p_low[g] * phi[j].powf(-1.0 / inp.theta[g])
+                } else {
+                    f64::INFINITY
+                }
+            })
             .collect();
-        let index: Vec<f64> = alpha
-            .iter()
-            .map(|&a| if a > 0.0 { 1.0 / a } else { f64::INFINITY })
-            .collect();
+        let (index, alpha): (Vec<f64>, Vec<f64>) = match self.gamma {
+            Some(gamma) => {
+                let gamma = good_major(gamma);
+                let index: Vec<f64> = ces.iter().zip(&gamma).map(|(c, g)| g * c).collect();
+                let alpha = index
+                    .iter()
+                    .map(|&q| if q.is_finite() { 1.0 / q } else { 0.0 })
+                    .collect();
+                (index, alpha)
+            }
+            None => {
+                let alpha: Vec<f64> = arrive
+                    .iter()
+                    .zip(&phi)
+                    .map(|(&a, &f)| if f > 0.0 { a / f } else { 0.0 })
+                    .collect();
+                let index = alpha
+                    .iter()
+                    .map(|&a| if a > 0.0 { 1.0 / a } else { f64::INFINITY })
+                    .collect();
+                (index, alpha)
+            }
+        };
         Sourcing {
+            ces: cells(&ces, n_p, n_g),
             index: cells(&index, n_p, n_g),
             alpha: cells(&alpha, n_p, n_g),
             w,
@@ -471,12 +572,20 @@ impl<'a> Model<'a> {
             .map(|(t, p)| p * t)
             .collect();
         let home: Vec<f64> = per_price.iter().zip(&reach).map(|(p, r)| p * r).collect();
-        let arrive: Vec<f64> = self
-            .origin_sums(&per_price, self.arriving())
-            .iter()
-            .zip(&reach)
-            .map(|(a, r)| r * a)
-            .collect();
+        let arrive: Vec<f64> = if self.gamma.is_some() {
+            let alpha = good_major(&src.alpha);
+            ef.iter()
+                .zip(phi)
+                .zip(&alpha)
+                .map(|((&e, &f), &a)| if f > 0.0 { e * a } else { 0.0 })
+                .collect()
+        } else {
+            self.origin_sums(&per_price, self.arriving())
+                .iter()
+                .zip(&reach)
+                .map(|(a, r)| r * a)
+                .collect()
+        };
         let duty_factors = Factors {
             dom: &self.dom_zero,
             acc: &acc.k,
@@ -565,10 +674,8 @@ impl<'a> Model<'a> {
     }
 }
 
-/// `production::labour_target` of one enterprise, uncapped: at a clearing wage no target exceeds
-/// L^s unless one enterprise alone employs the province (then Rust finds no clearing wage
-/// either), so the cap never binds at a steady state; leaving it out keeps labour demand
-/// responsive to the wage everywhere.
+/// `production::labour_target_uncapped` of one enterprise: the frictionless wage solves on
+/// uncapped targets in Rust too, which keeps labour demand responsive to the wage everywhere.
 #[allow(clippy::too_many_arguments)]
 fn labour_target(p_va: f64, w: f64, a: f64, va0: f64, l0: f64, s_l: f64, r: f64) -> f64 {
     let q = w * l0 / (p_va * a * va0 * s_l);
@@ -697,7 +804,15 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let kc = &m.pop_country;
     let people = &inp.pop_population;
     let n_k = kp.len();
-    let country_profit = bincount(&m.ent_country, profit.iter().copied(), n_c);
+    // ADR 0091: each origin of a stored good buys its output and sells Q / (1 + delta s), the
+    // rest replacing spoilage, a cash loss its country's profit pool carries (merchant rule)
+    let mut country_profit = bincount(&m.ent_country, profit.iter().copied(), n_c);
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| m.spoilage[g] > 0.0) {
+            let share = m.spoilage[g] / (1.0 + m.spoilage[g]);
+            country_profit[c[p]] -= price[(p, g)] * out[(p, g)] * share;
+        }
+    }
     let earned: Vec<f64> = (0..n_k)
         .map(|k| {
             m.pop_labour_share[k] * (wage[kp[k]] * m.employed_supply[kp[k]])
@@ -774,7 +889,7 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let flows = m.flows(&price, &spend, &src);
     let demand = Mat::from_fn(n_p, n_g, |p, g| {
         if traded[g] {
-            flows.orders[(p, g)]
+            flows.orders[(p, g)] * (1.0 + m.spoilage[g])
         } else {
             let pr = price[(p, g)];
             let hh = if pr > 0.0 { spend_hh[(p, g)] / pr } else { 0.0 };

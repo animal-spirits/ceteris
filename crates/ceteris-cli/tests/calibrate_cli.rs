@@ -53,6 +53,7 @@ fn calibrate_writes_and_reports_the_fixture_calibration() {
         "pass_history",
         "local_va_gap_quantiles",
         "ln_a_quantiles_traded",
+        "within_sigma_zero",
     ] {
         assert!(!summary[key].is_null(), "{key}");
     }
@@ -64,6 +65,8 @@ fn calibrate_writes_and_reports_the_fixture_calibration() {
 #[test]
 fn calibrate_needs_one_input() {
     let fixture = fixture();
+    let tmp = tempfile::tempdir().unwrap();
+    let never = tmp.path().join("calibration");
     for (args, message) in [
         (
             vec!["calibrate"],
@@ -90,6 +93,17 @@ fn calibrate_needs_one_input() {
         (
             vec![
                 "calibrate",
+                "--inputs",
+                path(&fixture),
+                "--no-border-fit",
+                "--out",
+                path(&never),
+            ],
+            "--no-border-fit needs --pack",
+        ),
+        (
+            vec![
+                "calibrate",
                 "--pack",
                 path(&fixture),
                 "--out",
@@ -103,6 +117,7 @@ fn calibrate_needs_one_input() {
         let stderr = String::from_utf8_lossy(&run.stderr);
         assert!(stderr.contains(message), "{args:?}: {stderr}");
     }
+    assert!(!never.exists());
 }
 
 /// The stability table of the fixture.
@@ -117,13 +132,13 @@ fn calibrate_stability_prints_the_fixture_table() {
     assert_eq!(
         String::from_utf8(run.stdout).unwrap(),
         "\
-| 0 Agriculture | 10.57 | 3 | 0.168 / 0.149 | 0.104 / 0.096 | 0.130 / 0.126 |
-| 1 Crude oil and gas | 10.57 | 1 | 0.169 / 0.151 | 0.048 / 0.074 | 0.016 / 0.095 |
-| 2 Coal and other mining | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
-| 3 Food | 2.62 | 2 | 0.508 / 0.368 | 0.392 / 0.347 | 0.040 / 0.380 |
-| 4 Light manufacturing | 10.57 | 2 | 0.168 / 0.149 | 0.097 / 0.089 | 0.040 / 0.116 |
-| 5 Chemicals, refined fuels, metals | 10.57 | 2 | 0.166 / 0.141 | 0.096 / 0.085 | 0.031 / 0.114 |
-| 6 Machinery, electronics, vehicles | 5.19 | 2 | 0.307 / 0.250 | 0.214 / 0.195 | 0.040 / 0.225 |
+| 0 Agriculture | 7.68 | 3 | 0.222 / 0.191 | 0.152 / 0.141 | 0.179 / 0.172 |
+| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.110 / 0.102 | 0.040 / 0.037 | 0.016 / 0.058 |
+| 2 Coal and other mining | 16.91 | 2 | 0.110 / 0.101 | 0.048 / 0.044 | 0.040 / 0.070 |
+| 3 Food | 2.91 | 2 | 0.473 / 0.349 | 0.360 / 0.321 | 0.040 / 0.353 |
+| 4 Light manufacturing | 7.68 | 2 | 0.222 / 0.191 | 0.142 / 0.130 | 0.040 / 0.158 |
+| 5 Chemicals and metals | 2.91 | 2 | 0.458 / 0.307 | 0.109 / 0.302 | 0.031 / 0.337 |
+| 6 Machinery, electronics, vehicles | 4.14 | 2 | 0.366 / 0.287 | 0.265 / 0.240 | 0.040 / 0.270 |
 "
     );
 }

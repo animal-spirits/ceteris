@@ -17,7 +17,7 @@ exercises all of it; P2 replaces it with the economic core.
 | Component | Owner | Type | Notes |
 |---|---|---|---|
 | Entity IDs | per entity kind | `EntityId(u32)` from `IdAlloc` | Monotonic, never reused, part of the snapshot |
-| Money balances | `Ledger` | `i64` minor units per account | Negative balance = net liability (issuers) |
+| Money balances | `Ledger` | `i64` minor units per narrow account, `i128` per wide account (ADR 0106) | Negative balance = net liability (issuers); the kind is chosen at `open` |
 | Goods holdings | `Ledger` | `f64` per (account, good), goods innermost | Never negative |
 | Account open flags | `Ledger` | `bool` per account | Closed accounts must be empty; IDs are not reused |
 | Event log | `EventLog` | `Vec<Event>` | Discrete decisions; part of the snapshot |
@@ -62,8 +62,13 @@ systems (19.4) arrive with the first module that needs them.
 
 ## Ledger (Section 4.6)
 
-- `transfer(flow, from, to, amount)` moves money between two accounts with checked
-  `i64` arithmetic; overflow halts the run. Every transfer is journaled with its
+- Accounts are narrow (`open`, `i64` balances: pops, enterprises, firms, households) or wide
+  (`open_wide`, `i128` balances: accounts that aggregate many others, such as pools, the mint,
+  markets and gateways; ADR 0106). `money(a)` reads a balance as `i64` and panics where it does
+  not fit; `money_wide(a)` reads any balance as `i128`.
+- `transfer(flow, from, to, amount)` moves an `i64` amount between two accounts of either
+  kind with checked arithmetic; a narrow balance leaving the `i64` range, or a wide one the
+  `i128` range, halts the run (`ledger overflow`). Every transfer is journaled with its
   `Flow` tag for later sector flow matrices.
 - `ship(from, to, good, qty)` moves goods between accounts.
 - `create(account, good, qty)` and `destroy(account, good, qty)` are the only ways
@@ -79,7 +84,9 @@ tree shape depends only on `xs.len()`, so 1 and 8 threads give identical bits.
 ## Snapshots (Sections 4.1, 14.3)
 
 Canonical encoding: little-endian, `f64` by bit pattern, slices length-prefixed,
-prefixed with magic `CETS` and a format version. State hash = BLAKE3 of
+prefixed with magic `CETS` and a format version (2 since ADR 0106: the ledger writes each
+account's kind and its balance as `i64` or `i128`). A snapshot of another format version is a
+`DecodeError` naming the version, never a misread. State hash = BLAKE3 of
 (tick, canonical bytes). Stored bytes are zstd-compressed and content-addressed by
 the hash, so identical states share one blob. `Sim::seek(t)` restores the nearest
 snapshot at or before `t` and replays. See ADR 0002 for why this is not Arrow yet.

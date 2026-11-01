@@ -17,9 +17,13 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_GOODS, TradeParams};
+use ceteris_trade::{Kernel, N_CLASSES, N_GOODS, TradeParams};
 
 const TICKS: u32 = 1200;
+/// V1's horizon where competitive storage is on (ADR 0091; econ SPEC, P2 gate): from the data
+/// state the fixture converges slowly and not monotonically (flows 1.5% off at 3,600 ticks, 2.1%
+/// at 4,800, 1.4e-4 at 6,000; owner, 2026-10-31).
+const STORAGE_TICKS: u32 = 6000;
 
 fn run(threads: usize, ticks: u32) -> Sim<EconWorld> {
     let pool = rayon::ThreadPoolBuilder::new()
@@ -165,13 +169,14 @@ fn flow_table(dir: &Path, name: &str) -> BTreeMap<FlowKey, (f64, f64)> {
 }
 
 /// V1 (specs/econ/SPEC.md, Equilibrium nesting): with frictionless settings the run from the
-/// data state reaches the GE reference within 1,200 ticks. Prices and wages are divided by the
-/// world price index over consumer prices (`EconWorld::world_price_index`, the index the
+/// data state reaches the GE reference within 1,200 ticks, 6,000 where storage is on. Prices
+/// and wages are divided by the world price index over consumer prices
+/// (`EconWorld::world_price_index`, the index the
 /// expectations of ADR 0019 track; the reference is normalized to an index of 1);
 /// flows are the mean of the last 12 ticks, joined with the reference on (exporter, importer,
 /// good). The 1% tolerances are V1's tolerance mode (ADR 0022): the uniqueness bound
 /// (`ceteris_reference::uniqueness`, Theorem 1 of Allen, Arkolakis and Li 2024 in the
-/// special case the SPEC states) is 0.922 at the fixture's theta and value-added shares, at most
+/// special case the SPEC states) is 0.946 at the fixture's theta and value-added shares, at most
 /// 1, so one equilibrium is presumed; `test_trade_only_is_unique` checks it on the same export.
 #[test]
 fn v1_fixture_frictionless_matches_reference() {
@@ -180,16 +185,18 @@ fn v1_fixture_frictionless_matches_reference() {
     let reference = fixture_dir().join("reference");
     let solution = ceteris_econ::equilibrium::Equilibrium::read(&reference).unwrap();
 
+    let trade = TradeParams::default();
+    let ticks = if (0..N_GOODS).any(|g| trade.stores(g)) {
+        STORAGE_TICKS
+    } else {
+        TICKS
+    };
     let mut sim = Sim::new(
-        EconWorld::new(
-            Arc::new(small_world()),
-            EconParams::frictionless(),
-            TradeParams::default(),
-        ),
+        EconWorld::new(Arc::new(small_world()), EconParams::frictionless(), trade),
         ceteris_econ::systems::schedule(),
         ceteris_econ::systems::SEED,
     );
-    sim.run_until(TICKS).unwrap_or_else(|v| panic!("{v}"));
+    sim.run_until(ticks).unwrap_or_else(|v| panic!("{v}"));
     let w = sim.world();
 
     let index = w.world_price_index();
@@ -373,29 +380,31 @@ fn pack_inputs_load() {
     assert!(left_out < n / 10);
 }
 
-/// Share of the country pairs of `pairs` in the international flows of the last 12 ticks, by
-/// value and by units, all goods. Shares compare runs whose price levels differ.
-fn pair_shares(w: &EconWorld, pairs: &[(usize, usize)]) -> (f64, f64) {
+/// Share of the (exporter, importer, good) cells of `cells` in all international flows of the
+/// last 12 ticks, by value and by units. Shares compare runs whose price levels differ.
+fn cell_shares(w: &EconWorld, cells: &[(usize, usize, usize)]) -> (f64, f64) {
     let nc = w.inputs().n_countries();
     let mean = w.scratch.flows.mean();
-    let cells = |ex: usize, im: usize| (0..N_GOODS).map(move |g| (ex * nc + im) * N_GOODS + g);
+    let key = move |ex: usize, im: usize, g: usize| (ex * nc + im) * N_GOODS + g;
     let sum = |x: &[f64], keys: &mut dyn Iterator<Item = usize>| keys.map(|k| x[k]).sum::<f64>();
     let foreign = || {
         (0..nc)
             .flat_map(move |ex| (0..nc).filter(move |&im| im != ex).map(move |im| (ex, im)))
-            .flat_map(move |(ex, im)| cells(ex, im))
+            .flat_map(move |(ex, im)| (0..N_GOODS).map(move |g| key(ex, im, g)))
     };
-    let chosen = || pairs.iter().flat_map(move |&(ex, im)| cells(ex, im));
+    let chosen = || cells.iter().map(move |&(ex, im, g)| key(ex, im, g));
     (
         sum(&mean.pair_value, &mut chosen()) / sum(&mean.pair_value, &mut foreign()),
         sum(&mean.pair_units, &mut chosen()) / sum(&mean.pair_units, &mut foreign()),
     )
 }
 
-/// The cheapest crossing cost per (exporter, importer) country pair.
-fn cheapest_crossings(net: &ceteris_trade::Network) -> BTreeMap<(usize, usize), f64> {
+type Costs = BTreeMap<(usize, usize), f64>;
+
+/// The cheapest crossing cost per (exporter, importer) country pair on `legs`.
+fn cheapest_crossings(net: &ceteris_trade::Network, legs: &[ceteris_trade::Leg]) -> Costs {
     let mut out = BTreeMap::new();
-    for l in &net.crossings {
+    for l in legs {
         let key = (
             usize::from(net.gateway_country[l.from as usize]),
             usize::from(net.gateway_country[l.to as usize]),
@@ -404,6 +413,49 @@ fn cheapest_crossings(net: &ceteris_trade::Network) -> BTreeMap<(usize, usize), 
         *c = l.cost_per_t.min(*c);
     }
     out
+}
+
+/// The (exporter, importer, good) cells of traded goods whose cheapest crossing is more than 1%
+/// dearer on `closed` than on `open`, each good on the crossings the kernel prices it on: the
+/// bulk legs for a bulk class (ADR 0247), else the base legs. Also the number of cells with a
+/// crossing.
+fn dependent_cells(
+    open: &ceteris_trade::Network,
+    closed: &ceteris_trade::Network,
+    trade: &TradeParams,
+) -> (Vec<(usize, usize, usize)>, usize) {
+    // (base, bulk) cheapest costs; a good of a bulk class reads the bulk ones
+    let costs = |n: &ceteris_trade::Network| {
+        let bulk = n
+            .bulk
+            .as_ref()
+            .map(|b| (b.classes, cheapest_crossings(n, &b.crossings)));
+        (cheapest_crossings(n, &n.crossings), bulk)
+    };
+    let (open, closed) = (costs(open), costs(closed));
+    let (mut dependent, mut all) = (Vec::new(), 0);
+    for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+        let class = trade.theta_class[g];
+        let (open_cost, closed_cost) = (on_legs_of(&open, class), on_legs_of(&closed, class));
+        all += open_cost.len();
+        dependent.extend(
+            open_cost
+                .iter()
+                .filter(|&(k, &c)| closed_cost[k] > 1.01 * c)
+                .map(|(&(ex, im), _)| (ex, im, g)),
+        );
+    }
+    (dependent, all)
+}
+
+type Classes = [bool; N_CLASSES];
+
+/// The bulk costs for a bulk class, else the base ones.
+fn on_legs_of(costs: &(Costs, Option<(Classes, Costs)>), class: u8) -> &Costs {
+    match &costs.1 {
+        Some((classes, bulk)) if classes[usize::from(class)] => bulk,
+        _ => &costs.0,
+    }
 }
 
 fn assert_finite(w: &EconWorld, when: &str) {
@@ -424,8 +476,9 @@ fn assert_finite(w: &EconWorld, when: &str) {
 /// A network change on the full pack: 12 ticks from the data state, then the Suez Canal closes,
 /// the network is rebuilt from the graph (`network_from_graph`, `set_network`) and the run
 /// goes on for 24 ticks with every invariant checked. Against a control run without the
-/// closure, the country pairs whose cheapest crossing went through Suez (more than 1% dearer
-/// without it) carry a smaller share of international trade, by value and by units.
+/// closure, the (country pair, good) cells whose cheapest crossing went through Suez (more than
+/// 1% dearer without it, on the crossings the kernel prices the good on) carry a smaller share
+/// of international trade, by value and by units.
 #[test]
 fn kernel_rebuilds_after_chokepoint_closure() {
     const BEFORE: u32 = 12;
@@ -439,7 +492,7 @@ fn kernel_rebuilds_after_chokepoint_closure() {
         EconWorld::sim(
             Arc::clone(inputs),
             EconParams::default(),
-            TradeParams::default(),
+            inputs.trade_params(),
         )
     };
     let (mut shocked, mut control) = (sim(&inputs), sim(&inputs));
@@ -458,7 +511,7 @@ fn kernel_rebuilds_after_chokepoint_closure() {
     let suez = pack.chokepoint("Suez Canal").expect("Suez in the pack");
     pack.graph
         .set_chokepoint_closed(suez, true, &TransportParams::default());
-    let closed = inputs.network_from_graph(&pack, &gateways);
+    let closed = inputs.network_from_graph(&pack, &gateways, &inputs.trade_params());
     let open = &inputs.network;
     let legs = |n: &ceteris_trade::Network| (n.domestic.len(), n.access.len(), n.crossings.len());
     assert_eq!(
@@ -466,14 +519,9 @@ fn kernel_rebuilds_after_chokepoint_closure() {
         legs(open),
         "every leg stays reachable without Suez"
     );
-    let (open_cost, closed_cost) = (cheapest_crossings(open), cheapest_crossings(&closed));
-    let dependent: Vec<(usize, usize)> = open_cost
-        .iter()
-        .filter(|&(k, &c)| closed_cost[k] > 1.01 * c)
-        .map(|(&k, _)| k)
-        .collect();
+    let (dependent, cells) = dependent_cells(open, &closed, &inputs.trade_params());
     assert!(!dependent.is_empty());
-    let before = pair_shares(control.world(), &dependent);
+    let before = cell_shares(control.world(), &dependent);
     shocked.world_mut().set_network(closed);
     assert_ne!(shocked.world().digest(), control.world().digest());
 
@@ -483,15 +531,15 @@ fn kernel_rebuilds_after_chokepoint_closure() {
     }
     assert_finite(shocked.world(), "after the closure");
     let (with, without) = (
-        pair_shares(shocked.world(), &dependent),
-        pair_shares(control.world(), &dependent),
+        cell_shares(shocked.world(), &dependent),
+        cell_shares(control.world(), &dependent),
     );
     println!(
-        "Suez closed at tick {BEFORE}: {} of {} country pairs depend on it; their share of \
+        "Suez closed at tick {BEFORE}: {} of {cells} (country pair, good) cells depend on it; \
+         their share of \
          international trade (value, units): ticks 1..12 {before:.4?}, ticks {}..{} with the \
          closure {with:.4?}, without {without:.4?}; world price index {} with, {} without",
         dependent.len(),
-        open_cost.len(),
         BEFORE + AFTER - 11,
         BEFORE + AFTER,
         shocked.world().world_price_index(),
@@ -603,7 +651,8 @@ fn hundred_years_without_violation() {
         return;
     };
     let started = std::time::Instant::now();
-    let mut sim = EconWorld::sim(inputs, EconParams::default(), TradeParams::default());
+    let trade = inputs.trade_params();
+    let mut sim = EconWorld::sim(inputs, EconParams::default(), trade);
     let mut census = Census::default();
     for tick in 1..=TICKS {
         sim.step().unwrap_or_else(|v| panic!("tick {tick}: {v}"));
@@ -654,7 +703,7 @@ fn full_pack_one_vs_eight_threads() {
             let mut sim = EconWorld::sim(
                 Arc::clone(&inputs),
                 EconParams::default(),
-                TradeParams::default(),
+                inputs.trade_params(),
             );
             sim.run_until(PACK_TICKS).unwrap_or_else(|v| panic!("{v}"));
             sim.snapshot_hashes()
@@ -683,11 +732,8 @@ fn data_state_write_off_census() {
     let mut inputs = (*inputs).clone();
     inputs.steady = None;
     let ticks: u32 = std::env::var("TICKS_CENSUS").map_or(4800, |v| v.parse().unwrap());
-    let mut sim = EconWorld::sim(
-        Arc::new(inputs),
-        EconParams::frictionless(),
-        TradeParams::default(),
-    );
+    let trade = inputs.trade_params();
+    let mut sim = EconWorld::sim(Arc::new(inputs), EconParams::frictionless(), trade);
     let mut by_country: BTreeMap<usize, i128> = BTreeMap::new();
     let mut most_negative = (0usize, 0u32);
     let checkpoints = [

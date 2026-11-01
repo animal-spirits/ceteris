@@ -1,6 +1,8 @@
 //! The calibrated steady state of ADR 0089 (`specs/econ/SPEC.md`, Calibration): the tables
 //! `ceteris calibrate` writes, read into the static inputs (A, VA0, L0,
-//! a_VA, the coefficients, w0 and the PIGL weights) and into the state a world starts from
+//! a_VA, the coefficients, w0, the PIGL weights, the selection constants Gamma of ADR 0200 and
+//! the market elasticities of ADR 0263)
+//! and into the state a world starts from
 //! ([`Steady`]: prices, stocks, the pipeline, money and the last D, Q and sales).
 //!
 //! Tables are keyed by pack province (`ProvinceData::pack`; the province itself for a
@@ -19,12 +21,16 @@ use ceteris_trade::goods::TRADED;
 use ceteris_trade::{N_GOODS, TradeParams};
 
 use crate::demand::{N_CATEGORIES, PiglWeights};
-use crate::inputs::EconInputs;
+use crate::inputs::{EconInputs, MarketElasticity};
 use crate::params::EconParams;
 use crate::world::{active_cells, static_digest};
 
 /// The `calibration_format` the loader reads (`ceteris_calibrate::steady::FORMAT`).
-pub const FORMAT: &str = "3";
+/// 9: the block limit gains (ADR 0267), and origins of competitively stored goods sell
+/// Q / (1 + delta s) and hold coverage times sales, with the storage response in E_cell and the
+/// block map (ADR 0091). Each branch numbered its own tables 8 before the merge. 10: the
+/// metadata's `border_nu` is one value per good (ADR 0276).
+pub const FORMAT: &str = "10";
 
 /// The state at the start of a tick of the calibrated steady state (stage 5), in economy
 /// indices.
@@ -110,6 +116,40 @@ fn calibrated_digest(t: &RecordBatch) -> Result<String, PackError> {
     Ok(value.split('"').next().unwrap_or_default().to_owned())
 }
 
+/// The P05 per good in the JSON metadata `calibration` of `econ_calib.arrow` (ADRs 0092, 0276):
+/// the border friction the steady state was solved at.
+fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_GOODS], PackError> {
+    let json = t
+        .schema()
+        .metadata()
+        .get("calibration")
+        .cloned()
+        .ok_or_else(|| err("econ_calib.arrow has no calibration metadata"))?;
+    let key = "\"border_nu\"";
+    let bad = || {
+        err(format!(
+            "calibration metadata has no border_nu of {N_GOODS} finite nonnegative values"
+        ))
+    };
+    let after_key = &json[json.find(key).ok_or_else(bad)? + key.len()..];
+    let list = after_key
+        .trim_start()
+        .strip_prefix(':')
+        .and_then(|v| v.trim_start().strip_prefix('['))
+        .and_then(|v| v.split(']').next())
+        .ok_or_else(bad)?;
+    let nu: Vec<f64> = list
+        .split(',')
+        .map(|v| v.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .map_err(|_| bad())?;
+    let nu: [f64; N_GOODS] = nu.try_into().map_err(|_| bad())?;
+    if nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
+        return Err(bad());
+    }
+    Ok(nu)
+}
+
 impl EconInputs {
     /// Whether `dir` holds calibration tables.
     pub fn has_calibration(dir: &Path) -> bool {
@@ -118,8 +158,10 @@ impl EconInputs {
 
     /// Reads the calibration tables in `dir` (ADR 0089) into these inputs, which must be the
     /// uncalibrated world the tables were solved from: A, VA0, L0, a_VA, the coefficients
-    /// (both the putty-clay vintage and the 2000 column that S09 FixedLeontief reads), w0 and
-    /// the PIGL weights, and the steady state a world starts from ([`EconInputs::steady`]).
+    /// (both the putty-clay vintage and the 2000 column that S09 FixedLeontief reads), w0, the
+    /// PIGL weights, the selection constants Gamma (ADR 0200), the market elasticities that cap
+    /// each market's price gain (ADR 0263, [`EconInputs::market_elasticity`]), and the steady
+    /// state a world starts from ([`EconInputs::steady`]).
     pub fn calibrate(&mut self, dir: &Path) -> Result<(), PackError> {
         let ent_table = table(dir, "econ_calib.arrow")?;
         let want = hex(&static_digest(
@@ -135,6 +177,7 @@ impl EconInputs {
                 dir.display()
             )));
         }
+        let border_nu = calibrated_border_nu(&ent_table)?;
         let (np, n_pops, n_ent) = (self.n_provinces(), self.n_pops(), self.n_enterprises());
         let pack: Vec<u32> = if self.provinces.pack.is_empty() {
             (0..np as u32).collect()
@@ -194,6 +237,7 @@ impl EconInputs {
             ));
         }
         let scale = f64s(&countries, "pigl_scale")?;
+        let sigma = f64s(&countries, "pigl_sigma")?;
         let omega = (0..N_CATEGORIES)
             .map(|c| f64s(&countries, &format!("pigl_omega_{c}")))
             .collect::<Result<Vec<_>, _>>()?;
@@ -204,6 +248,7 @@ impl EconInputs {
                     scale: scale[c],
                     omega: std::array::from_fn(|j| omega[j][c]),
                     within: within[c],
+                    sigma: sigma[c],
                 })
                 .collect(),
         );
@@ -231,6 +276,15 @@ impl EconInputs {
             .zip(&active)
             .map(|(p, &on)| if on { p } else { 1.0 })
             .collect();
+        let gamma = f64s(&cells, "gamma")?;
+        if let Some(c) = gamma.iter().position(|&x| !(x > 0.0 && x.is_finite())) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has selection constant {}",
+                gamma[c]
+            )));
+        }
+
+        let market_elasticity = market_elasticity(&cells)?;
 
         let pops = table(dir, "econ_calib_pops.arrow")?;
         let pop_keys = keys(&pops, "edu")?;
@@ -265,6 +319,9 @@ impl EconInputs {
             pipeline.push((buyer as u32, good[r], ahead[r], units[r]));
         }
 
+        self.provinces.gamma = gamma.as_chunks::<N_GOODS>().0.to_vec();
+        self.border_nu = Some(border_nu);
+        self.market_elasticity = Some(market_elasticity);
         self.steady = Some(std::sync::Arc::new(Steady {
             price,
             supply: f64s(&cells, "supply")?,
@@ -283,6 +340,36 @@ impl EconInputs {
         }));
         Ok(())
     }
+}
+
+/// The market elasticities E and eps of `econ_calib_cells.arrow` (ADR 0263), finite and not
+/// negative, and the block limit gains (ADR 0267), positive (infinite where no block caps).
+fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError> {
+    let m = MarketElasticity {
+        demand: f64s(cells, "demand_elasticity")?,
+        supply: f64s(cells, "supply_elasticity")?,
+        limit: [
+            f64s(cells, "block_limit_default")?,
+            f64s(cells, "block_limit_frictionless")?,
+        ],
+    };
+    for (name, v) in [("demand", &m.demand), ("supply", &m.supply)] {
+        if let Some(c) = v.iter().position(|&x| !(x >= 0.0 && x.is_finite())) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has {name} elasticity {}",
+                v[c]
+            )));
+        }
+    }
+    for v in &m.limit {
+        if let Some(c) = v.iter().position(|&x| x.is_nan() || x <= 0.0) {
+            return Err(err(format!(
+                "econ_calib_cells.arrow: cell {c} has block limit gain {}",
+                v[c]
+            )));
+        }
+    }
+    Ok(m)
 }
 
 #[cfg(test)]
@@ -321,10 +408,88 @@ mod tests {
     }
 
     #[test]
+    fn border_nu_is_read_per_good() {
+        for json in [
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, 0.3], "static_digest": "abc"}"#,
+            r#"{ "static_digest":"abc","border_nu" :[ 0.25,1.5 , 0.0625,3e-05,0.25,0.0,2,0.3,0.3,0.3 ] }"#,
+        ] {
+            let t = batch(&[("calibration", json)]);
+            assert_eq!(
+                calibrated_border_nu(&t).unwrap(),
+                [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2.0, 0.3, 0.3, 0.3],
+                "{json}"
+            );
+        }
+        for json in [
+            r#"{"static_digest": "abc"}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, -1.0]}"#,
+            r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, "x"]}"#,
+        ] {
+            let t = batch(&[("calibration", json)]);
+            assert!(calibrated_border_nu(&t).is_err(), "{json}");
+        }
+    }
+
+    #[test]
     fn digest_missing_is_an_error() {
         assert!(calibrated_digest(&batch(&[])).is_err());
         let t = batch(&[("calibration", r#"{"digest": "abc"}"#)]);
         assert!(calibrated_digest(&t).is_err());
+    }
+
+    fn elasticity_cells(demand: f64, supply: f64, limit: f64) -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("demand_elasticity", DataType::Float64, false),
+            Field::new("supply_elasticity", DataType::Float64, false),
+            Field::new("block_limit_default", DataType::Float64, false),
+            Field::new("block_limit_frictionless", DataType::Float64, false),
+        ]));
+        let column = |x: f64| Arc::new(Float64Array::from(vec![1.0, x])) as _;
+        let columns = vec![
+            column(demand),
+            column(supply),
+            column(f64::INFINITY),
+            column(limit),
+        ];
+        RecordBatch::try_new(schema, columns).unwrap()
+    }
+
+    #[test]
+    fn market_elasticities_must_be_finite_and_not_negative() {
+        let cells = |demand: f64, supply: f64| elasticity_cells(demand, supply, f64::INFINITY);
+        let m = market_elasticity(&cells(11.57, 0.0)).unwrap();
+        assert_eq!((m.demand, m.supply), (vec![1.0, 11.57], vec![1.0, 0.0]));
+        for (demand, supply, name) in [
+            (f64::NAN, 1.0, "demand"),
+            (-0.5, 1.0, "demand"),
+            (f64::INFINITY, 1.0, "demand"),
+            (1.0, f64::NAN, "supply"),
+            (1.0, -1e-12, "supply"),
+        ] {
+            let message = market_elasticity(&cells(demand, supply))
+                .unwrap_err()
+                .to_string();
+            assert!(
+                message.contains(&format!("cell 1 has {name} elasticity")),
+                "{message}"
+            );
+        }
+    }
+
+    /// ADR 0267: a block limit gain is positive, infinite where no block caps.
+    #[test]
+    fn block_limits_must_be_positive() {
+        let m = market_elasticity(&elasticity_cells(1.0, 1.0, 0.025)).unwrap();
+        assert_eq!(m.limit[1], vec![1.0, 0.025]);
+        assert_eq!(m.limit[0], vec![1.0, f64::INFINITY]);
+        for b in [0.0, -0.1, f64::NAN] {
+            let message = market_elasticity(&elasticity_cells(1.0, 1.0, b))
+                .unwrap_err()
+                .to_string();
+            assert!(message.contains("cell 1 has block limit gain"), "{message}");
+        }
     }
 
     #[test]

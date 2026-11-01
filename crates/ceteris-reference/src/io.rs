@@ -1,4 +1,5 @@
-//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 9).
+//! Inputs of the GE reference model, read from a `ceteris export` directory (export format
+//! [`EXPORT_FORMAT`], 15).
 
 use std::fs::File;
 use std::ops::{Index, IndexMut};
@@ -13,7 +14,7 @@ use arrow_schema::DataType;
 
 use crate::demand::{self, Pigl, Weights};
 
-pub const EXPORT_FORMAT: &str = "9";
+pub const EXPORT_FORMAT: &str = "15";
 
 /// Dense row-major matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -192,8 +193,14 @@ pub struct Crossings {
 /// G goods, P provinces, C countries, N gateways, E enterprises, K pops.
 #[derive(Clone, Debug)]
 pub struct Inputs {
-    /// (G,) P01 per good, 0 for local goods (ADR 0018).
+    /// (G,) P01 per good times the theta scale P150, as the kernel uses it; 0 for local goods
+    /// (ADRs 0018 and 0101).
     pub theta: Vec<f64>,
+    /// (G,) P01 theta class of each good (ADR 0023; 0 for local goods).
+    pub theta_class: Vec<usize>,
+    /// (G,) P05 per good (ADRs 0092, 0276), the border friction the crossings' `k` and
+    /// `inv_loss` carry.
+    pub border_nu: Vec<f64>,
     /// P06, within a PIGL category.
     pub sigma_demand: f64,
     pub pigl: Pigl,
@@ -203,6 +210,9 @@ pub struct Inputs {
     pub traded: Vec<bool>,
     pub province_country: Vec<usize>,
     pub gateway_country: Vec<usize>,
+    /// (N,) each gateway's share of its country's trade throughput, summing to 1 per country
+    /// (ADR 0092); the crossings' `k` carry m_a m_b.
+    pub gateway_mass: Vec<f64>,
     /// (P,) effective units, sum_k e_k LF_k.
     pub labour_supply: Vec<f64>,
     /// (P,) sum of the province's pops, rebate weights.
@@ -210,6 +220,10 @@ pub struct Inputs {
     pub w0: Vec<f64>,
     /// (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable).
     pub base_price: Mat,
+    /// (P, G) selection constant Gamma of ADR 0200: buyers pay Gamma P_d. `None` prices them
+    /// at the delivered unit price of the physical arrivals, 1 / alpha_d, as the calibration
+    /// does at every pass (it then sets Gamma = q_d / P_d at the calibrated point).
+    pub gamma: Option<Mat>,
     pub s_l: Vec<f64>,
     /// (C,) 2000 rate (data).
     pub unemployment: Vec<f64>,
@@ -238,6 +252,12 @@ pub struct Inputs {
     pub ent_va_target: Option<Vec<f64>>,
     /// (G,) P02 merchant stock target in months of orders.
     pub coverage: Option<Vec<f64>>,
+    /// (G,) P56 storage loss delta per month of the competitively stored goods (ADR 0091), 0
+    /// elsewhere: at a steady state their origins' output covers sales and spoilage.
+    pub storage_loss: Vec<f64>,
+    /// The other storage parameters of the export (ADR 0091): they move only the dynamics, which
+    /// the calibration's block map linearizes.
+    pub storage: Storage,
     /// (K,) education level.
     pub pop_edu: Option<Vec<usize>>,
     pub static_digest: String,
@@ -246,6 +266,16 @@ pub struct Inputs {
     pub calibrated_coef: Option<Mat>,
     pub calibrated_a_va: Option<Vec<f64>>,
     pub calibrated_weights: Option<Weights>,
+}
+
+/// Competitive storage's parameters besides P56 delta (ADR 0091), per good: P56 money cost k,
+/// P144 psi, P145 zeta, and P146 g_s; empty where the inputs carry none.
+#[derive(Clone, Debug, Default)]
+pub struct Storage {
+    pub cost: Vec<f64>,
+    pub speculation: Vec<f64>,
+    pub convenience: Vec<f64>,
+    pub gain: f64,
 }
 
 fn bincount(index: &[usize], weights: &[f64], n: usize) -> Vec<f64> {
@@ -393,21 +423,82 @@ impl Inputs {
             .collect()
     }
 
-    /// (C,) log income dispersion of every pop of a country, from its Gini.
-    pub fn sigma_income(&self) -> Vec<f64> {
-        demand::lognormal_sigma(&self.gini)
+    /// (K,) country of each pop.
+    pub fn pop_country(&self) -> Vec<usize> {
+        self.pop_province
+            .iter()
+            .map(|&p| self.province_country[p])
+            .collect()
     }
 
-    /// PIGL weights per country, as `world::household_preferences`.
+    /// (K,) base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times
+    /// its effective labour, plus its share of its country's pops' population times the
+    /// country's profit pool sum (1 - s_L) VA0, over its population; 0 without people.
+    pub fn pop_base_income(&self) -> Vec<f64> {
+        let n_c = self.n_countries();
+        let country = self.pop_country();
+        let ent_c: Vec<usize> = self
+            .ent_province
+            .iter()
+            .map(|&p| self.province_country[p])
+            .collect();
+        let profit: Vec<f64> = self
+            .ent_s_l()
+            .iter()
+            .zip(&self.ent_va0)
+            .map(|(s, va)| (1.0 - s) * va)
+            .collect();
+        let pool = bincount(&ent_c, &profit, n_c);
+        let people = bincount(&country, &self.pop_population, n_c);
+        (0..country.len())
+            .map(|k| {
+                let (p, c, n) = (self.pop_province[k], country[k], self.pop_population[k]);
+                if n > 0.0 {
+                    let wage = self.w0[p] * (1.0 - self.u_star[c]) * self.pop_effective[k];
+                    (wage + n / people[c] * pool[c]) / n
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+
+    /// (C,) within-pop log income dispersion s_w (ADR 0094), from the Gini and the pops' base
+    /// incomes.
+    pub fn within_sigma(&self) -> Vec<f64> {
+        demand::within_sigma(
+            &self.gini,
+            &self.pop_country(),
+            &self.pop_population,
+            &self.pop_base_income(),
+        )
+    }
+
+    /// PIGL weights per country, as `world::household_preferences`: the calibrated ones, else
+    /// inverted over the country's pops at prices 1 and their base incomes (ADR 0094).
     pub fn pigl_weights(&self) -> Result<Weights, String> {
         if let Some(w) = &self.calibrated_weights {
             return Ok(w.clone());
         }
-        demand::invert(
+        let country = self.pop_country();
+        let income = self.pop_base_income();
+        let spend: Vec<f64> = income
+            .iter()
+            .zip(&self.pop_population)
+            .map(|(m, n)| m * n)
+            .collect();
+        let ones = Mat::filled(country.len(), self.n_goods(), 1.0);
+        demand::invert_pops(
             &self.omega,
-            &self.base_spend(),
-            &self.sigma_income(),
+            &demand::Pops {
+                country: &country,
+                price: &ones,
+                income: &income,
+                spend: &spend,
+            },
+            &self.within_sigma(),
             &self.category,
+            self.sigma_demand,
             &self.pigl,
         )
     }
@@ -576,6 +667,7 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
     let ent = Table::open(d, "enterprises")?;
     let active = Table::open(d, "active")?;
     let io = Table::open(d, "country_io")?;
+    let gateways = Table::open(d, "gateways")?;
 
     let n_goods = params["n_goods"]
         .as_u64()
@@ -624,7 +716,12 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         .try_into()
         .map_err(|_| "params.json: econ.pigl_theta needs one value per PIGL category")?;
     let inp = Inputs {
-        theta: goods.f64("theta")?,
+        theta: {
+            let scale = json_f64(&params["trade"], "theta_scale")?;
+            goods.f64("theta")?.into_iter().map(|t| t * scale).collect()
+        },
+        theta_class: goods.usize("theta_class")?,
+        border_nu: json_f64s(&params["trade"], "border_nu")?,
         sigma_demand: json_f64(econ, "sigma_demand")?,
         pigl: Pigl {
             sigma_b: json_f64(econ, "pigl_sigma_b")?,
@@ -636,11 +733,13 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         category: goods.usize("category")?,
         sigma_fl: json_f64(econ, "sigma_fl")?,
         traded: goods.bool("traded")?,
-        gateway_country: Table::open(d, "gateways")?.usize("country")?,
+        gateway_country: gateways.usize("country")?,
+        gateway_mass: gateways.f64("mass")?,
         labour_supply: bincount(&pop_province, &pop_effective, n_p),
         population: bincount(&pop_province, &pop_population, n_p),
         w0: provinces.f64("w0")?,
         base_price: columns(&provinces, "base_price", n_p)?,
+        gamma: Some(columns(&provinces, "gamma", n_p)?),
         s_l: countries.f64("s_l")?,
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,
@@ -661,6 +760,13 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         crossing: crossings(&Table::open(d, "kernel_crossing")?)?,
         ent_va_target: Some(ent.f64("va_target")?),
         coverage: Some(goods.f64("coverage")?),
+        storage_loss: goods.f64("storage_loss")?,
+        storage: Storage {
+            cost: json_f64s(&params["trade"], "storage_cost")?,
+            speculation: json_f64s(&params["trade"], "speculation")?,
+            convenience: json_f64s(&params["trade"], "convenience")?,
+            gain: json_f64(&params["trade"], "storage_gain")?,
+        },
         pop_edu: Some(pop_edu),
         static_digest: params["static_digest"]
             .as_str()
@@ -696,6 +802,30 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
         .collect();
     if !gini.is_empty() {
         return Err(format!("Gini outside [0, 1) in countries {gini:?}"));
+    }
+    if inp.border_nu.len() != inp.traded.len() {
+        return Err(format!(
+            "{} border frictions for {} goods",
+            inp.border_nu.len(),
+            inp.traded.len()
+        ));
+    }
+    if inp.gateway_mass.len() != inp.gateway_country.len() {
+        return Err(format!(
+            "{} gateway masses for {} gateways",
+            inp.gateway_mass.len(),
+            inp.gateway_country.len()
+        ));
+    }
+    let mut mass = vec![0.0; inp.n_countries()];
+    for (&c, &m) in inp.gateway_country.iter().zip(&inp.gateway_mass) {
+        if !(m > 0.0 && m <= 1.0) {
+            return Err(format!("a gateway of country {c} has mass {m}"));
+        }
+        mass[c] += m;
+    }
+    if let Some(c) = (0..mass.len()).find(|&c| mass[c] != 0.0 && (mass[c] - 1.0).abs() > 1e-12) {
+        return Err(format!("gateway masses of country {c} sum to {}", mass[c]));
     }
     if inp.ent_a_va().iter().any(|&a| a <= 0.0) {
         return Err("an enterprise has a nonpositive value-added coefficient".into());

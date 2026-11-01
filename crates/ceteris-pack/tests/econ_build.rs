@@ -127,7 +127,8 @@ fn the_build_writes_its_tables_in_order() {
     assert_eq!(names, TABLES);
 }
 
-/// The stats the build writes to the pack manifest (whole provinces, ADR 0251).
+/// The stats the build writes to the pack manifest (whole provinces, ADR 0251), with the imputed
+/// VA share after refined petroleum moved into good 1 and ADRs 0249 and 0256.
 #[test]
 fn build_stats_match_the_python_build() {
     let Some(f) = full() else { return };
@@ -140,13 +141,33 @@ fn build_stats_match_the_python_build() {
             tariff_agreement_pairs: 1321,
             dose_match_rate: 0.8339,
             provinces_with_va: 4368,
-            va_imputed_share: 0.0759,
+            va_imputed_share: 0.0754,
         }
     );
     assert_eq!(
         f.report.stats.json().text(),
-        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":171,"land crossing":143,"port":286},"gateways":600,"provinces_with_va":4368,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0759}"#
+        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":171,"land crossing":143,"port":286},"gateways":600,"provinces_with_va":4368,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0754}"#
     );
+}
+
+/// Each good's theta class with the class's harmonic mean (the model's P01) and arithmetic mean
+/// (ADR 0023, Amendment 2026-10-29).
+#[test]
+fn econ_goods_records_both_class_means() {
+    let Some(f) = full() else { return };
+    let path = f.out.path().join("econ_goods.arrow");
+    assert_eq!(
+        values::<UInt8Type>(&path, "theta_class"),
+        [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]
+    );
+    let harmonic = values::<Float64Type>(&path, "theta_harmonic");
+    let arithmetic = values::<Float64Type>(&path, "theta_arithmetic");
+    let want_h = [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0];
+    let want_a = [9.15, 26.51, 26.51, 3.23, 9.15, 3.23, 7.20, 0.0, 0.0, 0.0];
+    for g in 0..N_GOODS {
+        assert!((harmonic[g] - want_h[g]).abs() <= 0.005, "good {g}");
+        assert!((arithmetic[g] - want_a[g]).abs() <= 0.005, "good {g}");
+    }
 }
 
 #[test]

@@ -4,12 +4,12 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `econ_calib` | province u32, good u8, a, va0, l0, a_va, price, output, sales, profit, coef_0 to coef_9, stock_0 to stock_9 f64; schema metadata `calibration` (JSON: format, r, passes, sinkhorn_residual, static_digest) |
-//! | `econ_calib_cells` | province u32, good u8, active bool, price, consumer_price, lead, supply, demand, demand_int, demand_hh, sales, inventory f64 |
+//! | `econ_calib` | province u32, good u8, a, va0, l0, a_va, price, output, sales, profit, coef_0 to coef_9, stock_0 to stock_9 f64; schema metadata `calibration` (JSON: format, r, border_nu (P05 per good, ADRs 0092, 0276), passes, sinkhorn_residual, static_digest) |
+//! | `econ_calib_cells` | province u32, good u8, active bool, price, consumer_price, gamma, lead, demand_elasticity, supply_elasticity, block_limit_default, block_limit_frictionless, supply, demand, demand_int, demand_hh, sales, inventory f64 |
 //! | `econ_calib_provinces` | province u32, w0, employment, income f64 |
 //! | `econ_calib_pops` | province u32, edu u8, money, income, wage f64 |
 //! | `econ_calib_pipeline` | buyer u8 (0 pops, 1 enterprises), province u32, key u8 (edu or good), good u8, ahead u8, units f64 |
-//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9 f64 |
+//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_sigma (the within-pop dispersion, ADR 0094), pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9 f64 |
 //!
 //! Every table carries `calibration_format` [`FORMAT`] in its schema metadata.
 
@@ -31,6 +31,7 @@ use arrow_schema::{DataType, Field, Schema};
 use ceteris_reference::demand::{N_CATEGORIES, Weights};
 use ceteris_reference::io::{Inputs, Mat};
 
+use crate::border::at_border_nu;
 use crate::json::Json;
 use crate::steady::{FORMAT, SLOTS, Steady};
 
@@ -119,6 +120,10 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
             "r",
             Json::List(s.r.iter().map(|&x| Json::Float(x)).collect()),
         ),
+        (
+            "border_nu",
+            Json::List(inp.border_nu.iter().map(|&x| Json::Float(x)).collect()),
+        ),
         ("passes", Json::Int(s.info.passes as i64)),
         ("sinkhorn_residual", Json::Float(s.info.sinkhorn_residual())),
         ("static_digest", Json::Str(inp.static_digest.clone())),
@@ -155,6 +160,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
     let cell_p: Vec<usize> = (0..n_p * n_g).map(|i| i / n_g).collect();
     let flat = |m: &Mat| f64s(m.data.iter().copied());
     let inventory = s.inventory();
+    let sales = s.sales();
     write_table(
         &out.join("econ_calib_cells.arrow"),
         vec![
@@ -168,12 +174,17 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
             ),
             named("price", flat(&s.price)),
             named("consumer_price", flat(&s.consumer)),
+            named("gamma", flat(&s.gamma)),
             named("lead", flat(&s.lead)),
+            named("demand_elasticity", flat(&s.demand_elasticity)),
+            named("supply_elasticity", flat(&s.supply_elasticity)),
+            named("block_limit_default", flat(&s.block_limit[0])),
+            named("block_limit_frictionless", flat(&s.block_limit[1])),
             named("supply", flat(&s.supply)),
-            named("demand", flat(&s.supply)),
+            named("demand", flat(&sales)),
             named("demand_int", flat(&s.orders[0])),
             named("demand_hh", flat(&s.orders[1])),
-            named("sales", flat(&s.supply)),
+            named("sales", flat(&sales)),
             named("inventory", flat(&inventory)),
         ],
         None,
@@ -248,6 +259,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
         named("u_star", f64s(s.u_star.iter().copied())),
         named("rebate", f64s(s.rebate.iter().copied())),
         named("pigl_scale", f64s(w.scale.iter().copied())),
+        named("pigl_sigma", f64s(w.sigma.iter().copied())),
     ];
     countries.extend((0..N_CATEGORIES).map(|c| (format!("pigl_omega_{c}"), column(&w.omega, c))));
     countries.extend((0..n_g).map(|g| (format!("pigl_within_{g}"), column(&w.within, g))));
@@ -320,6 +332,14 @@ impl Table {
             .collect())
     }
 
+    pub(crate) fn bool(&self, col: &str) -> Result<Vec<bool>, String> {
+        Ok(self
+            .column(col, &DataType::Boolean)?
+            .iter()
+            .flat_map(|a| a.as_boolean().values().iter().collect::<Vec<_>>())
+            .collect())
+    }
+
     pub(crate) fn rows(&self) -> usize {
         self.batches.iter().map(RecordBatch::num_rows).sum()
     }
@@ -342,6 +362,36 @@ pub fn read_u_star(pack: &Path) -> Result<Vec<f64>, String> {
 /// (P,) the pack province of each province of an export from a pack (`pack_provinces.arrow`).
 pub fn read_pack_provinces(export: &Path) -> Result<Vec<usize>, String> {
     Table::open(&export.join("pack_provinces.arrow"))?.usize("pack")
+}
+
+/// P05 of each of `n_goods` goods in the calibration tables installed in `pack` (ADRs 0092,
+/// 0276): the border friction their steady state was solved at.
+pub fn read_border_nu(pack: &Path, n_goods: usize) -> Result<Vec<f64>, String> {
+    let ent = Table::open(&pack.join("econ_calib.arrow"))?;
+    if ent.metadata.get("calibration_format").map(String::as_str) != Some(FORMAT) {
+        return Err(format!(
+            "econ_calib.arrow: calibration format is not {FORMAT}"
+        ));
+    }
+    let meta: serde_json::Value = serde_json::from_str(
+        ent.metadata
+            .get("calibration")
+            .ok_or("econ_calib.arrow has no calibration metadata")?,
+    )
+    .map_err(|e| format!("econ_calib.arrow: {e}"))?;
+    border_nu_of(&meta, n_goods)
+}
+
+fn border_nu_of(meta: &serde_json::Value, n_goods: usize) -> Result<Vec<f64>, String> {
+    meta["border_nu"]
+        .as_array()
+        .and_then(|a| {
+            a.iter()
+                .map(serde_json::Value::as_f64)
+                .collect::<Option<Vec<_>>>()
+        })
+        .filter(|v| v.len() == n_goods)
+        .ok_or_else(|| "econ_calib.arrow: border_nu is not one number per good".to_owned())
 }
 
 /// [`crate::steady::reference_inputs`] and [`crate::steady::reference_point`] from the
@@ -370,6 +420,10 @@ pub fn read_reference(
     if meta["static_digest"].as_str() != Some(inp.static_digest.as_str()) {
         return Err("the calibration tables belong to other inputs".into());
     }
+    let border_nu = border_nu_of(&meta, inp.n_goods())?;
+    // the export holds the data state's border friction; the calibration was solved at its own
+    let calibrated = at_border_nu(inp, &border_nu)?;
+    let inp = &calibrated;
     let n_g = inp.n_goods();
     let rows = |t: &Table, key: &str| -> Result<BTreeMap<(usize, usize), usize>, String> {
         let (p, k) = (t.usize("province")?, t.usize(key)?);
@@ -429,19 +483,24 @@ pub fn read_reference(
         scale: countries.f64("pigl_scale")?,
         omega: by_column("pigl_omega_", N_CATEGORIES)?,
         within: by_column("pigl_within_", n_g)?,
+        sigma: countries.f64("pigl_sigma")?,
     };
 
     let cells = read("econ_calib_cells.arrow")?;
     let at = rows(&cells, "good")?;
-    let cell_price = cells.f64("price")?;
     let n_p = inp.n_provinces();
-    let price: Vec<f64> = (0..n_p * n_g)
-        .map(|i| {
-            at.get(&(pack_province[i / n_g], i % n_g))
-                .map(|&r| cell_price[r])
-                .ok_or_else(|| missing("a cell"))
-        })
-        .collect::<Result<_, _>>()?;
+    let cell = |name: &str| -> Result<Vec<f64>, String> {
+        let v = cells.f64(name)?;
+        (0..n_p * n_g)
+            .map(|i| {
+                at.get(&(pack_province[i / n_g], i % n_g))
+                    .map(|&r| v[r])
+                    .ok_or_else(|| missing("a cell"))
+            })
+            .collect()
+    };
+    let price = cell("price")?;
+    let gamma = cell("gamma")?;
 
     let mut reference = inp.clone();
     reference.ent_a = col("a")?;
@@ -452,6 +511,11 @@ pub fn read_reference(
     reference.calibrated_coef = Some(coef);
     reference.calibrated_a_va = Some(col("a_va")?);
     reference.calibrated_weights = Some(weights);
+    reference.gamma = Some(Mat {
+        rows: n_p,
+        cols: n_g,
+        data: gamma,
+    });
     let mut x: Vec<f64> = inp.active_cells().iter().map(|&i| price[i].ln()).collect();
     x.extend(w0.iter().map(|w| w.ln()));
     Ok((reference, x))

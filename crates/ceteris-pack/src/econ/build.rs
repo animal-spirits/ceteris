@@ -14,6 +14,7 @@ use arrow_ipc::reader::FileReader;
 
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
+use super::theta::{self, ClassTable};
 use super::{goods, icio, people, tariffs};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
@@ -21,7 +22,7 @@ use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
 use crate::read::baci::trade_by_country;
-use crate::read::icio::{aggregate, load_wdi};
+use crate::read::icio::{aggregate, home_use, load_wdi};
 use crate::read::natural_earth::read_codes;
 use crate::read::people::load_observed;
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
@@ -29,7 +30,7 @@ use crate::read::wdi::read_rates;
 use crate::table;
 
 /// The written tables, in writing order.
-pub const TABLES: [&str; 7] = [
+pub const TABLES: [&str; 8] = [
     "econ_goods.arrow",
     "econ_countries.arrow",
     "econ_io.arrow",
@@ -37,6 +38,7 @@ pub const TABLES: [&str; 7] = [
     "econ_pops.arrow",
     "econ_tariffs.arrow",
     "gateways.arrow",
+    "econ_home_shares.arrow",
 ];
 pub const WORLDPOP: &str = "ppp_2000_1km_Aggregated.tif";
 pub use crate::read::natural_earth::ADMIN0;
@@ -257,9 +259,21 @@ fn write_batch(out: &Path, name: &str, batch: &RecordBatch) -> Result<(String, [
     Ok((name.to_owned(), digest))
 }
 
-/// `econ_goods.arrow`: name, whether the good is traded, tonnes per USD and inventory coverage.
-fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
+/// `econ_goods.arrow`: name, whether the good is traded, tonnes per USD, inventory coverage,
+/// and the good's theta class with that class's harmonic and arithmetic mean theta (ADRs 0023
+/// and 0101; 0 for local goods).
+fn goods_columns(
+    weight: [f64; goods::NAMES.len()],
+    (of, arithmetic, harmonic): &ClassTable,
+) -> Vec<(String, ArrayRef)> {
     let n = goods::NAMES.len();
+    let per_good = |class_value: &[f64]| -> ArrayRef {
+        Arc::new(
+            (0..n)
+                .map(|g| of.get(g).map_or(0.0, |&c| class_value[usize::from(c)]))
+                .collect::<Float64Array>(),
+        )
+    };
     vec![
         (
             "name".into(),
@@ -277,6 +291,14 @@ fn goods_columns(weight: [f64; goods::NAMES.len()]) -> Vec<(String, ArrayRef)> {
             "coverage".into(),
             Arc::new(COVERAGE.into_iter().collect::<Float64Array>()),
         ),
+        (
+            "theta_class".into(),
+            Arc::new(UInt8Array::from_iter_values(
+                (0..n).map(|g| of.get(g).copied().unwrap_or(0)),
+            )),
+        ),
+        ("theta_harmonic".into(), per_good(harmonic)),
+        ("theta_arithmetic".into(), per_good(arithmetic)),
     ]
 }
 
@@ -356,6 +378,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     )?;
 
     let weight = goods::weights_from_baci(&cache.join(BACI), &cache.join(HS_KEY))?;
+    let classes = theta::class_table(&cache.join(BACI), &cache.join(HS_KEY))?;
 
     let trade = trade_by_country(&cache.join(BACI), &iso, &codes)?;
     let agreements = tariffs::pack_pairs(
@@ -391,9 +414,10 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         pops_t,
         tariffs_t,
         gateways_t,
+        home_shares_t,
     ] = TABLES;
     let tables = vec![
-        write(out, goods_t, goods_columns(weight))?,
+        write(out, goods_t, goods_columns(weight, &classes))?,
         write(out, countries_t, countries_columns)?,
         write(out, io_t, icio::io_columns(&codes, &world)?)?,
         write(out, provinces_t, {
@@ -404,6 +428,11 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         write_batch(out, pops_t, &people::pops(&country, &population, &labour)?)?,
         write(out, tariffs_t, tariffs::columns(&rates)?)?,
         write(out, gateways_t, gateways::columns(&gw))?,
+        write(
+            out,
+            home_shares_t,
+            icio::home_share_columns(&codes, &home_use(&cache.join(icio::ICIO), YEAR)?, &iso)?,
+        )?,
     ];
     Ok(BuildReport {
         tables,

@@ -22,7 +22,7 @@ use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_GOODS, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch, source};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use rayon::prelude::*;
 
@@ -49,6 +49,7 @@ struct Columns {
     active: Vec<Vec<bool>>,
     spend: Vec<Vec<[f64; 2]>>,
     fill: Vec<Vec<[f64; 2]>>,
+    gamma: Vec<Vec<f64>>,
 }
 
 fn columns(w: &EconWorld) -> Columns {
@@ -72,12 +73,13 @@ fn columns(w: &EconWorld) -> Columns {
         fill: traded
             .map(|g| column(g).map(|c| sc.fill[c]).collect())
             .collect(),
+        gamma: w.layout().gamma.clone(),
     }
 }
 
 fn source_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     for (g, r) in out.iter_mut().enumerate() {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
     }
 }
 
@@ -90,7 +92,7 @@ fn dispatch_all(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 /// One task per good, sourcing and dispatch together, as E3 runs them.
 fn unit_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
         dispatch(k, g, &c.price[g], &c.fill[g], r);
     });
 }
@@ -98,7 +100,7 @@ fn unit_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 /// One task per good, sourcing for every good and then dispatch, as T2 and T2b run them.
 fn tick_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
-        source(k, g, &c.price[g], &c.active[g], &c.spend[g], r);
+        source(k, g, &c.price[g], &c.active[g], &c.gamma[g], &c.spend[g], r);
     });
     out.par_iter_mut().enumerate().for_each(|(g, r)| {
         dispatch(k, g, &c.price[g], &c.fill[g], r);
@@ -107,7 +109,7 @@ fn tick_parallel(k: &Kernel, c: &Columns, out: &mut [Sourced]) {
 
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
-    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let (params, trade) = (EconParams::default(), inputs.trade_params());
     let mut w = EconWorld::new(Arc::new(inputs), params, trade.clone());
     // tick 1, whose prices moved at tick 0's repricing: the sourcing kept from tick 0 is stale
     let posted = w.markets.price.clone();
@@ -145,6 +147,7 @@ fn bench(c: &mut Criterion) {
         fill: cols.fill.iter().map(|f| vec![[1.0; 2]; f.len()]).collect(),
         price: cols.price.clone(),
         active: cols.active.clone(),
+        gamma: cols.gamma.clone(),
     };
     let kernel = w.kernel();
     let mut sourced = stale.clone();
@@ -220,13 +223,15 @@ fn bench(c: &mut Criterion) {
         });
     }
     let (rationing, pi) = (w.params().rationing, w.expected_inflation);
+    let gain = w.layout().price_gain.clone();
     g.bench_function("clear_reprice", |b| {
         b.iter_batched(
             || markets.clone(),
             |mut m| {
+                m.store(&trade, &mut spoiled);
                 m.clear(rationing, &mut fill);
                 m.clear_local(&mut spoiled);
-                m.reprice(&trade, pi);
+                m.reprice(&trade, &gain, pi);
                 m
             },
             BatchSize::LargeInput,
