@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added: `ceteris air-share`, P04d from 2000 air shares (ADR 0277)
+
+- `ceteris_calibrate::air_share` fits the air to road cost ratio to the air share of US 2000
+  general imports by origin and traded good, through the kernel's gateway-pair sum, by a
+  Bernoulli quasi-likelihood with errors clustered by country pair (geo SPEC, Air rate from mode
+  shares). Nothing reads its output yet; P04d lands at the next goldens re-bless.
+- `dta::read_dta` reads Stata format 118 (Schott's US import files);
+  `read_hs_cpa_version` reads the BTiGE key for HS 1996 and HS 2002. No golden moves.
+
 ### BEHAVIOUR: provinces are whole first-level regions (ADR 0251)
 
 - `data/packs/2000` is rebuilt without the 250,000 km² split: 4,594 provinces (from 4,796; the
