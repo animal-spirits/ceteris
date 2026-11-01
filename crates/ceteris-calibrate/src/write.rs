@@ -135,16 +135,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
         named("va0", f64s(s.va0.iter().copied())),
         named("l0", f64s(s.l0.iter().copied())),
         named("a_va", f64s(s.a_va.iter().copied())),
-        named(
-            "price",
-            f64s((0..n_e).map(|e| {
-                if inp.traded[eg[e]] {
-                    s.price[(ep[e], eg[e])]
-                } else {
-                    1.0
-                }
-            })),
-        ),
+        named("price", f64s((0..n_e).map(|e| s.price[(ep[e], eg[e])]))),
         named("output", f64s(s.output.iter().copied())),
         named("sales", f64s(s.value.iter().copied())),
         named("profit", f64s((0..n_e).map(|e| (1.0 - s_l[e]) * s.va0[e]))),

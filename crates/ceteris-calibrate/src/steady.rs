@@ -18,13 +18,15 @@
 //! on the two-level
 //! kernel ([`sinkhorn`]), unique up to scale (Sinkhorn 1967). Then p_o = w_o^(-1/theta), one
 //! scale per good, set so that the good's part of the world price index (base consumption
-//! weights at the calibrated incomes) is 1; local goods take p = 1, so the index is 1. q_d, the
+//! weights at the calibrated incomes) is 1; local goods take their country's price level p_c
+//! (ADR 0098), so the normalization runs over traded goods only. q_d, the
 //! arrival slots and the lead L_d follow from sourcing (`Model::sourcing`).
 //!
 //! Stage 3, technology. coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices),
-//! a_VA = 1 - sum_k a_kg, so p_VA = p_o, A = 1 / p_VA and Y = V / p_o. Local output solves the
-//! Leontief system of each province against its local demand (households at p = 1 and every
-//! enterprise's a_kg V), and its VA, a_VA Y, is an output of calibration. w0 = sum_g s_L VA0 /
+//! a_VA = 1 - sum_k a_kg, so p_VA = p_o, A = 1 / p_VA and Y = V / p_o, p_o = p_c for local
+//! goods. Local output value solves the Leontief system of each province against its local
+//! demand (households at p_c and every enterprise's a_kg V), and its VA, a_VA V, is an output of
+//! calibration. w0 = sum_g s_L VA0 /
 //! ((1 - u*) L^s) and L0 = s_L VA0 / w0.
 //!
 //! Stage 4, demand. Per country, PIGL weights inverted jointly over its pops, each at its own
@@ -247,7 +249,7 @@ pub struct Steady {
     pub pop_wage: Vec<f64>,
     /// (K, G)
     pub pop_spend: Mat,
-    /// (P, G) household spending (local goods: units at p = 1).
+    /// (P, G) household spending (local goods at p_c).
     pub spend_hh: Mat,
     /// (P, G) traded input spending.
     pub spend_int: Mat,
@@ -607,7 +609,7 @@ pub fn arrivals(m: &Model, src: &Sourcing) -> Vec<Mat> {
         .collect()
 }
 
-/// (E,) output of local enterprises at p = 1, 0 for traded ones: per province the Leontief
+/// (E,) output value of local enterprises, 0 for traded ones: per province the Leontief
 /// system y_k = d_k + sum_j a_kj y_j over its local producers, `local_demand` (P, local goods)
 /// the demand of households and traded enterprises; `a_e` (E, G) the cost shares.
 pub fn local_output(
@@ -1000,6 +1002,8 @@ struct State {
     rebate_unit: f64,
     /// The largest PIGL scale at the start, fixed for the run.
     scale_unit: f64,
+    /// (P, G) the prices of the data state, whose local goods' (p_c) the passes keep.
+    level: Mat,
 }
 
 /// The largest magnitude in `v`, or 1 where every entry is 0: the unit of a block of the state.
@@ -1030,7 +1034,7 @@ impl State {
         let (n_p, n_c, n_g) = (self.n_p, self.n_c, self.traded.len());
         let goods: Vec<usize> = (0..n_g).filter(|&g| self.traded[g]).collect();
         let mut at = 0;
-        let mut q = Mat::filled(n_p, n_g, 1.0);
+        let mut q = self.level.clone();
         for p in 0..n_p {
             for &g in &goods {
                 q[(p, g)] = z[at].exp();
@@ -1085,13 +1089,8 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let setup = Setup::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let traded = &inp.traded;
-    let q = Mat::from_fn(n_p, n_g, |p, g| {
-        if traded[g] {
-            inp.base_price[(p, g)]
-        } else {
-            1.0
-        }
-    });
+    // traded goods at their base buyer prices, local goods at p_c (ADR 0098)
+    let q = inp.base_price.clone();
     let (r, rebate) = (vec![1.0; n_g], vec![0.0; n_c]);
     let weights = inp.pigl_weights()?;
     let v = setup.settle(
@@ -1131,13 +1130,8 @@ pub fn calibrate_with(
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Steady, CalibrationError> {
-    let start = Mat::from_fn(inp.n_provinces(), inp.n_goods(), |p, g| {
-        if inp.traded[g] {
-            inp.base_price[(p, g)]
-        } else {
-            1.0
-        }
-    });
+    // traded goods at their base buyer prices, local goods at p_c (ADR 0098)
+    let start = inp.base_price.clone();
     calibrate_from(inp, u_star, limits, &start, progress)
 }
 
@@ -1217,6 +1211,8 @@ pub fn calibrate_from(
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
         .collect();
+    // local goods stay at their country's price level p_c (ADR 0098)
+    let local_price = inp.data_state_price();
 
     let mut q = start.clone();
     let mut r = vec![1.0; n_g];
@@ -1230,6 +1226,7 @@ pub fn calibrate_from(
         sigma: sigma_within.clone(),
         rebate_unit: 0.0,
         scale_unit: block_unit(&weights.scale),
+        level: local_price.clone(),
     };
     let mut lw: Option<Mat> = None;
     let mut history: Vec<Pass> = Vec::new();
@@ -1277,7 +1274,7 @@ pub fn calibrate_from(
         }
         let raw = Mat::from_fn(n_p, n_g, |p, g| {
             if !traded[g] {
-                1.0
+                local_price[(p, g)]
             } else if origin(p, g) {
                 (-(log_weight[(p, g)] - top[g]) / theta[g]).exp()
             } else {
@@ -1294,8 +1291,9 @@ pub fn calibrate_from(
                 level[g] += index_weights[(p, g)] * index;
             }
         }
-        // A good without final demand has no weight in the index: its price level stays as
-        // solved.
+        // Each traded good's part of the index is 1, so the index over traded goods is 1 (local
+        // goods keep p_c, ADR 0098). A good without final demand has no weight in the index:
+        // its price level stays as solved.
         let level: Vec<f64> = (0..n_g)
             .map(|g| divide_where(level[g], mass[g], mass[g] > 0.0, 1.0))
             .collect();
@@ -1303,13 +1301,13 @@ pub fn calibrate_from(
             raw[(p, g)] / if traded[g] { level[g] } else { 1.0 }
         });
         let src = m.sourcing(&price);
-        let q_new = Mat::from_fn(
-            n_p,
-            n_g,
-            |p, g| {
-                if traded[g] { src.index[(p, g)] } else { 1.0 }
-            },
-        );
+        let q_new = Mat::from_fn(n_p, n_g, |p, g| {
+            if traded[g] {
+                src.index[(p, g)]
+            } else {
+                local_price[(p, g)]
+            }
+        });
         let duty = m.flows(&price, &ones, &src).tariff;
         let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
         let rebate_new = bincount(c, duty_bill, n_c);
@@ -1402,7 +1400,7 @@ pub fn calibrate_from(
             if traded_e[e] {
                 price[(ep[e], eg[e])]
             } else {
-                1.0
+                local_price[(ep[e], eg[e])]
             }
         })
         .collect();
@@ -1629,8 +1627,16 @@ mod tests {
             sigma: vec![0.1, 0.2],
             rebate_unit: 4e9,
             scale_unit: 2.5,
+            level: Mat::from_fn(2, 2, |p, g| if g == 0 { 1.0 } else { 1.0 + 0.3 * p as f64 }),
         };
-        let q = Mat::from_fn(2, 2, |p, g| if g == 0 { 1.5 + p as f64 } else { 1.0 });
+        // the local good keeps its price level (ADR 0098), which the state does not carry
+        let q = Mat::from_fn(2, 2, |p, g| {
+            if g == 0 {
+                1.5 + p as f64
+            } else {
+                1.0 + 0.3 * p as f64
+            }
+        });
         let (rebate, r) = (vec![1e9, 4e9], vec![1.1, 1.0]);
         let w = Weights {
             scale: vec![2.5, 0.5],
