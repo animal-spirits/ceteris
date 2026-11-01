@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches: [main]
-    paths-ignore: ["adr/**", "specs/**", "**/*.md"]
+    paths-ignore: ["rfcs/**", "spec/**", "specs/**", "**/*.md"]
   pull_request:
-    paths-ignore: ["adr/**", "specs/**", "**/*.md"]
+    paths-ignore: ["rfcs/**", "spec/**", "specs/**", "**/*.md"]
 
 env:
   CARGO_TERM_COLOR: always
