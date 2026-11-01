@@ -826,10 +826,12 @@ pub fn blocks(
         for g in 0..n_g {
             let Some(at) = place[g] else { continue };
             let d = g * n_p + p;
+            // local goods: the value of the cell's output, so that spending over it is the
+            // households' share of its units at p_c (ADR 0098)
             let norm = if inp.traded[g] {
                 src.phi[d]
             } else {
-                s.supply[(p, g)]
+                s.price[(p, g)] * s.supply[(p, g)]
             };
             let (mut wage, mut pool, mut spend) = (0.0, 0.0, 0.0);
             let mut prices = vec![0.0; n_g];
