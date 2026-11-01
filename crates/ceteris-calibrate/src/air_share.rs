@@ -133,112 +133,10 @@ impl Cell {
         let l = self.log_share(r);
         self.weight * (self.share * l.ln_s + (1.0 - self.share) * l.ln_1s)
     }
-
-    /// Score and Fisher information in x = ln r.
-    fn score_info(&self, r: f64) -> (f64, f64) {
-        let l = self.log_share(r);
-        let (s, s1) = (l.ln_s.exp(), l.ln_1s.exp());
-        let gx = r * l.g;
-        (
-            self.weight * (self.share - s) * gx,
-            self.weight * s * s1 * gx * gx,
-        )
-    }
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct AirFit {
-    /// P04d / P04a.
-    pub ratio: f64,
-    /// Clustered by (importer, origin).
-    pub se: f64,
-    pub cells: usize,
-    pub dropped: usize,
-    pub iterations: usize,
-    pub quasi_loglik: f64,
-}
-
-pub const AIR_TOL: f64 = 1e-12;
-pub const AIR_MAX_ITER: usize = 100;
-/// Below this the fit stops: air at a millionth of road is no longer a freight rate.
-pub const AIR_FLOOR: f64 = 1e-6;
 
 fn quasi_loglik(cells: &[&Cell], r: f64) -> f64 {
     cells.iter().map(|c| c.quasi_loglik(r)).sum()
-}
-
-/// Fisher scoring in ln r from `r0`, halving a step that lowers the quasi-likelihood. Fails
-/// when r does not exceed 1 (DESIGN 5.3, road < air): the value is reported, not clamped.
-pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
-    let used: Vec<&Cell> = cells.iter().filter(|c| c.informative()).collect();
-    if used.is_empty() {
-        return Err("air share: no cell has both an air and another crossing".into());
-    }
-    let mut x = r0.ln();
-    let mut ll = quasi_loglik(&used, x.exp());
-    let mut iterations = 0;
-    for iteration in 1..=AIR_MAX_ITER {
-        let r = x.exp();
-        let (mut score, mut info) = (0.0, 0.0);
-        for c in &used {
-            let (sc, i) = c.score_info(r);
-            score += sc;
-            info += i;
-        }
-        if r < AIR_FLOOR {
-            return Err(format!(
-                "air share: r ran to {r}: the model's air shares stay below the data's at any \
-                 air rate on these paths"
-            ));
-        }
-        if !(info > 0.0 && info.is_finite()) {
-            return Err(format!("air share: information {info} at r {r}"));
-        }
-        let mut step = score / info;
-        let mut next = quasi_loglik(&used, (x + step).exp());
-        let mut halvings = 0;
-        while (next.is_nan() || next < ll) && halvings < 60 {
-            step /= 2.0;
-            next = quasi_loglik(&used, (x + step).exp());
-            halvings += 1;
-        }
-        x += step;
-        ll = next;
-        if step.abs() <= AIR_TOL {
-            iterations = iteration;
-            break;
-        }
-    }
-    if iterations == 0 {
-        return Err(format!(
-            "air share did not converge in {AIR_MAX_ITER} steps: r {}",
-            x.exp()
-        ));
-    }
-    let r = x.exp();
-    let mut info = 0.0;
-    let mut by_cluster: std::collections::BTreeMap<usize, f64> = Default::default();
-    for c in &used {
-        let (sc, i) = c.score_info(r);
-        info += i;
-        *by_cluster.entry(c.cluster).or_default() += sc;
-    }
-    let meat: f64 = by_cluster.values().map(|g| g * g).sum();
-    let fit = AirFit {
-        ratio: r,
-        se: r * meat.sqrt() / info,
-        cells: used.len(),
-        dropped: cells.len() - used.len(),
-        iterations,
-        quasi_loglik: ll,
-    };
-    if fit.ratio <= 1.0 {
-        return Err(format!(
-            "P04d: air / road {} does not exceed 1 (road < air)",
-            fit.ratio
-        ));
-    }
-    Ok(fit)
 }
 
 // ---------------------------------------------------------------- data: 2000 import shares
@@ -775,79 +673,268 @@ fn cells(
         .collect()
 }
 
-/// One outer step of [`estimate`]: the ratio the legs were solved at and the fit on them.
+/// The cells of `obs` on the per-good least-iceberg legs solved with air at `r` times road.
+fn cells_at(
+    pack: &Path,
+    obs: &[Obs],
+    theta: &[f64; N_TRADED],
+    base: &Transport,
+    weight: &[f64],
+    r: f64,
+) -> Result<Vec<Cell>, String> {
+    let mut p = base.clone();
+    p.per_tkm[AIR as usize] = r * p.per_tkm[0];
+    let legs = legs(pack, &p, weight, &TradeParams::default())?;
+    Ok(cells(&legs, &p, theta, weight, obs))
+}
+
+/// Golden-section tolerance in ln r.
+pub const GOLDEN_TOL: f64 = 1e-4;
+/// Bootstrap replications, their seed (core Philox streams, one per replication) and the step of
+/// the fine grid they are evaluated on, in ln r (1/32 octave).
+pub const BOOT_REPLICATIONS: u32 = 200;
+pub const BOOT_SEED: u64 = 0x0277;
+pub const FINE_STEP: f64 = std::f64::consts::LN_2 / 32.0;
+
+/// The path-consistent estimate of r = P04d / P04a (ADR 0277 amendment).
 #[derive(Clone, Debug, PartialEq)]
-pub struct Step {
-    pub at: f64,
-    pub fit: AirFit,
-    /// Import-value weighted air share, model at the fitted ratio and data, over fitted cells.
+pub struct AirEstimate {
+    pub ratio: f64,
+    /// The fixed-set quasi-likelihood at `ratio`.
+    pub quasi_loglik: f64,
+    /// The profile grid's best point's neighbours, the golden section's bracket.
+    pub bracket: (f64, f64),
+    /// Paths solved: grid, golden section, fine grid and curvature points.
+    pub evaluations: usize,
+    /// Standard errors of ln r: clustered sandwich from the profile's curvature at `ratio`, and
+    /// the cluster bootstrap's standard deviation, with its 90% percentile interval of r and the
+    /// replications whose maximum fell on a bracket edge.
+    pub se_ln_curvature: f64,
+    pub se_ln_bootstrap: f64,
+    pub interval: (f64, f64),
+    pub at_edge: usize,
+    /// Cells with a reached crossing, their clusters, and the informative cells at `ratio`.
+    pub reached: usize,
+    pub clusters: usize,
+    pub informative: usize,
+    /// Import-value weighted air share over the informative cells at `ratio`, model and data,
+    /// overall and per good (cells, model, data).
     pub model_share: f64,
     pub data_share: f64,
-    /// The same by traded good: (fitted cells, model share, data share).
     pub by_good: [(usize, f64, f64); N_TRADED],
 }
 
-pub const OUTER_TOL: f64 = 1e-9;
-pub const OUTER_MAX: usize = 20;
+/// The index of the first largest of `v`: ties go to the lowest r.
+fn first_max(v: &[f64]) -> usize {
+    let mut best = 0;
+    for (i, &x) in v.iter().enumerate() {
+        if x > v[best] {
+            best = i;
+        }
+    }
+    best
+}
 
-/// Fits r on legs solved at r, then solves the legs again at the fitted r, until r moves by
-/// less than [`OUTER_TOL`] in logs (the paths repeat). Air km on access legs are held at their
-/// path's value within a step. The legs are the per-good least-iceberg paths (ADR 0279) at
-/// `TradeParams::default()`'s time costs and bulk rate. A fit that stops names, per good, the
-/// cells with both an air and another crossing.
+/// Each cluster's fixed-set quasi-likelihood (clipped shares, every cell with a reached
+/// crossing), in the order of `clusters`.
+fn by_cluster(cells: &[Cell], r: f64, clusters: &[usize]) -> Vec<f64> {
+    let mut q = vec![0.0; clusters.len()];
+    for c in cells.iter().filter(|c| c.reached()) {
+        let i = clusters
+            .binary_search(&c.cluster)
+            .expect("a reached cluster");
+        q[i] += c.clipped_quasi_loglik(r);
+    }
+    q
+}
+
+/// The value-weighted shares of `cells` at `r` over the informative cells.
+fn shares_at(cells: &[Cell], r: f64) -> (usize, f64, f64, [(usize, f64, f64); N_TRADED]) {
+    let mean = |used: &[&Cell]| {
+        let total: f64 = used.iter().map(|c| c.weight).sum();
+        let model = used
+            .iter()
+            .map(|c| c.weight * c.model_share(r).0)
+            .sum::<f64>()
+            / total;
+        let data = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
+        (model, data)
+    };
+    let used: Vec<&Cell> = cells.iter().filter(|c| c.informative()).collect();
+    let (model, data) = mean(&used);
+    let by_good = std::array::from_fn(|g| {
+        let of: Vec<&Cell> = used.iter().copied().filter(|c| c.good == g).collect();
+        let (m, d) = mean(&of);
+        (of.len(), m, d)
+    });
+    (used.len(), model, data, by_good)
+}
+
+/// Maximises the fixed-set quasi-likelihood over ln r with the paths solved again at every r
+/// (`cells_at`): the best point of `grid` (ties to the lowest r; a maximum at the grid's edge
+/// fails), golden section in ln r between its neighbours to [`GOLDEN_TOL`] in a fixed number of
+/// steps, then the errors. The bootstrap resamples (importer, origin) clusters with replacement
+/// and maximises each replication on a fine grid across the bracket ([`FINE_STEP`]; a cell's share
+/// at r does not depend on the resample), refined by a parabola through the best point and its
+/// neighbours. Fails when r does not exceed 1 (DESIGN 5.3, road < air).
+pub fn profile_fit(
+    mut cells_at: impl FnMut(f64) -> Result<Vec<Cell>, String>,
+    grid: &[f64],
+    seed: u64,
+) -> Result<AirEstimate, String> {
+    let first = cells_at(grid[0])?;
+    let mut clusters: Vec<usize> = first
+        .iter()
+        .filter(|c| c.reached())
+        .map(|c| c.cluster)
+        .collect();
+    clusters.sort_unstable();
+    clusters.dedup();
+    if clusters.is_empty() {
+        return Err("air share: no cell has a reached crossing".into());
+    }
+    let reached = first.iter().filter(|c| c.reached()).count();
+    // the first grid point is solved above
+    let mut evaluations = 1;
+    let mut eval = |x: f64| -> Result<Vec<f64>, String> {
+        evaluations += 1;
+        Ok(by_cluster(&cells_at(x.exp())?, x.exp(), &clusters))
+    };
+    let total = |q: &[f64]| q.iter().sum::<f64>();
+
+    let mut q_grid = vec![total(&by_cluster(&first, grid[0], &clusters))];
+    for &r in &grid[1..] {
+        q_grid.push(total(&eval(r.ln())?));
+    }
+    let best = first_max(&q_grid);
+    if best == 0 || best + 1 == grid.len() {
+        return Err(format!(
+            "air share: the profile's maximum is at the grid's edge, r {}",
+            grid[best]
+        ));
+    }
+    let (lo, hi) = (grid[best - 1].ln(), grid[best + 1].ln());
+
+    // golden section; equal values keep the lower point
+    let inv = (5f64.sqrt() - 1.0) / 2.0;
+    let steps = ((GOLDEN_TOL / (hi - lo)).ln() / inv.ln()).ceil() as usize;
+    let (mut a, mut b) = (lo, hi);
+    let (mut c, mut d) = (b - inv * (b - a), a + inv * (b - a));
+    let (mut fc, mut fd) = (total(&eval(c)?), total(&eval(d)?));
+    for _ in 0..steps {
+        if fc >= fd {
+            (b, d, fd) = (d, c, fc);
+            c = b - inv * (b - a);
+            fc = total(&eval(c)?);
+        } else {
+            (a, c, fc) = (c, d, fd);
+            d = a + inv * (b - a);
+            fd = total(&eval(d)?);
+        }
+    }
+    // the profile is piecewise where paths switch: keep the grid's best if it is higher
+    let mut candidates = [(c, fc), (d, fd), (grid[best].ln(), q_grid[best])];
+    candidates.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let qs: Vec<f64> = candidates.iter().map(|x| x.1).collect();
+    let (x_hat, q_hat) = candidates[first_max(&qs)];
+
+    // clustered sandwich from the profile's curvature at x_hat, over one fine step
+    let h = FINE_STEP;
+    let (qm, q0, qp) = (eval(x_hat - h)?, eval(x_hat)?, eval(x_hat + h)?);
+    let curvature = -(total(&qp) - 2.0 * total(&q0) + total(&qm)) / (h * h);
+    let meat: f64 = qp
+        .iter()
+        .zip(&qm)
+        .map(|(p, m)| ((p - m) / (2.0 * h)).powi(2))
+        .sum();
+    let se_ln_curvature = meat.sqrt() / curvature;
+
+    // the bootstrap on the fine grid across the bracket
+    let points = ((hi - lo) / h).round() as usize;
+    let fine: Vec<Vec<f64>> = (0..=points)
+        .map(|k| eval(lo + k as f64 * h))
+        .collect::<Result<_, _>>()?;
+    let n = clusters.len();
+    let mut draws: Vec<f64> = Vec::with_capacity(BOOT_REPLICATIONS as usize);
+    let mut at_edge = 0;
+    for rep in 0..BOOT_REPLICATIONS {
+        let mut s = ceteris_core::rng::Seed(seed).stream(
+            0,
+            ceteris_core::schedule::SystemId(0),
+            ceteris_core::entity::Kind(0),
+            ceteris_core::entity::EntityId(rep),
+        );
+        let mut m = vec![0u32; n];
+        for _ in 0..n {
+            m[((s.uniform() * n as f64) as usize).min(n - 1)] += 1;
+        }
+        let f: Vec<f64> = fine
+            .iter()
+            .map(|q| q.iter().zip(&m).map(|(q, &m)| q * f64::from(m)).sum())
+            .collect();
+        let j = first_max(&f);
+        let x = if j == 0 || j == points {
+            at_edge += 1;
+            lo + j as f64 * h
+        } else {
+            let den = f[j - 1] - 2.0 * f[j] + f[j + 1];
+            let shift = if den < 0.0 {
+                0.5 * (f[j - 1] - f[j + 1]) / den
+            } else {
+                0.0
+            };
+            lo + (j as f64 + shift) * h
+        };
+        draws.push(x);
+    }
+    let mean = draws.iter().sum::<f64>() / draws.len() as f64;
+    let var = draws.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (draws.len() - 1) as f64;
+    let mut sorted = draws.clone();
+    sorted.sort_by(f64::total_cmp);
+    let pct = |p: f64| sorted[(p * (sorted.len() - 1) as f64).round() as usize].exp();
+
+    let ratio = x_hat.exp();
+    let at_hat = cells_at(ratio)?;
+    evaluations += 1;
+    let (informative, model_share, data_share, by_good) = shares_at(&at_hat, ratio);
+    if ratio <= 1.0 {
+        return Err(format!(
+            "P04d: air / road {ratio} does not exceed 1 (road < air)"
+        ));
+    }
+    Ok(AirEstimate {
+        ratio,
+        quasi_loglik: q_hat,
+        bracket: (lo.exp(), hi.exp()),
+        evaluations,
+        se_ln_curvature,
+        se_ln_bootstrap: var.sqrt(),
+        interval: (pct(0.05), pct(0.95)),
+        at_edge,
+        reached,
+        clusters: n,
+        informative,
+        model_share,
+        data_share,
+        by_good,
+    })
+}
+
+/// [`profile_fit`] on the pack: the cells of `obs` on the per-good least-iceberg legs (ADR
+/// 0279) at `TradeParams::default()`'s time costs and bulk rate, over [`profile_grid`], with
+/// [`BOOT_SEED`].
 pub fn estimate(
     pack: &Path,
     obs: &[Obs],
     theta: &[f64; N_TRADED],
     base: &Transport,
-) -> Result<Vec<Step>, String> {
+) -> Result<AirEstimate, String> {
     let weight = Table::open(&pack.join("econ_goods.arrow"))?.f64("weight")?;
-    let mut r = base.per_tkm[AIR as usize] / base.per_tkm[0];
-    let mut steps = Vec::new();
-    for _ in 0..OUTER_MAX {
-        let mut p = base.clone();
-        p.per_tkm[AIR as usize] = r * p.per_tkm[0];
-        let trade = TradeParams::default();
-        let cs = cells(&legs(pack, &p, &weight, &trade)?, &p, theta, &weight, obs);
-        let fit = fit(&cs, r).map_err(|e| {
-            let mut n = [0usize; N_TRADED];
-            for c in &cs {
-                n[c.good] += usize::from(c.informative());
-            }
-            format!("{e} (at r {r}; cells with an air and another crossing by good {n:?})")
-        })?;
-        let shares = |good: Option<usize>| {
-            let used: Vec<&Cell> = cs
-                .iter()
-                .filter(|c| c.informative() && good.is_none_or(|g| c.good == g))
-                .collect();
-            let total: f64 = used.iter().map(|c| c.weight).sum();
-            let model = used
-                .iter()
-                .map(|c| c.weight * c.model_share(fit.ratio).0)
-                .sum::<f64>()
-                / total;
-            let data = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
-            (used.len(), model, data)
-        };
-        let (_, model_share, data_share) = shares(None);
-        let by_good = std::array::from_fn(|g| shares(Some(g)));
-        let done = (fit.ratio.ln() - r.ln()).abs() < OUTER_TOL;
-        r = fit.ratio;
-        steps.push(Step {
-            at: p.per_tkm[AIR as usize] / p.per_tkm[0],
-            fit,
-            model_share,
-            data_share,
-            by_good,
-        });
-        if done {
-            return Ok(steps);
-        }
-    }
-    Err(format!(
-        "air share: legs did not repeat in {OUTER_MAX} steps, last r {r}"
-    ))
+    profile_fit(
+        |r| cells_at(pack, obs, theta, base, &weight, r),
+        &profile_grid(),
+        BOOT_SEED,
+    )
 }
 
 /// The share clip of [`ProfilePoint::quasi_loglik_reached`].
@@ -889,13 +976,10 @@ pub fn profile(
     base: &Transport,
 ) -> Result<Vec<ProfilePoint>, String> {
     let weight = Table::open(&pack.join("econ_goods.arrow"))?.f64("weight")?;
-    let trade = TradeParams::default();
     profile_grid()
         .into_iter()
         .map(|r| {
-            let mut p = base.clone();
-            p.per_tkm[AIR as usize] = r * p.per_tkm[0];
-            let cs = cells(&legs(pack, &p, &weight, &trade)?, &p, theta, &weight, obs);
+            let cs = cells_at(pack, obs, theta, base, &weight, r)?;
             let mean = |used: &[&Cell]| {
                 let total: f64 = used.iter().map(|c| c.weight).sum();
                 let model = used
@@ -965,20 +1049,8 @@ mod tests {
         c.share = 0.2;
         let (s, ds) = c.model_share(3.0);
         assert!(s == 0.0 && ds == 0.0);
-        let (sc, i) = c.score_info(3.0);
-        assert!(sc.is_finite() && i.is_finite());
+        assert!(c.clipped_quasi_loglik(3.0).is_finite());
         assert!(c.quasi_loglik(3.0).is_finite());
-    }
-
-    #[test]
-    fn a_share_out_of_reach_stops_at_the_floor() {
-        let mut cells = sample(2.4);
-        for c in &mut cells {
-            // Data far above anything the cells can give: air pairs carry a fixed extra cost.
-            c.share = 0.99;
-            c.crossings[2].beta *= 50.0;
-        }
-        assert!(fit(&cells, 5.0).unwrap_err().contains("ran to"));
     }
 
     #[test]
@@ -1061,13 +1133,6 @@ mod tests {
     }
 
     #[test]
-    fn recovers_a_known_ratio() {
-        let fit = fit(&sample(2.4), 5.37).unwrap();
-        assert!((fit.ratio - 2.4).abs() <= 1e-9 * 2.4, "{fit:?}");
-        assert!(fit.se < 1e-6, "exact shares leave no residual: {fit:?}");
-    }
-
-    #[test]
     fn share_is_the_gateway_pair_sum() {
         // Province level: K_oa and K_bd for 3 origins and 2 destinations, then the full sum.
         let k_oa = [[0.5, 0.1], [0.2, 0.3], [0.05, 0.4]];
@@ -1132,23 +1197,144 @@ mod tests {
         assert!((c.model_share(2.0).0 - scaled.model_share(2.0).0).abs() <= 1e-15);
     }
 
+    /// [`sample`]'s cells with paths that switch with r: cell i's air crossing reroutes over
+    /// land once air costs more than `switch[i]` times road, at the factor air has there, so
+    /// the set of air crossings changes along the profile.
+    fn switching(r: f64, at: f64) -> Vec<Cell> {
+        let switch = [1.8, 2.4, 2.9, 3.3, 3.8, 4.6, 6.0];
+        let mut out = sample(at);
+        for (i, c) in out.iter_mut().enumerate() {
+            let s = switch[i % switch.len()];
+            let x = &mut c.crossings[2];
+            if r > s {
+                (x.beta, x.slope) = (x.beta + x.slope * s, 0.0);
+            }
+        }
+        out
+    }
+
+    /// Cells of [`switching`] at r with the data's shares from the model on the paths at `truth`.
+    fn switching_world(r: f64, truth: f64) -> Vec<Cell> {
+        let data = switching(truth, truth);
+        let mut cs = switching(r, truth);
+        for (c, d) in cs.iter_mut().zip(&data) {
+            c.share = d.model_share(truth).0;
+        }
+        cs
+    }
+
     #[test]
-    fn cells_without_both_modes_are_dropped() {
+    fn profile_recovers_a_known_ratio() {
+        let est = profile_fit(|_| Ok(sample(2.4)), &profile_grid(), BOOT_SEED).unwrap();
+        assert!(
+            (est.ratio.ln() - 2.4f64.ln()).abs() < 2.0 * GOLDEN_TOL,
+            "{est:?}"
+        );
+        assert!(est.se_ln_bootstrap < 1e-2, "exact shares: {est:?}");
+        assert!(
+            est.interval.0 <= 2.4 * 1.01 && est.interval.1 >= 2.4 / 1.01,
+            "{est:?}"
+        );
+        assert_eq!((est.reached, est.informative, est.clusters), (15, 15, 5));
+    }
+
+    /// The paths switch with r: on the paths at r* = 3 every cell's share is exact, and the
+    /// profile, solving the paths at each r, finds r* although several cells lose their air
+    /// crossing on either side of it.
+    #[test]
+    fn profile_recovers_r_when_paths_switch() {
+        let truth = 3.0;
+        let air_at = |r: f64| {
+            switching(r, truth)
+                .iter()
+                .filter(|c| c.crossings[2].slope > 0.0)
+                .count()
+        };
+        assert!(air_at(2.0) > air_at(truth) && air_at(truth) > air_at(5.0));
+        let est = profile_fit(
+            |r| Ok(switching_world(r, truth)),
+            &profile_grid(),
+            BOOT_SEED,
+        )
+        .unwrap();
+        assert!(
+            (est.ratio.ln() - truth.ln()).abs() < 2.0 * GOLDEN_TOL,
+            "{est:?}"
+        );
+    }
+
+    #[test]
+    fn bootstrap_is_deterministic() {
+        let mut cs = switching_world(3.0, 3.0);
+        // noise, so that resamples disagree
+        for (i, c) in cs.iter_mut().enumerate() {
+            c.share = (c.share * (1.0 + 0.3 * ((i * 7 % 5) as f64 - 2.0) / 2.0)).clamp(0.0, 1.0);
+        }
+        let run = || {
+            profile_fit(
+                |r| {
+                    let mut x = switching_world(r, 3.0);
+                    for (c, d) in x.iter_mut().zip(&cs) {
+                        c.share = d.share;
+                    }
+                    Ok(x)
+                },
+                &profile_grid(),
+                BOOT_SEED,
+            )
+            .unwrap()
+        };
+        let (a, b) = (run(), run());
+        // goods without cells carry NaN shares, so compare the printed values
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
+        assert!(
+            a.se_ln_bootstrap > 0.0 && a.interval.0 < a.interval.1,
+            "{a:?}"
+        );
+        let other = profile_fit(
+            |r| {
+                let mut x = switching_world(r, 3.0);
+                for (c, d) in x.iter_mut().zip(&cs) {
+                    c.share = d.share;
+                }
+                Ok(x)
+            },
+            &profile_grid(),
+            BOOT_SEED + 1,
+        )
+        .unwrap();
+        assert_eq!(other.ratio, a.ratio);
+        assert_ne!(other.se_ln_bootstrap, a.se_ln_bootstrap);
+    }
+
+    #[test]
+    fn ties_go_to_the_lowest_r_and_an_edge_maximum_fails() {
+        assert_eq!(first_max(&[1.0, 3.0, 3.0, 2.0]), 1);
+        assert_eq!(first_max(&[2.0, 2.0]), 0);
+        // shares the cells cannot move: a flat profile ties everywhere, so its maximum is the
+        // first point, at the edge
+        let mut flat = sample(2.4);
+        for c in &mut flat {
+            c.crossings[2].slope = 0.0;
+        }
+        let e = profile_fit(|_| Ok(flat.clone()), &profile_grid(), BOOT_SEED).unwrap_err();
+        assert!(e.contains("grid's edge, r 0.5"), "{e}");
+    }
+
+    #[test]
+    fn a_ratio_below_road_fails() {
+        let e = profile_fit(|_| Ok(sample(0.6)), &profile_grid(), BOOT_SEED).unwrap_err();
+        assert!(e.contains("does not exceed 1"), "{e}");
+    }
+
+    #[test]
+    fn cells_without_both_modes_are_counted_not_fitted() {
         let mut cells = sample(2.4);
         let mut no_air = cell(9, 6000.0, 2e-4, 4.0);
         no_air.crossings.pop();
         no_air.share = 0.3;
         cells.push(no_air);
-        let fit = fit(&cells, 5.0).unwrap();
-        assert_eq!((fit.cells, fit.dropped), (15, 1));
-    }
-
-    #[test]
-    fn a_ratio_below_road_stops() {
-        assert!(
-            fit(&sample(0.6), 2.0)
-                .unwrap_err()
-                .contains("does not exceed 1")
-        );
+        let est = profile_fit(|_| Ok(cells.clone()), &profile_grid(), BOOT_SEED).unwrap();
+        assert_eq!((est.reached, est.informative), (16, 15));
     }
 }

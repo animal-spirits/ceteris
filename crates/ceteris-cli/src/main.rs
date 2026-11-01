@@ -12,7 +12,7 @@
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
-//! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile | --from R]
+//! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -100,7 +100,7 @@ const USAGE: &str = "usage:
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
-  ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile | --from R]
+  ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -534,7 +534,8 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
-/// `air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile | --from R]`.
+/// `air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]`: the path-consistent
+/// estimate of P04d / P04a (ADR 0277), or with `--profile` the grid it starts from.
 fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     use ceteris_calibrate::air_share::{
         HS_1996, HS_2002, US_2000, US_2002, estimate, eu_hindcast, pack_countries, profile, trend,
@@ -547,14 +548,10 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
         root.join("data/raw/air-shares-2000"),
     );
     let mut set = "pooled".to_owned();
-    let (mut want_profile, mut from) = (false, None);
+    let mut want_profile = false;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--profile" => want_profile = true,
-            "--from" => {
-                let r = args.next().ok_or("--from needs a ratio to road")?;
-                from = Some(r.parse::<f64>().map_err(|e| format!("--from {r}: {e}"))?);
-            }
             "--pack" => pack = PathBuf::from(args.next().ok_or("--pack needs a directory")?),
             "--data" => data = PathBuf::from(args.next().ok_or("--data needs a directory")?),
             "--set" => set = args.next().ok_or("--set needs pooled, us or eu")?,
@@ -584,19 +581,27 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     println!("set {set}, cells {}", obs.len());
     let all = TradeParams::default().theta;
     let theta: [f64; N_TRADED] = std::array::from_fn(|g| all[g]);
-    let mut base = Transport::default();
-    if let Some(r) = from {
-        base.per_tkm[3] = r * base.per_tkm[0];
-    }
+    let base = Transport::default();
     if want_profile {
         for point in profile(&pack, &obs, &theta, &base)? {
             println!("{point:?}");
         }
         return Ok(ExitCode::SUCCESS);
     }
-    for step in estimate(&pack, &obs, &theta, &base)? {
-        println!("{step:?}");
-    }
+    let est = estimate(&pack, &obs, &theta, &base)?;
+    println!("{est:?}");
+    println!(
+        "P04d / P04a {:.4} (P04d {:.4} USD per tonne-km), se of ln r {:.4} (cluster bootstrap, \
+         {} of {} replications at a bracket edge) and {:.4} (curvature), 90% interval {:.4} to {:.4}",
+        est.ratio,
+        est.ratio * base.per_tkm[0],
+        est.se_ln_bootstrap,
+        est.at_edge,
+        ceteris_calibrate::air_share::BOOT_REPLICATIONS,
+        est.se_ln_curvature,
+        est.interval.0,
+        est.interval.1
+    );
     Ok(ExitCode::SUCCESS)
 }
 
