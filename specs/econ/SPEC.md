@@ -1472,6 +1472,28 @@ texture fed from core columns.
 
 ## Open questions
 
+- ADR 0098, held for the owner (2026-11-01; built: SWIID Gini first, WPP national totals,
+  Anguilla and Montserrat regions, the Venezuela income rule, `econ::ras::balance`):
+  - Price level source. WDI PA.NUS.PPPC.RF is already the price level ratio (PPP over the
+    market rate, base the United States), not a series to divide by PA.NUS.FCRF as the ADR
+    writes, and it is not normalised to the US (the US is 122.1 in 2000), so p_c is its value
+    over the US's. In 2000 it carries currency-unit errors: Turkey 3,712 times the US,
+    Azerbaijan 10.6, East Timor 0.003, the Palestinian territories 0.004, DR Congo 0.008, New
+    Caledonia 0.027; 33 of the economies it shares with PWT 11 differ from PWT's pl_gdpo by more
+    than 1.5 times. PWT 11 pl_gdpo over the US's has one such value (Bermuda 1,059). The rule
+    that screens them is a modelling choice; `price_level` and p_c wait on it.
+  - Exchange-rate rescale. The 1999-2001 mean of USD per unit of local currency over 2000's has
+    median 1.005 over 205 economies (Germany 1.041, Japan 0.944, Korea 0.942, Brazil 0.929), not
+    the 10 to 20% the ADR expects, and breaks at currency changeovers and high inflation: Greece
+    109.8 (euro from 2001), El Salvador 3.59 (dollar from 2001), Ecuador 0.667 (dollar in 2000),
+    Serbia 2.45, DR Congo 2.18, Belarus 1.72, Angola 1.68; the Atlas factor PA.NUS.ATLS has the
+    same breaks (Greece 337). Not built.
+  - RAS targets. Column totals of the donor's intermediate table follow from VA alone (output is
+    VA times the donor's output per VA), so only the row targets bind, and they need final
+    demand: rows X_k + M_k - E_k - F_k with BACI imports M and exports E by good and F the
+    donor's final demand shares of VA + M - E. The rest-of-world constraint needs the ICIO ROW
+    block, which the reader does not keep. Not wired into `impute`.
+
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
 - Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on
   great-circle distance, not path cost, since path costs need the Rust paths in the Python
