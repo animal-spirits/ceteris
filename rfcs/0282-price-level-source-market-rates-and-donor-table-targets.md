@@ -306,7 +306,7 @@ means something, and stops gating on a method split neither source resolves; not
 WDI's level strongly enough to override D1's choice of PWT.
 
 Decision: A, Antonio, 2026-11-01T23:04:41Z, decision card cmsg_017dUvr6fMSZ6kyrmGm9MVKG9KhZaekAksAekCbvycxHff (thread 'Explain PWT vs WDI price-level gap').
-Row: ADR 0288
+Row: ADR 0290
 
 The 10% is P160. It is set by hand, from data: the measured agreement of two published vintages
 of the same benchmark PPPs, 31 of 31 within it with Cyprus on totals, the largest gap the UK's
@@ -372,11 +372,11 @@ before). Only `econ_countries.arrow` moves, and in it only `price_level` and
   2000 market rates (ADR 0283); donor tables balanced by RAS to domestic use (ADR 0286); ADR
   0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285); PWT pl_da, and the check
   reported, not enforced (ADR 0287); the check on totals, NY.GDP.MKTP.PP.CD, enforced at 10% on
-  PWT's 2000 benchmark economies and reported for the rest (ADR 0288); the WDI fallback level
+  PWT's 2000 benchmark economies and reported for the rest (ADR 0290); the WDI fallback level
   from GDP over GDP at PPP (ADR 0289).
-- 17: P160, the check's 10% tolerance on the benchmark economies (ADR 0288).
+- 17: P160, the check's 10% tolerance on the benchmark economies (ADR 0290).
 - econ SPEC (module spec): `econ_countries.arrow` price level columns, Local base price, Open
   questions (ADRs 0282 and 0283); Economies outside ICIO, the RAS balance and the
   `io_basis` column (ADR 0286); the real GDP check (ADR 0285);
-  PWT pl_da in Price levels and the check reported only (ADR 0287); the gated check (ADR 0288);
+  PWT pl_da in Price levels and the check reported only (ADR 0287); the gated check (ADR 0290);
   the WDI level in Price levels (ADR 0289).

@@ -286,10 +286,10 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
 }
 
 /// P160: the real GDP check's tolerance on the economies whose PWT price level of 2000 is a
-/// benchmark (RFC 0282 D8, ADR 0288).
+/// benchmark (RFC 0282 D8, ADR 0290).
 const BENCHMARK_TOLERANCE: f64 = 0.10;
 
-/// ADR 0098's real GDP check (ADRs 0285, 0288): GDP over p_c against WDI NY.GDP.MKTP.PP.CD 2000,
+/// ADR 0098's real GDP check (ADRs 0285, 0290): GDP over p_c against WDI NY.GDP.MKTP.PP.CD 2000,
 /// totals, so that no population enters (WDI counts all of Cyprus, its GDP the south only), for
 /// the ICIO economies WDI reports. With the pack's GDP equal to WDI's, the ratio is WDI's price
 /// level over PWT's. Gated at `BENCHMARK_TOLERANCE` where PWT's i_cig of 2000 is Benchmark,

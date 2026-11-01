@@ -43,7 +43,7 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
-### Real GDP check on benchmark economies; current WDI price level (ADRs 0288, 0289, RFC 0282 D8 and D9; C1f, built, not installed)
+### Real GDP check on benchmark economies; current WDI price level (ADRs 0290, 0289, RFC 0282 D8 and D9; C1f, built, not installed)
 
 - RFC 0282 rulings, Antonio, 2026-11-01: D8 A (gate ADR 0098's real GDP check on the 31 ICIO
   economies whose PWT 2000 price level is a benchmark, at 10%, on totals; report the other 48 with
