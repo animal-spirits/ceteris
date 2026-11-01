@@ -41,7 +41,7 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
 10. **P9 Calibration and hindcast.** Pre-registration, a joint check of the block calibrations made at each gate, SBI, emulators and Sobol analysis in Rust, hazard fits outside the simulation (ADR 0242), 2011-2024 out-of-sample validation with replay off and on (ADR 0241), natural-experiment replication.
     - Accept: out-of-sample scorecard (15.4) and natural-experiment table (15.5) published with CRPS and coverage; robustness across structural switches documented.
     - **R Release** (ADR 0207): the user-side fetch and build of the pack, including manual sources, a signed macOS build, hashes checked across architectures, a minimum pedia. Accept: a clean machine builds the pack and reproduces the published 1.0 hashes.
-11. **P10 AI layers and Steward mode.** Learned state policies and playable single-state control; LLM leaders are deferred beyond v1.
+11. **P10 AI layers and Steward mode** (2.0-alpha for economic levers, full Steward and Tier 1b in 2.x; ADR 0239). Learned state policies and playable single-state control; LLM leaders are deferred beyond v1.
     - Accept: Tier 1b compared with Tier 1a on historical base rates; Steward mode exposes the full state action space.
 
 ### 21.2 Agent execution protocol
