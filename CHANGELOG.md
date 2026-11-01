@@ -52,6 +52,21 @@
   gone; `goods::p2` keeps P2's values for the fixture, the defaults and tests.
 - No golden moves: the inputs digest adds the goods table only where it differs from P2's.
 
+### Pack build: ADR 0098 source corrections (C1; built, not installed)
+
+- Gini: SWIID first (178 countries), WDI fallback (none needed in 2000), else the donor (64);
+  `econ_countries` gains `gini_source`. 197 Ginis move, at most 0.177 (Malawi 0.658 to 0.481;
+  India 0.277 to 0.430).
+- National population from UN WPP 2024 where WDI has none: Western Sahara 811 to 271,943
+  (its VA 1.05 to 352.6 million USD), Taiwan +0.38%, and 12 small territories; Cook Islands
+  province 710 and St Helena province 3504 rise above the working-age floor (provinces with VA
+  4,368 to 4,370).
+- Anguilla and Montserrat take Latin America and Caribbean donors (Mexico, Brazil; were Croatia,
+  Latvia). Venezuela ranks donors by WDI income (`wdi_not_pwt`; donor Peru to Chile).
+- A scratch `pack build --econ-only` moves `econ_countries`, `econ_io`, `econ_provinces` and
+  `econ_pops`; `econ_goods`, `econ_tariffs`, `gateways` and `econ_home_shares` do not. World VA
+  3.216259e7 to 3.216321e7 million USD. The installed pack and the goldens do not move (C6).
+
 ### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
 - Owner, 2026-11-01: ADR 0281 option A. A full pack build of c382cbf (owner-side, GEOS 3.15;
