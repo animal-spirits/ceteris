@@ -82,8 +82,11 @@ sum over good 1's VA above (refining VA is not negative), in place of 0.5 to 3.
   3.8e-9; with ln distance as the control class 0 2.429, 1 3.537, 2 7.647, 3 16.326, good 1
   16.461, good 2 15.397.
 - **Miss**: `pack_calibrated_state_holds_to_2e_6_and_4_minor_units` fails its boundedness check
-  over its 120 ticks: the price drift of cells of province 2464 peaks at 9.8e-2 of the tolerance
-  in ticks 61 to 120 against 4.2e-2 in ticks 5 to 60 (bound: twice). Run 480 ticks, it is a
-  bounded slow oscillation (peaks near ticks 100 and 282, 9.8e-2 in ticks 5 to 240, 1.02e-1 in
-  241 to 480) and passes; every quantity stays below 0.46 of its tolerance. On the pin-only
-  recalibration of the installed pack the 120-tick test passes.
+  over its 120 ticks: the price drift of Pitcairn's good 9 (cell 28929, province 2892; the
+  test printed active-cell entry 24646, first read as province 2464) peaks at 9.8e-2 of the
+  tolerance in ticks 61 to 120 against 4.2e-2 in ticks 5 to 60 (bound: twice). Run 480 ticks,
+  it is a bounded slow oscillation (peaks near ticks 100 and 282, 9.8e-2 in ticks 5 to 240,
+  1.02e-1 in 241 to 480) and passes; every quantity stays below 0.46 of its tolerance. On the
+  pin-only recalibration of the installed pack the 120-tick test passes. Pitcairn's VA is not
+  moved by this ADR: its slowest block mode is the same on both packs, and the 120-tick windows
+  were shorter than its period. The test now runs 480 ticks (ADR 0089 As built).

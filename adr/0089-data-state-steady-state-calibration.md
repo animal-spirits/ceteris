@@ -187,9 +187,10 @@ that coupling.
   - money (pop income and balances) to 2e-6 relative or 4 minor units per pop, whichever is
     larger, since money drift is real drift times income;
   - world aggregates (price index, world income, world unemployment) to 1e-9.
-- Boundedness: each quantity's largest drift over ticks 61 to 120 is at most twice its largest
-  over ticks 5 to 60. Ticks 1 to 4 are left out of the first window, while prices and wages
-  settle onto the rounding lattice.
+- Boundedness: each quantity's largest drift over ticks 241 to 480 is at most twice its largest
+  over ticks 5 to 240, on the fixture and on the pack (the pack ran 120 ticks, windows 5 to 60
+  and 61 to 120, until the window was set by its slowest mode below). Ticks 1 to 4 are left out
+  of the first window, while prices and wages settle onto the rounding lattice.
 - 2e-6 is 5,000 times inside V1's 1e-2.
 - Test: `crates/ceteris-econ/tests/p2_steady_state.rs`.
 
@@ -214,3 +215,21 @@ maximum.
 | world price index | 4.2e-14 | 5.4e-15 |
 | world income | 6.2e-13 | 2.8e-13 |
 | world unemployment | 1.6e-12 | 4.0e-12 |
+
+**Boundedness window from the slowest mode (B9b, 2026-11-01).** On the ADR 0281 scratch pack
+the 120-tick check failed: the price of Pitcairn's good 9 (cell 28929, province 2892) reached
+9.8e-2 of its tolerance over ticks 61 to 120 against 4.2e-2 over 5 to 60. The drift is a slow
+oscillation of the slowest mode of Pitcairn's coupled block, not growth.
+
+- The mode: modulus 0.9486 from the block map, 0.96 fitted to the price series, period 68 to 73
+  ticks (about 70); the same on the installed-calibration pack and the ADR 0281 pack. Over 2,000
+  ticks its envelope is bounded (slopes within one standard error of 0).
+- Halves of 56 and 60 ticks each cover less than one period, so the ratio of their maxima reads
+  the mode's phase: the check fails on 6 to 10% of window positions on either pack. With halves
+  of 236 and 240 ticks the ratio stays under 2 on every position but wage on the ADR 0281 pack,
+  3.9% of positions, largest 2.11; the actual start passes.
+- The pack check now runs 480 ticks, windows 5 to 240 and 241 to 480 (each at least 3 periods),
+  factor 2 unchanged, as the fixture does. Measured at 43 ms per tick: the largest late over
+  early ratio is 0.91 on the installed pack (pop income) and 1.11 on the ADR 0281 pack (world
+  price index, at 5e-14 relative; the price of cell 28929 1.04). The largest drift is pop income
+  at 0.47 of its bound on the installed pack and 0.46 on the ADR 0281 pack.
