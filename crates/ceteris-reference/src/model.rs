@@ -346,9 +346,15 @@ impl<'a> Model<'a> {
         self.active_cells.len() + self.inp.n_provinces()
     }
 
-    /// Prices 1 and base wages.
+    /// The data state's prices (1 for traded goods, p_c for local goods, ADR 0098) and base
+    /// wages.
     pub fn data_state(&self) -> Vec<f64> {
-        let mut x = vec![0.0; self.active_cells.len()];
+        let price = self.inp.data_state_price();
+        let mut x: Vec<f64> = self
+            .active_cells
+            .iter()
+            .map(|&i| price.data[i].ln())
+            .collect();
         x.extend(self.inp.w0.iter().map(|w| w.ln()));
         x
     }

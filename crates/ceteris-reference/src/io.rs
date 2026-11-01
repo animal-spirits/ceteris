@@ -218,7 +218,8 @@ pub struct Inputs {
     /// (P,) sum of the province's pops, rebate weights.
     pub population: Vec<f64>,
     pub w0: Vec<f64>,
-    /// (P, G) base delivered unit price q_d (1 for local goods, inf where unreachable).
+    /// (P, G) base delivered unit price q_d (inf where unreachable); for local goods the
+    /// country's price level p_c (ADR 0098), the price the data state starts them at.
     pub base_price: Mat,
     /// (P, G) selection constant Gamma of ADR 0200: buyers pay Gamma P_d. `None` prices them
     /// at the delivered unit price of the physical arrivals, 1 / alpha_d, as the calibration
@@ -262,7 +263,7 @@ pub struct Inputs {
     pub pop_edu: Option<Vec<usize>>,
     pub static_digest: String,
     /// A calibrated steady state replaces the base column (E, G), its a_VA and the PIGL weights
-    /// inverted at prices 1.
+    /// inverted at the data state's prices.
     pub calibrated_coef: Option<Mat>,
     pub calibrated_a_va: Option<Vec<f64>>,
     pub calibrated_weights: Option<Weights>,
@@ -310,30 +311,51 @@ impl Inputs {
             .collect()
     }
 
+    /// (P, G) prices of the data state, as `EconInputs::data_state_price`: 1 for traded goods,
+    /// the country's price level p_c for local goods (their base price, ADR 0098).
+    pub fn data_state_price(&self) -> Mat {
+        Mat::from_fn(self.n_provinces(), self.n_goods(), |p, g| {
+            if self.traded[g] {
+                1.0
+            } else {
+                self.base_price[(p, g)]
+            }
+        })
+    }
+
+    /// (E,) p_o, the data state's price of each enterprise's output at its province.
+    pub fn ent_base_price(&self) -> Vec<f64> {
+        let price = self.data_state_price();
+        (0..self.ent_good.len())
+            .map(|e| price[(self.ent_province[e], self.ent_good[e])])
+            .collect()
+    }
+
     /// (E, G): physical input coefficients, as `EconInputs::base_column`: the sector's ICIO cost
-    /// share a_kg over the base delivered price of k at the enterprise's province, 0 where the
-    /// sector does not use k.
+    /// share a_kg times p_o over the base delivered price of k at the enterprise's province, 0
+    /// where the sector does not use k.
     pub fn ent_inputs(&self) -> Mat {
         if let Some(coef) = &self.calibrated_coef {
             return coef.clone();
         }
         let country = self.ent_country();
+        let own = self.ent_base_price();
         Mat::from_fn(self.ent_good.len(), self.n_goods(), |e, k| {
             let a = self.io[country[e]][(k, self.ent_good[e])];
             if a > 0.0 {
-                a / self.base_price[(self.ent_province[e], k)]
+                a * own[e] / self.base_price[(self.ent_province[e], k)]
             } else {
                 0.0
             }
         })
     }
 
-    /// 1 - sum_k coef_k q_k at base prices, as `EconInputs::base_a_va` (1 - sum_k a_kg).
+    /// 1 - sum_k coef_k q_k / p_o at base prices, as `EconInputs::base_a_va` (1 - sum_k a_kg).
     pub fn ent_a_va(&self) -> Vec<f64> {
         if let Some(a_va) = &self.calibrated_a_va {
             return a_va.clone();
         }
-        let coef = self.ent_inputs();
+        let (coef, own) = (self.ent_inputs(), self.ent_base_price());
         (0..coef.rows)
             .map(|e| {
                 let mut cost = 0.0;
@@ -342,7 +364,7 @@ impl Inputs {
                         cost += c * self.base_price[(self.ent_province[e], k)];
                     }
                 }
-                1.0 - cost
+                1.0 - cost / own[e]
             })
             .collect()
     }
@@ -475,7 +497,8 @@ impl Inputs {
     }
 
     /// PIGL weights per country, as `world::household_preferences`: the calibrated ones, else
-    /// inverted over the country's pops at prices 1 and their base incomes (ADR 0094).
+    /// inverted over the country's pops at the data state's prices and their base incomes
+    /// (ADRs 0094 and 0098).
     pub fn pigl_weights(&self) -> Result<Weights, String> {
         if let Some(w) = &self.calibrated_weights {
             return Ok(w.clone());
@@ -487,12 +510,12 @@ impl Inputs {
             .zip(&self.pop_population)
             .map(|(m, n)| m * n)
             .collect();
-        let ones = Mat::filled(country.len(), self.n_goods(), 1.0);
+        let price = self.data_state_price().select_rows(&self.pop_province);
         demand::invert_pops(
             &self.omega,
             &demand::Pops {
                 country: &country,
-                price: &ones,
+                price: &price,
                 income: &income,
                 spend: &spend,
             },
@@ -785,7 +808,8 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
 pub fn validate(inp: &Inputs) -> Result<(), String> {
     let mut stuck = Vec::new();
     for (&p, &g) in inp.ent_province.iter().zip(&inp.ent_good) {
-        // Rust keeps such a cell's price at its initial 1, which is not homogeneous in prices.
+        // Rust keeps such a cell's price at its initial level, which is not homogeneous in
+        // prices.
         if !inp.traded[g] && !inp.active[p][g] && !stuck.contains(&[p, g]) {
             stuck.push([p, g]);
         }
