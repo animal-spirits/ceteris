@@ -2,8 +2,8 @@
 
 Status: proposed
 Date: 2026-11-01
-Design sections: 12.2, 16, 16.1; econ SPEC (Pack additions, Economies outside ICIO, Local base price, Open questions)
-Research: none separate; the measurements are the C1 and C1c pack builds quoted below.
+Design sections: 12.2, 16, 16.1, 17; econ SPEC (Pack additions, Economies outside ICIO, Local base price, Open questions)
+Research: none separate; the measurements are the C1 and C1c pack builds quoted below, and for D8 and D9 the study "Why PWT and WDI disagree on 2000 price levels" (2026-11-01), summarized under D8.
 
 ## Summary
 
@@ -14,8 +14,9 @@ its RAS row targets need final demand, which the ADR does not give. This RFC fix
 p_c and the screen on it (D1), drops the rescale (D2), sets the RAS row targets (D3) and asks
 what the targets do where they come out negative (D6), plus two follow-ups of the p_c build:
 which goods weight the run's world price index (D4) and which WDI series ADR 0098's real GDP
-check reads (D5), and, from that check, which PWT price level D1 reads (D7). All seven are ruled;
-D6 supersedes D3, and D7 amends D1's series. The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
+check reads (D5), and, from that check, which PWT price level D1 reads (D7), what the check gates
+(D8) and which WDI series is D1's fallback (D9). All nine are ruled; D6 supersedes D3, D7 amends
+D1's series and D9 its fallback. The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
 the same pipeline stage: like the pack's other screens (WDI tariff rates at or above 100% count as
 missing, `MAX_RATE`) it is not a parameter of Section 17, which registers what data does not pin,
 so it takes no code.
@@ -30,6 +31,10 @@ the US (the US is 122.1 in 2000). Its 2000 values carry currency-unit errors (Tu
 the US, Azerbaijan 10.6, East Timor 0.003, the Palestinian territories 0.004, DR Congo 0.008), and
 33 of the economies it shares with PWT 11 differ from PWT's pl_gdpo by more than 1.5 times. PWT 11
 pl_gdpo over the US's covers 182 economies with one such value (Bermuda, 1,059).
+
+Corrected by D9: the unit errors are those of the file read, `wdi_PA.NUS.PPPC.RF.zip`, which is a
+WDI Database Archives series (its US row runs 122.1 in 2000, 99 in 2011, 5 in 2024), not of
+current WDI. Current WDI's implied level gives plausible values for the economies listed.
 
 Options:
 
@@ -269,16 +274,109 @@ to 0.929, Nigeria 0.807 to 1.059, Norway 0.904 to 1.128, Qatar 0.610 to 0.760, L
 (Nigeria) and 0.364 (Angola) to 1.26 (Belarus) and 1.88 (DR Congo); slope 0.0509, correlation
 0.260; pinned as measured.
 
+### D8. What does ADR 0098's real GDP check gate?
+
+Raised by D7: the check is reported, not enforced, because no derived tolerance holds for all 79.
+
+Found (study of 2026-11-01): with the pack's GDP equal to WDI's, the check's ratio is exactly WDI's
+price level over PWT's, so it measures the two sources against each other and nothing in the
+pack. They part over method, not data. For 2000, WDI carries its ICP 2011 PPPs back with relative
+GDP deflators, except where Eurostat-OECD annual PPPs exist (World Bank data help desk, article
+665452); PWT 11 keeps each ICP benchmark a country took part in, interpolates between them (1996,
+2005, 2011) and extrapolates beyond (Feenstra, Inklaar and Timmer 2015), and flags each value
+(`i_cig`). Of the ICIO economies, the 31 whose PWT 2000 value is a benchmark (mostly
+Eurostat-OECD) have a median gap of 3.2%, the 37 interpolated ones 12.7% and the 12 extrapolated
+ones 50.7%. At 2011, the benchmark both share, pl_da agrees with WDI within 5% for 69 of 79. One
+miss is ours: Cyprus is at 0.71 to 0.73 in every benchmark year, because SP.POP.TOTL counts the
+whole island (0.948 million) while WDI's GDP and the PP.CD per-person denominator cover the south
+(PWT 0.694 million); on totals its ratio is 0.967. Shared-benchmark economies with Cyprus on
+totals: 23 of 31 within 5%, 31 of 31 within 10%, the largest gap the UK's 1.093.
+
+Options:
+
+- A. Gate the 31 economies whose PWT `i_cig` of 2000 is Benchmark at 10%, compare totals
+  (NY.GDP.MKTP.PP.CD), report the other 48 with their `i_cig`; the 10% registered in Section 17.
+- B. Report only, as built after D7.
+- C. Take WDI's level as p_c where PWT has no 2000 benchmark: the check passes there by
+  construction (circular for 48).
+- D. Check at 2011, where both sources have a benchmark: tests the sources, not the 2000 pack.
+
+Recommendation: A, because the check then catches unit and wiring errors where the comparison
+means something, and stops gating on a method split neither source resolves; nothing here favours
+WDI's level strongly enough to override D1's choice of PWT.
+
+Decision: A, Antonio, 2026-11-01T23:04:41Z, decision card cmsg_017dUvr6fMSZ6kyrmGm9MVKG9KhZaekAksAekCbvycxHff (thread 'Explain PWT vs WDI price-level gap').
+Row: ADR 0288
+
+The 10% is P160. It is set by hand, from data: the measured agreement of two published vintages
+of the same benchmark PPPs, 31 of 31 within it with Cyprus on totals, the largest gap the UK's
+1.093. The remaining 5 to 10% gaps (Portugal, Norway, Greece, Turkey, Romania, Switzerland,
+Ireland, the UK) are inferred, not traced, to be vintage and national-accounts revisions.
+
+As built (C1f, 2026-11-01). The PWT reader keeps `i_cig` of 2000 (`Pwt::price_basis`); the check
+(`econ_build.rs` `real_gdp_against_wdi_ppp`) reads WDI NY.GDP.MKTP.PP.CD (validation only,
+source `wdi-ppp`, CC BY 4.0 in the API metadata on 2026-11-01) and compares `gdp` over p_c with
+it. Gated: 31 economies, 31 within 10%, 23 within 5%, the UK largest at 1.0933 (Portugal 0.9115,
+Norway 0.9150, Greece 0.9304, Turkey 0.9431, Romania 0.9462, Switzerland 0.9466, Ireland 0.9476;
+Cyprus 0.9674). Reported: 48, 37 Interpolated (the US among them) and 11 Extrapolated, from
+0.165 (Nigeria, Interpolated) to 1.88 (DR Congo, Extrapolated). Over all 79: 35 within 5%, 51
+within 10%, median 0.955, slope of the log ratio on ln income 0.0523, correlation 0.267, pinned.
+These are with D9's p_c; the 79 ICIO economies all take PWT, so D9 does not move them.
+
+### D9. Which WDI series is D1's fallback?
+
+Found (study of 2026-11-01): `wdi_PA.NUS.PPPC.RF.zip`, read as D1's WDI level, comes from "WDI
+Database Archives" (database 57, updated 2025-10-29), not current WDI. Its US row is not 1 and not
+constant (121.9 in 1990, 122.1 in 2000, 99 in 2011, 5 in 2024), which a ratio to the US cannot be;
+Turkey 2000 is 453,396. Over the US's, it agrees with current WDI's implied level within 5% for
+82 of 193 economies. D1's rejected "unit errors" are its values: Afghanistan 0.025 against
+current WDI's 0.215, Greenland 0.079 against 0.642, Nauru 0.056 against 0.454, Curacao 0.059
+against 0.724.
+
+Options:
+
+- A. Current WDI's implied level: NY.GDP.MKTP.CD over NY.GDP.PCAP.PP.CD times SP.POP.TOTL, over
+  the US's, same year rule; drop PA.NUS.PPPC.RF.
+- B. Keep the archive file.
+
+Recommendation: A, because GDP over GDP at PPP is consistent by construction and current.
+
+Decision: A, Antonio, 2026-11-01T23:04:50Z, decision card cmsg_017dUvr6fMSZ6kyrmGm9MVKGKXK92VpvPZbwnXAV89G3BF.
+Row: ADR 0289
+
+As built (C1f, 2026-11-01). `price_level::wdi_implied` takes the ratio in every year all three
+series report; `relative` then takes the year nearest 2000 within five over the US's. NY.GDP.PCAP.PP.CD
+moves from `validation.toml` to `fetch.toml` (source `wdi`, CC BY 4.0); PA.NUS.PPPC.RF leaves the
+code, `fetch.toml` and `sources.toml`. The PWT screen does not change (fences 0.0250 to 8.84, ln p
+= -2.6571 + 0.2453 ln y over 180, residual fences -1.198 to 1.188; PWT rejects Somalia only).
+No WDI level is rejected now; Cuba, New Caledonia, French Polynesia and Kosovo have no GDP at PPP
+and take the donor's. Coverage of the 242 pack countries: PWT 181, WDI 21, donor 40 (61 flagged,
+as before); Afghanistan, Andorra, Greenland, Nauru, East Timor and the US Virgin Islands move from
+the donor to WDI. 21 levels move, all WDI-sourced: Somalia 0.095 to 0.827 (its rejected PWT
+level is 1.04), San Marino 0.344 to 0.700, Puerto Rico 0.494 to 0.706, East Timor 0.236 (donor)
+to 0.332, Andorra 0.899 (donor) to 0.652, Papua New Guinea 0.397 to 0.290, Tuvalu 0.446 to
+0.607, the Marshall Islands 0.682 to 0.910, Nauru 0.357 (donor) to 0.454, Afghanistan 0.268
+(donor) to 0.215, Palau, Greenland, Kiribati, the US Virgin Islands (0.833 donor to 0.936),
+Libya, Micronesia, the Solomon Islands, Samoa, Vanuatu, Eritrea and Tonga by less. No donor-filled
+level moves. p_c runs from 0.127 (Tajikistan) to 1.80 (Bermuda), GDP-weighted mean 0.912 (0.911
+before). Only `econ_countries.arrow` moves, and in it only `price_level` and
+`price_level_source`.
+
 ## Spec changes
 
 - 12.2: the inflation expectations read is that of a world price index over all goods, local
   goods at p_c (ADR 0284).
-- 16: the PWT row in the source table names the price level, pl_da (ADRs 0282, 0287).
+- 16: the PWT row in the source table names the price level, pl_da (ADRs 0282, 0287); the WDI
+  row names GDP per person at PPP, the fallback p_c (ADR 0289).
 - 16.1: price levels from PWT, WDI and the donor with the far-out screen (ADR 0282); values at
   2000 market rates (ADR 0283); donor tables balanced by RAS to domestic use (ADR 0286); ADR
   0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285); PWT pl_da, and the check
-  reported, not enforced (ADR 0287).
+  reported, not enforced (ADR 0287); the check on totals, NY.GDP.MKTP.PP.CD, enforced at 10% on
+  PWT's 2000 benchmark economies and reported for the rest (ADR 0288); the WDI fallback level
+  from GDP over GDP at PPP (ADR 0289).
+- 17: P160, the check's 10% tolerance on the benchmark economies (ADR 0288).
 - econ SPEC (module spec): `econ_countries.arrow` price level columns, Local base price, Open
   questions (ADRs 0282 and 0283); Economies outside ICIO, the RAS balance and the
   `io_basis` column (ADR 0286); the real GDP check (ADR 0285);
-  PWT pl_da in Price levels and the check reported only (ADR 0287).
+  PWT pl_da in Price levels and the check reported only (ADR 0287); the gated check (ADR 0288);
+  the WDI level in Price levels (ADR 0289).
