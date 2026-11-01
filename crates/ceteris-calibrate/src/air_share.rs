@@ -11,7 +11,11 @@ use ceteris_pack::read::natural_earth::{ADMIN0, Dbf, read_codes};
 use ceteris_reference::io::pairwise_sum;
 use rayon::prelude::*;
 
-use crate::costs::{AIR, Graph, N_TRADED, Quantities, Transport, edge_quantities, tau};
+use ceteris_trade::{TradeParams, kappa};
+
+use crate::costs::{
+    AIR, Graph, N_TRADED, Quantities, Transport, bulk_quantities, edge_quantities, tau,
+};
 use crate::dta::read_dta;
 use crate::gravity::{TIME_COST, pack_index};
 use crate::write::Table;
@@ -36,6 +40,7 @@ impl Crossing {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     pub cluster: usize,
+    pub good: usize,
     pub share: f64,
     pub weight: f64,
     pub theta: f64,
@@ -567,18 +572,23 @@ pub fn eu_hindcast(
 
 // ---------------------------------------------------------------- the pack's gateway pairs
 
-/// Least-cost legs of the pack graph at one [`Transport`]: each province's access quantities
-/// to its country's gateways, and the crossing quantities between all gateways.
+/// Least-iceberg legs of the pack graph at one [`Transport`] (ADR 0279, whatever its
+/// `path_choice`): per tree set, each province's access quantities to its country's gateways and
+/// the crossing quantities between all gateways; `set[g]` is good g's set. A set is one distinct
+/// (bulk rate, kappa_g) as the kernel's good legs, its trees on `c + kappa_g h` and, for a bulk
+/// class, on the edge quantities at the bulk rate ([`bulk_quantities`]), so that [`tau`] at `p`
+/// prices them as the kernel does.
 struct Legs {
     gateways_of: Vec<Vec<usize>>,
     provinces_of: Vec<Vec<usize>>,
-    access: Vec<Vec<Option<Quantities>>>,
-    crossing: Vec<Vec<Option<Quantities>>>,
+    set: [usize; N_TRADED],
+    access: Vec<Vec<Vec<Option<Quantities>>>>,
+    crossing: Vec<Vec<Vec<Option<Quantities>>>>,
     weight_out: Vec<[f64; N_TRADED]>,
     weight_in: Vec<f64>,
 }
 
-fn legs(pack: &Path, p: &Transport) -> Result<Legs, String> {
+fn legs(pack: &Path, p: &Transport, weight: &[f64], trade: &TradeParams) -> Result<Legs, String> {
     let read = |name: &str| Table::open(&pack.join(name));
     let (nodes, edges, gw, prov) = (
         read("nodes.arrow")?,
@@ -608,13 +618,24 @@ fn legs(pack: &Path, p: &Transport) -> Result<Legs, String> {
         .collect::<Result<Vec<_>, _>>()?;
     let mode: Vec<u8> = edges.usize("mode")?.iter().map(|&m| m as u8).collect();
     let q_edge = edge_quantities(&mode, &edges.f64("length_km")?, &edges.f64("tri_m")?, p);
-    let graph = Graph::new(
-        nodes.rows(),
-        &edges.usize("a")?,
-        &edges.usize("b")?,
-        &q_edge,
-        p,
-    );
+    let bulk = trade
+        .bulk_rate()
+        .map(|(classes, sea, port)| (classes, bulk_quantities(&mode, &q_edge, sea, port)));
+    let key = |g: usize| {
+        let on_bulk = bulk
+            .as_ref()
+            .is_some_and(|b| b.0[usize::from(trade.theta_class[g])]);
+        (on_bulk, kappa(weight[g], trade.time_cost[g]).to_bits())
+    };
+    let mut keys: Vec<(bool, u64)> = Vec::new();
+    let set = std::array::from_fn(|g| {
+        let k = key(g);
+        keys.iter().position(|&x| x == k).unwrap_or_else(|| {
+            keys.push(k);
+            keys.len() - 1
+        })
+    });
+    let (ea, eb) = (edges.usize("a")?, edges.usize("b")?);
     let gnode = gw.usize("node")?;
     let gcountry = gw.usize("country")?;
     let provinces_of: Vec<Vec<usize>> = (0..nc)
@@ -624,23 +645,35 @@ fn legs(pack: &Path, p: &Transport) -> Result<Legs, String> {
         .map(|c| (0..gnode.len()).filter(|&i| gcountry[i] == c).collect())
         .collect();
     let reached = |dist: &[f64], q: &[Quantities], n: usize| dist[n].is_finite().then_some(q[n]);
-    let access = (0..np)
-        .into_par_iter()
-        .map(|s| {
-            let (dist, q) = graph.tree(s);
-            gateways_of[country[s]]
-                .iter()
-                .map(|&g| reached(&dist, &q, gnode[g]))
-                .collect()
-        })
-        .collect();
-    let crossing = gnode
-        .par_iter()
-        .map(|&s| {
-            let (dist, q) = graph.tree(s);
-            gnode.iter().map(|&n| reached(&dist, &q, n)).collect()
-        })
-        .collect();
+    let (mut access, mut crossing) = (Vec::new(), Vec::new());
+    for &(on_bulk, k) in &keys {
+        let q = match &bulk {
+            Some((_, b)) if on_bulk => b,
+            _ => &q_edge,
+        };
+        let graph = Graph::by(nodes.rows(), &ea, &eb, q, p, f64::from_bits(k));
+        access.push(
+            (0..np)
+                .into_par_iter()
+                .map(|s| {
+                    let (dist, q) = graph.tree(s);
+                    gateways_of[country[s]]
+                        .iter()
+                        .map(|&g| reached(&dist, &q, gnode[g]))
+                        .collect()
+                })
+                .collect(),
+        );
+        crossing.push(
+            gnode
+                .par_iter()
+                .map(|&s| {
+                    let (dist, q) = graph.tree(s);
+                    gnode.iter().map(|&n| reached(&dist, &q, n)).collect()
+                })
+                .collect(),
+        );
+    }
     let weight_out = (0..np)
         .map(|s| std::array::from_fn(|g| va_cols[g][s]))
         .collect();
@@ -650,6 +683,7 @@ fn legs(pack: &Path, p: &Transport) -> Result<Legs, String> {
     Ok(Legs {
         gateways_of,
         provinces_of,
+        set,
         access,
         crossing,
         weight_out,
@@ -674,6 +708,7 @@ fn cells(
         .filter_map(|o| {
             let g = o.good;
             let (w, lam, th) = (weight[g], TIME_COST[g], theta[g]);
+            let (access, crossing) = (&l.access[l.set[g]], &l.crossing[l.set[g]]);
             let k = |q: &Option<Quantities>| q.map_or(0.0, |q| tau(&q, w, lam, p).powf(-th));
             let (po, pd) = (&l.provinces_of[o.origin], &l.provinces_of[o.importer]);
             let (go, gd) = (&l.gateways_of[o.origin], &l.gateways_of[o.importer]);
@@ -690,22 +725,18 @@ fn cells(
                             } else {
                                 l.weight_in[s]
                             };
-                            wo * k(&l.access[s][a])
+                            wo * k(&access[s][a])
                         })
                         .sum()
                 })
                 .collect();
             let u = (0..gd.len())
-                .map(|b| {
-                    pd.iter()
-                        .map(|&s| l.weight_in[s] * k(&l.access[s][b]))
-                        .sum()
-                })
+                .map(|b| pd.iter().map(|&s| l.weight_in[s] * k(&access[s][b])).sum())
                 .collect();
             let mut crossings = Vec::new();
             for (a, &ga) in go.iter().enumerate() {
                 for (b, &gb) in gd.iter().enumerate() {
-                    if let Some(q) = l.crossing[ga][gb] {
+                    if let Some(q) = crossing[ga][gb] {
                         let slope = w * road * q[AIR as usize];
                         crossings.push(Crossing {
                             a,
@@ -718,6 +749,7 @@ fn cells(
             }
             Some(Cell {
                 cluster: o.importer * l.provinces_of.len() + o.origin,
+                good: g,
                 share: o.air / o.total,
                 weight: o.total,
                 theta: th,
@@ -737,6 +769,8 @@ pub struct Step {
     /// Import-value weighted air share, model at the fitted ratio and data, over fitted cells.
     pub model_share: f64,
     pub data_share: f64,
+    /// The same by traded good: (fitted cells, model share, data share).
+    pub by_good: [(usize, f64, f64); N_TRADED],
 }
 
 pub const OUTER_TOL: f64 = 1e-9;
@@ -744,7 +778,9 @@ pub const OUTER_MAX: usize = 20;
 
 /// Fits r on legs solved at r, then solves the legs again at the fitted r, until r moves by
 /// less than [`OUTER_TOL`] in logs (the paths repeat). Air km on access legs are held at their
-/// path's value within a step.
+/// path's value within a step. The legs are the per-good least-iceberg paths (ADR 0279) at
+/// `TradeParams::default()`'s time costs and bulk rate. A fit that stops names, per good, the
+/// cells with both an air and another crossing.
 pub fn estimate(
     pack: &Path,
     obs: &[Obs],
@@ -757,16 +793,31 @@ pub fn estimate(
     for _ in 0..OUTER_MAX {
         let mut p = base.clone();
         p.per_tkm[AIR as usize] = r * p.per_tkm[0];
-        let cs = cells(&legs(pack, &p)?, &p, theta, &weight, obs);
-        let fit = fit(&cs, r)?;
-        let used: Vec<&Cell> = cs.iter().filter(|c| c.informative()).collect();
-        let total: f64 = used.iter().map(|c| c.weight).sum();
-        let model_share = used
-            .iter()
-            .map(|c| c.weight * c.model_share(fit.ratio).0)
-            .sum::<f64>()
-            / total;
-        let data_share = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
+        let trade = TradeParams::default();
+        let cs = cells(&legs(pack, &p, &weight, &trade)?, &p, theta, &weight, obs);
+        let fit = fit(&cs, r).map_err(|e| {
+            let mut n = [0usize; N_TRADED];
+            for c in &cs {
+                n[c.good] += usize::from(c.informative());
+            }
+            format!("{e} (at r {r}; cells with an air and another crossing by good {n:?})")
+        })?;
+        let shares = |good: Option<usize>| {
+            let used: Vec<&Cell> = cs
+                .iter()
+                .filter(|c| c.informative() && good.is_none_or(|g| c.good == g))
+                .collect();
+            let total: f64 = used.iter().map(|c| c.weight).sum();
+            let model = used
+                .iter()
+                .map(|c| c.weight * c.model_share(fit.ratio).0)
+                .sum::<f64>()
+                / total;
+            let data = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
+            (used.len(), model, data)
+        };
+        let (_, model_share, data_share) = shares(None);
+        let by_good = std::array::from_fn(|g| shares(Some(g)));
         let done = (fit.ratio.ln() - r.ln()).abs() < OUTER_TOL;
         r = fit.ratio;
         steps.push(Step {
@@ -774,6 +825,7 @@ pub fn estimate(
             fit,
             model_share,
             data_share,
+            by_good,
         });
         if done {
             return Ok(steps);
@@ -857,6 +909,7 @@ mod tests {
         let air_beta = 1.0 + w * 120.0 + 0.002 * (km / 500.0 + 24.0) / 24.0;
         Cell {
             cluster,
+            good: 0,
             share: 0.0,
             weight: 1.0 + km / 1e4,
             theta,

@@ -117,7 +117,10 @@ slots.
 
 P04d is fitted to the air share of import value by importer D, origin country O and traded
 good g. The model's share is the part of the trade kernel's gateway-pair sum (trade SPEC,
-Two-level kernel) that crosses by air:
+Two-level kernel) that crosses by air, on the per-good least-iceberg trees of ADR 0279 whatever
+the default `path_choice` (under freight trees no crossing flies): one tree set per distinct
+(bulk rate, kappa_g) at `TradeParams::default()`, a bulk class's trees on its bulk-rate edge
+quantities:
 
 ```
 v_a = sum_{o in O} w_o K_oa,   u_b = sum_{d in D} w_d K_bd       (access legs; road, so no r)
