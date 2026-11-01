@@ -33,6 +33,14 @@ pub const REGIONS: [(&str, &str); 5] = [
     ("MSR", "Latin America & Caribbean"),
 ];
 
+/// PWT GDP per person (PPP) is set aside where its ratio to WDI's (market rates) is below the
+/// US ratio over this. PWT above WDI is the Balassa-Samuelson norm, so only this side is an
+/// error: it would need a price level above `PWT_BELOW_WDI` times the US's, where the highest in
+/// 2000 is Japan's, 1.4 (ADR 0098).
+pub const PWT_BELOW_WDI: f64 = 3.0;
+/// The price level base economy.
+const BASE: &str = "USA";
+
 /// Where a country's VA level and split come from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Basis {
@@ -72,6 +80,9 @@ pub enum IncomeSource {
     Adb,
     /// Maddison Project GDP per person, 2011 international dollars.
     Maddison,
+    /// WDI GDP per person in place of a PWT value that falls below it by more than
+    /// `PWT_BELOW_WDI` times the US ratio of the two.
+    WdiNotPwt,
     /// Region median donor, donor's level unscaled.
     None,
 }
@@ -83,6 +94,7 @@ impl IncomeSource {
             IncomeSource::Wdi => "wdi",
             IncomeSource::Adb => "adb",
             IncomeSource::Maddison => "maddison",
+            IncomeSource::WdiNotPwt => "wdi_not_pwt",
             IncomeSource::None => "none",
         }
     }
@@ -389,9 +401,10 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// `Economy` for each pack country (`(code, sovereign code)`); ICIO economies keep their own.
 ///
 /// Another country copies the input coefficients and final demand shares of the ICIO economy in
-/// its World Bank region with the closest log income, in PWT GDP per person when it has one, else
-/// WDI GDP per person (ADB where WDI has none), else Maddison Project GDP per person, compared
-/// with the donors' in the same source; with no income at all, the region's median. Only ICIO
+/// its World Bank region with the closest log income, in PWT GDP per person when it has one (and
+/// it is not `PWT_BELOW_WDI` below WDI's), else WDI GDP per person (ADB where WDI has none), else
+/// Maddison Project GDP per person, compared with the donors' in the same source; with no income
+/// at all, the region's median. Only ICIO
 /// economies with WDI GDP and population can donate.
 ///
 /// VA by good: WDI GDP times the sector shares, each group split over its goods by the donor's
@@ -456,7 +469,17 @@ pub fn impute(
             found(&wdi.income),
             found(&wdi.maddison),
         );
-        let (ranking, level, source) = if !pwt.is_empty() {
+        let us_ratio = obs
+            .gdp_per_capita
+            .get(BASE)
+            .zip(wdi.income.get(BASE))
+            .map(|(p, w)| p / w);
+        let pwt_far_below = !pwt.is_empty()
+            && !income.is_empty()
+            && us_ratio.is_some_and(|r| mean(&pwt) / mean(&income) < r / PWT_BELOW_WDI);
+        let (ranking, level, source) = if pwt_far_below {
+            (&by_wdi, Some(mean(&income)), IncomeSource::WdiNotPwt)
+        } else if !pwt.is_empty() {
             (obs, Some(mean(&pwt)), IncomeSource::Pwt)
         } else if !income.is_empty() {
             let adb = ps

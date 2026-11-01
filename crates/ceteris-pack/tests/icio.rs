@@ -632,6 +632,34 @@ fn without_pwt_income_donors_are_ranked_and_scaled_by_wdi_gdp_per_person() {
     ));
 }
 
+/// XXX with PWT and WDI incomes; the US at a PWT over WDI ratio of 1.
+fn pwt_against_wdi(pwt: f64, income: f64) -> (Observed, Wdi) {
+    let o = obs_with(
+        Some(with(&PWT, &[("XXX", pwt), ("USA", 30000.0)])),
+        &[],
+        &[],
+    );
+    let mut w = wdi_income("wdi");
+    w.income.extend(map(&[("XXX", income), ("USA", 30000.0)]));
+    (o, w)
+}
+
+#[test]
+fn pwt_far_below_wdi_ranks_by_wdi_income() {
+    // PWT 3000 against WDI 40000 is 0.075 of the US ratio, below a third: WDI ranks, and picks
+    // BBB (50000) where PWT would pick AAA (1000).
+    let (o, w) = pwt_against_wdi(3000.0, 40000.0);
+    let got = one("XXX", &w, &o);
+    assert_eq!(got.income_source, IncomeSource::WdiNotPwt);
+    assert_eq!(got.donor.as_deref(), Some("BBB"));
+    assert_eq!(IncomeSource::WdiNotPwt.as_str(), "wdi_not_pwt");
+    // 3000 against 8000 is 0.375 of it: PWT stays.
+    let (o, w) = pwt_against_wdi(3000.0, 8000.0);
+    let got = one("XXX", &w, &o);
+    assert_eq!(got.income_source, IncomeSource::Pwt);
+    assert_eq!(got.donor.as_deref(), Some("AAA"));
+}
+
 #[test]
 fn adb_income_is_flagged() {
     let got = one("XXX", &wdi_income("adb"), &no_pwt_for_xxx());
@@ -1014,6 +1042,13 @@ fn real_populated_territories_have_value_added() {
     assert_eq!(region("SAH"), "Middle East & North Africa");
     assert_eq!(region("CYN"), "Europe & Central Asia");
     assert_eq!(region("SOL"), "Sub-Saharan Africa");
+    assert_eq!(d.imputed["VEN"].income_source, IncomeSource::WdiNotPwt);
+    let set_aside = d
+        .imputed
+        .values()
+        .filter(|c| c.income_source == IncomeSource::WdiNotPwt)
+        .count();
+    assert_eq!(set_aside, 1);
     assert_eq!(region("AIA"), "Latin America & Caribbean");
     assert_eq!(region("MSR"), "Latin America & Caribbean");
 }
