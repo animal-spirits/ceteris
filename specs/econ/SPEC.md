@@ -204,7 +204,9 @@ and buyer prices refreshed at the posted prices. Otherwise it starts from the da
 the origin's own base output of the good (s_g Y0 at every active traded cell, Y0 = A VA0 / a_VA
 of the province's enterprise of that good, the base output that sizes the input stocks; local
 goods hold none, as before), nothing in flight and one month of base dividends minted to each
-pop.
+pop. The stock ignores storage loss: with competitive storage on, the steady state holds
+coverage times sales, Y / (1 + delta s) (Calibration, stage 5), so the data state starts above it
+by the factor 1 + delta s; with storage off (the default, delta 0) the two agree.
 
 Merchant stocks of the data state (amendment 2026-10-31, B8e; owner, 2026-10-31, relayed by the
 coordinator). The

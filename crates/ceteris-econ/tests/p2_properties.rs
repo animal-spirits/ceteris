@@ -567,7 +567,9 @@ fn expected_inflation_follows_the_world_index() {
 }
 
 /// Expected inflation far above c_max passes through the clip (ADR 0106): every active price
-/// and every rule-set wage moves by pi^e within its clip, which bounds only the gap terms.
+/// and every rule-set wage moves by pi^e within its clip, which bounds only the gap terms. A
+/// frictionless wage clears its labour market within the tick, with no rule and so no clip:
+/// it never counts one.
 #[test]
 fn world_counts_clip_bindings() {
     let pi = 10.0;
@@ -597,6 +599,14 @@ fn world_counts_clip_bindings() {
             "province {i}: {step}"
         );
     }
+    let mut w = world(EconParams::frictionless());
+    w.expected_inflation = pi;
+    let mut sim = sim_of(w);
+    sim.step().unwrap();
+    assert!(
+        sim.world().wage_clip_ticks.iter().all(|&n| n == 0),
+        "a Walrasian wage counted a clip"
+    );
     let mut sim = sim_of(world(EconParams::default()));
     sim.run_until(120).unwrap();
     let w = sim.world();
