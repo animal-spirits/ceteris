@@ -16,9 +16,9 @@ use ceteris_pack::econ::goods::{
 };
 use ceteris_pack::econ::theta::{
     CALIENDO_PARRO, CLASS_SPREAD, REPLICATION, REV3_OF_CPA, by_good, caliendo_parro_by_good,
-    caliendo_parro_with_value, class_bands, class_means, classes, harmonic_mean, sector_theta,
-    sector_values,
+    caliendo_parro_with_value, class_means, classes, harmonic_mean, sector_theta, sector_values,
 };
+use ceteris_pack::numeric::pairwise_sum;
 use ceteris_pack::read::baci::{baci_values, read_hs_cpa};
 use ceteris_pack::read::icio::N_GOODS;
 use ceteris_pack::sources;
@@ -365,6 +365,43 @@ fn classes_follow_the_rule() {
     assert_eq!(of, [0, 0, 1, 1, 2, 2, 2]);
     let err = classes(&[1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0], &[1.0; 7]).unwrap_err();
     assert!(err.contains("5 classes"), "{err}");
+}
+
+/// H2 prior band of each class (ADR 0023, Prior band and Amendment 2026-10-29), a check of the
+/// class thetas, not built into the pack: its theta is the harmonic mean H of the sector thetas
+/// (replication vector) weighted by the class's trade value per sector (the weights of
+/// `classes`), and its standard error that of H for independent sector estimates by the delta
+/// method, H^2 sqrt(sum_s w_s^2 se_s^2 / theta_s^4). The s.e. are the printed column's
+/// (Caliendo and Parro 2015, Table 1): for Auto and Other Transport, which the replication vector
+/// sets to 8.22 with no s.e. of its own, the printed estimate's s.e. goes with 8.22. `values` is
+/// `sector_values` of the traded goods, `of` their classes. Returns each class's theta and
+/// standard error; the band is theta +/- 2 se.
+fn class_bands(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
+    let thetas: [f64; 20] = std::array::from_fn(sector_theta);
+    let n = usize::from(of.iter().copied().max().unwrap_or(0)) + 1;
+    let mut classes = vec![[0.0; 20]; n];
+    for (row, &c) in values.iter().zip(of) {
+        for (s, x) in classes[usize::from(c)].iter_mut().zip(row) {
+            *s += x;
+        }
+    }
+    classes
+        .iter()
+        .map(|v| {
+            let total = pairwise_sum(v);
+            let h = harmonic_mean(&thetas, v);
+            let var = v
+                .iter()
+                .zip(&thetas)
+                .zip(&CALIENDO_PARRO)
+                .map(|((v, t), s)| {
+                    let d = v / total * s.se / (t * t);
+                    d * d
+                })
+                .fold(0.0, |acc, x| acc + x);
+            (h, h * h * var.sqrt())
+        })
+        .unzip()
 }
 
 #[test]
