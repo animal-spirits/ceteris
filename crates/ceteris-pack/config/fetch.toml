@@ -479,7 +479,7 @@ sha256 = "e073025a389d032f0e2fc23160a87f6aa97dd7fe59e6e7e40c309aed97ff43b6"
 bytes = 44196
 url = "https://overpass-api.de/api/interpreter?data=%5Bout%3Acsv%28%3A%3Atype%2C%3A%3Aid%2C%3A%3Alat%2C%3A%3Alon%2Cname%2Coperator%2C%22capacity%22%2Cstart_date%3Btrue%3B%22%2C%22%29%5D%5Btimeout%3A600%5D%5Bdate%3A%222026-10-01T00%3A00%3A00Z%22%5D%3Bnwr%5B%22industrial%22%3D%22refinery%22%5D%3Bout%20center%20qt%3B"
 
-# The SFI downloads sit behind a request form (steel) and Dryad (cement); METI rejects scripted requests.
+# The SFI downloads sit behind a request form (steel) and Dryad (cement, plant CSVs zipped); METI rejects scripted requests.
 [[file]]
 source = "sfi-geoasset"
 name = "SFI-Global-Steel-Database-July-2021.xlsx"
@@ -489,9 +489,11 @@ url = "https://sustainablefinance.ox.ac.uk/research/spatial-finance/geoasset-dat
 
 [[file]]
 source = "sfi-geoasset"
-name = "SFI-Global-Cement-Database-July-2021.xlsx"
+name = "doi_10_5061_dryad_6t1g1jx4f__v20231004.zip"
 optional = true
 manual = true
+sha256 = "6079ffd5d79004901dfb76e413dd68e07f139633048da8aa63aab1b58dc26e86"
+bytes = 3167054
 url = "https://datadryad.org/dataset/doi:10.5061/dryad.6t1g1jx4f"
 
 [[file]]
