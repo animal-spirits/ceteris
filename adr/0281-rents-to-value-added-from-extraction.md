@@ -38,10 +38,10 @@ economies (Russia's above all) on top of their crude, at extraction's output per
 
 ## Decision
 
-Option 1, pending the owner (recommended by the B9 review triage). The rents, the column and the
-VA factor then measure the same activity, extraction; refining in a rent economy stays where its
-donor's split and WDI manufacturing put it, as ADR 0270 says. Derived from data, no new
-parameter, no register entry (DESIGN 17).
+Option 1 (owner, 2026-11-01: option A of the B9 triage, extraction VA in both factors). The
+rents, the column and the VA factor then measure the same activity, extraction; refining in a
+rent economy stays where its donor's split and WDI manufacturing put it, as ADR 0270 says.
+Derived from data, no new parameter, no register entry (DESIGN 17).
 
 `icio::extraction_va` is a country's B06 and B09 output less their inputs, as `CountryIo::va` is
 for a good; `oil_gas_va_over_rents` and `oil_gas_most_of_industry` use it.
@@ -57,8 +57,8 @@ sum over good 1's VA above (refining VA is not negative), in place of 0.5 to 3.
 - `econ_countries` and `econ_provinces` (VA columns) move for the rent economies outside ICIO;
   `econ_io`, the other econ tables and the P1 tables do not. The calibration follows. The fixture
   is synthetic and does not move.
-- The installed pack stays as it is until the owner rules; the measurements below are on a
-  scratch copy.
+- The installed pack stayed as it was until the owner ruled; the B9 measurements below are on a
+  scratch copy, the B10 ones on the installed pack.
 
 ## As built (pre-P3 B9, 2026-10-31; scratch pack, not installed)
 
