@@ -90,3 +90,27 @@ sum over good 1's VA above (refining VA is not negative), in place of 0.5 to 3.
   pin-only recalibration of the installed pack the 120-tick test passes. Pitcairn's VA is not
   moved by this ADR: its slowest block mode is the same on both packs, and the 120-tick windows
   were shorter than its period. The test now runs 480 ticks (ADR 0089 As built).
+
+## As built (pre-P3 B10, 2026-11-01; installed)
+
+- **Build**: a full owner-side pack build of c382cbf (GEOS 3.15, 221 s), since `pack build
+  --econ-only` writes the tables but not `manifest.json`. Every P1 table is byte-identical to the
+  installed one; build stats as before (gateways 286/171/143, 4,368 provinces with VA, imputed
+  share 0.0754, DOSE match 0.8339). `econ_countries` 1ba6b89c... -> 0395240b..., `econ_provinces`
+  a55e0b9b... -> 65fca14a..., the other econ tables unchanged. The installed manifest had kept
+  `econ_io`'s pre-ADR 0270 digest (1eca104e...) since B8b; the rewritten one records the
+  installed table (57578cf4...). Manifest 3c7895d1... -> 474138df.... `web/map.pmtiles` differs
+  from the installed file (0b9053aa... against 8ce03d0d...; the manifest pins its GeoJSON, not the
+  tiles) and was installed with the build.
+- **Calibration** at dbda425: nu 2.60516, 0.80014, 0.39731, good 1 0.046059, good 2 0 (clamped);
+  18 evaluations; 70 passes, last change 8.39e-14, Sinkhorn residual 8.70e-14; 1,365 s, 5.9 GB.
+  The six tables equal B9's scratch calibration bit for bit (econ_calib 9d89cc86..., cells
+  4b165022..., countries 2ea64c59..., pipeline 8baed99b..., pops 077a9e5f..., provinces
+  54b36027...). Old files in ~/.Trash/ceteris-pack-2000-2026-11-01-b10; `p2-pack.txt`
+  re-blessed (52ace70); `p1-pack.txt` and `p1-geo.txt` equal main's.
+- **Gate** on the installed pack: V1 from the perturbed steady state passes for seeds 20, 21 and
+  22 (price 2.076e-4, 1.583e-4, 1.285e-4, province 2699 good 9; wage 2.182e-4, 1.665e-4,
+  1.352e-4); V1 from the data state still fails as expected (0.757, province 3903 good 9). H2
+  distance -0.4554 (s.e. 0.0104, pseudo-R2 0.966); H2 per class passes (theta within 2.1e-8
+  relative). `pack_calibrated_state_holds_to_2e_6_and_4_minor_units` (480 ticks) passes; stage 5
+  on the pack passes.

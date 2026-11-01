@@ -4,8 +4,9 @@
 
 ### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
-- Owner, 2026-11-01: ADR 0281 option A. A full pack build at dbda425 (owner-side, GEOS 3.15)
-  rewrites `manifest.json`; `pack build --econ-only` writes the tables but not the manifest.
+- Owner, 2026-11-01: ADR 0281 option A. A full pack build of c382cbf (owner-side, GEOS 3.15;
+  dbda425 changes only docs) rewrites `manifest.json`; `pack build --econ-only` writes the
+  tables but not the manifest.
   Every P1 table is byte-identical to the installed one (`p1-pack.txt` does not move).
   `econ_countries` and `econ_provinces` move (VA columns of the rent economies outside ICIO,
   ADR 0281); the other econ tables do not.
