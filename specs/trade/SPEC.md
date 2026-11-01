@@ -59,7 +59,7 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023), w_g weigh
 - Least-cost legs (S05; the P2 default, the fixture and the pack): for a leg with least-cost path cost c (USD per tonne)
   and transit time T (days, hours along the same path / 24),
   `tau_leg,g = 1 + c * w_g + lambda_g * T` (iceberg; geo SPEC mapping at p = 1).
-- Least-iceberg legs (ADR 0279, proposed; `TransportParams::path_choice = Iceberg`, off until
+- Least-iceberg legs (ADR 0279, accepted 2026-11-01; `TransportParams::path_choice = Iceberg`, off until
   its ablation test passes): per traded good, the leg's path minimises
   `sum_e (w_g c_e + lambda_g h_e / 24)`, so `tau_leg,g = 1 + that minimum`. Goods with equal
   `lambda_g / w_g` share trees. The freight-cost trees stay for the map mode.

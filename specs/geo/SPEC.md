@@ -67,7 +67,7 @@ Path cost (freight trees, S05 as built and the map mode): c_od = min over paths 
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
 
-Per-good trees (ADR 0279, proposed, off by default): for traded good g the edge weight is
+Per-good trees (ADR 0279, accepted 2026-11-01; not built, off by default): for traded good g the edge weight is
 `w_g c_e + lambda_g h_e / 24`, so a leg's least-weight path is its least iceberg factor; one
 tree set per distinct `lambda_g / w_g`. Ties and the scan order are as for freight trees.
 

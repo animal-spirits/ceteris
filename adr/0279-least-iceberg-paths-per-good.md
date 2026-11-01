@@ -1,6 +1,6 @@
 # 0279. Leg paths minimise the full iceberg cost per good
 
-Status: proposed (owner pick 2026-11-01, "Paths minimise full cost"; spec approval pending)
+Status: accepted (owner, 2026-11-01: "Paths minimise full cost"; spec approved, code after B8)
 Date: 2026-11-01
 Design sections: 5.3, 5.4 (generalized trade cost), 8.3 (two-level kernel), 17.2 (S05), 19.4;
 amends the least-cost legs of S05 as built (geo SPEC, Equations; trade SPEC, Leg factors);
