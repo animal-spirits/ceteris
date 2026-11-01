@@ -285,6 +285,8 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0265 | [The ACR criterion with input-output linkages](0265-acr-criterion-with-input-output-linkages.md) | proposed | ADR 0265 |
 | 0266 | [Labour capped at what inputs allow](0266-labour-capped-at-what-inputs-allow.md) | proposed | ADR 0266 |
 | 0267 | [Price gain capped per coupled block of commodity markets](0267-price-gain-capped-per-coupled-block.md) | proposed | ADR 0267 |
+| 0268 | [The ACR criterion graded per province](0268-acr-graded-per-province.md) | accepted | ADR 0268 |
+| 0269 | [P04 mode cost ratios borrowed from freight rates](0269-p04-mode-cost-ratios-borrowed.md) | accepted | ADR 0269 |
 | 0270 | [Extraction column for crude oil and gas set by rents](0270-extraction-column-for-rent-economies.md) | accepted | ADR 0270 |
 | 0271 | [Goods at the ICIO industry level](0271-full-icio-goods-list.md) | proposed | ADR 0271 |
 | 0272 | [Log-distance trade cost on the border crossing](0272-log-distance-crossing-friction.md) | accepted | ADR 0272 |

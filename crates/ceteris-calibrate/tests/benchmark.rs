@@ -249,6 +249,10 @@ fn welfare_and_acr_match_the_hand_computed_toy() {
             buyer_price: Rows::from_rows(N_GOODS, [q]),
             home_share: Rows::from_rows(N_GOODS, [home]),
             absorption: Rows::from_rows(N_GOODS, [absorption]),
+            province_country: vec![0],
+            province_income: vec![income * price[0]],
+            province_buyer_price: Rows::from_rows(N_GOODS, [q]),
+            province_home_share: Rows::from_rows(N_GOODS, [home]),
             max_dlnp_last: 0.0,
             ticks: 0,
         }
@@ -288,6 +292,16 @@ fn welfare_and_acr_match_the_hand_computed_toy() {
             &Rows::filled(1, N_GOODS * N_GOODS, 0.0),
         )[0];
         assert_eq!(io.to_bits(), a.to_bits(), "x{border}");
+        // one province: the province forms are the country forms
+        let io_p = benchmark::acr_io_province(
+            &base,
+            &shocked,
+            &theta,
+            &Rows::filled(1, N_GOODS * N_GOODS, 0.0),
+        )[0];
+        assert_eq!(io_p.to_bits(), io.to_bits(), "x{border}");
+        let w_p = benchmark::welfare_province(&base, &shocked)[0];
+        assert_eq!(w_p.to_bits(), w.to_bits(), "x{border}");
     }
     let f = benchmark::foreign_share(&base, &[GA]);
     assert!((f - (1.0 - base.home_share[0][GA])).abs() < 1e-15);
@@ -311,6 +325,10 @@ fn outcomes(omega: &[(usize, f64)], home: &[(usize, f64, f64)]) -> (Outcome, Out
             buyer_price: Rows::filled(1, N_GOODS, 1.0),
             home_share: Rows::from_rows(N_GOODS, [h]),
             absorption: Rows::filled(1, N_GOODS, 1.0),
+            province_country: vec![0],
+            province_income: vec![1.0],
+            province_buyer_price: Rows::filled(1, N_GOODS, 1.0),
+            province_home_share: Rows::from_rows(N_GOODS, [h]),
             max_dlnp_last: 0.0,
             ticks: 0,
         }
@@ -398,6 +416,170 @@ fn acr_is_nan_where_a_home_share_vanishes_in_one_run() {
     );
 }
 
+/// One country of provinces with base and shocked `(income, buyer price, home share)` each,
+/// every good at the same buyer price and home share; the country rows are the province sums
+/// for income and population-weighted means (equal populations) for the buyer price.
+fn provinces(omega: &[(usize, f64)], rows: &[[(f64, f64, f64); 2]]) -> (Outcome, Outcome) {
+    let mut o = [0.0; N_GOODS];
+    for &(g, w) in omega {
+        o[g] = w;
+    }
+    let at = |run: usize| {
+        let n = rows.len() as f64;
+        let income: Vec<f64> = rows.iter().map(|r| r[run].0).collect();
+        let q = Rows::from_rows(N_GOODS, rows.iter().map(|r| [r[run].1; N_GOODS]));
+        let home =
+            Rows::from_rows(
+                N_GOODS,
+                rows.iter().map(|r| {
+                    std::array::from_fn::<f64, N_GOODS, _>(|g| {
+                        if TRADED[g] { r[run].2 } else { f64::NAN }
+                    })
+                }),
+            );
+        let mean = rows.iter().map(|r| r[run].1).sum::<f64>() / n;
+        Outcome {
+            traded: N_TRADED,
+            income: vec![income.iter().sum()],
+            omega: Rows::from_rows(N_GOODS, [o]),
+            buyer_price: Rows::filled(1, N_GOODS, mean),
+            home_share: Rows::filled(1, N_GOODS, f64::NAN),
+            absorption: Rows::filled(1, N_GOODS, 1.0),
+            province_country: vec![0; rows.len()],
+            province_income: income,
+            province_buyer_price: q,
+            province_home_share: home,
+            max_dlnp_last: 0.0,
+            ticks: 0,
+        }
+    };
+    (at(0), at(1))
+}
+
+/// ADR 0268, point 1 and 2: each province's input-output ACR and real income change, on its
+/// own home share and buyer prices, weighted by base income share; a province with no base
+/// income adds nothing.
+#[test]
+fn province_forms_weight_provinces_by_base_income() {
+    const G: usize = 4;
+    const LOCAL: usize = 9;
+    let theta = [5.0; N_GOODS];
+    let mut a = [0.0; N_GOODS * N_GOODS];
+    a[G * N_GOODS + G] = 0.4;
+    let a = Rows::from_rows(N_GOODS * N_GOODS, [a]);
+    let omega = [(G, 0.6), (LOCAL, 0.4)];
+    let (base, shocked) = provinces(
+        &omega,
+        &[
+            [(3.0, 1.0, 0.8), (3.3, 1.02, 0.7)],
+            [(1.0, 1.0, 0.5), (0.9, 1.05, 0.45)],
+            [(0.0, 1.0, 0.9), (0.0, 1.0, 0.1)],
+        ],
+    );
+    let dw = |l0: f64, l1: f64| -0.6 / 0.6 / 5.0 * (l1 / l0).ln();
+    let want = 0.75 * dw(0.8, 0.7) + 0.25 * dw(0.5, 0.45);
+    let got = benchmark::acr_io_province(&base, &shocked, &theta, &a)[0];
+    assert!((got / want - 1.0).abs() < 1e-14, "{got} vs {want}");
+
+    let real = |i0: f64, i1: f64, q0: f64, q1: f64| (i1 / i0).ln() - (q1 / q0).ln();
+    let want = 0.75 * real(3.0, 3.3, 1.0, 1.02) + 0.25 * real(1.0, 0.9, 1.0, 1.05);
+    let got = benchmark::welfare_province(&base, &shocked)[0];
+    assert!((got / want - 1.0).abs() < 1e-14, "{got} vs {want}");
+
+    // a province with no absorption of G in either run adds nothing for G, its weight kept
+    let (base, shocked) = provinces(
+        &omega,
+        &[
+            [(3.0, 1.0, 0.8), (3.3, 1.02, 0.7)],
+            [(1.0, 1.0, f64::NAN), (0.9, 1.05, f64::NAN)],
+        ],
+    );
+    let want = 0.75 * dw(0.8, 0.7);
+    let got = benchmark::acr_io_province(&base, &shocked, &theta, &a)[0];
+    assert!((got / want - 1.0).abs() < 1e-14, "{got} vs {want}");
+
+    // a province that buys at home in one run only makes the country NaN
+    let (base, shocked) = provinces(
+        &omega,
+        &[
+            [(3.0, 1.0, 0.8), (3.3, 1.02, 0.7)],
+            [(1.0, 1.0, 0.5), (0.9, 1.05, 0.0)],
+        ],
+    );
+    assert!(benchmark::acr_io_province(&base, &shocked, &theta, &a)[0].is_nan());
+}
+
+/// Provinces reduce to their own country with that country's income: two countries, the
+/// second with one province between two of the first.
+#[test]
+fn province_forms_reduce_to_each_province_country() {
+    const G: usize = 4;
+    let theta = [5.0; N_GOODS];
+    let a = Rows::filled(2, N_GOODS * N_GOODS, 0.0);
+    let rows = [
+        [(3.0, 1.0, 0.8), (3.3, 1.02, 0.7)],
+        [(2.0, 1.0, 0.6), (2.2, 1.01, 0.5)],
+        [(1.0, 1.0, 0.5), (0.9, 1.05, 0.45)],
+    ];
+    let split = |o: Outcome| {
+        let y = &o.province_income;
+        let two = |r: &Rows<f64>| Rows::from_rows(N_GOODS, [0, 1].map(|_| r[0].to_vec()));
+        Outcome {
+            income: vec![y[0] + y[2], y[1]],
+            omega: two(&o.omega),
+            buyer_price: two(&o.buyer_price),
+            home_share: two(&o.home_share),
+            absorption: two(&o.absorption),
+            province_country: vec![0, 1, 0],
+            ..o
+        }
+    };
+    let (base, shocked) = provinces(&[(G, 1.0)], &rows);
+    let (base, shocked) = (split(base), split(shocked));
+    let dw = |l0: f64, l1: f64| -(l1 / l0).ln() / 5.0;
+    let got = benchmark::acr_io_province(&base, &shocked, &theta, &a);
+    let want = [0.75 * dw(0.8, 0.7) + 0.25 * dw(0.5, 0.45), dw(0.6, 0.5)];
+    for c in 0..2 {
+        assert!(
+            (got[c] / want[c] - 1.0).abs() < 1e-14,
+            "{c}: {got:?} vs {want:?}"
+        );
+    }
+    let real = |i0: f64, i1: f64, q1: f64| (i1 / i0).ln() - q1.ln();
+    let got = benchmark::welfare_province(&base, &shocked);
+    let want = [
+        0.75 * real(3.0, 3.3, 1.02) + 0.25 * real(1.0, 0.9, 1.05),
+        real(2.0, 2.2, 1.01),
+    ];
+    for c in 0..2 {
+        assert!(
+            (got[c] / want[c] - 1.0).abs() < 1e-14,
+            "{c}: {got:?} vs {want:?}"
+        );
+    }
+}
+
+/// ADR 0268, point 2: the income-weighted welfare less the population-weighted one is, to first
+/// order, -sum_g Omega_g sum_p (s_p - pi_p) d ln q_pg, the covariance of income per head with
+/// price changes inside the country; the remainder is second order in d ln q.
+#[test]
+fn income_weights_differ_from_population_weights_by_the_price_covariance() {
+    const G: usize = 4;
+    let omega = [(G, 1.0)];
+    let d: [f64; 2] = [1e-3, -2e-3];
+    let (base, shocked) = provinces(
+        &omega,
+        &[
+            [(3.0, 1.0, 0.8), (3.0 * 1.001, d[0].exp(), 0.8)],
+            [(1.0, 1.0, 0.5), (1.0 * 1.001, d[1].exp(), 0.5)],
+        ],
+    );
+    let gap =
+        benchmark::welfare_province(&base, &shocked)[0] - benchmark::welfare(&base, &shocked)[0];
+    let want = -((0.75 - 0.5) * d[0] + (0.25 - 0.5) * d[1]);
+    assert!((gap - want).abs() < d[1] * d[1], "{gap} vs {want}");
+}
+
 /// `benchmark::outcome` on the small world run frictionless: lambda in [0, 1] for the traded
 /// goods with absorption and NaN for the local ones; absorption the importer's sum of the flow
 /// window's pair values and home purchases; the foreign share the exporter-not-importer pair
@@ -453,6 +635,37 @@ fn outcome_aggregates_the_flow_window() {
     assert!(
         with_absorption > nc,
         "{with_absorption} cells with absorption"
+    );
+    // provinces: income adds up to the country's, lambda is home purchases over absorption
+    for c in 0..nc {
+        let sum: f64 = (0..np)
+            .filter(|&i| o.province_country[i] == c)
+            .map(|i| o.province_income[i])
+            .sum();
+        assert!((sum - o.income[c]).abs() <= 1e-12 * o.income[c], "{c}");
+    }
+    let mut with_home = 0;
+    for i in 0..np {
+        assert_eq!(o.province_country[i], inp.country_of(i));
+        for (g, &traded) in TRADED.iter().enumerate() {
+            let l = o.province_home_share[i][g];
+            let a = mean.absorption[i * N_GOODS + g];
+            if traded && a > 0.0 {
+                assert_eq!(l, mean.home_value[i * N_GOODS + g] / a, "{i} {g}");
+                assert!((0.0..=1.0).contains(&l), "province {i} good {g}: {l}");
+                with_home += usize::from(l < 1.0);
+            } else {
+                assert!(l.is_nan(), "province {i} good {g}: {l}");
+            }
+            assert_eq!(
+                o.province_buyer_price[i][g].to_bits(),
+                w.price_index[i * N_GOODS + g].to_bits()
+            );
+        }
+    }
+    assert!(
+        with_home > np,
+        "{with_home} province cells buying elsewhere"
     );
     let f = benchmark::foreign_share(&o, &traded);
     assert!(f > 0.0 && f < 1.0, "{f}");
@@ -539,7 +752,9 @@ fn eu_loses_from_soft_brexit() {
 
 /// ADR 0207's three criteria and the hard Brexit case on the pack, printed for the record (C7
 /// asserts them): openness per theta class against ICIO 2000, ACR under border costs x1.1 in
-/// both forms (ADR 0265 grades the input-output one), and convergence under x10.
+/// three forms (ADR 0268 grades the province one against the province-weighted welfare; the
+/// country forms of ADR 0265 and ACR 2012 against the country welfare) with each country's gap
+/// between the input-output country and province forms, and convergence under x10.
 #[test]
 #[ignore = "report only; about 4 minutes on the pack in release"]
 fn benchmark_cases_are_reported() {
@@ -579,17 +794,21 @@ fn benchmark_cases_are_reported() {
 
     let shocked = run(&pack, "border-1.1.shocks").unwrap();
     let w = benchmark::welfare(base, &shocked);
+    let w_province = benchmark::welfare_province(base, &shocked);
+    let io_country = benchmark::acr_io(base, &shocked, &theta, io);
+    let io_province = benchmark::acr_io_province(base, &shocked, &theta, io);
     eprintln!("ACR x1.1: max |dlnp| {:e}", shocked.max_dlnp_last);
-    for (name, a) in [
-        ("plain", benchmark::acr(base, &shocked, &theta)),
-        (
-            "input-output",
-            benchmark::acr_io(base, &shocked, &theta, io),
-        ),
+    for (name, w, a) in [
+        ("plain", &w, benchmark::acr(base, &shocked, &theta)),
+        ("input-output", &w, io_country.clone()),
+        ("province", &w_province, io_province.clone()),
     ] {
-        let nan = (0..w.len()).filter(|&c| icio[c] && a[c].is_nan()).count();
+        // a province with no buyer price for a good it demands makes its country's welfare NaN
+        let nan = (0..w.len())
+            .filter(|&c| icio[c] && (a[c].is_nan() || w[c].is_nan()))
+            .count();
         let pairs: Vec<(f64, f64)> = (0..w.len())
-            .filter(|&c| icio[c] && a[c].is_finite() && a[c].abs() > 1e-4)
+            .filter(|&c| icio[c] && w[c].is_finite() && a[c].is_finite() && a[c].abs() > 1e-4)
             .map(|c| (w[c], a[c]))
             .collect();
         let wrong = pairs.iter().filter(|(w, a)| w * a <= 0.0).count();
@@ -607,10 +826,10 @@ fn benchmark_cases_are_reported() {
             pairs.iter().map(|(_, a)| (a - ma).powi(2)).sum(),
         );
         let (median, corr) = (at(0.5), cov / (vw * va).sqrt());
-        if name == "input-output" {
-            // ADR 0265's criterion, asserted by C7 at B8 on a settled baseline, reported here
+        if name == "province" {
+            // ADR 0268's criterion, asserted by C7 at B8 on a settled baseline, reported here
             eprintln!(
-                "ACR x1.1 criterion (ADR 0265): signs {}, median in [0.8, 1.25] {}, \
+                "ACR x1.1 criterion (ADR 0268): signs {}, median in [0.8, 1.25] {}, \
                  correlation >= 0.9 {}",
                 wrong == 0,
                 (0.8..=1.25).contains(&median),
@@ -618,13 +837,25 @@ fn benchmark_cases_are_reported() {
             );
         }
         eprintln!(
-            "ACR x1.1 {name}: {} ICIO countries with |ACR| > 1e-4 ({nan} NaN), {wrong} of the \
+            "ACR x1.1 {name}: {} ICIO countries with |ACR| > 1e-4 ({nan} NaN in either), {wrong} of the \
              wrong sign, model/ACR median {:.3}, p10 {:.3}, p90 {:.3}, correlation {:.3}",
             pairs.len(),
             median,
             at(0.1),
             at(0.9),
             corr,
+        );
+    }
+    eprintln!("ACR x1.1 per country: welfare, province welfare, input-output, province, gap");
+    for c in (0..w.len()).filter(|&c| icio[c]) {
+        eprintln!(
+            "  {} {:+.3e} {:+.3e} {:+.3e} {:+.3e} {:+.3e}",
+            codes(&pack)[c],
+            w[c],
+            w_province[c],
+            io_country[c],
+            io_province[c],
+            io_country[c] - io_province[c]
         );
     }
 

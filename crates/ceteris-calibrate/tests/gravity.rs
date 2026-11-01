@@ -15,6 +15,7 @@ use ceteris_calibrate::gravity::{
     self, AIR, CLASSES, Graph, N_Q, Q_FEE, Q_HOURS, Quantities, RAIL, ROAD, SEA, Sample,
     THETA_DEFAULT, TIME_COST, Transport, YOTOV, YOTOV_PUBLISHED,
 };
+use ceteris_geo::graph::TransportParams;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -599,6 +600,20 @@ fn nonpositive_mode_ratio_fires_the_stop_rule() {
     }
 }
 
+/// `costs::Transport` mirrors the geo defaults field for field (P04, ADR 0269).
+#[test]
+fn transport_mirrors_the_geo_defaults() {
+    let (p, g) = (Transport::default(), TransportParams::default());
+    assert_eq!(
+        (p.per_tkm, p.circuity, p.speed_kmh, p.fee, p.fee_hours),
+        (g.per_tkm, g.circuity, g.speed_kmh, g.fee, g.fee_hours)
+    );
+    assert_eq!(
+        (p.canal_fee, p.terrain_slope, p.terrain_cap),
+        (g.canal_fee, g.terrain_slope, g.terrain_cap)
+    );
+}
+
 #[test]
 fn edge_prices_follow_the_geo_spec() {
     let p = Transport::default();
@@ -607,14 +622,14 @@ fn edge_prices_follow_the_geo_spec() {
     let tri = [200.0, 1000.0, 500.0, 500.0, 300.0, 0.0];
     let q = gravity::edge_quantities(&kinds, &length, &tri, &p);
     let cost: Vec<f64> = q.iter().map(|q| gravity::edge_cost(q, &p)).collect();
-    // road: 0.10 * 130 km * min(1 + 0.5 * 2, 3); rail: 0.04 * 130 * 3 (capped); sea 0.008 * 100;
-    // air 0.8 * 105
-    for (got, want) in cost[..4].iter().zip([26.0, 15.6, 0.8, 84.0]) {
+    // road: 0.10 * 130 km * min(1 + 0.5 * 2, 3); rail: 0.0164 * 130 * 3 (capped); sea
+    // 0.0121 * 100; air 0.537 * 105
+    for (got, want) in cost[..4].iter().zip([26.0, 6.396, 1.21, 56.385]) {
         approx(*got, want, 1e-6, "cost");
     }
     // Port access: road line, no terrain, plus the port fee; canal.
     approx(cost[4], 0.10 * 13.0 + 8.0, 1e-6, "port access");
-    approx(cost[5], 0.008 * 7.0 + 5.0, 1e-6, "canal");
+    approx(cost[5], 0.0121 * 7.0 + 5.0, 1e-6, "canal");
     let hours = [
         130.0 / 40.0,
         130.0 / 25.0,

@@ -272,8 +272,8 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0265 | [The ACR criterion with input-output linkages](../rfcs/0265-acr-criterion-with-input-output-linkages.md) | 15.2, 21 |
 | 0266 | [Labour capped at what inputs allow](../rfcs/0266-labour-capped-at-what-inputs-allow.md) | 7.3, 8.5, 8.7, 15.3, 17.1 |
 | 0267 | [Price gain capped per coupled block of commodity markets](../rfcs/0267-price-gain-capped-per-coupled-block.md) | 8.2 |
-| 0268 | Per-province ACR with income weights (held by open branch) | 15 |
-| 0269 | P04 mode ratios from 2000 shares (held by open branch) | 17 |
+| 0268 | [The ACR criterion graded per province](../rfcs/0268-acr-graded-per-province.md) | 15.2, 21 |
+| 0269 | [P04 mode cost ratios borrowed from freight rates](../rfcs/0269-p04-mode-cost-ratios-borrowed.md) | 5.3, 17.1, 21 |
 | 0270 | [Extraction column for crude oil and gas set by rents](../rfcs/0270-extraction-column-for-rent-economies.md) | 16.1, 22.2 |
 | 0271 | [Goods at the ICIO industry level](../rfcs/0271-full-icio-goods-list.md) | 7.1, 7.2, 8.3, 8.6, 16.1, 19.2 |
 | 0272 | [Log-distance trade cost on the border crossing](../rfcs/0272-log-distance-crossing-friction.md) | 5.4, 8.3, 17.1 |

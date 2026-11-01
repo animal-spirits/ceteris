@@ -11,8 +11,11 @@
 //! demand share, not the run's expenditure share.
 //!
 //! [`acr`] is the ACR prediction without input-output linkages, [`acr_io`] the one with them;
-//! the model has Leontief intermediates, so its welfare follows the second, which ADR 0207's
-//! criterion grades (ADR 0265).
+//! the model has Leontief intermediates, so its welfare follows the second. ADR 0207's
+//! criterion grades [`acr_io_province`] against [`welfare_province`] (ADR 0268): the
+//! input-output formula on each province's own home share, and the model's real income change
+//! per province, both reduced to countries with base-run income weights (Ramondo,
+//! Rodriguez-Clare and Saborio-Rodriguez 2016, Proposition 4).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -47,6 +50,15 @@ pub struct Outcome {
     pub home_share: Rows<f64>,
     /// Value bought by the country, at origin prices; 0 for local goods.
     pub absorption: Rows<f64>,
+    /// Country of each province.
+    pub province_country: Vec<usize>,
+    /// Pop income per province, numeraire.
+    pub province_income: Vec<f64>,
+    /// Buyer price per province; not finite where the province has none.
+    pub province_buyer_price: Rows<f64>,
+    /// lambda per province: what it buys from itself over what it buys from every origin, by
+    /// value at origin prices; NaN for local goods and where its absorption is 0.
+    pub province_home_share: Rows<f64>,
     /// Largest |ln(p_T / p_{T - LAST})| over the active markets (from tick 0 if the run is
     /// shorter).
     pub max_dlnp_last: f64,
@@ -111,9 +123,13 @@ pub fn outcome(w: &EconWorld, max_dlnp_last: f64, ticks: u32) -> Outcome {
     let (ng, nt) = (inp.goods.n(), inp.goods.traded);
     let country = |i: usize| inp.country_of(i);
 
-    let mut income = vec![0.0; nc];
+    let mut province_income = vec![0.0; np];
     for k in 0..inp.n_pops() {
-        income[country(inp.pops.province[k] as usize)] += w.income[k];
+        province_income[inp.pops.province[k] as usize] += w.income[k];
+    }
+    let mut income = vec![0.0; nc];
+    for (i, y) in province_income.iter().enumerate() {
+        income[country(i)] += y;
     }
     let (mut q, mut qw) = (Rows::filled(nc, ng, 0.0), Rows::filled(nc, ng, 0.0));
     for i in 0..np {
@@ -147,6 +163,18 @@ pub fn outcome(w: &EconWorld, max_dlnp_last: f64, ticks: u32) -> Outcome {
         }
     }
     let home_share = ratio(&home, &absorption);
+    let traded_only = |v: &[f64]| {
+        let flat = v
+            .iter()
+            .enumerate()
+            .map(|(k, &x)| if k % ng < nt { x } else { 0.0 })
+            .collect();
+        Rows::from_flat(flat, ng)
+    };
+    let province_home_share = ratio(
+        &traded_only(&mean.home_value),
+        &traded_only(&mean.absorption),
+    );
     Outcome {
         traded: nt,
         income,
@@ -154,6 +182,10 @@ pub fn outcome(w: &EconWorld, max_dlnp_last: f64, ticks: u32) -> Outcome {
         buyer_price,
         home_share,
         absorption,
+        province_country: (0..np).map(country).collect(),
+        province_income,
+        province_buyer_price: Rows::from_flat(w.price_index[..np * ng].to_vec(), ng),
+        province_home_share,
         max_dlnp_last,
         ticks,
     }
@@ -186,13 +218,54 @@ pub fn welfare(base: &Outcome, shocked: &Outcome) -> Vec<f64> {
         .collect()
 }
 
+/// Welfare change per country from `base` to `shocked` reduced from its provinces (ADR 0268):
+/// sum over provinces p of s_p (d ln I_p - sum over g with Omega_cg > 0 of Omega_cg d ln q_pg),
+/// s_p = I_p / I_c in `base`. A province with no base income adds nothing; one with no buyer
+/// price for a good with Omega_cg > 0 makes its country NaN.
+pub fn welfare_province(base: &Outcome, shocked: &Outcome) -> Vec<f64> {
+    by_province(base, |p, c| {
+        let prices: f64 = (0..base.omega.width())
+            .filter(|&g| base.omega[c][g] > 0.0)
+            .map(|g| {
+                base.omega[c][g]
+                    * (shocked.province_buyer_price[p][g] / base.province_buyer_price[p][g]).ln()
+            })
+            .sum();
+        (shocked.province_income[p] / base.province_income[p]).ln() - prices
+    })
+}
+
+/// sum over provinces p of country c of s_p f(p, c), s_p = I_p / I_c in `base`, per country;
+/// provinces with no base income are left out.
+fn by_province(base: &Outcome, f: impl Fn(usize, usize) -> f64) -> Vec<f64> {
+    let mut out = vec![0.0; base.income.len()];
+    for (p, (&c, &y)) in base
+        .province_country
+        .iter()
+        .zip(&base.province_income)
+        .enumerate()
+        .filter(|(_, (_, y))| **y > 0.0)
+    {
+        out[c] += y / base.income[c] * f(p, c);
+    }
+    out
+}
+
 /// The multi-sector ACR welfare change per country (Arkolakis, Costinot and Rodriguez-Clare
 /// 2012): -sum over traded g of Omega_cg / theta_g d ln lambda_cg, over the goods with
 /// Omega > 0. A good the country buys nothing of at home in both runs adds nothing; one it buys
 /// at home in one run only makes the country's value NaN.
 pub fn acr(base: &Outcome, shocked: &Outcome, theta: &[f64]) -> Vec<f64> {
     (0..base.income.len())
-        .map(|c| weighted_dln_home(base, shocked, c, &base.omega[c], theta))
+        .map(|c| {
+            weighted_dln_home(
+                base.traded,
+                &base.home_share[c],
+                &shocked.home_share[c],
+                &base.omega[c],
+                theta,
+            )
+        })
         .collect()
 }
 
@@ -208,23 +281,55 @@ pub fn acr_io(base: &Outcome, shocked: &Outcome, theta: &[f64], a: &Rows<f64>) -
     (0..base.income.len())
         .map(|c| {
             let weight = leontief_weights(&base.omega[c], &a[c]);
-            weighted_dln_home(base, shocked, c, &weight, theta)
+            weighted_dln_home(
+                base.traded,
+                &base.home_share[c],
+                &shocked.home_share[c],
+                &weight,
+                theta,
+            )
         })
         .collect()
 }
 
-/// -sum over traded g with weight > 0 of weight_g / theta_g d ln lambda_cg, as [`acr`].
-fn weighted_dln_home(
+/// [`acr_io`] graded per province (ADR 0268; Ramondo, Rodriguez-Clare and Saborio-Rodriguez
+/// 2016, eq. (18)): d ln W_p = -Omega_c' (I - A_c')^-1 diag(1/theta) d ln lambda_p on each
+/// province's own home share, with its country's Omega and A, reduced to countries as
+/// sum_p s_p d ln W_p, s_p = I_p / I_c in `base`. A province NaN makes its country NaN; a
+/// province with no base income adds nothing.
+pub fn acr_io_province(
     base: &Outcome,
     shocked: &Outcome,
-    c: usize,
+    theta: &[f64],
+    a: &Rows<f64>,
+) -> Vec<f64> {
+    let weight: Vec<Vec<f64>> = (0..base.income.len())
+        .map(|c| leontief_weights(&base.omega[c], &a[c]))
+        .collect();
+    by_province(base, |p, c| {
+        weighted_dln_home(
+            base.traded,
+            &base.province_home_share[p],
+            &shocked.province_home_share[p],
+            &weight[c],
+            theta,
+        )
+    })
+}
+
+/// -sum over traded g < `traded` with weight > 0 of weight_g / theta_g d ln lambda_g from
+/// `base` to `shocked` home shares, as [`acr`].
+fn weighted_dln_home(
+    traded: usize,
+    base: &[f64],
+    shocked: &[f64],
     weight: &[f64],
     theta: &[f64],
 ) -> f64 {
-    -(0..base.traded)
+    -(0..traded)
         .filter(|&g| weight[g] > 0.0)
         .map(|g| {
-            let (l0, l1) = (base.home_share[c][g], shocked.home_share[c][g]);
+            let (l0, l1) = (base[g], shocked[g]);
             let none = |l: f64| l.is_nan() || l <= 0.0;
             match (none(l0), none(l1)) {
                 (true, true) => 0.0,
