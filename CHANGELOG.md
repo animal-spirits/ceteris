@@ -35,6 +35,25 @@ Goldens re-blessed:
 - `tests/golden/p2-fixture/calibration/`: every table. `p2-pack.txt` (the installed tables),
   `p2-econ.txt`, `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
 
+### Least-iceberg leg paths per good (ADR 0279; off by default, no golden moves)
+
+- `TransportParams::path_choice`: `Freight` (S05 as built, the default) or `Iceberg`. Under
+  `Iceberg` every kernel leg of a traded good takes the path minimising w_g c + lambda_g h / 24
+  (`ceteris_geo::paths::shortest_by` at kappa_g = lambda_g / (24 w_g)), one leg set per
+  distinct (kappa, bulk rate) in `Network.good_legs`; `country_costs` follows the same choice.
+- Ablation on the 2000 pack, each setting calibrated on its own legs: V1 from the perturbed
+  steady state (seeds 20 to 22) passes on both (largest price gap at tick 1200: 1.94e-4,
+  1.54e-4, 1.24e-4 Freight; 1.92e-4, 1.52e-4, 1.23e-4 Iceberg); H2 theta by class recovers every
+  theta_c on both; the 100-year P2 gate passes on both with no violation; the H2 distance
+  elasticity (diagnostic) is -0.454 Freight, -0.449 Iceberg. Fitted nu 2.594, 0.800, 0.395,
+  0.066, 0 Freight; 2.610, 0.871, 0.407, 0.068, 0 Iceberg (75 passes, 25.7 min). At P04d's
+  current default good 6 flies on 5.1% of crossings (4.0% by gateway mass) against 0.33%
+  under Freight; goods 0 to 5 within 0.3%. The default stays `Freight` (ADR 0279: it flips
+  with ADR 0277's P04d).
+- `kernel_build` 119 ms (Freight) and 121 ms (Iceberg) against the 2 s budget;
+  `network_from_graph` on the pack 3.08 s (Freight) and 13.7 s (Iceberg; benches
+  `network_freight`, `network_iceberg`, `kernel_build_iceberg`).
+
 ### Storage order by partial adjustment (ADR 0280; storage off by default, no golden moves)
 
 - The competitive-storage order is b = max(delta S + lambda (S* - S), -(1 - delta) S), S* = s D
