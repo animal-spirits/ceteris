@@ -9,7 +9,9 @@ use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray, UInt8Array,
 
 use super::goods::TRADED;
 use super::people::donor;
+use super::ras;
 use crate::numeric::{median, pairwise_sum, py_sum};
+use crate::read::baci::Trade;
 use crate::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi};
 use crate::read::people::{Observed, parts};
 use crate::read::wdi::Names;
@@ -40,6 +42,10 @@ pub const REGIONS: [(&str, &str); 5] = [
 pub const PWT_BELOW_WDI: f64 = 3.0;
 /// The price level base economy.
 const BASE: &str = "USA";
+/// RAS tolerance (relative, on every row and column total) and pass cap of the donor tables
+/// (ADR 0098).
+pub const RAS_TOL: f64 = 1e-10;
+pub const RAS_PASSES: usize = 200;
 
 /// Where a country's VA level and split come from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,6 +106,26 @@ impl IncomeSource {
     }
 }
 
+/// Where a country's input coefficients and final demand shares come from (ADR 0286).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IoBasis {
+    Icio,
+    /// The donor's use table balanced by RAS to the economy's domestic use.
+    Ras,
+    /// The donor's, unbalanced: a domestic use is negative, there is no BACI trade, or no VA.
+    Donor,
+}
+
+impl IoBasis {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IoBasis::Icio => "icio",
+            IoBasis::Ras => "ras",
+            IoBasis::Donor => "donor",
+        }
+    }
+}
+
 /// One pack country's 2000 structure by good and where it comes from.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Economy {
@@ -110,6 +136,9 @@ pub struct Economy {
     /// World Bank region the donor was looked up in.
     pub region: Option<String>,
     pub income_source: IncomeSource,
+    pub io_basis: IoBasis,
+    /// RAS passes of a balanced table; zero otherwise.
+    pub ras_passes: usize,
     /// Share of this economy's own VA given to territories counted inside it.
     pub shed: f64,
 }
@@ -122,6 +151,8 @@ impl Economy {
             va_basis: Basis::Icio,
             region: None,
             income_source: IncomeSource::None,
+            io_basis: IoBasis::Icio,
+            ras_passes: 0,
             shed: 0.0,
         }
     }
@@ -375,6 +406,67 @@ fn value_added(donor: &CountryIo, l: &Level) -> ([f64; N_GOODS], Basis) {
     ([0.0; N_GOODS], Basis::None)
 }
 
+/// Million USD: imports and exports by good.
+fn trade_millions(t: &Trade) -> ([f64; N_GOODS], [f64; N_GOODS]) {
+    (t.imports.map(|v| v / 1e6), t.exports.map(|v| v / 1e6))
+}
+
+/// Domestic use of each good, X + M - E (local goods have no BACI trade).
+fn domestic_use(table: &CountryIo, t: &Trade) -> [f64; N_GOODS] {
+    let (m, e) = trade_millions(t);
+    std::array::from_fn(|k| table.output[k] + m[k] - e[k])
+}
+
+/// The use table [Z | F] of `table` at final demand `final_demand`: Z_kg = a_kg X_g, F_k = f_k F.
+fn use_table(table: &CountryIo, final_demand: f64) -> [[f64; N_GOODS + 1]; N_GOODS] {
+    std::array::from_fn(|k| {
+        std::array::from_fn(|g| {
+            if g < N_GOODS {
+                table.io[k][g] * table.output[g]
+            } else {
+                table.final_demand_shares[k] * final_demand
+            }
+        })
+    })
+}
+
+/// Final demand VA + M - E.
+fn final_demand(table: &CountryIo, t: &Trade) -> f64 {
+    let (m, e) = trade_millions(t);
+    pairwise_sum(&table.va) + pairwise_sum(&m) - pairwise_sum(&e)
+}
+
+/// `table` with its donor use table [Z | F] balanced by RAS to rows of domestic use X + M - E and
+/// columns of intermediate inputs X - VA and final demand VA + M - E (ADR 0286), and the passes
+/// it took; None where a domestic use is negative.
+fn balanced(table: &CountryIo, t: &Trade) -> Result<Option<(CountryIo, usize)>, String> {
+    let rows = domestic_use(table, t);
+    if rows.iter().any(|u| *u < 0.0) {
+        return Ok(None);
+    }
+    let fin = final_demand(table, t);
+    let cols: [f64; N_GOODS + 1] = std::array::from_fn(|g| {
+        if g < N_GOODS {
+            table.output[g] - table.va[g]
+        } else {
+            fin
+        }
+    });
+    let done = ras::balance(&use_table(table, fin), &rows, &cols, RAS_TOL, RAS_PASSES)?;
+    let mut out = table.clone();
+    for (k, row) in done.table.iter().enumerate() {
+        for (g, (z, x)) in row.iter().zip(table.output).enumerate() {
+            if x > 0.0 {
+                out.io[k][g] = z / x;
+            }
+        }
+    }
+    let f: Vec<f64> = done.table.iter().map(|r| r[N_GOODS]).collect();
+    let total = pairwise_sum(&f);
+    out.final_demand_shares = std::array::from_fn(|k| f[k] / total);
+    Ok(Some((out, done.passes)))
+}
+
 /// The settings `impute` takes as constants in the pack build.
 pub struct Rules<'a> {
     /// The source economies of a pack country (`PARTS`).
@@ -417,8 +509,12 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP,
 /// population (WDI, else UN WPP, else the WorldPop national total) times the donor's VA per
 /// person, scaled by own over donor income (donor).
-/// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
-/// population share of the parent's VA and output out of the parent's (parent).
+/// Output follows at the donor's output per unit of VA. Where `trade` (BACI 2000, USD, by pack
+/// code) has the country and its VA basis is wdi, wdi_gdp or donor, the donor's use table is
+/// balanced by RAS to the country's domestic use by good (`balanced`, ADR 0286), unless a
+/// domestic use is negative. A territory in `inside` takes its population share of the parent's
+/// VA and output out of the parent's (parent), with the parent's coefficients.
+#[allow(clippy::too_many_arguments)]
 pub fn impute(
     countries: &[(String, String)],
     icio: &BTreeMap<String, CountryIo>,
@@ -426,6 +522,7 @@ pub fn impute(
     obs: &Observed,
     iso: &Names,
     worldpop: &BTreeMap<String, f64>,
+    trade: &BTreeMap<String, Trade>,
     rules: &Rules,
 ) -> Result<BTreeMap<String, Economy>, String> {
     let parts_of = rules.parts;
@@ -550,22 +647,32 @@ pub fn impute(
             };
             va[g] * per_va
         });
+        let mut table = CountryIo {
+            output,
+            va,
+            io,
+            final_demand_shares: d.final_demand_shares,
+            coal_share: d.coal_share,
+            extraction: [0.0; N_GOODS],
+            extraction_output: 0.0,
+        };
+        let (mut io_basis, mut ras_passes) = (IoBasis::Donor, 0);
+        if basis != Basis::None
+            && let Some(t) = trade.get(code)
+            && let Some((b, passes)) = balanced(&table, t).map_err(|e| format!("{code}: {e}"))?
+        {
+            (table, io_basis, ras_passes) = (b, IoBasis::Ras, passes);
+        }
         out.insert(
             code.clone(),
             Economy {
-                table: CountryIo {
-                    output,
-                    va,
-                    io,
-                    final_demand_shares: d.final_demand_shares,
-                    coal_share: d.coal_share,
-                    extraction: [0.0; N_GOODS],
-                    extraction_output: 0.0,
-                },
+                table,
                 donor: Some(name),
                 va_basis: basis,
                 region,
                 income_source: source,
+                io_basis,
+                ras_passes,
                 shed: 0.0,
             },
         );
@@ -614,6 +721,7 @@ pub fn impute_pack(
     obs: &Observed,
     iso: &Names,
     worldpop: &BTreeMap<String, f64>,
+    trade: &BTreeMap<String, Trade>,
 ) -> Result<BTreeMap<String, Economy>, String> {
     let parts_of = |c: &str| parts(c, iso);
     let rules = Rules {
@@ -621,7 +729,7 @@ pub fn impute_pack(
         inside: &INSIDE,
         regions: &REGIONS,
     };
-    impute(countries, icio, wdi, obs, iso, worldpop, &rules)
+    impute(countries, icio, wdi, obs, iso, worldpop, trade, &rules)
 }
 
 fn floats(values: impl IntoIterator<Item = f64>) -> ArrayRef {
@@ -683,6 +791,10 @@ pub fn country_columns(
             texts(rows.iter().map(|r| r.income_source.as_str().to_owned())),
         ),
         (
+            "io_basis".into(),
+            texts(rows.iter().map(|r| r.io_basis.as_str().to_owned())),
+        ),
+        (
             "region".into(),
             texts(rows.iter().map(|r| r.region.clone().unwrap_or_default())),
         ),
@@ -717,6 +829,72 @@ pub fn country_columns(
         ));
     }
     Ok(out)
+}
+
+/// The donor table balance (ADR 0286): economies balanced, the largest pass count and the worst
+/// relative row and column residuals of [Z | F] against their targets; economies that keep the
+/// donor's table, with a negative domestic use or without trade; and the imputed economies' VA
+/// against ICIO's ROW block, in total and the range over goods.
+pub fn balance_report(
+    world: &BTreeMap<String, Economy>,
+    trade: &BTreeMap<String, Trade>,
+    row: Option<&CountryIo>,
+) -> String {
+    let (mut ras_n, mut negative, mut no_trade, mut passes) = (0, 0, 0, 0);
+    let (mut worst_row, mut worst_col) = (0.0f64, 0.0f64);
+    for (code, e) in world {
+        if e.donor.is_none() || matches!(e.va_basis, Basis::Parent | Basis::None) {
+            continue;
+        }
+        let Some(t) = trade.get(code) else {
+            no_trade += 1;
+            continue;
+        };
+        if e.io_basis != IoBasis::Ras {
+            negative += 1;
+            continue;
+        }
+        ras_n += 1;
+        passes = passes.max(e.ras_passes);
+        // A parent balanced before its territories took their share: its targets are those of
+        // the whole.
+        let whole = e.scaled(1.0 / (1.0 - e.shed)).table;
+        let z = use_table(&whole, final_demand(&whole, t));
+        let rows: Vec<f64> = z.iter().map(|r| r.iter().sum()).collect();
+        let cols: Vec<f64> = (0..=N_GOODS)
+            .map(|g| z.iter().map(|r| r[g]).sum())
+            .collect();
+        let mut want_cols: Vec<f64> = (0..N_GOODS)
+            .map(|g| whole.output[g] - whole.va[g])
+            .collect();
+        want_cols.push(final_demand(&whole, t));
+        worst_row = worst_row.max(ras::worst(&rows, &domestic_use(&whole, t)));
+        worst_col = worst_col.max(ras::worst(&cols, &want_cols));
+    }
+    let mut out = format!(
+        "donor tables: ras {ras_n} (passes at most {passes}, worst residual rows {worst_row:.1e}, \
+         columns {worst_col:.1e}), donor's kept: negative domestic use {negative}, no BACI trade \
+         {no_trade}"
+    );
+    if let Some(r) = row {
+        let mut va = [0.0; N_GOODS];
+        for e in world.values().filter(|e| e.donor.is_some()) {
+            for (a, b) in va.iter_mut().zip(e.table.va) {
+                *a += b;
+            }
+        }
+        let ratios: Vec<f64> = (0..N_GOODS).map(|g| va[g] / r.va[g]).collect();
+        let (lo, hi) = ratios
+            .iter()
+            .fold((f64::INFINITY, 0.0f64), |(a, b), x| (a.min(*x), b.max(*x)));
+        out.push_str(&format!(
+            "; imputed VA {:.0} against ICIO ROW {:.0} million USD ({:.4}), by good {lo:.3} to {hi:.3}",
+            pairwise_sum(&va),
+            pairwise_sum(&r.va),
+            pairwise_sum(&va) / pairwise_sum(&r.va)
+        ));
+    }
+    out
 }
 
 /// `econ_io.arrow`: a_kg for every country, input k and good g, country-major, g innermost.

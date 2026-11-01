@@ -21,7 +21,7 @@ use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
-use crate::read::baci::trade_by_country;
+use crate::read::baci::{read_hs_cpa, trade_by_country, trade_by_good};
 use crate::read::icio::{aggregate, home_use, load_wdi};
 use crate::read::natural_earth::read_codes;
 use crate::read::people::{load_observed, parts};
@@ -334,14 +334,10 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     let population = people::scale_to_national(&raw, &country, &totals);
 
     let wdi = load_wdi(cache)?;
-    let world = icio::impute_pack(
-        &countries,
-        &aggregate(&cache.join(icio::ICIO), YEAR)?,
-        &wdi,
-        &obs,
-        &iso,
-        &worldpop,
-    )?;
+    let hs = read_hs_cpa(&cache.join(HS_KEY))?;
+    let by_good = trade_by_good(&cache.join(BACI), &goods::hs_goods(&hs), &iso, &codes)?;
+    let real = aggregate(&cache.join(icio::ICIO), YEAR)?;
+    let world = icio::impute_pack(&countries, &real, &wdi, &obs, &iso, &worldpop, &by_good)?;
 
     let pwt_levels = price_level::relative(&obs.price_level_pwt, "PWT")?;
     let screen = price_level::Screen::fit(&pwt_levels, &wdi.income)?;
@@ -451,6 +447,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         tables,
         stats: BuildStats::new(&gw, &rates, &matched, &placed),
         summary: vec![
+            icio::balance_report(&world, &by_good, real.get("ROW")),
             downscale::report(&placed, &matched),
             tariffs::report(&rates, &codes, &trade),
             gateways::report(&gw, &codes),
