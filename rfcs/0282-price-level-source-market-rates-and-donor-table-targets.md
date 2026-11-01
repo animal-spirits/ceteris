@@ -14,7 +14,8 @@ its RAS row targets need final demand, which the ADR does not give. This RFC fix
 p_c and the screen on it (D1), drops the rescale (D2), sets the RAS row targets (D3) and asks
 what the targets do where they come out negative (D6), plus two follow-ups of the p_c build:
 which goods weight the run's world price index (D4) and which WDI series ADR 0098's real GDP
-check reads (D5). All six are ruled; D6 supersedes D3. The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
+check reads (D5), and, from that check, which PWT price level D1 reads (D7). All seven are ruled;
+D6 supersedes D3, and D7 amends D1's series. The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
 the same pipeline stage: like the pack's other screens (WDI tariff rates at or above 100% count as
 missing, `MAX_RATE`) it is not a parameter of Section 17, which registers what data does not pin,
 so it takes no code.
@@ -212,14 +213,72 @@ utilities into chemicals 0.093 to 0.506, Guam and the Northern Marianas mining i
 0.107. ROW check: the imputed economies' VA is 1,014,073 million USD against ICIO ROW's 1,019,231
 (0.9949), by good 0.674 (machinery) to 1.330 (coal and other mining).
 
+### D7. Which PWT price level does D1 read?
+
+Raised by the D5 measurement: 32 of 79 within 5%, the oil exporters worst, read then as pl_gdpo
+carrying export prices.
+
+Options as first put: A pl_gdpe, the expenditure-side GDP price level; B pl_con; C pl_gdpo, as
+built; D the price level of non-traded construction; E WDI PA.NUS.PPPC.RF first; F a
+Balassa-Samuelson fit; G widen the check.
+
+First decision: A, Antonio, 2026-11-01 (20:34Z). Void: PWT 11 has no pl_gdpe. Its price levels
+are pl_con, pl_da, pl_gdpo, pl_c, pl_i, pl_g, pl_x, pl_m, pl_n and pl_k.
+
+Found before the second ask (C1e, offline, the D1 screen and the D5 check rerun on each series):
+the pack's `gdp` of the 79 ICIO economies equals WDI NY.GDP.MKTP.CD 2000 (to 1e-9 for all 79), so
+the D5 ratio is the PP.CD-implied price level (WDI GDP per person over PP.CD) over p_c. Its misses
+are differences between PWT's and WDI's PPPs, not export prices: the premise of the first ask was
+wrong. WDI's own PA.NUS.PPPC.RF over the US's is within 5% of the PP.CD-implied level for only 52
+of the 79. Within 5% by series: pl_da 34, GDP over cgdpe (derived) 34, pl_gdpo 32, pl_con 29.
+
+Options as re-asked:
+
+- A. PWT 11 pl_da, the price level of domestic absorption (C + I + G), over the US's in 2000, in
+  place of pl_gdpo; ADR 0098's 5% check reported, not enforced.
+- B. Keep pl_gdpo (D7 moot).
+- C. GDP at market rates over PWT cgdpe, a derived expenditure-side level.
+- D. The PP.CD-implied level first: circular, since it is what the check compares against.
+
+Recommendation: A, because domestic absorption is the expenditure side without net exports, the
+closest PWT series to what households, firms and the state pay for local goods, and it does as well
+as any series on the check.
+
+Decision: A, Antonio, 2026-11-01 (20:45Z).
+Row: ADR 0287
+
+Why the 5% is not enforced: with the pack's GDP equal to WDI's, the check measures PWT's price
+level against the one implied by WDI's PPP GDP, two ICP vintages of the same quantity. ADR 0098
+gives no derivation of a tolerance between them, and WDI's own price level series misses its
+PP.CD-implied level by more than 5% for 27 of 79, so 5% is not a bound any source meets.
+
+As built (C1e, 2026-11-01). The PWT reader takes pl_da; nothing else changes. PWT gives 184
+levels (as before). Level fences 0.0250 to 8.84 times the US; the Penn effect over 180 economies
+is ln p = -2.6571 + 0.2453 ln y (R2 0.611), residual fences -1.198 to 1.188. Rejected on PWT:
+Somalia only (1.04, residual 1.233); Bermuda (1.80) and the Turks and Caicos (1.21) now pass.
+Rejected on WDI, among economies without PWT: Afghanistan, Andorra, Cuba, Greenland, New
+Caledonia, Nauru, French Polynesia, East Timor, the US Virgin Islands and now Kosovo (0.149).
+Coverage of the 242 pack countries: PWT 181, WDI 15, donor 46 (61 flagged); Bermuda moves from
+WDI to PWT, the Turks and Caicos from the donor to PWT, Kosovo from WDI to the donor. p_c runs from
+0.095 (Somalia, WDI) to 1.80 (Bermuda), GDP-weighted mean 0.911 (0.897 with pl_gdpo); 226 of 242
+move, median ratio to the pl_gdpo build 1.012. Largest moves: Kosovo 0.149 to 0.422 (donor),
+the Turks and Caicos 0.588 to 1.209, Bermuda 0.956 to 1.800, Lesotho 0.240 to 0.341, Congo 0.669
+to 0.929, Nigeria 0.807 to 1.059, Norway 0.904 to 1.128, Qatar 0.610 to 0.760, Lebanon 1.124 to
+0.917. Only `econ_countries.arrow` moves, and in it only `price_level`, `price_level_source` and
+`price_level_imputed`. The D5 check: 34 of 79 within 5% (50 within 10%), median 0.950, from 0.165
+(Nigeria) and 0.364 (Angola) to 1.26 (Belarus) and 1.88 (DR Congo); slope 0.0509, correlation
+0.260; pinned as measured.
+
 ## Spec changes
 
 - 12.2: the inflation expectations read is that of a world price index over all goods, local
   goods at p_c (ADR 0284).
-- 16: the PWT row in the source table names the GDP price level (ADR 0282).
+- 16: the PWT row in the source table names the price level, pl_da (ADRs 0282, 0287).
 - 16.1: price levels from PWT, WDI and the donor with the far-out screen (ADR 0282); values at
   2000 market rates (ADR 0283); donor tables balanced by RAS to domestic use (ADR 0286); ADR
-  0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285).
+  0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285); PWT pl_da, and the check
+  reported, not enforced (ADR 0287).
 - econ SPEC (module spec): `econ_countries.arrow` price level columns, Local base price, Open
   questions (ADRs 0282 and 0283); Economies outside ICIO, the RAS balance and the
-  `io_basis` column (ADR 0286); the real GDP check (ADR 0285).
+  `io_basis` column (ADR 0286); the real GDP check (ADR 0285);
+  PWT pl_da in Price levels and the check reported only (ADR 0287).
