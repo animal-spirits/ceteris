@@ -84,15 +84,19 @@ fn country_labour_prefers_data_then_fallback_source_then_donor() {
         &Names::new(),
     )
     .unwrap();
-    let (a, b) = (&out["AAA"], &out["BBB"]);
-    // WDI wins over SWIID.
+    let (a, b, c) = (&out["AAA"], &out["BBB"], &out["CCC"]);
+    // SWIID wins over WDI (ADR 0098).
     assert_eq!(
         (a.gini, a.gini_source, a.gini_imputed),
-        (0.3, GiniSource::Wdi, false)
+        (0.9, GiniSource::Swiid, false)
     );
     assert_eq!(
         (b.gini, b.gini_source, b.gini_imputed),
-        (0.35, GiniSource::Swiid, true)
+        (0.35, GiniSource::Swiid, false)
+    );
+    assert_eq!(
+        (c.gini, c.gini_source, c.gini_imputed),
+        (0.4, GiniSource::Wdi, true)
     );
     // Barro-Lee fills a WIC gap.
     assert!(!b.edu_imputed && close3(b.edu_shares, [0.5, 0.4, 0.1]));
@@ -114,6 +118,33 @@ fn country_labour_prefers_data_then_fallback_source_then_donor() {
             || a.labour_share_imputed
             || a.working_age_imputed)
     );
+}
+
+/// A country without a SWIID Gini takes WDI's, one without either the donor's, each with its
+/// source and flag.
+#[test]
+fn missing_source_falls_back_with_flag() {
+    let mut obs = observed();
+    obs.gini_swiid.remove("AAA");
+    let out = country_labour(&same(&["AAA", "EEE"]), &obs, &Names::new()).unwrap();
+    let (a, e) = (&out["AAA"], &out["EEE"]);
+    assert_eq!(
+        (a.gini, a.gini_source, a.gini_imputed),
+        (0.3, GiniSource::Wdi, true)
+    );
+    // EEE (R1, 1500) has neither: its donor is BBB (2000), whose SWIID value wins.
+    assert_eq!(
+        (e.gini, e.gini_source, e.gini_imputed),
+        (0.35, GiniSource::Donor, true)
+    );
+    assert!(out.values().all(|l| l.gini.is_finite()));
+    let cols = country_columns(&s(&["AAA", "EEE"]), &out).unwrap();
+    let sources: Vec<&str> = named(&cols, "gini_source")
+        .as_string::<i32>()
+        .iter()
+        .map(Option::unwrap)
+        .collect();
+    assert_eq!(sources, ["wdi", "donor"]);
 }
 
 #[test]
@@ -175,7 +206,7 @@ fn labour_columns_and_flags() {
     let obs = observed();
     let labour = country_labour(&same(&["AAA", "DDD"]), &obs, &Names::new()).unwrap();
     let cols = country_columns(&s(&["DDD", "AAA"]), &labour).unwrap();
-    assert_eq!(f64s(named(&cols, "gini")), [0.4, 0.3]);
+    assert_eq!(f64s(named(&cols, "gini")), [0.4, 0.9]);
     assert_eq!(bools(named(&cols, "gini_imputed")), [true, false]);
     assert_eq!(bools(named(&cols, "edu_imputed")), [true, false]);
     assert_eq!(f64s(named(&cols, "u_star")), [0.04, 0.08]);
@@ -563,9 +594,9 @@ fn gini_in_unit_interval_with_source_flag() {
     let Some(d) = data() else { return };
     for l in d.labour.values() {
         assert!(l.gini > 0.15 && l.gini < 0.8);
-        assert_eq!(l.gini_imputed, l.gini_source != GiniSource::Wdi);
+        assert_eq!(l.gini_imputed, l.gini_source != GiniSource::Swiid);
     }
-    // Most countries have a WDI Gini within 1995 to 2005 or a SWIID value.
+    // Most countries have a SWIID Gini within 1995 to 2005 or a WDI value.
     let data_backed = d
         .labour
         .values()
@@ -578,8 +609,8 @@ fn gini_in_unit_interval_with_source_flag() {
 fn data_shares_follow_the_gini_rule() {
     let Some(d) = data() else { return };
     let (usa, bra) = (&d.labour["USA"], &d.labour["BRA"]);
-    assert_eq!(usa.gini_source, GiniSource::Wdi);
-    assert!(approx(usa.gini, d.obs.gini_wdi["USA"], 1e-12));
+    assert_eq!(usa.gini_source, GiniSource::Swiid);
+    assert!(approx(usa.gini, d.obs.gini_swiid["USA"], 1e-12));
     assert!(0.35 < usa.gini && usa.gini < 0.45 && 0.5 < bra.gini && bra.gini < 0.65);
 }
 

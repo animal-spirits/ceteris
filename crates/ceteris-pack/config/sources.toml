@@ -1295,7 +1295,7 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
-notes = "P2 uses the disposable-income Gini (gini_disp) for 2000 where WDI SI.POV.GINI has no value within 1995 to 2005; such rows are flagged imputed. Replaces WIID in that role."
+notes = "P2 uses the disposable-income Gini (gini_disp) nearest 2000 within 1995 to 2005 as the primary Gini (ADR 0098); WDI SI.POV.GINI is the fallback, flagged imputed. Replaces WIID in the fallback role."
 
 [[source]]
 id = "wid"
