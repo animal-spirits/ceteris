@@ -63,9 +63,13 @@ access(j) = line(road) + h_j,  hours(road) + t_j   for rail terminal, listed por
 canal     = line(sea) + h_canal
 ```
 
-Path cost: c_od = min over paths of the sum of edge prices (Dijkstra; heap keys are the bit
+Path cost (freight trees, S05 as built and the map mode): c_od = min over paths of the sum of edge prices (Dijkstra; heap keys are the bit
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
+
+Per-good trees (ADR 0278, proposed, off by default): for traded good g the edge weight is
+`w_g c_e + lambda_g h_e / 24`, so a leg's least-weight path is its least iceberg factor; one
+tree set per distinct `lambda_g / w_g`. Ties and the scan order are as for freight trees.
 
 ### Route choice (ADR 0017; `route_choice.rs`): built but off
 
@@ -107,7 +111,8 @@ slots.
 
 P04d is fitted to the air share of import value by importer D, origin country O and traded
 good g. The model's share is the part of the trade kernel's gateway-pair sum (trade SPEC,
-Two-level kernel) that crosses by air:
+Two-level kernel) that crosses by air, on the per-good trees of ADR 0278 (under freight trees no
+crossing flies):
 
 ```
 v_a = sum_{o in O} w_o K_oa,   u_b = sum_{d in D} w_d K_bd       (access legs; road, so no r)
