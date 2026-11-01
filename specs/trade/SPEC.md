@@ -92,8 +92,10 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   kernel's bulk check is unchanged. The kernel prices a good on its set when `good_legs` is
   present, else as above; route taus and good legs together are rejected. The inputs digest
   appends the sets only when present. `ceteris_calibrate::costs::country_costs` follows
-  `Transport::path_choice` with the same per-good weights, so the gravity sample sees the
-  kernel's paths. The freight-cost trees stay for the map mode. Tests:
+  `Transport::path_choice` (default: `TransportParams::default().path_choice`) with the same
+  per-good weights, so the gravity sample sees the kernel's paths. The export's `legs` table
+  keeps the base and bulk legs only; the reference reads the kernel tables, which carry each
+  good's factors. A graph repriced at other parameters takes their `path_choice`. The freight-cost trees stay for the map mode. Tests:
   `iceberg_flies_light_goods_and_ships_heavy_ones`, `iceberg_at_zero_time_cost_is_freight` and
   `iceberg_tree_is_least_weight` (geo paths), `good_legs_price_each_good_on_its_set`,
   `good_legs_must_match_the_time_costs` and `good_legs_must_match_the_base_legs` (kernel),

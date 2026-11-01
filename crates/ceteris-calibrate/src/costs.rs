@@ -68,7 +68,8 @@ impl Default for Transport {
             canal_fee: 5.0,
             terrain_slope: 0.5,
             terrain_cap: 3.0,
-            path_choice: PathChoice::Freight,
+            // the kernel's choice, so gravity sees the kernel's paths
+            path_choice: ceteris_geo::graph::TransportParams::default().path_choice,
         }
     }
 }
