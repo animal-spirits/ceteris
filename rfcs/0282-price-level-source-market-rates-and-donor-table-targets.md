@@ -164,6 +164,17 @@ Recommendation: A, because it compares like with like without a deflator.
 Decision: A, Antonio, 2026-11-01.
 Row: ADR 0285
 
+As built (C1d, 2026-11-01): a test, not a build step (`econ_build.rs`
+`real_gdp_per_person_against_wdi_ppp`; the series is pinned in `validation.toml`, source
+`wdi-ppp`, CC BY 4.0 in the API metadata). Over the 79 ICIO economies with WDI population (Taiwan
+has none), the pack's GDP per person over p_c is within 5% of PP.CD for 32. The ratio has median
+0.954 and runs from 0.216 (Nigeria) and 0.342 (Angola) to 1.41 (Belarus) and 1.85 (DR Congo); the
+OLS slope of its log on ln income is 0.0487, the correlation 0.259, so the misses are not a
+Penn-effect tilt. The largest are oil exporters (Saudi Arabia 0.432, Brunei 0.576, Kazakhstan
+0.586, the Emirates 0.780): PWT's pl_gdpo is the output-side level, which carries export prices,
+while PP.CD is expenditure-side. ADR 0098's 5% therefore fails for 47 of 79; the test pins the
+measured values and does not gate on 5%, and the choice of what to do about it is open.
+
 ### D6. What do the RAS targets do where they are negative?
 
 Raised by the D3 measurement above.
@@ -185,6 +196,21 @@ and needs no new parameters; B can follow if the 47 flagged economies matter.
 
 Decision: A, Antonio, 2026-11-01.
 Row: ADR 0286
+
+As built (C1d, 2026-11-01). Domestic use is X_k + M_k - E_k: output, because ICIO's uses count
+every source economy, plus BACI imports less BACI exports; local goods have no BACI trade, so
+their use is their output. Of the 160 imputed economies, 87 are balanced (Somaliland takes
+Somalia's balanced table, so 88 rows carry `io_basis` `ras`), 48 keep the donor's table for a
+negative domestic use and 15 for no BACI trade (47 and 14 in C1c's count, which left out the
+WorldPop populations), 9 have no VA. A parent is balanced before its territories take their share.
+RAS takes 10 to 56 passes (median 19; Guam 56, the Northern Marianas 55); the worst row residual
+is 1.0e-10 (Wallis and Futuna), the worst column residual 4.9e-16. Only `econ_countries.arrow`
+(final demand shares and the new `io_basis` column) and `econ_io.arrow` move: 8,320 coefficients
+in 88 economies, mean change 0.019. The largest: Niue chemicals into food 0.054 to 0.493, Libya
+utilities into chemicals 0.093 to 0.506, Guam and the Northern Marianas mining into construction
+0.360 to 0.733; Iraq's final demand share of construction 0.085 to 0.471 and of services 0.459 to
+0.107. ROW check: the imputed economies' VA is 1,014,073 million USD against ICIO ROW's 1,019,231
+(0.9949), by good 0.674 (machinery) to 1.330 (coal and other mining).
 
 ## Spec changes
 
