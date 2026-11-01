@@ -975,6 +975,15 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   budget in both runs (5 to 7% over; the earlier runs on 2026-10-26 and 2026-10-27 gave 7.7 to
   7.8 ms); a whole tick 37.3 and 35.5 ms, which missed the 35 ms budget in both runs;
   `unit_source_dispatch_parallel` 6.55 and 6.56 ms.
+  Tick speed-up (2026-11-01, no output change: state hash and ledger journal identical over 24
+  full-pack ticks on Linux x86 and the M4 Pro). Measured on the M4 Pro in a quiet sim loop
+  before it: a tick 39 ms, of which T2b 17.9 (per-good dispatch tasks 10, then 7.3 serial:
+  ledger posting 4.8, goods moves 2.5) and E3 8 (the unit dispatch of the price refresh 7).
+  Changes: the E3 price refresh runs `arrivals`, the unit dispatch reduced to what the
+  delivered prices and lead times read (bit-identical to `dispatch`'s arrivals, tested);
+  T2b posts every good's entries in one `Ledger::post_all` after the goods moves, applies the
+  chunk sums in parallel over accounts and copies the journal in parallel; `trade_legs`
+  builds its domestic legs and crossing splits in parallel, in the serial order.
 
 ## Open questions
 

@@ -882,13 +882,14 @@ pub fn dispatch(w: &mut EconWorld) {
             }
         }
 
-        // the buyers' payments, then the legs
-        w.ledger.post(&legs.entries, &mut w.scratch.post);
         w.scratch.dispatch_made[g] = made;
         w.scratch.dispatch_due[g] = r.selected - r.lost;
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    // every good's buyers' payments, then its legs; nothing above reads money
+    let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
+    w.ledger.post_all(&blocks, &mut w.scratch.post);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();
@@ -916,42 +917,56 @@ fn trade_legs(
 ) {
     let (np, ng) = (kernel.n_provinces(), kernel.n_gateways());
     let gk = kernel.good(g);
-    let entries = &mut p.entries;
-    let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
-        if amount != 0 {
-            entries.push(Entry {
-                flow,
-                from,
-                to,
-                amount,
-            });
-        }
+    let entry = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
+        (amount != 0).then_some(Entry {
+            flow,
+            from,
+            to,
+            amount,
+        })
     };
-    for o in 0..np {
-        let lo = gk.domestic.offsets[o] as usize;
-        for (j, e) in gk.domestic.row(o).iter().enumerate() {
-            let value = to_minor(r.domestic_value[lo + j]);
-            leg(TRADE, acc.market[e.col as usize], acc.market[o], value);
-        }
-    }
+    // the two large parts, domestic legs and the crossing splits, are built in parallel;
+    // `par_extend` and `collect` keep the serial order
+    p.entries
+        .par_extend((0..np).into_par_iter().flat_map_iter(|o| {
+            let lo = gk.domestic.offsets[o] as usize;
+            gk.domestic
+                .row(o)
+                .iter()
+                .enumerate()
+                .filter_map(move |(j, e)| {
+                    let value = to_minor(r.domestic_value[lo + j]);
+                    entry(TRADE, acc.market[e.col as usize], acc.market[o], value)
+                })
+        }));
+    let entries = &mut p.entries;
     p.at_gateway.clear();
     p.at_gateway.resize(ng, 0);
     for d in 0..np {
         let lo = gk.access.offsets[d] as usize;
         for (j, e) in gk.access.row(d).iter().enumerate() {
             let (b, value) = (e.col as usize, to_minor(r.access_in_value[lo + j]));
-            leg(TRADE, acc.market[d], acc.gateway[b], value);
+            entries.extend(entry(TRADE, acc.market[d], acc.gateway[b], value));
             p.at_gateway[b] += value;
         }
     }
+    let at_gateway = &p.at_gateway;
+    let crossing_parts: Vec<Vec<i64>> = (0..ng)
+        .into_par_iter()
+        .map(|b| {
+            let legs = kernel.crossings_by_target().column(b);
+            let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
+            let mut parts = Vec::new();
+            split(at_gateway[b], weights, &mut parts);
+            parts
+        })
+        .collect();
     p.from_gateway.clear();
     p.from_gateway.resize(ng, 0);
-    for b in 0..ng {
+    for (b, parts) in crossing_parts.iter().enumerate() {
         let legs = kernel.crossings_by_target().column(b);
-        let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
-        split(p.at_gateway[b], weights, &mut p.parts);
-        for (&(a, _), &part) in legs.iter().zip(&p.parts) {
-            leg(TRADE, acc.gateway[b], acc.gateway[a as usize], part);
+        for (&(a, _), &part) in legs.iter().zip(parts) {
+            entries.extend(entry(TRADE, acc.gateway[b], acc.gateway[a as usize], part));
             p.from_gateway[a as usize] += part;
         }
     }
@@ -960,12 +975,12 @@ fn trade_legs(
         let weights = legs.iter().map(|&(_, j)| r.access_out_value[j as usize]);
         split(p.from_gateway[a], weights, &mut p.parts);
         for (&(o, _), &part) in legs.iter().zip(&p.parts) {
-            leg(TRADE, acc.gateway[a], acc.market[o as usize], part);
+            entries.extend(entry(TRADE, acc.gateway[a], acc.market[o as usize], part));
         }
     }
     for d in 0..np {
         let rebate = acc.rebate[inp.country_of(d)];
-        leg(TARIFF, acc.market[d], rebate, to_minor(r.tariff[d]));
+        entries.extend(entry(TARIFF, acc.market[d], rebate, to_minor(r.tariff[d])));
     }
 }
 

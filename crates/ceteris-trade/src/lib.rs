@@ -16,4 +16,4 @@ pub use market::{Markets, Rationing};
 pub use network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
 pub use params::{N_CLASSES, TradeParams};
 pub use pipeline::Pipeline;
-pub use source::{Sourced, dispatch, source};
+pub use source::{Sourced, arrivals, dispatch, source};
