@@ -2,7 +2,7 @@
 
 Status: proposed
 Date: 2026-11-01
-Design sections: 16, 16.1; econ SPEC (Pack additions, Economies outside ICIO, Local base price, Open questions)
+Design sections: 12.2, 16, 16.1; econ SPEC (Pack additions, Economies outside ICIO, Local base price, Open questions)
 Research: none separate; the measurements are the C1 and C1c pack builds quoted below.
 
 ## Summary
@@ -14,7 +14,7 @@ its RAS row targets need final demand, which the ADR does not give. This RFC fix
 p_c and the screen on it (D1), drops the rescale (D2), sets the RAS row targets (D3) and asks
 what the targets do where they come out negative (D6), plus two follow-ups of the p_c build:
 which goods weight the run's world price index (D4) and which WDI series ADR 0098's real GDP
-check reads (D5). The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
+check reads (D5). All six are ruled; D6 supersedes D3. The PWT income screen of C1 (`PWT_BELOW_WDI`, Venezuela) is a data screen of
 the same pipeline stage: like the pack's other screens (WDI tariff rates at or above 100% count as
 missing, `MAX_RATE`) it is not a parameter of Section 17, which registers what data does not pin,
 so it takes no code.
@@ -110,8 +110,9 @@ Options:
 
 Recommendation: A.
 
-Decision: A, Antonio, 2026-11-01.
-Row: held for D6 (the rule cannot be built as it stands).
+Decision: A, Antonio, 2026-11-01; superseded by D6 (A, Antonio, 2026-11-01), whose row
+targets replace these.
+Row: none (D6 is ADR 0286).
 
 As measured (C1c, 2026-11-01, 133 imputed economies with WDI GDP or a donor level and BACI
 trade): 122 have at least one negative row target, 321 rows in all (construction 70, food 66,
@@ -141,8 +142,11 @@ Recommendation: A, because expected inflation should follow the prices household
 which are local services; the calibration's normalization over traded goods is a choice of
 numeraire, not of the inflation measure.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-01.
+Row: ADR 0284
+
+As built: no code change. `EconWorld::world_price_index` already weights buyer prices by base
+consumption over all goods, local goods at p_c.
 
 ### D5. Which WDI series does ADR 0098's real GDP check read?
 
@@ -157,8 +161,8 @@ Options:
 
 Recommendation: A, because it compares like with like without a deflator.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-01.
+Row: ADR 0285
 
 ### D6. What do the RAS targets do where they are negative?
 
@@ -179,13 +183,17 @@ Options:
 Recommendation: A, because it is the standard use-table balance (Miller and Blair 2009, ch. 7)
 and needs no new parameters; B can follow if the 47 flagged economies matter.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-01.
+Row: ADR 0286
 
 ## Spec changes
 
+- 12.2: the inflation expectations read is that of a world price index over all goods, local
+  goods at p_c (ADR 0284).
 - 16: the PWT row in the source table names the GDP price level (ADR 0282).
 - 16.1: price levels from PWT, WDI and the donor with the far-out screen (ADR 0282); values at
-  2000 market rates (ADR 0283).
+  2000 market rates (ADR 0283); donor tables balanced by RAS to domestic use (ADR 0286); ADR
+  0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285).
 - econ SPEC (module spec): `econ_countries.arrow` price level columns, Local base price, Open
-  questions (ADRs 0282 and 0283; D3 to D6 open).
+  questions (ADRs 0282 and 0283); Economies outside ICIO, the RAS balance and the
+  `io_basis` column (ADR 0286); the real GDP check (ADR 0285).

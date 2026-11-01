@@ -1435,3 +1435,8 @@ sections = "14.3"
 rows = "0282, 0283"
 topic = "[Price level source and market rates, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
 sections = "16, 16.1"
+
+[[entry]]
+rows = "0284 to 0286"
+topic = "[World price index, real GDP check series and donor use-table balance, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
+sections = "12.2, 16.1"
