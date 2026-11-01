@@ -1150,7 +1150,8 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
   to -0.7 and fails the test only when not finite or not negative (ADR 0264; it blocked the gate
   until then). Nothing is fitted to it: costs come from P04 and the literature time cost P43.
   With iceberg leg costs each class's coefficient is about -0.09 theta_c, against about -0.8 in
-  the data; the log-distance leg cost that ADR 0022 says the data prefer is scheduled for P9.
+  the data; the log-distance cost that ADR 0022 says the data prefer is built in P4 as a
+  crossing friction beside nu, not in the legs (ADR 0272 on main, replacing ADR 0264 Decision 3).
 - H2 per theta class (ADRs 0018, 0092 and 0264): PPML of each class's simulated country-pair
   trade, valued at what the importer pays (`run_flows.value` times 1 + t), on ln(1 + tariff) and
   the ln of the model's country-pair kernel net of tariffs at the calibrated point
