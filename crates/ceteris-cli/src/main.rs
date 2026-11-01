@@ -39,12 +39,15 @@
 //! pass and the summary. Copying the tables into the pack installs them: `EconInputs::from_pack`
 //! loads them at their `calibration_format` and the static digest of the export they were
 //! solved from. Before the steady state it fits the border friction per friction group to ICIO's
-//! cross-border shares (ADRs 0092, 0276); `--no-border-fit` keeps the default instead, for comparisons.
-//! `--inputs DIR` calibrates an export directory at its own u*, its provinces serving as their
-//! own pack provinces, and needs `--out`.
+//! cross-border shares (ADRs 0092, 0276) and reports the shares at the steady state;
+//! `--no-border-fit` keeps the default instead, for comparisons, and reads no ICIO shares.
+//! `--inputs DIR` calibrates an export directory at its own u* and border friction, its
+//! provinces serving as their own pack provinces, and needs `--out` (not `--no-border-fit`).
 //!
 //! `calibrate stability` prints the stability table of the stock-flow price rule for the
-//! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`).
+//! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`); `--storage` prints the storage
+//! loop's table instead: per storable good the kappa1 limit of the storage loop and the psi
+//! limit, at the fixture's storage values or, where storage is off, the approved ones (ADR 0091).
 //!
 //! `gravity` estimates theta by class, the border friction and the mode cost ratios by PPML
 //! structural gravity on 2000 BACI and the pack's least-cost costs (`--pack`, default
@@ -576,6 +579,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let dir = export.insert(tmp).path().to_owned();
             (dir, Some(u_star), Some(pack_province), out, Some(pack))
         }
+        (None, Some(_)) if !fit_border => return Err("--no-border-fit needs --pack".into()),
         (None, Some(inputs)) => (inputs, None, None, out.ok_or("--inputs needs --out")?, None),
         _ => return Err("choose one input with --pack or --inputs".into()),
     };
@@ -587,37 +591,37 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     // A pack's border friction is fitted to ICIO's cross-border shares (ADR 0092) before the
     // steady state; the fixture keeps its own.
     let icio = match &pack {
+        Some(_) if !fit_border => {
+            println!(
+                "border friction: kept at {:?} (--no-border-fit)",
+                inp.border_nu
+            );
+            None
+        }
         Some(pack) => {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
             let groups = border::friction_groups(&inp.theta_class[..n_traded]);
             let (target, icio) = border::target_shares(pack, &groups)?;
             println!("border friction: ICIO cross-border share by group {groups:?}: {target:?}");
-            if fit_border {
-                let fit = match border::fit_border_nu(
-                    &inp,
-                    &groups,
-                    &target,
-                    &icio,
-                    Limits::default(),
-                    &mut progress,
-                ) {
-                    Ok(fit) => fit,
-                    Err(e) => {
-                        eprintln!("no calibration: {e}");
-                        return Ok(ExitCode::FAILURE);
-                    }
-                };
-                println!(
-                    "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
-                    fit.nu, fit.share, fit.clamped, fit.evaluations
-                );
-                inp = border::at_border_nu(&inp, &fit.nu_of_goods(&inp.border_nu))?;
-            } else {
-                println!(
-                    "border friction: kept at {:?} (--no-border-fit)",
-                    inp.border_nu
-                );
-            }
+            let fit = match border::fit_border_nu(
+                &inp,
+                &groups,
+                &target,
+                &icio,
+                Limits::default(),
+                &mut progress,
+            ) {
+                Ok(fit) => fit,
+                Err(e) => {
+                    eprintln!("no calibration: {e}");
+                    return Ok(ExitCode::FAILURE);
+                }
+            };
+            println!(
+                "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
+                fit.nu, fit.share, fit.clamped, fit.evaluations
+            );
+            inp = border::at_border_nu(&inp, &fit.nu_of_goods(&inp.border_nu))?;
             Some((icio, groups))
         }
         None => None,

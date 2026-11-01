@@ -65,6 +65,8 @@ fn calibrate_writes_and_reports_the_fixture_calibration() {
 #[test]
 fn calibrate_needs_one_input() {
     let fixture = fixture();
+    let tmp = tempfile::tempdir().unwrap();
+    let never = tmp.path().join("calibration");
     for (args, message) in [
         (
             vec!["calibrate"],
@@ -91,6 +93,17 @@ fn calibrate_needs_one_input() {
         (
             vec![
                 "calibrate",
+                "--inputs",
+                path(&fixture),
+                "--no-border-fit",
+                "--out",
+                path(&never),
+            ],
+            "--no-border-fit needs --pack",
+        ),
+        (
+            vec![
+                "calibrate",
                 "--pack",
                 path(&fixture),
                 "--out",
@@ -104,6 +117,7 @@ fn calibrate_needs_one_input() {
         let stderr = String::from_utf8_lossy(&run.stderr);
         assert!(stderr.contains(message), "{args:?}: {stderr}");
     }
+    assert!(!never.exists());
 }
 
 /// The stability table of the fixture.

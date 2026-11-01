@@ -255,10 +255,43 @@ fn storage_smooths_a_short_cut_below_flow_clearing() {
 }
 
 /// ADR 0091 Tests, as amended: a 12-month cut draws the stock below half its target, and the
-/// convenience yield z^-zeta, unbounded as cover falls, keeps a pipeline stock above zero (0.23
-/// of target at the approved values).
+/// partial adjustment of ADR 0280, a release of lambda (S - S*) a month, keeps it above zero
+/// (0.13 of target at the approved values).
 #[test]
 fn cut_draws_the_stock_to_a_pipeline_floor() {
     let (_, low) = harvest(0.7, 12);
     assert!(low < 0.5 && low > 0.0, "lowest stock {low} of target");
+}
+
+/// ADR 0280 (Deaton and Laroque 1992): a stockout lets the price rise to the flow-clearing
+/// price, not past it. Crude oil and fuels (cover 1 month, zeta 13) at the stock target, orders
+/// doubled for one tick as a competitor's price rise sends them (theta 17.64: a 4% move), demand
+/// E 11.24 and supply eps 0.9 at eta 1 as Algeria's: the peak stays below the price at which the
+/// doubled orders clear against output alone, ln 2 / E (0.062; 0.600 under ADR 0091's first
+/// rule, two clipped steps).
+#[test]
+fn stockout_spike_stays_below_flow_clearing() {
+    const FUEL: usize = 1;
+    let (e, eta, eps) = (11.24, 1.0, 0.9);
+    let p = TradeParams::default().with_storage();
+    let q_star = 1.0 + p.storage_loss[FUEL] * p.coverage[FUEL];
+    let mut m = Markets::new(1);
+    m.active = (0..N_GOODS).map(|g| g == FUEL).collect();
+    m.inventory[FUEL] = p.coverage[FUEL];
+    let mut fill = vec![[1.0; 2]; N_GOODS];
+    let mut spoiled = vec![0.0; N_GOODS];
+    let (mut q, mut peak) = (0.0, 0.0f64);
+    for t in 0..120 {
+        let x = libm::log(m.price[FUEL]);
+        q = (1.0 - eta) * q + eta * eps * x;
+        m.supply[FUEL] = q_star * libm::exp(q);
+        m.demand_int[FUEL] = 0.0;
+        m.demand_hh[FUEL] = if t == 0 { 2.0 } else { 1.0 } * libm::exp(-e * x);
+        m.store(&p, &mut spoiled);
+        m.clear(Rationing::Proportional, &mut fill);
+        m.reprice(&p, &[p.kappa1; N_GOODS], 0.0);
+        peak = peak.max(libm::log(m.price[FUEL]));
+    }
+    let clearing = libm::log(2.0) / e;
+    assert!(peak < clearing, "peak {peak} clearing {clearing}");
 }

@@ -506,19 +506,18 @@ fn real_state(w: &EconWorld) -> Vec<(&'static str, Vec<f64>, Vec<f64>)> {
 /// With the loss write-off off: its cap is M months of base sales in base numeraire (ADR 0112),
 /// so scaling every nominal value moves losses past the cap in one run and not the other.
 ///
-/// The frictionless run is compared at tick 6. From the data state its coal shortage holds
-/// most mainland enterprises at their coal caps from tick 3 (`frictionless_unemployment_is_the_
-/// natural_rate`), and its clearing wage puts some exactly there, target = cap, where ADR 0266's
-/// split order rule is discontinuous: whether the cap cut the target, and so whether E3 orders
-/// coal on notional or capped output, is decided by rounding. At tick 7 the two runs decide it
-/// otherwise for enterprises 8 and 53 (their stocks agree to every printed digit), and from tick
-/// 8 they differ by 16% in employment, 0.5% at tick 120. Before the data state's merchants
-/// held coverage times their own base output (B8e) the run reached no such tie in 120 ticks.
+/// Frictionless, from the data state, the coal shortage holds most mainland enterprises at
+/// their coal caps from tick 3 (`frictionless_unemployment_is_the_natural_rate`), and the
+/// rationed wage puts the marginal one exactly at its cap, target = cap. Whether the cap cut it,
+/// and so whether E3 orders coal on notional or capped output, is decided with the margin of
+/// `systems::cap_cuts`, not by rounding: compared at tick 6 while it was `f > cap` (the two
+/// runs decided it otherwise for enterprises 8 and 53 at tick 7 and differed by 16% in
+/// employment from tick 8).
 #[test]
 fn homogeneity_of_degree_zero() {
     for (params, ticks) in [
         (EconParams::default(), 120),
-        (EconParams::frictionless(), 6),
+        (EconParams::frictionless(), 120),
     ] {
         let params = EconParams {
             write_off_months: f64::INFINITY,
@@ -567,7 +566,9 @@ fn expected_inflation_follows_the_world_index() {
 }
 
 /// Expected inflation far above c_max passes through the clip (ADR 0106): every active price
-/// and every rule-set wage moves by pi^e within its clip, which bounds only the gap terms.
+/// and every rule-set wage moves by pi^e within its clip, which bounds only the gap terms. A
+/// frictionless wage clears its labour market within the tick, with no rule and so no clip:
+/// it never counts one.
 #[test]
 fn world_counts_clip_bindings() {
     let pi = 10.0;
@@ -597,6 +598,14 @@ fn world_counts_clip_bindings() {
             "province {i}: {step}"
         );
     }
+    let mut w = world(EconParams::frictionless());
+    w.expected_inflation = pi;
+    let mut sim = sim_of(w);
+    sim.step().unwrap();
+    assert!(
+        sim.world().wage_clip_ticks.iter().all(|&n| n == 0),
+        "a Walrasian wage counted a clip"
+    );
     let mut sim = sim_of(world(EconParams::default()));
     sim.run_until(120).unwrap();
     let w = sim.world();
@@ -677,9 +686,8 @@ fn from_dispatch(w: &mut EconWorld, tick: u32) {
 /// from its market account (the ledger's goods arithmetic, bit for bit), the ledger's tally of
 /// destroyed goods rises by the sum of those losses and by nothing else at T3, and nothing else
 /// of that good leaves the account before dispatch. At tick 0 every stored cell expects a large
-/// fall (pi^e -10 for its order alone): where the unfloored order delta S + psi D x would sell
-/// more than the stock left after spoilage, the order sits exactly at its floor -(1 - delta) S,
-/// elsewhere above it, and at least one cell is floored. Over 120 ticks from a disturbed data
+/// fall (pi^e -10 for its order alone): its target stock is 0, so the order is the release
+/// delta S - lambda S (ADR 0280), above the floor -(1 - delta) S. Over 120 ticks from a disturbed data
 /// state every tick's invariants hold (goods identity, the market account holding S, money) and
 /// the markets end each tick with no money.
 #[test]
@@ -694,7 +702,7 @@ fn storage_conserves_goods_and_money() {
         *p *= 1.0 + 0.3 * ((i * 7 % 11) as f64 / 10.0 - 0.5);
     }
     let acc = w.layout().accounts.clone();
-    let (mut stored, mut floored) = (false, 0);
+    let (mut stored, mut released) = (false, 0);
     for tick in 0..120 {
         w.begin_tick();
         systems::deliver(&mut w);
@@ -732,14 +740,11 @@ fn storage_conserves_goods_and_money() {
             );
             let order = w.markets.storage[c];
             assert!(order >= -(s - loss), "tick {tick} cell {c}: {order}");
-            let d = w.markets.demand[c];
-            if tick == 0 && s > 0.0 && d > 0.0 {
-                // the unfloored order at this cover; oil's convenience yield (zeta 13) still
-                // holds stock where cover is short
-                let x = trade.storage_return(g, s / (trade.coverage[g] * d), -10.0);
-                let below = loss + trade.speculation[g] * d * x < -(s - loss);
-                assert_eq!(order == -(s - loss), below, "tick 0 cell {c}: {order}");
-                floored += usize::from(below);
+            if tick == 0 && s > 0.0 {
+                let release = loss - trade.storage_adjustment(g) * s;
+                assert_eq!(order, release, "tick 0 cell {c}");
+                assert!(order > -(s - loss), "tick 0 cell {c}: {order}");
+                released += 1;
             }
             stored |= order != loss;
         }
@@ -751,7 +756,7 @@ fn storage_conserves_goods_and_money() {
             assert_eq!(w.ledger.money(*a), 0, "tick {tick}");
         }
         if tick == 0 {
-            assert!(floored > 0, "tick 0: no order at its floor");
+            assert!(released > 0, "tick 0: no stored cell with stock");
         }
     }
     assert!(stored, "no storage order beyond spoilage");

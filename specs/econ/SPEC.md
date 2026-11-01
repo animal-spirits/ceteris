@@ -107,9 +107,10 @@ always against the donors' in the same source, never the region median when an i
 agriculture, industry or services missing, the known shares keep their goods and the goods they
 do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
-rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas VA to
-rents, out of its group (all of industry where industry less manufacturing is too small) and at
-most the largest ICIO share of crude oil and gas in industry VA of it (ADR 0249), with the ICIO
+rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas
+extraction VA (B06, B09 output less their inputs, without refining; ADR 0281, proposed) to rents,
+out of its group (all of industry where industry less manufacturing is too small) and at most the
+largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
 weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
@@ -204,7 +205,9 @@ and buyer prices refreshed at the posted prices. Otherwise it starts from the da
 the origin's own base output of the good (s_g Y0 at every active traded cell, Y0 = A VA0 / a_VA
 of the province's enterprise of that good, the base output that sizes the input stocks; local
 goods hold none, as before), nothing in flight and one month of base dividends minted to each
-pop.
+pop. The stock ignores storage loss: with competitive storage on, the steady state holds
+coverage times sales, Y / (1 + delta s) (Calibration, stage 5), so the data state starts above it
+by the factor 1 + delta s; with storage off (the default, delta 0) the two agree.
 
 Merchant stocks of the data state (amendment 2026-10-31, B8e; owner, 2026-10-31, relayed by the
 coordinator). The
@@ -434,6 +437,20 @@ meets. So:
   M_k / coef_k <= Y_in (1 + 1e-9), the margin taking in ties to the last bits (the data state holds
   one month of every input). `systems::scarcest_inputs`; E1 keeps the set per enterprise
   (`Scratch::short`).
+- "Exceeds" carries the same relative margin: the cap cut the target when L*_notional > L_in
+  (1 + 1e-9) (`systems::cap_cuts`; B9; option A, owner, 2026-11-01). Frictionless and rationed,
+  the wage is w_top, the marginal value product of the marginal enterprise at its cap, so that
+  enterprise's target at w_top equals L_in exactly in real numbers; computed, the two come from
+  different closed forms (the labour target at w_top, and VA^-1(a_VA Y_in) inside w_top), which
+  agree only to a few units in the last place, so with `>` alone the split rule was decided by
+  rounding (the fixture's frictionless run scaled by 1e4 decided enterprises 8 and 53 the other
+  way at tick 7 and differed by 16% in employment from tick 8). Within the margin both order
+  bases agree to it: notional output over capped output is VA(L*_notional) / VA(L_in) <= 1 +
+  1e-9 to first order (VA rises less than proportionally in L), so the choice moves no order by
+  more than 1e-9 relative, while 1e-9 is about 4.5e6 units in the last place, far above the
+  closed forms' rounding. It is the tie margin of `scarcest_inputs` (`SCARCEST`), a numerical
+  constant, not a parameter, and no register entry. With it the fixture's frictionless run is
+  homogeneous of degree zero over 120 ticks (`homogeneity_of_degree_zero`, 1e-9).
 - A binding input is ordered on notional output, VA(L_notional) / a_VA: L_notional is the
   employment E1 would have allocated on its targets without the input cap (the same eta step and
   L^s scaling from last tick's employment, at the wage the capped targets were set at: w_{t-1}
@@ -794,7 +811,7 @@ without it the level depended on the start and the mixing path, by up to 4e-4 fr
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-13 relative
-(Anderson-mixed; `PASS_TOL`, P158, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
+(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
 point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
 `stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
 settled at the last pass's r, rebates, buyer prices and PIGL weights, with D, the orders at the
@@ -814,7 +831,7 @@ undamped pass map is not a contraction (it locks onto a period-6 cycle in the go
 the DR Congo's interior and that country's PIGL weights), so settling rests on the mixing, and
 the mixing only saw the rebates. The passes still stop on `change` alone; the units change no
 equation and no fixed point. The stopping tolerance is a solver setting, not a model
-parameter; it is in the register (P158) since its value is derived from the stage-5 check.
+parameter; it is in the register (P159) since its value is derived from the stage-5 check.
 Within a pass the income and local-output fixed point is
 iterated until no local output changes by more than 1e-14 relative.
 
@@ -1150,7 +1167,8 @@ fixture cell past 2 / J and checks that it alone is left out and reported.
   to -0.7 and fails the test only when not finite or not negative (ADR 0264; it blocked the gate
   until then). Nothing is fitted to it: costs come from P04 and the literature time cost P43.
   With iceberg leg costs each class's coefficient is about -0.09 theta_c, against about -0.8 in
-  the data; the log-distance leg cost that ADR 0022 says the data prefer is scheduled for P9.
+  the data; the log-distance cost that ADR 0022 says the data prefer is built in P4 as a
+  crossing friction beside nu, not in the legs (ADR 0272 on main, replacing ADR 0264 Decision 3).
 - H2 per theta class (ADRs 0018, 0092 and 0264): PPML of each class's simulated country-pair
   trade, valued at what the importer pays (`run_flows.value` times 1 + t), on ln(1 + tariff) and
   the ln of the model's country-pair kernel net of tariffs at the calibrated point
@@ -1457,7 +1475,7 @@ texture fed from core columns.
   the first failing cell 1.12e-12). It is not rounding: Q is the settled output and D the
   orders at the settled prices from the spending the last pass's values give, which moved by up
   to the pass change (3.55e-13 at pass 68, PASS_TOL 1e-12), and D carries that change about four
-  times. PASS_TOL is now 1e-13 (P158; Calibration, stage 1). The other option, a check bound
+  times. PASS_TOL is now 1e-13 (P159; Calibration, stage 1). The other option, a check bound
   derived from the pass tolerance, needs D's sensitivity to the pass inputs and was not taken.
 
 ## Changes for the next design-doc snapshot

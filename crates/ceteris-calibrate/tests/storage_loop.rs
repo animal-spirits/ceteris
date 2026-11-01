@@ -107,3 +107,91 @@ fn stability_with_storage_matches_simulation() {
         }
     }
 }
+
+/// One storable good's origin market at the approved storage values, run `steps` ticks through
+/// `store`, `clear` and `reprice` from the state (x, q_{t-1}, sigma, pi) = `v` around the steady
+/// state, as [`simulate_storage`] does for agriculture; returns the state after the last tick.
+fn toy_state(
+    g: usize,
+    e: f64,
+    eta: f64,
+    eps: f64,
+    kappa: f64,
+    v: [f64; 4],
+    steps: usize,
+) -> [f64; 4] {
+    let p = TradeParams::default().with_storage();
+    let s_star = p.coverage[g];
+    let q_star = 1.0 + p.storage_loss[g] * s_star;
+    let mut m = Markets::new(1);
+    m.active = (0..N_GOODS).map(|k| k == g).collect();
+    m.price[g] = libm::exp(v[0]);
+    m.inventory[g] = s_star * (1.0 + v[2]);
+    m.expectation[g] = v[3];
+    let mut fill = vec![[1.0; 2]; N_GOODS];
+    let mut spoiled = vec![0.0; N_GOODS];
+    let mut q = v[1];
+    for _ in 0..steps {
+        let x = libm::log(m.price[g]);
+        q = (1.0 - eta) * q + eta * eps * x;
+        m.supply[g] = q_star * libm::exp(q);
+        m.demand_int[g] = 0.0;
+        m.demand_hh[g] = libm::exp(-e * x);
+        m.store(&p, &mut spoiled);
+        m.clear(Rationing::Proportional, &mut fill);
+        m.reprice(&p, &[kappa; N_GOODS], 0.0);
+    }
+    [
+        libm::log(m.price[g]),
+        q,
+        m.inventory[g] / s_star - 1.0,
+        m.expectation[g],
+    ]
+}
+
+/// ADR 0280: the partial-adjustment order has ADR 0091's linearisation at the steady state, so
+/// the Storage loop's map (and with it J's storage factor, the psi limit and the block map) is
+/// unchanged. For each stored good the toy market's tangent map over 1 and 5 ticks, by central
+/// differences, equals [`storage_matrix`] and its fifth power to 1e-7 (differencing at 1e-6).
+#[test]
+fn partial_adjustment_keeps_the_storage_loop() {
+    const H: f64 = 1e-6;
+    let p = TradeParams::default().with_storage();
+    for g in [0, 1, 2, 5] {
+        let st = Storage {
+            delta: p.storage_loss[g],
+            cost: p.storage_cost[g],
+            zeta: p.convenience[g],
+            psi: p.speculation[g],
+            gain: p.storage_gain,
+        };
+        for (e, eta, eps, kappa) in [(0.6, 0.3, 2.61, 0.05), (8.68, 1.0, 1.5, 0.03)] {
+            let m = storage_matrix(e, eta, eps, p.coverage[g], kappa, st);
+            let mut power = m;
+            for steps in [1, 5] {
+                if steps == 5 {
+                    for _ in 1..5 {
+                        power = std::array::from_fn(|i| {
+                            std::array::from_fn(|j| (0..4).map(|k| power[i][k] * m[k][j]).sum())
+                        });
+                    }
+                }
+                for j in 0..4 {
+                    let mut v = [0.0; 4];
+                    v[j] = H;
+                    let up = toy_state(g, e, eta, eps, kappa, v, steps);
+                    v[j] = -H;
+                    let down = toy_state(g, e, eta, eps, kappa, v, steps);
+                    for i in 0..4 {
+                        let tangent = (up[i] - down[i]) / (2.0 * H);
+                        assert!(
+                            (tangent - power[i][j]).abs() < 1e-7,
+                            "good {g} E {e} eta {eta} ticks {steps} [{i}][{j}]: {tangent} map {}",
+                            power[i][j]
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

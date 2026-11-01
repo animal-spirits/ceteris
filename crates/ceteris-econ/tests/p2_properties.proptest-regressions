@@ -4,6 +4,14 @@
 #
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
+#
+# Why each is kept (B9 review). The first nine (1785dec) and 10605457584265808090 (577ff11) are
+# random provinces of `exact_fill_equals_converged_iteration_on_random_provinces` on which a
+# draft of the exact local fill (ADR 0093) missed the converged fill iteration; each is a small
+# province, cheap to re-run, and guards the jump and stop rules that fixed it.
+# 13018842184927700166 is named in `stop_takes_the_cycle_fixed_point` (ADR 0093: 1.7e-12 above
+# its limit without the two-pass cycle's fixed point). The `factors` case is the Leontief breach
+# on good 7 (6d71117) of `conservation_over_120_ticks`, frictionless from scaled prices.
 cc 4058793303276dd5947131351d6b34d2fcaac203b24e6c9338264a858d35e4f5 # shrinks to seed = 14132356895728520628
 cc f4c41584cea17af8cb578da07c9b5d0966e28929c067c468c1b9eff9fffd91b0 # shrinks to seed = 16552123946907360344
 cc 6804055981b9c0e4d6e889a17c5e599ca6e72e1307fd92e2496650bbb0da970f # shrinks to seed = 13755100342486232104

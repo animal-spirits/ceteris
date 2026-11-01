@@ -195,18 +195,34 @@ impl TradeParams {
 
     /// Refuses a storable good with a storage loss and no speculation (P56 delta > 0, P144 psi
     /// = 0): its stock would spoil with nothing targeting it, a slowly growing root of the
-    /// storage loop (trade SPEC, Competitive storage).
+    /// storage loop (trade SPEC, Competitive storage). Refuses a stored good without a positive
+    /// cover (P02), convenience elasticity (P145) or carrying cost k + delta (P56): the order's
+    /// adjustment speed and target stock divide by them (ADR 0280).
     pub fn check_storage(&self) -> Result<(), String> {
-        match (0..N_GOODS)
+        if let Some(g) = (0..N_GOODS)
             .find(|&g| STORABLE[g] && self.storage_loss[g] > 0.0 && self.speculation[g] <= 0.0)
         {
-            Some(g) => Err(format!(
+            return Err(format!(
                 "good {g} has a storage loss {} and no speculation intensity: an untargeted \
                  stock that spoils; set P144 psi or P56 delta 0",
                 self.storage_loss[g]
-            )),
-            None => Ok(()),
+            ));
         }
+        for g in (0..N_GOODS).filter(|&g| self.stores(g)) {
+            let carry = self.storage_cost[g] + self.storage_loss[g];
+            for (name, x) in [
+                ("cover s (P02)", self.coverage[g]),
+                ("convenience elasticity zeta (P145)", self.convenience[g]),
+                ("carrying cost k + delta (P56)", carry),
+            ] {
+                if x.is_nan() || x <= 0.0 {
+                    return Err(format!(
+                        "good {g} is stored with {name} {x}: the storage order divides by it"
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The storage order's factor on the static elasticity of an origin's orders (trade SPEC,
@@ -220,12 +236,22 @@ impl TradeParams {
         (1.0 + self.speculation[g] * c) / (1.0 + self.storage_loss[g] * self.coverage[g])
     }
 
-    /// The expected net return x of holding a unit of storable good `g` a month (ADR 0091) at
-    /// cover `z` = S / (s_g D) and expectation `pi`: pi + (k + delta) (z^-zeta - 1), the
-    /// convenience yield relative to its value at z = 1, so x is 0 bit for bit there at pi = 0.
-    pub fn storage_return(&self, g: usize, z: f64, pi: f64) -> f64 {
+    /// The merchants' adjustment speed lambda_g toward the target stock, per month (ADR 0280):
+    /// psi zeta (k + delta) / s_g, the stock-persistence rate 1 - rho of Gorton, Hayashi and
+    /// Rouwenhorst (2013) from which P144 psi is derived; 0.144, 0.15, 0.05 and 0.067 for goods
+    /// 0, 1, 2 and 5 at the approved values.
+    pub fn storage_adjustment(&self, g: usize) -> f64 {
         let carry = self.storage_cost[g] + self.storage_loss[g];
-        pi + carry * (libm::pow(z, -self.convenience[g]) - 1.0)
+        self.speculation[g] * self.convenience[g] * carry / self.coverage[g]
+    }
+
+    /// The stock S* merchants want to hold at buyers' orders `d` and expectation `pi` (ADR
+    /// 0280): s_g D max(0, 1 + pi / (zeta (k + delta))), the cover at which ADR 0091's expected
+    /// net return pi + (k + delta)(z^-zeta - 1) is zero, to first order in pi (Working 1949). At
+    /// pi = 0 it is P02 cover; with no buyers it is 0.
+    pub fn storage_target(&self, g: usize, d: f64, pi: f64) -> f64 {
+        let carry = self.storage_cost[g] + self.storage_loss[g];
+        self.coverage[g] * d * (1.0 + pi / (self.convenience[g] * carry)).max(0.0)
     }
 
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
@@ -301,6 +327,26 @@ mod tests {
         };
         assert_eq!(p.price_gain(5.0), 0.1);
         assert!((p.price_gain(10.0) - 0.05).abs() < 1e-17);
+    }
+
+    /// A stored good needs a positive cover, convenience elasticity and carrying cost: the
+    /// order's adjustment speed psi zeta (k + delta) / s and target s D (1 + pi / (zeta (k +
+    /// delta))) divide by them (ADR 0280). The approved values and storage off pass.
+    #[test]
+    fn check_storage_refuses_a_stored_good_without_cover_zeta_or_carry() {
+        let on = TradeParams::default().with_storage();
+        assert!(TradeParams::default().check_storage().is_ok());
+        assert!(on.check_storage().is_ok());
+        let mut cover = on.clone();
+        cover.coverage[1] = 0.0;
+        let mut zeta = on.clone();
+        zeta.convenience[2] = 0.0;
+        let mut carry = on.clone();
+        (carry.storage_cost[5], carry.storage_loss[5]) = (0.0, 0.0);
+        for (name, p, good) in [("cover", cover, 1), ("zeta", zeta, 2), ("carry", carry, 5)] {
+            let err = p.check_storage().expect_err(name);
+            assert!(err.starts_with(&format!("good {good} ")), "{name}: {err}");
+        }
     }
 
     /// A NaN multiplier is reported as a bad rate, not as two classes that differ.

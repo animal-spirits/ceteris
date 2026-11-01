@@ -121,13 +121,12 @@ impl Markets {
     /// T3 before [`Markets::clear`], competitive storage at the active origins of the goods
     /// [`TradeParams::stores`] (ADR 0091; off by default): the stock S carried in loses delta S, written to `spoiled[i]` (0 for
     /// every other cell) for the caller to destroy in the ledger, and the merchants' order
-    /// b = max(delta S + psi D x, -(1 - delta) S) goes to `storage`, x =
-    /// [`TradeParams::storage_return`] at z = max(S, Q_floor) / (s_g D) and the cell's
-    /// expectation, D = `demand_int + demand_hh`; D = 0 orders delta S. `reprice` reads it.
+    /// b = max(delta S + lambda (S* - S), -(1 - delta) S) goes to `storage`: partial adjustment
+    /// (ADR 0280) at [`TradeParams::storage_adjustment`] toward [`TradeParams::storage_target`]
+    /// at D = `demand_int + demand_hh` and the cell's expectation. `reprice` reads it.
     pub fn store(&mut self, p: &TradeParams, spoiled: &mut [f64]) {
         assert_eq!(spoiled.len(), self.price.len());
         spoiled.fill(0.0);
-        let floor = self.floors();
         for (i, spoil) in spoiled.iter_mut().enumerate() {
             let g = i % N_GOODS;
             if !self.active[i] || !p.stores(g) {
@@ -136,13 +135,8 @@ impl Markets {
             let s = self.inventory[i];
             let d = self.demand_int[i] + self.demand_hh[i];
             let loss = p.storage_loss[g] * s;
-            let order = if d > 0.0 && floor[g] > 0.0 {
-                let z = s.max(floor[g]) / (p.coverage[g] * d);
-                let x = p.storage_return(g, z, self.expectation[i]);
-                loss + p.speculation[g] * d * x
-            } else {
-                loss
-            };
+            let order =
+                loss + p.storage_adjustment(g) * (p.storage_target(g, d, self.expectation[i]) - s);
             *spoil = loss;
             self.inventory[i] = s - loss;
             self.storage[i] = order.max(-self.inventory[i]);
@@ -574,6 +568,29 @@ mod tests {
         }
     }
 
+    /// ADR 0280: an origin with stock but no output and no buyers does not bid its own price up.
+    /// Province 0 is at its steady state; province 1 holds its stock target of old orders,
+    /// produces nothing and has no buyers left. Merchants there want no stock (target s D = 0),
+    /// so they release it rather than order spoilage replacement against no output.
+    #[test]
+    fn stock_without_supply_or_buyers_does_not_bid_the_price_up() {
+        let p = TradeParams::default().with_storage();
+        for g in storable() {
+            let mut m = Markets::new(2);
+            let q_star = 1.0 + p.storage_loss[g] * p.coverage[g];
+            set(&mut m, g, p.coverage[g], q_star, 1.0);
+            let dead = N_GOODS + g;
+            m.inventory[dead] = p.coverage[g];
+            for _ in 0..10 {
+                let (held, dead_held) = (m.inventory[g], m.inventory[dead]);
+                set(&mut m, g, held, q_star, 1.0);
+                set(&mut m, dead, dead_held, 0.0, 0.0);
+                tick(&mut m, &p);
+            }
+            assert!(m.price[dead] <= 1.0, "good {g}: price {}", m.price[dead]);
+        }
+    }
+
     /// The order is floored at the stock left after spoilage: however far the expectation falls,
     /// merchants offer at most what they hold, and clearing never leaves a negative stock.
     #[test]
@@ -603,13 +620,14 @@ mod tests {
                     "good {g}"
                 );
             }
-            // a strongly negative return releases the whole stock, no more
+            // a strongly negative expectation empties the target: merchants release lambda S a
+            // month, above the floor (lambda < 1)
             let mut m = Markets::new(1);
             set(&mut m, g, 5.0, 1.0, 1.0);
             m.expectation[g] = -10.0;
             tick(&mut m, &p);
-            let held = 5.0 - p.storage_loss[g] * 5.0;
-            assert_eq!(m.storage[g], -held, "good {g}");
+            let release = p.storage_loss[g] * 5.0 - p.storage_adjustment(g) * 5.0;
+            assert_eq!(m.storage[g], release, "good {g}");
         }
         // goods without storage, and storable goods with storage off (the default), order
         // nothing and lose nothing

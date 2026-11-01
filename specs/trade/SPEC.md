@@ -294,7 +294,8 @@ GE reference is unchanged. Every tick the clip binds on the gap terms at a cell 
 1, 2 and 5 (`goods::STORABLE`), where it is on (`TradeParams::stores`: psi or delta positive;
 a positive delta with psi 0, a stock that spoils with nothing targeting it, the slowly growing
 root of the Storage loop below, is refused by `TradeParams::check_storage` in `EconWorld::new`
-and in the calibration). It
+and in the calibration, as is a stored good without a positive cover s, zeta or k + delta, by
+which the order of ADR 0280 divides). It
 is off by default (owner ruling 2026-10-31; since g_s 0.006 the approved values pass the checks of
 the Storage loop below, and turning storage on is the owner's call), so P144 and P56's delta
 default to 0 and those goods run the stock rule, bit for bit as before ADR 0091, kappa2 included; `TradeParams::with_storage` sets the approved values. Each such origin market keeps an expected log-price change
@@ -306,19 +307,27 @@ pi^e_og <- pi^e_og + g_s ( dlnp_og - pi^e_og )        (P146; dlnp_og the step of
 
 At T3, before clearing, the stock S carried into the tick loses delta_g S (P56, destroyed in the
 ledger and tallied as spoilage), and the merchants place a storage order against this tick's
-buyer orders D = D_int + D_hh:
+buyer orders D = D_int + D_hh, a partial adjustment toward a target stock (ADR 0280, amending
+ADR 0091; Lovell 1961):
 
 ```
-x_og = pi^e_og + (k_g + delta_g) ( z^(-zeta_g) - 1 ),    z = S / (s_g D)       (P56 k_g and delta_g, P145)
-b_og = max( delta_g S + psi_g D x_og,  -(1 - delta_g) S )                      (P144)
+S*_og    = s_g D max( 0, 1 + pi^e_og / (zeta_g (k_g + delta_g)) )          (P02, P56 k_g and delta_g, P145)
+b_og     = max( delta_g S + lambda_g (S*_og - S),  -(1 - delta_g) S )
+lambda_g = psi_g zeta_g (k_g + delta_g) / s_g                                (P144)
 ```
 
-y(z) = (k_g + delta_g) z^-zeta_g is the convenience yield, written relative to its value at z = 1
-so that x is 0 bit for bit at z = 1 and pi^e = 0. The floor is the stock left after spoilage:
-merchants never offer more than they hold, so S' >= 0. D = 0 orders spoilage replacement only
-(b = delta S); S in z is floored at Q_floor (below), so a stockout orders a finite, very large b
-that the price clip bounds. The storage order is an order at the origin: the price step reads
-D + b in place of D,
+S\* is the stock at which ADR 0091's expected net return of holding, pi^e + (k + delta)(z^-zeta -
+1) with z = S / (s_g D) the cover and (k + delta) z^-zeta the convenience yield, is zero to first
+order in pi^e (Working 1949); at pi^e = 0 it is P02 cover s_g D. lambda_g is the monthly
+stock-persistence rate 1 - rho of Gorton, Hayashi and Rouwenhorst (2013) from which P144 psi is
+derived (DESIGN 17), 0.144, 0.15, 0.05 and 0.067 for goods 0, 1, 2 and 5 at the approved values:
+no new parameter (`TradeParams::storage_target`, `storage_adjustment`). The order is linear in S
+and D, so its response to buyers' orders is lambda s_g (1 + pi^e / c) everywhere, where ADR
+0091's first rule, delta S + psi D x, had psi (x + c z^-zeta), unbounded as cover falls (ADR 0280
+Context). The floor is the stock left after spoilage: merchants never offer more than they hold,
+so S' >= 0; at lambda < 1 it does not bind. With no buyers (D = 0) S\* = 0 and merchants release
+lambda S a month. The storage order is an order at the origin: the price step reads D + b in
+place of D,
 
 ```
 dlnp = pi^e + clip( kappa1_cell (D + b - Q)/Q, -c_max_g, c_max_g )
@@ -326,9 +335,10 @@ dlnp = pi^e + clip( kappa1_cell (D + b - Q)/Q, -c_max_g, c_max_g )
 
 and the kappa2 term of the stock rule is off for these goods. Physically the market's stock
 stays what it does not sell (S' = (1 - delta) S + Q - sales, buyers served first by S11): the
-order is filled through the price, so at a steady price D + b = Q and S' - S = psi D x exactly.
+order is filled through the price, so at a steady price D + b = Q and S' - S = lambda (S\* - S)
+exactly.
 A release (b < 0) is supply the price rule sees; a purchase is demand. At a steady state pi^e = 0
-and z = 1, so x = 0, b = delta S, and output covers sales and spoilage: Q = (1 + delta_g s_g) D,
+and S = S\* = s_g D, so b = delta S, and output covers sales and spoilage: Q = (1 + delta_g s_g) D,
 the market's cash flow p (sales - Q) = -p delta S each tick, passed to the country's profit pool
 (Market cash flow above). The calibration and the GE reference hold this point (econ SPEC,
 Calibration and GE reference): origins sell Q / (1 + delta_g s_g) and stocks are s_g D. With
@@ -452,8 +462,12 @@ The supply elasticities eps of the pack's traded enterprises run from 0.09 to 30
 Storage loop (ADR 0091). A competitively stored good adds the market's expectation pi^e_og as a
 fourth state and replaces kappa2 by the storage order. Linearize around Q\* = D\* / rho, rho =
 1 / (1 + delta s), S\* = s D\*, pi^e_og = 0, with c = zeta (k + delta), the slope of the
-convenience yield at z = 1: b - delta S\* = D\* ( delta s sigma + psi pi - psi c (sigma + E x) ),
-since z - 1 = sigma + E x to first order. Following the tick as above, with pi the market's
+convenience yield at z = 1, and lambda s = psi c: b - delta S\* = D\* ( delta s sigma + psi pi -
+psi c (sigma + E x) ), since S\* - S = s D\* (pi / c - E x - sigma) to first order. ADR 0091's
+first rule, delta S + psi D x with z - 1 = sigma + E x, has the same first-order terms, so ADR 0280
+leaves this map, J's storage factor, the psi limit and the block map as they were
+(`partial_adjustment_keeps_the_storage_loop`, calibrate `tests/storage_loop.rs`: the toy market's
+tangent map against `storage_matrix`). Following the tick as above, with pi the market's
 expectation before the step and kappa = kappa1_cell:
 
 ```
@@ -531,7 +545,8 @@ prices are within 0.06% at 3,600 ticks but flows 1.5% off, 2.1% at 4,800, and 1.
 V1's horizon is 6,000 ticks where storage is on (econ SPEC, P2 gate; owner, 2026-10-31). And the stockout claim of ADR 0091 did not hold as first written: on the toy
 agriculture market a 30% cut held 12 months raises the price by 0.64 in logs (0.20 for the
 surplus) but the stock stops at 0.23 of target, since the Working-Kaldor convenience yield z^-zeta
-grows without bound as cover falls. Against Deaton and Laroque's benchmark, no stock and the
+grows without bound as cover falls (ADR 0091's first rule; under ADR 0280's partial adjustment the
+values are in Tests). Against Deaton and Laroque's benchmark, no stock and the
 flow clearing each month (0.59 for that cut at E 0.6), the rule smooths: 0.10 for a 3-month cut,
 0.23 for 6 months. The stock rule with storage off is not that benchmark, since at kappa2 = 0 its
 price does not read the stock (B7 follow-up). ADR 0091's Tests were amended to these two claims
@@ -684,14 +699,15 @@ the block keeps the margin m of its stability limit that the Per-market gain giv
 else the lower end of a bisection of (0, 1] to 2^-12: a value at which the map is stable at
 gains b kappa_cell / m and unstable one grid step above. The stable set need not be an interval,
 so b is the boundary the bisection finds, not the largest stable value of the grid. A block
-unstable at every scale of the grid keeps the smallest, 2^-12. The map is stable when its
+unstable at every scale of the grid has no stable scale, b = 0, and the calibration stops on
+it (B9 review; it kept the smallest, 2^-12, at which it is unstable). The map is stable when its
 spectral radius, measured as the growth rate of its iterates over the second half of 4,000
 ticks from a fixed start vector, is at most 1 + 2e-3 (P157: a market at its own cap has radius 1
 there; on the fixture's blocks the measurement is within 5.4e-4 of the Gelfand limit
 ||M^k||^(1/k) at k = 2^40, `block_radius_matches_the_matrix_powers`). ITERATIONS and BISECTIONS
 are numerical constants of the measurement; the tolerance decides which blocks are capped, so
 it is registered. The calibration checks every capped block's map stable at its gains
-b kappa_cell (radius below 1) and stops otherwise.
+b kappa_cell by the same criterion (radius at most 1 + 2e-3) and stops otherwise.
 
 The block's limit gain is b kappa_cell / m per cell, infinite for a block within its margin and
 for a cell in no block. The calibration computes it at the default kappa1 (P03a), m (P03d),
@@ -842,7 +858,7 @@ collapse ADR 0090 places beyond P2's range.
 | P03d | Share m of each market's J2 limit that its gain may use, and of each coupled block's stability limit (ADRs 0263, 0267) | 0 to 1, start 0.5: kappa1_cell = min(kappa1, 2 m / J_cell, m L_cell), L_cell the block's limit gain | Free |
 | P157 | Block stability tolerance (`block::TOLERANCE`, ADR 0267): a block is stable while its measured radius is at most 1 + this | 2e-3 (not tuned) | Free (numerical) |
 | P56 | Storage loss delta_g and money cost k_g per month, goods 0, 1, 2, 5 (ADR 0091), `TradeParams::storage_loss`, `storage_cost` | delta 0 by default (storage off, owner ruling 2026-10-31); approved (`with_storage`) 0.003, 0.0005, 0.001, 0; k 0.009, 0.011, 0.007, 0.0067 (interest 0.0047 included; DESIGN 17, P56) | Literature (weak) |
-| P144 | Speculation intensity psi_g, months, `TradeParams::speculation` | 0 by default (storage off); approved (`with_storage`) 20, 1.0, 3.571, 5.714; derived from a stock-persistence target, psi = lambda s / (zeta (k + delta)), except good 5: 5.714 is the source sheet's 40 (at zeta 0.5) rescaled to zeta 3.5, 40 x 0.5 / 3.5, where the formula at zeta 3.5 gives 5.54 (owner-approved as rescaled; DESIGN 17) | Free |
+| P144 | Speculation intensity psi_g, months, `TradeParams::speculation` | 0 by default (storage off); approved (`with_storage`) 20, 1.0, 3.571, 5.714; derived from a stock-persistence target, psi = lambda s / (zeta (k + delta)), except good 5: 5.714 is the source sheet's 40 (at zeta 0.5) rescaled to zeta 3.5, 40 x 0.5 / 3.5, where the formula at zeta 3.5 gives 5.54 (owner-approved as rescaled; DESIGN 17). The storage order adjusts at lambda = psi zeta (k + delta) / s, 0.144, 0.15, 0.05, 0.067 a month (ADR 0280): derived from psi, no new parameter | Free |
 | P145 | Convenience-yield elasticity zeta_g, `TradeParams::convenience` | 1.8, 13, 3.5, 3.5 (DESIGN 17) | Free |
 | P146 | Gain g_s of the per-market expectation pi^e_og, `TradeParams::storage_gain` | 0.006 per month (0.004 to 0.65; DESIGN 17) | Free |
 | P151 | Price step clip c_max_storable of the storable commodities (goods 0, 1, 2, 5; ADR 0106) | 0.3 log points per month (oil fell about 30% in one month in late 2008) | Free (numerical) |
@@ -869,8 +885,8 @@ importer pays (value times 1 + t: the kernel carries (1 + t)^-theta on spending,
 value's tariff elasticity is theta + 1), with the model's country-pair kernel net of tariffs as the
 cost control, recovers the class's theta within max(2 pair-clustered standard errors, 1% of
 theta) (ADRs 0018 and 0092). The distance elasticity of PPML on simulated country-pair flows (the origin value of the
-shipped units) is reported against the data's -0.7 to -1.1, not gated, until log-distance leg
-costs land (ADR 0264). S02:
+shipped units) is reported against the data's -0.7 to -1.1, not gated, until the log-distance
+crossing friction lands in P4 (ADR 0264; ADR 0272 on main replaces its Decision 3). S02:
 balanced Sinkhorn on the dense kernel with the equilibrium's origin supplies and destination
 expenditures reproduces the sourcing flows (1e-8, reference test), and a Rust run started at the
 reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_a_fixed_point`).
@@ -941,11 +957,16 @@ parameters (`calibrated_start_rejects_other_storage_parameters`,
   more than a 30% surplus lowers it (`stockout_raises_price_more_than_surplus_lowers_it`), a 3-month
   30% cut raising it by less than half the flow-clearing price without stock, ln(1 / 0.7) / 0.6
   (`storage_smooths_a_short_cut_below_flow_clearing`), and the 12-month cut drawing the stock below
-  half its target while the convenience yield keeps a pipeline stock above zero
-  (`cut_draws_the_stock_to_a_pipeline_floor`), conservation with spoilage tallied on the
+  half its target while the geometric release at lambda keeps it above zero
+  (`cut_draws_the_stock_to_a_pipeline_floor`; ADR 0280: rise 0.356 against fall 0.266, 3-month rise
+  0.086 against a bound of 0.297, lowest stock 0.13 of target), a stockout spike below the
+  flow-clearing price (`stockout_spike_stays_below_flow_clearing`: fuels at Algeria's E 11.24,
+  orders doubled for one tick, peak below ln 2 / E = 0.062; 0.600 under the first rule), a dead
+  market not bidding its price up (`stock_without_supply_or_buyers_does_not_bid_the_price_up`),
+  the toy market's tangent map equal to the Storage loop's (`partial_adjustment_keeps_the_storage_loop`), conservation with spoilage tallied on the
   fixture world (`storage_conserves_goods_and_money`, econ `p2_properties.rs`: the market
   account loses delta S bit for bit, the ledger's tally of destroyed goods rises by exactly the
-  losses, and orders forced below the stock sit at the floor), the refusal of a loss without
+  losses, and at pi^e -10 the order is the release delta S - lambda S, above the floor), the refusal of a loss without
   speculation (`storage_loss_without_speculation_is_refused`), the stage 5 state
   with storage (`stage5_state_is_stationary_under_the_stock_rules`, calibrate) and the storage
   loop against the toy market (`stability_with_storage_matches_simulation`). The two last claims
@@ -1032,5 +1053,7 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   can make an inventory target stable, or with P9 calibration. Goods 0, 1, 2 and 5 target their
   stock through competitive storage (ADR 0091) where it is on; it is off by default (owner ruling
   2026-10-31), so in the default all seven traded goods are untargeted. The approved values with
-  g_s 0.006 pass the stability checks and V1 at 6,000 ticks; turning it on is open
-  (Storage loop).
+  g_s 0.006 pass the stability checks and V1 at 6,000 ticks on the fixture; on the 2000 pack,
+  under ADR 0280's order, the default mode passes V1 and the frictionless mode misses it (seed 20,
+  Switzerland's good-1 cells; the data state, France's province 1094; ADR 0280 As built). Turning
+  it on is open (Storage loop).

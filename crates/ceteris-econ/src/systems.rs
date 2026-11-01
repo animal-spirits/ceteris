@@ -230,6 +230,16 @@ pub fn scarcest_inputs(w: &EconWorld, e: usize) -> u16 {
 /// state holds one month of every input, so their ratios agree only to the last bits.
 pub const SCARCEST: f64 = 1e-9;
 
+/// Whether the input cap cut a labour target (ADR 0266, `Scratch::short`): the target without
+/// the cap exceeds the cap by more than [`SCARCEST`], relative. Frictionless, the rationed wage
+/// is the marginal value product of the marginal enterprise at its cap, so its target equals
+/// its cap up to the rounding of two closed forms; within the margin the target counts as
+/// capped by nothing, and its inputs are ordered on output that differs from notional output
+/// by at most the margin.
+pub fn cap_cuts(target: f64, cap: f64) -> bool {
+    target > cap * (1.0 + SCARCEST)
+}
+
 /// E1: labour targets L* at the current own price, last tick's input price indices and the
 /// current wage, each capped at the labour that produces the output its inputs allow
 /// ([`input_output`], ADR 0266), then the wage (wage rule on expected inflation and excess
@@ -348,7 +358,7 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .zip(free.iter().zip(&equipped))
                 .map(|(e, (&f, &cap))| {
-                    if f > cap {
+                    if cap_cuts(f, cap) {
                         scarcest_inputs(world, e)
                     } else {
                         0
@@ -1161,6 +1171,22 @@ pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
 
 #[cfg(test)]
 mod tests {
+    use super::cap_cuts;
+
+    /// A target at its cap, one unit in the last place either side, decides as at the cap: the
+    /// cap did not cut it. Beyond the margin it did; an infinite cap never cuts.
+    #[test]
+    fn a_target_at_its_cap_decides_the_same_under_a_one_ulp_perturbation() {
+        for cap in [1.0f64, 0.37, 2.5e3, 7.1e-4] {
+            for target in [cap, cap.next_up(), cap.next_down()] {
+                assert!(!cap_cuts(target, cap), "target {target} at cap {cap}");
+            }
+            assert!(!cap_cuts(cap * (1.0 + 0.5e-9), cap));
+            assert!(cap_cuts(cap * (1.0 + 2e-9), cap));
+            assert!(!cap_cuts(cap, f64::INFINITY));
+        }
+    }
+
     use super::*;
 
     #[test]

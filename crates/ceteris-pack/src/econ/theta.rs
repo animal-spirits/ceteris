@@ -220,32 +220,6 @@ pub fn class_means(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
         .unzip()
 }
 
-/// H2 prior band of each class (ADR 0023, Prior band and Amendment 2026-10-29): its theta is the
-/// harmonic mean H of the sector thetas weighted by the class's trade value per sector (the
-/// weights of `classes`), and its standard error that of H for independent sector estimates by
-/// the delta method, H^2 sqrt(sum_s w_s^2 se_s^2 / theta_s^4). `values` is `sector_values` of
-/// the traded goods, `of` their classes. Returns each class's theta and standard error; the band
-/// is theta +/- 2 se.
-pub fn class_bands(values: &[[f64; 20]], of: &[u8]) -> (Vec<f64>, Vec<f64>) {
-    let thetas: [f64; 20] = std::array::from_fn(sector_theta);
-    class_values(values, of)
-        .iter()
-        .map(|v| {
-            let total = pairwise_sum(v);
-            let h = harmonic_mean(&thetas, v);
-            let var = dot(v
-                .iter()
-                .zip(&thetas)
-                .zip(&CALIENDO_PARRO)
-                .map(|((v, t), s)| {
-                    let d = v / total * s.se / (t * t);
-                    d * d
-                }));
-            (h, h * h * var.sqrt())
-        })
-        .unzip()
-}
-
 fn dot(terms: impl Iterator<Item = f64>) -> f64 {
     terms.fold(0.0, |acc, x| acc + x)
 }

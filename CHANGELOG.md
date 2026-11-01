@@ -2,9 +2,69 @@
 
 ## Unreleased
 
-### BEHAVIOUR: calibration passes settle to 1e-13 (P158, owner, 2026-10-31; B8e)
+### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
-- `steady::PASS_TOL` 1e-12 to 1e-13 (register P158). Stage 5's check (1e-12) compares Q, settled
+- Owner, 2026-11-01: ADR 0281 option A. A full pack build at dbda425 (owner-side, GEOS 3.15)
+  rewrites `manifest.json`; `pack build --econ-only` writes the tables but not the manifest.
+  Every P1 table is byte-identical to the installed one (`p1-pack.txt` does not move).
+  `econ_countries` and `econ_provinces` move (VA columns of the rent economies outside ICIO,
+  ADR 0281); the other econ tables do not.
+- Calibrated at dbda425 with the pinned Sinkhorn (ffa7a62): nu 2.60516, 0.80014, 0.39731,
+  good 1 0.046059 (was 0.065907), good 2 0 (clamped); 70 passes, last change 8.39e-14,
+  Sinkhorn residual 8.70e-14. The six tables equal B9's scratch calibration bit for bit.
+
+Goldens re-blessed: `p2-pack.txt` (econ_countries, econ_provinces and the six calibration
+tables; econ_io moves in the golden only, as the manifest had kept its pre-ADR 0270 digest since
+B8b installed the 0270 table without rewriting the manifest). `p1-pack.txt`, `p1-geo.txt`,
+`p2-econ.txt` and the fixture goldens do not move.
+
+### BEHAVIOUR: a labour target at its input cap is not cut by it (ADR 0266, B9; option A, owner, 2026-11-01)
+
+- `Scratch::short` marks an input as binding when the target without the cap exceeds the cap by
+  more than `SCARCEST` (1e-9 relative, `systems::cap_cuts`), the tie margin of
+  `scarcest_inputs`; it was `f > cap`. Frictionless and rationed, the marginal enterprise's
+  target equals its cap up to the rounding of two closed forms, so the split order rule was
+  decided by rounding. Numerical, not a parameter (econ SPEC, Effective demand for inputs).
+- Default runs do not move (fixture 120 ticks bit for bit). The fixture's frictionless run
+  moves from the first tie: after 120 ticks flows by up to 3.5e-5, prices 5.3e-6, wages 4.3e-6.
+  `homogeneity_of_degree_zero` holds frictionless over 120 ticks again (6 before).
+
+Goldens: none re-blessed. `p2-econ.txt`, `p2-as-built-rule.txt` and `p2-pack.txt` are default
+runs or tables; `p2_acceptance` passes on the installed pack.
+
+### BEHAVIOUR: the Sinkhorn sweep pins the level of ln w from below too (B9 review)
+
+- `steady::sinkhorn` shifts each good's ln w by its largest before every sweep; the largest
+  started at 0, so a level below 0 was not shifted and carried through the sweep (a start at
+  -1,000 underflowed w to 0 and stopped at sweep 1). It starts at -infinity now
+  (`sinkhorn_pins_the_level_of_the_weights` adds the -1,000 start). The fixed point is the
+  same; the mixing takes other rounding.
+- Fixture: settles at pass 27 (last change 3.49e-14; 3.06e-14 before); 57 of 80 columns move,
+  the largest pipeline units 3.4e-13, lead 2.4e-13, all within the iterative tolerance.
+- 2000 pack (scratch recalibration, not installed): the same fitted nu, 71 passes (last change
+  8.57e-14, Sinkhorn residual 8.70e-14, 1,659 s); against the installed tables 61 of 80 columns
+  move, all within the iterative tolerance (pipeline units 3.6e-10, lead 1.9e-11, merchant
+  stocks 6.4e-13), the same size as B8e's move.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: every table. `p2-pack.txt` (the installed tables),
+  `p2-econ.txt`, `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
+
+### Storage order by partial adjustment (ADR 0280; storage off by default, no golden moves)
+
+- The competitive-storage order is b = max(delta S + lambda (S* - S), -(1 - delta) S), S* = s D
+  max(0, 1 + pi^e / (zeta (k + delta))), lambda = psi zeta (k + delta) / s (Lovell 1961; owner,
+  2026-10-31), in place of ADR 0091's delta S + psi D x with the convenience yield z^-zeta.
+  lambda is derived from psi (0.144, 0.15, 0.05, 0.067 a month at the approved values); the
+  linearisation at the steady state is unchanged (`partial_adjustment_keeps_the_storage_loop`).
+  A stockout peaks below the flow-clearing price (fuels 0.057 against 0.062; 0.600 before) and a
+  market without output or buyers releases its stock instead of bidding its price up.
+  `TradeParams::storage_return` is replaced by `storage_adjustment` and `storage_target`.
+
+### BEHAVIOUR: calibration passes settle to 1e-13 (P159, owner, 2026-10-31; B8e)
+
+- `steady::PASS_TOL` 1e-12 to 1e-13 (register P159). Stage 5's check (1e-12) compares Q, settled
   at the last pass's values, with D, the orders those values' spending gives; its gap is about
   3.8 times the last pass change plus about 3e-13 of rounding (B8d: 1.34e-12 at a last change of
   3.55e-13 on the B8 pack), so the tolerance must be at most 1.8e-13. Nothing else changes.
@@ -578,6 +638,14 @@ Goldens re-blessed:
   fixture's kernel, digest, reference solution and calibration do not move.
 - `tests/golden/p2-econ.txt`, `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move.
   `p2-pack.txt` waits for the pack rebuild (pre-P3 B8).
+
+### BEHAVIOUR: the as-built price rule's hashes re-recorded at 33fd1fa (ADR 0090; 5f26feb)
+
+- `tests/golden/p2-as-built-rule.txt` holds the hashes of the price rule as built just before
+  ADR 0090's split rule, which that ADR's special-case test compares against at the mapped
+  gains. The model moved since f2f5e5b (theta classes, masses, border friction per class, the
+  exact local fill, i128 aggregates, pi^e outside the clip), so all 360 hashes were recorded again
+  from the unchanged rule at 33fd1fa. No rule or equation changes; the other goldens do not move.
 
 ### BEHAVIOUR: calibration passes mixed in relative units
 

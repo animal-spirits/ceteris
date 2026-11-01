@@ -93,3 +93,21 @@ Option 1 (owner, 2026-10-31: option A of the B8 report, nu per good within class
   10-good world until then. The P4 recalibration revisits per-good nu wherever a class mixes
   goods with different own cross-border shares: main's class 5 holds C16, C27, B05, B06, B07,
   B08 and C17_18, mining (B05 to B08) with manufactures, the coupling this ADR splits in class 3.
+
+## As built (pre-P3 B8b to B8e, 2026-10-31)
+
+- **Code** (77c7db7): `TradeParams::border_nu` per good, `ceteris_calibrate::border::friction_groups`
+  (class 3 split per good, `PER_GOOD_CLASS`), export format 15, calibration format 10. Goldens
+  re-blessed in b116c37: every fixture column bit for bit, the static digest carries ten values
+  (params digest ab28855a to b33c1bee), so the p2-econ hashes move without a price, quantity or
+  money moving; core goldens unchanged.
+- **Fit on the 2000 pack** (B8b): nu 2.59398 (class 0), 0.80020 (class 1), 0.39538 (class 2),
+  0.065907 (good 1) and 0 (good 2, clamped: target 0.2583 against 0.2198 at nu 0); the fitted
+  shares equal their targets (0.15443, 0.30850, 0.13913, 0.30314), 18 evaluations. The
+  calibration settles in 68 passes (change 3.18e-13, Sinkhorn residual 9.95e-14). At the 1e-13
+  pass tolerance (P159, B8e) the same fit (2.5939774, 0.8001961, 0.3953798, 0.0659071, 0)
+  settles in 71 passes (last change 8.39e-14).
+- **H2 by good of class 3** (B8c, diagnostic, kernel control): goods 1 and 2 both recover
+  theta 16.91000 (deviation -4.3e-9 and -4.7e-9 relative). With ln distance as the control good 1
+  gives 16.275 (s.e. 0.417; ln distance -0.375), good 2 14.443 (0.739; -0.751), class 3 pooled
+  16.039 (0.383). Every class passes its band (theta within 7e-9 relative).

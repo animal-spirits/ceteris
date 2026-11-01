@@ -1,6 +1,7 @@
 # 0264. H2 distance a reported diagnostic, theta per class gated with the model's kernel
 
-Status: proposed
+Status: proposed; amended by ADR 0272 (on main; replaces Decision 3: the log-distance cost is a
+crossing friction built in P4, not a leg cost in P9)
 Date: 2026-10-30
 Design sections: 18 (H2), 21.1 (P2 gate); amends ADR 0092 (Tests); ADRs 0022, 0089, 0247, 0257
 
@@ -96,6 +97,10 @@ Owner ruling A (2026-10-30): the diagnostician's E and C2 now, F scheduled.
    proposed for P9, where ADR 0022 already revisits P01, P05 and P04 jointly with richer tariff
    data: it changes the transport cost form (geo SPEC, S05), refits P04 and recalibrates nu and
    the steady state, a P9-sized change. The owner may move it.
+
+   Note (ADR 0272, accepted on main, 2026-10-31): replaced. The owner moved it to P4, and its form
+   is a log-distance iceberg factor on the border crossing beside nu, not a component of the leg
+   costs; H2 distance stays a reported diagnostic.
 
 ## Consequences
 
