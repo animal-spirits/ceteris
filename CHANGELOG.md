@@ -43,6 +43,25 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
+### Real GDP check on benchmark economies; current WDI price level (ADRs 0288, 0289, RFC 0282 D8 and D9; C1f, built, not installed)
+
+- RFC 0282 rulings, Antonio, 2026-11-01: D8 A (gate ADR 0098's real GDP check on the 31 ICIO
+  economies whose PWT 2000 price level is a benchmark, at 10%, on totals; report the other 48 with
+  PWT's `i_cig`); D9 A (D1's WDI fallback is current WDI's implied level, GDP over GDP per person
+  at PPP times population, not the WDI Database Archives file of PA.NUS.PPPC.RF).
+- P160: the check's 10%, the measured agreement of two vintages of the same benchmark PPPs.
+- Real GDP check, now against NY.GDP.MKTP.PP.CD (new validation file): 31 of 31 benchmark economies
+  within 10%, 23 within 5%, the UK largest at 1.093; Cyprus 0.967 (0.708 per person). All 79: 35
+  within 5%, median 0.955, slope 0.0523, correlation 0.267.
+- WDI fallback: NY.GDP.PCAP.PP.CD moves from `validation.toml` to `fetch.toml`; PA.NUS.PPPC.RF is
+  dropped. Sources: PWT 181, WDI 21, donor 40 (was 15 and 46); no WDI level is rejected.
+  Afghanistan, Andorra, Greenland, Nauru, East Timor and the US Virgin Islands move from the donor
+  to WDI. 21 levels move, Somalia most (0.095 to 0.827). p_c 0.127 (Tajikistan) to 1.80
+  (Bermuda), GDP-weighted mean 0.912.
+- A scratch `pack build --econ-only` moves `econ_countries` only (`price_level`,
+  `price_level_source`). No fixture golden moves; the installed pack is unchanged until
+  reinstall.
+
 ### Price level of domestic absorption (ADR 0287, RFC 0282 D7; C1e, built, not installed)
 
 - RFC 0282 D7, Antonio, 2026-11-01: PWT 11 pl_da (domestic absorption, C + I + G) over the US's
