@@ -883,8 +883,8 @@ importer pays (value times 1 + t: the kernel carries (1 + t)^-theta on spending,
 value's tariff elasticity is theta + 1), with the model's country-pair kernel net of tariffs as the
 cost control, recovers the class's theta within max(2 pair-clustered standard errors, 1% of
 theta) (ADRs 0018 and 0092). The distance elasticity of PPML on simulated country-pair flows (the origin value of the
-shipped units) is reported against the data's -0.7 to -1.1, not gated, until log-distance leg
-costs land (ADR 0264). S02:
+shipped units) is reported against the data's -0.7 to -1.1, not gated, until the log-distance
+crossing friction lands in P4 (ADR 0264; ADR 0272 on main replaces its Decision 3). S02:
 balanced Sinkhorn on the dense kernel with the equilibrium's origin supplies and destination
 expenditures reproduces the sourcing flows (1e-8, reference test), and a Rust run started at the
 reference with every crossing lag at 0 stays within 1e-6 of it (`equilibrium_is_a_fixed_point`).
