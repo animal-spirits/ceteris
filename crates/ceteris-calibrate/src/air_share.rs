@@ -2,6 +2,20 @@
 //! of the trade kernel's gateway-pair sum, fitted to the data's share by a Bernoulli
 //! quasi-likelihood for fractional data (Papke and Wooldridge 1996).
 
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use ceteris_pack::econ::goods::hs_goods;
+use ceteris_pack::read::baci::read_hs_cpa_version;
+use ceteris_pack::read::natural_earth::{ADMIN0, Dbf, read_codes};
+use ceteris_reference::io::pairwise_sum;
+use rayon::prelude::*;
+
+use crate::costs::{AIR, Graph, N_TRADED, Quantities, Transport, edge_quantities, tau};
+use crate::dta::read_dta;
+use crate::gravity::{TIME_COST, pack_index};
+use crate::write::Table;
+
 /// One gateway pair of a cell: `tau(r) = beta + slope * r`, with `slope = w_g f_road q[air]`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Crossing {
@@ -154,9 +168,385 @@ pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
     Ok(fit)
 }
 
+// ---------------------------------------------------------------- data: US imports 2000
+
+/// The fetched files (ADR 0277, Build), under `data/raw/air-shares-2000`.
+pub const US_IMPORTS: &str = "imp_detl_2000_12n.dta";
+pub const CENSUS_COUNTRIES: &str = "country.txt";
+const HS_KEY: &str = "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx";
+/// The BTiGE key's version for HS 1996, the US 2000 nomenclature.
+const HS_1996: u8 = 1;
+
+/// Air and total import value of one (importer, origin, traded good) cell, USD.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Obs {
+    pub importer: usize,
+    pub origin: usize,
+    pub good: usize,
+    pub air: f64,
+    pub total: f64,
+}
+
+/// What the US reader kept and left out, USD of general imports.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UsNotes {
+    pub total: f64,
+    pub air: f64,
+    pub unmatched_country: f64,
+    pub unmatched_codes: Vec<String>,
+    pub unmatched_hs: f64,
+    pub local_goods: f64,
+}
+
+/// The pack's country codes, in pack order.
+pub fn pack_countries(pack: &Path) -> Result<Vec<String>, String> {
+    Table::open(&pack.join("countries.arrow"))?.strings("code")
+}
+
+/// Census Schedule C: country code to ISO alpha-2, from `Code | Name | ISO Code` rows.
+fn census_iso2(text: &str) -> BTreeMap<String, String> {
+    text.lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('|').map(str::trim).collect();
+            (f.len() == 3 && f[0].len() == 4 && f[0].bytes().all(|c| c.is_ascii_digit()))
+                .then(|| (f[0].to_owned(), f[2].to_owned()))
+        })
+        .filter(|(_, iso)| iso.len() == 2)
+        .collect()
+}
+
+/// US general imports of 2000 by origin and traded good, summed over districts: air is
+/// `air_val_yr`, the total `gen_val_yr`, land and vessel the rest. HS 1996 lines go to goods by
+/// the BTiGE key; origins to pack countries by ISO code.
+pub fn us_imports(
+    data: &Path,
+    cache: &Path,
+    codes: &[String],
+) -> Result<(Vec<Obs>, UsNotes), String> {
+    let path = data.join(US_IMPORTS);
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let d = read_dta(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    let numbers = |n: &str| {
+        d.get(n)
+            .and_then(|c| c.numbers())
+            .ok_or_else(|| format!("{US_IMPORTS}: no numeric {n}"))
+    };
+    let (hs10, total, air) = (
+        numbers("commodity")?,
+        numbers("gen_val_yr")?,
+        numbers("air_val_yr")?,
+    );
+    let cty = d
+        .get("cty_code")
+        .and_then(|c| c.strings())
+        .ok_or_else(|| format!("{US_IMPORTS}: no text cty_code"))?;
+
+    let countries_path = data.join(CENSUS_COUNTRIES);
+    let text = std::fs::read_to_string(&countries_path)
+        .map_err(|e| format!("{}: {e}", countries_path.display()))?;
+    let iso2 = census_iso2(&text);
+    let admin0 = cache.join(ADMIN0);
+    let iso3_of_iso2: BTreeMap<String, String> = Dbf::from_zip(&admin0)?
+        .select(["ISO_A2_EH", "ISO_A3_EH"])?
+        .into_iter()
+        .filter_map(|[a2, a3]| {
+            let (a2, a3) = (a2?, a3?);
+            (a2 != "-99" && a3 != "-99").then(|| (a2.to_owned(), a3.to_owned()))
+        })
+        .collect();
+    let (iso, _) = read_codes(&admin0)?;
+    let index = pack_index(codes, &iso);
+    let us = *index.get("USA").ok_or("no USA in the pack")?;
+    let origin_of =
+        |c: &str| -> Option<usize> { index.get(iso3_of_iso2.get(iso2.get(c)?)?).copied() };
+
+    let key = read_hs_cpa_version(&cache.join(HS_KEY), HS_1996)?;
+    let good_of: BTreeMap<i64, usize> = hs_goods(&key)
+        .into_iter()
+        .filter(|(k, _)| !k.is_empty() && k.bytes().all(|c| c.is_ascii_digit()))
+        .map(|(k, g)| (k.parse().expect("digits"), g))
+        .collect();
+
+    let mut cells: BTreeMap<(usize, usize), (f64, f64)> = BTreeMap::new();
+    let mut notes = UsNotes {
+        total: 0.0,
+        air: 0.0,
+        unmatched_country: 0.0,
+        unmatched_codes: Vec::new(),
+        unmatched_hs: 0.0,
+        local_goods: 0.0,
+    };
+    for i in 0..hs10.len() {
+        let (t, a) = (total[i], air[i]);
+        if t.is_nan() || t <= 0.0 {
+            continue;
+        }
+        let a = if a.is_nan() { 0.0 } else { a };
+        notes.total += t;
+        notes.air += a;
+        let Some(origin) = origin_of(&cty[i]).filter(|&o| o != us) else {
+            notes.unmatched_country += t;
+            if !notes.unmatched_codes.contains(&cty[i]) {
+                notes.unmatched_codes.push(cty[i].clone());
+            }
+            continue;
+        };
+        let Some(&good) = good_of.get(&((hs10[i] / 1e4).floor() as i64)) else {
+            notes.unmatched_hs += t;
+            continue;
+        };
+        if good >= N_TRADED {
+            notes.local_goods += t;
+            continue;
+        }
+        let c = cells.entry((origin, good)).or_default();
+        c.0 += a;
+        c.1 += t;
+    }
+    notes.unmatched_codes.sort();
+    let obs = cells
+        .into_iter()
+        .map(|((origin, good), (air, total))| Obs {
+            importer: us,
+            origin,
+            good,
+            air,
+            total,
+        })
+        .collect();
+    Ok((obs, notes))
+}
+
+// ---------------------------------------------------------------- the pack's gateway pairs
+
+/// Least-cost legs of the pack graph at one [`Transport`]: each province's access quantities
+/// to its country's gateways, and the crossing quantities between all gateways.
+struct Legs {
+    gateways_of: Vec<Vec<usize>>,
+    provinces_of: Vec<Vec<usize>>,
+    access: Vec<Vec<Option<Quantities>>>,
+    crossing: Vec<Vec<Option<Quantities>>>,
+    weight_out: Vec<[f64; N_TRADED]>,
+    weight_in: Vec<f64>,
+}
+
+fn legs(pack: &Path, p: &Transport) -> Result<Legs, String> {
+    let read = |name: &str| Table::open(&pack.join(name));
+    let (nodes, edges, gw, prov) = (
+        read("nodes.arrow")?,
+        read("edges.arrow")?,
+        read("gateways.arrow")?,
+        read("econ_provinces.arrow")?,
+    );
+    let countries = read("countries.arrow")?.strings("code")?;
+    let index: BTreeMap<&str, usize> = countries
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.as_str(), i))
+        .collect();
+    let country: Vec<usize> = read("provinces.arrow")?
+        .strings("country")?
+        .iter()
+        .map(|c| {
+            index
+                .get(c.as_str())
+                .copied()
+                .ok_or_else(|| format!("province country {c} is not a pack country"))
+        })
+        .collect::<Result<_, _>>()?;
+    let (np, nc) = (country.len(), countries.len());
+    let va_cols = (0..10)
+        .map(|g| prov.f64(&format!("va_{g}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mode: Vec<u8> = edges.usize("mode")?.iter().map(|&m| m as u8).collect();
+    let q_edge = edge_quantities(&mode, &edges.f64("length_km")?, &edges.f64("tri_m")?, p);
+    let graph = Graph::new(
+        nodes.rows(),
+        &edges.usize("a")?,
+        &edges.usize("b")?,
+        &q_edge,
+        p,
+    );
+    let gnode = gw.usize("node")?;
+    let gcountry = gw.usize("country")?;
+    let provinces_of: Vec<Vec<usize>> = (0..nc)
+        .map(|c| (0..np).filter(|&s| country[s] == c).collect())
+        .collect();
+    let gateways_of: Vec<Vec<usize>> = (0..nc)
+        .map(|c| (0..gnode.len()).filter(|&i| gcountry[i] == c).collect())
+        .collect();
+    let reached = |dist: &[f64], q: &[Quantities], n: usize| dist[n].is_finite().then_some(q[n]);
+    let access = (0..np)
+        .into_par_iter()
+        .map(|s| {
+            let (dist, q) = graph.tree(s);
+            gateways_of[country[s]]
+                .iter()
+                .map(|&g| reached(&dist, &q, gnode[g]))
+                .collect()
+        })
+        .collect();
+    let crossing = gnode
+        .par_iter()
+        .map(|&s| {
+            let (dist, q) = graph.tree(s);
+            gnode.iter().map(|&n| reached(&dist, &q, n)).collect()
+        })
+        .collect();
+    let weight_out = (0..np)
+        .map(|s| std::array::from_fn(|g| va_cols[g][s]))
+        .collect();
+    let weight_in = (0..np)
+        .map(|s| pairwise_sum(&(0..10).map(|g| va_cols[g][s]).collect::<Vec<_>>()))
+        .collect();
+    Ok(Legs {
+        gateways_of,
+        provinces_of,
+        access,
+        crossing,
+        weight_out,
+        weight_in,
+    })
+}
+
+/// The cells of `obs` on the legs at `p`: access sums by gateway, as the kernel's
+/// `v'_a` and `u'_b` without the origin price weights, with exporter weights the good's VA (all
+/// VA where the country makes none of it) and importer weights all VA, as in
+/// [`crate::costs::country_costs`]. Cells whose countries have no gateway are left out.
+fn cells(
+    l: &Legs,
+    p: &Transport,
+    theta: &[f64; N_TRADED],
+    weight: &[f64],
+    obs: &[Obs],
+) -> Vec<Cell> {
+    let road = p.per_tkm[0];
+    let r = p.per_tkm[AIR as usize] / road;
+    obs.iter()
+        .filter_map(|o| {
+            let g = o.good;
+            let (w, lam, th) = (weight[g], TIME_COST[g], theta[g]);
+            let k = |q: &Option<Quantities>| q.map_or(0.0, |q| tau(&q, w, lam, p).powf(-th));
+            let (po, pd) = (&l.provinces_of[o.origin], &l.provinces_of[o.importer]);
+            let (go, gd) = (&l.gateways_of[o.origin], &l.gateways_of[o.importer]);
+            if go.is_empty() || gd.is_empty() {
+                return None;
+            }
+            let makes = po.iter().any(|&s| l.weight_out[s][g] > 0.0);
+            let v = (0..go.len())
+                .map(|a| {
+                    po.iter()
+                        .map(|&s| {
+                            let wo = if makes {
+                                l.weight_out[s][g]
+                            } else {
+                                l.weight_in[s]
+                            };
+                            wo * k(&l.access[s][a])
+                        })
+                        .sum()
+                })
+                .collect();
+            let u = (0..gd.len())
+                .map(|b| {
+                    pd.iter()
+                        .map(|&s| l.weight_in[s] * k(&l.access[s][b]))
+                        .sum()
+                })
+                .collect();
+            let mut crossings = Vec::new();
+            for (a, &ga) in go.iter().enumerate() {
+                for (b, &gb) in gd.iter().enumerate() {
+                    if let Some(q) = l.crossing[ga][gb] {
+                        let slope = w * road * q[AIR as usize];
+                        crossings.push(Crossing {
+                            a,
+                            b,
+                            beta: tau(&q, w, lam, p) - slope * r,
+                            slope,
+                        });
+                    }
+                }
+            }
+            Some(Cell {
+                cluster: o.importer * l.provinces_of.len() + o.origin,
+                share: o.air / o.total,
+                weight: o.total,
+                theta: th,
+                v,
+                u,
+                crossings,
+            })
+        })
+        .collect()
+}
+
+/// One outer step of [`estimate`]: the ratio the legs were solved at and the fit on them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Step {
+    pub at: f64,
+    pub fit: AirFit,
+    /// Import-value weighted air share, model at the fitted ratio and data, over fitted cells.
+    pub model_share: f64,
+    pub data_share: f64,
+}
+
+pub const OUTER_TOL: f64 = 1e-9;
+pub const OUTER_MAX: usize = 20;
+
+/// Fits r on legs solved at r, then solves the legs again at the fitted r, until r moves by
+/// less than [`OUTER_TOL`] in logs (the paths repeat). Air km on access legs are held at their
+/// path's value within a step.
+pub fn estimate(
+    pack: &Path,
+    obs: &[Obs],
+    theta: &[f64; N_TRADED],
+    base: &Transport,
+) -> Result<Vec<Step>, String> {
+    let weight = Table::open(&pack.join("econ_goods.arrow"))?.f64("weight")?;
+    let mut r = base.per_tkm[AIR as usize] / base.per_tkm[0];
+    let mut steps = Vec::new();
+    for _ in 0..OUTER_MAX {
+        let mut p = base.clone();
+        p.per_tkm[AIR as usize] = r * p.per_tkm[0];
+        let cs = cells(&legs(pack, &p)?, &p, theta, &weight, obs);
+        let fit = fit(&cs, r)?;
+        let used: Vec<&Cell> = cs.iter().filter(|c| c.informative()).collect();
+        let total: f64 = used.iter().map(|c| c.weight).sum();
+        let model_share = used
+            .iter()
+            .map(|c| c.weight * c.model_share(fit.ratio).0)
+            .sum::<f64>()
+            / total;
+        let data_share = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
+        let done = (fit.ratio.ln() - r.ln()).abs() < OUTER_TOL;
+        r = fit.ratio;
+        steps.push(Step {
+            at: p.per_tkm[AIR as usize] / p.per_tkm[0],
+            fit,
+            model_share,
+            data_share,
+        });
+        if done {
+            return Ok(steps);
+        }
+    }
+    Err(format!(
+        "air share: legs did not repeat in {OUTER_MAX} steps, last r {r}"
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_schedule_c_rows() {
+        let text = "Produced: 31JAN14\nCode | Name | ISO Code\n5700 | China | CN\n1220 | Canada | CA\n0001 | Bad |\n";
+        let m = census_iso2(text);
+        assert_eq!(m.get("5700").map(String::as_str), Some("CN"));
+        assert_eq!(m.len(), 2);
+    }
 
     /// Two origin and two destination gateways; crossings 0-0 and 1-1 by sea, 0-1 by air.
     fn cell(cluster: usize, km: f64, w: f64, theta: f64) -> Cell {

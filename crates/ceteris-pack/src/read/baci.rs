@@ -286,13 +286,18 @@ pub fn trade_by_country(
 /// OECD BTiGE conversion key (2025): HS 1988/92 (key version 0) 6-digit line to CPA 2.1
 /// activity, gold moved to C24B and books and media to C18.
 pub fn read_hs_cpa(path: &Path) -> Result<Names, String> {
+    read_hs_cpa_version(path, 0)
+}
+
+/// [`read_hs_cpa`] for the key's HS `version`: 0 HS 1988/92, 1 HS 1996, 2 HS 2002 (UN H0 to H2).
+pub fn read_hs_cpa_version(path: &Path, version: u8) -> Result<Names, String> {
     let origin = path.display().to_string();
     let mut key = Names::new();
     for r in xlsx::sheet(path, KEY_SHEET)? {
-        let version = r
+        let row_version = r
             .get("HS-version")
             .ok_or_else(|| format!("{origin}: row without HS-version"))?;
-        if *version == Cell::Number(0.0) {
+        if *row_version == Cell::Number(f64::from(version)) {
             let text = |name: &str| {
                 r.get(name)
                     .map(Cell::to_text)

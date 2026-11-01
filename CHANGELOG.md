@@ -35,6 +35,15 @@ Goldens re-blessed:
 - `tests/golden/p2-fixture/calibration/`: every table. `p2-pack.txt` (the installed tables),
   `p2-econ.txt`, `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
 
+### Added: `ceteris air-share`, P04d from 2000 air shares (ADR 0277)
+
+- `ceteris_calibrate::air_share` fits the air to road cost ratio to the air share of US 2000
+  general imports by origin and traded good, through the kernel's gateway-pair sum, by a
+  Bernoulli quasi-likelihood with errors clustered by country pair (geo SPEC, Air rate from mode
+  shares). Nothing reads its output yet; P04d lands at the next goldens re-bless.
+- `dta::read_dta` reads Stata format 118 (Schott's US import files);
+  `read_hs_cpa_version` reads the BTiGE key for HS 1996 and HS 2002. No golden moves.
+
 ### Least-iceberg leg paths per good (ADR 0279; off by default, no golden moves)
 
 - `TransportParams::path_choice`: `Freight` (S05 as built, the default) or `Iceberg`. Under
