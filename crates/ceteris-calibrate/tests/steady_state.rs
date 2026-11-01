@@ -592,6 +592,23 @@ fn sinkhorn_pins_the_level_of_the_weights() {
     }
 }
 
+/// eps = s_L sigma_FL / ((1 - s_L) a_VA) is finite only for s_L < 1 and a_VA > 0: an
+/// enterprise outside that is an error at calibration, not an infinite elasticity.
+#[test]
+fn supply_elasticity_refuses_a_full_labour_share_or_no_value_added() {
+    let inp = &worlds()[0].inp;
+    let (s_l, a_va) = (inp.ent_s_l(), inp.ent_a_va());
+    assert!(elasticity::supply(inp, &s_l, &a_va).is_ok());
+    let mut full = s_l.clone();
+    full[0] = 1.0;
+    let mut none = a_va.clone();
+    none[0] = 0.0;
+    for (s_l, a_va) in [(&full, &a_va), (&s_l, &none)] {
+        let err = elasticity::supply(inp, s_l, a_va).unwrap_err();
+        assert!(err.starts_with("enterprise 0 "), "{err}");
+    }
+}
+
 /// Stage 3: at the calibrated prices and base wages, with A = 1 / p_VA, coef = a_kg p_o / q_ik
 /// and L0 = s_L VA0 / w0, the reference model's residual vanishes (every market clears, labour
 /// at (1 - u*) L^s, the world price index 1), and VA, employment and output are the data's.

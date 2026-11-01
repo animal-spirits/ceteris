@@ -421,13 +421,18 @@ impl Block {
             .fold(0.0, f64::max)
     }
 
-    /// The block's gain scale b in (0, 1] at employment speed `eta` and margin `share` (P03d):
+    /// Whether the map at gains `scale` kappa_i is stable: its measured radius is at most 1 +
+    /// TOLERANCE (P157), the one criterion of the scale and the limits.
+    fn stable_at(&self, scale: f64, eta: f64) -> bool {
+        self.spectral_radius(scale, eta) <= 1.0 + TOLERANCE
+    }
+
+    /// The block's gain scale b in [0, 1] at employment speed `eta` and margin `share` (P03d):
     /// 1 where the map is stable at gains kappa_i / m, else the bisection's lower end on a grid
     /// of 2^-BISECTIONS, a scale at which it is stable at gains b kappa_i / m and unstable one
-    /// grid step above. A block unstable at every scale of the grid keeps the smallest,
-    /// 2^-BISECTIONS.
+    /// grid step above. A block unstable at every scale of the grid has no stable scale: 0.
     pub fn scale(&self, eta: f64, share: f64) -> f64 {
-        let stable = |b: f64| self.spectral_radius(b / share, eta) <= 1.0 + TOLERANCE;
+        let stable = |b: f64| self.stable_at(b / share, eta);
         if stable(1.0) {
             return 1.0;
         }
@@ -440,7 +445,7 @@ impl Block {
                 hi = mid;
             }
         }
-        if lo > 0.0 { lo } else { hi }
+        lo
     }
 }
 
@@ -898,7 +903,8 @@ pub fn blocks(
 /// The block limit gain of every cell (P, G) under `params` (ADR 0267): for a cell of a block
 /// whose scale b (Block::scale) is below 1, b kappa_cell / m, the gain at which its block is at
 /// the edge of stability, with the map checked stable at gains b kappa_cell; infinite for a cell
-/// of a block already within its margin and for a cell in no block (inactive cells).
+/// of a block already within its margin and for a cell in no block (inactive cells). A block
+/// with no stable scale on the grid, or unstable at its scaled gains, is an error.
 pub fn limits(
     m: &Model,
     src: &Sourcing,
@@ -918,11 +924,17 @@ pub fn limits(
         if b == 1.0 {
             continue;
         }
-        let radius = block.spectral_radius(b, params.eta);
-        if radius >= 1.0 {
+        if b == 0.0 {
             return Err(format!(
-                "the block of cell {} has radius {radius} at its scaled gains (scale {b})",
+                "the block of cell {} is unstable at every gain scale down to 2^-{BISECTIONS}",
                 cells[0]
+            ));
+        }
+        if !block.stable_at(b, params.eta) {
+            return Err(format!(
+                "the block of cell {} has radius {} at its scaled gains (scale {b})",
+                cells[0],
+                block.spectral_radius(b, params.eta)
             ));
         }
         for (&j, &kappa) in cells.iter().zip(&block.gain) {
@@ -1079,6 +1091,24 @@ mod tests {
         for eta in [0.3, 1.0] {
             assert_eq!(b.scale(eta, SHARE), 1.0);
         }
+    }
+
+    /// A wage rule that overshoots by itself (kappa_w sum L beta = 3, root -2) is unstable at
+    /// every price gain: no scale of the grid is stable, and the scale says so with 0 instead of
+    /// the smallest grid step, at which the block is unstable.
+    #[test]
+    fn a_block_unstable_at_every_scale_has_scale_zero() {
+        let mut b = market(10.0, 6.0);
+        b.wage = Wage::Rule {
+            rise: 3.0,
+            cut: 3.0,
+        };
+        b.enterprises[0].wage = 1.0;
+        b.enterprises[0].labour = 1.0;
+        b.provinces[0].employed = 0.95;
+        let tiny = 0.5f64.powi(BISECTIONS as i32);
+        assert!(b.spectral_radius(tiny / SHARE, 1.0) > 1.0 + TOLERANCE);
+        assert_eq!(b.scale(1.0, SHARE), 0.0);
     }
 
     /// Agriculture's origin market with competitive storage at the approved values (ADR 0091):

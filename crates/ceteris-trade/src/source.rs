@@ -261,6 +261,10 @@ pub fn source(
     let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(spend.len(), np, "spend must have one entry per province");
     assert_eq!(gamma.len(), np, "gamma must have one entry per province");
+    assert!(
+        gamma.iter().all(|g| g.is_finite() && *g > 0.0),
+        "gamma must be finite and positive"
+    );
     let gk = k.good(g);
     let s = &mut out.scratch;
     s.good = Some(g);
@@ -1034,6 +1038,21 @@ mod tests {
         source(k, g, price, active, &gammas(price.len()), spend, &mut out);
         dispatch(k, g, price, fill, &mut out);
         out
+    }
+
+    /// The buyer price is gamma P_d: a gamma of 0 would make it 0 (and NaN or a negative gamma
+    /// a NaN or negative price), so it is refused.
+    #[test]
+    #[should_panic(expected = "gamma must be finite and positive")]
+    fn source_refuses_a_gamma_that_is_not_positive() {
+        let (net, wedges) = random_world(3);
+        let k = kernel(&net, &wedges);
+        let np = net.n_provinces();
+        let mut gamma = gammas(np);
+        gamma[0] = 0.0;
+        let mut out = Sourced::new();
+        let (price, spend) = (vec![1.0; np], vec![[1.0, 1.0]; np]);
+        source(&k, 0, &price, &vec![true; np], &gamma, &spend, &mut out);
     }
 
     #[test]
