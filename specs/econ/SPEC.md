@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098; 1 for every country, with `price_level_imputed` set, until the owner rules on its source, Open questions); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADR 0282): PWT 11 pl_gdpo, else WDI PA.NUS.PPPC.RF (CC BY 4.0), else the donor's |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -135,6 +135,33 @@ Europe and Central Asia, gave them a European donor; ADR 0098). A territory insi
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
 basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.
+
+**Price levels** (`econ::price_level`; ADR 0098 as amended by ADR 0282, RFC 0282 D1). A
+country's price level p_c, the base price of its local goods, is PWT 11 pl_gdpo (the price level
+of output-side GDP) over the US's; else WDI PA.NUS.PPPC.RF, the ratio of the PPP conversion
+factor to the market rate (not US-based: the US is 122.1 in 2000), over the US's; else the level
+of the country's imputation donor (`donor`) by the same two rules. Each series is read at the
+year nearest 2000 within five and divided by the US's of that year (PWT: Curacao and Sint Maarten
+2005, South Sudan outside). A country of several economies takes the mean of their levels and
+incomes. Screen (`Screen`): Tukey's far-out fences, 3 interquartile ranges beyond the quartiles
+(`FAR_OUT`, quartiles by linear interpolation), first on the logs of the 184 PWT levels (0.0262
+to 8.32 times the US), then on the residuals of the Penn effect ln p = a + b ln y, y WDI GDP per
+person at market rates, fitted by OLS on the PWT levels inside the first fences: over 179
+economies ln p = -2.7317 + 0.2517 ln y (R2 0.610), residual fences -1.198 to 1.169. A PWT or
+WDI value is kept when its residual lies inside them, or, with no WDI income (Anguilla,
+Montserrat, Taiwan, the British Virgin Islands), its level inside the level fences. Rejected:
+PWT Bermuda (1,059), Somalia (1.09) and the Turks and Caicos (2.50); WDI Afghanistan, Andorra,
+Cuba, Greenland, New Caledonia, Nauru, French Polynesia, East Timor and the US Virgin Islands
+(0.117), unit errors the level fences alone would keep. Built: 179 pack countries from PWT, 17
+from WDI, 46 from the donor; p_c from 0.095 (Somalia, WDI) to 1.42 (Japan). Values stay at 2000
+market rates: ADR 0098's rescale of ICIO blocks to 1999-2001 rates is dropped (ADR 0283). Tests
+(`tests/price_level.rs`): `pwt_reader_keeps_the_gdp_price_level`,
+`levels_are_relative_to_the_united_states_in_the_same_year`,
+`fences_are_tukeys_far_out_fences_on_the_logs`,
+`the_screen_fits_the_penn_effect_and_fences_its_residuals`, `pwt_first_then_wdi_then_the_donor`,
+`values_the_screen_rejects_fall_to_the_next_source`,
+`a_country_of_several_economies_takes_their_mean`, `no_level_and_no_donor_is_an_error`; on the
+built tables `econ_build.rs` `price_levels_come_from_pwt_then_wdi_then_the_donor`.
 
 **Gateways.** Per country: k gateways, the k-medoids on great-circle distance of its
 candidates: its listed ports and airports and its land crossing points, the endpoints of graph
@@ -278,8 +305,8 @@ data state's local market prices are p_c, and the PIGL weights are inverted at t
 prices, 1 for traded goods and p_c for local goods, so households' t = 0 shares are Omega in
 value. Traded goods are untouched: their origin prices start at 1, their base delivered prices
 and Gamma come from sourcing at those prices. With p_c = 1 everywhere every quantity is the one
-before, bit for bit (A = 1 / 1, a_kg 1 / q, coef q / 1), and so is every golden; the pack writes
-p_c = 1 until the source is ruled (Open questions). The world price index of the run
+before, bit for bit (A = 1 / 1, a_kg 1 / q, coef q / 1), and so is every golden; the pack's
+p_c come from Price levels (Pack additions). The world price index of the run
 (`EconWorld::world_price_index`) keeps its weights, base consumption values over all goods.
 Tests (`crates/ceteris-econ/tests/p2_properties.rs`): `price_level_values_unchanged`, the fixture
 with p_c = 1.3 in one country: at t = 0 only that country's local base and market prices move
@@ -1507,29 +1534,17 @@ texture fed from core columns.
 
 ## Open questions
 
-- ADR 0098, held for the owner (2026-11-01; built: SWIID Gini first, WPP national totals,
-  Anguilla and Montserrat regions, the Venezuela income rule, `econ::ras::balance`):
-  - Price level source. WDI PA.NUS.PPPC.RF is already the price level ratio (PPP over the
-    market rate, base the United States), not a series to divide by PA.NUS.FCRF as the ADR
-    writes, and it is not normalised to the US (the US is 122.1 in 2000), so p_c is its value
-    over the US's. In 2000 it carries currency-unit errors: Turkey 3,712 times the US,
-    Azerbaijan 10.6, East Timor 0.003, the Palestinian territories 0.004, DR Congo 0.008, New
-    Caledonia 0.027; 33 of the economies it shares with PWT 11 differ from PWT's pl_gdpo by more
-    than 1.5 times. PWT 11 pl_gdpo over the US's has one such value (Bermuda 1,059). The rule
-    that screens them is a modelling choice; it waits on the owner. C1b built the rest of p_c
-    (Local base price, above) and the pack writes `price_level` 1 with `price_level_imputed` for
-    every country until then.
-  - Exchange-rate rescale. The 1999-2001 mean of USD per unit of local currency over 2000's has
-    median 1.005 over 205 economies (Germany 1.041, Japan 0.944, Korea 0.942, Brazil 0.929), not
-    the 10 to 20% the ADR expects, and breaks at currency changeovers and high inflation: Greece
-    109.8 (euro from 2001), El Salvador 3.59 (dollar from 2001), Ecuador 0.667 (dollar in 2000),
-    Serbia 2.45, DR Congo 2.18, Belarus 1.72, Angola 1.68; the Atlas factor PA.NUS.ATLS has the
-    same breaks (Greece 337). Not built.
-  - RAS targets. Column totals of the donor's intermediate table follow from VA alone (output is
-    VA times the donor's output per VA), so only the row targets bind, and they need final
-    demand: rows X_k + M_k - E_k - F_k with BACI imports M and exports E by good and F the
-    donor's final demand shares of VA + M - E. The rest-of-world constraint needs the ICIO ROW
-    block, which the reader does not keep. Not wired into `impute`.
+- ADR 0098 (built: SWIID Gini first, WPP national totals, Anguilla and Montserrat regions, the
+  Venezuela income rule, `econ::ras::balance`; the price level source and the dropped rate
+  rescale are ADRs 0282 and 0283, Price levels above). Open in RFC 0282:
+  - RAS targets (D3 ruled, D6 open). The ruled rows X_k + M_k - E_k - F_k (BACI imports M and
+    exports E by good, F the donor's final demand shares of VA + M - E) are negative for 321
+    rows of 122 of the 133 imputed economies with BACI trade (construction 70, food 66), which
+    RAS cannot reach; exports exceed output plus imports in 57 rows of 47 economies; 14 imputed
+    economies are not in BACI. Not wired into `impute` until D6. ROW check: the imputed
+    economies' VA is 1,012,330 million USD against ICIO ROW's 1,019,231 (`aggregate` keeps ROW).
+  - D4, the goods that weight the run's world price index, and D5, ADR 0098's real GDP check
+    series (NY.GDP.PCAP.PP.CD for PP.KD).
 
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
 - Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on
