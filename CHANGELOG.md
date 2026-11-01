@@ -43,6 +43,25 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
+### Donor use tables balanced to domestic use; the real GDP check (ADRs 0284 to 0286, RFC 0282; C1d, built, not installed)
+
+- RFC 0282 rulings, Antonio, 2026-11-01: D4 A (the run's world price index keeps local goods;
+  no code change, ADR 0284), D5 A (ADR 0098's real GDP check reads NY.GDP.PCAP.PP.CD, ADR 0285),
+  D6 A (RAS of the donor's use table to domestic use, ADR 0286), which supersedes D3.
+- `ceteris_pack::econ::icio::impute` balances the donor's [Z | F] of each imputed economy with its
+  own VA and BACI 2000 trade (`read::baci::trade_by_good`, new) to rows X + M - E, columns X - VA
+  and final demand VA + M - E, 1e-10 in at most 200 passes (`ras::balance` now takes any shape and
+  returns its passes). 87 economies balanced (10 to 56 passes, worst residual 1.0e-10); 48 keep the
+  donor's table for a negative domestic use, 15 for no BACI trade. `econ_countries` gains
+  `io_basis` (`icio`, `ras`, `donor`). The build summary reports the imputed VA against ICIO ROW:
+  1,014,073 against 1,019,231 million USD.
+- The real GDP check is a pack test (`real_gdp_per_person_against_wdi_ppp`, PP.CD pinned in
+  `validation.toml`, source `wdi-ppp`): 32 of 79 ICIO economies within 5%; ADR 0098's 5% does not
+  hold and is not gated.
+- A scratch `pack build --econ-only` moves `econ_countries` and `econ_io` only. No fixture golden
+  moves; the installed pack and its golden (`tests/golden/p2-pack.txt`) are unchanged until
+  reinstall.
+
 ### Price levels from PWT, WDI and the donor (ADR 0282, RFC 0282; C1c, built, not installed)
 
 - `econ_countries` `price_level` p_c: PWT 11 pl_gdpo over the US's (179 pack countries), else
