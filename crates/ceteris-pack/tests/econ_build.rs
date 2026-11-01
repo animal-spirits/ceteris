@@ -20,6 +20,7 @@ use ceteris_pack::econ::goods::hs_goods;
 use ceteris_pack::econ::icio::{ICIO, INSIDE};
 use ceteris_pack::read::baci::{read_hs_cpa, trade_by_good};
 use ceteris_pack::read::natural_earth::read_codes;
+use ceteris_pack::read::people::read_pwt;
 use ceteris_pack::read::tariffs::{DTA, GRAVITY};
 use ceteris_pack::read::wdi::read_wdi;
 use ceteris_pack::sources;
@@ -232,9 +233,10 @@ fn missing_manual_icio_stops_the_build() {
     assert!(!cache.path().join(ICIO).exists());
 }
 
-/// ADRs 0282 and 0287: p_c from PWT pl_da over the US's for 181 pack countries, WDI for 15, the
-/// donor for 46; Somalia's PWT level (1.04) gives way to WDI's, and WDI's unit errors (New
-/// Caledonia 0.027, the US Virgin Islands 0.117, Kosovo 0.149) to the donor's.
+/// ADRs 0282, 0287 and 0289: p_c from PWT pl_da over the US's for 181 pack countries, the level
+/// WDI's GDP at PPP implies for 21, the donor for 40; Somalia's PWT level (1.04) gives way to
+/// WDI's (0.827), and economies WDI has no GDP at PPP for (New Caledonia, Kosovo) take the
+/// donor's.
 #[test]
 fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     let Some(f) = full() else { return };
@@ -256,7 +258,7 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     assert_eq!(level.len(), rows(&path));
     assert!(level.iter().all(|p| p.is_finite() && *p > 0.0));
     let count = |s: &str| source.iter().filter(|x| *x == s).count();
-    assert_eq!((count("pwt"), count("wdi"), count("donor")), (181, 15, 46));
+    assert_eq!((count("pwt"), count("wdi"), count("donor")), (181, 21, 40));
     for i in 0..code.len() {
         assert_eq!(imputed[i], source[i] != "pwt", "{}", code[i]);
     }
@@ -267,7 +269,8 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
         ("SOM", "wdi"),
         ("KOS", "donor"),
         ("NCL", "donor"),
-        ("VIR", "donor"),
+        ("VIR", "wdi"),
+        ("AFG", "wdi"),
         ("TUR", "pwt"),
     ] {
         assert_eq!(source[at(c)], s, "{c}");
@@ -275,41 +278,51 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     let (lo, hi) = level
         .iter()
         .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(*p), b.max(*p)));
-    // Somalia (WDI) to Bermuda.
+    // Tajikistan to Bermuda, both PWT.
     assert!(
-        (lo - 0.0948).abs() < 5e-5 && (hi - 1.8004).abs() < 5e-5,
+        (lo - 0.1268).abs() < 5e-5 && (hi - 1.8004).abs() < 5e-5,
         "{lo} {hi}"
     );
 }
 
-/// ADR 0098's real GDP check on the series of ADR 0285: GDP per person over p_c against WDI
-/// NY.GDP.PCAP.PP.CD 2000 for the ICIO economies with WDI population. Pinned as measured: ADR
-/// 0098's 5% holds for fewer than half and is reported, not enforced (RFC 0282, D5 and D7).
+/// P160: the real GDP check's tolerance on the economies whose PWT price level of 2000 is a
+/// benchmark (RFC 0282 D8, ADR 0288).
+const BENCHMARK_TOLERANCE: f64 = 0.10;
+
+/// ADR 0098's real GDP check (ADRs 0285, 0288): GDP over p_c against WDI NY.GDP.MKTP.PP.CD 2000,
+/// totals, so that no population enters (WDI counts all of Cyprus, its GDP the south only), for
+/// the ICIO economies WDI reports. With the pack's GDP equal to WDI's, the ratio is WDI's price
+/// level over PWT's. Gated at `BENCHMARK_TOLERANCE` where PWT's i_cig of 2000 is Benchmark,
+/// reported with i_cig elsewhere.
 #[test]
-fn real_gdp_per_person_against_wdi_ppp() {
+fn real_gdp_against_wdi_ppp() {
     let Some(f) = full() else { return };
-    let Some(ppp) = cached("wdi_NY.GDP.PCAP.PP.CD.zip") else {
+    let Some(ppp) = cached("wdi_NY.GDP.MKTP.PP.CD.zip") else {
         return;
     };
     let ppp = read_wdi(&ppp).unwrap();
-    let pop = read_wdi(&f.cache.join("wdi_SP.POP.TOTL.zip")).unwrap();
+    let basis_of = read_pwt(&f.cache.join("pwt110.xlsx")).unwrap().price_basis;
     let path = f.out.path().join("econ_countries.arrow");
-    let (code, basis) = (strings(&path, "code"), strings(&path, "va_basis"));
+    let (code, va_basis) = (strings(&path, "code"), strings(&path, "va_basis"));
     let gdp = values::<Float64Type>(&path, "gdp");
     let level = values::<Float64Type>(&path, "price_level");
+    let pop = read_wdi(&f.cache.join("wdi_SP.POP.TOTL.zip")).unwrap();
     let (mut ln_y, mut ln_r) = (Vec::new(), Vec::new());
-    for i in 0..code.len() {
-        let at_2000 =
-            |s: &BTreeMap<String, BTreeMap<i64, f64>>| s.get(&code[i])?.get(&2000).copied();
-        let (Some(p), Some(w)) = (at_2000(&pop), at_2000(&ppp)) else {
+    let (mut gated, mut reported) = (Vec::new(), Vec::new());
+    for i in (0..code.len()).filter(|&i| va_basis[i] == "icio") {
+        let Some(w) = ppp.get(&code[i]).and_then(|s| s.get(&2000)) else {
             continue;
         };
-        if basis[i] != "icio" {
-            continue;
+        let r = gdp[i] / level[i] / w;
+        let basis = basis_of.get(&code[i]).map_or("none", String::as_str);
+        if basis == "Benchmark" {
+            gated.push((code[i].as_str(), r));
+        } else {
+            reported.push((code[i].as_str(), basis, r));
         }
-        let y = gdp[i] / p;
-        ln_y.push(y.ln());
-        ln_r.push((y / level[i] / w).ln());
+        ln_r.push(r.ln());
+        // Income for the tilt only: GDP per person at market rates.
+        ln_y.push((gdp[i] / pop[&code[i]][&2000]).ln());
     }
     let n = ln_y.len() as f64;
     let mean = |v: &[f64]| v.iter().sum::<f64>() / n;
@@ -322,24 +335,54 @@ fn real_gdp_per_person_against_wdi_ppp() {
     let sxx: f64 = ln_y.iter().map(|y| (y - my).powi(2)).sum();
     let srr: f64 = ln_r.iter().map(|r| (r - mr).powi(2)).sum();
     let (slope, corr) = (sxy / sxx, sxy / (sxx * srr).sqrt());
-    let within = ln_r
-        .iter()
-        .filter(|r| (r.exp() - 1.0).abs() <= 0.05)
-        .count();
-    let mut sorted = ln_r.clone();
+    let within = |r: f64, t: f64| (r - 1.0).abs() <= t;
+    let all: Vec<f64> = ln_r.iter().map(|r| r.exp()).collect();
+    let mut sorted = all.clone();
     sorted.sort_by(f64::total_cmp);
-    let median = sorted[sorted.len() / 2].exp();
+    let median = sorted[sorted.len() / 2];
     eprintln!(
-        "real GDP check: {within} of {} within 5%, median {median:.4}, {:.4} to {:.4}, slope \
-         {slope:.4}, correlation {corr:.4}",
-        ln_y.len(),
-        sorted[0].exp(),
-        sorted[sorted.len() - 1].exp(),
+        "real GDP check: {} economies, {} within 5%, {} within 10%, median {median:.4}, {:.4} to \
+         {:.4}, slope {slope:.4}, correlation {corr:.4}",
+        all.len(),
+        all.iter().filter(|r| within(**r, 0.05)).count(),
+        all.iter().filter(|r| within(**r, 0.10)).count(),
+        sorted[0],
+        sorted[sorted.len() - 1],
     );
-    assert_eq!((ln_y.len(), within), (79, 34));
-    assert!((median - 0.9503).abs() < 5e-5, "{median}");
-    assert!((slope - 0.0509).abs() < 5e-5, "{slope}");
-    assert!((corr - 0.2596).abs() < 5e-5, "{corr}");
+    let worst = gated
+        .iter()
+        .copied()
+        .max_by(|a, b| (a.1 - 1.0).abs().total_cmp(&(b.1 - 1.0).abs()))
+        .unwrap();
+    eprintln!(
+        "benchmark economies: {} of {} within 10%, {} within 5%, largest gap {} {:.4}",
+        gated
+            .iter()
+            .filter(|g| within(g.1, BENCHMARK_TOLERANCE))
+            .count(),
+        gated.len(),
+        gated.iter().filter(|g| within(g.1, 0.05)).count(),
+        worst.0,
+        worst.1,
+    );
+    for (c, r) in &gated {
+        eprintln!("  gated {c} {r:.4}");
+    }
+    for (c, b, r) in &reported {
+        eprintln!("  reported {c} {b} {r:.4}");
+    }
+    for (c, r) in &gated {
+        assert!(within(*r, BENCHMARK_TOLERANCE), "{c} {r}");
+    }
+    assert_eq!((gated.len(), reported.len()), (31, 48));
+    assert_eq!(gated.iter().filter(|g| within(g.1, 0.05)).count(), 23);
+    assert_eq!(worst.0, "GBR");
+    assert!((worst.1 - 1.093).abs() < 5e-4, "{}", worst.1);
+    // All 79, reported only.
+    assert_eq!(all.iter().filter(|r| within(**r, 0.05)).count(), 35);
+    assert!((median - 0.9552).abs() < 5e-5, "{median}");
+    assert!((slope - 0.0523).abs() < 5e-5, "{slope}");
+    assert!((corr - 0.2674).abs() < 5e-5, "{corr}");
 }
 
 /// Donor tables balanced by RAS (ADR 0286): every `ras` economy's use table [Z | F] meets its

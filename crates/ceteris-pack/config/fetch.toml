@@ -303,13 +303,14 @@ sha256 = "e77b29f91026cee0df109141c15be90a6e268915f64255f5551293772cea1f60"
 bytes = 72497
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.NGAS.RT.ZS?downloadformat=csv"
 
-# Price level and official exchange rate (ADR 0098).
+# GDP per person at PPP, current international dollars: with GDP and population, the WDI price level
+# (ADR 0098 as amended by ADR 0289); and the official exchange rate (ADR 0098).
 [[file]]
 source = "wdi"
-name = "wdi_PA.NUS.PPPC.RF.zip"
-sha256 = "5b3908bf663254c71a24dd720222c9c10882ffd25733a18973bad1841ea42bbd"
-bytes = 98588
-url = "https://api.worldbank.org/v2/en/indicator/PA.NUS.PPPC.RF?downloadformat=csv"
+name = "wdi_NY.GDP.PCAP.PP.CD.zip"
+sha256 = "c7f9101196b72ca1a93b367a93f4b92ab70434685f8036e946268f3eab486822"
+bytes = 95109
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.PCAP.PP.CD?downloadformat=csv"
 
 [[file]]
 source = "wdi"

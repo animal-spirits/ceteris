@@ -1,13 +1,14 @@
 //! Price level p_c of each pack country (ADR 0098 as amended by ADRs 0282 and 0287): PWT 11 pl_da
-//! over the US's, else WDI PA.NUS.PPPC.RF over the US's, else the donor's, each screened by Tukey's
-//! far-out fences on the residuals of the Penn effect fitted on the PWT levels.
+//! over the US's, else the level WDI's GDP at PPP implies over the US's (ADR 0289), else the
+//! donor's, each screened by Tukey's far-out fences on the residuals of the Penn effect fitted on
+//! the PWT levels.
 
 mod common;
 
 use std::collections::BTreeMap;
 
 use ceteris_pack::econ::price_level::{
-    FAR_OUT, Level, Screen, Source, fences, price_levels, relative,
+    FAR_OUT, Level, Screen, Source, fences, price_levels, relative, wdi_implied,
 };
 use ceteris_pack::read::ByYear;
 use ceteris_pack::read::people::read_pwt;
@@ -51,10 +52,75 @@ fn pwt_reader_keeps_the_domestic_absorption_price_level() {
     assert_eq!(pwt.price_level["AAA"], [(1999, 0.3), (2000, 0.33)].into());
 }
 
+/// RFC 0282 D8: PWT's i_cig of 2000, how its price level of that year was made.
+#[test]
+fn pwt_reader_keeps_the_price_basis_of_2000() {
+    let dir = tempfile::tempdir().unwrap();
+    let row = |code: &'static str, year: f64, basis: &'static str| {
+        vec![
+            ("countrycode", V::T(code)),
+            ("year", V::N(year)),
+            ("i_cig", V::T(basis)),
+        ]
+    };
+    let path = write_rows(
+        &dir.path().join("pwt.xlsx"),
+        &[(
+            "Data",
+            vec![
+                row("USA", 2000.0, "Benchmark"),
+                row("AAA", 1999.0, "Benchmark"),
+                row("AAA", 2000.0, "Interpolated"),
+                row("BBB", 2001.0, "Extrapolated"),
+            ],
+        )],
+    );
+    let pwt = read_pwt(&path).unwrap();
+    assert_eq!(
+        pwt.price_basis,
+        [
+            ("AAA".to_owned(), "Interpolated".to_owned()),
+            ("USA".to_owned(), "Benchmark".to_owned()),
+        ]
+        .into()
+    );
+}
+
+/// RFC 0282 D9: GDP at market rates over GDP per person at PPP times population, by year where
+/// all three are reported.
+#[test]
+fn wdi_level_is_gdp_over_gdp_at_ppp() {
+    let got = wdi_implied(
+        &by_year(&[
+            ("USA", &[(2000, 100.0), (2001, 110.0)]),
+            ("AAA", &[(2000, 30.0)]),
+            ("BBB", &[(2000, 5.0)]),
+        ]),
+        &by_year(&[
+            ("USA", &[(2000, 50.0), (2001, 55.0)]),
+            ("AAA", &[(2000, 20.0), (2001, 21.0)]),
+            ("CCC", &[(2000, 1.0)]),
+        ]),
+        &by_year(&[
+            ("USA", &[(2000, 2.0), (2001, 2.0)]),
+            ("AAA", &[(2000, 3.0), (2001, 3.0)]),
+            ("BBB", &[(2000, 1.0)]),
+            ("CCC", &[(2000, 1.0)]),
+        ]),
+    );
+    assert_eq!(
+        got,
+        by_year(&[
+            ("USA", &[(2000, 1.0), (2001, 1.0)]),
+            ("AAA", &[(2000, 0.5)])
+        ])
+    );
+}
+
 #[test]
 fn levels_are_relative_to_the_united_states_in_the_same_year() {
-    // WDI's ratio is not based on the US (122.1 for it in 2000), PWT's neither (0.66): each value
-    // is over the US's of the same year, the year nearest 2000 within five.
+    // PWT's levels are not based on the US (0.66 for it in 2000): each value is over the US's of
+    // the same year, the year nearest 2000 within five.
     let got = relative(
         &by_year(&[
             ("USA", &[(2000, 122.0), (2003, 100.0)]),
@@ -195,9 +261,9 @@ fn pwt_first_then_wdi_then_the_donor() {
 
 #[test]
 fn values_the_screen_rejects_fall_to_the_next_source() {
-    // Bermuda's PWT level is 1,059 times the US's; WDI has Turkey at 3,712 times and East Timor
-    // at 0.003, and the US Virgin Islands, on the dollar, at 0.117: inside the level fences but
-    // far below the level of their income.
+    // PWT 11 pl_gdpo had Bermuda at 1,059 times the US; the WDI archive file of RFC 0282 D9 had
+    // Turkey at 3,712 times, East Timor at 0.003 and the US Virgin Islands, on the dollar, at
+    // 0.117: inside the level fences but far below the level of their income.
     let bmu = on_line(3e4, 0.05);
     let got = resolve(
         &["BMU", "TUR", "TLS", "VIR"],

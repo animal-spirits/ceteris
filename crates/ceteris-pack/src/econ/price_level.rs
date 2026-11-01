@@ -1,5 +1,5 @@
 //! Price level p_c of each pack country, the base price of its local goods (specs/econ/SPEC.md,
-//! Price levels; ADR 0098 as amended by RFC 0282, D1 and D7).
+//! Price levels; ADR 0098 as amended by RFC 0282, D1, D7 and D9).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -9,8 +9,13 @@ use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray};
 use crate::numeric::pairwise_sum;
 use crate::read::{ByYear, WINDOW, YEAR};
 
-/// WDI price level ratio of the PPP conversion factor (GDP) to the market exchange rate.
-pub const WDI_PRICE_LEVEL: &str = "wdi_PA.NUS.PPPC.RF.zip";
+/// WDI GDP at market rates, GDP per person at PPP and population, whose ratio is the WDI price
+/// level (`wdi_implied`).
+pub const WDI_PRICE_LEVEL: [&str; 3] = [
+    "wdi_NY.GDP.MKTP.CD.zip",
+    "wdi_NY.GDP.PCAP.PP.CD.zip",
+    "wdi_SP.POP.TOTL.zip",
+];
 /// The economy every level is relative to.
 pub const BASE: &str = "USA";
 /// Tukey's (1977) far-out fences: a value more than this many interquartile ranges beyond the
@@ -22,7 +27,7 @@ pub const FAR_OUT: f64 = 3.0;
 pub enum Source {
     /// PWT 11 pl_da over the US's.
     Pwt,
-    /// WDI PA.NUS.PPPC.RF over the US's of the same year.
+    /// The WDI level (`wdi_implied`) over the US's of the same year.
     Wdi,
     /// The imputation donor's level.
     Donor,
@@ -62,6 +67,25 @@ pub fn relative(
             Some((k.clone(), v / base.get(year).filter(|b| **b > 0.0)?))
         })
         .collect())
+}
+
+/// The price level WDI implies, by economy and year: GDP at market rates over GDP at PPP, the
+/// latter GDP per person at PPP times population, in every year all three report.
+pub fn wdi_implied(
+    gdp: &BTreeMap<String, ByYear>,
+    ppp_per_person: &BTreeMap<String, ByYear>,
+    population: &BTreeMap<String, ByYear>,
+) -> BTreeMap<String, ByYear> {
+    gdp.iter()
+        .filter_map(|(k, by_year)| {
+            let (ppp, pop) = (ppp_per_person.get(k)?, population.get(k)?);
+            let level: ByYear = by_year
+                .iter()
+                .filter_map(|(y, g)| Some((*y, g / (ppp.get(y)? * pop.get(y)?))))
+                .collect();
+            (!level.is_empty()).then(|| (k.clone(), level))
+        })
+        .collect()
 }
 
 /// Linear interpolation between order statistics (numpy's default) of sorted `x`.
