@@ -984,6 +984,14 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   T2b posts every good's entries in one `Ledger::post_all` after the goods moves, applies the
   chunk sums in parallel over accounts and copies the journal in parallel; `trade_legs`
   builds its domestic legs and crossing splits in parallel, in the serial order.
+  Parallel dispatch per good (owner, 2026-11-01; changes rounding, goldens re-blessed):
+  `dispatch` and `arrivals` run the origin pass in fixed chunks of 256 origins and the crossing
+  pass in fixed chunks of 32 origin gateways, in parallel. What an origin or gateway owns
+  (its shipments, its legs' values) is carried on in the serial order; what a chunk adds to
+  destinations, gateways and the `lost` and `selected` totals is summed from zero per chunk,
+  and the chunks are added in chunk order, so results do not depend on the thread count but
+  differ from the serial pass by rounding. The base delivered prices and Gamma move by the same
+  rounding, so the pack is recalibrated.
 
 ## Open questions
 
