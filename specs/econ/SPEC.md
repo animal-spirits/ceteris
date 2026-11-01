@@ -160,9 +160,13 @@ and its final demand shares F_k / sum_k F_k (`io_basis` `ras`). The donor's tabl
 (`io_basis` `donor`) where a target is negative, u_k < 0 for some good (exports above output plus
 imports: RAS cannot reach a negative total from a non-negative seed), where the economy has no
 BACI trade, and for VA basis `none`; a territory inside its parent (`parent`) takes its parent's
-table and IO basis. A positive target on a row the seed leaves empty, or a balance that does not
+table and IO basis (the parent is balanced on its whole, before the territory takes its share). A positive target on a row the seed leaves empty, or a balance that does not
 converge, stops the build. Rest of world (reported, not a constraint): the imputed economies' VA
 by good against ICIO's ROW block (`read::icio::aggregate` keeps it as ROW), in the build summary.
+Built: 87 economies balanced (88 rows `ras` with Somaliland), 48 keep the donor's table for a
+negative domestic use, 15 for no BACI trade, 9 have no VA; 10 to 56 passes (median 19), worst
+residual 1.0e-10 on rows and 4.9e-16 on columns; imputed VA 1,014,073 million USD against ROW's
+1,019,231 (0.9949; by good 0.674 to 1.330).
 Tests (`tests/ras.rs`, `tests/icio.rs`): `ras_balances_a_rectangular_table`,
 `ras_balances_the_donor_use_table_to_domestic_use`,
 `negative_domestic_use_keeps_the_donor_table`, `no_trade_keeps_the_donor_table`,
@@ -203,7 +207,9 @@ NY.GDP.PCAP.PP.CD 2000 (current international dollars, so of 2000 prices as the 
 are; validation only, `validation.toml`). ADR 0098 asks for agreement within 5%; the check reports
 the count within 5% and the OLS slope and correlation of the log ratio on ln income (WDI GDP per
 person at market rates), and pins them (`econ_build.rs`
-`real_gdp_per_person_against_wdi_ppp`).
+`real_gdp_per_person_against_wdi_ppp`). Measured: 32 of 79 within 5%, ratio median 0.954 (0.216
+Nigeria to 1.85 DR Congo), slope 0.0487, correlation 0.259; the largest misses are oil exporters,
+whose output-side pl_gdpo carries export prices (open, RFC 0282 D5).
 
 **Gateways.** Per country: k gateways, the k-medoids on great-circle distance of its
 candidates: its listed ports and airports and its land crossing points, the endpoints of graph
