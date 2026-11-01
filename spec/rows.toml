@@ -1,0 +1,1407 @@
+# Decision rows. One [[entry]] per batch; ids are ADR numbers, never reused.
+# Take new ids from `cargo run -p ceteris-rows -- next N`; then run render and check.
+
+[[entry]]
+rows = "0001"
+topic = "[Record architecture decisions](../rfcs/0001-record-architecture-decisions.md)"
+sections = "21.2, 22.2"
+
+[[entry]]
+rows = "0002"
+topic = "[Canonical binary snapshots before Arrow](../rfcs/0002-p0-snapshot-codec.md)"
+sections = "4.1, 14.3, 19.1"
+
+[[entry]]
+rows = "0003"
+topic = "[Python distribution name](../rfcs/0003-python-distribution-name.md)"
+sections = "22.1"
+
+[[entry]]
+rows = "0004"
+topic = "[Benchmark regression gate](../rfcs/0004-benchmark-gate.md)"
+sections = "19.4, 21.2"
+
+[[entry]]
+rows = "0005"
+topic = "[Data licence audit and closed-source fallbacks](../rfcs/0005-data-licence-audit.md)"
+sections = "2.5, 5.2, 5.4, 13.4, 16, 22, 22.1"
+
+[[entry]]
+rows = "0006"
+topic = "[Province set at 2000 borders](../rfcs/0006-province-set.md)"
+sections = "5.2, 22.2"
+
+[[entry]]
+rows = "0007"
+topic = "[Transport graph construction](../rfcs/0007-transport-graph.md)"
+sections = "5.3, 5.4, 19.1, 19.4"
+
+[[entry]]
+rows = "0008"
+topic = "[Pack format and map delivery in P1](../rfcs/0008-pack-format-and-map.md)"
+sections = "16.1, 19.1, 22.1"
+
+[[entry]]
+rows = "0009"
+topic = "[County display layer](../rfcs/0009-county-display-layer.md)"
+sections = "5.1, 5.2, 16, 19.1, 20.1"
+
+[[entry]]
+rows = "0010"
+topic = "[GPU fill layer, pack protocol and globe](../rfcs/0010-gpu-fills-and-pack-protocol.md)"
+sections = "19.1, 19.4, 20.1"
+
+[[entry]]
+rows = "0011"
+topic = "[Rewrite the map in Rust](../rfcs/0011-native-rust-map.md)"
+sections = "19.1, 19.4, 20, 22.1"
+
+[[entry]]
+rows = "0012"
+topic = "[Simulate the full globe from P2](../rfcs/0012-full-globe-from-p2.md)"
+sections = "21, 21.1, 22.1, 8.3, 19.2"
+
+[[entry]]
+rows = "0013"
+topic = "[Trade routing as a posted-price logit on a two-level kernel](../rfcs/0013-trade-routing-logit-two-level-kernel.md)"
+sections = "3.4, 5.4, 8.2, 8.3, 17, 18, 19.4"
+
+[[entry]]
+rows = "0014"
+topic = "[P2 data seeding, downscaling and imputation](../rfcs/0014-p2-data-seeding-and-imputation.md)"
+sections = "5.2, 6.1, 7.1, 7.2, 8.5, 15.1, 16, 16.1, 22.2"
+
+[[entry]]
+rows = "0015"
+topic = "[Trade flows in value with a dimensionless gravity kernel](../rfcs/0015-trade-flows-in-value.md)"
+sections = "1, 8, 8.3, 17.1"
+
+[[entry]]
+rows = "0016"
+topic = "[Clear origin markets across ticks](../rfcs/0016-clear-origin-markets-across-ticks.md)"
+sections = "8.2, 8.3, 17.2, 19.2, 19.4"
+
+[[entry]]
+rows = "0017"
+topic = "[Route-choice trade costs](../rfcs/0017-route-choice-trade-costs.md)"
+sections = "5.3, 5.4, 5.5, 8.3, 8.4, 17.2, 19.4"
+
+[[entry]]
+rows = "0018"
+topic = "[Sector-specific trade elasticities](../rfcs/0018-sector-trade-elasticities.md)"
+sections = "8.3, 17.1, 19.4, 18"
+
+[[entry]]
+rows = "0019"
+topic = "[Expected inflation in price and wage rules](../rfcs/0019-expected-inflation-in-price-and-wage-rules.md)"
+sections = "8.2, 8.7, 12.2, 15.3"
+
+[[entry]]
+rows = "0020"
+topic = "[Putty-clay intermediates and within-tick rationing](../rfcs/0020-putty-clay-and-within-tick-rationing.md)"
+sections = "7.2, 7.4, 8.2, 17.1, 17.2, 19.4"
+
+[[entry]]
+rows = "0021"
+topic = "[PIGL demand and a household consumption rule](../rfcs/0021-pigl-demand-and-consumption-rule.md)"
+sections = "8.6, 17.1, 17.2, 19.4"
+
+[[entry]]
+rows = "0022"
+topic = "[Uniqueness check, static nesting gate and direct estimation](../rfcs/0022-uniqueness-nesting-gate-and-direct-estimation.md)"
+sections = "3.4, 15.2, 15.3, 17.1, 21.1"
+
+[[entry]]
+rows = "0023"
+topic = "[Trade elasticity classes](../rfcs/0023-trade-elasticity-classes.md)"
+sections = "8.3, 17.1, 18, 22.2"
+
+[[entry]]
+rows = "0024"
+topic = "[Ensemble lanes](../rfcs/0024-ensemble-lanes.md)"
+sections = "4.5, 14.1, 14.4, 15.2, 19.4"
+
+[[entry]]
+rows = "0025"
+topic = "[Sequence-space HANK reference for the macro block](../rfcs/0025-sequence-space-hank-reference.md)"
+sections = "3.4, 8.6, 9, 15.3, 21.1"
+
+[[entry]]
+rows = "0026"
+topic = "[Firm heterogeneity within cells](../rfcs/0026-firm-heterogeneity-within-cells.md)"
+sections = "7.2, 7.4, 8.3, 15.3, 17.1"
+
+[[entry]]
+rows = "0027"
+topic = "[Short- and long-run trade elasticities](../rfcs/0027-short-and-long-run-trade-elasticities.md)"
+sections = "8.3, 15.5, 17.1, 17.2"
+
+[[entry]]
+rows = "0028"
+topic = "[Oil and gas market structure](../rfcs/0028-oil-and-gas-market-structure.md)"
+sections = "7.1, 7.7, 8.2, 8.4, 15.4, 17.1, 17.2"
+
+[[entry]]
+rows = "0029"
+topic = "[Food system: competitive storage, export restrictions and famine](../rfcs/0029-food-system-storage-export-bans-and-famine.md)"
+sections = "7.1, 8.2, 8.5, 6.2, 13, 15.7"
+
+[[entry]]
+rows = "0030"
+topic = "[Variable markups within cells](../rfcs/0030-variable-markups.md)"
+sections = "7.2, 8.2, 8.8, 15.7, 17"
+
+[[entry]]
+rows = "0031"
+topic = "[Structural transformation and informality dynamics](../rfcs/0031-structural-transformation-and-informality.md)"
+sections = "6.3, 7.5, 7.6, 9.6, 15.4"
+
+[[entry]]
+rows = "0032"
+topic = "[Cohort demography: education transitions, fertility timing and households](../rfcs/0032-cohort-demography-and-education-transitions.md)"
+sections = "6.1, 6.2, 6.3, 8.6, 8.7, 17.1"
+
+[[entry]]
+rows = "0033"
+topic = "[Mortality causes and health](../rfcs/0033-mortality-causes-and-health.md)"
+sections = "6.2, 9.6, 13.2, 13.3"
+
+[[entry]]
+rows = "0034"
+topic = "[Power sector via residual load duration curves](../rfcs/0034-power-sector-residual-load-duration-curves.md)"
+sections = "7.1, 7.5, 7.7, 13.2, 15.7, 17.2"
+
+[[entry]]
+rows = "0035"
+topic = "[Technology diffusion and energy policy instruments](../rfcs/0035-technology-diffusion-and-energy-policy-instruments.md)"
+sections = "7.4, 7.5, 7.7, 13.2, 17.1, 17.2"
+
+[[entry]]
+rows = "0036"
+topic = "[Climate damage lanes](../rfcs/0036-climate-damage-lanes.md)"
+sections = "13.2, 15.7, 17.2, 18"
+
+[[entry]]
+rows = "0037"
+topic = "[Regional climate emulation, tipping elements and sea level](../rfcs/0037-regional-climate-tipping-and-sea-level.md)"
+sections = "13.2, 5.1, 17.2"
+
+[[entry]]
+rows = "0038"
+topic = "[Water, air pollution and land use](../rfcs/0038-water-air-and-land.md)"
+sections = "5.1, 6.2, 7.2, 7.7, 13.2, 13.4"
+
+[[entry]]
+rows = "0039"
+topic = "[Automation and AI as a scenario lane](../rfcs/0039-automation-and-ai-scenario-lane.md)"
+sections = "2.4, 6.3, 7.5, 13.1, 17.2"
+
+[[entry]]
+rows = "0040"
+topic = "[Housing supply elasticity and mortgage underwriting](../rfcs/0040-housing-supply-and-mortgage-underwriting.md)"
+sections = "8.7, 9.3, 9.10, 9.11, 9.13"
+
+[[entry]]
+rows = "0041"
+topic = "[Multinational production and profit shifting](../rfcs/0041-multinational-production-and-profit-shifting.md)"
+sections = "7.4, 9.1, 9.6, 15.4"
+
+[[entry]]
+rows = "0042"
+topic = "[Public capital and fiscal dynamics](../rfcs/0042-public-capital-and-fiscal-dynamics.md)"
+sections = "5.5, 7.2, 9.4, 9.6, 15.4"
+
+[[entry]]
+rows = "0043"
+topic = "[Sovereign debt restructuring and creditor structure](../rfcs/0043-sovereign-debt-restructuring-and-creditors.md)"
+sections = "9.4, 9.10, 9.11, 11.8"
+
+[[entry]]
+rows = "0044"
+topic = "[Pensions, life-cycle saving and wealth dynamics](../rfcs/0044-pensions-life-cycle-and-wealth-dynamics.md)"
+sections = "6.1, 8.6, 9.1, 9.6, 15.7"
+
+[[entry]]
+rows = "0045"
+topic = "[Economic statecraft: critical minerals, export controls and sanctions evasion](../rfcs/0045-economic-statecraft-critical-minerals-and-sanctions-evasion.md)"
+sections = "8.5, 9.12, 11.8, 7.1"
+
+[[entry]]
+rows = "0046"
+topic = "[Political economy channels: populism, information, polarization and institutions](../rfcs/0046-political-economy-channels.md)"
+sections = "10.1, 10.4, 10.5, 10.7, 10.8, 9.2, 9.6, 18"
+
+[[entry]]
+rows = "0047"
+topic = "[Trade agreements and international organizations](../rfcs/0047-trade-agreements-and-international-organizations.md)"
+sections = "8.5, 10.3, 11.1, 9.4"
+
+[[entry]]
+rows = "0048"
+topic = "[Grounding the war module in modern evidence](../rfcs/0048-military-realism-grounding.md)"
+sections = "11, 6.1"
+
+[[entry]]
+rows = "0049"
+topic = "[Explainability panels and event chronicle](../rfcs/0049-explainability-panels-and-event-chronicle.md)"
+sections = "14.7, 20.2, 12.3, 11.2"
+
+[[entry]]
+rows = "0050"
+topic = "[Research and release pack profiles, and sources to audit](../rfcs/0050-research-and-release-pack-profiles.md)"
+sections = "16, 16.1, 2.5, 15.4, 22"
+
+[[entry]]
+rows = "0051"
+topic = "[A fat-tailed hazard library for rare events](../rfcs/0051-fat-tailed-hazard-library.md)"
+sections = "13.1, 13.3, 13.4, 13.5, 11.2, 19.4, 15.4"
+
+[[entry]]
+rows = "0052"
+topic = "[Forecast scorecard: real-time vintages, hard benchmarks and proper tests](../rfcs/0052-forecast-scorecard-vintages-and-benchmarks.md)"
+sections = "15.3, 15.4, 15.5, 15.7"
+
+[[entry]]
+rows = "0053"
+topic = "[Robust inference and model selection](../rfcs/0053-robust-inference-and-model-selection.md)"
+sections = "15.2, 15.6, 15.7, 17.2"
+
+[[entry]]
+rows = "0054"
+topic = "[Explicit exclusions](../rfcs/0054-explicit-exclusions.md)"
+sections = "2.4, 15.7, 23.1"
+
+[[entry]]
+rows = "0055"
+topic = "[Cohort values: secular and emancipative orientations](../rfcs/0055-cohort-values.md)"
+sections = "6.1, 6.4, 10.7, 10.8, 12.2"
+
+[[entry]]
+rows = "0056"
+topic = "[Generalized trust and civil society](../rfcs/0056-generalized-trust-and-civil-society.md)"
+sections = "9.6, 10.7, 10.8, 13.3"
+
+[[entry]]
+rows = "0057"
+topic = "[Gender norms, sex ratios at birth and marriage markets](../rfcs/0057-gender-norms-sex-ratios-and-marriage-markets.md)"
+sections = "6.1, 6.2, 6.3, 10.8"
+
+[[entry]]
+rows = "0058"
+topic = "[Religion switching and identity salience](../rfcs/0058-religion-switching-and-identity-salience.md)"
+sections = "6.4, 10.5, 10.7, 11.2, 11.6"
+
+[[entry]]
+rows = "0059"
+topic = "[Learning quality, not only years of schooling](../rfcs/0059-learning-quality.md)"
+sections = "6.3, 7.2, 7.5, 8.7, 17.1"
+
+[[entry]]
+rows = "0060"
+topic = "[Crime, homicide and organized crime](../rfcs/0060-crime-homicide-and-organized-crime.md)"
+sections = "6, 10.7, 11.6, 5.3, 8.5"
+
+[[entry]]
+rows = "0061"
+topic = "[Health-system capacity](../rfcs/0061-health-system-capacity.md)"
+sections = "6.2, 9.6, 13.3"
+
+[[entry]]
+rows = "0062"
+topic = "[Chronic disease risk and antimicrobial resistance](../rfcs/0062-chronic-disease-and-antimicrobial-resistance.md)"
+sections = "6.2, 8.6, 13.3"
+
+[[entry]]
+rows = "0063"
+topic = "[Addiction epidemics](../rfcs/0063-addiction-epidemics.md)"
+sections = "6.2"
+
+[[entry]]
+rows = "0064"
+topic = "[Child nutrition and the care burden of ageing](../rfcs/0064-child-nutrition-and-care-burden.md)"
+sections = "6.1, 6.3, 8.7, 9.6"
+
+[[entry]]
+rows = "0065"
+topic = "[True and reported statistics](../rfcs/0065-true-and-reported-statistics.md)"
+sections = "2.1, 12.3, 12.6, 15.1, 15.4, 20"
+
+[[entry]]
+rows = "0066"
+topic = "[Leaders, tenure and succession](../rfcs/0066-leader-tenure-and-succession.md)"
+sections = "10.6, 10.8, 13.5, 2.4"
+
+[[entry]]
+rows = "0067"
+topic = "[State capacity: building, eroding and collapsing](../rfcs/0067-state-capacity-dynamics.md)"
+sections = "9.6, 10.1, 11.6"
+
+[[entry]]
+rows = "0068"
+topic = "[Subnational governance, land tenure, clientelism and electoral integrity](../rfcs/0068-subnational-governance-land-tenure-and-clientelism.md)"
+sections = "10.3, 10.4, 10.5, 7.4, 8.7, 11.6"
+
+[[entry]]
+rows = "0069"
+topic = "[Non-state armed actors, insurgency finance and terrorism](../rfcs/0069-non-state-armed-actors-and-insurgency-finance.md)"
+sections = "11.6, 11.7"
+
+[[entry]]
+rows = "0070"
+topic = "[Development finance actors](../rfcs/0070-development-finance-actors.md)"
+sections = "5.5, 9.4, 11.1"
+
+[[entry]]
+rows = "0071"
+topic = "[Information technology and the information environment](../rfcs/0071-information-technology-and-the-information-environment.md)"
+sections = "10.7, 10.8, 9.6"
+
+[[entry]]
+rows = "0072"
+topic = "[International order, peace operations, courts and soft power](../rfcs/0072-international-order-and-soft-power.md)"
+sections = "11.1, 11.3, 11.8, 10.7"
+
+[[entry]]
+rows = "0073"
+topic = "[Proliferation, the Arctic, frozen conflicts and intelligence](../rfcs/0073-proliferation-arctic-frozen-conflicts-and-intelligence.md)"
+sections = "11.1, 11.2, 11.4, 5.3, 13.2"
+
+[[entry]]
+rows = "0074"
+topic = "[Settlement hierarchy and urban systems](../rfcs/0074-settlement-hierarchy-and-urban-systems.md)"
+sections = "5.1, 5.2, 6.1, 7.2, 8.7"
+
+[[entry]]
+rows = "0075"
+topic = "[Infrastructure interdependence and cascading failures](../rfcs/0075-infrastructure-interdependence-and-cascades.md)"
+sections = "5.3, 13.4, 9.11, 19.4"
+
+[[entry]]
+rows = "0076"
+topic = "[Groundwater, shared river basins and glacier water towers](../rfcs/0076-groundwater-river-basins-and-glaciers.md)"
+sections = "5.1, 7.2, 11.2, 13.2"
+
+[[entry]]
+rows = "0077"
+topic = "[Heat, wildfire, fisheries and deforestation frontiers](../rfcs/0077-heat-wildfire-fisheries-and-deforestation.md)"
+sections = "13.2, 13.4, 7.1, 6.2"
+
+[[entry]]
+rows = "0078"
+topic = "[Chronicle narration, storyteller camera and legends](../rfcs/0078-chronicle-narration-storyteller-camera-and-legends.md)"
+sections = "20"
+
+[[entry]]
+rows = "0079"
+topic = "[Red-team branches and surrogate sliders](../rfcs/0079-red-team-branches-and-surrogate-sliders.md)"
+sections = "14, 20.3"
+
+[[entry]]
+rows = "0080"
+topic = "[Polycrisis coupling audit](../rfcs/0080-polycrisis-coupling-audit.md)"
+sections = "3, 4.4, 14.7, 21.2"
+
+[[entry]]
+rows = "0081"
+topic = "[Seasonality and weather-driven demand](../rfcs/0081-seasonality-and-weather-driven-demand.md)"
+sections = "4.3, 7.1, 7.7, 8.2, 13.1"
+
+[[entry]]
+rows = "0082"
+topic = "[Cohort experience effects on expectations and risk-taking](../rfcs/0082-cohort-experience-effects.md)"
+sections = "12.2, 9.13, 8.6"
+
+[[entry]]
+rows = "0083"
+topic = "[Policy implementation and diffusion](../rfcs/0083-policy-implementation-and-diffusion.md)"
+sections = "10.1, 10.6, 12.3, 14.2"
+
+[[entry]]
+rows = "0084"
+topic = "[Price controls, subsidies, parallel markets and currency substitution](../rfcs/0084-price-controls-parallel-markets-and-currency-substitution.md)"
+sections = "8.2, 9.2, 9.9, 9.12, 9.6"
+
+[[entry]]
+rows = "0085"
+topic = "[Strategic reserves and stockpiles](../rfcs/0085-strategic-reserves-and-stockpiles.md)"
+sections = "9.2, 9.6, 12.3"
+
+[[entry]]
+rows = "0086"
+topic = "[Reconstruction and recovery](../rfcs/0086-reconstruction-and-recovery.md)"
+sections = "7.4, 11.7, 13.4"
+
+[[entry]]
+rows = "0087"
+topic = "[Synthetic observables for validation](../rfcs/0087-synthetic-observables.md)"
+sections = "15.3, 15.4"
+
+[[entry]]
+rows = "0088"
+topic = "[Fully native app with Slint panels](../rfcs/0088-native-app-slint.md)"
+sections = "19.1, 19.3, 22.1"
+
+[[entry]]
+rows = "0089"
+topic = "[Data-state steady-state calibration and natural-rate unemployment](../rfcs/0089-data-state-steady-state-calibration.md)"
+sections = "8.7, 15.2, 15.3, 19.4"
+
+[[entry]]
+rows = "0090"
+topic = "[Split price rule and inventory gain](../rfcs/0090-split-price-rule-and-inventory-gain.md)"
+sections = "8.2, 17"
+
+[[entry]]
+rows = "0091"
+topic = "[Competitive storage in P2 with per-market price expectations](../rfcs/0091-competitive-storage-in-p2.md)"
+sections = "8.2, 12.2, 17"
+
+[[entry]]
+rows = "0092"
+topic = "[Trade frictions consistent with theta](../rfcs/0092-trade-frictions-consistent-with-theta.md)"
+sections = "5.4, 8.3, 15.2, 18, 17"
+
+[[entry]]
+rows = "0093"
+topic = "[Numerical robustness of the P2 core](../rfcs/0093-numerical-robustness-of-the-p2-core.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0094"
+topic = "[PIGL aggregation across pops](../rfcs/0094-pigl-aggregation-across-pops.md)"
+sections = "8.6"
+
+[[entry]]
+rows = "0095"
+topic = "[Consistency amendments to proposed design ADRs](../rfcs/0095-consistency-amendments-to-design-adrs.md)"
+sections = "7.2, 8.3, 13.4, 17"
+
+[[entry]]
+rows = "0096"
+topic = "[Forward-mode derivatives in the Rust core](../rfcs/0096-forward-mode-derivatives.md)"
+sections = "15.2, 15.7, 17, 19.4"
+
+[[entry]]
+rows = "0097"
+topic = "[Determinism lints and the post-gate dispatch speed plan](../rfcs/0097-determinism-lints-and-dispatch-speed-plan.md)"
+sections = "4.5, 14.3, 19.2, 19.4"
+
+[[entry]]
+rows = "0098"
+topic = "[Price levels and source corrections at calibration](../rfcs/0098-calibration-price-levels-and-source-corrections.md)"
+sections = "3.3, 6.5, 8.6, 15.1, 16"
+
+[[entry]]
+rows = "0099"
+topic = "[Split final demand and a fixed saving rate in P2](../rfcs/0099-final-demand-split-and-saving-rate.md)"
+sections = "7.4, 8.6, 9.6, 15.3"
+
+[[entry]]
+rows = "0100"
+topic = "[Trade imbalances as exogenous transfers until finance](../rfcs/0100-trade-imbalances-as-transfers.md)"
+sections = "3.3, 8.3, 9.5, 15.4"
+
+[[entry]]
+rows = "0101"
+topic = "[Harmonic aggregation of trade elasticities](../rfcs/0101-harmonic-aggregation-of-trade-elasticities.md)"
+sections = "8.3, 15.5, 17.1, 18"
+
+[[entry]]
+rows = "0102"
+topic = "[Bilateral, transit and internal trade frictions](../rfcs/0102-bilateral-and-internal-trade-frictions.md)"
+sections = "5.4, 8.3, 8.5, 17.1"
+
+[[entry]]
+rows = "0103"
+topic = "[Initial drift: 2000 is not a rest point](../rfcs/0103-initial-drift-off-steady-state.md)"
+sections = "3.3, 7.5, 15.1, 15.4"
+
+[[entry]]
+rows = "0104"
+topic = "[Sector labour shares and the distribution of capital income](../rfcs/0104-sector-factor-shares-and-capital-income.md)"
+sections = "6.1, 7.2, 8.7, 9.1"
+
+[[entry]]
+rows = "0105"
+topic = "[Skill groups and sector switching costs](../rfcs/0105-skill-groups-and-sector-switching-costs.md)"
+sections = "6.3, 7.2, 8.7, 15.5"
+
+[[entry]]
+rows = "0106"
+topic = "[Price clip on the gap only, and money width](../rfcs/0106-price-clip-and-money-width.md)"
+sections = "4.5, 4.6, 8.2, 17.1"
+
+[[entry]]
+rows = "0107"
+topic = "[Holdout protocol, Monte Carlo error and parameter lanes](../rfcs/0107-holdout-protocol-and-monte-carlo-error.md)"
+sections = "14.4, 15.4, 15.6, 15.7, 19.2"
+
+[[entry]]
+rows = "0108"
+topic = "[Estimation windows per module and long-run lanes](../rfcs/0108-estimation-windows-and-long-run-lanes.md)"
+sections = "6.2, 7.5, 10, 11, 15.1, 15.2, 17"
+
+[[entry]]
+rows = "0109"
+topic = "[International migration under admission caps](../rfcs/0109-international-migration-under-admission-caps.md)"
+sections = "6.5, 10.6, 15.4"
+
+[[entry]]
+rows = "0110"
+topic = "[Reduced-form conflict hazard as the lab default](../rfcs/0110-reduced-form-conflict-hazard-default.md)"
+sections = "10.1, 10.8, 11.2, 11.5, 11.6, 13.5, 15.4, 17.2"
+
+[[entry]]
+rows = "0111"
+topic = "[Amendments from the assumption audit](../rfcs/0111-amendments-from-the-assumption-audit.md)"
+sections = "6.2, 8.2, 8.3, 8.6, 13.2"
+
+[[entry]]
+rows = "0112"
+topic = "[Loss write-off in P2](../rfcs/0112-loss-write-off-in-p2.md)"
+sections = "8.6, 8.7, 15.3"
+
+[[entry]]
+rows = "0113"
+topic = "[Full migration of the Python code to Rust](../rfcs/0113-full-migration-to-rust.md)"
+sections = "14.8, 15.2, 16, 16.1, 19.1, 19.3, 21.1, 22.1"
+
+[[entry]]
+rows = "0114"
+topic = "[Merge Natural Earth units below a country's first level](../rfcs/0114-merge-sub-first-level-units.md)"
+sections = "5.2, 22.2"
+
+[[entry]]
+rows = "0115"
+topic = "[Territory as partitions of a fixed cell grid](../rfcs/0115-territory-as-cell-partitions.md)"
+sections = "5.1, 5.2, 11.5, 11.6, 11.8, 14, 23"
+
+[[entry]]
+rows = "0116"
+topic = "[Version-control verbs for branches](../rfcs/0116-version-control-verbs-for-branches.md)"
+sections = "14.1, 14.3, 14.7, 20.2"
+
+[[entry]]
+rows = "0117"
+topic = "[Goal-seek interventions and leverage maps](../rfcs/0117-goal-seek-and-leverage-maps.md)"
+sections = "14, 15.2, 20.1"
+
+[[entry]]
+rows = "0118"
+topic = "[Contrastive explanations and history's percentile](../rfcs/0118-contrastive-explanations-and-historys-percentile.md)"
+sections = "14.5, 14.6, 20.2"
+
+[[entry]]
+rows = "0119"
+topic = "[Multiverse results and built-in preregistration](../rfcs/0119-multiverse-results-and-preregistration.md)"
+sections = "14.5, 15.6, 17.2"
+
+[[entry]]
+rows = "0120"
+topic = "[Fuzzing the model against stylized facts](../rfcs/0120-model-fuzzing-and-llm-auditor.md)"
+sections = "4.6, 15.3, 15.6"
+
+[[entry]]
+rows = "0121"
+topic = "[Friction dial and debate packs](../rfcs/0121-friction-dial-and-debate-packs.md)"
+sections = "2.5, 3.4, 14.2, 23.3"
+
+[[entry]]
+rows = "0122"
+topic = "[Element and embodied-energy ledgers](../rfcs/0122-element-and-energy-ledgers.md)"
+sections = "4.6, 7.7, 8.3, 20.1"
+
+[[entry]]
+rows = "0123"
+topic = "[Reflexive forecasters and alternative monetary regimes](../rfcs/0123-reflexive-forecasters-and-alternative-monetary-regimes.md)"
+sections = "9.2, 9.13, 12.2, 23.1"
+
+[[entry]]
+rows = "0124"
+topic = "[Economic views: trade-cost cartogram, receipt, atlas and diegetic eras](../rfcs/0124-economic-views-cartogram-receipt-atlas-eras.md)"
+sections = "5.4, 8.3, 20.1, 20.2"
+
+[[entry]]
+rows = "0125"
+topic = "[LLM tools outside the core](../rfcs/0125-llm-tools-outside-the-core.md)"
+sections = "12.5, 14.2, 14.8"
+
+[[entry]]
+rows = "0126"
+topic = "[Public benchmarks: CeterisBench and an agent gym](../rfcs/0126-public-benchmarks-ceterisbench-and-agent-gym.md)"
+sections = "12.5, 12.6, 14.4, 15.5, 23.4"
+
+[[entry]]
+rows = "0127"
+topic = "[Research infrastructure: living papers, parameter wiki, volunteer ensembles, model court](../rfcs/0127-research-infrastructure.md)"
+sections = "15.6, 15.7, 17"
+
+[[entry]]
+rows = "0128"
+topic = "[Distribution: runs as hashes, reproducible builds, annual report, engine crate](../rfcs/0128-distribution-runs-as-hashes-and-reproducible-builds.md)"
+sections = "2.5, 14.3, 19.1"
+
+[[entry]]
+rows = "0129"
+topic = "[Constitutional wind tunnel and veil-of-ignorance scoring](../rfcs/0129-constitutions-and-veil-of-ignorance-scoring.md)"
+sections = "10.1, 10.3, 10.6, 23.3, 23.4"
+
+[[entry]]
+rows = "0130"
+topic = "[New seats: idea, founder, coalition partner, mediator, quartermaster, citizen](../rfcs/0130-new-seats.md)"
+sections = "10.5, 10.7, 11.2, 11.6, 11.8, 12.6, 23.4, 23.5"
+
+[[entry]]
+rows = "0131"
+topic = "[Deep history: economic reanalysis, agrarian worlds, period advisers, long runs](../rfcs/0131-deep-history.md)"
+sections = "15, 23.3, 23.7, 23.9"
+
+[[entry]]
+rows = "0132"
+topic = "[Stakes, memory and community play](../rfcs/0132-stakes-memory-and-community-play.md)"
+sections = "14.4, 14.5, 12.4, 23.4, 23.5, 23.8"
+
+[[entry]]
+rows = "0133"
+topic = "[Other worlds: Earth variants, importers, LLM-drafted packs, nested zoom](../rfcs/0133-other-worlds.md)"
+sections = "2.5, 23.2, 23.3"
+
+[[entry]]
+rows = "0134"
+topic = "[Sandboxed mechanism modules](../rfcs/0134-sandboxed-mechanism-modules.md)"
+sections = "4.5, 23.3"
+
+[[entry]]
+rows = "0135"
+topic = "[Model intercomparison protocol and deterministic coupling](../rfcs/0135-model-intercomparison-and-coupling-protocol.md)"
+sections = "14.2, 15.4, 16"
+
+[[entry]]
+rows = "0136"
+topic = "[What earns a major version](../rfcs/0136-what-earns-a-major-version.md)"
+sections = "2.4, 21, 22.1, 23.1, 23.9"
+
+[[entry]]
+rows = "0137"
+topic = "[Art and sound direction: Modern Atlas](../rfcs/0137-art-and-sound-direction-modern-atlas.md)"
+sections = "20, 19.1"
+
+[[entry]]
+rows = "0138"
+topic = "[Natural capital as extended-profile minors](../rfcs/0138-natural-capital-as-extended-minors.md)"
+sections = "3.4, 13.2, 15.7, 17, 17.2, 19.2"
+
+[[entry]]
+rows = "0139"
+topic = "[Narrative state: endogenous belief content as a major candidate](../rfcs/0139-narrative-state-as-a-major-candidate.md)"
+sections = "9.13, 10.5, 10.7, 12.2, 12.5, 14.2, 15.7, 17, 19.2"
+
+[[entry]]
+rows = "0140"
+topic = "[Seat chrome by country and regime](../rfcs/0140-seat-chrome-by-country-and-regime.md)"
+sections = "20"
+
+[[entry]]
+rows = "0141"
+topic = "[Place and regime flavour from data](../rfcs/0141-place-and-regime-flavour-from-data.md)"
+sections = "20"
+
+[[entry]]
+rows = "0142"
+topic = "[Flags: real first, then AI-assisted and editable](../rfcs/0142-flags-real-first-ai-assisted-and-editable.md)"
+sections = "14.2, 20"
+
+[[entry]]
+rows = "0143"
+topic = "[State names: localized, dynamic and editable](../rfcs/0143-state-names-localized-dynamic-editable.md)"
+sections = "14.2, 20"
+
+[[entry]]
+rows = "0144"
+topic = "[Replay hooks](../rfcs/0144-replay-hooks.md)"
+sections = "20, 23.7"
+
+[[entry]]
+rows = "0145"
+topic = "[War architecture: clocks, grains and profiles](../rfcs/0145-war-architecture-clocks-and-profiles.md)"
+sections = "4.3, 5.3, 11, 12.6, 19.2, 23.5, 23.8"
+
+[[entry]]
+rows = "0146"
+topic = "[Forces, order of battle and the forces of 2000](../rfcs/0146-forces-order-of-battle-and-initial-forces.md)"
+sections = "11.4, 23.5, 23.7"
+
+[[entry]]
+rows = "0147"
+topic = "[Command, control and delegation](../rfcs/0147-command-control-and-delegation.md)"
+sections = "12.3, 12.6, 23.5, 23.8"
+
+[[entry]]
+rows = "0148"
+topic = "[Physical logistics on a military overlay](../rfcs/0148-physical-logistics-on-a-military-overlay.md)"
+sections = "5.3, 8.2, 11.5, 11.7, 23.5"
+
+[[entry]]
+rows = "0149"
+topic = "[Land combat resolver](../rfcs/0149-land-combat-resolver.md)"
+sections = "11.5, 17.2, 23.5"
+
+[[entry]]
+rows = "0150"
+topic = "[Air power, drones and air defence](../rfcs/0150-air-power-drones-and-air-defence.md)"
+sections = "5.3, 11.5, 23.7"
+
+[[entry]]
+rows = "0151"
+topic = "[Naval forces and sea control](../rfcs/0151-naval-forces-and-sea-control.md)"
+sections = "5.3, 11.5, 11.8"
+
+[[entry]]
+rows = "0152"
+topic = "[Strategic strike, nuclear forces and escalation](../rfcs/0152-strategic-strike-nuclear-forces-and-escalation.md)"
+sections = "11.2, 11.4, 13.2, 23.7"
+
+[[entry]]
+rows = "0153"
+topic = "[Intelligence and fog of war as belief states](../rfcs/0153-intelligence-and-fog-of-war-as-belief-states.md)"
+sections = "11.2, 23.4, 23.5, 23.6"
+
+[[entry]]
+rows = "0154"
+topic = "[Irregular war, occupation, civilian harm and atrocities](../rfcs/0154-irregular-war-occupation-and-atrocities.md)"
+sections = "11.5, 11.6, 23.6, 23.7"
+
+[[entry]]
+rows = "0155"
+topic = "[Economic lenses](../rfcs/0155-economic-lenses.md)"
+sections = "9.2, 9.11, 9.13, 20.1, 20.2, 23.8"
+
+[[entry]]
+rows = "0156"
+topic = "[Influence web from derivatives](../rfcs/0156-influence-web-from-derivatives.md)"
+sections = "12.6, 14.7, 20.2"
+
+[[entry]]
+rows = "0157"
+topic = "[Static and dynamic scoring of policy packages](../rfcs/0157-static-and-dynamic-scoring-of-policy-packages.md)"
+sections = "8.5, 9.6, 14.2, 14.4, 14.5, 23.7"
+
+[[entry]]
+rows = "0158"
+topic = "[Onboarding: lessons and in-app pedia](../rfcs/0158-onboarding-lessons-and-in-app-pedia.md)"
+sections = "14, 20.2"
+
+[[entry]]
+rows = "0159"
+topic = "[Situations as tracked processes](../rfcs/0159-situations-as-tracked-processes.md)"
+sections = "9.2, 9.4, 9.13, 23.8"
+
+[[entry]]
+rows = "0160"
+topic = "[Trade-core seats: corridor planner and commodity trader](../rfcs/0160-trade-core-seats-corridor-planner-and-commodity-trader.md)"
+sections = "5.3, 5.5, 8.2, 17, 23.4"
+
+[[entry]]
+rows = "0161"
+topic = "[Ambitions, Pareto histograms, ascension and policy paths](../rfcs/0161-ambitions-pareto-histograms-ascension-and-policy-paths.md)"
+sections = "23.4, 14.2, 14.4"
+
+[[entry]]
+rows = "0162"
+topic = "[Commitment devices](../rfcs/0162-commitment-devices.md)"
+sections = "9.2, 9.6, 9.13, 12.6, 14.2, 17"
+
+[[entry]]
+rows = "0163"
+topic = "[State reach](../rfcs/0163-state-reach.md)"
+sections = "5.4, 9.6, 10.1, 17"
+
+[[entry]]
+rows = "0164"
+topic = "[Whip count and private ledger objective](../rfcs/0164-whip-count-and-private-ledger-objective.md)"
+sections = "10.1, 10.6, 10.7, 23.4"
+
+[[entry]]
+rows = "0165"
+topic = "[Mobilization and the war economy](../rfcs/0165-mobilization-and-the-war-economy.md)"
+sections = "6.5, 8.2, 9, 11.7, 23.7"
+
+[[entry]]
+rows = "0166"
+topic = "[War interaction surfaces and modding](../rfcs/0166-war-interaction-surfaces-and-modding.md)"
+sections = "20, 23.3, 23.4, 23.8"
+
+[[entry]]
+rows = "0167"
+topic = "[Endemic disease: HIV/AIDS, malaria and tuberculosis](../rfcs/0167-endemic-disease.md)"
+sections = "6.2, 9.6, 13.3, 15.4"
+
+[[entry]]
+rows = "0168"
+topic = "[Cross-border services trade and tourism](../rfcs/0168-cross-border-services-and-tourism.md)"
+sections = "7.1, 8.1, 8.3, 9.5, 15.4, 15.5"
+
+[[entry]]
+rows = "0169"
+topic = "[Hours worked and short-time work](../rfcs/0169-hours-and-short-time-work.md)"
+sections = "6.3, 8.7, 15.3, 15.4"
+
+[[entry]]
+rows = "0170"
+topic = "[Enterprise input stocks and inventory investment](../rfcs/0170-enterprise-input-stocks.md)"
+sections = "4.6, 7.3, 8.2, 15.5"
+
+[[entry]]
+rows = "0171"
+topic = "[State-owned enterprise behaviour](../rfcs/0171-state-owned-enterprise-behaviour.md)"
+sections = "7.2, 7.3, 9.6, 10.4, 15.4"
+
+[[entry]]
+rows = "0172"
+topic = "[Bank forbearance and trade finance](../rfcs/0172-forbearance-and-trade-finance.md)"
+sections = "8.4, 8.5, 9.4, 15.5"
+
+[[entry]]
+rows = "0173"
+topic = "[Consumer durables](../rfcs/0173-consumer-durables.md)"
+sections = "6.4, 7.1, 15.4, 15.5"
+
+[[entry]]
+rows = "0174"
+topic = "[Temporary labour migration](../rfcs/0174-temporary-labour-migration.md)"
+sections = "6.5, 15.4"
+
+[[entry]]
+rows = "0175"
+topic = "[Offshore household wealth, bargaining coverage and space weather](../rfcs/0175-offshore-wealth-bargaining-space-weather.md)"
+sections = "6.4, 6.3, 9.6, 13.4"
+
+[[entry]]
+rows = "0176"
+topic = "[Endogenous neutral rate in the policy rule](../rfcs/0176-endogenous-neutral-rate.md)"
+sections = "9.3, 15.4"
+
+[[entry]]
+rows = "0177"
+topic = "[Natural unemployment rate from matching](../rfcs/0177-emergent-natural-unemployment.md)"
+sections = "6.3, 9.3, 15.4"
+
+[[entry]]
+rows = "0178"
+topic = "[Endogenous exploration and reserves](../rfcs/0178-endogenous-exploration-and-reserves.md)"
+sections = "7.4, 13.4, 15.4, 15.5"
+
+[[entry]]
+rows = "0179"
+topic = "[Research effort and its direction](../rfcs/0179-research-effort-and-direction.md)"
+sections = "7.5, 15.4"
+
+[[entry]]
+rows = "0180"
+topic = "[Endogenous shipping costs and water-limited waterways](../rfcs/0180-endogenous-transport-costs.md)"
+sections = "8.3, 15.4"
+
+[[entry]]
+rows = "0181"
+topic = "[Small endogenizations: invoicing, piracy, housing regulation, pandemic spillover](../rfcs/0181-small-endogenizations.md)"
+sections = "8.8, 8.3, 6.4, 13.3"
+
+[[entry]]
+rows = "0182"
+topic = "[Data sources to add from the gap audit](../rfcs/0182-data-sources-from-the-gap-audit.md)"
+sections = "2.3, 15.4, 15.5"
+
+[[entry]]
+rows = "0183"
+topic = "[Characters and the real 2000 roster](../rfcs/0183-characters-and-the-real-2000-roster.md)"
+sections = "2.4, 10.6, 13.5, 14.4, 15.7, 23.5"
+
+[[entry]]
+rows = "0184"
+topic = "[Character traits from data, and the ablation gate](../rfcs/0184-character-traits-from-data.md)"
+sections = "10.5, 12.3, 15.7, 17, 23.5"
+
+[[entry]]
+rows = "0185"
+topic = "[Character memory and relations](../rfcs/0185-character-memory-and-relations.md)"
+sections = "10.5, 10.8, 12.2, 23.5"
+
+[[entry]]
+rows = "0186"
+topic = "[Careers, pools and generated successors](../rfcs/0186-careers-pools-and-generated-successors.md)"
+sections = "6, 10.3, 10.4, 10.8, 14.4, 23.5"
+
+[[entry]]
+rows = "0187"
+topic = "[Leadership dossiers instead of portraits](../rfcs/0187-leadership-dossiers-instead-of-portraits.md)"
+sections = "20, 23.5"
+
+[[entry]]
+rows = "0188"
+topic = "[Keyboard-first input: command registry, two keymaps, palette and query language](../rfcs/0188-keyboard-first-input.md)"
+sections = "14.2, 14.8, 20, 20.2, 20.3"
+
+[[entry]]
+rows = "0189"
+topic = "[Emergent organizations](../rfcs/0189-emergent-organizations.md)"
+sections = "10.4, 10.5, 10.7, 10.8, 11.6"
+
+[[entry]]
+rows = "0190"
+topic = "[Administrative divisions as an open partition registry](../rfcs/0190-administrative-divisions-as-an-open-partition-registry.md)"
+sections = "5.1, 5.2, 10.3, 14.2, 20.1, 23.2"
+
+[[entry]]
+rows = "0191"
+topic = "[Wellbeing: material welfare and life evaluation](../rfcs/0191-wellbeing-material-welfare-and-life-evaluation.md)"
+sections = "6.1, 8.6, 10.7, 10.8, 20.1"
+
+[[entry]]
+rows = "0192"
+topic = "[Approval and legitimacy as separate stocks](../rfcs/0192-approval-and-legitimacy-as-separate-stocks.md)"
+sections = "10.1, 10.5, 10.7, 10.8, 11.5, 13.3"
+
+[[entry]]
+rows = "0193"
+topic = "[Vote intention, turnout and polls](../rfcs/0193-vote-intention-turnout-and-polls.md)"
+sections = "10.5, 10.6, 14.4"
+
+[[entry]]
+rows = "0194"
+topic = "[Legislative voting, discipline and veto gates](../rfcs/0194-legislative-voting-discipline-and-veto-gates.md)"
+sections = "10.5, 10.6, 14.4, 23.4"
+
+[[entry]]
+rows = "0195"
+topic = "[Government as bodies with scopes and competences](../rfcs/0195-government-bodies-competences-and-appointments.md)"
+sections = "9.6, 9.8, 10.1, 10.3, 10.5, 10.6, 14.2, 20"
+
+[[entry]]
+rows = "0196"
+topic = "[Multiple windows and workspaces](../rfcs/0196-multiple-windows-and-workspaces.md)"
+sections = "20.2"
+
+[[entry]]
+rows = "0197"
+topic = "[Local API, exports and deep links](../rfcs/0197-local-api-and-exports.md)"
+sections = "2.1, 14.8, 20.2, 20.3, 21.1"
+
+[[entry]]
+rows = "0198"
+topic = "[Regime balance by seat-relative play](../rfcs/0198-regime-balance-by-seat-relative-play.md)"
+sections = "10.6, 10.8, 23.4"
+
+[[entry]]
+rows = "0199"
+topic = "[Loyalty belief state and coup-proofing](../rfcs/0199-loyalty-belief-state-and-coup-proofing.md)"
+sections = "10.1, 10.6, 10.8, 11.4, 23.5"
+
+[[entry]]
+rows = "0200"
+topic = "[Selection on trade links](../rfcs/0200-selection-on-trade-links.md)"
+sections = "4.6, 7.2, 8.3, 15.3, 15.5"
+
+[[entry]]
+rows = "0201"
+topic = "[Ownership cells from OECD Analytical AMNE](../rfcs/0201-ownership-cells-from-oecd-amne.md)"
+sections = "3.2, 7.4, 7.5, 9.1, 15.4"
+
+[[entry]]
+rows = "0202"
+topic = "[Firm entry, exit and the zombie band](../rfcs/0202-firm-entry-exit-and-zombie-band.md)"
+sections = "7.2, 7.4, 15.4, 15.5, 17.1"
+
+[[entry]]
+rows = "0203"
+topic = "[Named firms: view, granular opt-in, political actors](../rfcs/0203-named-firms-view-granular-and-political.md)"
+sections = "2.5, 10.4, 15.7, 20.2, 23.7"
+
+[[entry]]
+rows = "0204"
+topic = "[Capital formation by asset class and time to build](../rfcs/0204-capital-formation-and-time-to-build.md)"
+sections = "4.4, 4.6, 7.2, 7.4, 17, 19.4"
+
+[[entry]]
+rows = "0205"
+topic = "[Construction capacity as a priced bottleneck, with priority](../rfcs/0205-construction-capacity-and-priority.md)"
+sections = "7.1, 7.3, 8.2, 8.7, 17"
+
+[[entry]]
+rows = "0206"
+topic = "[Named projects, the 2000 pipeline and the project tape](../rfcs/0206-named-projects-pipeline-and-project-tape.md)"
+sections = "5.2, 5.3, 5.5, 12.6, 14.2, 15.4, 15.5, 20.1"
+
+[[entry]]
+rows = "0207"
+topic = "[The 1.0 phase plan and scope rule](../rfcs/0207-1.0-phase-plan-and-scope.md)"
+sections = "2.4, 13, 14.8, 15.2, 19.1, 21, 22.1, 23.9"
+
+[[entry]]
+rows = "0208"
+topic = "[Presentation pipeline and time controls](../rfcs/0208-presentation-pipeline-and-time-controls.md)"
+sections = "4.4, 14.3, 19.2, 19.4, 20.3"
+
+[[entry]]
+rows = "0209"
+topic = "[Sparse hourly war phase](../rfcs/0209-sparse-hourly-war-phase.md)"
+sections = "4.3, 4.5, 11.5, 19.2, 23.5"
+
+[[entry]]
+rows = "0210"
+topic = "[Policy in 1.0: estimated rules per lever and the policy tape](../rfcs/0210-policy-rules-and-the-policy-tape-in-1.0.md)"
+sections = "2.4, 8.5, 9.2, 9.4, 9.6, 12.3, 12.6, 15.7, 17, 19.3, 23.4"
+
+[[entry]]
+rows = "0211"
+topic = "[Run files and compatibility across versions](../rfcs/0211-run-files-and-compatibility-across-versions.md)"
+sections = "2.4, 4.5, 14.1, 14.3, 19.1, 23.3, 23.4"
+
+[[entry]]
+rows = "0212"
+topic = "[History retention and the disk budget](../rfcs/0212-history-retention-and-disk-budget.md)"
+sections = "14.1, 14.3, 14.5, 19.1, 19.2, 19.4"
+
+[[entry]]
+rows = "0213"
+topic = "[Data licences in shared runs and exports](../rfcs/0213-data-licences-in-shared-runs-and-exports.md)"
+sections = "2.5, 14.3, 16, 19.1"
+
+[[entry]]
+rows = "0214"
+topic = "[Failure handling, repro bundles and opt-in usage statistics](../rfcs/0214-failure-handling-repro-bundles-and-usage-stats.md)"
+sections = "4.5, 4.6, 14.3, 15.7, 20"
+
+[[entry]]
+rows = "0215"
+topic = "[First-run data fetch and the source archive](../rfcs/0215-first-run-data-fetch-and-source-archive.md)"
+sections = "1, 16, 16.1, 21.1"
+
+[[entry]]
+rows = "0216"
+topic = "[Platforms, signing, updates and minimum hardware](../rfcs/0216-platforms-signing-updates-and-minimum-hardware.md)"
+sections = "1, 19.1, 19.2, 22.1"
+
+[[entry]]
+rows = "0217"
+topic = "[Pack profiles as prebuilt and user-built, and the credits screen](../rfcs/0217-pack-profiles-as-prebuilt-and-user-built-and-credits.md)"
+sections = "2.5, 16, 19.1, 22.1"
+
+[[entry]]
+rows = "0218"
+topic = "[Repository opening and contributions](../rfcs/0218-repository-opening-and-contributions.md)"
+sections = "1, 2.5, 22.1"
+
+[[entry]]
+rows = "0219"
+topic = "[Documentation set](../rfcs/0219-documentation-set.md)"
+sections = "15.4, 15.7, 17, 20.2, 21.1"
+
+[[entry]]
+rows = "0220"
+topic = "[Localization pipeline and 1.0 languages](../rfcs/0220-localization-pipeline-and-1.0-languages.md)"
+sections = "20"
+
+[[entry]]
+rows = "0221"
+topic = "[Colour-vision-safe map modes and UI scale](../rfcs/0221-colour-vision-safe-map-modes-and-ui-scale.md)"
+sections = "14.5, 20.1"
+
+[[entry]]
+rows = "0222"
+topic = "[Disputed borders and neutral presentation](../rfcs/0222-disputed-borders-and-neutral-presentation.md)"
+sections = "2.4, 5.2, 22, 22.1, 23.3"
+
+[[entry]]
+rows = "0223"
+topic = "[Language repertoires and shift](../rfcs/0223-language-repertoires-and-shift.md)"
+sections = "6.1, 6.4, 6.5, 8.7, 17.1"
+
+[[entry]]
+rows = "0224"
+topic = "[Religious change: affiliation and religiosity](../rfcs/0224-religious-change-affiliation-and-religiosity.md)"
+sections = "6.1, 6.2, 6.4, 10.5, 16"
+
+[[entry]]
+rows = "0225"
+topic = "[Assimilation policy, backlash and group boundaries](../rfcs/0225-assimilation-policy-backlash-and-group-boundaries.md)"
+sections = "6.1, 6.4, 10.1, 10.6, 10.7"
+
+[[entry]]
+rows = "0226"
+topic = "[Atrocity risk, onset and consequences](../rfcs/0226-atrocity-risk-onset-and-consequences.md)"
+sections = "6.2, 6.4, 6.5, 10.1, 11.6, 13.5, 15.3"
+
+[[entry]]
+rows = "0227"
+topic = "[The full financial design in 1.0](../rfcs/0227-full-financial-design-in-1.0.md)"
+sections = "8.8, 15.4, 17, 19.2, 21.1"
+
+[[entry]]
+rows = "0228"
+topic = "[Gabaix-Maggiori exchange rates in P5a](../rfcs/0228-gabaix-maggiori-exchange-rates-in-p5a.md)"
+sections = "8.8, 9.2, 9.9, 9.12, 21.1"
+
+[[entry]]
+rows = "0229"
+topic = "[Crisis levers as state-triggered rules in 1.0](../rfcs/0229-crisis-levers-as-state-triggered-rules.md)"
+sections = "9.2, 9.4, 9.11, 9.12, 15.4"
+
+[[entry]]
+rows = "0230"
+topic = "[Latent demand dynamics in the demand system](../rfcs/0230-latent-demand-dynamics.md)"
+sections = "9.9, 9.14, 13.1, 14.4, 17"
+
+[[entry]]
+rows = "0231"
+topic = "[Cost of capital for investment](../rfcs/0231-cost-of-capital-for-investment.md)"
+sections = "7.4, 9.10, 9.11"
+
+[[entry]]
+rows = "0232"
+topic = "[Daily calendar over monthly ticks](../rfcs/0232-daily-calendar-over-monthly-ticks.md)"
+sections = "4.3, 4.4, 4.5, 19.2, 20.3"
+
+[[entry]]
+rows = "0233"
+topic = "[Margin-constrained leverage and LDI spirals](../rfcs/0233-margin-constrained-leverage-and-ldi-spirals.md)"
+sections = "9.7, 9.8, 9.11, 9.13, 15.4, 17"
+
+[[entry]]
+rows = "0234"
+topic = "[Late-game flatness gate](../rfcs/0234-late-game-flatness-gate.md)"
+sections = "19.2, 21.2"
+
+[[entry]]
+rows = "0235"
+topic = "[Budget lines from measured per-good cost](../rfcs/0235-budget-lines-from-measured-per-good-cost.md)"
+sections = "19.2"
+
+[[entry]]
+rows = "0236"
+topic = "[Bounded state tables](../rfcs/0236-bounded-state-tables.md)"
+sections = "4.4, 9.8, 19.2, 19.4"
+
+[[entry]]
+rows = "0237"
+topic = "[Seat registry: office, firm and planned-economy seats](../rfcs/0237-seat-registry-office-firm-and-planned-economy-seats.md)"
+sections = "2.1, 12.6, 23.4, 23.9"
+
+[[entry]]
+rows = "0238"
+topic = "[Data revisions and real-time vintages](../rfcs/0238-data-revisions-and-real-time-vintages.md)"
+sections = "12.3, 12.6, 15.2, 15.4, 17, 19.2"
+
+[[entry]]
+rows = "0239"
+topic = "[No player seats in 1.x: game mechanics start at 2.0](../rfcs/0239-no-player-seats-in-1x.md)"
+sections = "2.1, 12.6, 21, 23.4, 23.9"
+
+[[entry]]
+rows = "0240"
+topic = "[Narration, chrome, flavour and replay hooks after 1.0](../rfcs/0240-presentation-game-layer-after-1.0.md)"
+sections = "20, 23.7, 23.8"
+
+[[entry]]
+rows = "0241"
+topic = "[Initial conditions only: calendar-blind runs and replay history](../rfcs/0241-initial-conditions-only-and-replay-history.md)"
+sections = "4.4, 13, 14.1, 14.4, 15.2, 15.4, 15.5, 15.7, 17.2, 22"
+
+[[entry]]
+rows = "0242"
+topic = "[Endogenous hazards: pandemics, policy regimes and technology jumps](../rfcs/0242-endogenous-hazards-pandemics-regimes-technology.md)"
+sections = "5.3, 7.5, 9.2, 9.11, 13.3, 13.4, 17"
+
+[[entry]]
+rows = "0243"
+topic = "[Balanced-growth calibration](../rfcs/0243-balanced-growth-calibration.md)"
+sections = "8.6, 8.7, 13, 15.2, 15.3"
+
+[[entry]]
+rows = "0244"
+topic = "[Map borders from the id buffer, labels in Slint](../rfcs/0244-map-borders-from-ids-and-slint-labels.md)"
+sections = "19.1, 20"
+
+[[entry]]
+rows = "0245"
+topic = "[Control labels, irregular shares and how advances relabel cells](../rfcs/0245-control-labels-irregular-shares-and-advance-relabel.md)"
+sections = "11.5, 11.6"
+
+[[entry]]
+rows = "0246"
+topic = "[Rear security: computed demand and key-node orders](../rfcs/0246-rear-security-demand-and-key-node-orders.md)"
+sections = "11.5, 11.6"
+
+[[entry]]
+rows = "0247"
+topic = "[Bulk freight rate per theta class](../rfcs/0247-bulk-freight-rate-per-theta-class.md)"
+sections = "5.3, 5.4, 15.7"
+
+[[entry]]
+rows = "0248"
+topic = "[Re-estimate of the 1.0 plan after ADRs 0208 to 0247](../rfcs/0248-1.0-re-estimate-after-0207.md)"
+sections = "21"
+
+[[entry]]
+rows = "0249"
+topic = "[Partial WDI sector shares and oil and gas from rents](../rfcs/0249-wdi-partial-shares-and-oil-gas-rents.md)"
+sections = "16.1, 22.2"
+
+[[entry]]
+rows = "0250"
+topic = "[Globe-only map, Equal Earth for print](../rfcs/0250-globe-only-map-equal-earth-for-print.md)"
+sections = "19.1, 20.1"
+
+[[entry]]
+rows = "0251"
+topic = "[Whole first-level provinces](../rfcs/0251-whole-first-level-provinces.md)"
+sections = "2, 5.2, 5.3, 22.2"
+
+[[entry]]
+rows = "0252"
+topic = "[Map and notice cues borrowed from grand strategy games](../rfcs/0252-map-and-notice-cues.md)"
+sections = "19.1, 20, 23.8"
+
+[[entry]]
+rows = "0253"
+topic = "[Royal houses, claimants and emergent restorations](../rfcs/0253-royal-houses-claimants-and-restorations.md)"
+sections = "10.2, 10.5, 10.7, 10.8, 13.5, 23.5"
+
+[[entry]]
+rows = "0254"
+topic = "[Organic conflict onset: crisis hazard, actors decide](../rfcs/0254-organic-conflict-onset.md)"
+sections = "6.5, 10.8, 11.1, 11.2, 11.6, 11.8, 13.5, 13.6, 15, 23.6"
+
+[[entry]]
+rows = "0255"
+topic = "[Relief globe](../rfcs/0255-relief-globe.md)"
+sections = "19.1, 20.1"
+
+[[entry]]
+rows = "0256"
+topic = "[World technology for crude oil and gas set by rents](../rfcs/0256-world-technology-for-oil-and-gas-from-rents.md)"
+sections = "16.1, 22.2"
+
+[[entry]]
+rows = "0257"
+topic = "[Literature-fidelity tiers and a benchmark rerun at every phase gate](../rfcs/0257-literature-fidelity-tiers-and-phase-gate-benchmark.md)"
+sections = "3.4, 15.3, 15.7, 17, 21.1, 21.2"
+
+[[entry]]
+rows = "0258"
+topic = "[Indicator registry, display transforms and the headline set](../rfcs/0258-indicator-registry-and-display-transforms.md)"
+sections = "14.1, 20.1, 20.2"
+
+[[entry]]
+rows = "0259"
+topic = "[Difficulty settings for seat play](../rfcs/0259-difficulty-settings-for-seat-play.md)"
+sections = "23.4, 23.8"
+
+[[entry]]
+rows = "0260"
+topic = "[Frosted panels, theme from the OS, SDF map labels](../rfcs/0260-frosted-panels-os-theme-sdf-labels.md)"
+sections = "19.1, 20"
+
+[[entry]]
+rows = "0261"
+topic = "[Glass loupe and glass edges on floating overlays](../rfcs/0261-glass-loupe-and-overlay-edges.md)"
+sections = "19.1, 20"
+
+[[entry]]
+rows = "0262"
+topic = "[UI and UX polish touches](../rfcs/0262-ui-polish-touches.md)"
+sections = "19.1, 20"
+
+[[entry]]
+rows = "0263"
+topic = "[Price gain capped at a share of each market's stability limit](../rfcs/0263-price-gain-capped-per-market.md)"
+sections = "8.2"
+
+[[entry]]
+rows = "0264"
+topic = "[H2 distance a reported diagnostic, theta per class gated with the model's kernel](../rfcs/0264-h2-distance-diagnostic-kernel-controlled-theta.md)"
+sections = "18, 21.1"
+
+[[entry]]
+rows = "0265"
+topic = "[The ACR criterion with input-output linkages](../rfcs/0265-acr-criterion-with-input-output-linkages.md)"
+sections = "15.2, 21"
+
+[[entry]]
+rows = "0266"
+topic = "[Labour capped at what inputs allow](../rfcs/0266-labour-capped-at-what-inputs-allow.md)"
+sections = "7.3, 8.5, 8.7, 15.3, 17.1"
+
+[[entry]]
+rows = "0267"
+topic = "[Price gain capped per coupled block of commodity markets](../rfcs/0267-price-gain-capped-per-coupled-block.md)"
+sections = "8.2"
+
+[[entry]]
+rows = "0268"
+topic = "[The ACR criterion graded per province](../rfcs/0268-acr-graded-per-province.md)"
+sections = "15.2, 21"
+
+[[entry]]
+rows = "0269"
+topic = "[P04 mode cost ratios borrowed from freight rates](../rfcs/0269-p04-mode-cost-ratios-borrowed.md)"
+sections = "5.3, 17.1, 21"
+
+[[entry]]
+rows = "0270"
+topic = "[Extraction column for crude oil and gas set by rents](../rfcs/0270-extraction-column-for-rent-economies.md)"
+sections = "16.1, 22.2"
+
+[[entry]]
+rows = "0271"
+topic = "[Goods at the ICIO industry level](../rfcs/0271-full-icio-goods-list.md)"
+sections = "7.1, 7.2, 8.3, 8.6, 16.1, 19.2"
+
+[[entry]]
+rows = "0272"
+topic = "[Log-distance trade cost on the border crossing](../rfcs/0272-log-distance-crossing-friction.md)"
+sections = "5.4, 8.3, 17.1"
+
+[[entry]]
+rows = "0273"
+topic = "[Mining support services are a local good](../rfcs/0273-mining-support-services-local.md)"
+sections = "7.1, 8.3, 8.6"
+
+[[entry]]
+rows = "0274"
+topic = "[Up to seven theta classes](../rfcs/0274-up-to-seven-theta-classes.md)"
+sections = "8.3, 17.1, 18"
+
+[[entry]]
+rows = "0275"
+topic = "[Manufacturing province spread from plant and census seeds, fitted by RAS](../rfcs/0275-manufacturing-spread-by-seeds-and-ras.md)"
+sections = "5.2, 7.1, 22"
+
+[[entry]]
+rows = "0276"
+topic = "[Border friction per good in theta class 3](../rfcs/0276-border-friction-per-good-in-class-3.md)"
+sections = "5.4, 8.3, 17"
+
+[[entry]]
+rows = "0277"
+topic = "[Air freight rate from 2000 mode shares](../rfcs/0277-air-freight-rate-from-mode-shares.md)"
+sections = "5.3, 8.3, 17.1, 21"
+
+[[entry]]
+rows = "0278"
+topic = "[Energy scope for 1.0: grid zones, plant capacity, state energy cells, frozen energy policy, gas markets](../rfcs/0278-energy-scope-for-1.0.md)"
+sections = "5.3, 7.1, 7.7, 9.6, 13.1, 16.1"
+
+[[entry]]
+rows = "0279"
+topic = "[Leg paths minimise the full iceberg cost per good](../rfcs/0279-least-iceberg-paths-per-good.md)"
+sections = "5.3, 5.4, 8.3, 17.2, 19.4"
+
+[[entry]]
+rows = "0280"
+topic = "[Storage order by partial adjustment toward a target stock](../rfcs/0280-storage-order-by-partial-adjustment.md)"
+sections = "8.2, 12.2, 17"
+
+[[entry]]
+rows = "0281"
+topic = "[Rents-to-VA factor from extraction value added](../rfcs/0281-rents-to-value-added-from-extraction.md)"
+sections = "16.1, 22.2"

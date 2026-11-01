@@ -6,7 +6,7 @@ of the ablation test was ill-posed (As built)
 Date: 2026-10-30
 Design sections: 5.3 (maritime container, bulk and tanker; freight rates), 5.4, 15.7 (ablation),
 17.1 (P04; new P154, P155), 21.2 item 7; amends ADR 0022 (P04 mode costs); ADR 0092 (nu per
-class); trade SPEC Leg factors, Parameters; P154 rescaled to the new P04c by ADR 0269
+class); trade SPEC Leg factors, Parameters
 
 ## Context
 

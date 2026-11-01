@@ -4,7 +4,6 @@ Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Ta
 Date: 2026-10-24
 Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate
 Amended by ADR 0247 (proposed, 2026-10-30): per-class multipliers on P04's sea cost per tonne-km and port fee (bulk freight rate, P154 and P155).
-Amended by ADR 0269 (proposed, 2026-10-31): P04a-d borrowed from BTS 2000 freight rates with ranges from Donaldson (2018); the PPML estimate of P04 stays a diagnostic until P9.
 Paths (ADR 0113, 2026-10-29): the uniqueness check and PPML are `ceteris_reference::{uniqueness, ppml}`, the gravity estimation `ceteris_calibrate::gravity` (`ceteris gravity`), and the gate `crates/ceteris-cli/tests/p2_gate.rs`.
 
 ## Context
@@ -216,11 +215,6 @@ sea 0.102, air -1.59) was a local stationary point: the profile deviance there i
 10,000 above the corner (181,360 on those classes, started from the corner); the four classes
 remove the small barrier in front of the corner. Diagnosis:
 `.superpowers/sdd/PLAN-pre-p3-rust/p04-diagnosis.md`.
-
-**Amendment (2026-10-31, ADR 0269): P04 borrowed.** The PPML estimate no longer sets P04a-d. The
-defaults are road 0.10 USD per tonne-km (prior kept) and rail, sea and air at BTS 2000 freight
-revenue per ton-mile relative to truck: 0.0164, 0.0121, 0.537. The fit above stays computed and
-recorded as a diagnostic; P9 refits the mode costs to mode-specific moments.
 
 ## Consequences
 
