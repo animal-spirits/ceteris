@@ -67,6 +67,16 @@ Path cost: c_od = min over paths of the sum of edge prices (Dijkstra; heap keys 
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
 
+Per-good trees (ADR 0279, accepted 2026-11-01; built, off by default: `TransportParams::path_choice`
+is `PathChoice::Freight`). Under `PathChoice::Iceberg`, for traded good g the edge weight is
+`w_g c_e + lambda_g h_e / 24`, so a leg's least-weight path is its least iceberg factor. The
+minimiser depends only on `kappa_g = lambda_g / (24 w_g)`, so `paths::shortest_by(g, source,
+kappa)` runs Dijkstra on `c_e + kappa h_e` (heap keys and ties as for freight trees) and returns
+the cost per tonne and hours along that path; `kappa = 0` is `shortest` bit for bit. One tree set
+per distinct `(kappa_g, bulk)`, the bulk flag giving a bulk class's goods the edge prices at its
+freight rate (ADR 0247). The freight-cost trees and `PathCache` stay for the map mode. The graph
+records the parameters it was last priced at (`TransportGraph::params`).
+
 ### Route choice (ADR 0017; `route_choice.rs`): built but off
 
 Built and tested in P2 but not used: route choice is deferred past P2 (owner, 2026-10-24; ADR

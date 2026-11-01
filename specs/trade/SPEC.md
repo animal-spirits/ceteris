@@ -80,6 +80,24 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   `bulk_rate_rejects_nan`, `bulk_rate_is_on_for_class_3_by_default` (params), `bulk_rate_reprices_sea_and_port_fees` (geo),
   `bulk_legs_follow_the_bulk_paths`, `bulk_rate_can_switch_the_path` (econ pack),
   `routing_matches_rust` (reference CLI).
+- Least-iceberg legs (ADR 0279, accepted 2026-11-01; built, off until its ablation test passes:
+  `TransportParams::path_choice = Iceberg`, read from the graph's parameters by
+  `EconInputs::network_from_graph`): per traded good, the leg's path minimises
+  `sum_e (w_g c_e + lambda_g h_e / 24)`, so `tau_leg,g = 1 + that minimum`; the hours come from
+  the same path. Domestic, access and crossing legs all use it. Goods with equal
+  `lambda_g / w_g` and the same bulk freight rate share one leg set (`Network.good_legs`:
+  `GoodLegs::set` names each traded good's set in `GoodLegs::sets`, `u8::MAX` for local goods;
+  each set has the base lists' endpoints in their order, since the weight changes no edge's
+  reachability). A bulk class's goods take their trees on the graph at the bulk rate, so the
+  kernel's bulk check is unchanged. The kernel prices a good on its set when `good_legs` is
+  present, else as above; route taus and good legs together are rejected. The inputs digest
+  appends the sets only when present. `ceteris_calibrate::costs::country_costs` follows
+  `Transport::path_choice` with the same per-good weights, so the gravity sample sees the
+  kernel's paths. The freight-cost trees stay for the map mode. Tests:
+  `iceberg_flies_light_goods_and_ships_heavy_ones` and `iceberg_at_zero_time_cost_is_freight`
+  (geo), `iceberg_legs_are_thread_count_independent` and
+  `iceberg_legs_price_each_good_on_its_paths` (econ pack), `iceberg_country_costs_follow_the_kernel`
+  (calibrate).
 - Route choice (ADR 0017, `LegTaus`; built and tested but off in P2: `Network.route_taus` stays
   `None`, route choice is deferred past P2, owner 2026-10-24): per good,
   `tau_leg,g = z^(-1/theta_r)` over every walk on the transport graph with edge factors
