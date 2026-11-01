@@ -678,7 +678,7 @@ fn from_dispatch(w: &mut EconWorld, tick: u32) {
 /// destroyed goods rises by the sum of those losses and by nothing else at T3, and nothing else
 /// of that good leaves the account before dispatch. At tick 0 every stored cell expects a large
 /// fall (pi^e -10 for its order alone): its target stock is 0, so the order is the release
-/// delta S - lambda S (ADR 0278), above the floor -(1 - delta) S. Over 120 ticks from a disturbed data
+/// delta S - lambda S (ADR 0280), above the floor -(1 - delta) S. Over 120 ticks from a disturbed data
 /// state every tick's invariants hold (goods identity, the market account holding S, money) and
 /// the markets end each tick with no money.
 #[test]

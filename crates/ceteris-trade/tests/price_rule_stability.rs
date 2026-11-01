@@ -255,7 +255,7 @@ fn storage_smooths_a_short_cut_below_flow_clearing() {
 }
 
 /// ADR 0091 Tests, as amended: a 12-month cut draws the stock below half its target, and the
-/// partial adjustment of ADR 0278, a release of lambda (S - S*) a month, keeps it above zero
+/// partial adjustment of ADR 0280, a release of lambda (S - S*) a month, keeps it above zero
 /// (0.13 of target at the approved values).
 #[test]
 fn cut_draws_the_stock_to_a_pipeline_floor() {
@@ -263,7 +263,7 @@ fn cut_draws_the_stock_to_a_pipeline_floor() {
     assert!(low < 0.5 && low > 0.0, "lowest stock {low} of target");
 }
 
-/// ADR 0278 (Deaton and Laroque 1992): a stockout lets the price rise to the flow-clearing
+/// ADR 0280 (Deaton and Laroque 1992): a stockout lets the price rise to the flow-clearing
 /// price, not past it. Crude oil and fuels (cover 1 month, zeta 13) at the stock target, orders
 /// doubled for one tick as a competitor's price rise sends them (theta 17.64: a 4% move), demand
 /// E 11.24 and supply eps 0.9 at eta 1 as Algeria's: the peak stays below the price at which the

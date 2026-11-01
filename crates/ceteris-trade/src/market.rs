@@ -122,7 +122,7 @@ impl Markets {
     /// [`TradeParams::stores`] (ADR 0091; off by default): the stock S carried in loses delta S, written to `spoiled[i]` (0 for
     /// every other cell) for the caller to destroy in the ledger, and the merchants' order
     /// b = max(delta S + lambda (S* - S), -(1 - delta) S) goes to `storage`: partial adjustment
-    /// (ADR 0278) at [`TradeParams::storage_adjustment`] toward [`TradeParams::storage_target`]
+    /// (ADR 0280) at [`TradeParams::storage_adjustment`] toward [`TradeParams::storage_target`]
     /// at D = `demand_int + demand_hh` and the cell's expectation. `reprice` reads it.
     pub fn store(&mut self, p: &TradeParams, spoiled: &mut [f64]) {
         assert_eq!(spoiled.len(), self.price.len());
@@ -568,7 +568,7 @@ mod tests {
         }
     }
 
-    /// ADR 0278: an origin with stock but no output and no buyers does not bid its own price up.
+    /// ADR 0280: an origin with stock but no output and no buyers does not bid its own price up.
     /// Province 0 is at its steady state; province 1 holds its stock target of old orders,
     /// produces nothing and has no buyers left. Merchants there want no stock (target s D = 0),
     /// so they release it rather than order spoilage replacement against no output.

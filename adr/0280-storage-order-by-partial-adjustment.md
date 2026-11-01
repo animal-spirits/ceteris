@@ -1,4 +1,4 @@
-# 0278. Storage order by partial adjustment toward a target stock
+# 0280. Storage order by partial adjustment toward a target stock
 
 Status: proposed
 Date: 2026-10-31
