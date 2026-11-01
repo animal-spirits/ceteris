@@ -3427,3 +3427,179 @@ fn write_off_runs_are_thread_independent() {
     assert!(fired > 0, "no write-off fired");
     assert_eq!(one, four);
 }
+
+/// The country whose price level the ADR 0098 tests lift, and its level.
+const LIFTED: (usize, f64) = (0, 1.3);
+
+/// The fixture with country `LIFTED.0` at price level `LIFTED.1` (ADR 0098), the rest at 1.
+fn lifted_world() -> EconInputs {
+    let mut inputs = small_world();
+    let mut levels = vec![1.0; inputs.n_countries()];
+    levels[LIFTED.0] = LIFTED.1;
+    inputs.set_price_levels(levels, &TradeParams::default());
+    inputs.set_base_point(&EconParams::default().edu_eff);
+    inputs.validate();
+    inputs
+}
+
+fn close(got: f64, want: f64, what: &str) {
+    assert!(
+        (got - want).abs() <= 1e-12 * want.abs().max(1.0),
+        "{what}: {got} against {want}"
+    );
+}
+
+/// Nominal value added of enterprise `e` at the base prices of `inp`: p_VA A VA0, p_VA = (p_o -
+/// sum_k coef_k q_k) / a_VA.
+fn base_nominal_va(inp: &EconInputs, e: usize) -> f64 {
+    let q = &inp.provinces.base_price[inp.enterprises.province[e] as usize];
+    let coef = &inp.enterprises.coef[e];
+    let cost: f64 = (0..N_GOODS)
+        .filter(|&k| coef[k] > 0.0)
+        .map(|k| coef[k] * q[k])
+        .sum();
+    let p_va = (inp.base_output_price(e) - cost) / inp.enterprises.a_va[e];
+    p_va * inp.enterprises.a[e] * inp.enterprises.va0[e]
+}
+
+/// ADR 0098, Tests: a price level p_c = 1.3 in one country moves only that country's local
+/// prices at t = 0 (base and market prices by p_c, local units by 1 / p_c, its local producers'
+/// input coefficients by p_c), and keeps values, shares and the national accounts: every
+/// enterprise's nominal VA, output value, a_VA and input cost shares, its input stocks' value,
+/// w0, L0, every pop's money, households' value shares at the data state's prices, and VA and
+/// household spending by country and good.
+#[test]
+fn price_level_values_unchanged() {
+    let (base, lifted) = (small_world(), lifted_world());
+    let (c, level) = LIFTED;
+    assert_eq!(base.provinces.w0, lifted.provinces.w0);
+    assert_eq!(base.enterprises.l0, lifted.enterprises.l0);
+    assert_eq!(base.enterprises.va0, lifted.enterprises.va0);
+    assert_eq!(base.provinces.gamma, lifted.provinces.gamma);
+    let in_c = |inp: &EconInputs, i: usize| inp.country_of(i) == c;
+    let mut moved = 0;
+    for i in 0..base.n_provinces() {
+        for (g, &traded) in TRADED.iter().enumerate() {
+            let (b, l) = (
+                base.provinces.base_price[i][g],
+                lifted.provinces.base_price[i][g],
+            );
+            if !traded && in_c(&base, i) {
+                assert_eq!((b, l), (1.0, level), "province {i} good {g}");
+                moved += 1;
+            } else {
+                assert_eq!(b.to_bits(), l.to_bits(), "province {i} good {g}");
+            }
+        }
+    }
+    assert!(moved > 0);
+    let nc = base.n_countries();
+    let (mut va_base, mut va_lifted) = (vec![0.0; nc * N_GOODS], vec![0.0; nc * N_GOODS]);
+    for e in 0..base.n_enterprises() {
+        let i = base.enterprises.province[e] as usize;
+        let g = usize::from(base.enterprises.good[e]);
+        let local_in_c = !TRADED[g] && in_c(&base, i);
+        let p_o = lifted.base_output_price(e);
+        assert_eq!(p_o, if local_in_c { level } else { 1.0 });
+        let (a, la) = (base.enterprises.a[e], lifted.enterprises.a[e]);
+        assert_eq!(la, a / p_o, "enterprise {e}: A");
+        close(lifted.enterprises.a_va[e], base.enterprises.a_va[e], "a_VA");
+        let value = |inp: &EconInputs| {
+            inp.base_output_price(e) * inp.enterprises.a[e] * inp.enterprises.va0[e]
+                / inp.enterprises.a_va[e]
+        };
+        close(value(&lifted), value(&base), "output value");
+        let (vb, vl) = (base_nominal_va(&base, e), base_nominal_va(&lifted, e));
+        close(vl, vb, "nominal VA");
+        close(vb, base.enterprises.va0[e], "nominal VA at p_c = 1");
+        va_base[base.country_of(i) * N_GOODS + g] += vb;
+        va_lifted[base.country_of(i) * N_GOODS + g] += vl;
+        let (qb, ql) = (
+            &base.provinces.base_price[i],
+            &lifted.provinces.base_price[i],
+        );
+        for k in 0..N_GOODS {
+            let (cb, cl) = (base.enterprises.coef[e][k], lifted.enterprises.coef[e][k]);
+            if cb == 0.0 {
+                assert_eq!(cl, 0.0);
+                continue;
+            }
+            close(cl * ql[k] / p_o, cb * qb[k], "input cost share");
+            // in units: local inputs of the lifted country are bought in units p_c times
+            // dearer, and its local producers' units are p_c times larger
+            let units = p_o * qb[k] / ql[k];
+            close(cl, cb * units, "input coefficient");
+        }
+    }
+    for (x, y) in va_lifted.iter().zip(&va_base) {
+        close(*x, *y, "VA by country and good");
+    }
+    assert_ne!(lifted.digest(), base.digest());
+
+    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let wb = EconWorld::new(Arc::new(base), params.clone(), trade.clone());
+    let wl = EconWorld::new(Arc::new(lifted), params.clone(), trade);
+    let (inp, lb, ll) = (wb.inputs(), wb.layout(), wl.layout());
+    for (cell, (&b, &l)) in wb.markets.price.iter().zip(&wl.markets.price).enumerate() {
+        let (i, g) = (cell / N_GOODS, cell % N_GOODS);
+        if !TRADED[g] && in_c(inp, i) {
+            assert_eq!((b, l), (1.0, level), "cell {cell}");
+        } else {
+            assert_eq!(b.to_bits(), l.to_bits(), "cell {cell}");
+        }
+    }
+    for k in 0..inp.n_pops() {
+        assert_eq!(
+            wb.ledger.money(lb.accounts.pop[k]),
+            wl.ledger.money(ll.accounts.pop[k]),
+            "pop {k}: money"
+        );
+    }
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        for k in 0..N_GOODS {
+            let value = |w: &EconWorld, lay: &ceteris_econ::world::Layout| {
+                w.ledger.goods(lay.accounts.enterprise[e], k)
+                    * w.inputs().provinces.base_price[i][k]
+            };
+            close(value(&wl, ll), value(&wb, lb), "input stock value");
+        }
+    }
+    // households at the data state's prices and their base income: value spending by good
+    let income = ceteris_econ::world::pop_base_income(inp, &params);
+    let (mut fd_base, mut fd_lifted) = (vec![0.0; nc * N_GOODS], vec![0.0; nc * N_GOODS]);
+    let mut units = vec![0.0; N_GOODS];
+    for (k, &money) in income.iter().enumerate() {
+        let i = inp.pops.province[k] as usize;
+        let country = inp.country_of(i);
+        for (w, lay, fd) in [(&wb, lb, &mut fd_base), (&wl, ll, &mut fd_lifted)] {
+            let price: Vec<f64> = (0..N_GOODS)
+                .map(|g| w.inputs().data_state_price(i, g))
+                .collect();
+            ceteris_econ::demand::pigl(
+                &lay.pigl[country],
+                &price,
+                money,
+                lay.sigma_income[country],
+                &params,
+                &mut units,
+            );
+            for g in 0..N_GOODS {
+                fd[country * N_GOODS + g] += inp.pops.population[k] * units[g] * price[g];
+            }
+        }
+    }
+    for (x, y) in fd_lifted.iter().zip(&fd_base) {
+        close(*x, *y, "household spending by country and good");
+    }
+}
+
+/// ADR 0098: p_c = 1 everywhere is the fixture, bit for bit.
+#[test]
+fn price_level_one_is_the_data_state() {
+    let base = small_world();
+    let mut ones = small_world();
+    ones.set_price_levels(vec![1.0; ones.n_countries()], &TradeParams::default());
+    ones.set_base_point(&EconParams::default().edu_eff);
+    assert_eq!(ones.digest(), base.digest());
+}

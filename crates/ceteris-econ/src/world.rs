@@ -135,7 +135,7 @@ pub struct Layout {
     /// Weights of the world price index, [`price_index_weights`].
     pub index_weights: Vec<f64>,
     /// PIGL weights per country: the calibrated ones (`Countries::pigl`), else inverted at
-    /// load over its pops at prices 1 ([`household_preferences`]).
+    /// load over its pops at the data state's prices ([`household_preferences`]).
     pub pigl: Vec<PiglWeights>,
     /// Within-pop log income dispersion of every pop of a country, which its weights carry
     /// (ADR 0094).
@@ -720,7 +720,8 @@ pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Per country, the calibrated PIGL weights (`Countries::pigl`) or else the weights inverted
-/// jointly over its pops at prices 1, each at its [`pop_base_income`] and weighted by its base
+/// jointly over its pops at the data state's prices (1 for traded goods, p_c for local goods,
+/// ADR 0098), each at its [`pop_base_income`] and weighted by its base
 /// spending (ADR 0094), and the within-pop log income dispersion every pop of the country uses,
 /// which the weights carry. Panics where a country's shares cannot be inverted
 /// (`invert_pigl_pops`).
@@ -745,10 +746,13 @@ pub fn household_preferences(
                         .map(|&k| (inp.pops.population[k], income[k]))
                         .collect();
                     let sigma = within_sigma(inp.countries.gini[c], &people);
-                    let at: Vec<PopAt> = people
+                    let at: Vec<PopAt> = members
                         .iter()
-                        .map(|&(n, m)| PopAt {
-                            price: vec![1.0; ng],
+                        .zip(&people)
+                        .map(|(&k, &(n, m))| PopAt {
+                            price: (0..ng)
+                                .map(|g| inp.data_state_price(inp.pops.province[k] as usize, g))
+                                .collect(),
                             income: m,
                             spend: n * m,
                         })
@@ -888,7 +892,7 @@ fn delivered_prices(
 /// delivered unit price of the physical arrivals, 1 / alpha_d with alpha_d the units that
 /// survive the losses per unit of spending (infinite where no active origin is reachable), and
 /// Gamma = (1 / alpha_d) / P_d (ADR 0200; 1 where unreachable), so that the buyer price of tick
-/// 0, Gamma P_d, is the base price. Local goods: 1 and 1.
+/// 0, Gamma P_d, is the base price. Local goods: the country's price level p_c (ADR 0098) and 1.
 pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64>, Rows<f64>) {
     let (ng, nt) = (inp.n_goods(), inp.goods.traded);
     let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, trade);
@@ -918,6 +922,11 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64
         &mut lead,
     );
     let (mut base, mut gamma) = (Rows::filled(np, ng, 1.0), Rows::filled(np, ng, 1.0));
+    for d in 0..np {
+        for g in nt..ng {
+            base[d][g] = inp.data_state_price(d, g);
+        }
+    }
     for (g, unit) in sourced.iter().enumerate() {
         for d in 0..np {
             let alpha: f64 = unit.survived.iter().map(|s| s[d]).sum();
@@ -939,8 +948,8 @@ const TRANSIT_ROUNDING: f64 = 1e-12;
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the initial state: the calibrated
     /// steady state of `EconInputs::steady` (ADR 0089, [`EconWorld::start_steady`]) when the
-    /// inputs carry one, else the 2000 data state: prices 1, base wages w0 and employment L0
-    /// from the inputs, unemployment at the natural rate u*, input stocks at one month of base
+    /// inputs carry one, else the 2000 data state: prices 1 (p_c for local goods, ADR 0098),
+    /// base wages w0 and employment L0 from the inputs, unemployment at the natural rate u*, input stocks at one month of base
     /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times own base
     /// output (see [`EconWorld::stock_base_output`]), nothing in flight, and one month of base
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
@@ -1078,6 +1087,12 @@ impl EconWorld {
             let dividends = lay.ownership[k] * pool[inp.country_of(i)];
             self.ledger
                 .transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
+        }
+        // local goods at the country's price level p_c (ADR 0098), traded goods at 1
+        for i in 0..inp.n_provinces() {
+            for g in inp.goods.traded..ng {
+                self.markets.price[i * ng + g] = inp.data_state_price(i, g);
+            }
         }
         // input stocks at one month of base use (Y0 = A VA0 / a_VA)
         for e in 0..inp.n_enterprises() {

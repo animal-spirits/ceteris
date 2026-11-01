@@ -69,9 +69,12 @@ pub struct Countries {
     pub u_star: Vec<f64>,
     /// 2000 Gini of income, the dispersion of each pop's lognormal income (ADR 0021).
     pub gini: Vec<f64>,
-    /// Calibrated PIGL weights (ADR 0089, stage 4); `None` inverts them at load at prices 1
-    /// (`world::household_preferences`).
+    /// Calibrated PIGL weights (ADR 0089, stage 4); `None` inverts them at load at the data
+    /// state's prices (`world::household_preferences`).
     pub pigl: Option<Vec<PiglWeights>>,
+    /// Price level p_c (ADR 0098): the base price of the country's local goods, at which the
+    /// data state starts them. See [`EconInputs::set_price_levels`].
+    pub price_level: Vec<f64>,
 }
 
 /// Per-province data, indexed by province.
@@ -86,9 +89,10 @@ pub struct ProvinceData {
     pub population: Vec<f64>,
     /// Base wage w0, numeraire per effective labour unit. See [`EconInputs::set_base_point`].
     pub w0: Vec<f64>,
-    /// Base delivered unit price q_d of every good at the province: 1 for local goods; for
-    /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
-    /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
+    /// Base delivered unit price q_d of every good at the province: the country's price level
+    /// p_c for local goods (ADR 0098); for traded goods, sourcing in the data state with
+    /// prices 1, tariffs and iceberg included, infinite where no origin is reachable. See
+    /// [`EconInputs::set_base_prices`].
     pub base_price: Rows<f64>,
     /// Selection constant Gamma of every good at the province (ADR 0200): buyers of a traded
     /// good pay Gamma times the CES index P_d. Fixed where the world is calibrated, so that the
@@ -218,6 +222,35 @@ impl EconInputs {
             crate::world::base_delivered_prices(self, trade);
     }
 
+    /// Sets each country's price level p_c to `levels` (ADR 0098) and what follows from it in
+    /// the data state: A = 1 / p_c for local enterprises (1 for traded ones), the base prices
+    /// under `trade` and the coefficients, so that values, cost shares and the base point stay
+    /// those of the data.
+    pub fn set_price_levels(&mut self, levels: Vec<f64>, trade: &TradeParams) {
+        self.countries.price_level = levels;
+        for e in 0..self.n_enterprises() {
+            self.enterprises.a[e] = 1.0 / self.base_output_price(e);
+        }
+        self.set_base_prices(trade);
+        self.set_coefficients();
+    }
+
+    /// Price of good `g` at province `i` in the data state: 1 for traded goods, the country's
+    /// price level p_c for local goods (ADR 0098).
+    pub fn data_state_price(&self, i: usize, g: usize) -> f64 {
+        if self.goods.is_traded(g) {
+            1.0
+        } else {
+            self.countries.price_level[self.country_of(i)]
+        }
+    }
+
+    /// p_o of enterprise `e`: the data state's price of its output at its province.
+    pub fn base_output_price(&self, e: usize) -> f64 {
+        let ent = &self.enterprises;
+        self.data_state_price(ent.province[e] as usize, usize::from(ent.good[e]))
+    }
+
     /// Sets the network's route taus to the kernel's least-cost factors (S05) under `trade`,
     /// from each good's legs as the kernel picks them (its good legs, ADR 0279, else the bulk
     /// legs for the bulk classes' goods, ADR 0247), with each good's leg hours, and drops the
@@ -286,7 +319,7 @@ impl EconInputs {
             (0..self.n_enterprises()).map(|e| self.cost_share_column(e)),
         );
         self.enterprises.a_va = (0..self.n_enterprises())
-            .map(|e| self.base_a_va(self.enterprises.province[e] as usize, &column[e]))
+            .map(|e| self.base_a_va(e, &column[e]))
             .collect();
         self.enterprises.coef = column.clone();
         self.enterprises.column = column;
@@ -306,24 +339,27 @@ impl EconInputs {
     }
 
     /// Physical coefficients of enterprise `e` from its country's cost shares (owner decision,
-    /// 2026-10-25): coef_k = a_kg / q_k, q_k the base delivered price of k at its province, so
-    /// at base prices every input's cost share is the ICIO share; 0 where k is unreachable.
+    /// 2026-10-25): coef_k = a_kg p_o / q_k, q_k the base delivered price of k at its province
+    /// and p_o that of its output ([`EconInputs::base_output_price`], ADR 0098), so at base
+    /// prices every input's cost share is the ICIO share; 0 where k is unreachable.
     pub fn cost_share_column(&self, e: usize) -> Vec<f64> {
         let q = &self.provinces.base_price[self.enterprises.province[e] as usize];
-        let a = self.country_column(e);
+        let (a, p_o) = (self.country_column(e), self.base_output_price(e));
         (0..a.len())
-            .map(|k| if a[k] > 0.0 { a[k] / q[k] } else { 0.0 })
+            .map(|k| if a[k] > 0.0 { a[k] * p_o / q[k] } else { 0.0 })
             .collect()
     }
 
-    /// Value-added coefficient of coefficients `coef` at the base prices of province `i`:
-    /// a_VA = 1 - sum_k coef_k q_k over reachable inputs (1 - sum_k a_kg for the base column).
-    pub fn base_a_va(&self, i: usize, coef: &[f64]) -> f64 {
-        let q = &self.provinces.base_price[i];
+    /// Value-added coefficient of coefficients `coef` of enterprise `e` at the base prices of
+    /// its province: a_VA = 1 - sum_k coef_k q_k / p_o over reachable inputs (1 - sum_k a_kg
+    /// for the base column).
+    pub fn base_a_va(&self, e: usize, coef: &[f64]) -> f64 {
+        let q = &self.provinces.base_price[self.enterprises.province[e] as usize];
         1.0 - (0..coef.len())
             .filter(|&k| coef[k] > 0.0)
             .map(|k| coef[k] * q[k])
             .sum::<f64>()
+            / self.base_output_price(e)
     }
 
     /// Whether every enterprise's coefficients are its 2000 column (one vintage), so that
@@ -399,6 +435,7 @@ impl EconInputs {
                 && c.unemployment.len() == nc
                 && c.u_star.len() == nc
                 && c.gini.len() == nc
+                && c.price_level.len() == nc
                 && c.pigl.as_ref().is_none_or(|w| w.len() == nc),
             "country columns disagree in length"
         );
@@ -422,6 +459,11 @@ impl EconInputs {
                 (0.0..1.0).contains(&c.u_star[k]),
                 "country {k}: natural rate {}",
                 c.u_star[k]
+            );
+            assert!(
+                c.price_level[k] > 0.0 && c.price_level[k].is_finite(),
+                "country {k}: price level {}",
+                c.price_level[k]
             );
             assert!(
                 (0.0..1.0).contains(&c.gini[k]),
@@ -603,6 +645,7 @@ impl EconInputs {
             u_star,
             gini,
             pigl,
+            price_level,
         } = countries;
         let ProvinceData {
             country,
@@ -689,6 +732,11 @@ impl EconInputs {
                 e.f64s(&w.within);
                 e.f64(w.sigma);
             }
+        }
+        // appended only where some country's is not 1, so worlds before ADR 0098 keep their digest
+        if price_level.iter().any(|&p| p != 1.0) {
+            b"price-level".iter().for_each(|&b| e.u8(b));
+            e.f64s(price_level);
         }
         if let Some(nu) = border_nu {
             b"border-nu".iter().for_each(|&b| e.u8(b));
