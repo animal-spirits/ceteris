@@ -21,8 +21,8 @@ use ceteris_econ::systems;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
-use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_GOODS, Sourced, dispatch, source};
+use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
+use ceteris_trade::{Kernel, Sourced, dispatch, source};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use rayon::prelude::*;
 
@@ -54,7 +54,7 @@ struct Columns {
 
 fn columns(w: &EconWorld) -> Columns {
     let np = w.inputs().n_provinces();
-    let traded = (0..N_GOODS).filter(|&g| TRADED[g]);
+    let traded = (0..N_GOODS).filter(|&g| g < N_TRADED);
     let column = |g: usize| (0..np).map(move |o| o * N_GOODS + g);
     let (m, sc) = (&w.markets, &w.scratch);
     Columns {

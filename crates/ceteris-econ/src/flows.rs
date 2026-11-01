@@ -8,8 +8,7 @@
 //! countries of the two gateways of the crossing. Home purchases are valued at the
 //! province's own price.
 
-use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_GOODS, Sourced};
+use ceteris_trade::{Kernel, Sourced};
 
 /// Ticks averaged by the export.
 pub const WINDOW: usize = 12;
@@ -89,10 +88,10 @@ impl GoodFlows {
 /// Means over the recorded ticks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MeanFlows {
-    /// `[(exporter * n_countries + importer) * N_GOODS + g]`.
+    /// `[(exporter * n_countries + importer) * n_goods + g]`.
     pub pair_value: Vec<f64>,
     pub pair_units: Vec<f64>,
-    /// Home purchases, `[province * N_GOODS + g]`.
+    /// Home purchases, `[province * n_goods + g]`.
     pub home_value: Vec<f64>,
     pub home_units: Vec<f64>,
 }
@@ -101,6 +100,7 @@ pub struct MeanFlows {
 pub struct FlowWindow {
     n_countries: usize,
     n_provinces: usize,
+    n_goods: usize,
     /// Per tick, the flows of each traded good.
     slots: Vec<Vec<GoodFlows>>,
     /// Slot of the current tick.
@@ -109,12 +109,13 @@ pub struct FlowWindow {
 }
 
 impl FlowWindow {
-    pub fn new(n_countries: usize, n_provinces: usize) -> Self {
-        let n_traded = TRADED.iter().filter(|&&t| t).count();
+    /// A window for `n_goods` goods of which the first `n_traded` are traded.
+    pub fn new(n_countries: usize, n_provinces: usize, n_goods: usize, n_traded: usize) -> Self {
         let slot = vec![GoodFlows::new(n_countries, n_provinces); n_traded];
         Self {
             n_countries,
             n_provinces,
+            n_goods,
             slots: vec![slot; WINDOW],
             head: WINDOW - 1,
             ticks: 0,
@@ -154,12 +155,12 @@ impl FlowWindow {
 
     /// Means over the recorded ticks, summed from the oldest to the newest.
     pub fn mean(&self) -> MeanFlows {
-        let (nc, np) = (self.n_countries, self.n_provinces);
+        let (nc, np, ng) = (self.n_countries, self.n_provinces, self.n_goods);
         let mut out = MeanFlows {
-            pair_value: vec![0.0; nc * nc * N_GOODS],
-            pair_units: vec![0.0; nc * nc * N_GOODS],
-            home_value: vec![0.0; np * N_GOODS],
-            home_units: vec![0.0; np * N_GOODS],
+            pair_value: vec![0.0; nc * nc * ng],
+            pair_units: vec![0.0; nc * nc * ng],
+            home_value: vec![0.0; np * ng],
+            home_units: vec![0.0; np * ng],
         };
         if self.ticks == 0 {
             return out;
@@ -174,7 +175,7 @@ impl FlowWindow {
                     (&mut out.home_units, &f.home_units),
                 ] {
                     for (i, y) in add.iter().enumerate() {
-                        sum[i * N_GOODS + g] += y;
+                        sum[i * ng + g] += y;
                     }
                 }
             }
@@ -196,6 +197,8 @@ impl FlowWindow {
 mod tests {
     use super::*;
     use crate::fixture::small_world;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
     use ceteris_trade::{TradeParams, dispatch, source};
 
     fn relative(a: f64, b: f64) -> f64 {
@@ -219,7 +222,7 @@ mod tests {
         source(&kernel, g, &price, &active, &vec![1.0; np], &spend, &mut r);
         dispatch(&kernel, g, &price, &fill, &mut r);
 
-        let mut window = FlowWindow::new(nc, np);
+        let mut window = FlowWindow::new(nc, np, N_GOODS, N_TRADED);
         window.advance();
         window.record(
             &kernel,
@@ -262,7 +265,7 @@ mod tests {
     #[test]
     fn window_averages_the_last_twelve_ticks() {
         let (nc, np) = (1, 1);
-        let mut window = FlowWindow::new(nc, np);
+        let mut window = FlowWindow::new(nc, np, N_GOODS, N_TRADED);
         assert_eq!(window.mean().home_units, vec![0.0; N_GOODS]);
         for t in 0..30 {
             window.advance();
@@ -274,7 +277,7 @@ mod tests {
             window.mean().home_units[0],
             (18..30).sum::<usize>() as f64 / 12.0
         );
-        let mut short = FlowWindow::new(nc, np);
+        let mut short = FlowWindow::new(nc, np, N_GOODS, N_TRADED);
         for t in 0..3 {
             short.advance();
             short.slots[short.head][0].home_units[0] = t as f64;

@@ -24,7 +24,8 @@ use ceteris_econ::fixture::small_world;
 use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
-use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::goods::p2::N as N_GOODS;
+use ceteris_trade::{Sourced, TradeParams, dispatch, source};
 
 fn solution() -> Equilibrium {
     let dir = std::env::var_os("CETERIS_FIXTURE_DIR").map_or_else(

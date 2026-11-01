@@ -8,10 +8,12 @@
 
 use std::path::Path;
 
+use ceteris_core::rows::Rows;
 use ceteris_geo::graph::{TransportGraph, TransportParams};
-use ceteris_geo::pack::{Pack, PackError, f64s, read_table, strings, u8s, u32s};
+use ceteris_geo::pack::{Pack, PackError, bools, f64s, read_table, strings, u8s, u32s};
 use ceteris_geo::paths::{Tree, shortest};
-use ceteris_trade::{BulkLegs, Leg, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::goods::p2;
+use ceteris_trade::{BulkLegs, Goods, Leg, Network, TradeParams, Wedges};
 use rayon::prelude::*;
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
@@ -126,17 +128,55 @@ fn expect_rows(what: &str, got: usize, want: usize) -> Result<(), PackError> {
     }
 }
 
-/// Columns `{prefix}0` to `{prefix}9`, as one row of goods per table row.
+/// Columns `{prefix}0` to `{prefix}{n - 1}`, as one row of `n` goods per table row.
 fn per_good(
     batch: &arrow_array::RecordBatch,
     prefix: &str,
-) -> Result<Vec<[f64; N_GOODS]>, PackError> {
-    let cols = (0..N_GOODS)
+    n: usize,
+) -> Result<Rows<f64>, PackError> {
+    let cols = (0..n)
         .map(|g| f64s(batch, &format!("{prefix}{g}")))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((0..batch.num_rows())
-        .map(|r| std::array::from_fn(|g| cols[g][r]))
-        .collect())
+    Ok(Rows::from_flat(
+        (0..batch.num_rows())
+            .flat_map(|r| cols.iter().map(move |c| c[r]))
+            .collect(),
+        n,
+    ))
+}
+
+/// The goods table of `econ_goods`: one good per row, traded goods first. A pack without
+/// `storable`, `tariff_group` and `category` columns (the 2000 pack, format 3) must hold the P2
+/// goods, whose values those are.
+fn read_goods(goods: &arrow_array::RecordBatch) -> Result<Goods, PackError> {
+    let name = strings(goods, "name")?;
+    let traded = bools(goods, "traded")?;
+    let n_traded = traded.iter().take_while(|&&t| t).count();
+    if traded[n_traded..].contains(&true) {
+        return Err(err("econ_goods: traded goods must come first"));
+    }
+    let has = |c: &str| goods.column_by_name(c).is_some();
+    if has("storable") && has("tariff_group") && has("category") {
+        let storable = bools(goods, "storable")?;
+        let group = u8s(goods, "tariff_group")?;
+        let category = u8s(goods, "category")?;
+        if storable[n_traded..].contains(&true)
+            || group.iter().any(|&g| g > 1)
+            || category.iter().any(|&c| c > 2)
+        {
+            return Err(err(
+                "econ_goods: a storable local good, a tariff group above 1 or a category above 2",
+            ));
+        }
+        return Ok(Goods::new(name, n_traded, storable, group, category));
+    }
+    let p2 = Goods::p2();
+    if name != p2.name || n_traded != p2::TRADED {
+        return Err(err(
+            "econ_goods: goods other than P2's need storable, tariff_group and category columns",
+        ));
+    }
+    Ok(p2)
 }
 
 impl EconInputs {
@@ -169,12 +209,16 @@ impl EconInputs {
                 .and_then(|i| u16::try_from(i).ok())
                 .ok_or_else(|| err(format!("province country {code} not in econ_countries")))
         };
+        let goods = table("econ_goods.arrow")?;
+        let weight = f64s(&goods, "weight")?;
+        let goods = read_goods(&goods)?;
+        let ng = goods.n();
         let io_table = table("econ_io.arrow")?;
         let a = f64s(&io_table, "a")?;
-        expect_rows("econ_io", a.len(), nc * N_GOODS * N_GOODS)?;
+        expect_rows("econ_io", a.len(), nc * ng * ng)?;
         let countries = Countries {
-            omega: per_good(&c, "fd_")?,
-            io: a.as_chunks::<{ N_GOODS * N_GOODS }>().0.to_vec(),
+            omega: per_good(&c, "fd_", ng)?,
+            io: Rows::from_flat(a, ng * ng),
             s_l: f64s(&c, "labour_share")?,
             unemployment: f64s(&c, "unemployment")?,
             u_star: f64s(&c, "u_star")?,
@@ -182,9 +226,6 @@ impl EconInputs {
             pigl: None,
         };
 
-        let goods = table("econ_goods.arrow")?;
-        let weight = f64s(&goods, "weight")?;
-        expect_rows("econ_goods", weight.len(), N_GOODS)?;
         let t = table("econ_tariffs.arrow")?;
         let rate = f64s(&t, "rate")?;
         expect_rows("econ_tariffs", rate.len(), 2 * nc * nc)?;
@@ -209,7 +250,7 @@ impl EconInputs {
 
         let p = table("econ_provinces.arrow")?;
         let n = pack.provinces.len();
-        let va = per_good(&p, "va_")?;
+        let va = per_good(&p, "va_", ng)?;
         expect_rows("econ_provinces", va.len(), n)?;
         let population = f64s(&p, "population")?;
         let pops = table("econ_pops.arrow")?;
@@ -223,7 +264,11 @@ impl EconInputs {
 
         // pack province -> economy province
         let mut index = vec![u32::MAX; n];
-        let mut provinces = ProvinceData::default();
+        let mut provinces = ProvinceData {
+            base_price: Rows::new(ng),
+            gamma: Rows::new(ng),
+            ..ProvinceData::default()
+        };
         for i in 0..n {
             let has_va = va[i].iter().sum::<f64>() > 0.0;
             if has_va && lf[i] <= 0.0 {
@@ -267,11 +312,12 @@ impl EconInputs {
 
         check_owners(&codes, &provinces, &pop_data, &ent)?;
         let mut inputs = EconInputs {
+            goods,
             network: Network {
                 province_country: provinces.country.clone(),
                 ..Network::default()
             },
-            weight: weight.try_into().expect("ten goods"),
+            weight,
             wedges,
             countries,
             provinces,
@@ -406,6 +452,8 @@ mod tests {
     use super::*;
     use ceteris_geo::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
     use ceteris_geo::pack::Provinces;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
 
     /// Pack provinces 0, 1 and 3 in country 0, 2 in country 1; ports 4 (country 0) and 5
     /// (country 1) joined through sea node 6, the sea edge in chokepoint 1. The economy holds

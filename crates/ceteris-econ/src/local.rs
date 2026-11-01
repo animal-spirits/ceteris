@@ -6,13 +6,10 @@
 use rayon::prelude::*;
 
 use ceteris_core::ledger::Ledger;
-use ceteris_trade::N_GOODS;
+use ceteris_core::rows::Rows;
 
 use crate::inputs::EconInputs;
 use crate::world::{EconWorld, Layout};
-
-/// Local goods, in input-output order.
-pub const LOCAL: [usize; 3] = [7, 8, 9];
 
 /// Splits `rest` units of output among users given as (need n, uncovered need u, stock b),
 /// writing each user's draw from output into `out`: output first, so with enough output every
@@ -48,7 +45,8 @@ fn split(rest: f64, users: &[(f64, f64, f64)], out: &mut [f64]) {
     }
 }
 
-/// A province's enterprises as the chain sees them, by position in the province. Built by
+/// A province's enterprises as the chain sees them, by position in the province, over the
+/// local goods in good order (index j is local good `traded + j`). Built by
 /// [`Province::new`] or [`Province::from_parts`], which cache each user's floors; a province
 /// whose `cap`, `coef` or `stock` is changed afterwards needs [`Province::rebuilt`].
 #[derive(Clone, Debug)]
@@ -57,14 +55,14 @@ pub struct Province {
     pub cap: Vec<f64>,
     /// Coefficients of the local goods; 0 for an enterprise's own good, which its own
     /// output serves first.
-    pub coef: Vec<[f64; 3]>,
-    pub stock: Vec<[f64; 3]>,
-    pub producer: [Option<usize>; 3],
+    pub coef: Rows<f64>,
+    pub stock: Rows<f64>,
+    pub producer: Vec<Option<usize>>,
     /// The producer's own coefficient of each local good.
-    pub own: [f64; 3],
+    pub own: Vec<f64>,
     /// Each user's [`Province::floor`] of each local good, from `cap`, `coef` and `stock` when
     /// the province is built.
-    floors: Vec<[f64; 3]>,
+    floors: Rows<f64>,
 }
 
 impl Province {
@@ -72,24 +70,38 @@ impl Province {
     pub fn new(inp: &EconInputs, lay: &Layout, ledger: &Ledger, i: usize, cap: &[f64]) -> Self {
         let ents = lay.enterprises(i);
         let first = ents.start;
+        let local = inp.goods.local_goods();
         let good = |e: usize| usize::from(inp.enterprises.good[e]);
-        let producer = LOCAL.map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first));
+        let producer: Vec<Option<usize>> = local
+            .clone()
+            .map(|k| ents.clone().find(|&e| good(e) == k).map(|e| e - first))
+            .collect();
+        let own = (0..local.len())
+            .map(|j| producer[j].map_or(0.0, |p| lay.coef[p + first][local.start + j]))
+            .collect();
         Province::from_parts(
             cap.to_vec(),
-            ents.clone()
-                .map(|e| {
-                    let mut c = LOCAL.map(|k| lay.coef[e][k]);
-                    if let Some(j) = LOCAL.iter().position(|&k| k == good(e)) {
+            Rows::from_rows(
+                local.len(),
+                ents.clone().map(|e| {
+                    let mut c: Vec<f64> = local.clone().map(|k| lay.coef[e][k]).collect();
+                    if let Some(j) = local.clone().position(|k| k == good(e)) {
                         c[j] = 0.0;
                     }
                     c
-                })
-                .collect(),
-            ents.clone()
-                .map(|e| LOCAL.map(|k| ledger.goods(lay.accounts.enterprise[e], k)))
-                .collect(),
+                }),
+            ),
+            Rows::from_rows(
+                local.len(),
+                ents.clone().map(|e| {
+                    local
+                        .clone()
+                        .map(|k| ledger.goods(lay.accounts.enterprise[e], k))
+                        .collect::<Vec<_>>()
+                }),
+            ),
             producer,
-            std::array::from_fn(|j| producer[j].map_or(0.0, |p| lay.coef[p + first][LOCAL[j]])),
+            own,
         )
     }
 
@@ -97,14 +109,19 @@ impl Province {
     /// producer of each local good and its own coefficient.
     pub fn from_parts(
         cap: Vec<f64>,
-        coef: Vec<[f64; 3]>,
-        stock: Vec<[f64; 3]>,
-        producer: [Option<usize>; 3],
-        own: [f64; 3],
+        coef: Rows<f64>,
+        stock: Rows<f64>,
+        producer: Vec<Option<usize>>,
+        own: Vec<f64>,
     ) -> Self {
-        let floors = (0..cap.len())
-            .map(|u| std::array::from_fn(|j| floor_of(cap[u], coef[u][j], stock[u][j])))
-            .collect();
+        let n = own.len();
+        let floors = Rows::from_flat(
+            (0..cap.len())
+                .flat_map(|u| (0..n).map(move |j| (u, j)))
+                .map(|(u, j)| floor_of(cap[u], coef[u][j], stock[u][j]))
+                .collect(),
+            n,
+        );
         Province {
             cap,
             coef,
@@ -113,6 +130,11 @@ impl Province {
             own,
             floors,
         }
+    }
+
+    /// Local goods of the province.
+    pub fn n_local(&self) -> usize {
+        self.own.len()
     }
 
     /// The province with its floors recomputed, after `cap`, `coef` or `stock` changed.
@@ -139,8 +161,8 @@ impl Province {
     }
 
     /// Smallest level of enterprise `u`'s local inputs at fills `f`, 1 if it uses none.
-    fn least(&self, u: usize, f: &[f64; 3]) -> f64 {
-        (0..3)
+    fn least(&self, u: usize, f: &[f64]) -> f64 {
+        (0..self.n_local())
             .filter(|&j| self.coef[u][j] > 0.0)
             .fold(1.0, |m, j| m.min(self.level(u, j, f[j])))
     }
@@ -164,8 +186,8 @@ impl Province {
 
     /// User `u`'s smallest deficit of good j ([`Province::deficit`]) through its local inputs
     /// other than j at fills `f`: 1 - s_j where every other level is 1 or it uses no other.
-    fn other(&self, u: usize, j: usize, f: &[f64; 3]) -> f64 {
-        (0..3)
+    fn other(&self, u: usize, j: usize, f: &[f64]) -> f64 {
+        (0..self.n_local())
             .filter(|&k| k != j && self.coef[u][k] > 0.0)
             .fold(1.0 - self.floor(u, j), |d, k| {
                 d.min(self.deficit(u, j, k, f[k]))
@@ -176,7 +198,7 @@ impl Province {
     /// its smallest level, as coef cap max(min_k deficit_k, 0): coef cap G - b would cancel to
     /// the rounding of b where the user runs mostly on its stock (a small fill), and the jumps
     /// could not follow a collapse there.
-    fn uncovered(&self, u: usize, j: usize, f: &[f64; 3]) -> f64 {
+    fn uncovered(&self, u: usize, j: usize, f: &[f64]) -> f64 {
         let a = self.coef[u][j] * self.cap[u];
         if a == 0.0 {
             return 0.0;
@@ -197,7 +219,7 @@ impl Province {
     }
 
     /// Outputs at fills `f`: Y_e = cap_e min_k G_ek(F_k) over the local goods e uses.
-    pub fn outputs(&self, f: &[f64; 3], y: &mut Vec<f64>) {
+    pub fn outputs(&self, f: &[f64], y: &mut Vec<f64>) {
         y.clear();
         y.extend((0..self.cap.len()).map(|u| self.cap[u] * self.least(u, f)));
     }
@@ -205,7 +227,7 @@ impl Province {
     /// Output left for the users of good j, its users as (need, uncovered need, stock), at fills
     /// f and their outputs y. A user without stock has its whole need uncovered, as before the
     /// stock floor; any other's uncovered need is [`Province::uncovered`], at most its need.
-    fn users(&self, j: usize, f: &[f64; 3], y: &[f64], out: &mut Vec<(f64, f64, f64)>) -> f64 {
+    fn users(&self, j: usize, f: &[f64], y: &[f64], out: &mut Vec<(f64, f64, f64)>) -> f64 {
         out.clear();
         for (u, &yu) in y.iter().enumerate() {
             let need = self.coef[u][j] * yu;
@@ -227,7 +249,7 @@ impl Province {
     fn balance(
         &self,
         j: usize,
-        f: &[f64; 3],
+        f: &[f64],
         y: &[f64],
         users: &mut Vec<(f64, f64, f64)>,
     ) -> (f64, f64) {
@@ -237,7 +259,7 @@ impl Province {
 
     /// Whether good j fits at fills f and their outputs y: the first of [`Province::balance`] is
     /// at most the second.
-    fn fits(&self, j: usize, f: &[f64; 3], y: &[f64], users: &mut Vec<(f64, f64, f64)>) -> bool {
+    fn fits(&self, j: usize, f: &[f64], y: &[f64], users: &mut Vec<(f64, f64, f64)>) -> bool {
         let (uncovered, rest) = self.balance(j, f, y, users);
         uncovered <= rest
     }
@@ -265,7 +287,7 @@ struct Work {
     users: Vec<(f64, f64, f64)>,
     kinks: Vec<f64>,
     /// The cycle's composed map squared k times, k = 0, 1, ..., in [`jump`].
-    powers: Vec<[Affine; 3]>,
+    powers: Vec<Vec<Affine>>,
     /// Cycles followed and maps applied by [`jump`].
     work: usize,
     /// Fits evaluated by the last [`descend`].
@@ -276,28 +298,42 @@ struct Work {
 }
 
 /// A fill as an affine function of the fills at the start of a pass: c + sum_k d_k F_k.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Affine {
     c: f64,
-    d: [f64; 3],
+    d: Vec<f64>,
 }
 
 impl Affine {
-    fn of(j: usize) -> Self {
-        let mut d = [0.0; 3];
-        d[j] = 1.0;
-        Affine { c: 0.0, d }
+    /// Zero of `n` fills.
+    fn zero(n: usize) -> Self {
+        Affine {
+            c: 0.0,
+            d: vec![0.0; n],
+        }
     }
 
-    fn at(&self, f: &[f64; 3]) -> f64 {
-        self.c + (0..3).map(|k| self.d[k] * f[k]).sum::<f64>()
+    /// Fill j of `n` fills.
+    fn of(j: usize, n: usize) -> Self {
+        let mut a = Affine::zero(n);
+        a.d[j] = 1.0;
+        a
+    }
+
+    /// Each of `n` fills.
+    fn identity(n: usize) -> Vec<Affine> {
+        (0..n).map(|j| Affine::of(j, n)).collect()
+    }
+
+    fn at(&self, f: &[f64]) -> f64 {
+        self.c + (0..self.d.len()).map(|k| self.d[k] * f[k]).sum::<f64>()
     }
 
     /// This function of the fills `inner` gives, each affine in the same fills.
-    fn after(&self, inner: &[Affine; 3]) -> Affine {
+    fn after(&self, inner: &[Affine]) -> Affine {
         let mut row = Affine {
             c: self.c,
-            d: [0.0; 3],
+            ..Affine::zero(self.d.len())
         };
         for (dk, ik) in self.d.iter().zip(inner) {
             row.c += dk * ik.c;
@@ -330,8 +366,8 @@ struct Piece {
 
 /// The good whose level is user `u`'s smallest at fills `f` among its local inputs other than
 /// `but`, the lowest on a tie; None if it uses none.
-fn binding(p: &Province, u: usize, f: &[f64; 3], but: Option<usize>) -> Option<usize> {
-    (0..3)
+fn binding(p: &Province, u: usize, f: &[f64], but: Option<usize>) -> Option<usize> {
+    (0..p.n_local())
         .filter(|&k| p.coef[u][k] > 0.0 && Some(k) != but)
         .fold(None, |best: Option<usize>, k| match best {
             Some(b) if p.level(u, b, f[b]) <= p.level(u, k, f[k]) => Some(b),
@@ -342,10 +378,10 @@ fn binding(p: &Province, u: usize, f: &[f64; 3], but: Option<usize>) -> Option<u
 /// Whether the step of good j that sets its fill to `x` from fills `f` (the other goods'
 /// current values) lies on `piece`. Comparisons are not strict: on a tie, or where a user's
 /// smallest other level meets its floor, both sides give the same U.
-fn on_piece(p: &Province, j: usize, piece: &Piece, f: &[f64; 3], x: f64) -> bool {
+fn on_piece(p: &Province, j: usize, piece: &Piece, f: &[f64], x: f64) -> bool {
     let level = |u: usize, k: usize| p.level(u, k, f[k]);
     let smallest = |u: usize, k: usize| {
-        (0..3).all(|i| i == j || p.coef[u][i] == 0.0 || level(u, k) <= level(u, i))
+        (0..p.n_local()).all(|i| i == j || p.coef[u][i] == 0.0 || level(u, k) <= level(u, i))
     };
     let producer = match (p.producer[j], piece.producer) {
         (Some(q), Some(k)) => smallest(q, k),
@@ -376,7 +412,7 @@ fn on_piece(p: &Province, j: usize, piece: &Piece, f: &[f64; 3], x: f64) -> bool
 /// Returns None where j already fits. Otherwise the piece and the root on it as an affine
 /// function of the other fills, x = (R - level) / slope; the affine has NaN coefficients where
 /// rounding put the root on a kink.
-fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affine, Piece)> {
+fn step(p: &Province, j: usize, f: &mut [f64], w: &mut Work) -> Option<(Affine, Piece)> {
     p.outputs(f, &mut w.y);
     if p.fits(j, f, &w.y, &mut w.users) {
         return None;
@@ -410,10 +446,7 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
         hi = x;
     }
     // R - level on the piece, as an affine function of the other fills
-    let mut num = Affine {
-        c: 0.0,
-        d: [0.0; 3],
-    };
+    let mut num = Affine::zero(p.n_local());
     let mut piece = Piece::default();
     if let Some(q) = p.producer[j] {
         let share = (1.0 - p.own[j]) * p.cap[q];
@@ -467,12 +500,12 @@ fn step(p: &Province, j: usize, f: &mut [f64; 3], w: &mut Work) -> Option<(Affin
     let map = if inside {
         Affine {
             c: num.c / slope,
-            d: num.d.map(|d| d / slope),
+            d: num.d.iter().map(|d| d / slope).collect(),
         }
     } else {
         Affine {
             c: f64::NAN,
-            d: [f64::NAN; 3],
+            d: vec![f64::NAN; p.n_local()],
         }
     };
     Some((map, piece))
@@ -491,13 +524,13 @@ const DESCENT: usize = 8;
 /// producer's output does not depend on its own good), 0 always fits (every uncovered need is
 /// then 0: the deficit through j is 0) and positive f64 order as their bits. A root above a flat
 /// piece, where U - R is rounding, could otherwise take up to 2^62 steps.
-fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f64 {
+fn descend(p: &Province, j: usize, f: &mut [f64], x: f64, w: &mut Work) -> f64 {
     debug_assert!(
         p.producer[j].is_none_or(|q| p.coef[q][j] == 0.0),
         "good {j}'s producer takes its own good as an input: the fit is not monotone"
     );
     w.descent = 0;
-    let fits = |x: f64, f: &mut [f64; 3], w: &mut Work| {
+    let fits = |x: f64, f: &mut [f64], w: &mut Work| {
         w.descent += 1;
         debug_assert!(w.descent <= DESCENT + 65, "descent unbounded");
         f[j] = x;
@@ -531,15 +564,16 @@ fn descend(p: &Province, j: usize, f: &mut [f64; 3], x: f64, w: &mut Work) -> f6
 /// start, and the piece of each step that cut.
 #[derive(Clone)]
 struct Pass {
-    map: [Affine; 3],
-    pieces: [Option<Piece>; 3],
+    map: Vec<Affine>,
+    pieces: Vec<Option<Piece>>,
 }
 
 /// One pass of the fill iteration over the goods in order.
-fn pass(p: &Province, f: &mut [f64; 3], w: &mut Work) -> Pass {
-    let mut map = [0, 1, 2].map(Affine::of);
-    let mut pieces = [None, None, None];
-    for j in 0..3 {
+fn pass(p: &Province, f: &mut [f64], w: &mut Work) -> Pass {
+    let n = p.n_local();
+    let mut map = Affine::identity(n);
+    let mut pieces = vec![None; n];
+    for j in 0..n {
         if let Some((s, piece)) = step(p, j, f, w) {
             map[j] = s.after(&map);
             pieces[j] = Some(piece);
@@ -602,32 +636,33 @@ const DOUBLINGS: usize = 64;
 /// Where [`jump`] takes the passes.
 enum Jump {
     /// The limit, confirmed by running the cycle's passes from it.
-    Limit([f64; 3]),
+    Limit(Vec<f64>),
     /// The fills after the last whole cycle that stays on the cycle's pieces (short of it where
     /// the jumps' shared budget runs out).
-    Ahead([f64; 3]),
+    Ahead(Vec<f64>),
 }
 
 /// The fixed point g of the cycle of passes `cycle` (oldest first) from the fills `f` at the
 /// end of its last pass: on the goods the cycle lowers, the composed map's fixed point, the
 /// others held at f. None where a step's map is undefined or the system is singular.
-fn fixed_point(cycle: &[Pass], f: &[f64; 3]) -> Option<FixedPoint> {
-    let cut: Vec<usize> = (0..3)
+fn fixed_point(cycle: &[Pass], f: &[f64]) -> Option<FixedPoint> {
+    let l = f.len();
+    let cut: Vec<usize> = (0..l)
         .filter(|&j| cycle.iter().any(|q| q.pieces[j].is_some()))
         .collect();
-    let map = cycle.iter().fold([0, 1, 2].map(Affine::of), |acc, q| {
-        q.map.map(|o| o.after(&acc))
+    let map = cycle.iter().fold(Affine::identity(l), |acc, q| {
+        q.map.iter().map(|o| o.after(&acc)).collect()
     });
     let n = cut.len();
-    // (I - M_CC) g_C = c_C + M_CN f_N
-    let mut a = [[0.0f64; 4]; 3];
+    // (I - M_CC) g_C = c_C + M_CN f_N, the right-hand side in column l
+    let mut a = vec![vec![0.0f64; l + 1]; l];
     for (r, &j) in cut.iter().enumerate() {
         let row = &map[j];
         if !row.c.is_finite() || !row.d.iter().all(|d| d.is_finite()) {
             return None;
         }
-        a[r][3] = row.c
-            + (0..3)
+        a[r][l] = row.c
+            + (0..l)
                 .filter(|k| !cut.contains(k))
                 .map(|k| row.d[k] * f[k])
                 .sum::<f64>();
@@ -641,7 +676,7 @@ fn fixed_point(cycle: &[Pass], f: &[f64; 3]) -> Option<FixedPoint> {
             return None;
         }
         a.swap(c, pivot);
-        let top = a[c];
+        let top = a[c].clone();
         for row in a.iter_mut().take(n).skip(c + 1) {
             let ratio = row[c] / top[c];
             for (x, t) in row.iter_mut().zip(&top).skip(c) {
@@ -649,13 +684,13 @@ fn fixed_point(cycle: &[Pass], f: &[f64; 3]) -> Option<FixedPoint> {
             }
         }
     }
-    let mut x = [0.0; 3];
+    let mut x = vec![0.0; l];
     for c in (0..n).rev() {
         let s: f64 = (c + 1..n).map(|k| a[c][k] * x[k]).sum();
-        x[c] = (a[c][3] - s) / a[c][c];
+        x[c] = (a[c][l] - s) / a[c][c];
     }
     // the solve rounds: a limit at 0 or at f may come out just beyond it
-    let mut g = *f;
+    let mut g = f.to_vec();
     let mut limit = true;
     for (v, &j) in cut.iter().enumerate() {
         limit &= x[v] >= -SOLVE_ROUNDING && x[v] <= f[j] + SOLVE_ROUNDING;
@@ -670,8 +705,8 @@ struct FixedPoint {
     /// The goods the cycle lowers.
     cut: Vec<usize>,
     /// The cycle's composed map.
-    map: [Affine; 3],
-    g: [f64; 3],
+    map: Vec<Affine>,
+    g: Vec<f64>,
     /// Whether g lies in [0, f] up to the solve's rounding.
     limit: bool,
 }
@@ -687,13 +722,7 @@ struct FixedPoint {
 /// passes reach in exact arithmetic: between the last two checked points it is found by
 /// bisection of the cycles (as the doubling, the cycles that stay on the pieces taken to be the
 /// first ones), so the next pass crosses a kink. None where the first cycle already leaves.
-fn jump(
-    p: &Province,
-    cycle: &[Pass],
-    f: &[f64; 3],
-    budget: &mut usize,
-    w: &mut Work,
-) -> Option<Jump> {
+fn jump(p: &Province, cycle: &[Pass], f: &[f64], budget: &mut usize, w: &mut Work) -> Option<Jump> {
     if *budget == 0 {
         w.inapplicable = true;
         return None;
@@ -710,20 +739,19 @@ fn jump(
         w.inapplicable = true;
         return None;
     }
-    let mut now = *f;
-    let ahead = |now: [f64; 3]| (now != *f).then_some(Jump::Ahead(now));
+    let mut now = f.to_vec();
+    let ahead = |now: Vec<f64>| (now != f).then_some(Jump::Ahead(now));
     let scale = cut
         .iter()
         .fold(f64::MIN_POSITIVE, |s, &j| s.max((f[j] - g[j]).abs()));
-    let reached =
-        |s: &[f64; 3]| limit && cut.iter().all(|&j| (s[j] - g[j]).abs() <= REACHED * scale);
+    let reached = |s: &[f64]| limit && cut.iter().all(|&j| (s[j] - g[j]).abs() <= REACHED * scale);
     let confirm = |w: &mut Work| {
-        let mut h = g;
+        let mut h = g.clone();
         for _ in cycle {
             pass(p, &mut h, w);
         }
         let size = g.iter().fold(0.0f64, |s, &v| s.max(v));
-        (0..3)
+        (0..g.len())
             .all(|k| (h[k] - g[k]).abs() <= CONFIRMED * size)
             .then_some(Jump::Limit(h))
     };
@@ -745,8 +773,8 @@ fn jump(
     // with no rounding allowance on the shortages: a fall too slow to follow cycle by cycle,
     // typically a collapse towards 0 at a rate near 1
     // the fills `power` gives from `from`, where they lie in [0, below] and on the pieces
-    let on = |from: &[f64; 3], power: &[Affine; 3], below: &[f64; 3], w: &mut Work| {
-        let mut at = *from;
+    let on = |from: &[f64], power: &[Affine], below: &[f64], w: &mut Work| {
+        let mut at = from.to_vec();
         for &j in &cut {
             at[j] = power[j].at(from);
         }
@@ -756,7 +784,7 @@ fn jump(
     };
     w.powers.clear();
     w.powers.push(map);
-    let mut last = now;
+    let mut last = now.clone();
     let mut left = false;
     for k in 0..DOUBLINGS {
         if *budget == 0 {
@@ -764,16 +792,18 @@ fn jump(
         }
         *budget -= 1;
         w.work += 1;
-        let power = w.powers[k];
+        let power = w.powers[k].clone();
         let Some(at) = on(&now, &power, &last, w) else {
             left = true;
             break;
         };
+        let hit = reached(&at);
         last = at;
-        if reached(&at) {
+        if hit {
             return confirm(w).or_else(|| ahead(last));
         }
-        w.powers.push(power.map(|o| o.after(&power)));
+        w.powers
+            .push(power.iter().map(|o| o.after(&power)).collect());
     }
     // The passes left the pieces between the last two checked points, 2^(k-1) and 2^k cycles
     // on: the last point before from which a cycle stays on them, by bisection of the cycles in
@@ -787,10 +817,11 @@ fn jump(
             }
             *budget -= 1;
             w.work += 1;
-            let power = w.powers[i];
+            let power = w.powers[i].clone();
             if let Some(at) = on(&last, &power, &last, w) {
+                let hit = reached(&at);
                 last = at;
-                if reached(&at) {
+                if hit {
                     return confirm(w).or_else(|| ahead(last));
                 }
             }
@@ -812,15 +843,15 @@ fn jump(
 fn follow(
     p: &Province,
     cycle: &[Pass],
-    from: &[f64; 3],
+    from: &[f64],
     short: f64,
     w: &mut Work,
-) -> Option<[f64; 3]> {
+) -> Option<Vec<f64>> {
     w.work += 1;
-    let mut through = *from;
+    let mut through = from.to_vec();
     for q in cycle {
-        let mut state = through;
-        for j in 0..3 {
+        let mut state = through.clone();
+        for j in 0..p.n_local() {
             p.outputs(&state, &mut w.y);
             let (uncovered, rest) = p.balance(j, &state, &w.y, &mut w.users);
             let slack = ROUNDING * (uncovered + rest);
@@ -856,7 +887,7 @@ fn follow(
 /// normal f64 is 0.
 pub fn fills(p: &Province) -> Fills {
     let mut w = Work::default();
-    let mut f = [1.0; 3];
+    let mut f = vec![1.0; p.n_local()];
     let mut passes = 0;
     let mut recent: Vec<Pass> = Vec::with_capacity(PERIOD);
     // the last passes, kept across jumps: the cycle whose fixed point a stop moves to
@@ -871,7 +902,7 @@ pub fn fills(p: &Province) -> Fills {
     loop {
         passes += 1;
         since += 1;
-        let start = f;
+        let start = f.clone();
         let last = pass(p, &mut f, &mut w);
         if f == start {
             return Fills {
@@ -904,7 +935,7 @@ pub fn fills(p: &Province) -> Fills {
         // to rounding, or the map falls to 0 by less than the margin: no constant, so the fixed point
         // is 0, and no resolvable fall), the fills are taken as they are; after a stall, the
         // plain passes go on and the stall is reported.
-        let lowered: Vec<usize> = (0..3).filter(|&j| f[j] != start[j]).collect();
+        let lowered: Vec<usize> = (0..f.len()).filter(|&j| f[j] != start[j]).collect();
         let rounding = lowered.iter().all(|&j| !resolvable(start[j], f[j]));
         // what this pass adds to `uncovered`, None once counted: a good cut by rounding alone
         // while another falls changes the pieces where no kink lies, and costs two passes as a
@@ -970,7 +1001,10 @@ pub fn fills(p: &Province) -> Fills {
             uncovered += c.max(usize::from(missed));
         }
         if let Some(h) = ahead {
-            f = h.map(|x| if x < f64::MIN_POSITIVE { 0.0 } else { x });
+            f = h
+                .into_iter()
+                .map(|x| if x < f64::MIN_POSITIVE { 0.0 } else { x })
+                .collect();
             recent.clear();
         }
     }
@@ -979,9 +1013,9 @@ pub fn fills(p: &Province) -> Fills {
 /// Whether fills `at` lie on the pieces of `pass`: each step that cut is on its piece with its
 /// map's value at least 0, and each good the pass leaves fits up to [`ROUNDING`] of its flows.
 /// Unlike [`follow`], no shortage is required: at a fixed point of the pass they vanish.
-fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
-    let mut state = *at;
-    for j in 0..3 {
+fn on_pieces(p: &Province, pass: &Pass, at: &[f64], w: &mut Work) -> bool {
+    let mut state = at.to_vec();
+    for j in 0..p.n_local() {
         p.outputs(&state, &mut w.y);
         let (uncovered, rest) = p.balance(j, &state, &w.y, &mut w.users);
         let on = match &pass.pieces[j] {
@@ -1020,10 +1054,10 @@ fn on_pieces(p: &Province, pass: &Pass, at: &[f64; 3], w: &mut Work) -> bool {
 fn settle(
     p: &Province,
     tail: &[Pass],
-    f: &[f64; 3],
+    f: &[f64],
     rounding: bool,
     w: &mut Work,
-) -> Option<[f64; 3]> {
+) -> Option<Vec<f64>> {
     let periods = if rounding { 1..=tail.len() } else { 1..=1 };
     for period in periods.filter(|&n| n <= tail.len()) {
         let cycle = &tail[tail.len() - period..];
@@ -1037,22 +1071,22 @@ fn settle(
         let near = |j: usize| f[j] - fp.g[j] <= TAIL * f[j];
         let reached =
             period == 1 && (fp.cut.iter().all(|&j| near(j)) || on_pieces(p, &cycle[0], &fp.g, w));
-        let mut to = *f;
+        let mut to = f.to_vec();
         for &j in &fp.cut {
             let g = fp.g[j];
             if g.is_finite() && resolvable(f[j], g) && (reached || near(j)) {
                 to[j] = g;
             }
         }
-        if to == *f {
+        if to == f {
             continue;
         }
-        let mut h = to;
+        let mut h = to.clone();
         for _ in cycle {
             pass(p, &mut h, w);
         }
         let size = to.iter().fold(0.0f64, |s, &v| s.max(v));
-        if (0..3).all(|k| (h[k] - to[k]).abs() <= CONFIRMED * size) {
+        if (0..to.len()).all(|k| (h[k] - to[k]).abs() <= CONFIRMED * size) {
             return Some(to);
         }
     }
@@ -1062,10 +1096,10 @@ fn settle(
 /// The fills [`fills`] returns at [`PASS_CAP`]: the current ones, where every good fits to
 /// [`FIT`] of its flows, else with the goods that do not set to 0 one at a time in good order
 /// until every good does (all fills 0 always fit: no user of a local good then runs).
-fn capped(p: &Province, mut f: [f64; 3], w: &mut Work) -> [f64; 3] {
+fn capped(p: &Province, mut f: Vec<f64>, w: &mut Work) -> Vec<f64> {
     loop {
         p.outputs(&f, &mut w.y);
-        let short = (0..3).find(|&j| {
+        let short = (0..f.len()).find(|&j| {
             let (uncovered, rest) = p.balance(j, &f, &w.y, &mut w.users);
             uncovered > rest + FIT * (uncovered + rest)
         });
@@ -1077,9 +1111,10 @@ fn capped(p: &Province, mut f: [f64; 3], w: &mut Work) -> [f64; 3] {
 }
 
 /// What [`fills`] returns.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Fills {
-    pub fills: [f64; 3],
+    /// One per local good, in good order.
+    pub fills: Vec<f64>,
     /// Passes run, a jump's confirming passes included.
     pub passes: usize,
     /// Cycles followed and maps applied by the jumps.
@@ -1124,13 +1159,14 @@ pub fn chain(
     province.outputs(&f, &mut y);
     let mut users = Vec::new();
     let mut draws = Vec::new();
-    for (j, &k) in LOCAL.iter().enumerate() {
+    let ng = inp.n_goods();
+    for (j, k) in inp.goods.local_goods().enumerate() {
         let rest = province.users(j, &f, &y, &mut users);
         draws.resize(users.len(), 0.0);
         split(rest, &users, &mut draws);
         let mut d = draws.iter();
         for (u, &yu) in y.iter().enumerate() {
-            from_output[u * N_GOODS + k] = if Some(u) == province.producer[j] {
+            from_output[u * ng + k] = if Some(u) == province.producer[j] {
                 province.own[j] * yu
             } else if province.coef[u][j] * yu > 0.0 {
                 *d.next().expect("one draw per user")
@@ -1154,7 +1190,7 @@ pub fn chain_all(w: &mut EconWorld) {
     for i in 0..inp.n_provinces() {
         let n = lay.enterprises(i).len();
         let (p, rest) = std::mem::take(&mut produced).split_at_mut(n);
-        let (f, rest_f) = std::mem::take(&mut from_output).split_at_mut(n * N_GOODS);
+        let (f, rest_f) = std::mem::take(&mut from_output).split_at_mut(n * inp.n_goods());
         (produced, from_output) = (rest, rest_f);
         rows.push((p, f));
     }
@@ -1174,6 +1210,24 @@ pub fn chain_all(w: &mut EconWorld) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
+
+    fn parts<const L: usize>(
+        cap: Vec<f64>,
+        coef: Vec<[f64; L]>,
+        stock: Vec<[f64; L]>,
+        producer: [Option<usize>; L],
+        own: [f64; L],
+    ) -> Province {
+        Province::from_parts(
+            cap,
+            Rows::from_rows(L, coef.iter().map(|r| r.as_slice())),
+            Rows::from_rows(L, stock.iter().map(|r| r.as_slice())),
+            producer.to_vec(),
+            own.to_vec(),
+        )
+    }
 
     #[test]
     fn split_draws_output_first_and_stock_for_the_rest() {
@@ -1200,7 +1254,7 @@ mod tests {
     /// 2e14 steps (over 40 minutes).
     fn flat_piece_province() -> Province {
         let b = f64::from_bits;
-        Province::from_parts(
+        parts(
             vec![
                 b(0x412ca1b14416c37a),
                 b(0x0),
@@ -1300,7 +1354,7 @@ mod tests {
     /// checks (1,088 and 2,112 cycles). Before the stock floor (ADR 0093, amendment of
     /// 2026-10-30) the kink was the third user's own stock covering its need below fill 1e-3.
     fn slow_fall_province() -> Province {
-        Province::from_parts(
+        parts(
             vec![1.0, 1.0, 1.0],
             vec![[0.0, 0.0, 0.5], [0.0, 0.50151, 0.0], [0.001, 0.001, 0.0]],
             vec![[0.0; 3], [0.0; 3], [1e-6, 0.0, 0.0]],
@@ -1334,7 +1388,11 @@ mod tests {
         // limit and its confirming pass, and the pass that changes nothing (4 before the floor,
         // where the third good was never cut)
         let out = fills(&p);
-        assert_eq!((out.fills, out.passes), ([0.0; 3], 5), "{out:?}");
+        assert_eq!(
+            (out.fills.as_slice(), out.passes),
+            (&[0.0; 3][..], 5),
+            "{out:?}"
+        );
     }
 
     /// The stock floor (ADR 0093, amendment of 2026-10-30): good 7's producer (0) makes
@@ -1345,7 +1403,7 @@ mod tests {
     #[test]
     fn stock_is_a_floor_under_the_fill() {
         let c = 0.1;
-        let p = Province::from_parts(
+        let p = parts(
             vec![0.0, 10.0, 10.0, 10.0, 100.0, 100.0],
             vec![
                 [0.0, c, c],
@@ -1399,7 +1457,7 @@ mod tests {
         let d = 1.0 - a7 * (1.0 - s8);
         let b = 0.5 + a8 * (1.0 - s8);
         let cap1 = (1.0 - eps) * b / 1.6;
-        let p = Province::from_parts(
+        let p = parts(
             vec![1.0, cap1, 1.0, 1.0],
             vec![
                 [0.0, 0.5, 0.0],

@@ -11,14 +11,25 @@ use ceteris_calibrate::border;
 use ceteris_calibrate::shock::{self, Shock};
 use std::sync::Arc;
 
+use ceteris_core::rows::Rows;
 use ceteris_core::sim::Sim;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconParams, EconWorld};
-use ceteris_trade::goods::{N_GOODS, TRADED};
+use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
 use ceteris_trade::kernel::Kernel;
 use ceteris_trade::network::{Leg, Network, Wedges};
 use ceteris_trade::{Sourced, TradeParams, dispatch, source};
+
+const TRADED: [bool; N_GOODS] = {
+    let mut t = [false; N_GOODS];
+    let mut g = 0;
+    while g < N_TRADED {
+        t[g] = true;
+        g += 1;
+    }
+    t
+};
 
 /// Ticks of every pack run, as the 28 October benchmark.
 const TICKS: u32 = 1_200;
@@ -116,7 +127,7 @@ fn shock_files_name_countries_by_code() {
     let text = "# comment\ntariff FRA GBR -1 0.05\nntb GBR FRA 1.0277 # soft\n\
                 border 1.1\nborder 10 4\nprod JPN 3 1.5\n";
     assert_eq!(
-        shock::parse(text, &codes).unwrap(),
+        shock::parse(text, &codes, N_GOODS).unwrap(),
         vec![
             Shock::Tariff {
                 importer: 1,
@@ -144,7 +155,7 @@ fn shock_files_name_countries_by_code() {
             },
         ]
     );
-    let err = shock::parse("ntb GBR XXX 1.1", &codes).unwrap_err();
+    let err = shock::parse("ntb GBR XXX 1.1", &codes, N_GOODS).unwrap_err();
     assert!(err.contains("XXX"), "{err}");
     for bad in [
         "ntb GBR FRA",
@@ -153,7 +164,7 @@ fn shock_files_name_countries_by_code() {
         "tariff FRA GBR 2 0.1",
         "quota GBR 1",
     ] {
-        assert!(shock::parse(bad, &codes).is_err(), "{bad}");
+        assert!(shock::parse(bad, &codes, N_GOODS).is_err(), "{bad}");
     }
     for name in [
         "border-1.1.shocks",
@@ -164,7 +175,10 @@ fn shock_files_name_countries_by_code() {
         let text = std::fs::read_to_string(data(name)).unwrap();
         let mut codes: Vec<String> = EU27.map(String::from).to_vec();
         codes.push("GBR".into());
-        assert!(!shock::parse(&text, &codes).unwrap().is_empty(), "{name}");
+        assert!(
+            !shock::parse(&text, &codes, N_GOODS).unwrap().is_empty(),
+            "{name}"
+        );
     }
 }
 
@@ -200,7 +214,7 @@ fn welfare_and_acr_match_the_hand_computed_toy() {
     let mut theta = [5.0; N_GOODS];
     theta[GB] = 3.0;
     let trade = TradeParams {
-        theta,
+        theta: theta.to_vec(),
         ..TradeParams::default().bulk_off()
     };
     let mut wedges = Wedges::none(2);
@@ -229,11 +243,12 @@ fn welfare_and_acr_match_the_hand_computed_toy() {
         // a real outcome has NaN here; a finite, moving share shows a local good leaking into acr
         home[LOCAL] = local_home;
         Outcome {
+            traded: N_TRADED,
             income: vec![income * price[0]],
-            omega: vec![omega],
-            buyer_price: vec![q],
-            home_share: vec![home],
-            absorption: vec![absorption],
+            omega: Rows::from_rows(N_GOODS, [omega]),
+            buyer_price: Rows::from_rows(N_GOODS, [q]),
+            home_share: Rows::from_rows(N_GOODS, [home]),
+            absorption: Rows::from_rows(N_GOODS, [absorption]),
             max_dlnp_last: 0.0,
             ticks: 0,
         }
@@ -266,7 +281,12 @@ fn welfare_and_acr_match_the_hand_computed_toy() {
         );
         assert!(a < 0.0, "x{border}: {a}");
         // with no input-output linkages the input-output form is the plain one
-        let io = benchmark::acr_io(&base, &shocked, &theta, &[[0.0; N_GOODS * N_GOODS]])[0];
+        let io = benchmark::acr_io(
+            &base,
+            &shocked,
+            &theta,
+            &Rows::filled(1, N_GOODS * N_GOODS, 0.0),
+        )[0];
         assert_eq!(io.to_bits(), a.to_bits(), "x{border}");
     }
     let f = benchmark::foreign_share(&base, &[GA]);
@@ -285,11 +305,12 @@ fn outcomes(omega: &[(usize, f64)], home: &[(usize, f64, f64)]) -> (Outcome, Out
             h[g] = if shocked { l1 } else { l0 };
         }
         Outcome {
+            traded: N_TRADED,
             income: vec![1.0],
-            omega: vec![o],
-            buyer_price: vec![[1.0; N_GOODS]],
-            home_share: vec![h],
-            absorption: vec![[1.0; N_GOODS]],
+            omega: Rows::from_rows(N_GOODS, [o]),
+            buyer_price: Rows::filled(1, N_GOODS, 1.0),
+            home_share: Rows::from_rows(N_GOODS, [h]),
+            absorption: Rows::filled(1, N_GOODS, 1.0),
             max_dlnp_last: 0.0,
             ticks: 0,
         }
@@ -312,7 +333,12 @@ fn input_output_acr_matches_its_closed_forms() {
     for share in [0.0, 0.4, 0.55, 0.9] {
         let mut a = [0.0; N_GOODS * N_GOODS];
         a[G * N_GOODS + G] = share;
-        let io = benchmark::acr_io(&base, &shocked, &theta, &[a])[0];
+        let io = benchmark::acr_io(
+            &base,
+            &shocked,
+            &theta,
+            &Rows::from_rows(N_GOODS * N_GOODS, [a]),
+        )[0];
         let want = plain / (1.0 - share);
         assert!((io / want - 1.0).abs() < 1e-14, "a {share}: {io} vs {want}");
     }
@@ -323,7 +349,12 @@ fn input_output_acr_matches_its_closed_forms() {
     a[G * N_GOODS + LOCAL] = 0.3;
     a[LOCAL * N_GOODS + LOCAL] = 0.2;
     a[G * N_GOODS + G] = 0.4;
-    let io = benchmark::acr_io(&base, &shocked, &theta, &[a])[0];
+    let io = benchmark::acr_io(
+        &base,
+        &shocked,
+        &theta,
+        &Rows::from_rows(N_GOODS * N_GOODS, [a]),
+    )[0];
     // v_L = 1 / (1 - 0.2), v_G = 0.3 v_L / (1 - 0.4)
     let want = 0.3 / 0.8 / 0.6 * plain;
     assert!((io / want - 1.0).abs() < 1e-14, "{io} vs {want}");
@@ -342,14 +373,29 @@ fn acr_is_nan_where_a_home_share_vanishes_in_one_run() {
             "{l0} {l1}"
         );
         assert!(
-            benchmark::acr_io(&base, &shocked, &theta, &a)[0].is_nan(),
+            benchmark::acr_io(
+                &base,
+                &shocked,
+                &theta,
+                &Rows::from_rows(N_GOODS * N_GOODS, a)
+            )[0]
+            .is_nan(),
             "{l0} {l1}"
         );
     }
     let (base, shocked) = outcomes(&[(2, 0.5), (3, 0.5)], &[(2, 0.6, 0.5), (3, 0.0, f64::NAN)]);
     let want = -0.5 / 5.0 * (0.5f64 / 0.6).ln();
     assert!((benchmark::acr(&base, &shocked, &theta)[0] - want).abs() < 1e-15);
-    assert!((benchmark::acr_io(&base, &shocked, &theta, &a)[0] - want).abs() < 1e-15);
+    assert!(
+        (benchmark::acr_io(
+            &base,
+            &shocked,
+            &theta,
+            &Rows::from_rows(N_GOODS * N_GOODS, a)
+        )[0] - want)
+            .abs()
+            < 1e-15
+    );
 }
 
 /// `benchmark::outcome` on the small world run frictionless: lambda in [0, 1] for the traded
@@ -437,7 +483,11 @@ fn base(pack: &Path) -> &'static Outcome {
 
 fn run(pack: &Path, file: &str) -> Result<Outcome, String> {
     let text = std::fs::read_to_string(data(file)).unwrap();
-    benchmark::run(pack, &shock::parse(&text, codes(pack))?, TICKS)
+    benchmark::run(
+        pack,
+        &shock::parse(&text, codes(pack), benchmark::n_goods(pack)?)?,
+        TICKS,
+    )
 }
 
 fn country(pack: &Path, code: &str) -> usize {

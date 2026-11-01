@@ -65,7 +65,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 
 | Table | Rows | Content | Sources |
 |---|---|---|---|
-| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
+| `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
 | `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else SWIID (disposable-income Gini, CC0; WIID is non-commercial) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
@@ -73,6 +73,13 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
 | `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing), mass (share of the country's trade throughput, ADR 0092) | P1 graph, BACI 2000 trade by country |
 | `econ_home_shares.arrow` | countries x 7 traded goods | country, good, home_share (ICIO 2000 domestic-origin use over total use, intermediate plus final demand without DPABR), absorption (total use, million USD), icio (an ICIO economy; outside ICIO the share and absorption are NaN, as is the share of a good an ICIO economy does not use) | ICIO 2000 (ADR 0092) |
+
+**Goods count.** The rows of `econ_goods.arrow` are the world's goods (`Goods`, trade SPEC):
+every per-good column, the IO table's width and every goods-indexed array follow its row count.
+Traded goods must come first. A table without the storable, tariff group and category columns
+must hold the P2 goods (the 2000 pack, format 3), whose values those are; a table of other goods
+must carry them. The inputs digest covers the goods table only where it differs from P2's, so
+the P2 digests and golden hashes do not move.
 
 **Coverage.** `TradeParams::coverage` (P02, trade SPEC) is the authoritative value: the model, the
 snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The

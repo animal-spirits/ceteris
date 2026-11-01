@@ -2,7 +2,7 @@
 //! destination spending sourced through gateways is compared with sourcing on direct
 //! province-to-province leg costs. Reported, not asserted; both must spend E exactly.
 
-use ceteris_trade::goods::N_GOODS;
+use ceteris_trade::goods::p2::N as N_GOODS;
 use ceteris_trade::{Kernel, Leg, Network, Sourced, TradeParams, Wedges, dispatch, source};
 
 const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
