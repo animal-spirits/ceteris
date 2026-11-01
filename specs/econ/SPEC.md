@@ -110,7 +110,14 @@ nearest in (region, log GDP per capita); national VA by good from WDI sector sha
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
 (ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
-always against the donors' in the same source, never the region median when an income exists. With manufacturing missing, industry goes over goods 1 to 8. With
+always against the donors' in the same source, never the region median when an income exists.
+PWT income is set aside where it falls more than 3 times below WDI's at the US ratio of the two
+(PWT_c / WDI_c < (PWT_USA / WDI_USA) / 3, `PWT_BELOW_WDI`; ADR 0098): PWT is at PPP and WDI at
+market rates, so PWT above WDI is the Balassa-Samuelson norm (124 economies differ by more than 3
+times that way), while PWT a third of the US ratio below WDI would need a price level above 3
+times the US's (Japan's, the highest in 2000, is 1.4). Only Venezuela falls there (PWT 490 against
+WDI 4,776 USD per person in 2000, 0.068 of the US ratio; the next lowest, Barbados, is 0.55); it
+ranks and scales by WDI income, flagged `income_source` `wdi_not_pwt`. With manufacturing missing, industry goes over goods 1 to 8. With
 agriculture, industry or services missing, the known shares keep their goods and the goods they
 do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
