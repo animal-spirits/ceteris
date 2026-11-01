@@ -12,7 +12,7 @@
 //! ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
-//! ceteris air-share [--pack DIR] [--data DIR]
+//! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -52,10 +52,11 @@
 //! estimates as TOML into `--out` (default `crates/ceteris-pack/config/gravity_2000.toml`, beside
 //! the pack configuration) when no stop rule fires.
 //!
-//! `air-share` fits P04d to the air share of US 2000 imports by origin and traded good
-//! (ADR 0277) through the kernel's gateway-pair sum on the pack (`--pack`), from the files in
-//! `--data` (default `data/raw/air-shares-2000`), printing each outer step and the reader's
-//! notes. It exits 1 when the fit stops.
+//! `air-share` fits P04d to the air share of 2000 imports by importer, origin and traded good
+//! (ADR 0277) through the kernel's gateway-pair sum on the pack (`--pack`): US 2000, EU15 2002
+//! hindcast to 2000, or both pooled (`--set`, default pooled), from the files in `--data`
+//! (default `data/raw/air-shares-2000`), printing the readers' notes and each outer step. It
+//! exits 1 when the fit stops.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -94,7 +95,7 @@ const USAGE: &str = "usage:
   ceteris calibrate --pack DIR | --inputs DIR [--out DIR]
   ceteris calibrate stability [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
-  ceteris air-share [--pack DIR] [--data DIR]
+  ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -522,26 +523,48 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
-/// `air-share [--pack DIR] [--data DIR]`.
+/// `air-share [--pack DIR] [--data DIR] [--set pooled|us|eu]`.
 fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
-    use ceteris_calibrate::air_share::{estimate, pack_countries, us_imports};
+    use ceteris_calibrate::air_share::{
+        HS_1996, HS_2002, US_2000, US_2002, estimate, eu_hindcast, pack_countries, trend,
+        us_imports,
+    };
     use ceteris_calibrate::costs::{N_TRADED, Transport};
     let root = sources::workspace_root();
     let (mut pack, mut data) = (
         root.join("data/packs/2000"),
         root.join("data/raw/air-shares-2000"),
     );
+    let mut set = "pooled".to_owned();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--pack" => pack = PathBuf::from(args.next().ok_or("--pack needs a directory")?),
             "--data" => data = PathBuf::from(args.next().ok_or("--data needs a directory")?),
+            "--set" => set = args.next().ok_or("--set needs pooled, us or eu")?,
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
+    let cache = root.join(fetch::CACHE_DIR);
     let codes = pack_countries(&pack)?;
-    let (obs, notes) = us_imports(&data, &root.join(fetch::CACHE_DIR), &codes)?;
-    println!("{notes:?}");
-    println!("cells {}", obs.len());
+    let (us, us_notes) = us_imports(&data, US_2000, HS_1996, &cache, &codes)?;
+    println!("us 2000 {us_notes:?}");
+    let mut obs = Vec::new();
+    if set != "eu" {
+        obs.extend(us.iter().cloned());
+    }
+    if set != "us" {
+        let (us02, notes02) = us_imports(&data, US_2002, HS_2002, &cache, &codes)?;
+        println!("us 2002 {notes02:?}");
+        let shift = trend(&us, &us02);
+        println!("trend 2002 to 2000, log-odds by good {shift:?}");
+        let (eu, eu_notes) = eu_hindcast(&data, &cache, &codes, &shift)?;
+        println!("eu 2000 hindcast {eu_notes:?}");
+        obs.extend(eu);
+    }
+    if !["pooled", "us", "eu"].contains(&set.as_str()) {
+        return Err(format!("--set {set}: expected pooled, us or eu"));
+    }
+    println!("set {set}, cells {}", obs.len());
     let all = TradeParams::default().theta;
     let theta: [f64; N_TRADED] = std::array::from_fn(|g| all[g]);
     for step in estimate(&pack, &obs, &theta, &Transport::default())? {
