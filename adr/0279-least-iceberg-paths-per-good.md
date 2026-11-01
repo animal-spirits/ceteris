@@ -1,4 +1,4 @@
-# 0278. Leg paths minimise the full iceberg cost per good
+# 0279. Leg paths minimise the full iceberg cost per good
 
 Status: proposed (owner pick 2026-11-01, "Paths minimise full cost"; spec approval pending)
 Date: 2026-11-01
@@ -69,7 +69,7 @@ edges, as now. Domestic, access and crossing legs all use it.
   the slots fixed for determinism.
 - Goldens: `tests/golden/p1-geo.txt` (freight trees) does not move. Every econ golden that
   prices legs moves when the default changes. The commit and the CHANGELOG then carry
-  `### BEHAVIOUR: leg paths minimise the iceberg cost per good (ADR 0278)`.
+  `### BEHAVIOUR: leg paths minimise the iceberg cost per good (ADR 0279)`.
 - Timing: the build touches `ceteris-geo` paths, `ceteris-econ` `network_from_graph` and
   `ceteris-calibrate` costs, which pre-P3 B8 is changing now. So code starts on main once B8
   lands, and the default and P04d land together at the next rebuild that re-blesses the goldens
