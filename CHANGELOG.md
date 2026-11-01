@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### BEHAVIOUR: each good's dispatch runs in parallel over fixed chunks (owner, 2026-11-01)
+
+- The origin pass runs in chunks of 256 origins and the crossing pass in chunks of 32 origin
+  gateways. Sums into destinations, gateways and the loss and selection totals are per chunk,
+  added in chunk order. Results do not depend on the thread count but differ from the serial
+  pass by rounding.
+- Gamma moves by that rounding, so the 2000 pack (manifest 474138df) is recalibrated with the
+  border fit: 70 passes, last change 7.86e-14, Sinkhorn residual 9.42e-14; nu 2.60516,
+  0.80014, 0.39731, 0.046059, 0 (clamped), unchanged to five digits.
+- Criterion `econ_pack/tick` on the full pack, median of two rounds each (M4 Pro, 1-minute load
+  below 3 at start): 47.06 ms before (f1ffeb2), 45.83 ms after. `econ_pack/dispatch` alone is
+  slower, 24.35 ms before and 27.15 ms after; `econ_pack/consume` 8.30 ms before, 6.18 ms after.
+
+Goldens re-blessed: `tests/golden/p2-pack.txt` calibration tables only.
+
 ### The goods count is a pack value (P3 G2)
 
 - `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,
