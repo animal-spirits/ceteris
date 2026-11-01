@@ -43,6 +43,22 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
+### Price level of domestic absorption (ADR 0287, RFC 0282 D7; C1e, built, not installed)
+
+- RFC 0282 D7, Antonio, 2026-11-01: PWT 11 pl_da (domestic absorption, C + I + G) over the US's
+  replaces pl_gdpo as p_c's primary source. The first answer, pl_gdpe, was void: PWT 11 has no
+  such series.
+- Screen refit: ln p = -2.6571 + 0.2453 ln y over 180 economies (R2 0.611), residual fences
+  -1.198 to 1.188; PWT rejects Somalia only, so Bermuda (1.80) and the Turks and Caicos (1.21)
+  take PWT; WDI's Kosovo (0.149) now falls to the donor. Sources: PWT 181, WDI 15, donor 46. p_c
+  0.095 (Somalia) to 1.80 (Bermuda), GDP-weighted mean 0.911 (was 0.897); 226 of 242 move.
+- Real GDP check: 34 of 79 within 5% (was 32), median 0.950, slope 0.0509, correlation 0.260;
+  pinned, reported, not enforced (the pack's GDP equals WDI's, so the misses are PWT against WDI
+  PPPs).
+- A scratch `pack build --econ-only` moves `econ_countries` only (`price_level`,
+  `price_level_source`, `price_level_imputed`). No fixture golden moves; the installed pack and
+  its golden (`tests/golden/p2-pack.txt`) are unchanged until reinstall.
+
 ### Donor use tables balanced to domestic use; the real GDP check (ADRs 0284 to 0286, RFC 0282; C1d, built, not installed)
 
 - RFC 0282 rulings, Antonio, 2026-11-01: D4 A (the run's world price index keeps local goods;
