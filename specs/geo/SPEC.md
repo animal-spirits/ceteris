@@ -131,14 +131,24 @@ S_ODg(r) = sum_{(a,b) air} v_a K_ab u_b  /  sum_{(a,b)} v_a K_ab u_b
 r = P04d / P04a. beta_ab is the crossing's S05 factor without its air km. An air crossing has
 q_ab[air] > 0. The weights are province VA: of the good at the origin, of all goods at the
 destination, as in `country_costs`. nu_AB and the tariff multiply every K_ab of a country pair
-alike, so they cancel. Paths are fixed while r moves, and are solved again at the converged r
-until the set of air crossings repeats.
+alike, so they cancel.
 
-Estimator: Bernoulli quasi-likelihood for fractional data (Papke and Wooldridge 1996), with
-weights equal to the cell's import value. Fisher scoring in x = ln r, to 1e-12 in x. Standard
-errors are sandwich, clustered by (importer, origin). Cells with S equal to 0 or 1 at every r
-carry no information and are counted, not fitted. The fit stops, without clamping, if r does
-not exceed 1 (Mode ordering).
+Estimator (ADR 0277, Amendment 2026-11-01, estimator; proposed, pending owner pick): Bernoulli
+quasi-likelihood for fractional data (Papke and Wooldridge 1996), with weights equal to the
+cell's import value, maximised over ln r with the paths solved again at every r, so that the
+shares at each r are those on the paths air at r chooses. The objective is summed over a set
+fixed across r: every cell with a reached crossing (reachability does not depend on r), with
+the model's shares clipped to [1e-12, 1 - 1e-12]. `--profile` evaluates it on 25 points of r
+from 0.5 to 32, a quarter octave apart. The estimate takes the grid's best point (ties to the
+lowest r; a maximum at the grid's edge fails), then golden section in ln r between its
+neighbours to 1e-4, in a fixed number of steps. Errors of ln r: a clustered sandwich from the
+profile's curvature over 1/32 octave at r_hat, and a cluster bootstrap over (importer, origin),
+200 replications on core Philox streams with seed 0x0277, each maximised on a 1/32-octave grid
+across the bracket with a parabolic refine (a cell's share at r does not depend on the
+resample), with a 90% percentile interval. Cells informative at r_hat (both an air and another
+crossing) are counted for the shares by good. The fit fails, without clamping, if r does not
+exceed 1 (Mode ordering). The fixed-path Fisher fit with an outer re-solve that this replaces
+does not converge on the pack: its re-solve flips the air crossings (Amendment).
 
 ## System order
 

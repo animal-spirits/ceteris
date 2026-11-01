@@ -159,3 +159,48 @@ the value:
   **Range:** the US-only and EU-only fits, beside the sets listed under Decision.
 - Mode 0 (not declared, about 9.5% of 2002 EU15 import value) is left out of the share's
   denominator and counted.
+
+## Amendment (proposed, pending owner pick, 2026-11-01): path-consistent estimator
+
+On the per-good least-iceberg paths of ADR 0279 the estimator of Decision (Fisher scoring on
+paths held fixed, then the paths solved again at the fitted r until the set of air crossings
+repeats) does not converge. The fixed-path likelihood keeps rising past the point where the
+paths change: crossings that fly at r keep their air km as r rises. Re-solved at the fitted r,
+most of them stop flying, and the next fit runs r to the floor. Evidence on the 2000 pack
+(Iceberg calibration, US 2000 and hindcast EU15 2000, 11,440 cells pooled):
+
+| Set, start | Outer step 1 | Outer step 2 |
+|---|---|---|
+| pooled, r 8 (P04d default) | r to 8.7e-12 | |
+| pooled, r 2.83 | r 7.45 | r to 2.1e-10 |
+| EU, r 2.83 | r 5.48 | r to 5.7e-13 |
+| US, r 3.36 | no convergence in 100 steps (r 6.09) | |
+
+Solved at each r instead (`ceteris air-share --profile`, 25 points from 0.5 to 32), the
+fixed-set quasi-likelihood has an interior maximum in every set: r 2.83 pooled and EU, 3.36 US.
+
+**Proposed:** maximise that profile, with the paths solved at every r (geo SPEC, Air rate from
+mode shares, Estimator): the grid's best point, then golden section in ln r between its
+neighbours to 1e-4. Errors of ln r by a cluster bootstrap over (importer, origin), 200
+replications with a fixed seed, on a 1/32-octave grid across the bracket, with a 90% percentile
+interval. The clustered sandwich from the profile's curvature is reported beside it but is not
+the error: the profile jumps where paths switch, so its curvature at the maximum describes one
+piece only.
+
+Results (Iceberg pack, road 0.10 USD per tonne-km; 65 path solves, about 20 min a set):
+
+| Set | r_hat | P04d (USD/tkm) | Bootstrap se of ln r | 90% interval of r | Curvature se | Model / data air share, informative cells |
+|---|---|---|---|---|---|---|
+| pooled | 2.607 | 0.261 | 0.082 | 2.60 to 3.10 | 0.0075 | 0.386 / 0.281 (3,950 cells) |
+| US | 3.364 | 0.336 | 0.057 | 3.00 to 3.72 | 0.0067 | 0.237 / 0.247 (1,151) |
+| EU | 2.607 | 0.261 | 0.010 | 2.59 to 2.62 | 0.0048 | 0.387 / 0.347 (2,814) |
+
+The pooled and EU maxima sit at the same r, just below a path switch, and the US maximum is the
+grid point itself: the profile is piecewise, so the bootstrap interval is asymmetric. By good,
+the model's air share at r_hat overshoots for machinery (good 6, 0.63 against 0.37 pooled),
+undershoots for agriculture, light manufacturing and chemicals (goods 0, 4, 5), and is zero for
+coal and other mining (good 2, data 0.19). That is the within-good dispersion of value per kg
+noted under Consequences, which the 50 goods of ADR 0271 address.
+
+Options for the owner: this estimator (coordinator's recommendation); or keep Decision's
+estimator and report no value on this pack.
