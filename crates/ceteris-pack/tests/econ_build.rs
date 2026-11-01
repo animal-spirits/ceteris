@@ -128,7 +128,8 @@ fn the_build_writes_its_tables_in_order() {
 }
 
 /// The stats the build writes to the pack manifest (whole provinces, ADR 0251), with the imputed
-/// VA share after refined petroleum moved into good 1 and ADRs 0249 and 0256.
+/// VA share after refined petroleum moved into good 1 and ADRs 0249 and 0256, and two provinces
+/// (Cook Islands 710, St Helena 3504) above the working-age floor at UN WPP totals (ADR 0098).
 #[test]
 fn build_stats_match_the_python_build() {
     let Some(f) = full() else { return };
@@ -140,13 +141,13 @@ fn build_stats_match_the_python_build() {
             tariff_importers_own: 172,
             tariff_agreement_pairs: 1321,
             dose_match_rate: 0.8339,
-            provinces_with_va: 4368,
+            provinces_with_va: 4370,
             va_imputed_share: 0.0754,
         }
     );
     assert_eq!(
         f.report.stats.json().text(),
-        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":171,"land crossing":143,"port":286},"gateways":600,"provinces_with_va":4368,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0754}"#
+        r#"{"dose_match_rate":0.8339,"gateway_kinds":{"airport":171,"land crossing":143,"port":286},"gateways":600,"provinces_with_va":4370,"tariff_agreement_pairs":1321,"tariff_importers_own":172,"va_imputed_share":0.0754}"#
     );
 }
 
