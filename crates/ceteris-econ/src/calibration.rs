@@ -15,10 +15,10 @@ use std::path::Path;
 
 use arrow_array::RecordBatch;
 use arrow_array::cast::AsArray;
+use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::hex;
 use ceteris_geo::pack::{PackError, f64s, read_table, u8s, u32s};
-use ceteris_trade::goods::TRADED;
-use ceteris_trade::{N_GOODS, TradeParams};
+use ceteris_trade::TradeParams;
 
 use crate::demand::{N_CATEGORIES, PiglWeights};
 use crate::inputs::{EconInputs, MarketElasticity};
@@ -36,7 +36,7 @@ pub const FORMAT: &str = "10";
 /// indices.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Steady {
-    /// Posted price per cell `[province * N_GOODS + g]`: origin markets of traded goods, 1
+    /// Posted price per cell `[province * n_goods + g]`: origin markets of traded goods, 1
     /// for local goods and cells without a market.
     pub price: Vec<f64>,
     /// Last Q, D (by buyer class at traded origins) and sales per cell, D = Q = sales.
@@ -52,7 +52,7 @@ pub struct Steady {
     pub ent_sales: Vec<f64>,
     pub profit: Vec<f64>,
     /// Input stock per enterprise, (1 + COVER) months of use.
-    pub stock: Vec<[f64; N_GOODS]>,
+    pub stock: Rows<f64>,
     /// Money per pop at the start of a tick (dividends and rebates; wages come at E2) and
     /// its income per month.
     pub money: Vec<f64>,
@@ -88,13 +88,16 @@ fn bools(batch: &RecordBatch, name: &str) -> Result<Vec<bool>, PackError> {
     Ok(values.iter().map(|v| v.unwrap_or(false)).collect())
 }
 
-fn per_good(batch: &RecordBatch, prefix: &str) -> Result<Vec<[f64; N_GOODS]>, PackError> {
-    let cols = (0..N_GOODS)
+fn per_good(batch: &RecordBatch, prefix: &str, n: usize) -> Result<Rows<f64>, PackError> {
+    let cols = (0..n)
         .map(|g| f64s(batch, &format!("{prefix}{g}")))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((0..batch.num_rows())
-        .map(|r| std::array::from_fn(|g| cols[g][r]))
-        .collect())
+    Ok(Rows::from_flat(
+        (0..batch.num_rows())
+            .flat_map(|r| cols.iter().map(move |c| c[r]))
+            .collect(),
+        n,
+    ))
 }
 
 /// The `static_digest` in the JSON metadata `calibration` of `econ_calib.arrow`.
@@ -118,7 +121,7 @@ fn calibrated_digest(t: &RecordBatch) -> Result<String, PackError> {
 
 /// The P05 per good in the JSON metadata `calibration` of `econ_calib.arrow` (ADRs 0092, 0276):
 /// the border friction the steady state was solved at.
-fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_GOODS], PackError> {
+fn calibrated_border_nu(t: &RecordBatch, n: usize) -> Result<Vec<f64>, PackError> {
     let json = t
         .schema()
         .metadata()
@@ -128,7 +131,7 @@ fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_GOODS], PackError> {
     let key = "\"border_nu\"";
     let bad = || {
         err(format!(
-            "calibration metadata has no border_nu of {N_GOODS} finite nonnegative values"
+            "calibration metadata has no border_nu of {n} finite nonnegative values"
         ))
     };
     let after_key = &json[json.find(key).ok_or_else(bad)? + key.len()..];
@@ -143,8 +146,7 @@ fn calibrated_border_nu(t: &RecordBatch) -> Result<[f64; N_GOODS], PackError> {
         .map(|v| v.trim().parse::<f64>())
         .collect::<Result<_, _>>()
         .map_err(|_| bad())?;
-    let nu: [f64; N_GOODS] = nu.try_into().map_err(|_| bad())?;
-    if nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
+    if nu.len() != n || nu.iter().any(|v| !(v.is_finite() && *v >= 0.0)) {
         return Err(bad());
     }
     Ok(nu)
@@ -177,7 +179,8 @@ impl EconInputs {
                 dir.display()
             )));
         }
-        let border_nu = calibrated_border_nu(&ent_table)?;
+        let ng = self.n_goods();
+        let border_nu = calibrated_border_nu(&ent_table, ng)?;
         let (np, n_pops, n_ent) = (self.n_provinces(), self.n_pops(), self.n_enterprises());
         let pack: Vec<u32> = if self.provinces.pack.is_empty() {
             (0..np as u32).collect()
@@ -211,7 +214,7 @@ impl EconInputs {
                 "econ_calib.arrow rows are not the enterprises in order",
             ));
         }
-        let coef = per_good(&ent_table, "coef_")?;
+        let coef = per_good(&ent_table, "coef_", ng)?;
         let ent = &mut self.enterprises;
         ent.a = f64s(&ent_table, "a")?;
         ent.va0 = f64s(&ent_table, "va0")?;
@@ -241,13 +244,14 @@ impl EconInputs {
         let omega = (0..N_CATEGORIES)
             .map(|c| f64s(&countries, &format!("pigl_omega_{c}")))
             .collect::<Result<Vec<_>, _>>()?;
-        let within = per_good(&countries, "pigl_within_")?;
+        let within = per_good(&countries, "pigl_within_", ng)?;
         self.countries.pigl = Some(
             (0..nc)
                 .map(|c| PiglWeights {
                     scale: scale[c],
                     omega: std::array::from_fn(|j| omega[j][c]),
-                    within: within[c],
+                    within: within[c].to_vec(),
+                    category: self.goods.category.clone(),
                     sigma: sigma[c],
                 })
                 .collect(),
@@ -255,11 +259,11 @@ impl EconInputs {
 
         let cells = table(dir, "econ_calib_cells.arrow")?;
         let cell_keys = keys(&cells, "good")?;
-        let in_order = cell_keys.len() == np * N_GOODS
+        let in_order = cell_keys.len() == np * ng
             && cell_keys
                 .iter()
                 .enumerate()
-                .all(|(c, &(i, g))| i == c / N_GOODS && usize::from(g) == c % N_GOODS);
+                .all(|(c, &(i, g))| i == c / ng && usize::from(g) == c % ng);
         if !in_order {
             return Err(err(
                 "econ_calib_cells.arrow rows are not the cells in order",
@@ -312,14 +316,14 @@ impl EconInputs {
             };
             let buyer = found
                 .map_err(|_| err(format!("econ_calib_pipeline.arrow row {r}: no such buyer")))?;
-            let traded = TRADED.get(usize::from(good[r])).copied().unwrap_or(false);
+            let traded = self.goods.is_traded(usize::from(good[r]));
             if !traded || !(1..=4).contains(&ahead[r]) || units[r].is_nan() || units[r] <= 0.0 {
                 return Err(err(format!("econ_calib_pipeline.arrow row {r}: bad entry")));
             }
             pipeline.push((buyer as u32, good[r], ahead[r], units[r]));
         }
 
-        self.provinces.gamma = gamma.as_chunks::<N_GOODS>().0.to_vec();
+        self.provinces.gamma = Rows::from_flat(gamma, ng);
         self.border_nu = Some(border_nu);
         self.market_elasticity = Some(market_elasticity);
         self.steady = Some(std::sync::Arc::new(Steady {
@@ -333,7 +337,7 @@ impl EconInputs {
             output: f64s(&ent_table, "output")?,
             ent_sales: f64s(&ent_table, "sales")?,
             profit: f64s(&ent_table, "profit")?,
-            stock: per_good(&ent_table, "stock_")?,
+            stock: per_good(&ent_table, "stock_", ng)?,
             money: f64s(&pops, "money")?,
             income: f64s(&pops, "income")?,
             pipeline,
@@ -374,6 +378,8 @@ fn market_elasticity(cells: &RecordBatch) -> Result<MarketElasticity, PackError>
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -415,7 +421,7 @@ mod tests {
         ] {
             let t = batch(&[("calibration", json)]);
             assert_eq!(
-                calibrated_border_nu(&t).unwrap(),
+                calibrated_border_nu(&t, N_GOODS).unwrap(),
                 [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2.0, 0.3, 0.3, 0.3],
                 "{json}"
             );
@@ -428,7 +434,7 @@ mod tests {
             r#"{"border_nu": [0.25, 1.5, 0.0625, 3e-05, 0.25, 0.0, 2, 0.3, 0.3, "x"]}"#,
         ] {
             let t = batch(&[("calibration", json)]);
-            assert!(calibrated_border_nu(&t).is_err(), "{json}");
+            assert!(calibrated_border_nu(&t, N_GOODS).is_err(), "{json}");
         }
     }
 

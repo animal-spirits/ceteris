@@ -2,7 +2,7 @@
 //! (ADR 0016), perishing of local goods, competitive storage of the storable goods (ADR 0091) and
 //! the stock-flow price rule (`specs/trade/SPEC.md`, Equations).
 //!
-//! All arrays are `[province * N_GOODS + g]`. A traded cell is the origin market of the
+//! All arrays are `[province * n_goods + g]`. A traded cell is the origin market of the
 //! province's output: the caller sets `supply` (Q, this tick's output) and the orders placed
 //! at it by every destination (`demand_int`, `demand_hh`) before [`Markets::clear`]. A local
 //! cell is the province market: the caller sets `supply` (local output) and `demand` before
@@ -10,9 +10,9 @@
 //! capacity, a local cell anyone in the province buys. Prices of inactive cells are not read;
 //! `clear`, `clear_local` and `reprice` skip inactive cells.
 
-use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder};
+use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
-use crate::goods::{N_GOODS, TRADED};
+use crate::goods::Goods;
 use crate::params::TradeParams;
 
 /// Q_floor as a fraction of the good's world mean Q over active cells.
@@ -54,6 +54,9 @@ impl Rationing {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Markets {
+    /// Goods per province, and how many of them, the first, are traded; not state.
+    n_goods: usize,
+    n_traded: usize,
     pub price: Vec<f64>,
     /// Merchant stock S carried into the next tick; always 0 for local goods.
     pub inventory: Vec<f64>,
@@ -81,9 +84,11 @@ pub struct Markets {
 
 impl Markets {
     /// All cells active at price 1 with no stock, supply or demand.
-    pub fn new(provinces: usize) -> Self {
-        let n = provinces * N_GOODS;
+    pub fn new(provinces: usize, goods: &Goods) -> Self {
+        let n = provinces * goods.n();
         Self {
+            n_goods: goods.n(),
+            n_traded: goods.traded,
             price: vec![1.0; n],
             inventory: vec![0.0; n],
             demand: vec![0.0; n],
@@ -99,20 +104,30 @@ impl Markets {
     }
 
     pub fn n_provinces(&self) -> usize {
-        self.price.len() / N_GOODS
+        self.price.len() / self.n_goods
+    }
+
+    pub fn n_goods(&self) -> usize {
+        self.n_goods
+    }
+
+    /// Whether cell `i` is the origin market of a traded good.
+    pub fn is_traded(&self, i: usize) -> bool {
+        i % self.n_goods < self.n_traded
     }
 
     /// Q_floor of every good: 1e-9 of its world mean Q over active cells, 0 where that is 0.
-    fn floors(&self) -> [f64; N_GOODS] {
-        let mut floor = [0.0; N_GOODS];
-        let mut count = [0usize; N_GOODS];
+    fn floors(&self) -> Vec<f64> {
+        let n = self.n_goods;
+        let mut floor = vec![0.0; n];
+        let mut count = vec![0usize; n];
         for (i, &q) in self.supply.iter().enumerate() {
             if self.active[i] {
-                floor[i % N_GOODS] += q;
-                count[i % N_GOODS] += 1;
+                floor[i % n] += q;
+                count[i % n] += 1;
             }
         }
-        for g in 0..N_GOODS {
+        for g in 0..n {
             floor[g] = Q_FLOOR_FRACTION * floor[g] / count[g].max(1) as f64;
         }
         floor
@@ -128,7 +143,7 @@ impl Markets {
         assert_eq!(spoiled.len(), self.price.len());
         spoiled.fill(0.0);
         for (i, spoil) in spoiled.iter_mut().enumerate() {
-            let g = i % N_GOODS;
+            let g = i % self.n_goods;
             if !self.active[i] || !p.stores(g) {
                 continue;
             }
@@ -150,8 +165,8 @@ impl Markets {
     /// cells of `fill` are untouched.
     pub fn clear(&mut self, rationing: Rationing, fill: &mut [[f64; 2]]) {
         assert_eq!(fill.len(), self.price.len());
-        for i in 0..self.price.len() {
-            if !self.active[i] || !TRADED[i % N_GOODS] {
+        for (i, fill) in fill.iter_mut().enumerate() {
+            if !self.active[i] || !self.is_traded(i) {
                 continue;
             }
             let (s, q) = (self.inventory[i], self.supply[i]);
@@ -159,7 +174,7 @@ impl Markets {
             let d = d_int + d_hh;
             self.demand[i] = d;
             let avail = s + q;
-            fill[i] = rationing.fill(avail, d_int, d_hh);
+            *fill = rationing.fill(avail, d_int, d_hh);
             if d <= avail {
                 self.sales[i] = d;
                 // S + (Q - D) rather than (S + Q) - D keeps S bit for bit when D = Q
@@ -177,14 +192,14 @@ impl Markets {
     pub fn clear_local(&mut self, spoiled: &mut [f64]) {
         assert_eq!(spoiled.len(), self.price.len());
         spoiled.fill(0.0);
-        for i in 0..self.price.len() {
-            if !self.active[i] || TRADED[i % N_GOODS] {
+        for (i, spoiled) in spoiled.iter_mut().enumerate() {
+            if !self.active[i] || self.is_traded(i) {
                 continue;
             }
             let (q, d) = (self.supply[i], self.demand[i]);
             let sold = d.min(q);
             self.sales[i] = sold;
-            spoiled[i] = q - sold;
+            *spoiled = q - sold;
             self.inventory[i] = 0.0;
         }
     }
@@ -204,7 +219,7 @@ impl Markets {
         assert_eq!(gain.len(), self.price.len());
         let floor = self.floors();
         for (i, &gain) in gain.iter().enumerate() {
-            let g = i % N_GOODS;
+            let g = i % self.n_goods;
             if !self.active[i] || floor[g] <= 0.0 {
                 continue;
             }
@@ -248,9 +263,12 @@ impl Encode for Markets {
     }
 }
 
-impl Decode for Markets {
-    fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+impl Markets {
+    /// Restores markets of `goods` encoded by [`Encode`].
+    pub fn decode(d: &mut Decoder, goods: &Goods) -> Result<Self, DecodeError> {
         let m = Self {
+            n_goods: goods.n(),
+            n_traded: goods.traded,
             price: d.f64s()?,
             inventory: d.f64s()?,
             demand: d.f64s()?,
@@ -276,7 +294,7 @@ impl Decode for Markets {
             m.expectation.len(),
             m.storage.len(),
         ];
-        if !n.is_multiple_of(N_GOODS) || lens.iter().any(|&l| l != n) {
+        if !n.is_multiple_of(goods.n()) || lens.iter().any(|&l| l != n) {
             return Err(DecodeError(format!("market arrays {n} and {lens:?}")));
         }
         Ok(m)
@@ -286,7 +304,7 @@ impl Decode for Markets {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::goods::STORABLE;
+    use crate::goods::p2::{N as N_GOODS, STORABLE, TRADED};
     use ceteris_core::snapshot::canonical;
 
     const G: usize = 3; // food, traded
@@ -308,7 +326,7 @@ mod tests {
     }
 
     fn one() -> (Markets, TradeParams) {
-        (Markets::new(1), rule())
+        (Markets::new(1, &Goods::p2()), rule())
     }
 
     /// Stock S, supply Q and demand D at a cell; on a traded cell D is household orders.
@@ -452,16 +470,16 @@ mod tests {
     fn storable_goods_clip_at_0_3() {
         let p = rule();
         assert_eq!(p.c_max_storable, 0.3);
-        for g in 0..N_GOODS {
+        for (g, &storable) in STORABLE.iter().enumerate() {
             // huge excess demand, then a glut far above the stock target
             for (s, q, d, sign) in [(0.0, 1.0, 50.0, 1.0), (100.0, 10.0, 0.1, -1.0)] {
-                let mut m = Markets::new(1);
+                let mut m = Markets::new(1, &Goods::p2());
                 set(&mut m, g, s, q, d);
-                if TRADED[g] {
+                if g < TRADED {
                     clear(&mut m);
                 }
                 m.reprice(&p, &kappa1(&p, &m), 0.0);
-                let c_max = if STORABLE[g] { 0.3 } else { p.c_max };
+                let c_max = if storable { 0.3 } else { p.c_max };
                 assert_eq!(m.price[g], libm::exp(sign * c_max), "good {g}");
                 assert_eq!(m.clip_ticks[g], 1, "good {g}");
             }
@@ -474,7 +492,7 @@ mod tests {
 
     #[test]
     fn clip_ticks_count_bindings() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         let p = rule();
         let cells = [G, N_GOODS + G, L, N_GOODS + L];
         // excess demand clips up, a glut clips down, a balanced cell does not clip
@@ -508,7 +526,7 @@ mod tests {
     /// ADR 0263: each cell's flow term uses its own gain; the inventory term keeps kappa2.
     #[test]
     fn reprice_uses_the_gain_of_each_cell() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         let p = rule();
         for i in [0, N_GOODS] {
             set(&mut m, i + G, 2.3, 1.0, 1.1);
@@ -547,7 +565,7 @@ mod tests {
     fn storage_orders_equal_spoilage_at_steady_state() {
         let p = TradeParams::default().with_storage();
         for g in storable() {
-            let mut m = Markets::new(1);
+            let mut m = Markets::new(1, &Goods::p2());
             let d = 0.1 + 0.2;
             let s = p.coverage[g] * d;
             let loss = p.storage_loss[g] * s;
@@ -576,7 +594,7 @@ mod tests {
     fn stock_without_supply_or_buyers_does_not_bid_the_price_up() {
         let p = TradeParams::default().with_storage();
         for g in storable() {
-            let mut m = Markets::new(2);
+            let mut m = Markets::new(2, &Goods::p2());
             let q_star = 1.0 + p.storage_loss[g] * p.coverage[g];
             set(&mut m, g, p.coverage[g], q_star, 1.0);
             let dead = N_GOODS + g;
@@ -604,7 +622,7 @@ mod tests {
                 (1e6, 1.0, 1e-3, -0.01),
                 (2.0, 0.5, 4.0, 0.2),
             ] {
-                let mut m = Markets::new(1);
+                let mut m = Markets::new(1, &Goods::p2());
                 set(&mut m, g, s, q, d);
                 m.expectation[g] = pi;
                 tick(&mut m, &p);
@@ -622,7 +640,7 @@ mod tests {
             }
             // a strongly negative expectation empties the target: merchants release lambda S a
             // month, above the floor (lambda < 1)
-            let mut m = Markets::new(1);
+            let mut m = Markets::new(1, &Goods::p2());
             set(&mut m, g, 5.0, 1.0, 1.0);
             m.expectation[g] = -10.0;
             tick(&mut m, &p);
@@ -631,13 +649,13 @@ mod tests {
         }
         // goods without storage, and storable goods with storage off (the default), order
         // nothing and lose nothing
-        let mut m = Markets::new(1);
+        let mut m = Markets::new(1, &Goods::p2());
         set(&mut m, G, 5.0, 1.0, 1.0);
         let spoiled = tick(&mut m, &p);
         assert_eq!((spoiled[G], m.storage[G], m.inventory[G]), (0.0, 0.0, 5.0));
         let off = TradeParams::default();
         for g in storable() {
-            let mut m = Markets::new(1);
+            let mut m = Markets::new(1, &Goods::p2());
             set(&mut m, g, 5.0, 1.0, 1.0);
             m.expectation[g] = -1.0;
             let spoiled = tick(&mut m, &off);
@@ -672,7 +690,7 @@ mod tests {
 
     #[test]
     fn clear_leaves_local_and_inactive_cells_alone() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         set(&mut m, G, 0.0, 1.0, 2.0);
         set(&mut m, N_GOODS + G, 0.0, 1.0, 2.0);
         set(&mut m, L, 0.0, 1.0, 2.0);
@@ -689,7 +707,7 @@ mod tests {
     #[test]
     fn all_import_province_with_zero_q_stays_finite() {
         // province 0 produces and supplies; province 1 only imports, so Q = 0, D > 0
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         let p = rule();
         for g in 0..7 {
             set(&mut m, g, 0.0, 10.0, 1.0);
@@ -724,7 +742,7 @@ mod tests {
 
     #[test]
     fn floor_uses_the_mean_over_active_cells_only() {
-        let mut m = Markets::new(3);
+        let mut m = Markets::new(3, &Goods::p2());
         let p = rule();
         // provinces 0 and 1 active with Q 4 and 0; province 2 inactive with huge Q
         set(&mut m, G, 0.0, 4.0, 4.0);
@@ -740,7 +758,7 @@ mod tests {
 
     #[test]
     fn steady_state_is_fixed_point() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         let p = rule();
         // awkward values: (S + Q) - D is not S in floating point for these
         let d = 0.1 + 0.2;
@@ -774,7 +792,7 @@ mod tests {
 
     #[test]
     fn goods_are_conserved_by_clearing() {
-        let mut m = Markets::new(1);
+        let mut m = Markets::new(1, &Goods::p2());
         for (g, (s, q, d)) in [(0.3, 2.0, 7.0), (4.0, 1.0, 0.5), (0.0, 0.0, 0.0)]
             .into_iter()
             .enumerate()
@@ -894,7 +912,7 @@ mod tests {
 
     #[test]
     fn origin_clearing_leaves_local_and_inactive_cells_alone() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         order(&mut m, G, 0.0, 1.0, 1.0, 1.0);
         order(&mut m, N_GOODS + G, 0.0, 1.0, 1.0, 1.0);
         order(&mut m, L, 0.0, 1.0, 1.0, 1.0);
@@ -908,7 +926,7 @@ mod tests {
 
     #[test]
     fn round_trips_through_snapshot_bytes() {
-        let mut m = Markets::new(2);
+        let mut m = Markets::new(2, &Goods::p2());
         set(&mut m, G, 1.0, 2.0, 3.0);
         m.active[5] = false;
         clear(&mut m);
@@ -917,7 +935,7 @@ mod tests {
         m.encode(&mut e);
         let bytes = e.into_bytes();
         let mut d = Decoder::new(&bytes);
-        let back = Markets::decode(&mut d).unwrap();
+        let back = Markets::decode(&mut d, &Goods::p2()).unwrap();
         d.finish().unwrap();
         assert_eq!(back, m);
         assert_eq!(canonical(3, &back), canonical(3, &m));
@@ -933,6 +951,6 @@ mod tests {
         e.bools(&[true; 3]);
         e.u32s(&[0; N_GOODS]);
         let bytes = e.into_bytes();
-        assert!(Markets::decode(&mut Decoder::new(&bytes)).is_err());
+        assert!(Markets::decode(&mut Decoder::new(&bytes), &Goods::p2()).is_err());
     }
 }

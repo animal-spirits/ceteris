@@ -8,6 +8,7 @@ pub mod invariant;
 pub mod ledger;
 pub mod reduce;
 pub mod rng;
+pub mod rows;
 pub mod schedule;
 pub mod sim;
 pub mod snapshot;

@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use ceteris_core::ledger::AccountId;
+use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
 use ceteris_econ::inputs::EconInputs;
@@ -16,10 +17,20 @@ use ceteris_econ::world::{
     static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
-use ceteris_trade::goods::{STORABLE, TRADED};
+use ceteris_trade::goods::p2::{N as N_GOODS, STORABLE, TRADED as N_TRADED};
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{N_GOODS, Network, Rationing, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{Network, Rationing, Sourced, TradeParams, dispatch, source};
 use proptest::prelude::*;
+
+const TRADED: [bool; N_GOODS] = {
+    let mut t = [false; N_GOODS];
+    let mut g = 0;
+    while g < N_TRADED {
+        t[g] = true;
+        g += 1;
+    }
+    t
+};
 
 fn world(params: EconParams) -> EconWorld {
     EconWorld::new(Arc::new(small_world()), params, TradeParams::default())
@@ -1343,7 +1354,7 @@ fn input_orders_plan_on_notional_output_for_the_short_input() {
             "enterprise 0 was not held by an input"
         );
         let all = (0..N_GOODS).filter(|&k| TRADED[k] && w.layout().coef[0][k] > 0.0);
-        assert!(tick > 0 || all.fold(0u16, |b, k| b | 1 << k) == w.scratch.short[0]);
+        assert!(tick > 0 || all.fold(0u64, |b, k| b | 1 << k) == w.scratch.short[0]);
         assert_order_rule(&w);
         systems::source(&mut w);
         systems::clear(&mut w);
@@ -1995,7 +2006,23 @@ fn chain_passes_and_uncovered_are_pinned() {
 /// Outputs at fills `f`, as ADR 0093's Amendment defines them (each user's stock a floor under
 /// the fill, amendment of 2026-10-30), written out here independently: Y = cap min_j G_j(F_j),
 /// G = s + (1 - s) F with s the share of the need at capacity the stock covers, 1 at F = 1.
-fn outputs_at(p: &Province, f: &[f64; 3]) -> Vec<f64> {
+fn province(
+    cap: Vec<f64>,
+    coef: Vec<[f64; 3]>,
+    stock: Vec<[f64; 3]>,
+    producer: [Option<usize>; 3],
+    own: [f64; 3],
+) -> Province {
+    Province::from_parts(
+        cap,
+        Rows::from_rows(3, &coef),
+        Rows::from_rows(3, &stock),
+        producer.to_vec(),
+        own.to_vec(),
+    )
+}
+
+fn outputs_at(p: &Province, f: &[f64]) -> Vec<f64> {
     (0..p.cap.len())
         .map(|u| {
             let least = (0..3).filter(|&j| p.coef[u][j] > 0.0).fold(1.0f64, |m, j| {
@@ -2022,7 +2049,7 @@ fn outputs_at(p: &Province, f: &[f64; 3]) -> Vec<f64> {
 /// G_k - s_j as (1 - s_j) F_j for j itself and (s_k - s_j) + (1 - s_k) F_k for its other goods,
 /// so that the stock's share does not cancel, at most its need coef Y; a user without stock has
 /// its whole need uncovered.
-fn uncovered_at(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
+fn uncovered_at(p: &Province, j: usize, f: &[f64]) -> f64 {
     let y = outputs_at(p, f);
     (0..p.cap.len())
         .map(|u| {
@@ -2064,7 +2091,7 @@ fn uncovered_at(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
         .sum()
 }
 
-fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
+fn fits_at(p: &Province, j: usize, f: &[f64]) -> bool {
     let y = outputs_at(p, f);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
     uncovered_at(p, j, f) <= rest
@@ -2073,7 +2100,7 @@ fn fits_at(p: &Province, j: usize, f: &[f64; 3]) -> bool {
 /// Whether good j fits at fills f up to rounding (ADR 0093, bounded work): where the passes stop
 /// at what f64 resolves, a good may be short by rounding, at most 1e-12 of its flows, which the
 /// split shares pro rata within the Leontief invariant's 1e-12.
-fn fits_up_to_rounding(p: &Province, j: usize, f: &[f64; 3]) -> bool {
+fn fits_up_to_rounding(p: &Province, j: usize, f: &[f64]) -> bool {
     let y = outputs_at(p, f);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
     let uncovered = uncovered_at(p, j, f);
@@ -2210,7 +2237,7 @@ fn random_province_with(seed: u64, extra: usize, coef_max: f64, no_stock: f64) -
         })
         .collect();
     let own = std::array::from_fn(|_| 0.3 * next());
-    Province::from_parts(cap, coef, stock, producer, own)
+    province(cap, coef, stock, producer, own)
 }
 
 proptest! {
@@ -2245,7 +2272,7 @@ fn assert_iteration_limit(p: &Province, what: &str) -> ([f64; 3], usize) {
         );
     }
     assert!(!out.stalled, "{what}: {out:?}");
-    (out.fills, out.work)
+    (out.fills.try_into().unwrap(), out.work)
 }
 
 /// A province in the calibrated form: producers of the three local goods (enterprises 0 to 2)
@@ -2299,7 +2326,7 @@ fn balanced_province(seed: u64) -> Option<Province> {
     }
     let who = (next() * n as f64) as usize;
     cap[who] *= 0.3 + 0.69 * next();
-    Some(Province::from_parts(
+    Some(province(
         cap,
         coef,
         vec![[0.0; 3]; n],
@@ -2411,7 +2438,7 @@ fn translate(p: &Province, t: f64) -> Province {
 fn near_singular(eps: f64) -> (Province, [f64; 3]) {
     let d = 1.0 - eps;
     let s = 2.0 / d;
-    let p = Province::from_parts(
+    let p = province(
         vec![1.0, 1.0, 3.0],
         vec![
             [0.0, 0.5, 0.0],
@@ -2561,7 +2588,7 @@ fn translated_verdict(
     p: &Province,
     heuristic: &[Option<f64>; 3],
     plain: Option<[f64; 3]>,
-    f: &[f64; 3],
+    f: &[f64],
     t: f64,
 ) -> Result<bool, String> {
     let degenerate = heuristic.contains(&Some(t));
@@ -2632,8 +2659,8 @@ fn loosened(p: &Province, plain: Option<[f64; 3]>, t: f64) -> [bool; 3] {
 /// that rule, none by name. The examples measured before the stock floor (seeds
 /// 1097310483361641164, 7641237549142102837, 13946236107313884973 at 0.1) are not translatable
 /// under it: each has a local good without a producer.
-fn shortage_at_one(p: &Province, j: usize, f: &[f64; 3]) -> f64 {
-    let mut g = *f;
+fn shortage_at_one(p: &Province, j: usize, f: &[f64]) -> f64 {
+    let mut g = f.to_vec();
     g[j] = 1.0;
     let y = outputs_at(p, &g);
     let rest = p.producer[j].map_or(0.0, |q| (1.0 - p.own[j]) * y[q]);
@@ -2736,7 +2763,7 @@ fn translated_sample(n: u64, offset: u64) -> Sample {
                 if out.fills[j] != 1.0 {
                     continue;
                 }
-                let mut wrong = out.fills;
+                let mut wrong = out.fills.clone();
                 wrong[j] = t;
                 if translated_verdict(&p, &heuristic, plain, &wrong, t).is_err() {
                     sample.rejected += 1;
@@ -2804,7 +2831,7 @@ fn translated_oracle_rejects_a_good_lowered_from_one() {
         let out = assert_translated_limit_of(seed, &original, &limit, t);
         assert_eq!(out.fills[j], 1.0, "seed {seed} t {t}: {out:?}");
         let p = translate(&original, t);
-        let mut wrong = out.fills;
+        let mut wrong = out.fills.clone();
         wrong[j] = t;
         assert!((0..3).all(|k| fits_up_to_rounding(&p, k, &wrong)));
         let verdict = translated_verdict(
@@ -2852,8 +2879,8 @@ fn neutral_good_stop_takes_a_fixed_point_on_its_line() {
             let mut c = [0.0; 3];
             c[k] = 0.5;
             p.cap.push((share - total) / 0.5);
-            p.coef.push(c);
-            p.stock.push([0.0; 3]);
+            p.coef.push(&c);
+            p.stock.push(&[0.0; 3]);
         }
     }
     let q = translate(&p.rebuilt(), t);
@@ -2911,8 +2938,8 @@ fn stalled_provinces_end_within_the_pass_cap() {
     for i in 0..200 {
         let threshold = 0.49 - 0.18 * (i as f64 + 0.5) / 200.0;
         kinks.cap.push(1.0);
-        kinks.coef.push([1e-3, 0.0, 0.0]);
-        kinks.stock.push([1e-3 * threshold, 0.0, 0.0]);
+        kinks.coef.push(&[1e-3, 0.0, 0.0]);
+        kinks.stock.push(&[1e-3 * threshold, 0.0, 0.0]);
     }
     cases.push(("200 kinks".into(), kinks.rebuilt()));
     for (what, p) in &cases {
@@ -3058,7 +3085,7 @@ fn putty_clay_one_vintage_equals_fixed_leontief() {
     let (inputs, e) = (Arc::new(inputs), 0);
     let fixed_world = EconWorld::new(Arc::clone(&inputs), fixed, t.clone());
     let putty_world = EconWorld::new(Arc::clone(&inputs), putty, t);
-    assert_eq!(fixed_world.layout().coef[e], inputs.base_column(e));
+    assert_eq!(&fixed_world.layout().coef[e], inputs.base_column(e));
     assert_eq!(putty_world.layout().coef[e], inputs.enterprises.coef[e]);
 }
 

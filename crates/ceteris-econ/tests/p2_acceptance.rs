@@ -16,8 +16,8 @@ use ceteris_econ::world::{DIVIDEND, WRITE_OFF, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{f64s, read_table, u8s, u32s};
-use ceteris_trade::goods::TRADED;
-use ceteris_trade::{Kernel, N_CLASSES, N_GOODS, TradeParams};
+use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
+use ceteris_trade::{Kernel, N_CLASSES, TradeParams};
 
 const TICKS: u32 = 1200;
 /// V1's horizon where competitive storage is on (ADR 0091; econ SPEC, P2 gate): from the data
@@ -434,7 +434,7 @@ fn dependent_cells(
     };
     let (open, closed) = (costs(open), costs(closed));
     let (mut dependent, mut all) = (Vec::new(), 0);
-    for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+    for g in (0..N_GOODS).filter(|&g| g < N_TRADED) {
         let class = trade.theta_class[g];
         let (open_cost, closed_cost) = (on_legs_of(&open, class), on_legs_of(&closed, class));
         all += open_cost.len();
@@ -632,7 +632,7 @@ impl Census {
             self.retained.2 = self.retained.2.min(to_numeraire(carrying.iter().sum()));
         }
         let m = &w.markets;
-        for c in (0..m.price.len()).filter(|&c| m.active[c] && TRADED[c % N_GOODS]) {
+        for c in (0..m.price.len()).filter(|&c| m.active[c] && c % N_GOODS < N_TRADED) {
             if m.sales[c] < m.demand[c] {
                 self.stockouts[c % N_GOODS] += 1;
                 self.first_stockout.get_or_insert((tick, c));

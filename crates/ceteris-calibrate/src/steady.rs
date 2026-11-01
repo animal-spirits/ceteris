@@ -51,7 +51,7 @@ use ceteris_reference::demand::{self, N_CATEGORIES, Weights};
 use ceteris_reference::io::{Inputs, Mat};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
-use ceteris_trade::{N_GOODS, TradeParams};
+use ceteris_trade::TradeParams;
 
 use crate::{block, elasticity};
 
@@ -1171,13 +1171,16 @@ pub fn calibrate_from(
     // the block map at the inputs' P02 and storage parameters (ADR 0091), the rest at the
     // defaults; the structural digest pins the storage parameters to the calibration's
     let default = TradeParams::default();
-    let per_good = |v: &[f64], fallback: &[f64; N_GOODS]| -> [f64; N_GOODS] {
-        std::array::from_fn(|g| v.get(g).copied().unwrap_or(fallback[g]))
+    let per_good = |v: &[f64], fallback: &[f64]| -> Vec<f64> {
+        (0..fallback.len())
+            .map(|g| v.get(g).copied().unwrap_or(fallback[g]))
+            .collect()
     };
     let st = &inp.storage;
+    let zero = vec![0.0; default.goods.n()];
     let trade = TradeParams {
-        coverage: per_good(coverage, &[0.0; N_GOODS]),
-        storage_loss: per_good(&inp.storage_loss, &[0.0; N_GOODS]),
+        coverage: per_good(coverage, &zero),
+        storage_loss: per_good(&inp.storage_loss, &zero),
         storage_cost: per_good(&st.cost, &default.storage_cost),
         speculation: per_good(&st.speculation, &default.speculation),
         convenience: per_good(&st.convenience, &default.convenience),

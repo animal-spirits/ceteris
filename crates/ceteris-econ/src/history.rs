@@ -26,7 +26,6 @@ use arrow_array::{ArrayRef, BooleanArray, Float64Array, UInt8Array, UInt32Array}
 
 use ceteris_core::invariant::Violation;
 use ceteris_core::sim::Sim;
-use ceteris_trade::N_GOODS;
 
 use crate::export::{Column, ExportError, write_table_zstd};
 use crate::world::{EconWorld, to_numeraire_wide};
@@ -84,6 +83,7 @@ impl<const N: usize> F64Cols<N> {
 pub struct History {
     sampled: Vec<u32>,
     n_provinces: usize,
+    n_goods: usize,
     world: F64Cols<7>,
     pops_negative_money: Vec<u32>,
     provinces: F64Cols<6>,
@@ -102,6 +102,7 @@ impl History {
         Self {
             sampled: Vec::new(),
             n_provinces: 0,
+            n_goods: 0,
             world: F64Cols::new([
                 "world_price_index",
                 "expected_inflation",
@@ -151,6 +152,8 @@ impl History {
     pub fn record(&mut self, tick: u32, world: &EconWorld) {
         let (inp, lay, m) = (world.inputs(), world.layout(), &world.markets);
         self.n_provinces = inp.n_provinces();
+        self.n_goods = inp.n_goods();
+        let ng = self.n_goods;
 
         let (mut employment, mut supply) = (0.0, 0.0);
         let (mut money, mut negative) = (0_i128, 0_u32);
@@ -176,8 +179,8 @@ impl History {
             supply += ls;
             money += minor;
 
-            for g in 0..N_GOODS {
-                let c = i * N_GOODS + g;
+            for g in 0..ng {
+                let c = i * ng + g;
                 self.markets.push([
                     m.price[c],
                     world.price_index[c],
@@ -193,7 +196,7 @@ impl History {
         let e = &inp.enterprises;
         let output_value: f64 = (0..inp.n_enterprises())
             .map(|k| {
-                world.output[k] * m.price[e.province[k] as usize * N_GOODS + usize::from(e.good[k])]
+                world.output[k] * m.price[e.province[k] as usize * ng + usize::from(e.good[k])]
             })
             .sum();
         self.world.push([
@@ -225,9 +228,9 @@ impl History {
     }
 
     fn tables(self) -> [(&'static str, Vec<(&'static str, Col)>); 3] {
-        let np = self.n_provinces;
-        let (province_ticks, market_ticks) = (self.tick_keys(np), self.tick_keys(np * N_GOODS));
-        let (province_ids, market_ids) = (self.province_keys(1), self.province_keys(N_GOODS));
+        let (np, ng) = (self.n_provinces, self.n_goods);
+        let (province_ticks, market_ticks) = (self.tick_keys(np), self.tick_keys(np * ng));
+        let (province_ids, market_ids) = (self.province_keys(1), self.province_keys(ng));
         let mut world = vec![("tick", Col::U32(self.sampled))];
         world.extend(self.world.into_cols());
         world.push(("pops_negative_money", Col::U32(self.pops_negative_money)));
@@ -243,11 +246,7 @@ impl History {
             ("province", Col::U32(market_ids)),
             (
                 "good",
-                Col::U8(
-                    (0..self.active.len())
-                        .map(|r| (r % N_GOODS) as u8)
-                        .collect(),
-                ),
+                Col::U8((0..self.active.len()).map(|r| (r % ng) as u8).collect()),
             ),
         ];
         markets.extend(self.markets.into_cols());
@@ -339,6 +338,8 @@ pub fn run_recorded(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Arc;

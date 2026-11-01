@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use ceteris_calibrate::{benchmark, shock};
 use ceteris_core::sim::Sim;
 use ceteris_econ::systems::{SEED, schedule};
-use ceteris_trade::goods::{N_GOODS, TRADED, tariff_group};
 
 const EVERY: u32 = 50;
 
@@ -41,8 +40,13 @@ fn main() {
         Vec::new()
     } else {
         let codes = benchmark::codes(&pack).expect("country codes");
-        shock::parse(&fs::read_to_string(shock_file).expect("shock file"), &codes)
-            .expect("shock file")
+        let n_goods = benchmark::n_goods(&pack).expect("goods");
+        shock::parse(
+            &fs::read_to_string(shock_file).expect("shock file"),
+            &codes,
+            n_goods,
+        )
+        .expect("shock file")
     };
 
     let mut sim = Sim::new(
@@ -71,6 +75,7 @@ fn main() {
     let o = benchmark::outcome(w, f64::NAN, sim.tick());
     let inp = w.inputs();
     let (nc, np) = (inp.n_countries(), inp.n_provinces());
+    let (n_goods, traded) = (inp.goods.n(), inp.goods.traded);
     let country = |i: usize| inp.country_of(i);
 
     let mut people = vec![0.0; nc];
@@ -89,10 +94,10 @@ fn main() {
         }),
     );
     let (mut emp, mut outp, mut sales, mut pvol) = (
-        vec![[0.0; N_GOODS]; nc],
-        vec![[0.0; N_GOODS]; nc],
-        vec![[0.0; N_GOODS]; nc],
-        vec![[0.0; N_GOODS]; nc],
+        vec![vec![0.0; n_goods]; nc],
+        vec![vec![0.0; n_goods]; nc],
+        vec![vec![0.0; n_goods]; nc],
+        vec![vec![0.0; n_goods]; nc],
     );
     for e in 0..inp.n_enterprises() {
         let i = inp.enterprises.province[e] as usize;
@@ -100,14 +105,14 @@ fn main() {
         emp[c][g] += w.employment[e];
         outp[c][g] += w.output[e];
         sales[c][g] += w.sales[e];
-        pvol[c][g] += w.output[e] * w.markets.price[i * N_GOODS + g];
+        pvol[c][g] += w.output[e] * w.markets.price[i * n_goods + g];
     }
     csv(
         &out.join("goods.csv"),
         "country,good,omega,buyer_price,employment,output,sales,output_value",
         (0..nc).flat_map(|c| {
             let (o, emp, outp, sales, pvol) = (&o, &emp, &outp, &sales, &pvol);
-            (0..N_GOODS).map(move |g| {
+            (0..n_goods).map(move |g| {
                 format!(
                     "{c},{g},{},{},{},{},{},{}",
                     o.omega[c][g],
@@ -124,17 +129,17 @@ fn main() {
     let mut rows = Vec::new();
     for ex in 0..nc {
         for im in 0..nc {
-            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-                let at = (ex * nc + im) * N_GOODS + g;
+            for g in 0..traded {
+                let at = (ex * nc + im) * n_goods + g;
                 let mut v = mean.pair_value[at];
                 if ex == im {
                     v += (0..np)
                         .filter(|&i| country(i) == ex)
-                        .map(|i| mean.home_value[i * N_GOODS + g])
+                        .map(|i| mean.home_value[i * n_goods + g])
                         .sum::<f64>();
                 }
                 if v > 0.0 {
-                    let t = inp.wedges.tariff[(im * nc + ex) * 2 + tariff_group(g)];
+                    let t = inp.wedges.tariff[(im * nc + ex) * 2 + inp.goods.tariff_group(g)];
                     let t = if ex == im { 0.0 } else { f64::from(t) };
                     rows.push(format!("{ex},{im},{g},{v},{t}"));
                 }

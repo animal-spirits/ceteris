@@ -1,12 +1,14 @@
 //! Trade parameters with their register IDs (`specs/trade/SPEC.md`, Parameters).
 
-use crate::goods::{N_GOODS, STORABLE};
+use crate::goods::{Goods, p2};
 
 /// Theta classes of P01 (ADR 0023, Amendment 2026-10-29).
 pub const N_CLASSES: usize = 4;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
+    /// The goods these parameters are for: every per-good field has one entry per good.
+    pub goods: Goods,
     /// P01 trade elasticity theta_g per good, local goods 0 (unused). Prior 2.91 to 16.91, the
     /// range of the class values (ADR 0101). Each traded good carries its class's theta, derived
     /// by the ADR 0023 rule from the OECD concordance (`ceteris_pack::econ::theta`): Caliendo and
@@ -18,16 +20,16 @@ pub struct TradeParams {
     /// at the harmonic mean over its lines, to two decimals. The test
     /// `fixture_theta_defaults_follow_the_estimator` (ceteris-pack) keeps these and `theta_class`
     /// equal to the estimator's output.
-    pub theta: [f64; N_GOODS],
+    pub theta: Vec<f64>,
     /// P01 theta class of each good (ADR 0023), 0 for the lowest theta; local goods 0
     /// (unused). Kernels stay per good, since weight classes are goods in P2 (ADR 0018); the
     /// map lets goods of one class share kernels once weight classes merge.
-    pub theta_class: [u8; N_GOODS],
+    pub theta_class: Vec<u8>,
     /// P150 theta scale: the kernel is built at theta_g times this (ADR 0101). Tariff
     /// experiments report the lane {0.6, 1, 1.4}.
     pub theta_scale: f64,
     /// P02 inventory target coverage s_g in months; local goods 0.
-    pub coverage: [f64; N_GOODS],
+    pub coverage: Vec<f64>,
     /// P03a price response to the demand-supply gap, per month. Prior 0.01 to 0.5 (widened
     /// from 0.05 by owner decision, 2026-10-24, for stability), default 0.05 (owner decision,
     /// 2026-10-24, MIGRATION Task 6: at 0.02 the expectation loop of ADR 0019 breaks V1 for
@@ -63,7 +65,7 @@ pub struct TradeParams {
     /// terms only, expected inflation passes through (ADR 0106). Every tick it binds is counted
     /// per market (`Markets::clip_ticks`) and per wage.
     pub c_max: f64,
-    /// P151 price step clip of the storable commodities (`goods::STORABLE`), in log points per
+    /// P151 price step clip of the storable commodities (`Goods::storable`), in log points per
     /// month (ADR 0106): monthly commodity moves exceed P03c (oil fell about 30% in one month in
     /// late 2008).
     pub c_max_storable: f64,
@@ -79,9 +81,9 @@ pub struct TradeParams {
     /// 2000 cross-border share of each friction group, a theta class or, in class 3, a good
     /// (`ceteris_calibrate::border`), which `EconInputs::trade_params` puts here. Local goods
     /// never cross a border.
-    pub border_nu: [f64; N_GOODS],
+    pub border_nu: Vec<f64>,
     /// P43 ad valorem cost of a day in transit, lambda_g.
-    pub time_cost: [f64; N_GOODS],
+    pub time_cost: Vec<f64>,
     /// P44 route-choice dispersion theta_r (ADR 0017): edge factors `a = t^-theta_r`, route
     /// costs `tau = [(I - A)^-1]^(-1/theta_r)`. Prior 41 to 182 (Fan, Lu and Luo 2021: 111.5,
     /// s.e. 35.4), value its point estimate. Unused in P2: route choice is deferred (ADR 0017),
@@ -100,27 +102,27 @@ pub struct TradeParams {
     /// rates over the listed-port fee (on by default, as P154).
     pub bulk_port: [f64; N_CLASSES],
     /// P56 physical storage loss delta_g per month at the origin markets of the storable goods
-    /// (ADR 0091; `goods::STORABLE`, 0 elsewhere). Competitive storage is off by default (owner
+    /// (ADR 0091; `Goods::storable`, 0 elsewhere). Competitive storage is off by default (owner
     /// ruling 2026-10-31: the approved values destabilize the fixture, ADR 0091 As built), so
     /// the default is 0; [`TradeParams::with_storage`] sets the approved values: agriculture 0.003, a world blend of commercial
     /// grain shrink (Hofstrand, ISU A2-33, 1995) and smallholder post-harvest losses (APHLIS);
     /// fuels 0.0005 and coal and mining 0.001 by judgement; chemicals and metals 0 (base metals do
     /// not deteriorate, Cafiero et al. 2011). Owner approval 2026-10-30; refit in P9.
-    pub storage_loss: [f64; N_GOODS],
+    pub storage_loss: Vec<f64>,
     /// P56 money cost k_g of holding a unit for a month, interest 0.0047 (FRED TB3MS, 2000 mean
     /// 5.82% a year) plus physical storage: 0.009, 0.011, 0.007, 0.0067 (DESIGN 17, P56; weak).
-    pub storage_cost: [f64; N_GOODS],
+    pub storage_cost: Vec<f64>,
     /// P144 speculation intensity psi_g in months (ADR 0091), 0 by default (storage off); the
     /// approved values ([`TradeParams::with_storage`]) are 20, 1.0, 3.571, 5.714, derived as
     /// lambda s_g / (zeta (k + delta)) from the stock-persistence target lambda = 1 - rho of
     /// Gorton, Hayashi and Rouwenhorst (2013, Table 2); not estimated (DESIGN 17). Good 5's
     /// 5.714 is the source sheet's 40 at zeta 0.5 rescaled to zeta 3.5 (40 x 0.5 / 3.5), where
     /// the formula gives 5.54; approved as rescaled.
-    pub speculation: [f64; N_GOODS],
+    pub speculation: Vec<f64>,
     /// P145 convenience-yield elasticity zeta_g (ADR 0091): 1.8, 13, 3.5, 3.5, the slope of the
     /// basis in inventory of Gorton, Hayashi and Rouwenhorst (2013, Table 3) over k + delta, 3.5
     /// for goods 2 and 5 by owner choice (DESIGN 17).
-    pub convenience: [f64; N_GOODS],
+    pub convenience: Vec<f64>,
     /// P146 gain g_s of each stored good's market expectation pi^e_og per month (ADR 0091): 0.006,
     /// P45's start, the constant learning gain of Milani (2007), 0.0183 a quarter (DESIGN 17;
     /// owner approval 2026-10-31).
@@ -128,6 +130,26 @@ pub struct TradeParams {
 }
 
 impl TradeParams {
+    /// Refuses a per-good field without one entry per good of `goods`.
+    pub fn check_goods(&self) -> Result<(), String> {
+        let n = self.goods.n();
+        let lens = [
+            ("theta", self.theta.len()),
+            ("theta_class", self.theta_class.len()),
+            ("coverage", self.coverage.len()),
+            ("border_nu", self.border_nu.len()),
+            ("time_cost", self.time_cost.len()),
+            ("storage_loss", self.storage_loss.len()),
+            ("storage_cost", self.storage_cost.len()),
+            ("speculation", self.speculation.len()),
+            ("convenience", self.convenience.len()),
+        ];
+        match lens.iter().find(|(_, l)| *l != n) {
+            Some((field, l)) => Err(format!("trade parameter {field} has {l} goods, not {n}")),
+            None => Ok(()),
+        }
+    }
+
     /// The border friction of good `g`.
     pub fn border_nu_of(&self, g: usize) -> f64 {
         self.border_nu[g]
@@ -179,9 +201,14 @@ impl TradeParams {
     /// (ADR 0091, As built).
     #[must_use]
     pub fn with_storage(self) -> Self {
+        assert_eq!(
+            self.goods,
+            Goods::p2(),
+            "the approved storage values are for the P2 goods"
+        );
         Self {
-            storage_loss: [0.003, 0.0005, 0.001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            speculation: [20.0, 1.0, 3.571, 0.0, 0.0, 5.714, 0.0, 0.0, 0.0, 0.0],
+            storage_loss: vec![0.003, 0.0005, 0.001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            speculation: vec![20.0, 1.0, 3.571, 0.0, 0.0, 5.714, 0.0, 0.0, 0.0, 0.0],
             ..self
         }
     }
@@ -190,7 +217,7 @@ impl TradeParams {
     /// storable good with a positive speculation intensity or storage loss. Otherwise the
     /// stock rule applies, kappa2 term included.
     pub fn stores(&self, g: usize) -> bool {
-        STORABLE[g] && (self.speculation[g] > 0.0 || self.storage_loss[g] > 0.0)
+        self.goods.storable[g] && (self.speculation[g] > 0.0 || self.storage_loss[g] > 0.0)
     }
 
     /// Refuses a storable good with a storage loss and no speculation (P56 delta > 0, P144 psi
@@ -199,16 +226,16 @@ impl TradeParams {
     /// cover (P02), convenience elasticity (P145) or carrying cost k + delta (P56): the order's
     /// adjustment speed and target stock divide by them (ADR 0280).
     pub fn check_storage(&self) -> Result<(), String> {
-        if let Some(g) = (0..N_GOODS)
-            .find(|&g| STORABLE[g] && self.storage_loss[g] > 0.0 && self.speculation[g] <= 0.0)
-        {
+        if let Some(g) = (0..self.goods.n()).find(|&g| {
+            self.goods.storable[g] && self.storage_loss[g] > 0.0 && self.speculation[g] <= 0.0
+        }) {
             return Err(format!(
                 "good {g} has a storage loss {} and no speculation intensity: an untargeted \
                  stock that spoils; set P144 psi or P56 delta 0",
                 self.storage_loss[g]
             ));
         }
-        for g in (0..N_GOODS).filter(|&g| self.stores(g)) {
+        for g in (0..self.goods.n()).filter(|&g| self.stores(g)) {
             let carry = self.storage_cost[g] + self.storage_loss[g];
             for (name, x) in [
                 ("cover s (P02)", self.coverage[g]),
@@ -256,7 +283,7 @@ impl TradeParams {
 
     /// The price step clip of good `g`: P151 for storable commodities, else P03c.
     pub fn price_clip(&self, g: usize) -> f64 {
-        if STORABLE[g] {
+        if self.goods.storable[g] {
             self.c_max_storable
         } else {
             self.c_max
@@ -267,27 +294,28 @@ impl TradeParams {
 impl Default for TradeParams {
     fn default() -> Self {
         Self {
-            theta: [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
-            theta_class: [2, 3, 3, 0, 2, 0, 1, 0, 0, 0],
+            goods: Goods::p2(),
+            theta: vec![7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
+            theta_class: vec![2, 3, 3, 0, 2, 0, 1, 0, 0, 0],
             theta_scale: 1.0,
-            coverage: [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
+            coverage: vec![3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.05,
             gain_share: 0.5,
             kappa2: 0.0,
             c_max: 0.1,
             c_max_storable: 0.3,
             expectation_gain: 0.006,
-            border_nu: [0.3; N_GOODS],
-            time_cost: [
+            border_nu: vec![0.3; p2::N],
+            time_cost: vec![
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
             bulk_sea: [1.0, 1.0, 1.0, 0.026],
             bulk_port: [1.0, 1.0, 1.0, 0.40],
-            storage_loss: [0.0; N_GOODS],
-            storage_cost: [0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
-            speculation: [0.0; N_GOODS],
-            convenience: [1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
+            storage_loss: vec![0.0; p2::N],
+            storage_cost: vec![0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
+            speculation: vec![0.0; p2::N],
+            convenience: vec![1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
             storage_gain: 0.006,
         }
     }

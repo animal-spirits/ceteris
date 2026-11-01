@@ -11,9 +11,8 @@ use arrow_array::types::Float64Type;
 use arrow_ipc::reader::FileReader;
 use std::sync::Arc;
 
-use ceteris_trade::goods::TRADED;
 use ceteris_trade::source::{ARRIVAL_SLOTS, HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{N_GOODS, Sourced, TradeParams, dispatch, source};
+use ceteris_trade::{Sourced, TradeParams, dispatch, source};
 
 use crate::export::ExportError;
 use crate::inputs::EconInputs;
@@ -29,7 +28,7 @@ const INCOME_ITERATIONS: usize = 100;
 /// A reference solution as written by `ceteris reference solve --out DIR`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Equilibrium {
-    /// `[province * N_GOODS + g]`: posted price of active cells (origin markets of traded
+    /// `[province * ng + g]`: posted price of active cells (origin markets of traded
     /// goods, province markets of local goods), 0 elsewhere.
     pub price: Vec<f64>,
     pub wage: Vec<f64>,
@@ -93,8 +92,8 @@ fn hex(hash: &[u8; 32]) -> String {
 
 /// Sourcing and full-fill dispatch of `spend` for traded good `g` at the world's prices.
 fn ship(w: &EconWorld, g: usize, spend: &[[f64; 2]], out: &mut Sourced) {
-    let np = w.inputs.n_provinces();
-    let cells = || (0..np).map(|o| o * N_GOODS + g);
+    let (np, ng) = (w.inputs.n_provinces(), w.inputs.n_goods());
+    let cells = || (0..np).map(|o| o * ng + g);
     let price: Vec<f64> = cells().map(|c| w.markets.price[c]).collect();
     let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
     source(
@@ -139,6 +138,7 @@ impl EconWorld {
     /// parameters (adjustment speeds, the frictionless and rationing switches are free);
     /// panics otherwise.
     pub fn settle(&mut self, solution: &Equilibrium) {
+        let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
         let structural = structural_digest(&self.inputs, &self.params, &self.trade);
         assert_eq!(
             solution.static_digest,
@@ -155,14 +155,14 @@ impl EconWorld {
             inp.n_enterprises(),
         );
         assert!(
-            solution.price.len() == np * N_GOODS
+            solution.price.len() == np * ng
                 && solution.wage.len() == np
                 && solution.employment.len() == n_ent
                 && solution.output.len() == n_ent,
             "solution sizes do not match the inputs"
         );
         assert!(
-            (0..N_GOODS).all(|g| self.pipeline.in_flight(g) == 0.0),
+            (0..ng).all(|g| self.pipeline.in_flight(g) == 0.0),
             "settle needs a world fresh from EconWorld::new"
         );
 
@@ -187,30 +187,30 @@ impl EconWorld {
         self.price_level = self.world_price_index();
         let price = |cell: usize| self.markets.price[cell];
         let index = self.price_index.clone();
-        let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+        let traded: Vec<usize> = (0..nt).collect();
         let mut out = Sourced::new();
 
         // enterprises: inputs used, traded inputs bought at a Y q_d, profits
-        let mut ent_spend = vec![0.0; n_ent * N_GOODS];
-        let mut output = vec![0.0; np * N_GOODS];
+        let mut ent_spend = vec![0.0; n_ent * ng];
+        let mut output = vec![0.0; np * ng];
         let mut pool = vec![0.0; nc];
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
             let g = usize::from(inp.enterprises.good[e]);
             let y = self.output[e];
-            output[i * N_GOODS + g] += y;
+            output[i * ng + g] += y;
             let mut cost = 0.0;
-            for k in (0..N_GOODS).filter(|&k| lay.coef[e][k] > 0.0) {
-                let (use_k, cell) = (lay.coef[e][k] * y, i * N_GOODS + k);
-                if !TRADED[k] {
+            for k in (0..ng).filter(|&k| lay.coef[e][k] > 0.0) {
+                let (use_k, cell) = (lay.coef[e][k] * y, i * ng + k);
+                if k >= nt {
                     cost += price(cell) * use_k;
                 } else if index[cell].is_finite() {
-                    ent_spend[e * N_GOODS + k] = use_k * index[cell];
-                    cost += ent_spend[e * N_GOODS + k];
+                    ent_spend[e * ng + k] = use_k * index[cell];
+                    cost += ent_spend[e * ng + k];
                 }
             }
             pool[inp.country_of(i)] +=
-                price(i * N_GOODS + g) * y - self.wage[i] * self.employment[e] - cost;
+                price(i * ng + g) * y - self.wage[i] * self.employment[e] - cost;
         }
 
         // households: wages, and by population share their country's profits, market cash and
@@ -226,38 +226,36 @@ impl EconWorld {
         let mut income: Vec<f64> = (0..n_pops)
             .map(|k| wages[k] + lay.ownership[k] * pool[country(k)])
             .collect();
-        let mut pop_spend = vec![0.0; n_pops * N_GOODS];
-        let mut spend = vec![[0.0; 2]; np * N_GOODS];
-        let mut x = [0.0; N_GOODS];
+        let mut pop_spend = vec![0.0; n_pops * ng];
+        let mut spend = vec![[0.0; 2]; np * ng];
+        let mut x = vec![0.0; ng];
         for _ in 0..INCOME_ITERATIONS {
             for k in 0..n_pops {
                 let i = inp.pops.province[k] as usize;
-                let row: [f64; N_GOODS] = index[i * N_GOODS..(i + 1) * N_GOODS]
-                    .try_into()
-                    .expect("one row of goods");
-                lay.pop_demand(inp, &self.params, k, &row, income[k], &mut x);
+                let row = &index[i * ng..(i + 1) * ng];
+                lay.pop_demand(inp, &self.params, k, row, income[k], &mut x);
                 for &g in &traded {
-                    pop_spend[k * N_GOODS + g] = if x[g] > 0.0 { x[g] * row[g] } else { 0.0 };
+                    pop_spend[k * ng + g] = if x[g] > 0.0 { x[g] * row[g] } else { 0.0 };
                 }
             }
             spend.fill([0.0; 2]);
             for d in 0..np {
                 for &g in &traded {
-                    let cell = d * N_GOODS + g;
+                    let cell = d * ng + g;
                     for e in lay.enterprises(d) {
-                        spend[cell][INTERMEDIATE] += ent_spend[e * N_GOODS + g];
+                        spend[cell][INTERMEDIATE] += ent_spend[e * ng + g];
                     }
                     for k in lay.pops(d) {
-                        spend[cell][HOUSEHOLD] += pop_spend[k * N_GOODS + g];
+                        spend[cell][HOUSEHOLD] += pop_spend[k * ng + g];
                     }
                 }
             }
             let (mut rebate, mut market) = (vec![0.0; nc], vec![0.0; nc]);
             for &g in &traded {
-                let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
+                let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * ng + g]).collect();
                 ship(self, g, &s, &mut out);
                 for d in 0..np {
-                    let cell = d * N_GOODS + g;
+                    let cell = d * ng + g;
                     rebate[inp.country_of(d)] += out.tariff[d];
                     market[inp.country_of(d)] += price(cell) * (out.shipped[d] - output[cell]);
                 }
@@ -281,20 +279,17 @@ impl EconWorld {
 
         // goods in flight: the slot delivered j ticks from now holds every slot of at least j
         // of the last ticks' shipments; enterprise stocks so that orders replace one month
-        let mut in_flight = [0.0; N_GOODS];
-        let mut lagged = vec![0.0; n_ent * N_GOODS];
+        let mut in_flight = vec![0.0; ng];
+        let mut lagged = vec![0.0; n_ent * ng];
         for &g in &traded {
-            let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
+            let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * ng + g]).collect();
             ship(self, g, &s, &mut out);
             for d in 0..np {
-                let cell = d * N_GOODS + g;
+                let cell = d * ng + g;
                 let buyers = lay
                     .enterprises(d)
-                    .map(|e| (n_pops + e, INTERMEDIATE, ent_spend[e * N_GOODS + g]))
-                    .chain(
-                        lay.pops(d)
-                            .map(|k| (k, HOUSEHOLD, pop_spend[k * N_GOODS + g])),
-                    );
+                    .map(|e| (n_pops + e, INTERMEDIATE, ent_spend[e * ng + g]))
+                    .chain(lay.pops(d).map(|k| (k, HOUSEHOLD, pop_spend[k * ng + g])));
                 for (b, class, value) in buyers.filter(|b| b.2 > 0.0) {
                     let share = value / spend[cell][class];
                     let units: Vec<f64> = out.arrive.iter().map(|a| a[d][class] * share).collect();
@@ -307,8 +302,7 @@ impl EconWorld {
                     }
                     if class == INTERMEDIATE {
                         let e = b - n_pops;
-                        lagged[e * N_GOODS + g] =
-                            (1..ARRIVAL_SLOTS).map(|j| j as f64 * units[j]).sum();
+                        lagged[e * ng + g] = (1..ARRIVAL_SLOTS).map(|j| j as f64 * units[j]).sum();
                     }
                 }
             }
@@ -320,7 +314,7 @@ impl EconWorld {
         }
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
-            for k in 0..N_GOODS {
+            for k in 0..ng {
                 let held = self.ledger.goods(acc.enterprise[e], k);
                 self.ledger.destroy(acc.enterprise[e], k, held);
                 let a = lay.coef[e][k];
@@ -332,11 +326,11 @@ impl EconWorld {
                 // M = T + a Y - u - sum_s s a_s. Local: E2 draws the use from this tick's
                 // output, so the stock stays at T and E3 orders nothing
                 let use_k = a * self.output[e];
-                let cell = i * N_GOODS + k;
+                let cell = i * ng + k;
                 let target = (1.0 + COVER + self.scratch.lead[cell]) * use_k;
-                let stock = if TRADED[k] {
-                    let ordered = ent_spend[e * N_GOODS + k] / index[cell];
-                    (target + use_k - ordered - lagged[e * N_GOODS + k]).max(0.0)
+                let stock = if k < nt {
+                    let ordered = ent_spend[e * ng + k] / index[cell];
+                    (target + use_k - ordered - lagged[e * ng + k]).max(0.0)
                 } else {
                     target
                 };
@@ -346,10 +340,10 @@ impl EconWorld {
             }
         }
         for (cell, &y) in output.iter().enumerate() {
-            let (i, g) = (cell / N_GOODS, cell % N_GOODS);
+            let (i, g) = (cell / ng, cell % ng);
             let held = self.ledger.goods(acc.market[i], g);
             self.ledger.destroy(acc.market[i], g, held);
-            let stock = if TRADED[g] && self.markets.active[cell] {
+            let stock = if g < nt && self.markets.active[cell] {
                 // output covers sales and spoilage, Q = (1 + delta s) D (ADR 0091)
                 let sales = y / (1.0 + self.trade.storage_loss[g] * self.trade.coverage[g]);
                 self.trade.coverage[g] * sales

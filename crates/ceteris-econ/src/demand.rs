@@ -2,14 +2,11 @@
 //! Alder, Boppart and Mueller (2022) across three categories, a CES over goods within each
 //! category, and a pop's lognormal income integrated in closed form through E[y^(1 - eps)].
 
-use ceteris_trade::N_GOODS;
-
 use crate::params::EconParams;
 
+/// Categories A (0) agriculture and food, M (1) crude oil, mining and manufactures, S (2)
+/// utilities, construction and services; each good's is `Goods::category`.
 pub const N_CATEGORIES: usize = 3;
-/// Category of each good: A (0) agriculture and food, M (1) crude oil, mining and
-/// manufactures, S (2) utilities, construction and services.
-pub const CATEGORY: [usize; N_GOODS] = [0, 1, 1, 0, 1, 1, 1, 2, 2, 2];
 
 /// Preference weights of one country, backed out by [`invert_pigl`].
 #[derive(Clone, Debug, PartialEq)]
@@ -19,7 +16,9 @@ pub struct PiglWeights {
     /// Weights omega_c of B(P); omega_A = 0.
     pub omega: [f64; N_CATEGORIES],
     /// Within-category CES weights alpha_g, summing to 1 over each category with demand.
-    pub within: [f64; N_GOODS],
+    pub within: Vec<f64>,
+    /// Category of each good (`Goods::category`), which `within` sums over.
+    pub category: Vec<u8>,
     /// Within-pop log income dispersion s_w the weights were inverted with, which every pop of
     /// the country uses (ADR 0094).
     pub sigma: f64,
@@ -47,16 +46,13 @@ pub fn lognormal_sigma(gini: f64) -> f64 {
 /// Category price indexes P_c = (sum_g alpha_g p_g^(1 - sigma))^(1 / (1 - sigma)) over the
 /// category's goods with a weight and a finite price (infinite where there is none), and each
 /// good's share of its category's spending.
-fn category_prices(
-    w: &PiglWeights,
-    price: &[f64; N_GOODS],
-    sigma: f64,
-) -> ([f64; N_CATEGORIES], [f64; N_GOODS]) {
-    let mut term = [0.0; N_GOODS];
+fn category_prices(w: &PiglWeights, price: &[f64], sigma: f64) -> ([f64; N_CATEGORIES], Vec<f64>) {
+    let n = w.within.len();
+    let mut term = vec![0.0; n];
     let mut sum = [0.0; N_CATEGORIES];
-    for g in (0..N_GOODS).filter(|&g| w.within[g] > 0.0 && price[g].is_finite()) {
+    for g in (0..n).filter(|&g| w.within[g] > 0.0 && price[g].is_finite()) {
         term[g] = w.within[g] * libm::pow(price[g], 1.0 - sigma);
-        sum[CATEGORY[g]] += term[g];
+        sum[usize::from(w.category[g])] += term[g];
     }
     let index = sum.map(|s| {
         if s > 0.0 {
@@ -65,9 +61,9 @@ fn category_prices(
             f64::INFINITY
         }
     });
-    let mut within = [0.0; N_GOODS];
-    for g in (0..N_GOODS).filter(|&g| term[g] > 0.0) {
-        within[g] = term[g] / sum[CATEGORY[g]];
+    let mut within = vec![0.0; n];
+    for g in (0..n).filter(|&g| term[g] > 0.0) {
+        within[g] = term[g] / sum[usize::from(w.category[g])];
     }
     (index, within)
 }
@@ -130,17 +126,17 @@ fn raw_shares(
 /// goods without a weight or at an infinite price get 0.
 pub fn pigl_shares(
     w: &PiglWeights,
-    price: &[f64; N_GOODS],
+    price: &[f64],
     income: f64,
     sigma_income: f64,
     p: &EconParams,
-    out: &mut [f64; N_GOODS],
+    out: &mut [f64],
 ) {
     let (index, within) = category_prices(w, price, p.sigma_demand);
     let raw = raw_shares(w, &index, income, sigma_income, p).map(|s| s.max(0.0));
     let total: f64 = raw.iter().sum();
-    for g in 0..N_GOODS {
-        out[g] = raw[CATEGORY[g]] / total * within[g];
+    for (g, o) in out.iter_mut().enumerate() {
+        *o = raw[usize::from(w.category[g])] / total * within[g];
     }
 }
 
@@ -149,19 +145,19 @@ pub fn pigl_shares(
 /// nonpositive balance buys nothing.
 pub fn pigl(
     w: &PiglWeights,
-    price: &[f64; N_GOODS],
+    price: &[f64],
     money: f64,
     sigma_income: f64,
     p: &EconParams,
-    out: &mut [f64; N_GOODS],
+    out: &mut [f64],
 ) {
-    *out = [0.0; N_GOODS];
+    out.fill(0.0);
     if money <= 0.0 {
         return;
     }
-    let mut share = [0.0; N_GOODS];
+    let mut share = vec![0.0; out.len()];
     pigl_shares(w, price, money, sigma_income, p, &mut share);
-    for g in (0..N_GOODS).filter(|&g| share[g] > 0.0) {
+    for g in (0..out.len()).filter(|&g| share[g] > 0.0) {
         out[g] = share[g] * money / price[g];
     }
 }
@@ -172,21 +168,25 @@ pub fn pigl(
 /// z = Omega_A / theta_A, omega_c = (Omega_c - z theta_c) / (1 - z) and
 /// lambda = z base_spend^eps exp(eps (1 - eps) s^2 / 2). Panics where a weight would be
 /// negative (z >= 1 or Omega_c < z theta_c): the country's shares are outside the form.
+/// `category` is each good's (`Goods::category`).
 pub fn invert_pigl(
-    omega: &[f64; N_GOODS],
+    omega: &[f64],
+    category: &[u8],
     base_spend: f64,
     sigma_income: f64,
     p: &EconParams,
 ) -> PiglWeights {
     let q = &p.pigl;
     let total: f64 = omega.iter().sum();
+    let n = omega.len();
+    let of = |g: usize| usize::from(category[g]);
     let mut cat = [0.0; N_CATEGORIES];
-    for g in 0..N_GOODS {
-        cat[CATEGORY[g]] += omega[g] / total;
+    for g in 0..n {
+        cat[of(g)] += omega[g] / total;
     }
-    let mut within = [0.0; N_GOODS];
-    for g in (0..N_GOODS).filter(|&g| omega[g] > 0.0) {
-        within[g] = omega[g] / total / cat[CATEGORY[g]];
+    let mut within = vec![0.0; n];
+    for g in (0..n).filter(|&g| omega[g] > 0.0) {
+        within[g] = omega[g] / total / cat[of(g)];
     }
     let z = cat[0] / q.theta[0];
     let mut weight = [0.0; N_CATEGORIES];
@@ -204,6 +204,7 @@ pub fn invert_pigl(
             * libm::exp(eps * (1.0 - eps) * sigma_income * sigma_income / 2.0),
         omega: weight,
         within,
+        category: category.to_vec(),
         sigma: sigma_income,
     }
 }
@@ -230,9 +231,9 @@ pub fn within_sigma(gini: f64, pops: &[(f64, f64)]) -> f64 {
 }
 
 /// One pop of a country in [`invert_pigl_pops`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PopAt {
-    pub price: [f64; N_GOODS],
+    pub price: Vec<f64>,
     /// Mean income per person.
     pub income: f64,
     /// Spending, the pop's weight in its country's aggregate.
@@ -246,12 +247,7 @@ const MAX_SECANT_STEPS: usize = 400;
 
 /// A pop at the current alpha: category indexes, shares within them, sD and the factor of
 /// lambda without B, Dt^gamma m^-eps exp(-eps (1 - eps) s^2 / 2).
-type Fixed = (
-    [f64; N_CATEGORIES],
-    [f64; N_GOODS],
-    [f64; N_CATEGORIES],
-    f64,
-);
+type Fixed = ([f64; N_CATEGORIES], Vec<f64>, [f64; N_CATEGORIES], f64);
 
 /// ADR 0094, Amendment: the weights at which the PIGL shares of a country's pops (each at its
 /// prices and income, with dispersion `sigma`), weighted by their spending, are its final demand
@@ -261,33 +257,40 @@ type Fixed = (
 /// aggregate share, renormalized within its category; until every aggregate share is within
 /// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
 /// out; without any, [`invert_pigl`] at spending 0. Panics where a weight would be negative or
-/// a split takes more than [`MAX_SECANT_STEPS`] secant steps.
+/// a split takes more than [`MAX_SECANT_STEPS`] secant steps. `category` is each good's
+/// (`Goods::category`).
 pub fn invert_pigl_pops(
-    omega: &[f64; N_GOODS],
+    omega: &[f64],
+    category: &[u8],
     pops: &[PopAt],
     sigma: f64,
     p: &EconParams,
 ) -> PiglWeights {
-    let pops: Vec<PopAt> = pops.iter().copied().filter(|k| k.spend > 0.0).collect();
+    let pops: Vec<PopAt> = pops.iter().filter(|k| k.spend > 0.0).cloned().collect();
     if pops.is_empty() {
-        return invert_pigl(omega, 0.0, sigma, p);
+        return invert_pigl(omega, category, 0.0, sigma, p);
     }
+    let n = omega.len();
+    let of = |g: usize| usize::from(category[g]);
     let total: f64 = omega.iter().sum();
-    let share = omega.map(|o| o / total);
+    let share: Vec<f64> = omega.iter().map(|o| o / total).collect();
     let mut cat = [0.0; N_CATEGORIES];
-    for g in 0..N_GOODS {
-        cat[CATEGORY[g]] += share[g];
+    for g in 0..n {
+        cat[of(g)] += share[g];
     }
     let mut w = PiglWeights {
         scale: 0.0,
         omega: [0.0; N_CATEGORIES],
-        within: std::array::from_fn(|g| {
-            if share[g] > 0.0 {
-                share[g] / cat[CATEGORY[g]]
-            } else {
-                0.0
-            }
-        }),
+        within: (0..n)
+            .map(|g| {
+                if share[g] > 0.0 {
+                    share[g] / cat[of(g)]
+                } else {
+                    0.0
+                }
+            })
+            .collect(),
+        category: category.to_vec(),
         sigma,
     };
     let spent: f64 = pops.iter().map(|k| k.spend).sum();
@@ -396,13 +399,13 @@ pub fn invert_pigl_pops(
         }
         w.scale = lambda;
         w.omega = [0.0, t, 1.0 - t];
-        let mut model = [0.0; N_GOODS];
+        let mut model = vec![0.0; n];
         for ((s, (_, within, _, _)), k) in shares.iter().zip(&fixed).zip(&pops) {
-            for g in 0..N_GOODS {
-                model[g] += k.spend * s[CATEGORY[g]] * within[g];
+            for g in 0..n {
+                model[g] += k.spend * s[of(g)] * within[g];
             }
         }
-        let miss = (0..N_GOODS)
+        let miss = (0..n)
             .filter(|&g| share[g] > 0.0)
             .map(|g| (model[g] / spent / share[g] - 1.0).abs())
             .fold(0.0, f64::max);
@@ -415,12 +418,12 @@ pub fn invert_pigl_pops(
             stalled += 1;
         }
         let mut sum = [0.0; N_CATEGORIES];
-        for g in (0..N_GOODS).filter(|&g| share[g] > 0.0) {
+        for g in (0..n).filter(|&g| share[g] > 0.0) {
             w.within[g] *= share[g] * spent / model[g];
-            sum[CATEGORY[g]] += w.within[g];
+            sum[of(g)] += w.within[g];
         }
-        for g in (0..N_GOODS).filter(|&g| share[g] > 0.0) {
-            w.within[g] /= sum[CATEGORY[g]];
+        for g in (0..n).filter(|&g| share[g] > 0.0) {
+            w.within[g] /= sum[of(g)];
         }
     }
     panic!(
@@ -435,6 +438,8 @@ mod tests {
     use crate::fixture::small_world;
     use crate::inputs::EconInputs;
     use crate::world::base_income;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{CATEGORY, N as N_GOODS, TRADED as N_TRADED};
 
     const OMEGA: [f64; N_GOODS] = [0.06, 0.0, 0.01, 0.12, 0.08, 0.04, 0.07, 0.04, 0.10, 0.48];
     const PRICES: [f64; N_GOODS] = [1.0, 3.0, 0.7, 2.2, 1.4, 5.0, 0.9, 1.1, 2.0, 0.5];
@@ -442,7 +447,7 @@ mod tests {
     const SIGMA: f64 = 0.7;
 
     fn weights() -> PiglWeights {
-        invert_pigl(&OMEGA, BASE, SIGMA, &EconParams::default())
+        invert_pigl(&OMEGA, &CATEGORY, BASE, SIGMA, &EconParams::default())
     }
 
     fn spent(price: &[f64; N_GOODS], x: &[f64; N_GOODS]) -> f64 {
@@ -546,7 +551,7 @@ mod tests {
             let mut got = [0.0; N_GOODS];
             pigl(&w, &PRICES, money, sigma, &p, &mut got);
             for g in 0..N_GOODS {
-                let want = cat[CATEGORY[g]] * within[g] / PRICES[g];
+                let want = cat[usize::from(CATEGORY[g])] * within[g] / PRICES[g];
                 assert!(
                     (got[g] - want).abs() <= 1e-10 * want,
                     "good {g}: {} vs {want}",
@@ -620,7 +625,13 @@ mod tests {
         for c in 0..inp.n_countries() {
             let (spend, people) = country_base(&inp, &income, c);
             let sigma = lognormal_sigma(inp.countries.gini[c]);
-            let w = invert_pigl(&inp.countries.omega[c], spend / people, sigma, &p);
+            let w = invert_pigl(
+                &inp.countries.omega[c],
+                &CATEGORY,
+                spend / people,
+                sigma,
+                &p,
+            );
             pigl_shares(&w, &[1.0; N_GOODS], spend / people, sigma, &p, &mut s);
             for (g, (got, want)) in s.iter().zip(&inp.countries.omega[c]).enumerate() {
                 assert!((got - want).abs() <= 1e-12, "country {c} good {g}");
@@ -655,8 +666,9 @@ mod tests {
         }
         let alone = invert_pigl_pops(
             &OMEGA,
+            &CATEGORY,
             &[PopAt {
-                price: [1.0; N_GOODS],
+                price: vec![1.0; N_GOODS],
                 income: BASE,
                 spend: 3.0,
             }],
@@ -674,7 +686,7 @@ mod tests {
     }
 
     fn weights_at(omega: &[f64; N_GOODS]) -> PiglWeights {
-        invert_pigl(omega, BASE, SIGMA, &EconParams::default())
+        invert_pigl(omega, &CATEGORY, BASE, SIGMA, &EconParams::default())
     }
 
     #[test]
@@ -694,7 +706,7 @@ mod tests {
     fn inversion_refuses_a_negative_weight() {
         // services below z theta_S: omega_S would be negative
         let omega = [0.30, 0.0, 0.0, 0.30, 0.3, 0.0, 0.0, 0.0, 0.0, 0.1];
-        invert_pigl(&omega, BASE, SIGMA, &EconParams::default());
+        invert_pigl(&omega, &CATEGORY, BASE, SIGMA, &EconParams::default());
     }
 
     #[test]
@@ -707,7 +719,13 @@ mod tests {
         for c in 0..inp.n_countries() {
             let (spend, people) = country_base(&inp, &income, c);
             let sigma = lognormal_sigma(inp.countries.gini[c]);
-            let w = invert_pigl(&inp.countries.omega[c], spend / people, sigma, &p);
+            let w = invert_pigl(
+                &inp.countries.omega[c],
+                &CATEGORY,
+                spend / people,
+                sigma,
+                &p,
+            );
             // base income per person of each pop: its effective labour share of the province
             let mut pops: Vec<(f64, [f64; N_GOODS])> = (0..inp.n_pops())
                 .filter(|&k| inp.country_of(inp.pops.province[k] as usize) == c)
