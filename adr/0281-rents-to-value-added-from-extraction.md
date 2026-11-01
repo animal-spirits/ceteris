@@ -59,3 +59,31 @@ sum over good 1's VA above (refining VA is not negative), in place of 0.5 to 3.
   is synthetic and does not move.
 - The installed pack stays as it is until the owner rules; the measurements below are on a
   scratch copy.
+
+## As built (pre-P3 B9, 2026-10-31; scratch pack, not installed)
+
+- **Code** (198c0c8): `icio::extraction_va`; no golden moves (the installed pack is unchanged
+  and the fixture is synthetic). A copy of the installed pack rebuilt `--econ-only` at HEAD
+  reproduces every econ table bit for bit; at 198c0c8 only `econ_countries` (sha256 0395240b...,
+  was 1ba6b89c...) and `econ_provinces` (65fca14a..., was a55e0b9b...) move, and in them only
+  the VA columns (largest relative move 0.31 in good 1, 0.93 in goods 3 to 6 of an economy whose
+  crude oil and gas came out of a merged industry group). Good-1 VA source shares: gem 81.4%
+  (82.3%), eia 14.7% (13.9%), population 3.9% (3.8%).
+- **Calibration** (with the B9 Sinkhorn pin): nu 2.60516 (class 0), 0.80014 (class 1), 0.39731
+  (class 2), 0.046059 (good 1, was 0.065907) and 0 (good 2, clamped: share 0.2260 against its
+  target 0.2583); 18 evaluations; 70 passes, last change 8.39e-14, Sinkhorn residual 8.70e-14,
+  1,420 s, 6.0 GB. Table sha256: econ_calib 9d89cc86..., cells 4b165022..., countries
+  2ea64c59..., pipeline 8baed99b..., pops 077a9e5f..., provinces 54b36027....
+- **Gate** on that pack: V1 from the perturbed steady state passes for seeds 20, 21 and 22
+  (price 2.08e-4, 1.58e-4, 1.29e-4, all province 2699 good 9; were 1.94e-4, 1.54e-4,
+  1.25e-4). V1 from the data state still fails (0.751 at 1,200 ticks, province 3903 good 9;
+  0.762 before). H2 distance -0.4554 (s.e. 0.0104; -0.4539 before), reported. H2 per class
+  passes (theta within 2.1e-8 relative); by good of class 3, goods 1 and 2 recover 16.91 within
+  3.8e-9; with ln distance as the control class 0 2.429, 1 3.537, 2 7.647, 3 16.326, good 1
+  16.461, good 2 15.397.
+- **Miss**: `pack_calibrated_state_holds_to_2e_6_and_4_minor_units` fails its boundedness check
+  over its 120 ticks: the price drift of cells of province 2464 peaks at 9.8e-2 of the tolerance
+  in ticks 61 to 120 against 4.2e-2 in ticks 5 to 60 (bound: twice). Run 480 ticks, it is a
+  bounded slow oscillation (peaks near ticks 100 and 282, 9.8e-2 in ticks 5 to 240, 1.02e-1 in
+  241 to 480) and passes; every quantity stays below 0.46 of its tolerance. On the pin-only
+  recalibration of the installed pack the 120-tick test passes.
