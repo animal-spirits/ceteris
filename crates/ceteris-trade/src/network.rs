@@ -1,7 +1,8 @@
 //! The graph-independent trade network: leg costs between provinces and gateways, as
 //! produced from `ceteris-geo` path costs, and the tariff wedges on gateway crossings.
 
-use crate::goods::N_GOODS;
+use ceteris_core::rows::Rows;
+
 use crate::params::N_CLASSES;
 
 /// A least-cost path summary between two nodes. `cost_per_t` is USD per tonne at the
@@ -49,15 +50,16 @@ pub struct Network {
     pub good_legs: Option<GoodLegs>,
 }
 
-/// Least-iceberg legs per traded good (ADR 0279): `sets[set[g]]` holds good g's legs, on the
-/// paths that minimise `w_g c + lambda_g h / 24`, with the base lists' endpoints in their order;
-/// `set[g]` is `u8::MAX` for a local good. Goods with the same `kappa` (lambda_g / (24 w_g)) and
-/// the same bulk freight rate share a set. `kappa` records each traded good's value the sets were
-/// built with (0 for local goods); the kernel refuses weights and time costs that give another.
+/// Least-iceberg legs per traded good (ADR 0279): `sets[set[g]]` holds traded good g's legs, on
+/// the paths that minimise `w_g c + lambda_g h / 24`, with the base lists' endpoints in their
+/// order; `set` and `kappa` have one entry per traded good. Goods with the same `kappa`
+/// (lambda_g / (24 w_g)) and the same bulk freight rate share a set. `kappa` records each traded
+/// good's value the sets were built with; the kernel refuses weights and time costs that give
+/// another.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GoodLegs {
-    pub set: [u8; N_GOODS],
-    pub kappa: [f64; N_GOODS],
+    pub set: Vec<u8>,
+    pub kappa: Vec<f64>,
     pub sets: Vec<LegSet>,
 }
 
@@ -93,15 +95,15 @@ pub struct BulkLegs {
 /// Route-choice leg factors per good (ADR 0017, `ceteris_geo::route_choice`) and the
 /// route-probability-weighted hours, aligned with the leg lists of [`Network`]: entry i of
 /// `domestic` belongs to `Network::domestic[i]`, and so on. Factors are at least 1, infinite
-/// for a leg with no route; local goods' entries are unused.
+/// for a leg with no route; local goods' entries are unused. Rows are one entry per good.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LegTaus {
-    pub domestic: Vec<[f64; N_GOODS]>,
-    pub access: Vec<[f64; N_GOODS]>,
-    pub crossings: Vec<[f64; N_GOODS]>,
-    pub domestic_hours: Vec<[f64; N_GOODS]>,
-    pub access_hours: Vec<[f64; N_GOODS]>,
-    pub crossing_hours: Vec<[f64; N_GOODS]>,
+    pub domestic: Rows<f64>,
+    pub access: Rows<f64>,
+    pub crossings: Rows<f64>,
+    pub domestic_hours: Rows<f64>,
+    pub access_hours: Rows<f64>,
+    pub crossing_hours: Rows<f64>,
 }
 
 impl Network {
@@ -132,7 +134,7 @@ pub fn equal_gateway_mass(gateway_country: &[u16]) -> Vec<f64> {
 
 /// Applied tariffs as ad valorem rates, indexed
 /// `[(importer * n_countries + exporter) * 2 + group]` with the group from
-/// [`crate::goods::tariff_group`]. The country count is implied by the length:
+/// [`crate::goods::Goods::tariff_group`]. The country count is implied by the length:
 /// `len == 2 * n_countries^2`.
 #[derive(Clone, Debug, Default)]
 pub struct Wedges {

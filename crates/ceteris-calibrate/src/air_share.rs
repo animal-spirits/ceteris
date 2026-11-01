@@ -13,11 +13,10 @@ use rayon::prelude::*;
 
 use ceteris_trade::{TradeParams, kappa};
 
-use crate::costs::{
-    AIR, Graph, N_TRADED, Quantities, Transport, bulk_quantities, edge_quantities, tau,
-};
+use crate::costs::{AIR, Graph, Quantities, Transport, bulk_quantities, edge_quantities, tau};
 use crate::dta::read_dta;
-use crate::gravity::{TIME_COST, pack_index};
+// P2's 7 traded goods, as the P04 gravity estimation (P3 G2)
+use crate::gravity::{N_TRADED, TIME_COST, pack_index};
 use crate::write::Table;
 
 /// One gateway pair of a cell: `tau(r) = beta + slope * r`, with `slope = w_g f_road q[air]`.

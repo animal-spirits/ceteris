@@ -5,14 +5,13 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::Path;
 
+use ceteris_core::rows::Rows;
 use ceteris_geo::graph::PathChoice;
 use ceteris_reference::io::pairwise_sum;
 use ceteris_trade::TradeParams;
 use rayon::prelude::*;
 
 use crate::write::Table;
-
-pub const N_TRADED: usize = 7;
 
 pub const ROAD: u8 = 0;
 pub const RAIL: u8 = 1;
@@ -272,19 +271,21 @@ impl Graph {
     }
 }
 
-/// Mean S05 path quantities between countries per traded good, `q[((a * C + b) * N_TRADED + g)]`
+/// Mean S05 path quantities between countries per traded good, `q[((a * C + b) * T + g)]`
 /// for exporter a and importer b, weighted by exporter province VA of the good times importer
 /// province VA; `reach[a * C + b]` is false where no weighted province pair is connected.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CountryCosts {
     pub n: usize,
+    /// T, the traded goods.
+    pub traded: usize,
     pub q: Vec<Quantities>,
     pub reach: Vec<bool>,
 }
 
 impl CountryCosts {
     pub fn at(&self, a: usize, b: usize, g: usize) -> &Quantities {
-        &self.q[(a * self.n + b) * N_TRADED + g]
+        &self.q[(a * self.n + b) * self.traded + g]
     }
 }
 
@@ -302,18 +303,19 @@ fn argmin(v: impl IntoIterator<Item = f64>) -> (usize, f64) {
 /// The weighted mean of the pair quantities of one country pair: `w[o][d][g] = wo[o][g] *
 /// (win[d] * ok[o][d])`; None when no weight is positive.
 fn weighted_mean(
-    wo: &[[f64; N_TRADED]],
+    wo: &Rows<f64>,
     win: &[f64],
     ok: &[Vec<bool>],
     q: &[Vec<Quantities>],
-) -> Option<[Quantities; N_TRADED]> {
-    let mut num = [[0.0; N_Q]; N_TRADED];
-    let mut den = [0.0; N_TRADED];
+) -> Option<Vec<Quantities>> {
+    let nt = wo.width();
+    let mut num = vec![[0.0; N_Q]; nt];
+    let mut den = vec![0.0; nt];
     let mut any = false;
     for (o, wo) in wo.iter().enumerate() {
         for (d, &win) in win.iter().enumerate() {
             let inner = win * f64::from(u8::from(ok[o][d]));
-            for g in 0..N_TRADED {
+            for g in 0..nt {
                 let w = wo[g] * inner;
                 any |= w > 0.0;
                 den[g] += w;
@@ -324,8 +326,8 @@ fn weighted_mean(
         }
     }
     any.then(|| {
-        let mut out = [[0.0; N_Q]; N_TRADED];
-        for g in 0..N_TRADED {
+        let mut out = vec![[0.0; N_Q]; nt];
+        for g in 0..nt {
             for k in 0..N_Q {
                 out[g][k] = num[g][k] / den[g];
             }
@@ -384,10 +386,12 @@ pub struct CostInputs {
     pub gateway_country: Vec<usize>,
     pub province_country: Vec<usize>,
     pub n_countries: usize,
+    /// Goods `0..traded` are traded (`econ_goods`).
+    pub traded: usize,
     /// Value added by good, per province.
-    pub va: Vec<[f64; 10]>,
+    pub va: Rows<f64>,
     /// Weight per value w_g by good (tonnes per USD), for the iceberg paths (ADR 0279).
-    pub weight: [f64; 10],
+    pub weight: Vec<f64>,
 }
 
 impl CostInputs {
@@ -415,11 +419,11 @@ impl CostInputs {
                     .ok_or_else(|| format!("province country {c} is not a pack country"))
             })
             .collect::<Result<_, _>>()?;
-        let weight: [f64; 10] = read("econ_goods.arrow")?
-            .f64("weight")?
-            .try_into()
-            .map_err(|w: Vec<f64>| format!("econ_goods has {} weights, not 10", w.len()))?;
-        let va_cols = (0..10)
+        let goods = read("econ_goods.arrow")?;
+        let is_traded = goods.bool("traded")?;
+        let traded = is_traded.iter().take_while(|&&t| t).count();
+        let weight = goods.f64("weight")?;
+        let va_cols = (0..is_traded.len())
             .map(|g| prov.f64(&format!("va_{g}")))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(CostInputs {
@@ -431,11 +435,15 @@ impl CostInputs {
             tri_m: edges.f64("tri_m")?,
             gateway_node: gw.usize("node")?,
             gateway_country: gw.usize("country")?,
-            va: (0..province_country.len())
-                .map(|s| std::array::from_fn(|g| va_cols[g][s]))
-                .collect(),
+            va: Rows::from_flat(
+                (0..province_country.len())
+                    .flat_map(|s| va_cols.iter().map(move |c| c[s]))
+                    .collect(),
+                va_cols.len(),
+            ),
             province_country,
             n_countries: countries.len(),
+            traded,
             weight,
         })
     }
@@ -455,6 +463,7 @@ impl CostInputs {
     /// from the pack), as the kernel's good legs, with one run per distinct (bulk rate, kappa).
     pub fn country_costs(&self, p: &Transport, trade: &TradeParams) -> CountryCosts {
         let q_edge = edge_quantities(&self.mode, &self.length_km, &self.tri_m, p);
+        let nt = self.traded;
         let bulk = trade
             .bulk_rate()
             .map(|(classes, sea, port)| (classes, bulk_quantities(&self.mode, &q_edge, sea, port)));
@@ -469,13 +478,13 @@ impl CostInputs {
             (on_bulk, kappa.to_bits())
         };
         let mut keys: Vec<(bool, u64)> = Vec::new();
-        for g in 0..N_TRADED {
+        for g in 0..nt {
             if !keys.contains(&key(g)) {
                 keys.push(key(g));
             }
         }
         let cells = self.n_countries * self.n_countries;
-        let (mut q, mut reach) = (vec![[0.0; N_Q]; cells * N_TRADED], Vec::new());
+        let (mut q, mut reach) = (vec![[0.0; N_Q]; cells * nt], Vec::new());
         for (i, &(on_bulk, kappa)) in keys.iter().enumerate() {
             let edges = match &bulk {
                 Some((_, b)) if on_bulk => b,
@@ -485,14 +494,15 @@ impl CostInputs {
             if i == 0 {
                 reach = r;
             }
-            for g in (0..N_TRADED).filter(|&g| key(g) == (on_bulk, kappa)) {
+            for g in (0..nt).filter(|&g| key(g) == (on_bulk, kappa)) {
                 for cell in 0..cells {
-                    q[cell * N_TRADED + g] = means[cell * N_TRADED + g];
+                    q[cell * nt + g] = means[cell * nt + g];
                 }
             }
         }
         CountryCosts {
             n: self.n_countries,
+            traded: self.traded,
             q,
             reach,
         }
@@ -513,7 +523,7 @@ impl CostInputs {
             &self.gateway_country,
             &self.va,
         );
-        let (np, nc) = (country.len(), self.n_countries);
+        let (np, nc, nt) = (country.len(), self.n_countries, self.traded);
         let provinces_of: Vec<Vec<usize>> = (0..nc)
             .map(|c| (0..np).filter(|&s| country[s] == c).collect())
             .collect();
@@ -548,16 +558,13 @@ impl CostInputs {
             .collect();
 
         // Exporter: the good's VA; importer: all VA.
-        let weight_out: Vec<[f64; N_TRADED]> =
-            (0..np).map(|s| std::array::from_fn(|g| va[s][g])).collect();
-        let weight_in: Vec<f64> = (0..np)
-            .map(|s| pairwise_sum(&(0..10).map(|g| va[s][g]).collect::<Vec<_>>()))
-            .collect();
-        let mut out = vec![[0.0; N_Q]; nc * nc * N_TRADED];
+        let weight_out = Rows::from_rows(nt, va.iter().map(|v| &v[..nt]));
+        let weight_in: Vec<f64> = va.iter().map(pairwise_sum).collect();
+        let mut out = vec![[0.0; N_Q]; nc * nc * nt];
         let mut reach = vec![false; nc * nc];
-        let mut put = |a: usize, b: usize, mean: [Quantities; N_TRADED]| {
+        let mut put = |a: usize, b: usize, mean: Vec<Quantities>| {
             for (g, q) in mean.into_iter().enumerate() {
-                out[(a * nc + b) * N_TRADED + g] = q;
+                out[(a * nc + b) * nt + g] = q;
             }
             reach[a * nc + b] = true;
         };
@@ -568,21 +575,23 @@ impl CostInputs {
                 continue;
             }
             // A good the country does not make: all VA.
-            let makes: Vec<bool> = (0..N_TRADED)
+            let makes: Vec<bool> = (0..nt)
                 .map(|g| pa.iter().any(|&s| weight_out[s][g] > 0.0))
                 .collect();
-            let wo: Vec<[f64; N_TRADED]> = pa
-                .iter()
-                .map(|&s| {
-                    std::array::from_fn(|g| {
-                        if makes[g] {
-                            weight_out[s][g]
-                        } else {
-                            weight_in[s]
-                        }
-                    })
-                })
-                .collect();
+            let wo = Rows::from_rows(
+                nt,
+                pa.iter().map(|&s| {
+                    (0..nt)
+                        .map(|g| {
+                            if makes[g] {
+                                weight_out[s][g]
+                            } else {
+                                weight_in[s]
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                }),
+            );
             let ok: Vec<Vec<bool>> = pa
                 .iter()
                 .map(|&s| access[s].dom_cost.iter().map(|c| c.is_finite()).collect())

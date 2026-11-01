@@ -1,9 +1,6 @@
 //! Inspector rows (DESIGN 20.2): every attribute of one province, its county, and the freight
 //! cost from the origin. Ports `app/src/Inspector.tsx`.
 
-use ceteris_trade::N_GOODS;
-use ceteris_trade::goods::NAME as GOODS;
-
 use crate::econ::View;
 use crate::freight::Costs;
 use crate::web::{Counties, Provinces, RESOURCE_GROUPS, TERRAIN};
@@ -82,13 +79,14 @@ const EDUCATION: [&str; 3] = ["Below secondary", "Secondary", "Tertiary"];
 /// The province panel (econ SPEC, App): markets, enterprises and pops of econ province `i`
 /// at the view's tick (ADR 0208: panels show tick values and name the tick).
 pub fn economy(v: &View, i: usize, date: &str) -> Vec<Row> {
-    let cell = |g: usize| i * N_GOODS + g;
+    let goods = &v.layout.goods;
+    let cell = |g: usize| i * goods.n() + g;
     let mut rows = vec![heading(&format!("Economy, tick {} ({date})", v.tick))];
     rows.push(heading("Markets: price, stock, supply, orders"));
-    rows.extend((0..N_GOODS).map(|g| {
+    rows.extend((0..goods.n()).map(|g| {
         let c = cell(g);
         number(
-            GOODS[g],
+            &goods.name[g],
             format!(
                 "{} · {} · {} · {}",
                 compact(v.price[c]),
@@ -101,7 +99,7 @@ pub fn economy(v: &View, i: usize, date: &str) -> Vec<Row> {
     rows.push(heading("Enterprises: employment, output, profit"));
     rows.extend(v.layout.ents_of(i).map(|e| {
         number(
-            GOODS[usize::from(v.layout.ent_good[e])],
+            &goods.name[usize::from(v.layout.ent_good[e])],
             format!(
                 "{} · {} · {}",
                 compact(v.employment[e]),

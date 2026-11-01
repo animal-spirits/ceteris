@@ -46,8 +46,12 @@ them only as quantities offered to and demanded from each market.
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 
 A unit of good g is the quantity worth one 2000 US dollar at the world reference price. Goods
-are innermost in every goods-indexed array (19.4); P2 has 10 goods, padded to 12 for `f64`
-alignment where it helps vectorization.
+are innermost in every goods-indexed array (19.4). The goods count is a pack value, not a
+compile-time constant: `Goods` (`ceteris_trade::goods`) holds the rows of `econ_goods` (names,
+the traded prefix, storable flags, tariff groups, PIGL categories), and every goods-indexed
+array is sized from it. Traded goods come first, `0..traded`, local goods after. `TradeParams`
+carries its `Goods`, and its per-good vectors have one entry per good (`check_goods`). P2 has 10
+goods, 7 traded (`goods::p2`), which the fixture and the 2000 pack use.
 
 ## Equations
 
@@ -86,7 +90,8 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   `sum_e (w_g c_e + lambda_g h_e / 24)`, so `tau_leg,g = 1 + that minimum`; the hours come from
   the same path. Domestic, access and crossing legs all use it. Goods with equal
   `lambda_g / w_g` and the same bulk freight rate share one leg set (`Network.good_legs`:
-  `GoodLegs::set` names each traded good's set in `GoodLegs::sets`, `u8::MAX` for local goods;
+  `GoodLegs::set` names each traded good's set in `GoodLegs::sets`, one entry per traded
+  good (P3 G2: the traded prefix of the pack's goods);
   each set has the base lists' endpoints in their order, since the weight changes no edge's
   reachability). A bulk class's goods take their trees on the graph at the bulk rate, so the
   kernel's bulk check is unchanged. The kernel prices a good on its set when `good_legs` is

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### The goods count is a pack value (P3 G2)
+
+- `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,
+  tariff groups, PIGL categories); `TradeParams` and `EconInputs` carry it, and every
+  goods-indexed array is sized from it (`Vec`, or `ceteris_core::rows::Rows` for rows of goods).
+  The compile-time `N_GOODS`, `TRADED`, `STORABLE`, `CATEGORY` and calibrate's `N_TRADED` are
+  gone; `goods::p2` keeps P2's values for the fixture, the defaults and tests.
+- No golden moves: the inputs digest adds the goods table only where it differs from P2's.
+
 ### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
 - Owner, 2026-11-01: ADR 0281 option A. A full pack build of c382cbf (owner-side, GEOS 3.15;

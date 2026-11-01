@@ -1,8 +1,6 @@
 //! Map modes (DESIGN 20.1): one RGBA colour per feature, uploaded to the feature colour texture
 //! (ADR 0010), plus a legend. Ports `app/src/modes.ts`.
 
-use ceteris_trade::goods::{NAME as GOODS, TRADED};
-
 use crate::econ::View;
 use crate::web::{Provinces, RESOURCE_GROUPS, TERRAIN};
 
@@ -322,26 +320,28 @@ pub fn paint(mode: Mode, p: &Provinces, cost: Option<&[f64]>, econ: Option<&View
 fn economy(mode: Mode, n: usize, v: &View) -> Painted {
     let at = format!("tick {}", v.tick);
     let seq = |values: Vec<f64>, unit: &str| sequential(&values, unit, None);
+    let goods = &v.layout.goods;
+    let name = |g: usize| goods.name[g].to_lowercase();
     let (title, (fill, legend), note) = match mode {
         Mode::Price(g) => (
-            format!("Price of {}", GOODS[g].to_lowercase()),
+            format!("Price of {}", name(g)),
             seq(v.price_of(n, g), "x world index"),
             format!("Buyer price over the world price index, {at}."),
         ),
         Mode::Output(g) => (
-            format!("Output of {}", GOODS[g].to_lowercase()),
+            format!("Output of {}", name(g)),
             seq(v.output_of(n, g), "per month"),
             format!("At the province's market price, numeraire per month, {at}."),
         ),
-        Mode::NetExports(g) if TRADED[g] => (
-            format!("Net exports of {}", GOODS[g].to_lowercase()),
+        Mode::NetExports(g) if goods.is_traded(g) => (
+            format!("Net exports of {}", name(g)),
             diverging(&v.net_out_of(n, g), "per month", "in", "out"),
             format!(
                 "Sales of the province's market less its buyers' purchases, numeraire per month, {at}."
             ),
         ),
         Mode::NetExports(g) => (
-            format!("Net exports of {}", GOODS[g].to_lowercase()),
+            format!("Net exports of {}", name(g)),
             (vec![rgba(NO_DATA); n], Vec::new()),
             "A local good: it does not ship between provinces.".into(),
         ),

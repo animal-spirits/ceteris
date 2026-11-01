@@ -14,7 +14,9 @@
 //! metals (good 5), which exists in some provinces only: (province, oil) cells without
 //! good 5 are inactive, some of them with oil output.
 
-use ceteris_trade::{BulkLegs, Leg, N_GOODS, Network, TradeParams, Wedges, equal_gateway_mass};
+use ceteris_core::rows::Rows;
+use ceteris_trade::goods::p2::N as N_GOODS;
+use ceteris_trade::{BulkLegs, Goods, Leg, Network, TradeParams, Wedges, equal_gateway_mass};
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
 use crate::params::EconParams;
@@ -187,8 +189,8 @@ pub fn small_world() -> EconInputs {
         }
     }
     let countries = Countries {
-        omega: vec![OMEGA; n_countries],
-        io: vec![io; n_countries],
+        omega: Rows::from_rows(N_GOODS, vec![OMEGA; n_countries]),
+        io: Rows::from_rows(N_GOODS * N_GOODS, vec![io; n_countries]),
         s_l: S_L.to_vec(),
         unemployment: UNEMPLOYMENT.to_vec(),
         // a generated world has no 1995 to 2005 window: its 2000 rate is its natural rate
@@ -224,8 +226,9 @@ pub fn small_world() -> EconInputs {
     }
 
     let mut inputs = EconInputs {
+        goods: Goods::p2(),
         network: net,
-        weight: WEIGHT,
+        weight: WEIGHT.to_vec(),
         wedges,
         countries,
         provinces: ProvinceData {
@@ -233,8 +236,8 @@ pub fn small_world() -> EconInputs {
             population,
             w0: Vec::new(),
             pack: Vec::new(),
-            base_price: Vec::new(),
-            gamma: Vec::new(),
+            base_price: Rows::new(N_GOODS),
+            gamma: Rows::new(N_GOODS),
         },
         pops,
         enterprises: ent,
@@ -287,6 +290,8 @@ pub fn unreachable_island(trade: &TradeParams) -> EconInputs {
 mod tests {
     use super::*;
     use ceteris_trade::Kernel;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
 
     #[test]
     fn fixture_has_four_countries_and_twenty_five_provinces() {
@@ -401,7 +406,7 @@ mod tests {
         );
         let b = Kernel::build(&cut.network, &cut.weight, &cut.wedges, &off);
         let mut changed = 0;
-        for g in (0..N_GOODS).filter(|&g| ceteris_trade::goods::TRADED[g]) {
+        for g in 0..N_TRADED {
             let (a, b) = (a.good(g), b.good(g));
             assert_eq!(a.domestic.entries, b.domestic.entries);
             assert_eq!(a.access.entries, b.access.entries);

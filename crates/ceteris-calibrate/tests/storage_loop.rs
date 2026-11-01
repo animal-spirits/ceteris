@@ -3,7 +3,8 @@
 //! through `Markets::store`, `clear` and `reprice`.
 
 use ceteris_calibrate::stability::{Storage, storage_matrix};
-use ceteris_trade::{Markets, N_GOODS, Rationing, TradeParams};
+use ceteris_trade::goods::p2::N as N_GOODS;
+use ceteris_trade::{Goods, Markets, Rationing, TradeParams};
 
 /// Agriculture, competitively stored (ADR 0091).
 const AG: usize = 0;
@@ -41,7 +42,7 @@ fn simulate_storage(e: f64, eta: f64, eps: f64, kappa: f64, x0: f64, steps: usiz
     let p = TradeParams::default().with_storage();
     let s_star = p.coverage[AG];
     let q_star = 1.0 + p.storage_loss[AG] * s_star;
-    let mut m = Markets::new(1);
+    let mut m = Markets::new(1, &Goods::p2());
     m.active = (0..N_GOODS).map(|g| g == AG).collect();
     m.price[AG] = libm::exp(x0);
     m.inventory[AG] = s_star;
@@ -123,7 +124,7 @@ fn toy_state(
     let p = TradeParams::default().with_storage();
     let s_star = p.coverage[g];
     let q_star = 1.0 + p.storage_loss[g] * s_star;
-    let mut m = Markets::new(1);
+    let mut m = Markets::new(1, &Goods::p2());
     m.active = (0..N_GOODS).map(|k| k == g).collect();
     m.price[g] = libm::exp(v[0]);
     m.inventory[g] = s_star * (1.0 + v[2]);

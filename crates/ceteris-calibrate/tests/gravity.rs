@@ -744,8 +744,9 @@ fn bulk_class_country_costs_match_the_kernel() {
         gateway_country: vec![0, 1],
         province_country: vec![0, 0, 1],
         n_countries: 2,
-        va: vec![[1.0; 10]; 3],
-        weight: [0.5; 10],
+        va: ceteris_core::rows::Rows::filled(3, 10, 1.0),
+        traded: 7,
+        weight: vec![0.5; 10],
     };
     let trade = TradeParams::default();
     let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
@@ -844,8 +845,9 @@ fn iceberg_country_costs_follow_the_kernel() {
         gateway_country: vec![0, 1, 0, 1],
         province_country: vec![0, 0, 1],
         n_countries: 2,
-        va: vec![[1.0; 10]; 3],
-        weight,
+        va: ceteris_core::rows::Rows::filled(3, 10, 1.0),
+        traded: 7,
+        weight: weight.to_vec(),
     };
     let trade = TradeParams::default();
     let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");

@@ -33,7 +33,7 @@ use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::world::{MINOR_PER_UNIT, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
-use ceteris_trade::{N_GOODS, TradeParams};
+use ceteris_trade::TradeParams;
 
 /// Ticks of the fixture's and the pack's runs; the boundedness check splits each at its half.
 const FIXTURE_TICKS: u32 = 480;
@@ -105,7 +105,7 @@ fn over(drift: f64, tolerance: f64) -> f64 {
 enum Entry {
     /// Active cells in cell order.
     ActiveCell,
-    /// Cells `[province * N_GOODS + g]`.
+    /// Cells `[province * n_goods + g]`.
     Cell,
     Province,
     Enterprise,
@@ -238,11 +238,12 @@ fn place(inputs: &EconInputs, cells: &[usize], codes: &[String], what: Entry, e:
             .cloned()
             .unwrap_or_else(|| inputs.country_of(p).to_string())
     };
+    let ng = inputs.n_goods();
     let cell = |c: usize| {
-        let p = c / N_GOODS;
+        let p = c / ng;
         format!(
             "cell {c} (province {p}, good {}, country {})",
-            c % N_GOODS,
+            c % ng,
             country(p)
         )
     };
@@ -517,7 +518,7 @@ fn fixture_at_other_nu() -> Arc<EconInputs> {
     inputs
         .calibrate(&fixture_dir().join("calibration"))
         .unwrap();
-    inputs.border_nu = Some(OTHER_NU);
+    inputs.border_nu = Some(OTHER_NU.to_vec());
     Arc::new(inputs)
 }
 

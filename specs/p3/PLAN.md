@@ -186,6 +186,8 @@ Independent of B to F; can start the day P3 starts.
 
 ### Task G2: Synthetic 45-goods pack and per-good budget lines (0235)
 
+- [x] Goods count a pack value: `Goods` read from `econ_goods`, fixed-size goods arrays replaced by vectors and `Rows`; the 10-goods fixture and pack hash unchanged. The pack builder's 10-good aggregation and the P04 gravity estimation stay at P2's goods until the 50-goods pack (ADR 0271).
+
 - [ ] Generator: the 10 real goods' parameters resampled across theta classes, IO coefficients scaled to keep value added, on the full province set; benchmark fixture only, never a calibration input.
 - [ ] Benchmarks at 10, 20 and 45 synthetic goods fit fixed plus per-good cost per goods-indexed system; DESIGN 19.2 restated with formula and value at 45 goods. If 45 goods exceed 160 ms, levers in order: gateway count and crossings (0092), the dispatch plan (0097), only then the ceiling by new ADR.
 - [ ] The synthetic pack runs 100 years without an invariant violation. Commit.

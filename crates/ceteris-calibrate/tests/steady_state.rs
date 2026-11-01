@@ -1675,14 +1675,16 @@ fn block_limits_of_the_calibration() {
 fn block_limits_with_storage_on() {
     let (inp, s) = fixture_with_storage();
     let trade = TradeParams {
-        coverage: std::array::from_fn(|g| {
-            inp.coverage
-                .as_ref()
-                .unwrap()
-                .get(g)
-                .copied()
-                .unwrap_or(0.0)
-        }),
+        coverage: (0..10)
+            .map(|g| {
+                inp.coverage
+                    .as_ref()
+                    .unwrap()
+                    .get(g)
+                    .copied()
+                    .unwrap_or(0.0)
+            })
+            .collect(),
         ..TradeParams::default().with_storage()
     };
     let m = Model::physical(inp).unwrap();

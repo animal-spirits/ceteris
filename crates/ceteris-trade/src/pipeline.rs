@@ -5,16 +5,15 @@
 //! (slot 0) are delivered at once and never enter the pipeline. Within a tick the caller first
 //! drains the due slot with [`Pipeline::pop_due`] (T1) and then pushes new dispatches.
 
-use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder};
-
-use crate::goods::N_GOODS;
+use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 pub const SLOTS: usize = 4;
 
-/// Arrays are `[buyer * N_GOODS + g]`, buyers numbered by the caller.
+/// Arrays are `[buyer * n_goods + g]`, buyers numbered by the caller.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pipeline {
     buyers: usize,
+    goods: usize,
     /// Storage slot that the next `pop_due` delivers.
     cursor: usize,
     slots: [Vec<f64>; SLOTS],
@@ -23,10 +22,11 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(n_buyers: usize) -> Self {
-        let n = n_buyers * N_GOODS;
+    pub fn new(n_buyers: usize, n_goods: usize) -> Self {
+        let n = n_buyers * n_goods;
         Self {
             buyers: n_buyers,
+            goods: n_goods,
             cursor: 0,
             slots: std::array::from_fn(|_| vec![0.0; n]),
             due: vec![0.0; n],
@@ -37,6 +37,10 @@ impl Pipeline {
         self.buyers
     }
 
+    pub fn n_goods(&self) -> usize {
+        self.goods
+    }
+
     /// Adds `units` of good `g` for `buyer`, delivered `slot` ticks from now (1 to 4). Call
     /// after this tick's `pop_due`.
     pub fn push(&mut self, slot: usize, buyer: usize, g: usize, units: f64) {
@@ -44,11 +48,14 @@ impl Pipeline {
             (1..=SLOTS).contains(&slot),
             "slot {slot} outside 1 to {SLOTS}"
         );
-        assert!(buyer < self.buyers && g < N_GOODS, "buyer {buyer} good {g}");
-        self.slots[(self.cursor + slot - 1) % SLOTS][buyer * N_GOODS + g] += units;
+        assert!(
+            buyer < self.buyers && g < self.goods,
+            "buyer {buyer} good {g}"
+        );
+        self.slots[(self.cursor + slot - 1) % SLOTS][buyer * self.goods + g] += units;
     }
 
-    /// Delivers what is due this tick, `[buyer * N_GOODS + g]`, and advances the pipeline.
+    /// Delivers what is due this tick, `[buyer * n_goods + g]`, and advances the pipeline.
     /// The slice stays valid until the next call.
     pub fn pop_due(&mut self) -> &[f64] {
         // the delivered slot is swapped out for the zeroed previous delivery, so a slot-4 push
@@ -60,7 +67,7 @@ impl Pipeline {
     }
 
     /// Goods delivered `ticks` from now (1 to 4) if nothing more is pushed,
-    /// `[buyer * N_GOODS + g]`.
+    /// `[buyer * n_goods + g]`.
     pub fn scheduled(&self, ticks: usize) -> &[f64] {
         assert!(
             (1..=SLOTS).contains(&ticks),
@@ -71,23 +78,23 @@ impl Pipeline {
 
     /// Goods of `g` on order for `buyer`, over every slot.
     pub fn on_order(&self, buyer: usize, g: usize) -> f64 {
-        self.slots.iter().map(|s| s[buyer * N_GOODS + g]).sum()
+        self.slots.iter().map(|s| s[buyer * self.goods + g]).sum()
     }
 
     /// Total goods of `g` in flight, the transit account balance per good.
     pub fn in_flight(&self, g: usize) -> f64 {
         self.slots
             .iter()
-            .flat_map(|s| s.iter().skip(g).step_by(N_GOODS))
+            .flat_map(|s| s.iter().skip(g).step_by(self.goods))
             .sum()
     }
 
     /// [`Pipeline::in_flight`] of every good in one pass, each summed in the same order.
-    pub fn in_flight_all(&self) -> [f64; N_GOODS] {
+    pub fn in_flight_all(&self) -> Vec<f64> {
         // -0.0 is where `Iterator::sum` starts
-        let mut total = [-0.0; N_GOODS];
+        let mut total = vec![-0.0; self.goods];
         for s in &self.slots {
-            for row in s.as_chunks::<N_GOODS>().0 {
+            for row in s.chunks_exact(self.goods) {
                 for (t, &x) in total.iter_mut().zip(row) {
                     *t += x;
                 }
@@ -105,8 +112,9 @@ impl Encode for Pipeline {
     }
 }
 
-impl Decode for Pipeline {
-    fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+impl Pipeline {
+    /// Restores a pipeline of `n_goods` goods per buyer encoded by [`Encode`].
+    pub fn decode(d: &mut Decoder, n_goods: usize) -> Result<Self, DecodeError> {
         let buyers = d.count()?;
         let cursor = usize::from(d.u8()?);
         if cursor >= SLOTS {
@@ -115,7 +123,7 @@ impl Decode for Pipeline {
         let mut slots: [Vec<f64>; SLOTS] = Default::default();
         for s in &mut slots {
             *s = d.f64s()?;
-            if s.len() != buyers * N_GOODS {
+            if s.len() != buyers * n_goods {
                 return Err(DecodeError(format!(
                     "pipeline slot of {} for {buyers} buyers",
                     s.len()
@@ -124,9 +132,10 @@ impl Decode for Pipeline {
         }
         Ok(Self {
             buyers,
+            goods: n_goods,
             cursor,
             slots,
-            due: vec![0.0; buyers * N_GOODS],
+            due: vec![0.0; buyers * n_goods],
         })
     }
 }
@@ -134,11 +143,13 @@ impl Decode for Pipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const N_GOODS: usize = crate::goods::p2::N;
     use ceteris_core::snapshot::canonical;
 
     #[test]
     fn in_flight_of_all_goods_matches_each_good() {
-        let mut p = Pipeline::new(3);
+        let mut p = Pipeline::new(3, N_GOODS);
         for (i, units) in [0.1, 1e-17, 3.0, 0.7, 1e16, 0.3].into_iter().enumerate() {
             p.push(1 + i % SLOTS, i % 3, (i * 7) % N_GOODS, units);
         }
@@ -150,7 +161,7 @@ mod tests {
     #[test]
     fn pipeline_delivers_each_buyer_after_its_slot() {
         let buyers = 3;
-        let mut p = Pipeline::new(buyers);
+        let mut p = Pipeline::new(buyers, N_GOODS);
         // (due tick, buyer, good, units)
         let mut expect: Vec<(usize, usize, usize, f64)> = vec![];
         for t in 0..30usize {
@@ -197,7 +208,7 @@ mod tests {
 
     #[test]
     fn slot_four_lands_in_the_slot_just_drained() {
-        let mut p = Pipeline::new(1);
+        let mut p = Pipeline::new(1, N_GOODS);
         p.pop_due();
         p.push(4, 0, 0, 5.0);
         p.push(1, 0, 0, 1.0);
@@ -211,7 +222,7 @@ mod tests {
 
     #[test]
     fn scheduled_shows_what_each_pop_delivers() {
-        let mut p = Pipeline::new(2);
+        let mut p = Pipeline::new(2, N_GOODS);
         p.pop_due();
         p.pop_due();
         for slot in 1..=SLOTS {
@@ -229,12 +240,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "slot")]
     fn home_deliveries_do_not_enter_the_pipeline() {
-        Pipeline::new(1).push(0, 0, 0, 1.0);
+        Pipeline::new(1, N_GOODS).push(0, 0, 0, 1.0);
     }
 
     #[test]
     fn pipeline_round_trips_encode() {
-        let mut p = Pipeline::new(3);
+        let mut p = Pipeline::new(3, N_GOODS);
         p.pop_due();
         p.push(1, 0, 1, 1.0);
         p.push(4, 2, 6, 4.0);
@@ -245,7 +256,7 @@ mod tests {
         p.encode(&mut e);
         let encoded = e.into_bytes();
         let mut d = Decoder::new(&encoded);
-        let mut back = Pipeline::decode(&mut d).unwrap();
+        let mut back = Pipeline::decode(&mut d, N_GOODS).unwrap();
         d.finish().unwrap();
         assert_eq!(canonical(7, &back), bytes);
         for _ in 0..5 {
@@ -259,7 +270,7 @@ mod tests {
         e.count(2);
         e.u8(4);
         let bytes = e.into_bytes();
-        assert!(Pipeline::decode(&mut Decoder::new(&bytes)).is_err());
+        assert!(Pipeline::decode(&mut Decoder::new(&bytes), N_GOODS).is_err());
 
         let mut e = Encoder::default();
         e.count(2);
@@ -268,6 +279,6 @@ mod tests {
             e.f64s(&[0.0; N_GOODS]);
         }
         let bytes = e.into_bytes();
-        assert!(Pipeline::decode(&mut Decoder::new(&bytes)).is_err());
+        assert!(Pipeline::decode(&mut Decoder::new(&bytes), N_GOODS).is_err());
     }
 }

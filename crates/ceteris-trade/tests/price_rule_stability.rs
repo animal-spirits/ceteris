@@ -3,7 +3,8 @@
 //! characteristic polynomial of the 3 x 3 transition matrix against a toy market run through
 //! `Markets::clear` and `Markets::reprice`.
 
-use ceteris_trade::{Markets, N_GOODS, Rationing, TradeParams};
+use ceteris_trade::goods::p2::N as N_GOODS;
+use ceteris_trade::{Goods, Markets, Rationing, TradeParams};
 
 /// A traded good.
 const G: usize = 3;
@@ -69,7 +70,7 @@ impl Toy {
     /// D = exp(-E x), clearing and the price rule as built. Returns the largest of |x| and |q|,
     /// and that of |S / S*_eq - 1|, over the last 100 ticks.
     fn simulate(&self, k1: f64, k2: f64, x0: f64, steps: usize) -> [f64; 2] {
-        let mut coverage = [0.0; N_GOODS];
+        let mut coverage = vec![0.0; N_GOODS];
         coverage[G] = self.cover;
         let p = TradeParams {
             kappa1: k1,
@@ -77,7 +78,7 @@ impl Toy {
             coverage,
             ..TradeParams::default()
         };
-        let mut m = Markets::new(1);
+        let mut m = Markets::new(1, &Goods::p2());
         m.active = (0..N_GOODS).map(|g| g == G).collect();
         m.price[G] = libm::exp(x0);
         m.inventory[G] = self.cover;
@@ -215,7 +216,7 @@ fn harvest(shock: f64, months: usize) -> (f64, f64) {
     let p = TradeParams::default().with_storage();
     let s_star = p.coverage[AG];
     let q_star = 1.0 + p.storage_loss[AG] * s_star;
-    let mut m = Markets::new(1);
+    let mut m = Markets::new(1, &Goods::p2());
     m.active = (0..N_GOODS).map(|g| g == AG).collect();
     m.inventory[AG] = s_star;
     let mut fill = vec![[1.0; 2]; N_GOODS];
@@ -275,7 +276,7 @@ fn stockout_spike_stays_below_flow_clearing() {
     let (e, eta, eps) = (11.24, 1.0, 0.9);
     let p = TradeParams::default().with_storage();
     let q_star = 1.0 + p.storage_loss[FUEL] * p.coverage[FUEL];
-    let mut m = Markets::new(1);
+    let mut m = Markets::new(1, &Goods::p2());
     m.active = (0..N_GOODS).map(|g| g == FUEL).collect();
     m.inventory[FUEL] = p.coverage[FUEL];
     let mut fill = vec![[1.0; 2]; N_GOODS];

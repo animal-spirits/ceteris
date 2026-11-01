@@ -47,14 +47,13 @@ use arrow_array::{
 use arrow_ipc::CompressionType;
 use arrow_ipc::writer::{FileWriter, IpcWriteOptions};
 use arrow_schema::{Field, Schema};
-use ceteris_trade::goods::{NAME, TRADED, tariff_group};
-use ceteris_trade::{Kernel, N_GOODS, Rationing, TradeParams};
+use ceteris_trade::{Kernel, Rationing, TradeParams};
 
 use ceteris_core::entity::{EntityId, Kind};
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::SystemId;
 
-use crate::demand::{CATEGORY, pigl};
+use crate::demand::pigl;
 use crate::flows::WINDOW;
 use crate::inputs::EconInputs;
 use crate::params::{EconParams, Technology};
@@ -203,29 +202,33 @@ pub fn write_inputs(
     trade: &TradeParams,
 ) -> Result<(), ExportError> {
     fs::create_dir_all(dir)?;
-    let (np, nc) = (inputs.n_provinces(), inputs.n_countries());
-    let net = &inputs.network;
+    let (np, nc, ng) = (inputs.n_provinces(), inputs.n_countries(), inputs.n_goods());
+    let (net, goods) = (&inputs.network, &inputs.goods);
 
     write_table(
         dir,
         "goods",
         vec![
-            u8s("good", 0..N_GOODS as u8),
-            col("name", StringArray::from(NAME.to_vec())),
-            bools("traded", TRADED),
+            u8s("good", 0..ng as u8),
+            col("name", StringArray::from(goods.name.clone())),
+            bools("traded", (0..ng).map(|g| goods.is_traded(g))),
             col(
                 "tariff_group",
-                Int8Array::from_iter_values(
-                    (0..N_GOODS).map(|g| if TRADED[g] { tariff_group(g) as i8 } else { -1 }),
-                ),
+                Int8Array::from_iter_values((0..ng).map(|g| {
+                    if goods.is_traded(g) {
+                        goods.tariff_group(g) as i8
+                    } else {
+                        -1
+                    }
+                })),
             ),
-            f64s("weight", inputs.weight),
-            f64s("coverage", trade.coverage),
-            f64s("storage_loss", trade.storage_loss),
-            f64s("time_cost", trade.time_cost),
-            f64s("theta", trade.theta),
-            u8s("theta_class", trade.theta_class),
-            u8s("category", CATEGORY.map(|c| c as u8)),
+            f64s("weight", inputs.weight.iter().copied()),
+            f64s("coverage", trade.coverage.iter().copied()),
+            f64s("storage_loss", trade.storage_loss.iter().copied()),
+            f64s("time_cost", trade.time_cost.iter().copied()),
+            f64s("theta", trade.theta.iter().copied()),
+            u8s("theta_class", trade.theta_class.iter().copied()),
+            u8s("category", goods.category.iter().copied()),
         ],
     )?;
     write_table(
@@ -246,13 +249,12 @@ pub fn write_inputs(
         f64s("u_star", c.u_star.iter().copied()),
         f64s("gini", c.gini.iter().copied()),
     ];
-    for g in 0..N_GOODS {
+    for g in 0..ng {
         columns.push(f64s(&format!("omega_{g}"), c.omega.iter().map(|o| o[g])));
     }
     write_table(dir, "countries", columns)?;
-    let cells = || {
-        (0..nc).flat_map(|c| (0..N_GOODS).flat_map(move |k| (0..N_GOODS).map(move |g| (c, k, g))))
-    };
+    let cells =
+        || (0..nc).flat_map(move |c| (0..ng).flat_map(move |k| (0..ng).map(move |g| (c, k, g))));
     write_table(
         dir,
         "country_io",
@@ -285,13 +287,13 @@ pub fn write_inputs(
         f64s("population", p.population.iter().copied()),
         f64s("w0", p.w0.iter().copied()),
     ];
-    for g in 0..N_GOODS {
+    for g in 0..ng {
         columns.push(f64s(
             &format!("base_price_{g}"),
             p.base_price.iter().map(|q| q[g]),
         ));
     }
-    for g in 0..N_GOODS {
+    for g in 0..ng {
         columns.push(f64s(&format!("gamma_{g}"), p.gamma.iter().map(|x| x[g])));
     }
     write_table(dir, "provinces", columns)?;
@@ -331,7 +333,7 @@ pub fn write_inputs(
             f64s("va_target", e.va_target.iter().copied()),
         ],
     )?;
-    write_table(dir, "active", active_columns(&active_cells(inputs)))?;
+    write_table(dir, "active", active_columns(&active_cells(inputs), ng))?;
     write_table(dir, "pigl_check", pigl_check(inputs, params))?;
 
     let legs: Vec<(u8, &ceteris_trade::Leg)> = [&net.domestic, &net.access, &net.crossings]
@@ -380,16 +382,16 @@ pub fn write_inputs(
     Ok(())
 }
 
-fn active_columns(active: &[bool]) -> Vec<Column> {
+fn active_columns(active: &[bool], ng: usize) -> Vec<Column> {
     vec![
-        u32s("province", (0..active.len()).map(|c| (c / N_GOODS) as u32)),
-        u8s("good", (0..active.len()).map(|c| (c % N_GOODS) as u8)),
+        u32s("province", (0..active.len()).map(|c| (c / ng) as u32)),
+        u8s("good", (0..active.len()).map(|c| (c % ng) as u8)),
         bools("active", active.iter().copied()),
     ]
 }
 
 fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
-    let traded = || (0..N_GOODS).filter(|&g| TRADED[g]);
+    let traded = || (0..kernel.n_goods()).filter(|&g| kernel.try_good(g).is_some());
 
     // (good, row, entry col, k, inv_tau) for the two plain legs
     let plain = |pick: fn(
@@ -456,18 +458,20 @@ fn write_kernel(dir: &Path, kernel: &Kernel) -> Result<(), ExportError> {
 fn pigl_check(inputs: &EconInputs, params: &EconParams) -> Vec<Column> {
     let (weights, _) = household_preferences(inputs, params);
     let base = base_spend(inputs, params);
-    let nc = inputs.n_countries();
+    let (nc, ng, nt) = (inputs.n_countries(), inputs.n_goods(), inputs.goods.traded);
     let mut rows = Vec::with_capacity(PIGL_CHECK_DRAWS);
     for r in 0..PIGL_CHECK_DRAWS {
         let mut s = Seed(21).stream(0, SystemId(0), Kind(0), EntityId(r as u32));
         let c = (s.next_u32() as usize) % nc;
-        let mut price: [f64; N_GOODS] = std::array::from_fn(|_| libm::exp(4.0 * s.uniform() - 2.0));
+        let mut price: Vec<f64> = (0..ng)
+            .map(|_| libm::exp(4.0 * s.uniform() - 2.0))
+            .collect();
         if r % 10 == 0 {
-            price[r % 7] = f64::INFINITY;
+            price[r % nt] = f64::INFINITY;
         }
         let money = base[c] * libm::exp(14.0 * s.uniform() - 7.0);
         let sigma = 1.2 * s.uniform();
-        let mut x = [0.0; N_GOODS];
+        let mut x = vec![0.0; ng];
         pigl(&weights[c], &price, money, sigma, params, &mut x);
         rows.push((c, money, sigma, price, x));
     }
@@ -477,10 +481,10 @@ fn pigl_check(inputs: &EconInputs, params: &EconParams) -> Vec<Column> {
         f64s("money", rows.iter().map(|r| r.1)),
         f64s("sigma", rows.iter().map(|r| r.2)),
     ];
-    for g in 0..N_GOODS {
+    for g in 0..ng {
         columns.push(f64s(&format!("price_{g}"), rows.iter().map(|r| r.3[g])));
     }
-    for g in 0..N_GOODS {
+    for g in 0..ng {
         columns.push(f64s(&format!("x_{g}"), rows.iter().map(|r| r.4[g])));
     }
     columns
@@ -596,8 +600,9 @@ fn params_json(
         format!("{{\n{}\n  }}", lines.join(",\n"))
     };
     format!(
-        "{{\n  \"format\": \"{EXPORT_FORMAT}\",\n  \"static_digest\": \"{}\",\n  \"n_goods\": {N_GOODS},\n  \"minor_per_unit\": {},\n  \"register\": {{\n{}\n  }},\n  \"econ\": {},\n  \"trade\": {}\n}}\n",
+        "{{\n  \"format\": \"{EXPORT_FORMAT}\",\n  \"static_digest\": \"{}\",\n  \"n_goods\": {},\n  \"minor_per_unit\": {},\n  \"register\": {{\n{}\n  }},\n  \"econ\": {},\n  \"trade\": {}\n}}\n",
         hex(&digest),
+        t.goods.n(),
         num(MINOR_PER_UNIT),
         register.join(",\n"),
         object(&econ),
@@ -630,14 +635,15 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
     fs::create_dir_all(dir)?;
     let inputs = world.inputs();
     let (np, nc) = (inputs.n_provinces(), inputs.n_countries());
+    let (ng, nt) = (inputs.n_goods(), inputs.goods.traded);
     let m = &world.markets;
 
     write_table(
         dir,
         "run_prices",
         vec![
-            u32s("province", (0..m.price.len()).map(|c| (c / N_GOODS) as u32)),
-            u8s("good", (0..m.price.len()).map(|c| (c % N_GOODS) as u8)),
+            u32s("province", (0..m.price.len()).map(|c| (c / ng) as u32)),
+            u8s("good", (0..m.price.len()).map(|c| (c % ng) as u8)),
             f64s("price", m.price.iter().copied()),
             bools("active", m.active.iter().copied()),
             f64s("price_index", world.price_index.iter().copied()),
@@ -671,8 +677,8 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
     let mut keys = Vec::new();
     for ex in 0..nc {
         for im in 0..nc {
-            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-                let at = (ex * nc + im) * N_GOODS + g;
+            for g in 0..nt {
+                let at = (ex * nc + im) * ng + g;
                 if mean.pair_value[at] > 0.0 || mean.pair_units[at] > 0.0 {
                     keys.push((ex as u32, im as u32, g as u8, at));
                 }
@@ -690,13 +696,13 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
             f64s("units", keys.iter().map(|k| mean.pair_units[k.3])),
         ],
     )?;
-    let cells: Vec<usize> = (0..np * N_GOODS).filter(|&c| TRADED[c % N_GOODS]).collect();
+    let cells: Vec<usize> = (0..np * ng).filter(|&c| c % ng < nt).collect();
     write_table(
         dir,
         "run_home",
         vec![
-            u32s("province", cells.iter().map(|&c| (c / N_GOODS) as u32)),
-            u8s("good", cells.iter().map(|&c| (c % N_GOODS) as u8)),
+            u32s("province", cells.iter().map(|&c| (c / ng) as u32)),
+            u8s("good", cells.iter().map(|&c| (c % ng) as u8)),
             f64s("value", cells.iter().map(|&c| mean.home_value[c])),
             f64s("units", cells.iter().map(|&c| mean.home_units[c])),
         ],
@@ -717,6 +723,8 @@ pub fn write_run(dir: &Path, world: &EconWorld) -> Result<(), ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -725,8 +733,7 @@ mod tests {
     use arrow_array::cast::AsArray;
     use arrow_array::types::{Float32Type, Int8Type};
     use ceteris_geo::pack::{f64s, read_table, strings, u8s, u32s};
-    use ceteris_trade::N_GOODS;
-    use ceteris_trade::goods::{NAME, TRADED};
+    use ceteris_trade::goods::p2::NAME;
 
     use crate::fixture::small_world;
     use crate::world::MINOR_PER_UNIT;
@@ -780,7 +787,10 @@ mod tests {
         let goods = table("goods");
         assert_eq!(goods.num_rows(), N_GOODS);
         assert_eq!(strings(&goods, "name").unwrap()[4], NAME[4]);
-        assert_eq!(bools(&goods, "traded"), TRADED);
+        assert_eq!(
+            bools(&goods, "traded"),
+            (0..N_GOODS).map(|g| g < N_TRADED).collect::<Vec<_>>()
+        );
         assert_eq!(
             i8s(&goods, "tariff_group"),
             [0, 0, 0, 0, 1, 1, 1, -1, -1, -1]
@@ -791,7 +801,10 @@ mod tests {
         assert_eq!(f64s(&goods, "time_cost").unwrap(), trade.time_cost);
         assert_eq!(f64s(&goods, "theta").unwrap(), trade.theta);
         assert_eq!(u8s(&goods, "theta_class").unwrap(), trade.theta_class);
-        assert_eq!(u8s(&goods, "category").unwrap(), CATEGORY.map(|c| c as u8));
+        assert_eq!(
+            u8s(&goods, "category").unwrap(),
+            ceteris_trade::goods::p2::CATEGORY
+        );
 
         let gateways = table("gateways");
         assert_eq!(u32s(&gateways, "country").unwrap().len(), 7);
@@ -876,7 +889,7 @@ mod tests {
             + inputs.network.crossings.len();
         assert_eq!(legs.num_rows(), n_legs);
 
-        let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+        let traded: Vec<usize> = (0..N_TRADED).collect();
         let domestic = table("kernel_domestic");
         let n: usize = traded
             .iter()
@@ -1061,7 +1074,7 @@ mod tests {
         assert!(flows.num_rows() > 0);
         let key = |r: usize| (ex[r], im[r], g[r]);
         for r in 0..flows.num_rows() {
-            assert!(ex[r] < 4 && im[r] < 4 && TRADED[usize::from(g[r])]);
+            assert!(ex[r] < 4 && im[r] < 4 && usize::from(g[r]) < N_TRADED);
             assert!(value[r] > 0.0 && units[r] > 0.0 && value[r].is_finite());
             assert!(r == 0 || key(r - 1) < key(r), "rows sorted and unique");
         }

@@ -541,7 +541,8 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
         HS_1996, HS_2002, US_2000, US_2002, estimate, eu_hindcast, pack_countries, profile, trend,
         us_imports,
     };
-    use ceteris_calibrate::costs::{N_TRADED, Transport};
+    use ceteris_calibrate::costs::Transport;
+    use ceteris_calibrate::gravity::N_TRADED;
     let root = sources::workspace_root();
     let (mut pack, mut data) = (
         root.join("data/packs/2000"),
