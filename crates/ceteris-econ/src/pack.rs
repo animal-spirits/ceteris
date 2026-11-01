@@ -8,9 +8,10 @@
 
 use std::path::Path;
 
+use ceteris_geo::graph::{TransportGraph, TransportParams};
 use ceteris_geo::pack::{Pack, PackError, f64s, read_table, strings, u8s, u32s};
 use ceteris_geo::paths::{Tree, shortest};
-use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{BulkLegs, Leg, N_GOODS, Network, TradeParams, Wedges};
 use rayon::prelude::*;
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
@@ -49,26 +50,62 @@ fn check_owners(
     }
 }
 
-/// Gateways of the pack (`gateways.arrow`): graph node and country of each, and its kind
-/// (0 port, 1 airport, 2 land crossing).
+/// Gateways of the pack (`gateways.arrow`): graph node and country of each, its kind
+/// (0 port, 1 airport, 2 land crossing) and its mass, the share of its country's trade
+/// throughput (ADR 0092; the pack builder's source is in the econ SPEC, Gateways).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gateways {
     pub node: Vec<u32>,
     pub country: Vec<u16>,
     pub kind: Vec<u8>,
+    pub mass: Vec<f64>,
+}
+
+/// Largest deviation from 1 of a country's summed gateway masses (as `Kernel::build` checks).
+const MASS_TOLERANCE: f64 = 1e-12;
+
+/// Each gateway's mass in (0, 1], and each country's masses summing to 1 (ADR 0092).
+fn check_masses(country: &[u16], mass: &[f64]) -> Result<(), PackError> {
+    let mut total: std::collections::BTreeMap<u16, f64> = std::collections::BTreeMap::new();
+    for (a, (&c, &m)) in country.iter().zip(mass).enumerate() {
+        // also rejects NaN
+        if !(m > 0.0 && m <= 1.0) {
+            return Err(err(format!("gateways.arrow: gateway {a} has mass {m}")));
+        }
+        *total.entry(c).or_insert(0.0) += m;
+    }
+    match total
+        .iter()
+        .find(|(_, t)| (*t - 1.0).abs() > MASS_TOLERANCE)
+    {
+        Some((c, t)) => Err(err(format!(
+            "gateways.arrow: the gateway masses of country {c} sum to {t}, not 1 (ADR 0092)"
+        ))),
+        None => Ok(()),
+    }
 }
 
 impl Gateways {
     pub fn read(dir: &Path) -> Result<Self, PackError> {
         let t = read_table(&dir.join("gateways.arrow"))?;
-        let country = u32s(&t, "country")?
+        let country: Vec<u16> = u32s(&t, "country")?
             .into_iter()
             .map(|c| u16::try_from(c).map_err(|_| err(format!("gateway country {c}"))))
             .collect::<Result<_, _>>()?;
+        if t.column_by_name("mass").is_none() {
+            return Err(err(format!(
+                "{} has no mass column (gateway masses, ADR 0092): the pack's econ tables \
+                 predate it; rebuild them with `ceteris pack build --econ-only`",
+                dir.join("gateways.arrow").display()
+            )));
+        }
+        let mass = f64s(&t, "mass")?;
+        check_masses(&country, &mass)?;
         Ok(Self {
             node: u32s(&t, "node")?,
             country,
             kind: u8s(&t, "kind")?,
+            mass,
         })
     }
 
@@ -241,8 +278,11 @@ impl EconInputs {
             pops: pop_data,
             enterprises: ent,
             steady: None,
+            border_nu: None,
+            market_elasticity: None,
         };
-        inputs.network = inputs.network_from_graph(pack, &Gateways::read(dir)?);
+        inputs.network =
+            inputs.network_from_graph(pack, &Gateways::read(dir)?, &TradeParams::default());
         inputs.set_base_prices(&TradeParams::default());
         inputs.set_coefficients();
         inputs.set_base_point(&EconParams::default().edu_eff);
@@ -255,7 +295,46 @@ impl EconInputs {
     /// of its country and its country's gateways from a province, gateways of other
     /// countries from a gateway), so no full tree outlives its source. Unreachable pairs get
     /// no leg. `route_taus` stays `None`: route choice is deferred past P2 (ADR 0017).
-    pub fn network_from_graph(&self, pack: &Pack, gateways: &Gateways) -> Network {
+    ///
+    /// Where `trade` gives theta classes a bulk freight rate (P154, P155, ADR 0247), the same
+    /// runs on a copy of the graph repriced at P04's defaults with that rate
+    /// (`TransportParams::bulk`; every pack in the workspace is loaded at the defaults) give
+    /// `Network::bulk`. The rate changes no edge's reachability, so the bulk legs have the base
+    /// legs' endpoints in the same order.
+    pub fn network_from_graph(
+        &self,
+        pack: &Pack,
+        gateways: &Gateways,
+        trade: &TradeParams,
+    ) -> Network {
+        let [domestic, access, crossings] = self.legs_on(&pack.graph, gateways);
+        let bulk = trade.bulk_rate().map(|(classes, sea, port)| {
+            let mut graph = pack.graph.clone();
+            graph.reprice(&TransportParams::default().bulk(sea, port));
+            let [domestic, access, crossings] = self.legs_on(&graph, gateways);
+            BulkLegs {
+                classes,
+                sea,
+                port,
+                domestic,
+                access,
+                crossings,
+            }
+        });
+        Network {
+            province_country: self.provinces.country.clone(),
+            gateway_country: gateways.country.clone(),
+            gateway_mass: gateways.mass.clone(),
+            domestic,
+            access,
+            crossings,
+            route_taus: None,
+            bulk,
+        }
+    }
+
+    /// Domestic, access and crossing legs on `graph` ([`Self::network_from_graph`]).
+    fn legs_on(&self, graph: &TransportGraph, gateways: &Gateways) -> [Vec<Leg>; 3] {
         let nodes = &self.provinces.pack;
         assert!(
             !nodes.is_empty(),
@@ -286,7 +365,7 @@ impl EconInputs {
             .into_par_iter()
             .map(|s| {
                 if s < np {
-                    let t = shortest(&pack.graph, nodes[s]);
+                    let t = shortest(graph, nodes[s]);
                     let c = usize::from(country[s]);
                     let domestic = provinces_of[c]
                         .iter()
@@ -300,7 +379,7 @@ impl EconInputs {
                     (domestic, access)
                 } else {
                     let a = s - np;
-                    let t = shortest(&pack.graph, gateways.node[a]);
+                    let t = shortest(graph, gateways.node[a]);
                     let crossings = (0..ng)
                         .filter(|&b| gateways.country[b] != gateways.country[a])
                         .filter_map(|b| leg(&t, a, b, gateways.node[b]))
@@ -309,20 +388,16 @@ impl EconInputs {
                 }
             })
             .collect();
-        let mut net = Network {
-            province_country: country.clone(),
-            gateway_country: gateways.country.clone(),
-            ..Network::default()
-        };
+        let [mut domestic, mut access, mut crossings] = [Vec::new(), Vec::new(), Vec::new()];
         for (s, (first, second)) in legs.into_iter().enumerate() {
             if s < np {
-                net.domestic.extend(first);
-                net.access.extend(second);
+                domestic.extend(first);
+                access.extend(second);
             } else {
-                net.crossings.extend(first);
+                crossings.extend(first);
             }
         }
-        net
+        [domestic, access, crossings]
     }
 }
 
@@ -336,7 +411,13 @@ mod tests {
     /// (country 1) joined through sea node 6, the sea edge in chokepoint 1. The economy holds
     /// provinces 0, 1 and 2; province 3 lies on the road from 0 to 1.
     fn pack() -> Pack {
-        let kind = [
+        pack_with_coastal_route(false)
+    }
+
+    /// [`pack`], and with `coastal` a port 7 in province 1, 1000 km by sea from port 4: a
+    /// second path from province 0 to province 1, dearer than the road at P04's defaults.
+    fn pack_with_coastal_route(coastal: bool) -> Pack {
+        let mut kind = vec![
             NodeKind::Province,
             NodeKind::Province,
             NodeKind::Province,
@@ -345,13 +426,8 @@ mod tests {
             NodeKind::Port,
             NodeKind::Sea,
         ];
-        let nodes = NodeList {
-            kind: kind.to_vec(),
-            province: vec![0, 1, 2, 3, 0, 2, u32::MAX],
-            lon: vec![0.0; 7],
-            lat: vec![0.0; 7],
-        };
-        let e = [
+        let mut province = vec![0, 1, 2, 3, 0, 2, u32::MAX];
+        let mut e = vec![
             (0, 3, Mode::Road, 50.0, 0),
             (3, 1, Mode::Road, 50.0, 0),
             (0, 4, Mode::PortAccess, 10.0, 0),
@@ -359,6 +435,18 @@ mod tests {
             (6, 5, Mode::Sea, 1000.0, 0),
             (5, 2, Mode::PortAccess, 10.0, 0),
         ];
+        if coastal {
+            kind.push(NodeKind::Port);
+            province.push(1);
+            e.push((4, 7, Mode::Sea, 1000.0, 0));
+            e.push((7, 1, Mode::PortAccess, 10.0, 0));
+        }
+        let nodes = NodeList {
+            lon: vec![0.0; kind.len()],
+            lat: vec![0.0; kind.len()],
+            kind,
+            province,
+        };
         let edges = EdgeList {
             a: e.iter().map(|x| x.0).collect(),
             b: e.iter().map(|x| x.1).collect(),
@@ -402,6 +490,7 @@ mod tests {
             node: vec![4, 5],
             country: vec![0, 1],
             kind: vec![0, 0],
+            mass: vec![1.0, 1.0],
         }
     }
 
@@ -432,7 +521,7 @@ mod tests {
     #[test]
     fn legs_keep_own_country_provinces_and_gateways_and_foreign_gateways() {
         let (mut pack, inputs) = (pack(), inputs());
-        let net = inputs.network_from_graph(&pack, &gateways());
+        let net = inputs.network_from_graph(&pack, &gateways(), &TradeParams::default());
         let ends = |legs: &[Leg]| legs.iter().map(|l| (l.from, l.to)).collect::<Vec<_>>();
         assert_eq!(ends(&net.domestic), [(0, 1), (1, 0)]);
         assert_eq!(ends(&net.access), [(0, 0), (1, 0), (2, 1)]);
@@ -442,6 +531,7 @@ mod tests {
             (net.province_country, net.gateway_country),
             (vec![0, 0, 1], vec![0, 1])
         );
+        assert_eq!(net.gateway_mass, gateways().mass);
         let g = &pack.graph;
         let road = g.cost[0] + g.cost[1];
         assert_eq!(net.domestic[0].cost_per_t, road);
@@ -452,8 +542,129 @@ mod tests {
         // with the strait closed the ports cannot reach each other: no crossing legs
         pack.graph
             .set_chokepoint_closed(1, true, &TransportParams::default());
-        let closed = inputs.network_from_graph(&pack, &gateways());
+        let closed = inputs.network_from_graph(&pack, &gateways(), &TradeParams::default());
         assert!(closed.crossings.is_empty());
         assert_eq!(closed.domestic, net.domestic);
+    }
+
+    /// ADR 0247: a class with a bulk freight rate gets legs with the same endpoints, priced on
+    /// the graph repriced at that rate; at multipliers 1 there are no bulk legs.
+    #[test]
+    fn bulk_legs_follow_the_bulk_paths() {
+        let (pack, inputs) = (pack(), inputs());
+        let off = TradeParams {
+            bulk_sea: [1.0; 4],
+            bulk_port: [1.0; 4],
+            ..TradeParams::default()
+        };
+        assert!(
+            inputs
+                .network_from_graph(&pack, &gateways(), &off)
+                .bulk
+                .is_none()
+        );
+        let on = TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, 0.5],
+            bulk_port: [1.0, 1.0, 1.0, 0.25],
+            ..TradeParams::default()
+        };
+        let base = inputs.network_from_graph(&pack, &gateways(), &off);
+        let net = inputs.network_from_graph(&pack, &gateways(), &on);
+        let b = net.bulk.as_ref().unwrap();
+        assert_eq!(b.classes, [false, false, false, true]);
+        let ends = |legs: &[Leg]| legs.iter().map(|l| (l.from, l.to)).collect::<Vec<_>>();
+        assert_eq!(ends(&b.domestic), ends(&net.domestic));
+        assert_eq!(ends(&b.access), ends(&net.access));
+        assert_eq!(ends(&b.crossings), ends(&net.crossings));
+        let (bp, g) = (TransportParams::default().bulk(0.5, 0.25), &pack.graph);
+        let price =
+            |e: usize| ceteris_geo::graph::price(g.mode[e], g.length_km[e], g.tri_m[e], &bp);
+        // roads only: unchanged
+        assert_eq!(b.domestic, net.domestic);
+        // province 0 to its port: the road line plus a quarter of the listed-port fee
+        assert_eq!(b.access[0].cost_per_t, price(2).0);
+        assert_eq!(b.access[0].hours, net.access[0].hours);
+        // port to port: half the sea cost
+        assert_eq!(b.crossings[0].cost_per_t, price(3).0 + price(4).0);
+        assert!((b.crossings[0].cost_per_t - 0.5 * net.crossings[0].cost_per_t).abs() < 1e-12);
+        // the base legs do not move
+        assert_eq!(
+            (&net.domestic, &net.access, &net.crossings),
+            (&base.domestic, &base.access, &base.crossings)
+        );
+    }
+
+    /// ADR 0247: the bulk legs are least-cost paths on the repriced graph, so the rate can
+    /// change the path. From province 0 to province 1 the road wins at P04's defaults and the
+    /// coastal sea route wins at a tenth of the sea cost and port fees.
+    #[test]
+    fn bulk_rate_can_switch_the_path() {
+        let (pack, inputs) = (pack_with_coastal_route(true), inputs());
+        let on = TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, 0.1],
+            bulk_port: [1.0, 1.0, 1.0, 0.1],
+            ..TradeParams::default()
+        };
+        let net = inputs.network_from_graph(&pack, &gateways(), &on);
+        let b = net.bulk.as_ref().unwrap();
+        let g = &pack.graph;
+        let at = |p: &TransportParams, edges: &[usize]| {
+            edges
+                .iter()
+                .map(|&e| ceteris_geo::graph::price(g.mode[e], g.length_km[e], g.tri_m[e], p))
+                .fold((0.0, 0.0), |(c, h), (ec, eh)| (c + ec, h + eh))
+        };
+        let (road, coastal) = ([0, 1], [2, 6, 7]);
+        let (base, bulk) = (
+            TransportParams::default(),
+            TransportParams::default().bulk(0.1, 0.1),
+        );
+        assert!(at(&base, &road).0 < at(&base, &coastal).0);
+        assert!(at(&bulk, &coastal).0 < at(&bulk, &road).0);
+        let leg = |l: &Leg| (l.from, l.to, l.cost_per_t, l.hours);
+        assert_eq!(
+            leg(&net.domestic[0]),
+            (0, 1, at(&base, &road).0, at(&base, &road).1)
+        );
+        assert_eq!(
+            leg(&b.domestic[0]),
+            (0, 1, at(&bulk, &coastal).0, at(&bulk, &coastal).1)
+        );
+    }
+
+    /// Masses that do not sum to 1 per country, or are not in (0, 1], are a load error.
+    #[test]
+    fn gateway_masses_are_checked_at_load() {
+        assert!(check_masses(&[0, 0, 1], &[0.5, 0.5, 1.0]).is_ok());
+        let e = check_masses(&[0, 0, 1], &[0.5, 0.6, 1.0]).unwrap_err();
+        assert!(e.0.contains("country 0 sum to"), "{e}");
+        for bad in [0.0, f64::NAN, 1.5] {
+            let e = check_masses(&[0, 1], &[bad, 1.0]).unwrap_err();
+            assert!(e.0.contains("gateway 0 has mass"), "{e}");
+        }
+    }
+
+    /// A pack built before the gateway masses is refused with an error naming the column.
+    #[test]
+    fn gateways_without_mass_name_the_column() {
+        use arrow_array::{RecordBatch, UInt8Array, UInt32Array};
+        use arrow_ipc::writer::FileWriter;
+        use std::sync::Arc;
+
+        let dir = std::env::temp_dir().join(format!("ceteris-gateways-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let t = RecordBatch::try_from_iter([
+            ("node", Arc::new(UInt32Array::from(vec![4, 5])) as _),
+            ("country", Arc::new(UInt32Array::from(vec![0, 1])) as _),
+            ("kind", Arc::new(UInt8Array::from(vec![0, 0])) as _),
+        ])
+        .unwrap();
+        let file = std::fs::File::create(dir.join("gateways.arrow")).unwrap();
+        let mut w = FileWriter::try_new(file, &t.schema()).unwrap();
+        w.write(&t).unwrap();
+        w.finish().unwrap();
+        let e = Gateways::read(&dir).unwrap_err();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(e.0.contains("has no mass column"), "{e}");
     }
 }

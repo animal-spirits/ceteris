@@ -9,7 +9,8 @@ pub const MAX_ITER: usize = 100_000;
 pub const TOL: f64 = 1e-14;
 
 /// (P, P) K_od of traded good `g`: 1 at home, the direct leg within a country, and the sum over
-/// gateway pairs of K_oa K_ab K_bd across borders. `net_of_tariff` divides each crossing by its
+/// gateway pairs of K_oa m_a K_ab m_b K_bd across borders, the gateway masses m (ADR 0092) in the
+/// exported crossing factors. `net_of_tariff` divides each crossing by its
 /// 1 + t: the kernel of what origins receive rather than what buyers pay.
 pub fn dense_kernel(inp: &Inputs, g: usize, net_of_tariff: bool) -> Mat {
     let (n_p, n_n) = (inp.n_provinces(), inp.n_gateways());

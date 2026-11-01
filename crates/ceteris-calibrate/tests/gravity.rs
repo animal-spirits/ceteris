@@ -275,11 +275,32 @@ fn world(n: usize, seed: u64) -> (Vec<Quantities>, Vec<f64>) {
 /// Flows exp(FE - theta ln(1 + t) - theta ln tau - theta ln(1 + nu) border) with tau the S05
 /// form.
 fn synthetic_sample(theta: &[f64; 7], nu: f64, cost: [f64; 4], domestic: bool) -> Sample {
-    let n = 30;
-    let (q, rate) = world(n, 11);
-    let mut r = Draws(5);
     // Light enough that every good trades.
     let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
+    weighted_sample(theta, nu, cost, domestic, weight, usize::MAX, false)
+}
+
+/// [`synthetic_sample`] at the given weights, with air only between the first `air_among`
+/// countries (elsewhere its km go by road; `q` holds road, rail, sea and air km first), and
+/// with `log_cost` flows on ln(tau - 1), the log of cost, in place of the S05 ln tau.
+fn weighted_sample(
+    theta: &[f64; 7],
+    nu: f64,
+    cost: [f64; 4],
+    domestic: bool,
+    weight: [f64; 7],
+    air_among: usize,
+    log_cost: bool,
+) -> Sample {
+    let n = 30;
+    let (mut q, rate) = world(n, 11);
+    for (i, q) in q.iter_mut().enumerate() {
+        if i / n >= air_among || i % n >= air_among {
+            q[0] += q[3];
+            q[3] = 0.0;
+        }
+    }
+    let mut r = Draws(5);
     let mut s = Sample::default();
     for g in 0..theta.len() {
         let a: Vec<f64> = (0..n).map(|_| r.normal()).collect();
@@ -291,6 +312,9 @@ fn synthetic_sample(theta: &[f64; 7], nu: f64, cost: [f64; 4], domestic: bool) -
                 let i = o * n + d;
                 let c: f64 = (0..4).map(|m| q[i][m] * cost[m]).sum::<f64>() + q[i][Q_FEE];
                 tau[i] = 1.0 + weight[g] * c + TIME_COST[g] * q[i][Q_HOURS] / 24.0;
+                if log_cost {
+                    tau[i] -= 1.0;
+                }
                 let border = if o == d { 0.0 } else { 1.0 };
                 mu[i] = (ao + bd
                     - theta[g] * (rate[i].ln_1p() + tau[i].ln() + border * nu.ln_1p()))
@@ -378,6 +402,202 @@ fn mode_costs_recover_known_ratios() {
 }
 
 const MODE: [&str; 3] = ["rail", "sea", "air"];
+
+/// Deliberately heavy goods and an air cost far below its start (8 times road): ln tau is
+/// concave in the air ratio, so the undamped first Gauss-Newton step overshoots past the ratio
+/// at which some tau reaches 0 (the crash recorded in ADR 0022 before its Amendment
+/// 2026-10-29). The guarded step halves it instead and the fit still recovers the ratios.
+#[test]
+fn mode_costs_guard_keeps_tau_positive() {
+    let cost = [0.10, 0.04, 0.008, 0.004];
+    let s = weighted_sample(&THETA, 0.0, cost, false, [0.01; 7], usize::MAX, false);
+    let p = Transport::default();
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    let start: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / p.per_tkm[0]);
+    let undamped: [f64; 3] = std::array::from_fn(|m| start[m] + est.steps[0][m]);
+    let tau = gravity::mode_tau(&s, &undamped, &p);
+    assert!(tau.iter().any(|&t| t <= 0.0), "{undamped:?}");
+    assert!(est.halvings[0] > 0, "{est:?}");
+    for m in 0..3 {
+        approx(est.ratio[m], cost[m + 1] / cost[0], 0.1, MODE[m]);
+    }
+    assert!(
+        gravity::mode_tau(&s, &est.ratio, &p)
+            .iter()
+            .all(|&t| t > 0.0)
+    );
+}
+
+/// Flows on the log of cost (the form the 2000 data prefer, ADR 0022) and a start far above
+/// the data: some undamped step keeps every tau positive but raises the profile deviance, and
+/// the guard halves it. The profile deviance never rises from one step to the next.
+#[test]
+fn mode_costs_halve_a_step_that_raises_the_deviance() {
+    let s = weighted_sample(
+        &THETA,
+        0.0,
+        [0.10, 0.04, 0.008, 0.004],
+        false,
+        [0.01; 7],
+        usize::MAX,
+        true,
+    );
+    let p = Transport {
+        per_tkm: [0.10, 0.5, 0.5, 5.0],
+        ..Transport::default()
+    };
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    assert_eq!(est.deviance.len(), est.iterations, "{est:?}");
+    for w in est.deviance.windows(2) {
+        assert!(w[1] <= w[0], "{:?}", est.deviance);
+    }
+    let mut r: [f64; 3] = std::array::from_fn(|m| p.per_tkm[m + 1] / p.per_tkm[0]);
+    let mut rises = 0;
+    for (k, step) in est.steps.iter().enumerate() {
+        let full: [f64; 3] = std::array::from_fn(|m| r[m] + step[m]);
+        if gravity::mode_tau(&s, &full, &p).iter().all(|&t| t > 0.0) {
+            let d = gravity::profile_deviance(&s, &SYNTHETIC_CLASSES, &p, &full).unwrap();
+            if d > est.deviance[k] {
+                assert!(est.halvings[k] > 0, "step {k}: {est:?}");
+                rises += 1;
+            }
+        }
+        let alpha = 0.5_f64.powi(est.halvings[k] as i32);
+        r = std::array::from_fn(|m| r[m] + alpha * step[m]);
+    }
+    assert!(rises > 0, "{est:?}");
+}
+
+/// Started a relative 3e-9 off its own converged ratios (the first step is above `MODE_TOL`),
+/// inside the band where the deviance moves by less than the PPML's resolution, the fit converges
+/// back. With a strict deviance comparison it fails on that noise: the halved trials never lower
+/// the deviance, the last one equals the ratios bit for bit, and the same step repeats until
+/// `MODE_MAX_ITER`.
+#[test]
+fn mode_costs_converge_from_inside_the_deviance_band() {
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let p = Transport::default();
+    let first = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &p).unwrap();
+    let mut near = p.clone();
+    for m in 0..3 {
+        near.per_tkm[m + 1] = p.per_tkm[0] * first.ratio[m] * (1.0 + 3e-9);
+    }
+    let again = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &near).unwrap();
+    for (m, mode) in MODE.iter().enumerate() {
+        approx(again.ratio[m], first.ratio[m], 1e-6, mode);
+    }
+}
+
+/// At the cap the fit returns an error, not a panic: with no halving allowed, the heavy
+/// sample's first step (which drives a tau below 0) cannot be taken.
+#[test]
+fn mode_costs_return_an_error_at_the_cap() {
+    let s = weighted_sample(
+        &THETA,
+        0.0,
+        [0.10, 0.04, 0.008, 0.004],
+        false,
+        [0.01; 7],
+        usize::MAX,
+        false,
+    );
+    let err =
+        gravity::mode_costs_halving(&s, &SYNTHETIC_CLASSES, &Transport::default(), 0).unwrap_err();
+    assert!(err.starts_with("step 1: within 0 halvings"), "{err}");
+}
+
+/// Air between 5 countries only: at most 10 country pairs (2000 BACI has 3 with a positive flow),
+/// fewer than `MODE_MIN_PAIRS`. Air keeps its start and is reported as not identified; rail and sea are
+/// still recovered.
+#[test]
+fn mode_below_the_support_threshold_is_unidentified() {
+    let cost = [0.10, 0.03, 0.01, 0.5];
+    let weight = [0.0005, 0.0008, 0.002, 0.0016, 0.0003, 0.0008, 0.0001];
+    let s = weighted_sample(&THETA, 0.0, cost, false, weight, 5, false);
+    let support = gravity::mode_support(&s);
+    assert!(0 < support[2] && support[2] <= 10, "{support:?}");
+    assert!(support[0] >= gravity::MODE_MIN_PAIRS && support[1] >= gravity::MODE_MIN_PAIRS);
+    let est = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
+    assert_eq!(est.identified, [true, true, false]);
+    assert_eq!(est.support, support);
+    assert!(est.ratio[2].is_nan() && est.se[2].is_nan(), "{est:?}");
+    for m in 0..2 {
+        approx(est.ratio[m], cost[m + 1] / cost[0], 0.1, MODE[m]);
+    }
+    assert!(gravity::report(&estimates(Ok(est))).contains("air not identified"));
+}
+
+/// Estimates on the synthetic samples with the given P04 result.
+fn estimates(modes: Result<gravity::Modes, String>) -> gravity::Estimates {
+    let s = synthetic_sample(&THETA, 0.4, COST, true);
+    let international: Vec<bool> = (0..s.len())
+        .map(|i| s.exporter[i] != s.importer[i])
+        .collect();
+    let border = gravity::border_friction(&s, &SYNTHETIC_CLASSES, Some(&[0.1, 0.4, 0.5])).unwrap();
+    gravity::Estimates {
+        theta: gravity::theta_by_class(&s.rows(&international), &SYNTHETIC_CLASSES).unwrap(),
+        border,
+        modes,
+        class_shares: vec![0.1, 0.4, 0.5],
+        n_countries: 30,
+        n_domestic_countries: 30,
+        notes: gravity::Notes {
+            countries: 30,
+            countries_with_baci_trade: 30,
+            unreached_pairs: 0,
+            baci_international_usd: 0.0,
+            baci_international_usd_in_sample: 0.0,
+            domestic_countries: 30,
+            domestic_cells_dropped: 0,
+            class_trade_usd: vec![0.0; 3],
+        },
+    }
+}
+
+/// A failed P04 fit is a diagnostic: the other estimates stand, the report says why P04 has no
+/// values, a stop rule fires and `gravity_2000.toml` is left as it was. Ratios that keep the
+/// ordering are written.
+#[test]
+fn p04_failure_leaves_the_toml_unchanged() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("gravity_2000.toml");
+    std::fs::write(&out, "kept\n").unwrap();
+    let failed = estimates(Err("forced".to_owned()));
+    assert!(gravity::report(&failed).contains("P04 did not converge: forced"));
+    let fired = gravity::stop_rules(&failed);
+    assert_eq!(fired.len(), 1, "{fired:?}");
+    assert!(fired[0].starts_with("P04"), "{fired:?}");
+    assert!(!gravity::to_toml(&failed).contains("P04b/P04a"));
+    assert!(!gravity::write_toml(&failed, &out).unwrap());
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "kept\n");
+
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let fitted = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default());
+    let ok = estimates(fitted);
+    assert!(
+        gravity::stop_rules(&ok).is_empty(),
+        "{:?}",
+        gravity::stop_rules(&ok)
+    );
+    assert!(gravity::write_toml(&ok, &out).unwrap());
+    assert!(std::fs::read_to_string(&out).unwrap().contains("P04d/P04a"));
+}
+
+/// A cost ratio at or below zero is not a cost, whatever the ordering: sea < 0 < rail < 1 < air
+/// fires the P04 stop rule and nothing is written.
+#[test]
+fn nonpositive_mode_ratio_fires_the_stop_rule() {
+    let s = synthetic_sample(&THETA, 0.0, [0.10, 0.03, 0.01, 0.5], false);
+    let fitted = gravity::mode_costs(&s, &SYNTHETIC_CLASSES, &Transport::default()).unwrap();
+    for sea in [-0.05, 0.0] {
+        let mut m = fitted.clone();
+        m.ratio[1] = sea;
+        let est = estimates(Ok(m));
+        let fired = gravity::stop_rules(&est);
+        assert_eq!(fired.len(), 1, "sea {sea}: {fired:?}");
+        assert!(fired[0].starts_with("P04"), "{fired:?}");
+    }
+}
 
 #[test]
 fn edge_prices_follow_the_geo_spec() {
@@ -490,6 +710,103 @@ fn s05_costs_match_the_rust_crossing_legs() {
     assert!(n > 300_000, "{n} crossing legs");
 }
 
+/// ADR 0247: with the bulk freight rate on (class 3 by default), the country costs of a bulk
+/// class are those of the kernel's bulk legs (`EconInputs::network_from_graph`: the same graph
+/// repriced at `TransportParams::bulk`, shortest paths by `ceteris_geo::paths::shortest`), and
+/// the other classes keep the base legs. Two countries: A with provinces 0 and 1 and port 3, B
+/// with province 2 and port 4; between the ports a sea lane of 4,000 km and a rail line of
+/// 600 km, the rail line cheaper at the base rate (31.2 against 32 per tonne) and the sea lane
+/// at the bulk rate, so the route switches.
+#[test]
+fn bulk_class_country_costs_match_the_kernel() {
+    use ceteris_geo::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
+    use ceteris_geo::paths::shortest;
+    use ceteris_trade::TradeParams;
+
+    let edges = [
+        (0, 1, Mode::Road, 100.0),
+        (0, 3, Mode::PortAccess, 10.0),
+        (1, 3, Mode::Road, 50.0),
+        (2, 4, Mode::PortAccess, 10.0),
+        (3, 5, Mode::Sea, 2000.0),
+        (5, 4, Mode::Sea, 2000.0),
+        (3, 6, Mode::Rail, 300.0),
+        (6, 4, Mode::Rail, 300.0),
+    ];
+    let inputs = gravity::CostInputs {
+        nodes: 7,
+        edge_a: edges.iter().map(|e| e.0).collect(),
+        edge_b: edges.iter().map(|e| e.1).collect(),
+        mode: edges.iter().map(|e| e.2 as u8).collect(),
+        length_km: edges.iter().map(|e| e.3).collect(),
+        tri_m: vec![0.0; edges.len()],
+        gateway_node: vec![3, 4],
+        gateway_country: vec![0, 1],
+        province_country: vec![0, 0, 1],
+        n_countries: 2,
+        va: vec![[1.0; 10]; 3],
+    };
+    let trade = TradeParams::default();
+    let (classes, sea, port) = trade.bulk_rate().expect("the rate is on by default");
+    let p = Transport::default();
+    let costs = inputs.country_costs(&p, &trade);
+
+    let kind = [0, 0, 0, 2, 2, 4, 1].map(|k| NodeKind::from_u8(k).unwrap());
+    let base = TransportGraph::new(
+        3,
+        NodeList {
+            kind: kind.to_vec(),
+            province: vec![0, 1, 2, 0, 2, 0, 0],
+            lon: vec![0.0; 7],
+            lat: vec![0.0; 7],
+        },
+        EdgeList {
+            a: edges.iter().map(|e| e.0 as u32).collect(),
+            b: edges.iter().map(|e| e.1 as u32).collect(),
+            mode: edges.iter().map(|e| e.2).collect(),
+            length_km: inputs.length_km.clone(),
+            tri_m: inputs.tri_m.clone(),
+            chokepoint: vec![0; edges.len()],
+        },
+        &TransportParams::default(),
+    );
+    let mut bulk = base.clone();
+    bulk.reprice(&TransportParams::default().bulk(sea, port));
+    // the kernel's chain from A to B: access from the province to port 3, the crossing to port 4,
+    // access from province 2; with VA 1 everywhere the country cost is the mean over A's provinces
+    let chain = |g: &TransportGraph| {
+        let (p3, p2) = (shortest(g, 3), shortest(g, 2));
+        let legs = |o: u32| {
+            let t = shortest(g, o);
+            (
+                t.cost[3] + p3.cost[4] + p2.cost[4],
+                t.hours[3] + p3.hours[4] + p2.hours[4],
+            )
+        };
+        let (a, b) = (legs(0), legs(1));
+        ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+    };
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * y;
+    let (on_base, on_bulk) = (chain(&base), chain(&bulk));
+    assert!(
+        on_bulk.0 < 0.9 * on_base.0 && on_bulk.1 > on_base.1,
+        "{on_bulk:?} {on_base:?}"
+    );
+    for g in 0..7 {
+        let want = if classes[usize::from(trade.theta_class[g])] {
+            on_bulk
+        } else {
+            on_base
+        };
+        let q = costs.at(0, 1, g);
+        let got = (gravity::edge_cost(q, &p), q[Q_HOURS]);
+        assert!(
+            close(got.0, want.0) && close(got.1, want.1),
+            "good {g}: {got:?} {want:?}"
+        );
+    }
+}
+
 /// The literals of ADR 0023 as exported from `TradeParams::default()` (pinned to the export by
 /// p2_acceptance), against `CLASSES` and `THETA_DEFAULT`.
 #[test]
@@ -504,7 +821,7 @@ fn fixture_defaults_match_the_calibration_constants() {
         .iter()
         .map(|v| v.as_u64().unwrap())
         .collect();
-    assert_eq!(of, [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]);
+    assert_eq!(of, [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]);
     let theta: Vec<f64> = trade["theta"]
         .as_array()
         .unwrap()
@@ -513,7 +830,7 @@ fn fixture_defaults_match_the_calibration_constants() {
         .collect();
     assert_eq!(
         theta,
-        [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]
+        [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]
     );
     let n_classes = *of[..7].iter().max().unwrap() as usize + 1;
     let classes: Vec<Vec<usize>> = (0..n_classes)

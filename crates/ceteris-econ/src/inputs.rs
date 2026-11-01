@@ -5,10 +5,46 @@
 use std::sync::Arc;
 
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Leg, N_GOODS, Network, TradeParams, Wedges};
+use ceteris_trade::{Leg, LegTaus, N_GOODS, Network, TradeParams, Wedges};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
+use crate::params::EconParams;
+
+/// The elasticities of each market's price loop at the calibrated point (ADR 0263; trade SPEC,
+/// Stability region, Per-market gain), `[province * N_GOODS + g]`, 0 where no market is active.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarketElasticity {
+    /// E: the own-price elasticity of the orders the market receives.
+    pub demand: Vec<f64>,
+    /// eps: the largest supply elasticity of the market's enterprises.
+    pub supply: Vec<f64>,
+    /// The limit gain of the market's coupled block (ADR 0267; trade SPEC, Block gain) in the
+    /// default mode and frictionless: the gain at which the block is at the edge of stability,
+    /// computed at the default kappa1 (P03a), P03d and wage parameters; infinite for a market in
+    /// no block or one whose block is within its margin.
+    pub limit: [Vec<f64>; 2],
+}
+
+impl MarketElasticity {
+    /// J of cell `i` at employment speed `eta` (P41) under `trade`: E r + eta eps / (2 - eta), r
+    /// the storage order's factor on the orders' elasticity at a competitively stored good's
+    /// origin ([`TradeParams::order_response`], ADR 0091; 1 elsewhere).
+    pub fn j(&self, i: usize, eta: f64, trade: &TradeParams) -> f64 {
+        self.demand[i] * trade.order_response(i % N_GOODS) + eta * self.supply[i] / (2.0 - eta)
+    }
+
+    /// kappa1_cell of cell `i` in a run under `params` and `trade` (ADRs 0263, 0267): the
+    /// per-market cap at the run's eta, kappa1 and P03d, capped again at the share P03d of the
+    /// block limit gain of the run's wage regime (frictionless or the wage rule). J carries the
+    /// storage response of `trade`; the limit is the calibration's, at its storage parameters.
+    pub fn price_gain(&self, i: usize, params: &EconParams, trade: &TradeParams) -> f64 {
+        let mode = usize::from(params.frictionless);
+        trade
+            .price_gain(self.j(i, params.eta, trade))
+            .min(trade.gain_share * self.limit[mode][i])
+    }
+}
 
 /// Education levels of a pop: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
@@ -50,6 +86,12 @@ pub struct ProvinceData {
     /// traded goods, sourcing in the data state with prices 1, tariffs and iceberg included,
     /// infinite where no origin is reachable. See [`EconInputs::set_base_prices`].
     pub base_price: Vec<[f64; N_GOODS]>,
+    /// Selection constant Gamma of every good at the province (ADR 0200): buyers of a traded
+    /// good pay Gamma times the CES index P_d. Fixed where the world is calibrated, so that the
+    /// buyer price there is the delivered unit price of the physical arrivals: the data state's
+    /// `base_price / P_d` at prices 1 ([`EconInputs::set_base_prices`]), or the calibration
+    /// tables' value. 1 for local goods and where no origin is reachable.
+    pub gamma: Vec<[f64; N_GOODS]>,
 }
 
 /// Pops, one per (province, education level), sorted by province.
@@ -108,9 +150,25 @@ pub struct EconInputs {
     /// The calibrated steady state a world starts from (ADR 0089, stage 5); `None` starts
     /// from the data state. Not in the digest: snapshots carry the state.
     pub steady: Option<Arc<Steady>>,
+    /// P05 per good of the calibration (ADRs 0092, 0276), which its steady state was solved at;
+    /// `None` uncalibrated. [`EconInputs::trade_params`] carries it into the trade parameters.
+    pub border_nu: Option<[f64; N_GOODS]>,
+    /// The calibration's elasticities of each market's price loop (ADR 0263), which cap its
+    /// price gain; `None` uncalibrated, where every market runs kappa1.
+    pub market_elasticity: Option<MarketElasticity>,
 }
 
 impl EconInputs {
+    /// The default trade parameters with the calibrated border friction, where there is one:
+    /// the parameters the calibrated steady state holds under.
+    pub fn trade_params(&self) -> TradeParams {
+        let default = TradeParams::default();
+        TradeParams {
+            border_nu: self.border_nu.unwrap_or(default.border_nu),
+            ..default
+        }
+    }
+
     pub fn n_countries(&self) -> usize {
         self.countries.s_l.len()
     }
@@ -142,10 +200,53 @@ impl EconInputs {
         self.enterprises.coef[e][k]
     }
 
-    /// Fills `ProvinceData::base_price` from sourcing at prices 1 over the kernel of this
-    /// network under `trade` (`world::delivered_prices`, the price index of the data state).
+    /// Fills `ProvinceData::base_price` and `ProvinceData::gamma` from sourcing at prices 1
+    /// over the kernel of this network under `trade` ([`crate::world::base_delivered_prices`]).
     pub fn set_base_prices(&mut self, trade: &TradeParams) {
-        self.provinces.base_price = crate::world::base_delivered_prices(self, trade);
+        (self.provinces.base_price, self.provinces.gamma) =
+            crate::world::base_delivered_prices(self, trade);
+    }
+
+    /// Sets the network's route taus to the kernel's least-cost factors (S05) under `trade`,
+    /// from the bulk legs for the bulk classes' goods (ADR 0247), with each good's leg hours,
+    /// and drops the bulk legs, since route taus and bulk legs are exclusive. The world then
+    /// runs with the bulk freight rate off; its kernel is the one of these inputs at `trade`.
+    pub fn fold_bulk_into_route_taus(&mut self, trade: &TradeParams) {
+        let bulk = self.network.bulk.take();
+        let weight = self.weight;
+        let on_bulk = |g: usize| {
+            bulk.as_ref()
+                .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
+        };
+        let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>| {
+            let leg = |i: usize, g: usize| bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]);
+            let taus: Vec<[f64; N_GOODS]> = (0..base.len())
+                .map(|i| {
+                    std::array::from_fn(|g| {
+                        let l = leg(i, g);
+                        // the kernel's least-cost factor, bit for bit
+                        1.0 + l.cost_per_t * weight[g] + trade.time_cost[g] * l.hours / 24.0
+                    })
+                })
+                .collect();
+            let hours = (0..base.len())
+                .map(|i| std::array::from_fn(|g| leg(i, g).hours))
+                .collect();
+            (taus, hours)
+        };
+        let net = &self.network;
+        let (domestic, domestic_hours) = factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic));
+        let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access));
+        let (crossings, crossing_hours) =
+            factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings));
+        self.network.route_taus = Some(LegTaus {
+            domestic,
+            access,
+            crossings,
+            domestic_hours,
+            access_hours,
+            crossing_hours,
+        });
     }
 
     /// Fills every enterprise's 2000 column with [`EconInputs::cost_share_column`], its
@@ -301,7 +402,10 @@ impl EconInputs {
 
         let p = &self.provinces;
         assert!(
-            p.population.len() == np && p.w0.len() == np && p.base_price.len() == np,
+            p.population.len() == np
+                && p.w0.len() == np
+                && p.base_price.len() == np
+                && p.gamma.len() == np,
             "province columns disagree in length; fill base prices with set_base_prices"
         );
         assert!(
@@ -309,6 +413,12 @@ impl EconInputs {
                 .iter()
                 .all(|q| q.iter().all(|&x| x > 0.0 && !x.is_nan())),
             "base delivered prices must be positive"
+        );
+        assert!(
+            p.gamma
+                .iter()
+                .all(|g| g.iter().all(|&x| x > 0.0 && x.is_finite())),
+            "selection constants must be positive and finite"
         );
         assert_eq!(
             p.country, self.network.province_country,
@@ -412,14 +522,18 @@ impl EconInputs {
             enterprises,
             // the initial state, which snapshots carry
             steady: _,
+            border_nu,
+            market_elasticity,
         } = self;
         let Network {
             province_country,
             gateway_country,
+            gateway_mass,
             domestic,
             access,
             crossings,
             route_taus,
+            bulk,
         } = network;
         let Countries {
             omega,
@@ -436,6 +550,7 @@ impl EconInputs {
             w0,
             pack,
             base_price,
+            gamma,
         } = provinces;
         let PopData {
             province: pop_province,
@@ -459,6 +574,7 @@ impl EconInputs {
         b"ceteris-econ-inputs-1".iter().for_each(|&b| e.u8(b));
         u16s(&mut e, province_country);
         u16s(&mut e, gateway_country);
+        e.f64s(gateway_mass);
         for legs in [domestic, access, crossings] {
             encode_legs(&mut e, legs);
         }
@@ -475,6 +591,7 @@ impl EconInputs {
         e.f64s(population);
         e.f64s(w0);
         e.f64s(base_price.as_flattened());
+        e.f64s(gamma.as_flattened());
         e.u32s(pop_province);
         e.count(edu.len());
         edu.iter().for_each(|&b| e.u8(b));
@@ -496,7 +613,20 @@ impl EconInputs {
                 e.f64(w.scale);
                 e.f64s(&w.omega);
                 e.f64s(&w.within);
+                e.f64(w.sigma);
             }
+        }
+        if let Some(nu) = border_nu {
+            b"border-nu".iter().for_each(|&b| e.u8(b));
+            e.f64s(nu);
+        }
+        // appended only when present, so uncalibrated worlds keep their digest
+        if let Some(m) = market_elasticity {
+            b"market-elasticity".iter().for_each(|&b| e.u8(b));
+            e.f64s(&m.demand);
+            e.f64s(&m.supply);
+            e.f64s(&m.limit[0]);
+            e.f64s(&m.limit[1]);
         }
         // appended only when present, so generated worlds keep their digest
         if !pack.is_empty() {
@@ -515,6 +645,14 @@ impl EconInputs {
                 &rt.crossing_hours,
             ] {
                 e.f64s(list.as_flattened());
+            }
+        }
+        // appended only when present, so networks without a bulk freight rate keep their digest
+        if let Some(b) = bulk {
+            b"bulk-legs".iter().for_each(|&b| e.u8(b));
+            b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
+            for legs in [&b.domestic, &b.access, &b.crossings] {
+                encode_legs(&mut e, legs);
             }
         }
         state_hash(&e.into_bytes())

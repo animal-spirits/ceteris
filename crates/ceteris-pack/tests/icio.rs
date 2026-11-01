@@ -7,12 +7,13 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
-    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, impute, impute_pack, median_va_over_gdp,
-    oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares, world_oil_gas_column,
+    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, home_share_columns, impute, impute_pack,
+    median_va_over_gdp, oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
+    world_oil_gas_column,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
-use ceteris_pack::read::icio::{CountryIo, N_GOODS, Wdi, aggregate, load_wdi};
+use ceteris_pack::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi, aggregate, load_wdi};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{Observed, load_observed};
 use ceteris_pack::read::wdi::Names;
@@ -34,13 +35,23 @@ fn with<T: Clone>(base: &[(&str, T)], more: &[(&str, T)]) -> BTreeMap<String, T>
 
 /// A donor whose VA is `DONOR_VA` and whose inputs take `colsum` of every column's output.
 fn country(colsum: f64, fd: [f64; N_GOODS]) -> CountryIo {
-    CountryIo {
+    let mut c = CountryIo {
         output: DONOR_VA.map(|v| v / (1.0 - colsum)),
         va: DONOR_VA,
         io: [[colsum / 10.0; N_GOODS]; N_GOODS],
         final_demand_shares: fd,
         coal_share: 0.0,
-    }
+        extraction: [0.0; N_GOODS],
+        extraction_output: 0.0,
+    };
+    extraction_is_good_one(&mut c);
+    c
+}
+
+/// All of good 1 is extraction (no refining in it).
+fn extraction_is_good_one(c: &mut CountryIo) {
+    c.extraction_output = c.output[1];
+    c.extraction = std::array::from_fn(|k| c.io[k][1] * c.output[1]);
 }
 
 fn donors() -> BTreeMap<String, CountryIo> {
@@ -323,6 +334,7 @@ fn oil_donors() -> BTreeMap<String, CountryIo> {
     let c = icio.get_mut("CCC").unwrap();
     c.va = [10.0, 40.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 41.0];
     c.output = c.va.map(|v| v / 0.7);
+    extraction_is_good_one(c);
     icio
 }
 
@@ -346,6 +358,38 @@ fn oil_gas_va_over_rents_sums_the_icio_economies_with_a_rent() {
         2.0,
         1e-12
     ));
+}
+
+/// Gives donor `code` refining in good 1: its crude oil and gas extraction (B06, B09) has output
+/// `output` and inputs summing to `inputs`, the rest of good 1 being refining (C19).
+fn refines(icio: &mut BTreeMap<String, CountryIo>, code: &str, output: f64, inputs: f64) {
+    let c = icio.get_mut(code).unwrap();
+    c.extraction_output = output;
+    c.extraction = [0.0; N_GOODS];
+    (c.extraction[1], c.extraction[3]) = (0.5 * inputs, 0.5 * inputs);
+}
+
+/// The rents measure extraction, so the factor is extraction VA (B06, B09 output less their
+/// inputs) over rents, not good 1's VA with refining in it (ADR 0281): AAA's good-1 VA is 4, of
+/// which extraction 3 - 0.5 = 2.5, against rents of 2.
+#[test]
+fn oil_gas_va_over_rents_takes_extraction_value_added() {
+    let mut icio = donors();
+    refines(&mut icio, "AAA", 3.0, 0.5);
+    assert!(approx(
+        oil_gas_va_over_rents(&icio, &with_rents(0.0, 0.0)),
+        1.25,
+        1e-12
+    ));
+}
+
+/// The cap is the largest extraction VA over the VA of goods 1 to 8 (refining stays in
+/// industry): CCC's good 1 holds 40 of its industry's 49, extraction 30 of it.
+#[test]
+fn oil_gas_most_of_industry_takes_extraction_value_added() {
+    let mut icio = oil_donors();
+    refines(&mut icio, "CCC", 36.0, 6.0);
+    assert!(approx(oil_gas_most_of_industry(&icio), 30.0 / 49.0, 1e-12));
 }
 
 #[test]
@@ -410,6 +454,7 @@ fn a_donor_without_oil_and_gas_still_gives_oil_and_gas_output() {
     for row in &mut b.io {
         row[1] = 0.0;
     }
+    extraction_is_good_one(b);
     let got = run(
         &[("XXX", "XXX")],
         &icio,
@@ -445,6 +490,20 @@ fn world_oil_gas_column_weights_inputs_by_oil_and_gas_output() {
             .iter()
             .all(|&x| approx(x, want, 1e-12))
     );
+}
+
+#[test]
+fn world_oil_gas_column_leaves_out_refining() {
+    // Refining in good 1 (ADR 0092) changes its column but not the extraction one (ADR 0270).
+    let mut icio = oil_donors();
+    let want = world_oil_gas_column(&icio);
+    for c in icio.values_mut() {
+        c.output[1] *= 3.0;
+        for row in &mut c.io {
+            row[1] = 0.06;
+        }
+    }
+    assert_eq!(world_oil_gas_column(&icio), want);
 }
 
 #[test]
@@ -1018,6 +1077,67 @@ fn real_venezuela_is_not_left_empty() {
     assert!((80e3..130e3).contains(&total(&ven.table.va)));
 }
 
+/// `econ_home_shares.arrow`: one row per pack country and traded good; an ICIO economy (by its ISO
+/// code) carries its domestic over total use and its total use, a country outside ICIO is flagged
+/// and carries NaN.
+#[test]
+fn home_share_rows_follow_the_pack_countries() {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
+
+    let mut home = [0.0; N_GOODS];
+    let mut total = [0.0; N_GOODS];
+    for g in 0..7 {
+        home[g] = 1.0 + g as f64;
+        total[g] = 4.0 + 2.0 * g as f64;
+    }
+    total[2] = 0.0;
+    home[2] = 0.0;
+    let used = map(&[("AAA", HomeUse { home, total })]);
+    let iso = map(&[("XAA", "AAA".to_owned())]);
+    let codes = ["XAA".to_owned(), "BBB".to_owned()];
+    let batch =
+        arrow_array::RecordBatch::try_from_iter(home_share_columns(&codes, &used, &iso).unwrap())
+            .unwrap();
+    assert_eq!(batch.num_rows(), 14);
+    let col = |n: &str| batch.column_by_name(n).unwrap().clone();
+    let country = col("country")
+        .as_primitive::<UInt32Type>()
+        .values()
+        .to_vec();
+    let good = col("good").as_primitive::<UInt8Type>().values().to_vec();
+    let share = col("home_share")
+        .as_primitive::<Float64Type>()
+        .values()
+        .to_vec();
+    let absorption = col("absorption")
+        .as_primitive::<Float64Type>()
+        .values()
+        .to_vec();
+    let icio: Vec<bool> = col("icio")
+        .as_boolean()
+        .iter()
+        .map(|b| b.unwrap())
+        .collect();
+    for r in 0..14 {
+        let (c, g) = (r / 7, r % 7);
+        assert_eq!((country[r] as usize, usize::from(good[r])), (c, g));
+        if c == 0 && g != 2 {
+            assert!(icio[r]);
+            assert!(approx(share[r], home[g] / total[g], 1e-12), "row {r}");
+            assert_eq!(absorption[r], total[g]);
+        } else {
+            // outside ICIO, or an ICIO economy that uses none of the good
+            assert_eq!(icio[r], c == 0);
+            assert!(share[r].is_nan(), "row {r}");
+            assert!(
+                c == 0 && absorption[r] == 0.0 || absorption[r].is_nan(),
+                "row {r}"
+            );
+        }
+    }
+}
+
 /// Economies whose WDI 2000 lacks one of agriculture, industry or services.
 const PARTIAL_SHARES: [&str; 9] = [
     "BMU", "ERI", "KEN", "KWT", "LBY", "MAC", "MDG", "PNG", "TUV",
@@ -1049,8 +1169,25 @@ fn real_partial_shares_reach_the_icio_median_va_over_gdp() {
 #[test]
 fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
     let Some(d) = data() else { return };
+    // Extraction VA over rents (ADR 0281). Below: a rent, (price - unit cost) times output, is
+    // at most the output's value, so k is at least the extraction column's a_VA, 0.666 in the
+    // world totals of ADR 0270. Above: good 1's VA holds refining's as well, which is not
+    // negative, so k is below the same sum over good 1's VA. 2000: 0.991 against 1.430.
     let k = oil_gas_va_over_rents(&d.real, &d.wdi);
-    assert!((0.5..3.0).contains(&k), "{k}");
+    let (va_1, rents): (Vec<f64>, Vec<f64>) = d
+        .real
+        .iter()
+        .filter_map(|(code, c)| {
+            let r = match (d.wdi.oil_rents.get(code), d.wdi.gas_rents.get(code)) {
+                (None, None) => return None,
+                (oil, gas) => oil.unwrap_or(&0.0) + gas.unwrap_or(&0.0),
+            };
+            Some((c.va[1] * 1e6, d.wdi.gdp.get(code)? * r))
+        })
+        .unzip();
+    let with_refining = va_1.iter().sum::<f64>() / rents.iter().sum::<f64>();
+    let a_va = 1.0 - world_oil_gas_column(&d.real).iter().sum::<f64>();
+    assert!(a_va < k && k < with_refining, "{a_va} {k} {with_refining}");
     // Billion USD of crude oil and gas VA, against about 21, 14, 20 and 33 of 2000 crude output.
     // Crude oil and gas from rents produce with the world column, not the donor's (Sudan's
     // donor Senegal has a value-added share of 0.07 in it).
@@ -1059,7 +1196,8 @@ fn real_oil_exporters_outside_icio_have_their_oil_and_gas() {
         let io = &d.imputed[code].table.io;
         assert!(io.iter().zip(world).all(|(row, w)| row[1] == w), "{code}");
     }
-    assert!(1.0 - world.iter().sum::<f64>() > 0.5);
+    // Extraction only (ADR 0270): 0.666 on 2000 data, against 0.418 with refining.
+    assert!((0.6..0.7).contains(&(1.0 - world.iter().sum::<f64>())));
     for (code, low) in [("KWT", 10.0), ("LBY", 5.0), ("DZA", 8.0), ("VEN", 15.0)] {
         let va = d.imputed[code].table.va[1] / 1e3;
         assert!(va > low, "{code} {va}");

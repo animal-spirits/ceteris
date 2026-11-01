@@ -199,6 +199,7 @@ fn ratio() {
             g,
             &price,
             &active,
+            &w.layout().gamma[g],
             &vec![[1.0, 0.0]; np],
             &mut out,
         );

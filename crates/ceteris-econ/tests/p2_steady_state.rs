@@ -1,19 +1,28 @@
 //! ADR 0089: the calibrated data state is the model's steady state. From the calibration
-//! tables (`ceteris calibrate`), 120 ticks with every friction on stay at
-//! the calibrated state: on the fixture (`tests/golden/p2-fixture/calibration`) and, when the
-//! pack holds its calibration, on the full 2000 pack. Run with `--release`; the pack run takes
-//! about 20 s.
+//! tables (`ceteris calibrate`), a run with every friction on stays at the calibrated state: 480
+//! ticks on the fixture (`tests/golden/p2-fixture/calibration`) and, when the pack holds its
+//! calibration, on the full 2000 pack. Run with `--release`; the pack run takes about 25 s.
 //!
 //! Acceptance (owner decision 2026-10-25, a resolution-aware test; controller ruling on its
 //! form, ADR 0089 As built): on the fixture every quantity holds to 1e-9 relative. On the full
 //! pack money is integer minor units (1e-4 USD), and national dividends and domestic trade
 //! carry each pop's rounding through its country, so prices and flows hold to 2e-6 relative,
-//! money (pop income and balances, which drift as real drift times income) to 2e-6 relative or
-//! 4 minor units per pop, whichever is larger, and world aggregates (price index, income,
-//! unemployment) to 1e-9. Every quantity's
-//! drift stays bounded: its largest value over ticks 61 to 120, scaled by its tolerance, is at
-//! most twice that over ticks 5 to 60 (ticks 1 to 4, where prices and wages settle onto the
-//! rounding lattice, left out).
+//! money (pop income and balances) to 2e-6 of the pop's steady monthly income or 4 minor units,
+//! whichever is larger (P156), and world aggregates (price index, income, unemployment) to
+//! 1e-9. A balance's error accumulates from one tick's flows through it, wage, dividends and
+//! rebates in and spending out, each carrying the relative error eps of the real drift:
+//! |dm| <= eps (W + Div + Reb + S) ~ 2 eps y, y the monthly income. A tolerance relative to the
+//! balance itself reads that error against the non-wage share of income only (0.22 in Albania,
+//! 0.32 in Pitcairn), so it scales with income y_k; the factor 2 is not taken, so 2e-6 y_k is
+//! the tighter of the two bounds (owner approval 2026-10-30). Every quantity's
+//! drift stays bounded: its largest value over the second half of the run, scaled by its
+//! tolerance, is at most twice that over ticks 5 to the half (ticks 1 to 4, where prices and
+//! wages settle onto the rounding lattice, left out). The fixture's rounding drift peaks near
+//! tick 105 and falls after, so a 120-tick window would read that peak as growth. On the pack
+//! the slowest block mode (Pitcairn, good 9) has modulus 0.95 and a period of about 70 ticks,
+//! so halves of 56 and 60 ticks each see less than one period and read its phase as growth on 6
+//! to 10% of window positions; the pack also runs 480 ticks, each half at least 3 periods (ADR
+//! 0089 As built).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,11 +33,12 @@ use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::world::{MINOR_PER_UNIT, to_numeraire};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
-use ceteris_trade::TradeParams;
+use ceteris_trade::{N_GOODS, TradeParams};
 
-const TICKS: u32 = 120;
+/// Ticks of the fixture's and the pack's runs; the boundedness check splits each at its half.
+const FIXTURE_TICKS: u32 = 480;
+const PACK_TICKS: u32 = 480;
 const SETTLE: u32 = 4;
-const SPLIT: u32 = 60;
 /// Relative drift below which a quantity is at f64 rounding (about 450 ulps): it wanders
 /// rather than grows, so the boundedness check does not apply.
 const ROUNDING: f64 = 1e-13;
@@ -64,6 +74,8 @@ struct Tolerance {
     money: f64,
     minor: f64,
     world: f64,
+    /// Money relative to the pop's steady monthly income (P156) instead of the quantity itself.
+    money_of_income: bool,
 }
 
 /// Every quantity at 1e-9 relative (the fixture).
@@ -72,12 +84,14 @@ const FIXTURE: Tolerance = Tolerance {
     money: EXACT,
     minor: 0.0,
     world: EXACT,
+    money_of_income: false,
 };
 const PACK: Tolerance = Tolerance {
     real: PACK_RELATIVE,
     money: PACK_RELATIVE,
     minor: PACK_MINOR,
     world: EXACT,
+    money_of_income: true,
 };
 
 /// A drift over its tolerance; no drift is 0 even where the tolerance is 0 (a zero balance
@@ -86,8 +100,21 @@ fn over(drift: f64, tolerance: f64) -> f64 {
     if drift == 0.0 { 0.0 } else { drift / tolerance }
 }
 
-/// A quantity: name, kind and entries.
-type Quantity = (&'static str, Kind, Vec<f64>);
+/// What a quantity's entries are, to name the entry a record reports.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Entry {
+    /// Active cells in cell order.
+    ActiveCell,
+    /// Cells `[province * N_GOODS + g]`.
+    Cell,
+    Province,
+    Enterprise,
+    Pop,
+    World,
+}
+
+/// A quantity: name, kind, what its entries are and the entries.
+type Quantity = (&'static str, Kind, Entry, Vec<f64>);
 
 /// The quantities the fixed point holds: prices of active cells, buyer prices that are
 /// finite, wages, employment, output and sales per enterprise, Q, D, sales and merchant stock
@@ -117,27 +144,54 @@ fn quantities(w: &EconWorld) -> Vec<Quantity> {
     let employed: f64 = w.employment.iter().sum();
     let supply: f64 = lay.labour_supply.iter().sum();
     vec![
-        ("price", Kind::Real, active(&m.price)),
-        ("buyer price", Kind::Real, finite),
-        ("wage", Kind::Real, w.wage.clone()),
-        ("employment", Kind::Real, w.employment.clone()),
-        ("output", Kind::Real, w.output.clone()),
-        ("enterprise sales", Kind::Real, w.sales.clone()),
-        ("supply Q", Kind::Real, active(&m.supply)),
-        ("demand D", Kind::Real, active(&m.demand)),
-        ("market sales", Kind::Real, active(&m.sales)),
-        ("merchant stock", Kind::Real, active(&m.inventory)),
-        ("pop income", Kind::Money, w.income.clone()),
-        ("pop money", Kind::Money, money),
+        ("price", Kind::Real, Entry::ActiveCell, active(&m.price)),
+        ("buyer price", Kind::Real, Entry::Cell, finite),
+        ("wage", Kind::Real, Entry::Province, w.wage.clone()),
+        (
+            "employment",
+            Kind::Real,
+            Entry::Enterprise,
+            w.employment.clone(),
+        ),
+        ("output", Kind::Real, Entry::Enterprise, w.output.clone()),
+        (
+            "enterprise sales",
+            Kind::Real,
+            Entry::Enterprise,
+            w.sales.clone(),
+        ),
+        ("supply Q", Kind::Real, Entry::ActiveCell, active(&m.supply)),
+        ("demand D", Kind::Real, Entry::ActiveCell, active(&m.demand)),
+        (
+            "market sales",
+            Kind::Real,
+            Entry::ActiveCell,
+            active(&m.sales),
+        ),
+        (
+            "merchant stock",
+            Kind::Real,
+            Entry::ActiveCell,
+            active(&m.inventory),
+        ),
+        ("pop income", Kind::Money, Entry::Pop, w.income.clone()),
+        ("pop money", Kind::Money, Entry::Pop, money),
         (
             "world price index",
             Kind::World,
+            Entry::World,
             vec![w.world_price_index()],
         ),
-        ("world income", Kind::World, vec![w.income.iter().sum()]),
+        (
+            "world income",
+            Kind::World,
+            Entry::World,
+            vec![w.income.iter().sum()],
+        ),
         (
             "world unemployment",
             Kind::World,
+            Entry::World,
             vec![1.0 - employed / supply],
         ),
     ]
@@ -148,6 +202,7 @@ fn quantities(w: &EconWorld) -> Vec<Quantity> {
 struct Record {
     name: &'static str,
     kind: Kind,
+    what: Entry,
     /// Largest relative drift (entries at 0 measured against the largest entry), its tick and
     /// entry.
     relative: f64,
@@ -157,28 +212,88 @@ struct Record {
     minor: f64,
     minor_tick: u32,
     minor_entry: usize,
-    /// Largest drift over its tolerance, over the run and over ticks SETTLE + 1 to SPLIT and
-    /// SPLIT + 1 to TICKS.
+    /// Largest drift over its tolerance, over the run and over ticks SETTLE + 1 to the half and
+    /// the half + 1 to the end.
     over: f64,
     early: f64,
     late: f64,
-    /// Largest relative drift over ticks SPLIT + 1 to TICKS.
+    /// Tick and entry of `late`.
+    late_tick: u32,
+    late_entry: usize,
+    /// Largest relative drift over the second half.
     late_relative: f64,
+    /// `entry`, `minor_entry` and `late_entry` named by [`place`].
+    at: String,
+    minor_at: String,
+    late_at: String,
 }
 
-/// Runs `TICKS` ticks from the steady state of `inputs` and returns the record of every
+/// Names entry `e` of a quantity whose entries are `what`: its cell, province, good and
+/// country. `cells` are the active cells; `codes` the country code of each province, empty
+/// for a world from no pack (the country's index then).
+fn place(inputs: &EconInputs, cells: &[usize], codes: &[String], what: Entry, e: usize) -> String {
+    let country = |p: usize| {
+        codes
+            .get(p)
+            .cloned()
+            .unwrap_or_else(|| inputs.country_of(p).to_string())
+    };
+    let cell = |c: usize| {
+        let p = c / N_GOODS;
+        format!(
+            "cell {c} (province {p}, good {}, country {})",
+            c % N_GOODS,
+            country(p)
+        )
+    };
+    match what {
+        Entry::ActiveCell => cell(cells[e]),
+        Entry::Cell => cell(e),
+        Entry::Province => format!("province {e} (country {})", country(e)),
+        Entry::Enterprise => {
+            let ent = &inputs.enterprises;
+            let p = ent.province[e] as usize;
+            format!(
+                "enterprise {e} (province {p}, good {}, country {})",
+                ent.good[e],
+                country(p)
+            )
+        }
+        Entry::Pop => {
+            let pops = &inputs.pops;
+            let p = pops.province[e] as usize;
+            format!(
+                "pop {e} (province {p}, education {}, country {})",
+                pops.edu[e],
+                country(p)
+            )
+        }
+        Entry::World => "world".to_string(),
+    }
+}
+
+/// Runs `ticks` ticks from the steady state of `inputs` and returns the record of every
 /// quantity under `tol`; prints them, the world price index path and the time per tick.
-fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
+/// `codes` are the country codes of the provinces, [`place`].
+fn run(
+    inputs: EconInputs,
+    codes: &[String],
+    ticks: u32,
+    tol: Tolerance,
+    what: &str,
+) -> Vec<Record> {
+    let split = ticks / 2;
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
-    let world = EconWorld::new(
-        Arc::new(inputs),
-        EconParams::default(),
-        TradeParams::default(),
-    );
+    let trade = inputs.trade_params();
+    let inputs = Arc::new(inputs);
+    let world = EconWorld::new(Arc::clone(&inputs), EconParams::default(), trade);
     let steady = world.inputs().steady.clone().unwrap();
+    let cells: Vec<usize> = (0..world.markets.active.len())
+        .filter(|&c| world.markets.active[c])
+        .collect();
     let mut base = quantities(&world);
     // the calibrated state's last tick, which the first tick must reproduce
-    for (name, _, values) in &mut base {
+    for (name, _, _, values) in &mut base {
         match *name {
             "output" => values.clone_from(&steady.output),
             "enterprise sales" => values.clone_from(&steady.ent_sales),
@@ -190,9 +305,10 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
     }
     let mut records: Vec<Record> = base
         .iter()
-        .map(|&(name, kind, _)| Record {
+        .map(|&(name, kind, what, _)| Record {
             name,
             kind,
+            what,
             relative: 0.0,
             tick: 0,
             entry: 0,
@@ -202,17 +318,22 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
             over: 0.0,
             early: 0.0,
             late: 0.0,
+            late_tick: 0,
+            late_entry: 0,
             late_relative: 0.0,
+            at: String::new(),
+            minor_at: String::new(),
+            late_at: String::new(),
         })
         .collect();
     let mut sim = Sim::new(world, schedule(), SEED);
     let mut index = Vec::new();
     let started = std::time::Instant::now();
-    for tick in 1..=TICKS {
+    for tick in 1..=ticks {
         sim.step().unwrap_or_else(|v| panic!("{what}: {v}"));
         let w = sim.world();
         index.push(w.world_price_index());
-        for (r, ((_, kind, b), (_, _, now))) in
+        for (r, ((_, kind, _, b), (_, _, _, now))) in
             records.iter_mut().zip(base.iter().zip(quantities(w)))
         {
             let scale = b.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
@@ -223,7 +344,14 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                 let scaled = match kind {
                     Kind::Real => over(relative, tol.real),
                     Kind::World => over(relative, tol.world),
-                    Kind::Money => over(minor, tol.minor.max(tol.money * b.abs() * MINOR_PER_UNIT)),
+                    Kind::Money => {
+                        let of = if tol.money_of_income {
+                            steady.income[entry]
+                        } else {
+                            b
+                        };
+                        over(minor, tol.minor.max(tol.money * of.abs() * MINOR_PER_UNIT))
+                    }
                 };
                 if relative > r.relative {
                     (r.relative, r.tick, r.entry) = (relative, tick, entry);
@@ -232,68 +360,79 @@ fn run(inputs: EconInputs, tol: Tolerance, what: &str) -> Vec<Record> {
                     (r.minor, r.minor_tick, r.minor_entry) = (minor, tick, entry);
                 }
                 r.over = r.over.max(scaled);
-                if tick > SETTLE && tick <= SPLIT {
+                if tick > SETTLE && tick <= split {
                     r.early = r.early.max(scaled);
-                } else if tick > SPLIT {
-                    r.late = r.late.max(scaled);
+                } else if tick > split && scaled > r.late {
+                    (r.late, r.late_tick, r.late_entry) = (scaled, tick, entry);
+                }
+                if tick > split {
                     r.late_relative = r.late_relative.max(relative);
                 }
             }
         }
     }
-    let per_tick = started.elapsed() / TICKS;
-    println!("{what}: {TICKS} ticks from the calibrated state, {per_tick:?} per tick");
-    for r in &records {
+    let per_tick = started.elapsed() / ticks;
+    println!("{what}: {ticks} ticks from the calibrated state, {per_tick:?} per tick");
+    for r in &mut records {
+        let at = |e| place(&inputs, &cells, codes, r.what, e);
+        (r.at, r.minor_at, r.late_at) = (at(r.entry), at(r.minor_entry), at(r.late_entry));
         println!(
-            "  {:>18} ({:?}): max relative drift {:.3e} (tick {}, entry {}), max absolute \
-             {:.3} minor units (tick {}, entry {}); max drift / tolerance {:.3e}, ticks \
-             {}-{SPLIT} {:.3e}, {}-{TICKS} {:.3e}",
+            "  {:>18} ({:?}): max relative drift {:.3e} (tick {}, {}), max absolute {:.3} \
+             minor units (tick {}, {}); max drift / tolerance {:.3e}, ticks {}-{split} \
+             {:.3e}, {}-{ticks} {:.3e} (tick {}, {})",
             r.name,
             r.kind,
             r.relative,
             r.tick,
-            r.entry,
+            r.at,
             r.minor,
             r.minor_tick,
-            r.minor_entry,
+            r.minor_at,
             r.over,
             SETTLE + 1,
             r.early,
-            SPLIT + 1,
-            r.late
+            split + 1,
+            r.late,
+            r.late_tick,
+            r.late_at
         );
     }
     let (lo, hi) = index
         .iter()
         .fold((f64::INFINITY, 0.0f64), |a, &x| (a.0.min(x), a.1.max(x)));
     println!(
-        "  world price index: tick 1 {:.15}, tick {TICKS} {:.15}, range [{lo:.15}, {hi:.15}]",
+        "  world price index: tick 1 {:.15}, tick {ticks} {:.15}, range [{lo:.15}, {hi:.15}]",
         index[0],
-        index[TICKS as usize - 1]
+        index[ticks as usize - 1]
     );
     records
 }
 
-fn assert_fixed(records: &[Record], what: &str) {
+fn assert_fixed(records: &[Record], ticks: u32, what: &str) {
+    let split = ticks / 2;
     for r in records {
         assert!(
             r.over <= 1.0,
-            "{what}: {} reaches {:.3} times its tolerance (relative {:.3e} at tick {}, {:.3} \
-             minor units at tick {})",
+            "{what}: {} reaches {:.3} times its tolerance (relative {:.3e} at tick {}, {}; \
+             {:.3} minor units at tick {}, {})",
             r.name,
             r.over,
             r.relative,
             r.tick,
+            r.at,
             r.minor,
-            r.minor_tick
+            r.minor_tick,
+            r.minor_at
         );
         assert!(
             r.late <= 2.0 * r.early || r.late_relative <= ROUNDING,
-            "{what}: {} is not bounded: ticks {}-{TICKS} reach {:.3e} of the tolerance, ticks \
-             {}-{SPLIT} {:.3e}",
+            "{what}: {} is not bounded: ticks {}-{ticks} reach {:.3e} of the tolerance (tick \
+             {}, {}), ticks {}-{split} {:.3e}",
             r.name,
-            SPLIT + 1,
+            split + 1,
             r.late,
+            r.late_tick,
+            r.late_at,
             SETTLE + 1,
             r.early
         );
@@ -306,8 +445,8 @@ fn fixture_calibrated_state_holds_to_1e_9() {
     inputs
         .calibrate(&fixture_dir().join("calibration"))
         .unwrap();
-    let records = run(inputs, FIXTURE, "fixture");
-    assert_fixed(&records, "fixture");
+    let records = run(inputs, &[], FIXTURE_TICKS, FIXTURE, "fixture");
+    assert_fixed(&records, FIXTURE_TICKS, "fixture");
 }
 
 /// Calibration tables of other inputs do not load: the static digest guards them.
@@ -338,6 +477,78 @@ fn calibrated_start_rejects_other_theta() {
     EconWorld::new(calibrated_fixture(), EconParams::default(), trade);
 }
 
+/// The storage parameters are structural (ADRs 0091, 0267): the calibration's block map and
+/// market elasticities were computed at them, so a run with a speculation intensity, a
+/// convenience elasticity, a money cost or an expectation gain of its own is refused, though
+/// none of them moves the steady state.
+#[test]
+fn calibrated_start_rejects_other_storage_parameters() {
+    let changes: [fn(&mut TradeParams); 4] = [
+        |t| t.speculation[5] = 5.714,
+        |t| t.convenience[0] *= 1.1,
+        |t| t.storage_cost[1] *= 1.1,
+        |t| t.storage_gain = 0.08,
+    ];
+    for (k, change) in changes.iter().enumerate() {
+        let mut trade = TradeParams::default();
+        change(&mut trade);
+        let err = std::panic::catch_unwind(|| {
+            EconWorld::new(calibrated_fixture(), EconParams::default(), trade)
+        })
+        .map(|_| ())
+        .expect_err(&format!("change {k} was not refused"));
+        let message = err
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .unwrap_or_default();
+        assert!(
+            message.contains("calibrated steady state"),
+            "change {k}: {message}"
+        );
+    }
+}
+
+/// A calibration solved at other border frictions than the defaults (ADRs 0092, 0276), goods 1
+/// and 2 of one theta class at different values.
+const OTHER_NU: [f64; 10] = [0.6, 0.8, 0.05, 0.2, 0.6, 0.2, 0.4, 0.3, 0.3, 0.3];
+
+fn fixture_at_other_nu() -> Arc<EconInputs> {
+    let mut inputs = small_world();
+    inputs
+        .calibrate(&fixture_dir().join("calibration"))
+        .unwrap();
+    inputs.border_nu = Some(OTHER_NU);
+    Arc::new(inputs)
+}
+
+/// The calibrated border friction is part of the parameters the steady state holds under: the
+/// world starts under `EconInputs::trade_params`, which carries it.
+#[test]
+fn calibrated_start_takes_the_calibrated_border_nu() {
+    let inputs = fixture_at_other_nu();
+    let trade = inputs.trade_params();
+    assert_eq!(trade.border_nu, OTHER_NU);
+    assert_eq!(
+        TradeParams {
+            border_nu: TradeParams::default().border_nu,
+            ..trade.clone()
+        },
+        TradeParams::default()
+    );
+    EconWorld::new(inputs, EconParams::default(), trade);
+}
+
+/// ... and the default border friction is then a structural change.
+#[test]
+#[should_panic(expected = "calibrated steady state")]
+fn calibrated_start_rejects_the_default_border_nu() {
+    EconWorld::new(
+        fixture_at_other_nu(),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+}
+
 /// The adjustment speeds do not move the steady state, so they load.
 #[test]
 fn calibrated_start_accepts_other_speeds() {
@@ -351,6 +562,47 @@ fn calibrated_start_accepts_other_speeds() {
         ..EconParams::default()
     };
     EconWorld::new(calibrated_fixture(), params, trade);
+}
+
+/// ADR 0263: the calibrated fixture carries each market's elasticities; at the default eta no
+/// market's J reaches J_ref = 20, so every gain is kappa1 and the default dynamics are those
+/// before the cap. Frictionless (eta 1) J is reported with the cells it caps.
+#[test]
+fn no_cell_capped_in_the_default_mode() {
+    let inputs = calibrated_fixture();
+    let m = inputs
+        .market_elasticity
+        .as_ref()
+        .expect("calibrated elasticities");
+    let trade = inputs.trade_params();
+    let active: Vec<usize> = (0..m.demand.len())
+        .filter(|&i| m.demand[i] > 0.0 || m.supply[i] > 0.0)
+        .collect();
+    assert!(!active.is_empty());
+    for (params, what) in [
+        (EconParams::default(), "default"),
+        (EconParams::frictionless(), "frictionless"),
+    ] {
+        let w = EconWorld::new(Arc::clone(&inputs), params.clone(), trade.clone());
+        let (top, cell) = active
+            .iter()
+            .map(|&i| (m.j(i, params.eta, &trade), i))
+            .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
+        let capped = w
+            .layout()
+            .price_gain
+            .iter()
+            .filter(|&&k| k != trade.kappa1)
+            .count();
+        eprintln!("{what}: largest J {top:.3} at cell {cell}, {capped} cells capped");
+        if what == "default" {
+            assert!(
+                top < 2.0 * trade.gain_share / trade.kappa1,
+                "J {top} at cell {cell}"
+            );
+            assert_eq!(capped, 0);
+        }
+    }
 }
 
 #[test]
@@ -373,6 +625,12 @@ fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let pack =
         ceteris_geo::pack::Pack::load(&dir, &TransportParams::default()).expect("pack loads");
     let inputs = EconInputs::from_pack(&pack, &dir).unwrap();
-    let records = run(inputs, PACK, "full pack");
-    assert_fixed(&records, "full pack");
+    let codes: Vec<String> = inputs
+        .provinces
+        .pack
+        .iter()
+        .map(|&p| pack.provinces.country[p as usize].clone())
+        .collect();
+    let records = run(inputs, &codes, PACK_TICKS, PACK, "full pack");
+    assert_fixed(&records, PACK_TICKS, "full pack");
 }

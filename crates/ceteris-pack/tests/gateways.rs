@@ -170,6 +170,16 @@ fn every_country_gets_a_gateway_from_its_ports_airports_or_land_crossings() {
     assert_eq!(countries.into_iter().collect::<Vec<_>>(), [0, 1, 2]);
     assert_eq!(rows.len(), 5);
     assert!(rows.is_sorted_by_key(|r| (r.country, r.node)));
+    // no throughput per gateway in the sources: each of a country's k gateways has mass 1/k
+    for c in 0..3 {
+        let mass: Vec<f64> = rows
+            .iter()
+            .filter(|r| r.country == c)
+            .map(|r| r.mass)
+            .collect();
+        let k = mass.len() as f64;
+        assert!(mass.iter().all(|&m| m == 1.0 / k), "country {c}: {mass:?}");
+    }
     // BBB's only candidate is its centroid (node 1), the BBB end of both its land crossings,
     // counted once
     let bbb: Vec<(u32, u8)> = rows
@@ -209,11 +219,21 @@ fn read_gateways(path: &std::path::Path) -> Vec<Gateway> {
             .column_by_name("kind")
             .unwrap()
             .as_primitive::<UInt8Type>();
+        let mass = b
+            .column_by_name("mass")
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} has no mass column (ADR 0092): rebuild the econ tables",
+                    path.display()
+                )
+            })
+            .as_primitive::<Float64Type>();
         for i in 0..b.num_rows() {
             out.push(Gateway {
                 node: node.value(i),
                 country: country.value(i),
                 kind: kind.value(i),
+                mass: mass.value(i),
             });
         }
     }
@@ -231,6 +251,22 @@ fn every_country_has_a_gateway() {
     assert_eq!(countries, (0..n).collect());
     let nodes: BTreeSet<u32> = rows.iter().map(|r| r.node).collect();
     assert_eq!(nodes.len(), rows.len());
+}
+
+/// ADR 0092: the masses of each country's gateways sum to 1.
+#[test]
+fn gateway_mass_sums_to_one() {
+    let Some(g) = pack_table("gateways.arrow") else {
+        return;
+    };
+    let mut total: BTreeMap<u32, f64> = BTreeMap::new();
+    for r in read_gateways(&g) {
+        assert!(r.mass > 0.0 && r.mass <= 1.0, "{r:?}");
+        *total.entry(r.country).or_default() += r.mass;
+    }
+    for (c, t) in total {
+        assert!((t - 1.0).abs() <= 1e-12, "country {c}: masses sum to {t}");
+    }
 }
 
 #[test]

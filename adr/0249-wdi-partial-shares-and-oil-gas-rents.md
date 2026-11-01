@@ -1,6 +1,7 @@
 # 0249. Partial WDI sector shares and oil and gas from rents
 
-Status: accepted (owner, 2026-10-30); amended by ADR 0256 (world technology for oil and gas from rents)
+Status: accepted (owner, 2026-10-30); amended by ADR 0256 (world technology for oil and gas from rents) and
+ADR 0281 (proposed: k and c from extraction VA)
 Date: 2026-10-30
 Design sections: 16.1, 22.2; amends ADR 0014
 

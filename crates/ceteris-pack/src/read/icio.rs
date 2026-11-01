@@ -13,6 +13,7 @@ use super::xlsx::{self, Cell};
 use super::{
     ByYear, Csv, WINDOW, YEAR, cell, err, float, int, nearest_year, open_csv, with_member,
 };
+use crate::econ::goods::{Industry, icio_industry};
 use crate::numeric::pairwise_sum;
 
 /// Number of goods.
@@ -29,28 +30,16 @@ pub const ADB_ISO: [(&str, &str); 1] = [("COO", "COK")];
 /// GDP per person is taken from the year nearest 2000 within these years.
 pub const INCOME_YEARS: (i64, i64) = (1995, 2010);
 
-/// Good of an ICIO industry. The 2025 edition has 50 industries; the older names stay mapped,
-/// except the combined coal, oil and gas industry B05_06, which this reader refuses.
+/// Good of an ICIO industry (`goods::icio_industry`), refusing the combined coal, oil and gas
+/// industry B05_06 of editions before 2025.
 pub fn icio_good(industry: &str) -> Result<usize, String> {
-    Ok(match industry {
-        "A01" | "A02" | "A03" | "A01_02" => 0,
-        "B06" | "B09" => 1,
-        "B05" | "B07" | "B08" | "B07_08" => 2,
-        "C10T12" => 3,
-        "C13T15" | "C16" | "C17_18" | "C31T33" => 4,
-        "C19" | "C20" | "C21" | "C22" | "C23" | "C24" | "C24A" | "C24B" | "C25" => 5,
-        "C26" | "C27" | "C28" | "C29" | "C30" | "C301" | "C302T309" => 6,
-        "D" | "E" => 7,
-        "F" => 8,
-        "G" | "H49" | "H50" | "H51" | "H52" | "H53" | "I" | "J58T60" | "J61" | "J62_63" | "K"
-        | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" => 9,
-        "B05_06" => {
-            return Err(format!(
-                "{industry} combines coal with oil and gas; use the 2025 edition"
-            ));
-        }
-        _ => return Err(format!("unknown ICIO industry {industry}")),
-    })
+    match icio_industry(industry) {
+        Some(Industry::Good(g)) => Ok(g),
+        Some(Industry::Split) => Err(format!(
+            "{industry} combines coal with oil and gas; use the 2025 edition"
+        )),
+        None => Err(format!("unknown ICIO industry {industry}")),
+    }
 }
 
 /// One economy's 2000 structure by good, read from ICIO.
@@ -65,6 +54,11 @@ pub struct CountryIo {
     pub final_demand_shares: [f64; N_GOODS],
     /// Coal (B05) in the value added of good 2.
     pub coal_share: f64,
+    /// Million USD: inputs by good of crude oil and gas extraction (B06, B09), good 1 without
+    /// refining (ADR 0270); zero outside ICIO.
+    pub extraction: [f64; N_GOODS],
+    /// Million USD: output of crude oil and gas extraction.
+    pub extraction_output: f64,
 }
 
 /// One year of ICIO: row labels, column names and the numeric columns (without the last, OUT).
@@ -163,6 +157,7 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
     let mut fin: BTreeMap<&str, [f64; N_GOODS]> = BTreeMap::new();
     let mut coal: BTreeMap<&str, f64> = BTreeMap::new();
     let mut mining: BTreeMap<&str, f64> = BTreeMap::new();
+    let mut extraction: BTreeMap<&str, ([f64; N_GOODS], f64)> = BTreeMap::new();
     let mut picked = vec![0.0; rows.len()];
     for (name, x) in table.names.iter().zip(&table.columns) {
         let (code, tail) = split_once(name);
@@ -184,6 +179,13 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
                 m[k][g] += b;
             }
             output.entry(code).or_insert([0.0; N_GOODS])[g] += x[out_row];
+            if matches!(tail, "B06" | "B09") {
+                let e = extraction.entry(code).or_insert(([0.0; N_GOODS], 0.0));
+                for (a, b) in e.0.iter_mut().zip(add) {
+                    *a += b;
+                }
+                e.1 += x[out_row];
+            }
             if g == 2 {
                 let va = x[out_row] - pairwise_sum(&picked);
                 *mining.entry(code).or_insert(0.0) += va;
@@ -220,6 +222,10 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
             0.0
         };
         let va = std::array::from_fn(|g| x[g] - used[g]);
+        let (extraction, extraction_output) = extraction
+            .get(code)
+            .copied()
+            .unwrap_or(([0.0; N_GOODS], 0.0));
         result.insert(
             code.to_owned(),
             CountryIo {
@@ -228,6 +234,8 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
                 io,
                 final_demand_shares: shares,
                 coal_share,
+                extraction,
+                extraction_output,
             },
         );
     }
@@ -259,6 +267,65 @@ pub fn exports(path: &Path, year: i64) -> Result<BTreeMap<String, [f64; N_GOODS]
     let mut out: BTreeMap<String, [f64; N_GOODS]> = BTreeMap::new();
     for ((s, g), a) in seller.iter().zip(&good).zip(&abroad) {
         out.entry((*s).to_owned()).or_insert([0.0; N_GOODS])[*g] += a;
+    }
+    Ok(out)
+}
+
+/// One economy's use of each good (million USD): intermediate use by its industries plus the
+/// `FINAL_DEMAND` columns, from home and from every source economy.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HomeUse {
+    pub home: [f64; N_GOODS],
+    pub total: [f64; N_GOODS],
+}
+
+impl HomeUse {
+    /// Domestic-origin use over total use of good `g`; NaN without use.
+    pub fn share(&self, g: usize) -> f64 {
+        if self.total[g] > 0.0 {
+            self.home[g] / self.total[g]
+        } else {
+            f64::NAN
+        }
+    }
+}
+
+/// Economy code to its use of each good by origin (ADR 0092's home shares): the buyer is the
+/// economy of the column, the origin that of the row; DPABR (purchases abroad by residents) is
+/// left out, as in [`aggregate`].
+pub fn home_use(path: &Path, year: i64) -> Result<BTreeMap<String, HomeUse>, String> {
+    let table = open_table(path, year)?;
+    let (mut rows, mut seller, mut good) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, label) in table.labels.iter().enumerate() {
+        if !SPECIAL_ROWS.contains(&label.as_str()) {
+            let (code, industry) = split_once(label);
+            rows.push(i);
+            seller.push(code);
+            good.push(icio_good(
+                industry.ok_or_else(|| format!("row label {label} has no industry"))?,
+            )?);
+        }
+    }
+    let mut out: BTreeMap<String, HomeUse> = BTreeMap::new();
+    for (name, x) in table.names.iter().zip(&table.columns) {
+        let (buyer, tail) = split_once(name);
+        let tail = tail.ok_or_else(|| format!("column {name} has no industry"))?;
+        if tail == "DPABR" {
+            continue;
+        }
+        if !FINAL_DEMAND.contains(&tail) {
+            icio_good(tail)?;
+        }
+        let u = out.entry(buyer.to_owned()).or_insert(HomeUse {
+            home: [0.0; N_GOODS],
+            total: [0.0; N_GOODS],
+        });
+        for ((&i, s), &g) in rows.iter().zip(&seller).zip(&good) {
+            u.total[g] += x[i];
+            if *s == buyer {
+                u.home[g] += x[i];
+            }
+        }
     }
     Ok(out)
 }

@@ -1,8 +1,8 @@
 //! Two-level trade kernel (`specs/trade/SPEC.md`, Equations).
 //!
 //! Domestic pairs use the direct leg, `K_od = tau_od^-theta_g`, dense within a country. A
-//! cross-border pair is reached through gateways, `K_od = sum_ab K_oa K_ab K_bd`, and never
-//! materialized: [`Kernel::origin_access_into`]
+//! cross-border pair is reached through gateways, `K_od = sum_ab K_oa m_a K_ab m_b K_bd` with
+//! the gateway masses m (ADR 0092), and never materialized: [`Kernel::origin_access_into`]
 //! evaluates the sums through gateway aggregates. Factors are f64, which holds `tau^-theta`
 //! down to about 1e-308 (tau 1e4 at theta 64.85, ADR 0093).
 
@@ -18,6 +18,8 @@ use crate::params::TradeParams;
 const MAX_LAG: f64 = 3.0;
 /// Hours per month for transit lags.
 const HOURS_PER_MONTH: f64 = 730.0;
+/// Largest deviation from 1 of a country's summed gateway masses.
+const MASS_TOLERANCE: f64 = 1e-12;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -106,7 +108,8 @@ pub struct Entry {
 
 /// A gateway crossing a to b. With `tau` the leg factor, `1 + nu` the iceberg border loss,
 /// destroyed at the crossing, and t the tariff, a routing wedge only:
-/// `k = (tau (1 + nu) (1 + t))^-theta_g`, `inv_duty = 1 / (1 + t)`, the share of the value the importer pays that is not tariff, and
+/// `k = m_a m_b (tau (1 + nu) (1 + t))^-theta_g` with the gateway masses m (ADR 0092),
+/// `inv_duty = 1 / (1 + t)`, the share of the value the importer pays that is not tariff, and
 /// `inv_loss = 1 / (tau (1 + nu))`, the share of the units shipped that arrive. `lag` is the
 /// extra transit time in months, `round(hours / 730)` capped at 3, from the least-cost leg's
 /// hours or the good's expected route hours.
@@ -142,7 +145,7 @@ pub struct Kernel {
     n_countries: usize,
     province_country: Vec<u16>,
     gateway_country: Vec<u16>,
-    /// P01 per good as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
+    /// P01 per good times P150, as used to build `k`; sourcing needs it for `p^-theta_g`. Kernels are
     /// per good: in P2 each good is its own weight class, so a theta class adds no kernel
     /// (ADR 0018).
     theta: [f64; N_GOODS],
@@ -256,6 +259,14 @@ impl Kernel {
     ) -> Kernel {
         let (np, ng) = (net.n_provinces(), net.n_gateways());
         validate(net, np, ng);
+        let (want, built) = (
+            p.bulk_rate(),
+            net.bulk.as_ref().map(|b| (b.classes, b.sea, b.port)),
+        );
+        assert!(
+            want == built,
+            "bulk freight rate {want:?} of the parameters against {built:?} of the network (ADR 0247)"
+        );
         if !net.crossings.is_empty() {
             let n_countries = wedges.n_countries();
             let max = net
@@ -276,8 +287,10 @@ impl Kernel {
             .chain(&net.gateway_country)
             .max()
             .map_or(0, |&c| usize::from(c) + 1);
+        let theta = p.theta.map(|t| t * p.theta_scale);
         let goods = std::array::from_fn(|g| {
-            TRADED[g].then(|| good_kernel(net, np, ng, n_countries, g, weight[g], wedges, p))
+            TRADED[g]
+                .then(|| good_kernel(net, np, ng, n_countries, g, weight[g], theta[g], wedges, p))
         });
         let first: Option<&GoodKernel> = goods.iter().flatten().next();
         let (crossings_by_target, access_by_gateway, domestic_by_destination) =
@@ -294,7 +307,7 @@ impl Kernel {
             n_countries,
             province_country: net.province_country.clone(),
             gateway_country: net.gateway_country.clone(),
-            theta: p.theta,
+            theta,
             goods,
             crossings_by_target,
             access_by_gateway,
@@ -324,7 +337,7 @@ impl Kernel {
         &self.gateway_country
     }
 
-    /// P01 of good `g`, as the kernel of `g` was built with.
+    /// P01 of good `g` times P150, as the kernel of `g` was built with.
     pub fn theta(&self, g: usize) -> f64 {
         self.theta[g]
     }
@@ -465,6 +478,34 @@ impl Kernel {
 }
 
 fn validate(net: &Network, np: usize, ng: usize) {
+    assert_eq!(
+        net.gateway_mass.len(),
+        ng,
+        "gateway masses: {} for {ng} gateways",
+        net.gateway_mass.len()
+    );
+    let n_countries = net
+        .gateway_country
+        .iter()
+        .max()
+        .map_or(0, |&c| usize::from(c) + 1);
+    let mut total = vec![0.0; n_countries];
+    for (a, (&m, &c)) in net
+        .gateway_mass
+        .iter()
+        .zip(&net.gateway_country)
+        .enumerate()
+    {
+        // also rejects NaN
+        assert!(m > 0.0 && m <= 1.0, "gateway {a} has mass {m}");
+        total[usize::from(c)] += m;
+    }
+    for (c, t) in total.iter().enumerate() {
+        assert!(
+            *t == 0.0 || (t - 1.0).abs() <= MASS_TOLERANCE,
+            "gateway masses of country {c} sum to {t}"
+        );
+    }
     for l in &net.domestic {
         let (o, d) = (l.from as usize, l.to as usize);
         assert!(o < np && d < np && o != d, "bad domestic leg {l:?}");
@@ -494,6 +535,29 @@ fn validate(net: &Network, np: usize, ng: usize) {
             l.cost_per_t >= 0.0 && l.hours >= 0.0,
             "negative leg cost: {l:?}"
         );
+    }
+    if let Some(b) = &net.bulk {
+        assert!(
+            net.route_taus.is_none(),
+            "route taus and bulk legs together (ADR 0247)"
+        );
+        for (name, bulk, base) in [
+            ("domestic", &b.domestic, &net.domestic),
+            ("access", &b.access, &net.access),
+            ("crossing", &b.crossings, &net.crossings),
+        ] {
+            assert_eq!(bulk.len(), base.len(), "bulk {name} legs: count");
+            for (x, y) in bulk.iter().zip(base) {
+                assert!(
+                    (x.from, x.to) == (y.from, y.to),
+                    "bulk {name} leg {x:?} against base {y:?}"
+                );
+                assert!(
+                    x.cost_per_t >= 0.0 && x.hours >= 0.0,
+                    "negative bulk leg cost: {x:?}"
+                );
+            }
+        }
     }
     if let Some(rt) = &net.route_taus {
         let lists = [
@@ -545,12 +609,19 @@ fn good_kernel(
     nc: usize,
     g: usize,
     w: f64,
+    theta: f64,
     wedges: &Wedges,
     p: &TradeParams,
 ) -> GoodKernel {
     let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
     let rt = net.route_taus.as_ref();
-    let k_of = |total: f64| libm::pow(total, -p.theta[g]);
+    let (domestic, access, crossing_legs) = match &net.bulk {
+        Some(b) if b.classes[usize::from(p.theta_class[g])] => {
+            (&b.domestic, &b.access, &b.crossings)
+        }
+        _ => (&net.domestic, &net.access, &net.crossings),
+    };
+    let k_of = |total: f64| libm::pow(total, -theta);
     let plain = |taus: Option<&Vec<[f64; N_GOODS]>>, i: usize, l: &Leg| {
         let tau = taus.map_or_else(|| least(l), |t| t[i][g]);
         Entry {
@@ -560,7 +631,8 @@ fn good_kernel(
         }
     };
     let group = tariff_group(g);
-    let border_tau = 1.0 + p.border_nu;
+    let border_tau = 1.0 + p.border_nu_of(g);
+    let mass = &net.gateway_mass;
     let crossing = |i: usize, l: &Leg| {
         let (tau, hours) = rt.map_or_else(
             || (least(l), l.hours),
@@ -573,13 +645,13 @@ fn good_kernel(
         let loss = tau * border_tau;
         Crossing {
             col: l.to,
-            k: k_of(loss * duty),
+            k: mass[a] * mass[b] * k_of(loss * duty),
             inv_duty: 1.0 / duty,
             inv_loss: 1.0 / loss,
             lag: (hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8,
         }
     };
-    let crossings = Csr::from_legs(ng, &net.crossings, crossing);
+    let crossings = Csr::from_legs(ng, crossing_legs, crossing);
     let mut links = vec![false; ng * nc];
     for a in 0..ng {
         for e in crossings.row(a).iter().filter(|e| e.k > 0.0) {
@@ -587,10 +659,8 @@ fn good_kernel(
         }
     }
     GoodKernel {
-        domestic: Csr::from_legs(np, &net.domestic, |i, l| {
-            plain(rt.map(|r| &r.domestic), i, l)
-        }),
-        access: Csr::from_legs(np, &net.access, |i, l| plain(rt.map(|r| &r.access), i, l)),
+        domestic: Csr::from_legs(np, domestic, |i, l| plain(rt.map(|r| &r.domestic), i, l)),
+        access: Csr::from_legs(np, access, |i, l| plain(rt.map(|r| &r.access), i, l)),
         crossings,
         links,
     }
@@ -600,7 +670,7 @@ fn good_kernel(
 mod tests {
     use super::*;
     use crate::goods::{N_GOODS, tariff_group};
-    use crate::network::{Leg, LegTaus, Network, Wedges};
+    use crate::network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
     use crate::params::TradeParams;
 
     const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
@@ -633,14 +703,15 @@ mod tests {
         f64::powf(leg_tau(p, g, leg) * extra, -p.theta[g])
     }
 
-    /// Provinces 0..5 in country 0, 5..10 in country 1; gateways 0 and 1 in country 0,
-    /// gateway 2 in country 1. Costs random.
+    /// Provinces 0..5 in country 0, 5..10 in country 1; gateways 0 and 1 in country 0 with
+    /// masses 0.3 and 0.7, gateway 2 in country 1. Costs random.
     fn world(rng: &mut Rng) -> Network {
         let province_country: Vec<u16> = (0..10).map(|i| u16::from(i >= 5)).collect();
         let gateway_country = vec![0, 0, 1];
         let mut net = Network {
             province_country: province_country.clone(),
             gateway_country: gateway_country.clone(),
+            gateway_mass: vec![0.3, 0.7, 1.0],
             ..Network::default()
         };
         for o in 0..10u32 {
@@ -716,7 +787,7 @@ mod tests {
 
     #[test]
     fn leg_factor_matches_spec() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = two_provinces(150.0, 48.0);
         let k = Kernel::build(&net, &W, &Wedges::none(1), &p);
         let e = k.good(4).domestic.row(0)[0];
@@ -729,7 +800,7 @@ mod tests {
 
     #[test]
     fn kernel_uses_theta_per_good() {
-        let mut p = TradeParams::default();
+        let mut p = TradeParams::default().bulk_off();
         p.theta[0] = 2.0;
         p.theta[4] = 8.0;
         let net = world(&mut Rng(5));
@@ -737,8 +808,8 @@ mod tests {
         wedges.tariff.iter_mut().for_each(|t| *t = 0.2);
         let k = Kernel::build(&net, &W, &wedges, &p);
         assert_eq!((k.theta(0), k.theta(4)), (2.0, 8.0));
-        let nu = 1.0 + p.border_nu;
         for g in [0, 4] {
+            let nu = 1.0 + p.border_nu_of(g);
             let gk = k.good(g);
             for (csr, legs) in [(&gk.domestic, &net.domestic), (&gk.access, &net.access)] {
                 for l in legs {
@@ -750,7 +821,8 @@ mod tests {
             for l in &net.crossings {
                 let e = crossing(&gk.crossings, l);
                 let (loss, duty) = (leg_tau(&p, g, l) * nu, 1.0 + f64::from(0.2f32));
-                assert_eq!(e.k, libm::pow(loss * duty, -p.theta[g]));
+                let m = net.gateway_mass[l.from as usize] * net.gateway_mass[l.to as usize];
+                assert_eq!(e.k, m * libm::pow(loss * duty, -p.theta[g]));
                 assert_eq!((e.inv_loss, e.inv_duty), (1.0 / loss, 1.0 / duty));
             }
         }
@@ -759,23 +831,203 @@ mod tests {
         assert_ne!(e.k, libm::pow(1.0 / e.inv_tau, -8.0));
     }
 
+    /// ADR 0247: goods of a class with bulk legs take the bulk legs' cost and hours on every leg
+    /// list; the other goods keep the base legs. Bulk legs equal to the base legs change nothing.
+    #[test]
+    fn bulk_legs_price_the_bulk_classes() {
+        let p = bulk_params(0.5, 0.25);
+        let base = world(&mut Rng(9));
+        let mut rng = Rng(21);
+        let redraw = |legs: &[Leg], rng: &mut Rng| -> Vec<Leg> {
+            legs.iter().map(|l| rng.leg(l.from, l.to)).collect()
+        };
+        let mut classes = [false; crate::params::N_CLASSES];
+        classes[3] = true;
+        let net = Network {
+            bulk: Some(BulkLegs {
+                classes,
+                sea: 0.5,
+                port: 0.25,
+                domestic: redraw(&base.domestic, &mut rng),
+                access: redraw(&base.access, &mut rng),
+                crossings: redraw(&base.crossings, &mut rng),
+            }),
+            ..base.clone()
+        };
+        let bulk = net.bulk.as_ref().unwrap();
+        let wedges = Wedges::none(2);
+        let k = Kernel::build(&net, &W, &wedges, &p);
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            let on = p.theta_class[g] == 3;
+            let pick = |b: &Vec<Leg>, n: &Vec<Leg>| if on { b.clone() } else { n.clone() };
+            let gk = k.good(g);
+            for (csr, legs) in [
+                (&gk.domestic, pick(&bulk.domestic, &net.domestic)),
+                (&gk.access, pick(&bulk.access, &net.access)),
+            ] {
+                for l in &legs {
+                    let tau = leg_tau(&p, g, l);
+                    assert_eq!(entry(csr, l).inv_tau, 1.0 / tau, "good {g}");
+                }
+            }
+            let nu = 1.0 + p.border_nu_of(g);
+            for l in &pick(&bulk.crossings, &net.crossings) {
+                let e = crossing(&gk.crossings, l);
+                assert_eq!(e.inv_loss, 1.0 / (leg_tau(&p, g, l) * nu), "good {g}");
+                let lag = (l.hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8;
+                assert_eq!(e.lag, lag, "good {g}");
+            }
+        }
+        let same = Network {
+            bulk: Some(BulkLegs {
+                classes,
+                sea: 0.5,
+                port: 0.25,
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings: base.crossings.clone(),
+            }),
+            ..base.clone()
+        };
+        let (a, b) = (
+            Kernel::build(&base, &W, &wedges, &TradeParams::default().bulk_off()),
+            Kernel::build(&same, &W, &wedges, &p),
+        );
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            assert_eq!(a.good(g).crossings.entries, b.good(g).crossings.entries);
+            assert_eq!(a.good(g).domestic.entries, b.good(g).domestic.entries);
+            assert_eq!(a.good(g).access.entries, b.good(g).access.entries);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "bulk crossing leg")]
+    fn bulk_legs_must_match_the_base_legs() {
+        let base = world(&mut Rng(9));
+        let mut crossings = base.crossings.clone();
+        crossings.swap(0, 1);
+        let net = Network {
+            bulk: Some(BulkLegs {
+                classes: [false, false, false, true],
+                sea: 0.5,
+                port: 0.25,
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings,
+            }),
+            ..base
+        };
+        Kernel::build(&net, &W, &Wedges::none(2), &bulk_params(0.5, 0.25));
+    }
+
+    fn bulk_network(sea: f64, port: f64) -> Network {
+        let base = world(&mut Rng(9));
+        Network {
+            bulk: Some(BulkLegs {
+                classes: [false, false, false, true],
+                sea,
+                port,
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings: base.crossings.clone(),
+            }),
+            ..base
+        }
+    }
+
+    fn bulk_params(sea: f64, port: f64) -> TradeParams {
+        TradeParams {
+            bulk_sea: [1.0, 1.0, 1.0, sea],
+            bulk_port: [1.0, 1.0, 1.0, port],
+            ..TradeParams::default().bulk_off()
+        }
+    }
+
+    /// ADR 0247: P154 and P155 reach the kernel only through `Network::bulk`, so a run whose
+    /// multipliers differ from the ones the network was built with is refused.
+    #[test]
+    fn bulk_rate_must_match_the_network() {
+        let (net, wedges) = (bulk_network(0.5, 0.25), Wedges::none(2));
+        Kernel::build(&net, &W, &wedges, &bulk_params(0.5, 0.25));
+        let refused = |net: &Network, p: &TradeParams| {
+            std::panic::catch_unwind(|| Kernel::build(net, &W, &wedges, p)).is_err()
+        };
+        assert!(refused(&net, &TradeParams::default().bulk_off()));
+        assert!(refused(&net, &bulk_params(0.5, 0.5)));
+        assert!(refused(&world(&mut Rng(9)), &bulk_params(0.5, 0.25)));
+    }
+
+    /// ADRs 0092, 0276: each good's crossings carry its own border friction, so goods of one
+    /// theta class may differ.
+    #[test]
+    fn border_nu_follows_the_good() {
+        let p = TradeParams {
+            border_nu: [0.1, 0.25, 0.5, 2.0, 0.75, 1.5, 0.05, 0.3, 0.3, 0.3],
+            ..TradeParams::default().bulk_off()
+        };
+        let net = world(&mut Rng(9));
+        let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
+        for g in (0..N_GOODS).filter(|&g| crate::goods::TRADED[g]) {
+            let nu = 1.0 + p.border_nu[g];
+            for l in &net.crossings {
+                let e = crossing(&k.good(g).crossings, l);
+                let loss = leg_tau(&p, g, l) * nu;
+                let m = net.gateway_mass[l.from as usize] * net.gateway_mass[l.to as usize];
+                assert_eq!(e.inv_loss, 1.0 / loss, "good {g}");
+                assert_eq!(e.k, m * libm::pow(loss, -p.theta[g]), "good {g}");
+            }
+        }
+    }
+
+    #[test]
+    fn theta_scale_multiplies_every_class() {
+        let net = world(&mut Rng(9));
+        let mut wedges = Wedges::none(2);
+        wedges.tariff.iter_mut().for_each(|t| *t = 0.1);
+        let scaled = TradeParams {
+            theta_scale: 1.4,
+            ..TradeParams::default().bulk_off()
+        };
+        let mut multiplied = TradeParams::default().bulk_off();
+        multiplied.theta.iter_mut().for_each(|t| *t *= 1.4);
+        let (a, b) = (
+            Kernel::build(&net, &W, &wedges, &scaled),
+            Kernel::build(&net, &W, &wedges, &multiplied),
+        );
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            assert_eq!(a.theta(g).to_bits(), b.theta(g).to_bits(), "good {g}");
+            let (ga, gb) = (a.good(g), b.good(g));
+            assert_eq!(ga.domestic.entries, gb.domestic.entries, "good {g}");
+            assert_eq!(ga.access.entries, gb.access.entries, "good {g}");
+            assert_eq!(ga.crossings.entries, gb.crossings.entries, "good {g}");
+        }
+        assert_ne!(
+            a.good(0).domestic.entries,
+            Kernel::build(&net, &W, &wedges, &TradeParams::default().bulk_off())
+                .good(0)
+                .domestic
+                .entries
+        );
+    }
+
     #[test]
     fn local_goods_have_no_kernel() {
         let k = Kernel::build(
             &two_provinces(1.0, 1.0),
             &W,
             &Wedges::none(1),
-            &TradeParams::default(),
+            &TradeParams::default().bulk_off(),
         );
         assert!((0..N_GOODS).all(|g| k.try_good(g).is_some() == (g < 7)));
     }
 
     #[test]
     fn crossing_includes_border_and_tariff() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = Network {
             province_country: vec![0, 1],
             gateway_country: vec![0, 1],
+            gateway_mass: vec![1.0, 1.0],
             access: vec![
                 Leg {
                     from: 0,
@@ -861,7 +1113,7 @@ mod tests {
 
     #[test]
     fn kernel_uses_route_taus_when_present() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let mut net = world(&mut Rng(11));
         let least = Kernel::build(&net, &W, &Wedges::none(2), &p);
         // per-good factors unrelated to the least-cost legs; hours give lags 0 to 3
@@ -886,8 +1138,8 @@ mod tests {
         };
         net.route_taus = Some(rt.clone());
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
-        let nu = 1.0 + p.border_nu;
         for g in 0..7 {
+            let nu = 1.0 + p.border_nu_of(g);
             let gk = k.good(g);
             for (i, l) in net.domestic.iter().enumerate() {
                 let e = entry(&gk.domestic, l);
@@ -901,8 +1153,9 @@ mod tests {
             for (i, l) in net.crossings.iter().enumerate() {
                 let e = crossing(&gk.crossings, l);
                 let loss = rt.crossings[i][g] * nu;
+                let m = net.gateway_mass[l.from as usize] * net.gateway_mass[l.to as usize];
                 assert_eq!(e.inv_loss, 1.0 / loss);
-                assert_eq!(e.k, libm::pow(loss * 1.0, -p.theta[g]));
+                assert_eq!(e.k, m * libm::pow(loss * 1.0, -p.theta[g]));
                 let lag = (rt.crossing_hours[i][g] / 730.0).round().min(3.0) as u8;
                 assert_eq!(e.lag, lag);
             }
@@ -925,12 +1178,17 @@ mod tests {
             domestic_hours: vec![[1.0; N_GOODS]; 2],
             ..LegTaus::default()
         });
-        Kernel::build(&net, &W, &Wedges::none(1), &TradeParams::default());
+        Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(1),
+            &TradeParams::default().bulk_off(),
+        );
     }
 
     #[test]
     fn home_kernel_is_one() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let net = world(&mut Rng(7));
         let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
         for g in 0..7 {
@@ -951,7 +1209,7 @@ mod tests {
 
     #[test]
     fn phi_matches_dense_kernel() {
-        let p = TradeParams::default();
+        let p = TradeParams::default().bulk_off();
         let mut rng = Rng(0x9e3779b97f4a7c15);
         let net = world(&mut rng);
         let mut wedges = Wedges::none(2);
@@ -959,9 +1217,9 @@ mod tests {
             *t = (0.3 * rng.next()) as f32;
         }
         let kernel = Kernel::build(&net, &W, &wedges, &p);
-        let nu = 1.0 + p.border_nu;
 
         for g in [0usize, 3, 4, 6] {
+            let nu = 1.0 + p.border_nu_of(g);
             let pt: Vec<f64> = (0..10)
                 .map(|d| if d == 8 { 0.0 } else { 0.2 + 3.0 * rng.next() })
                 .collect();
@@ -1006,7 +1264,9 @@ mod tests {
                                             .find(|l| (l.from, l.to) == (d as u32, b as u32))
                                             .unwrap();
                                         let t = f64::from(wedges.rate(cb, ca, tariff_group(g)));
+                                        let m = net.gateway_mass[a] * net.gateway_mass[b];
                                         s += leg_k(&p, g, oa, 1.0)
+                                            * m
                                             * leg_k(&p, g, ab, nu * (1.0 + t))
                                             * leg_k(&p, g, bd, 1.0);
                                     }
@@ -1047,7 +1307,7 @@ mod tests {
         // f32 ln K resolves to 1e-7 (1.5e-5)
         let p = TradeParams {
             theta: [64.85; N_GOODS],
-            ..TradeParams::default()
+            ..TradeParams::default().bulk_off()
         };
         let mut net = world(&mut Rng(3));
         let taus = |n: usize| vec![[1e4; N_GOODS]; n];
@@ -1069,10 +1329,13 @@ mod tests {
                 assert!((e.k - want).abs() <= 1e-7 * want, "{} vs {want}", e.k);
                 assert_eq!(e.inv_tau, 1e-4);
             }
-            let want = libm::pow(1e4 * (1.0 + p.border_nu), -64.85);
-            for e in &gk.crossings.entries {
-                assert!(libm::log(e.k).is_finite());
-                assert!((e.k - want).abs() <= 1e-7 * want);
+            let want = libm::pow(1e4 * (1.0 + p.border_nu_of(g)), -64.85);
+            for a in 0..3 {
+                for e in gk.crossings.row(a) {
+                    let m = net.gateway_mass[a] * net.gateway_mass[e.col as usize];
+                    assert!(libm::log(e.k).is_finite());
+                    assert!((e.k - m * want).abs() <= 1e-7 * m * want);
+                }
             }
         }
     }
@@ -1102,7 +1365,12 @@ mod tests {
             access_hours: vec![[0.0; N_GOODS]; n(&net.access)],
             crossing_hours: vec![[0.0; N_GOODS]; n(&net.crossings)],
         });
-        let k = Kernel::build(&net, &W, &Wedges::none(2), &TradeParams::default());
+        let k = Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(2),
+            &TradeParams::default().bulk_off(),
+        );
         let mut acc = Access::default();
         k.origin_access_into(0, &[1.0; 10], &[0.0, -800.0], &mut acc);
         // country 0 imports from country 1 in country 1's scale; nothing reaches country 1
@@ -1112,5 +1380,19 @@ mod tests {
             let ln_phi = acc.ln_phi(d, usize::from(net.province_country[d]));
             assert!(ln_phi.is_finite() && ln_phi >= if d < 5 { 0.0 } else { -800.0 });
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "gateway masses of country 0 sum to")]
+    fn gateway_masses_must_sum_to_one_per_country() {
+        let mut net = world(&mut Rng(2));
+        assert_eq!(equal_gateway_mass(&net.gateway_country), [0.5, 0.5, 1.0]);
+        net.gateway_mass = vec![0.5, 0.6, 1.0];
+        Kernel::build(
+            &net,
+            &W,
+            &Wedges::none(2),
+            &TradeParams::default().bulk_off(),
+        );
     }
 }

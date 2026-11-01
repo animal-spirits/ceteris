@@ -8,20 +8,20 @@
 //!
 //! | file | columns |
 //! |---|---|
-//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
-//! | `gateways` | gateway u32, country u32 |
+//! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, storage_loss f64 (P56 delta, 0 for goods without competitive storage), time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
+//! | `gateways` | gateway u32, country u32, mass f64 (share of the country's trade throughput, ADR 0092) |
 //! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
-//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable) |
+//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable), gamma_0 to gamma_9 f64 (`ProvinceData::gamma`: selection constant of ADR 0200, buyers pay Gamma P_d) |
 //! | `pack_provinces` | province u32, pack u32 (`ProvinceData::pack`); written only for a world loaded from a pack, which the calibration keys by pack province |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |
 //! | `active` | province u32, good u8, active bool (cells with a market, as the world computes them: origin markets of traded goods, province markets of local goods) |
-//! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64 |
+//! | `legs` | kind u8 (0 domestic, 1 access, 2 crossing), from u32, to u32, cost_per_t f64, hours f64, bulk_cost_per_t f64, bulk_hours f64 (the leg at the bulk freight rate, `Network::bulk`, ADR 0247; NaN without bulk legs) |
 //! | `kernel_domestic` | good u8, o u32, d u32, k f64, inv_tau f64 |
 //! | `kernel_access` | good u8, province u32, gateway u32, k f64, inv_tau f64 |
-//! | `kernel_crossing` | good u8, a u32, b u32, k f64, inv_duty f64, inv_loss f64, lag u8 |
+//! | `kernel_crossing` | good u8, a u32, b u32, k f64 (gateway masses included), inv_duty f64, inv_loss f64, lag u8 |
 //! | `pigl_check` | draw u32, country u32, money f64 (mean spending per person), sigma f64, price_0 to price_9 f64 (some infinite), x_0 to x_9 f64: `demand::pigl` with the country's weights on [`PIGL_CHECK_DRAWS`] random draws, which the reference reproduces |
 //! | `params.json` | both parameter sets by field name, the register IDs, constants |
 //!
@@ -73,8 +73,17 @@ use crate::world::{
 /// enterprise coefficients follow as cost shares (owner decision, 2026-10-25). 8: `countries`
 /// has the natural rate `u_star` (ADR 0089). 9: kernel factors are f64 (ADR 0093), the kernel
 /// tables carry the reciprocal loss and duty factors in place of tau, border tau and tariff
-/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093).
-pub const EXPORT_FORMAT: &str = "9";
+/// (ADR 0097), and `params.json` has no `weight_floor` (ADR 0093). 10: `params.json` has
+/// `theta_scale` (P150), by which the kernel factors and the sourcing scale theta (ADR 0101).
+/// 11: `gateways` has `mass` and the crossings' k carry the gateway masses, and `params.json`
+/// `border_nu` is a list, one per theta class (ADR 0092). 12: `legs` has `bulk_cost_per_t` and
+/// `bulk_hours`, and `params.json` has `bulk_sea` (P154), `bulk_port` (P155) and the network's
+/// `bulk_classes` (ADR 0247). 13: `provinces` has the selection constants `gamma_g`, and
+/// `run_prices.price_index` is the buyer price Gamma P_d (ADR 0200). 14: `goods` has
+/// `storage_loss` (P56), and `params.json` has the storage parameters (P56, P144 to P146) of
+/// competitive storage (ADR 0091). 15: `params.json` `border_nu` is a list, one per good
+/// (ADR 0276).
+pub const EXPORT_FORMAT: &str = "15";
 
 /// Rows of the `pigl_check` table.
 pub const PIGL_CHECK_DRAWS: usize = 100;
@@ -212,6 +221,7 @@ pub fn write_inputs(
             ),
             f64s("weight", inputs.weight),
             f64s("coverage", trade.coverage),
+            f64s("storage_loss", trade.storage_loss),
             f64s("time_cost", trade.time_cost),
             f64s("theta", trade.theta),
             u8s("theta_class", trade.theta_class),
@@ -224,6 +234,7 @@ pub fn write_inputs(
         vec![
             u32s("gateway", 0..net.n_gateways() as u32),
             u32s("country", net.gateway_country.iter().map(|&c| u32::from(c))),
+            f64s("mass", net.gateway_mass.iter().copied()),
         ],
     )?;
 
@@ -280,6 +291,9 @@ pub fn write_inputs(
             p.base_price.iter().map(|q| q[g]),
         ));
     }
+    for g in 0..N_GOODS {
+        columns.push(f64s(&format!("gamma_{g}"), p.gamma.iter().map(|x| x[g])));
+    }
     write_table(dir, "provinces", columns)?;
     if !p.pack.is_empty() {
         write_table(
@@ -325,6 +339,14 @@ pub fn write_inputs(
         .enumerate()
         .flat_map(|(kind, legs)| legs.iter().map(move |l| (kind as u8, l)))
         .collect();
+    let bulk: Vec<Option<&ceteris_trade::Leg>> = match &net.bulk {
+        Some(b) => [&b.domestic, &b.access, &b.crossings]
+            .into_iter()
+            .flatten()
+            .map(Some)
+            .collect(),
+        None => vec![None; legs.len()],
+    };
     write_table(
         dir,
         "legs",
@@ -334,13 +356,26 @@ pub fn write_inputs(
             u32s("to", legs.iter().map(|l| l.1.to)),
             f64s("cost_per_t", legs.iter().map(|l| l.1.cost_per_t)),
             f64s("hours", legs.iter().map(|l| l.1.hours)),
+            f64s(
+                "bulk_cost_per_t",
+                bulk.iter().map(|l| l.map_or(f64::NAN, |l| l.cost_per_t)),
+            ),
+            f64s(
+                "bulk_hours",
+                bulk.iter().map(|l| l.map_or(f64::NAN, |l| l.hours)),
+            ),
         ],
     )?;
 
     write_kernel(dir, kernel)?;
     fs::write(
         dir.join("params.json"),
-        params_json(static_digest(inputs, params, trade), params, trade),
+        params_json(
+            static_digest(inputs, params, trade),
+            params,
+            trade,
+            net.bulk.as_ref().map(|b| b.classes),
+        ),
     )?;
     Ok(())
 }
@@ -451,14 +486,22 @@ fn pigl_check(inputs: &EconInputs, params: &EconParams) -> Vec<Column> {
     columns
 }
 
-fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
+fn params_json(
+    digest: [u8; 32],
+    p: &EconParams,
+    t: &TradeParams,
+    bulk_classes: Option<[bool; ceteris_trade::N_CLASSES]>,
+) -> String {
     let register = [
         ("theta", "P01"),
         ("theta_class", "P01"),
+        ("theta_scale", "P150"),
         ("coverage", "P02"),
         ("kappa1", "P03a"),
+        ("gain_share", "P03d"),
         ("kappa2", "P03b"),
         ("c_max", "P03c"),
+        ("c_max_storable", "P151"),
         ("border_nu", "P05"),
         ("sigma_demand", "P06"),
         ("pigl_sigma_b", "P46"),
@@ -472,6 +515,13 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
         ("eta", "P41"),
         ("edu_eff", "P42"),
         ("time_cost", "P43"),
+        ("bulk_sea", "P154"),
+        ("bulk_port", "P155"),
+        ("storage_loss", "P56"),
+        ("storage_cost", "P56"),
+        ("speculation", "P144"),
+        ("convenience", "P145"),
+        ("storage_gain", "P146"),
         ("expectation_gain", "P45"),
         ("rationing", "S11"),
         ("technology", "S09"),
@@ -516,13 +566,27 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
     let trade = [
         ("theta", nums(&t.theta)),
         ("theta_class", format!("{:?}", t.theta_class)),
+        ("theta_scale", num(t.theta_scale)),
         ("coverage", nums(&t.coverage)),
         ("kappa1", num(t.kappa1)),
+        ("gain_share", num(t.gain_share)),
         ("kappa2", num(t.kappa2)),
         ("c_max", num(t.c_max)),
+        ("c_max_storable", num(t.c_max_storable)),
         ("expectation_gain", num(t.expectation_gain)),
-        ("border_nu", num(t.border_nu)),
+        ("border_nu", nums(&t.border_nu)),
         ("time_cost", nums(&t.time_cost)),
+        ("bulk_sea", nums(&t.bulk_sea)),
+        ("bulk_port", nums(&t.bulk_port)),
+        ("storage_loss", nums(&t.storage_loss)),
+        ("storage_cost", nums(&t.storage_cost)),
+        ("speculation", nums(&t.speculation)),
+        ("convenience", nums(&t.convenience)),
+        ("storage_gain", num(t.storage_gain)),
+        (
+            "bulk_classes",
+            format!("{:?}", bulk_classes.unwrap_or_default()),
+        ),
     ];
     let object = |items: &[(&str, String)]| {
         let lines: Vec<String> = items
@@ -545,7 +609,7 @@ fn params_json(digest: [u8; 32], p: &EconParams, t: &TradeParams) -> String {
 ///
 /// | file | columns |
 /// |---|---|
-/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (the delivered unit price q_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
+/// | `run_prices` | province u32, good u8, price f64, active bool, price_index f64 (the buyer price q_d = Gamma P_d of traded goods, the local price of local goods, at the last E3), clip_ticks u32 (ticks the price step clip bound) |
 /// | `run_wages` | province u32, wage f64, clip_ticks u32 (ticks the wage step clip bound) |
 /// | `run_enterprises` | enterprise u32, province u32, good u8, employment f64, output f64 |
 /// | `run_flows` | exporter_country u32, importer_country u32, good u8, value f64, units f64 |
@@ -723,6 +787,7 @@ mod tests {
         );
         assert_eq!(f64s(&goods, "weight").unwrap(), inputs.weight);
         assert_eq!(f64s(&goods, "coverage").unwrap(), trade.coverage);
+        assert_eq!(f64s(&goods, "storage_loss").unwrap(), trade.storage_loss);
         assert_eq!(f64s(&goods, "time_cost").unwrap(), trade.time_cost);
         assert_eq!(f64s(&goods, "theta").unwrap(), trade.theta);
         assert_eq!(u8s(&goods, "theta_class").unwrap(), trade.theta_class);
@@ -730,6 +795,10 @@ mod tests {
 
         let gateways = table("gateways");
         assert_eq!(u32s(&gateways, "country").unwrap().len(), 7);
+        assert_eq!(
+            f64s(&gateways, "mass").unwrap(),
+            inputs.network.gateway_mass
+        );
 
         let countries = table("countries");
         assert_eq!(countries.num_rows(), 4);
@@ -884,15 +953,14 @@ mod tests {
 
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
-            json.contains(
-                "\"theta\": [10.57, 10.57, 10.57, 2.62, 10.57, 10.57, 5.19, 0.0, 0.0, 0.0]"
-            ),
+            json.contains("\"theta\": [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
             "{json}"
         );
         assert!(
-            json.contains("\"theta_class\": [2, 2, 2, 0, 2, 2, 1, 0, 0, 0]"),
+            json.contains("\"theta_class\": [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]"),
             "{json}"
         );
+        assert!(json.contains("\"theta_scale\": 1.0"), "{json}");
         assert!(json.contains("\"sigma_demand\": 0.6"), "{json}");
         assert!(
             json.contains("\"pigl_theta\": [0.634, 0.082, 0.284]"),
@@ -908,7 +976,7 @@ mod tests {
         );
         for id in [
             "P01", "P02", "P03a", "P03b", "P03c", "P05", "P43", "P06", "P08", "P39", "P40", "P41",
-            "P42", "P45", "P46", "P47",
+            "P42", "P45", "P46", "P47", "P150",
         ] {
             assert!(
                 json.contains(&format!("\"{id}\"")),

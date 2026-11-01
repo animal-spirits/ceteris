@@ -15,6 +15,7 @@ use proptest::prelude::*;
 use ceteris_reference::demand::Pigl;
 use ceteris_reference::io::{self, Crossings, Inputs, Legs, Mat};
 use ceteris_reference::model::{self, Model};
+use ceteris_reference::ppml;
 use ceteris_reference::sinkhorn;
 use ceteris_reference::solve::{self, Equilibrium, Limits, SolveError, TOL};
 
@@ -293,9 +294,10 @@ struct Oracle {
 /// Every route enumerated from the exported legs: home, o -> d inside a country, and
 /// o -> a -> b -> d over every gateway pair, with its own K, iceberg and tariff. Destination d
 /// spends E_d over routes by K w_o / Phi_d; the buyer pays p_o (1 + t) per shipped unit,
-/// t / (1 + t) of it is tariff, the origin receives p_o per unit; d receives the units over the
-/// route's tau.
-fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
+/// t / (1 + t) of it is tariff, the origin receives p_o per unit. With `gamma` (ADR 0200) d
+/// pays q_d = Gamma_d p_min Phi_d^(-1/theta) and receives what it paid over q_d; without, it
+/// receives the units over the route's tau and q_d is what it pays per arriving unit.
+fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat, gamma: Option<&Mat>) -> Oracle {
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let zeros = || Mat::zeros(n_p, n_g);
     let mut out = Oracle {
@@ -339,6 +341,13 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
         for &(o, d, k, _, _) in &routes {
             phi[d] += k * w[o];
         }
+        let active = active_column(inp, g);
+        let p_min = (0..n_p)
+            .filter(|&i| active[i])
+            .map(|i| p[i])
+            .fold(f64::INFINITY, f64::min);
+        let buyer =
+            |d: usize| gamma.map(|gm| gm[(d, g)] * p_min * phi[d].powf(-1.0 / inp.theta[g]));
         let mut alpha = vec![0.0; n_p];
         for &(o, d, k, arrives, net) in &routes {
             if w[o] == 0.0 {
@@ -348,7 +357,10 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
             let units = x * net / p[o];
             alpha[d] += k * w[o] / phi[d] * net / p[o] * arrives;
             out.orders[(o, g)] += units;
-            out.arrive[(d, g)] += units * arrives;
+            out.arrive[(d, g)] += match buyer(d) {
+                Some(q) => x / q,
+                None => units * arrives,
+            };
             out.paid[(d, g)] += x;
             out.tariff[(d, g)] += x * (1.0 - net);
             out.received[(o, g)] += x * net;
@@ -361,7 +373,7 @@ fn dense_route_oracle(inp: &Inputs, price: &Mat, spend: &Mat) -> Oracle {
             }
         }
         for (d, a) in alpha.iter().enumerate() {
-            out.index[(d, g)] = 1.0 / a;
+            out.index[(d, g)] = buyer(d).unwrap_or(1.0 / a);
         }
     }
     out
@@ -384,11 +396,23 @@ fn sourcing_weights_use_theta_per_good() {
     }
 }
 
+/// Both buyer prices: Gamma P_d with the exported Gamma (ADR 0200), and the delivered unit
+/// price of the physical arrivals ([`Model::physical`]).
 #[test]
 fn trade_money_matches_dense_route_oracle() {
     let inp = inputs();
     assert!(inp.crossing.inv_duty.iter().any(|&d| d < 1.0));
-    let m = Model::new(inp).unwrap();
+    let gamma = inp.gamma.as_ref().unwrap();
+    assert!(gamma.data.iter().any(|&g| (g - 1.0).abs() > 1e-3));
+    for (m, gamma) in [
+        (Model::new(inp).unwrap(), Some(gamma)),
+        (Model::physical(inp).unwrap(), None),
+    ] {
+        oracle_case(inp, &m, gamma);
+    }
+}
+
+fn oracle_case(inp: &Inputs, m: &Model, gamma: Option<&Mat>) {
     let mut rng = Draws(11);
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
     let price = draw_mat(n_p, n_g, |_| rng.uniform(-2.3, 2.3).exp());
@@ -396,7 +420,7 @@ fn trade_money_matches_dense_route_oracle() {
         let s = rng.uniform(0.0, 1e6);
         if inp.traded[g] { s } else { 0.0 }
     });
-    let want = dense_route_oracle(inp, &price, &spend);
+    let want = dense_route_oracle(inp, &price, &spend, gamma);
     let src = m.sourcing(&price);
     let got = m.flows(&price, &spend, &src);
     let traded = traded_goods(inp);
@@ -432,23 +456,22 @@ fn trade_money_matches_dense_route_oracle() {
 }
 
 /// Owner decision 2026-10-25: coefficients are ICIO cost shares at base delivered prices. The
-/// exported base prices are the reference's own delivered unit prices at prices 1, so at the
-/// data state every enterprise's input cost share is its sector's a_kg.
+/// exported base prices are the reference's own buyer prices at prices 1, both with the exported
+/// Gamma (Gamma P_d, ADR 0200) and as the delivered unit price of the physical arrivals, so at
+/// the data state every enterprise's input cost share is its sector's a_kg.
 #[test]
 fn base_prices_are_the_reference_sourcing_at_prices_one() {
     let inp = inputs();
     let m = Model::new(inp).unwrap();
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
-    let q = m.sourcing(&Mat::filled(n_p, n_g, 1.0)).index;
+    let ones = Mat::filled(n_p, n_g, 1.0);
+    let q = m.sourcing(&ones).index;
+    let physical = Model::physical(inp).unwrap().sourcing(&ones).index;
     for g in 0..n_g {
         if inp.traded[g] {
-            assert_close(
-                &column(&inp.base_price, g),
-                &column(&q, g),
-                1e-13,
-                0.0,
-                "base price",
-            );
+            for (what, q) in [("base price", &q), ("physical base price", &physical)] {
+                assert_close(&column(&inp.base_price, g), &column(q, g), 1e-13, 0.0, what);
+            }
         } else {
             assert!(column(&inp.base_price, g).iter().all(|&p| p == 1.0));
         }
@@ -573,10 +596,103 @@ fn fixture_reference_is_current() {
     assert!((meta["price_index"].as_f64().unwrap() - eq.price_index).abs() <= 1e-8);
 }
 
+/// The fixture with a tariff per country pair and good, 0 to 10%: its own tariffs vary by
+/// importer and good only, which importer effects absorb.
+fn pair_tariffs(inp: &Inputs) -> Inputs {
+    let mut out = inp.clone();
+    let cro = &mut out.crossing;
+    for j in 0..cro.k.len() {
+        let (e, m, g) = (
+            inp.gateway_country[cro.row[j]],
+            inp.gateway_country[cro.col[j]],
+            cro.good[j],
+        );
+        let inv_duty = 1.0 / (1.0 + 0.01 * ((7 * e + 3 * m * m + 5 * e * m + g) % 11) as f64);
+        cro.k[j] *= (inv_duty / cro.inv_duty[j]).powf(inp.theta[g]);
+        cro.inv_duty[j] = inv_duty;
+    }
+    out
+}
+
+/// H2 per theta class (ADRs 0092 and 0264): with the model's own country-pair kernel net of
+/// tariffs as the cost control, the tariff regression of each class's equilibrium flows recovers
+/// the class's theta, on the fixture with tariffs per pair. Weighted by the sourcing weights w_o
+/// and E_d / Phi_d the kernel is exact: theta to the fit's tolerance, the kernel's coefficient 1.
+#[test]
+fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
+    let inp = &pair_tariffs(inputs());
+    let m = Model::new(inp).unwrap();
+    let eq = solve::equilibrium(&m, None, TOL, None).unwrap();
+    let (n_p, n_c, n_g) = (inp.n_provinces(), inp.n_countries(), inp.n_goods());
+    let src = m.sourcing(&eq.price);
+    let phi = model::cells(&src.phi, n_p, n_g);
+    let destination = Mat::from_fn(n_p, n_g, |p, g| {
+        if phi[(p, g)] > 0.0 {
+            eq.expenditure[(p, g)] / phi[(p, g)]
+        } else {
+            0.0
+        }
+    });
+    let ln_k = model::ln_country_kernel(inp, &model::cells(&src.w, n_p, n_g), &destination);
+    let mut tariff = vec![f64::NAN; n_c * n_c * n_g];
+    let cro = &inp.crossing;
+    for j in 0..cro.k.len() {
+        let (e, m) = (
+            inp.gateway_country[cro.row[j]],
+            inp.gateway_country[cro.col[j]],
+        );
+        tariff[(e * n_c + m) * n_g + cro.good[j]] = 1.0 / cro.inv_duty[j] - 1.0;
+    }
+    let goods = traded_goods(inp);
+    let n_classes = goods.iter().map(|&g| inp.theta_class[g]).max().unwrap() + 1;
+    for c in 0..n_classes {
+        let rows: Vec<(usize, usize, usize)> = (0..n_c)
+            .flat_map(|e| (0..n_c).filter(move |&m| m != e).map(move |m| (e, m)))
+            .flat_map(|(e, m)| {
+                goods
+                    .iter()
+                    .filter(move |&&g| inp.theta_class[g] == c)
+                    .map(move |&g| (e, m, g))
+            })
+            .filter(|&(e, m, g)| ln_k[(e * n_c + m) * n_g + g].is_finite())
+            .collect();
+        let at = |&(e, m, g): &(usize, usize, usize)| (e * n_c + m) * n_g + g;
+        let t: Vec<f64> = rows.iter().map(|r| tariff[at(r)]).collect();
+        let paid: Vec<f64> = rows
+            .iter()
+            .zip(&t)
+            .map(|(r, t)| eq.flows_by_country_pair_good[at(r)] * (1.0 + t))
+            .collect();
+        let control: Vec<f64> = rows.iter().map(|r| ln_k[at(r)]).collect();
+        let fit =
+            ppml::class_tariff_fit(&rows, &paid, &t, &[("ln_kernel", &control)], true).unwrap();
+        let theta = -fit.coef("ln_tariff");
+        let theta_c = inp.theta[rows[0].2];
+        println!(
+            "class {c}: theta {theta:.4} (pair-clustered s.e. {:.4}), ln kernel {:.4}, theta_c \
+             {theta_c}, n {}",
+            fit.se("ln_tariff"),
+            fit.coef("ln_kernel"),
+            fit.n
+        );
+        assert!(
+            (theta - theta_c).abs() <= 1e-6 * theta_c,
+            "class {c}: theta {theta} against {theta_c}"
+        );
+        assert!((fit.coef("ln_kernel") - 1.0).abs() <= 1e-6);
+    }
+}
+
 /// Newton-Krylov that hits its step cap falls back to tatonnement, then
 /// Newton-Krylov from there, and the solution reports it. At a wage of e^-800 (0) the residual is
 /// not finite: Newton-Krylov falls back at once, tatonnement does not settle within its cap, and
 /// the solve errs instead of panicking.
+///
+/// The cap `NEWTON_CAP` is chosen for the fixture as it stands (gateway masses, ADR 0092): from
+/// the perturbed start Newton-Krylov needs more than 6 steps (residuals 2.9, 1.9, 0.91, 0.12,
+/// 0.013, 0.0038, 2.2e-5), while from tatonnement's point it needs 2 (4.7e-6, 1.2e-10, 3.2e-15).
+/// At 3 the first run fails and the second converges; at 2 the second fails too (3.2e-15 is
+/// reached only at the third check).
 #[test]
 fn nonconverging_solve_reports_and_falls_back() {
     let inp = inputs();
@@ -593,22 +709,25 @@ fn nonconverging_solve_reports_and_falls_back() {
         (eq, lines)
     };
 
+    const NEWTON_CAP: usize = 3;
     let limits = Limits {
-        max_newton: 2,
+        max_newton: NEWTON_CAP,
         ..Limits::default()
     };
     let (eq, lines) = solve_from(&perturbed(0.1), limits);
     let eq = eq.unwrap();
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.starts_with("newton_krylov failed (residual ")
-                && l.ends_with(" after 2 Newton steps): tatonnement")),
-        "{lines:?}"
-    );
+    let failed = lines
+        .iter()
+        .find_map(|l| {
+            l.strip_prefix("newton_krylov failed (residual ")?
+                .strip_suffix(&format!(" after {NEWTON_CAP} Newton steps): tatonnement"))
+        })
+        .unwrap_or_else(|| panic!("no capped Newton-Krylov run: {lines:?}"));
+    // the first run really did not converge within the cap
+    assert!(failed.parse::<f64>().unwrap() > TOL, "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("tatonnement 0 step")));
     assert_eq!(eq.info.method, "tatonnement, newton_krylov");
-    assert!(eq.info.iterations <= 2 && eq.info.residual <= TOL);
+    assert!(eq.info.iterations < NEWTON_CAP && eq.info.residual <= TOL);
     assert!(model::max_abs(&model::residual(&eq.x, &m)) <= TOL);
 
     let limits = Limits {
@@ -672,6 +791,8 @@ fn two_provinces(
     let l0 = (1.0 - u) * labour / 2.0;
     Inputs {
         theta: vec![theta],
+        theta_class: vec![0],
+        border_nu: vec![0.3],
         sigma_demand,
         pigl: Pigl {
             sigma_b: 0.26,
@@ -685,10 +806,12 @@ fn two_provinces(
         traded: vec![true],
         province_country: vec![0, 0],
         gateway_country: vec![],
+        gateway_mass: vec![],
         labour_supply: vec![labour; 2],
         population: vec![1e6; 2],
         w0: vec![s_l * 50.0 / l0; 2],
         base_price: Mat::filled(2, 1, 1.0),
+        gamma: None,
         s_l: vec![s_l],
         unemployment: vec![u],
         u_star: vec![0.0],
@@ -723,6 +846,8 @@ fn two_provinces(
         },
         ent_va_target: None,
         coverage: None,
+        storage_loss: vec![0.0],
+        storage: Default::default(),
         pop_edu: None,
         static_digest: String::new(),
         calibrated_coef: None,
@@ -752,7 +877,8 @@ proptest! {
         let inp = two_provinces(theta, tau, sigma_demand, sigma_fl, s_l, a, labour, u);
         let m = Model::new(&inp).unwrap();
         let eq = solve::equilibrium(&m, None, TOL, None).unwrap();
-        // Buyers pay the delivered unit price q = 1 / alpha: a unit of spending buys home at p
+        // Without Gamma (the toy's inputs carry none) buyers pay the delivered unit price of
+        // the physical arrivals, q = 1 / alpha: a unit of spending buys home at p
         // and the other province's good at p tau, with sourcing shares 1 / (1 + k) and
         // k / (1 + k); the world index is q, normalized to 1.
         let k = tau.powf(-theta);

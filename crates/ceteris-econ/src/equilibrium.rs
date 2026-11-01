@@ -97,7 +97,15 @@ fn ship(w: &EconWorld, g: usize, spend: &[[f64; 2]], out: &mut Sourced) {
     let cells = || (0..np).map(|o| o * N_GOODS + g);
     let price: Vec<f64> = cells().map(|c| w.markets.price[c]).collect();
     let active: Vec<bool> = cells().map(|c| w.markets.active[c]).collect();
-    source(&w.kernel, g, &price, &active, spend, out);
+    source(
+        &w.kernel,
+        g,
+        &price,
+        &active,
+        &w.layout.gamma[g],
+        spend,
+        out,
+    );
     dispatch(&w.kernel, g, &price, &vec![[1.0; 2]; np], out);
 }
 
@@ -121,7 +129,8 @@ impl EconWorld {
     /// shipments of the last ticks; traded input stocks such that this tick's orders (up to
     /// the inventory position of E3) replace exactly one month of use, bought at the delivered
     /// unit price, a Y q_d, and local input stocks at their target, which E2 leaves untouched
-    /// (the same-tick chain draws local use from output); origin inventories at coverage of output; and each pop
+    /// (the same-tick chain draws local use from output); origin inventories at coverage of sales,
+    /// output over 1 + delta s (ADR 0091); and each pop
     /// holding last tick's dividends and rebates, so that with this tick's wages it spends
     /// exactly its steady-state income (found by iterating, since rebates and market cash
     /// depend on spending).
@@ -341,7 +350,9 @@ impl EconWorld {
             let held = self.ledger.goods(acc.market[i], g);
             self.ledger.destroy(acc.market[i], g, held);
             let stock = if TRADED[g] && self.markets.active[cell] {
-                self.trade.coverage[g] * y
+                // output covers sales and spoilage, Q = (1 + delta s) D (ADR 0091)
+                let sales = y / (1.0 + self.trade.storage_loss[g] * self.trade.coverage[g]);
+                self.trade.coverage[g] * sales
             } else {
                 0.0
             };

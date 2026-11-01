@@ -65,7 +65,7 @@ impl GoodFlows {
         let pair = |ex: u16, im: u16| usize::from(ex) * nc + usize::from(im);
 
         for o in 0..kernel.n_provinces() {
-            let home = r.arrive[0][o][0] + r.arrive[0][o][1];
+            let home = r.home[o][0] + r.home[o][1];
             self.home_value[o] += price[o] * home;
             self.home_units[o] += home;
             let at = pair(province_country[o], province_country[o]);
@@ -216,7 +216,7 @@ mod tests {
         let active = vec![true; np];
         let fill: Vec<[f64; 2]> = (0..np).map(|i| [1.0, 0.5 + 0.1 * (i % 5) as f64]).collect();
         let mut r = Sourced::new();
-        source(&kernel, g, &price, &active, &spend, &mut r);
+        source(&kernel, g, &price, &active, &vec![1.0; np], &spend, &mut r);
         dispatch(&kernel, g, &price, &fill, &mut r);
 
         let mut window = FlowWindow::new(nc, np);

@@ -13,11 +13,11 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::goods::TRADED;
-use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE, dispatch, source};
+use ceteris_trade::source::{INTERMEDIATE, dispatch, source};
 use ceteris_trade::{Kernel, Markets, N_GOODS, Network, Pipeline, Sourced, TradeParams};
 
 use crate::calibration::Steady;
-use crate::demand::{PiglWeights, invert_pigl, lognormal_sigma, pigl};
+use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
 use crate::inputs::EconInputs;
 use crate::params::{EconParams, Pigl, Technology};
@@ -29,9 +29,30 @@ pub const MINOR_PER_UNIT: f64 = 1e4;
 const LABOUR_TOLERANCE: f64 = 1e-12;
 /// Relative tolerance of input use against coef_k Y (spec Invariants, Leontief).
 const LEONTIEF_TOLERANCE: f64 = 1e-12;
+/// What a user of a local good may miss of coef_k Y beyond [`LEONTIEF_TOLERANCE`], relative to
+/// the larger of its coef_k Y and what was available (spec Invariants, Leontief): where the
+/// chain's passes stop short, a good is short by at most [`crate::local::FIT`] of its flows,
+/// U - R <= FIT (U + R), so R / U >= (1 - FIT) / (1 + FIT), and a user drawing pro rata misses
+/// (n - b)(1 - R / U) <= 2 FIT / (1 + FIT) (n - b) < 2 FIT of its need n.
+const CHAIN_STOP_TOLERANCE: f64 = 2.0 * crate::local::FIT;
+/// What a user of a local good may miss beyond that, relative to the units of the good drawn at
+/// its province market this tick, D (spec Invariants, Leontief): the users draw from the market
+/// account one after the other, each draw rounding its balance by at most eps / 2 of what the
+/// market held, M: with the split's sums up to 2 (N_GOODS + 1) roundings, (N_GOODS + 1) eps M
+/// in all, which the user at which the market runs dry absorbs. The draws bind only where the market
+/// ends empty, so M is D plus those roundings, M <= D / (1 - (N_GOODS + 1) eps) < 2 D.
+const MARKET_DRAIN_TOLERANCE: f64 = 2.0 * (N_GOODS as f64 + 1.0) * f64::EPSILON;
 /// Relative tolerance of dispatched units against origin sales (trade SPEC Invariants,
 /// Dispatch mass).
 const DISPATCH_TOLERANCE: f64 = 1e-12;
+
+/// How far an origin cell's dispatched units `sent` may lie from its sales `sold` (trade SPEC,
+/// Invariants, Dispatch mass): [`DISPATCH_TOLERANCE`] of the larger, the `rounding` of products
+/// below the normal range that the kernel carries for the cell, and 2^-1022 for results below
+/// that range.
+fn dispatch_tolerance(sent: f64, sold: f64, rounding: f64) -> f64 {
+    DISPATCH_TOLERANCE * sent.abs().max(sold.abs()) + rounding + f64::MIN_POSITIVE
+}
 
 pub const WAGE: Flow = Flow(1);
 pub const SALE: Flow = Flow(2);
@@ -54,11 +75,18 @@ pub fn to_minor(value: f64) -> i64 {
 }
 
 pub fn to_numeraire(minor: i64) -> f64 {
+    to_numeraire_wide(i128::from(minor))
+}
+
+/// [`to_numeraire`] of a wide balance or of a sum of balances.
+pub fn to_numeraire_wide(minor: i128) -> f64 {
     minor as f64 / MINOR_PER_UNIT
 }
 
 /// Ledger accounts, opened at load in field order and ID order within each field, so the
-/// layout follows from the inputs alone.
+/// layout follows from the inputs alone. Pops, enterprises and transit accounts are narrow
+/// (`i64`); markets, gateways, the pools and the mint, which aggregate them, are wide (`i128`,
+/// ADR 0106).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Accounts {
     /// Per pop: money balance (spent at E3, refilled by wages, dividends and rebates).
@@ -105,14 +133,18 @@ pub struct Layout {
     /// Weights of the world price index, [`price_index_weights`].
     pub index_weights: Vec<f64>,
     /// PIGL weights per country: the calibrated ones (`Countries::pigl`), else inverted at
-    /// load from its final demand shares at prices 1 and its base spending per person
-    /// ([`base_spend`]).
+    /// load over its pops at prices 1 ([`household_preferences`]).
     pub pigl: Vec<PiglWeights>,
-    /// Log income dispersion sigma of every pop of a country, from the country's Gini.
+    /// Within-pop log income dispersion of every pop of a country, which its weights carry
+    /// (ADR 0094).
     pub sigma_income: Vec<f64>,
     /// Retained loss each enterprise keeps before the write-off (ADR 0112), minor units: M
     /// months of its base sales VA0 / a_VA (the calibrated steady-state sales value).
     pub ent_loss_cap: Vec<i64>,
+    /// Selection constant per traded good and province, `ProvinceData::gamma` good by good.
+    pub gamma: Vec<Vec<f64>>,
+    /// Price gain kappa1_cell of each market (ADR 0263), [`price_gains`].
+    pub price_gain: Vec<f64>,
 }
 
 impl Layout {
@@ -173,8 +205,11 @@ pub struct Scratch {
     /// Units of local output drawn by intermediate users at E2 per province market,
     /// `[province * N_GOODS + g]` (0 for traded goods): part of the market's demand and sales.
     pub drawn: Vec<f64>,
-    /// Iterations of the same-tick chain per province at E2.
+    /// Passes of the same-tick chain per province at E2 (`local::fills`).
     pub chain_iterations: Vec<u32>,
+    /// Whether the same-tick chain of a province met a fall its stall rule could not resolve
+    /// (`local::Fills::stalled`): a diagnostic.
+    pub chain_stalled: Vec<bool>,
     /// Units dispatched at T2b by each origin market, home purchases included,
     /// `[province * N_GOODS + g]`: the filled orders, equal to the market's sales.
     pub dispatched: Vec<f64>,
@@ -212,6 +247,19 @@ pub struct Scratch {
     pub lead: Vec<f64>,
     /// Country-pair flows of the last 12 ticks, for the run export.
     pub flows: FlowWindow,
+    /// Per traded good, this tick's T2b: goods it created less goods it destroyed (selection
+    /// at home purchases and in transit, the melt), the same due from `dispatch`
+    /// (`Sourced::selected - Sourced::lost`), and its shipped plus delivered units, the scale of
+    /// the selection invariant.
+    pub dispatch_made: Vec<f64>,
+    pub dispatch_due: Vec<f64>,
+    pub dispatch_scale: Vec<f64>,
+    /// Per enterprise, the traded inputs whose cap cut its labour target at E1, a bit per good
+    /// (`systems::scarcest_inputs`), and the employment E1 would have allocated on targets
+    /// without the input cap (its employment where no cap binds in its province); E3 orders
+    /// those inputs on the output at that employment (ADR 0266).
+    pub short: Vec<u16>,
+    pub notional: Vec<f64>,
 }
 
 impl Scratch {
@@ -224,6 +272,7 @@ impl Scratch {
             from_output: vec![0.0; n_ent * N_GOODS],
             drawn: vec![0.0; np * N_GOODS],
             chain_iterations: vec![0; np],
+            chain_stalled: vec![false; np],
             dispatched: vec![0.0; np * N_GOODS],
             pop_demand: vec![0.0; n_pops * N_GOODS],
             ent_order: vec![0.0; n_ent * N_GOODS],
@@ -240,6 +289,11 @@ impl Scratch {
             post: PostScratch::default(),
             lead: vec![0.0; np * N_GOODS],
             flows: FlowWindow::new(nc, np),
+            dispatch_made: vec![0.0; n_traded],
+            dispatch_due: vec![0.0; n_traded],
+            dispatch_scale: vec![0.0; n_traded],
+            short: vec![0; n_ent],
+            notional: vec![0.0; n_ent],
         }
     }
 }
@@ -301,7 +355,9 @@ pub struct Order {
     pub account: AccountId,
     pub buyer: usize,
     pub household: bool,
+    /// Delivered units bought at home, and the origin units shipped for them (ADR 0200).
     pub home: f64,
+    pub home_shipped: f64,
     pub slots: [f64; 4],
 }
 
@@ -321,10 +377,9 @@ pub struct EconWorld {
     pub markets: Markets,
     /// Goods paid for and in flight per buyer: pops `0..n_pops`, then enterprises.
     pub pipeline: Pipeline,
-    /// Buyer prices `[province * N_GOODS + g]`: the delivered unit price q_d = 1 / alpha_d of
-    /// each traded good, the numeraire a buyer at d needs per arriving unit under the current
-    /// sourcing shares (tariffs and iceberg losses included; infinite where no active origin
-    /// is reachable), and the posted price of each local good (owner decision, 2026-10-24).
+    /// Buyer prices `[province * N_GOODS + g]`: q_d = Gamma_d P_d of each traded good (ADR
+    /// 0200), the numeraire a buyer at d pays per arriving unit, tariffs included (infinite
+    /// where no active origin is reachable), and the posted price of each local good.
     /// Refreshed at E3 from the prices of the moment, read by E1 of the next tick.
     pub price_index: Vec<f64>,
     /// Wage w per province, numeraire per effective labour unit.
@@ -351,8 +406,9 @@ pub struct EconWorld {
     pub scratch: Scratch,
 }
 
-/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148,
-/// which the snapshot header carries after the digest: everything else a snapshot leaves out.
+/// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148
+/// and the storable price clip P151, which the snapshot header carries after the digest:
+/// everything else a snapshot leaves out.
 pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     // destructured so a new parameter cannot be left out of the digest
     let EconParams {
@@ -372,10 +428,15 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     } = params;
     let TradeParams {
         theta,
+        theta_scale,
         coverage,
         kappa1,
+        gain_share,
         kappa2,
         c_max,
+        // binds only off a steady state, so calibrations do not depend on it; the snapshot
+        // header carries it
+        c_max_storable: _,
         expectation_gain,
         border_nu,
         time_cost,
@@ -383,6 +444,15 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         theta_r: _,
         // groups goods for kernel sharing; the dynamics read theta alone
         theta_class: _,
+        // reach the kernel only through Network.bulk, in the inputs digest; Kernel::build
+        // refuses values other than the ones the network was built with
+        bulk_sea: _,
+        bulk_port: _,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+        storage_gain,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
@@ -404,15 +474,30 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         e.u8(*technology as u8);
     }
     e.f64s(theta);
-    e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain, *border_nu]);
+    e.f64(*theta_scale);
+    e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain]);
+    // reaches the dynamics only through the calibration's market elasticities
+    if inputs.market_elasticity.is_some() {
+        e.f64(*gain_share);
+    }
+    e.f64s(border_nu);
     e.f64s(coverage);
     e.f64s(time_cost);
+    e.f64s(storage_loss);
+    e.f64s(storage_cost);
+    e.f64s(speculation);
+    e.f64s(convenience);
+    e.f64(*storage_gain);
     state_hash(&e.into_bytes())
 }
 
 /// [`static_digest`] of `inputs` under the structural subset of the parameters, the rest at
 /// their defaults: the parameters a steady state (calibrated or solved) depends on, `sigma_demand`,
-/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `coverage`, `border_nu` and `time_cost`.
+/// the PIGL parameters, `sigma_fl`, `edu_eff`, `theta`, `theta_scale`, `coverage`, `border_nu`,
+/// `time_cost` and `storage_loss` (output replaces spoilage at a steady state, ADR 0091), and the
+/// other storage parameters `storage_cost`, `speculation`, `convenience` and `storage_gain`,
+/// which leave the steady state but enter the calibration's block map and market elasticities
+/// (ADRs 0091, 0267): a run under other storage parameters would keep stale price-gain limits.
 /// The adjustment speeds and the frictionless and rationing switches are free.
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
@@ -426,12 +511,31 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
         },
         &TradeParams {
             theta: trade.theta,
+            theta_scale: trade.theta_scale,
             coverage: trade.coverage,
             border_nu: trade.border_nu,
             time_cost: trade.time_cost,
+            storage_loss: trade.storage_loss,
+            storage_cost: trade.storage_cost,
+            speculation: trade.speculation,
+            convenience: trade.convenience,
+            storage_gain: trade.storage_gain,
             ..TradeParams::default()
         },
     )
+}
+
+/// kappa1_cell of every cell (ADRs 0263, 0267; trade SPEC, Per-market gain and Block gain):
+/// kappa1 capped at the share P03d of the cell's J2 limit, J from the calibration's market
+/// elasticities at the run's employment speed eta (P41), and at the share P03d of its coupled
+/// block's limit gain ([`MarketElasticity::price_gain`]); kappa1 in every cell of inputs without
+/// a calibration.
+pub fn price_gains(inp: &EconInputs, params: &EconParams, trade: &TradeParams) -> Vec<f64> {
+    let n = inp.n_provinces() * N_GOODS;
+    match &inp.market_elasticity {
+        Some(m) => (0..n).map(|i| m.price_gain(i, params, trade)).collect(),
+        None => vec![trade.kappa1; n],
+    }
 }
 
 /// Which (province, good) cells have a market, `[province * N_GOODS + g]`. A traded good's
@@ -525,28 +629,68 @@ pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
         .collect()
 }
 
+/// Base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times its
+/// effective labour, plus its population share of its country's base profit pool, over its
+/// population; 0 without people. As `ceteris_reference::io::Inputs::pop_base_income`.
+pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
+    let pool = base_profit_pool(inp);
+    let (_, country_people) = pop_people(inp);
+    (0..inp.n_pops())
+        .map(|k| {
+            let i = inp.pops.province[k] as usize;
+            let c = inp.country_of(i);
+            let n = inp.pops.population[k];
+            if n > 0.0 {
+                let effective =
+                    params.edu_eff[usize::from(inp.pops.edu[k])] * inp.pops.labour_force[k];
+                let wage = inp.provinces.w0[i] * (1.0 - inp.countries.u_star[c]) * effective;
+                (wage + n / country_people[c] * pool[c]) / n
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
 /// Per country, the calibrated PIGL weights (`Countries::pigl`) or else the weights inverted
-/// from its final demand shares at prices 1 and its [`base_spend`], and the log income
-/// dispersion of its pops from its Gini (ADR 0021). Panics where a country's shares cannot be
-/// inverted (`invert_pigl`).
+/// jointly over its pops at prices 1, each at its [`pop_base_income`] and weighted by its base
+/// spending (ADR 0094), and the within-pop log income dispersion every pop of the country uses,
+/// which the weights carry. Panics where a country's shares cannot be inverted
+/// (`invert_pigl_pops`).
 pub fn household_preferences(
     inp: &EconInputs,
     params: &EconParams,
 ) -> (Vec<PiglWeights>, Vec<f64>) {
-    let sigma: Vec<f64> = inp
-        .countries
-        .gini
-        .iter()
-        .map(|&g| lognormal_sigma(g))
-        .collect();
     let weights = match &inp.countries.pigl {
         Some(w) => w.clone(),
-        None => base_spend(inp, params)
-            .iter()
-            .enumerate()
-            .map(|(c, &m)| invert_pigl(&inp.countries.omega[c], m, sigma[c], params))
-            .collect(),
+        None => {
+            let income = pop_base_income(inp, params);
+            let mut pops = vec![Vec::new(); inp.n_countries()];
+            for k in 0..inp.n_pops() {
+                pops[inp.country_of(inp.pops.province[k] as usize)].push(k);
+            }
+            pops.iter()
+                .enumerate()
+                .map(|(c, members)| {
+                    let people: Vec<(f64, f64)> = members
+                        .iter()
+                        .map(|&k| (inp.pops.population[k], income[k]))
+                        .collect();
+                    let sigma = within_sigma(inp.countries.gini[c], &people);
+                    let at: Vec<PopAt> = people
+                        .iter()
+                        .map(|&(n, m)| PopAt {
+                            price: [1.0; N_GOODS],
+                            income: m,
+                            spend: n * m,
+                        })
+                        .collect();
+                    invert_pigl_pops(&inp.countries.omega[c], &at, sigma, params)
+                })
+                .collect()
+        }
     };
+    let sigma = weights.iter().map(|w| w.sigma).collect();
     (weights, sigma)
 }
 
@@ -573,7 +717,12 @@ fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
     (0..n).map(|_| ledger.open()).collect()
 }
 
-fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
+fn open_wide_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
+    (0..n).map(|_| ledger.open_wide()).collect()
+}
+
+/// Creates `change` of `good` in `account`, or destroys `-change` of it.
+pub(crate) fn adjust_stock(ledger: &mut Ledger, account: AccountId, good: usize, change: f64) {
     if change >= 0.0 {
         ledger.create(account, good, change);
     } else {
@@ -592,18 +741,28 @@ fn offsets(rows: &[u32], n: usize) -> Vec<u32> {
     off
 }
 
+/// Selection constants of the traded goods, one column over provinces per good.
+fn gamma_columns(gamma: &[[f64; N_GOODS]]) -> Vec<Vec<f64>> {
+    (0..N_GOODS)
+        .filter(|&g| TRADED[g])
+        .map(|g| gamma.iter().map(|row| row[g]).collect())
+        .collect()
+}
+
 /// Buyer prices of every cell, `[province * N_GOODS + g]`, with origins posting `price` on
-/// `active` markets: a traded good's delivered unit price q_d = 1 / alpha_d (alpha_d the units
-/// arriving per unit of intermediate spending, `source` and `dispatch` of one unit at every
-/// destination; infinite where no active origin is reachable) and the expected months in
-/// transit (`lead`, arrival slots weighted by units); a local good's posted price, lead 0.
+/// `active` markets: a traded good's buyer price q_d = Gamma_d P_d (ADR 0200; `gamma` one
+/// column per traded good; infinite where no active origin is reachable) and the expected
+/// months in transit (`lead`, the arrival slots of `source` and `dispatch` of one unit at every
+/// destination, weighted by the units arriving); a local good's posted price, lead 0.
 /// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
 /// same good at the same prices on it again, and `source` then reuses the origin access.
 /// Traded goods run in parallel, each on its own `sourced` and `columns` entry.
+#[allow(clippy::too_many_arguments)]
 fn delivered_prices(
     kernel: &Kernel,
     price: &[f64],
     active: &[bool],
+    gamma: &[Vec<f64>],
     sourced: &mut [Sourced],
     columns: &mut [Columns],
     index: &mut [f64],
@@ -625,21 +784,16 @@ fn delivered_prices(
         .enumerate()
         .for_each(|(g, (unit, col))| {
             col.gather(price, active, g);
-            source(kernel, g, &col.price, &col.active, &spend, unit);
+            source(kernel, g, &col.price, &col.active, &gamma[g], &spend, unit);
             dispatch(kernel, g, &col.price, &fill, unit);
-            col.index.clear();
+            col.index.clone_from(&unit.buyer_price);
             col.lead.clear();
             for d in 0..np {
                 let slots = unit.arrive.iter().map(|a| a[d][INTERMEDIATE]);
-                let alpha: f64 = slots.clone().sum();
+                let units: f64 = slots.clone().sum();
                 let weighted: f64 = slots.enumerate().map(|(s, x)| s as f64 * x).sum();
-                let (q, l) = if alpha > 0.0 {
-                    (1.0 / alpha, weighted / alpha)
-                } else {
-                    (f64::INFINITY, 0.0)
-                };
-                col.index.push(q);
-                col.lead.push(l);
+                col.lead
+                    .push(if units > 0.0 { weighted / units } else { 0.0 });
             }
         });
     for d in 0..np {
@@ -653,10 +807,17 @@ fn delivered_prices(
     }
 }
 
-/// Base delivered prices per province: [`delivered_prices`] in the data state, every price 1,
-/// the traded markets of [`active_cells`] (which do not depend on input coefficients), over
-/// the kernel of `inp`'s network under `trade`. The buyer prices of tick 0.
-pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64; N_GOODS]> {
+/// Base delivered prices and selection constants per province, in the data state (every price
+/// 1, the traded markets of [`active_cells`], which do not depend on input coefficients) over
+/// the kernel of `inp`'s network under `trade`. The base price of a traded good is the
+/// delivered unit price of the physical arrivals, 1 / alpha_d with alpha_d the units that
+/// survive the losses per unit of spending (infinite where no active origin is reachable), and
+/// Gamma = (1 / alpha_d) / P_d (ADR 0200; 1 where unreachable), so that the buyer price of tick
+/// 0, Gamma P_d, is the base price. Local goods: 1 and 1.
+pub fn base_delivered_prices(
+    inp: &EconInputs,
+    trade: &TradeParams,
+) -> (Vec<[f64; N_GOODS]>, Vec<[f64; N_GOODS]>) {
     let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, trade);
     let np = inp.n_provinces();
     let ent = &inp.enterprises;
@@ -672,32 +833,53 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> Vec<[f64;
     let n_traded = TRADED.iter().filter(|&&t| t).count();
     let mut sourced: Vec<Sourced> = (0..n_traded).map(|_| Sourced::new()).collect();
     let mut columns = vec![Columns::default(); n_traded];
+    let ones = vec![vec![1.0; np]; n_traded];
     delivered_prices(
         &kernel,
         &price,
         &active,
+        &ones,
         &mut sourced,
         &mut columns,
         &mut index,
         &mut lead,
     );
-    index.as_chunks::<N_GOODS>().0.to_vec()
+    let (mut base, mut gamma) = (vec![[1.0; N_GOODS]; np], vec![[1.0; N_GOODS]; np]);
+    for (g, unit) in sourced.iter().enumerate() {
+        for d in 0..np {
+            let alpha: f64 = unit.survived.iter().map(|s| s[d]).sum();
+            let ces = unit.price_index[d];
+            if alpha > 0.0 {
+                base[d][g] = 1.0 / alpha;
+                gamma[d][g] = base[d][g] / ces;
+            } else {
+                base[d][g] = f64::INFINITY;
+            }
+        }
+    }
+    (base, gamma)
 }
+
+/// Relative rounding of market holdings that the transit accounts carry (`EconWorld::end_tick`).
+const TRANSIT_ROUNDING: f64 = 1e-12;
 
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the initial state: the calibrated
     /// steady state of `EconInputs::steady` (ADR 0089, [`EconWorld::start_steady`]) when the
     /// inputs carry one, else the 2000 data state: prices 1, base wages w0 and employment L0
     /// from the inputs, unemployment at the natural rate u*, input stocks at one month of base
-    /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times initial demand
-    /// (see [`EconWorld::stock_base_demand`]), nothing in flight, and one month of base
+    /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times own base
+    /// output (see [`EconWorld::stock_base_output`]), nothing in flight, and one month of base
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
     /// per enterprise) minted to each pop: tick 0 wages are paid at E2, so tick 0 spending is
     /// one month of base income. Panics on invalid inputs or a base point other than base
-    /// employment = (1 - u*) L^s under `params.edu_eff`, and on a calibrated start under structural
-    /// parameters other than the defaults ([`structural_digest`]).
+    /// employment = (1 - u*) L^s under `params.edu_eff`, on a storage loss without speculation
+    /// ([`TradeParams::check_storage`]), and on a calibrated start under structural
+    /// parameters other than the defaults with the calibrated border friction
+    /// ([`structural_digest`], [`EconInputs::trade_params`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
         inputs.validate();
+        trade.check_storage().unwrap_or_else(|e| panic!("{e}"));
         let inp = &*inputs;
         let (np, nc) = (inp.n_provinces(), inp.n_countries());
         let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
@@ -718,12 +900,12 @@ impl EconWorld {
         let accounts = Accounts {
             pop: open_n(&mut ledger, n_pops),
             enterprise: open_n(&mut ledger, n_ent),
-            market: open_n(&mut ledger, np),
-            gateway: open_n(&mut ledger, inp.network.n_gateways()),
+            market: open_wide_n(&mut ledger, np),
+            gateway: open_wide_n(&mut ledger, inp.network.n_gateways()),
             transit: open_n(&mut ledger, n_traded),
-            rebate: open_n(&mut ledger, nc),
-            dividend: open_n(&mut ledger, nc),
-            mint: ledger.open(),
+            rebate: open_wide_n(&mut ledger, nc),
+            dividend: open_wide_n(&mut ledger, nc),
+            mint: ledger.open_wide(),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -778,6 +960,8 @@ impl EconWorld {
             country_pops,
             a_va: inp.enterprises.a_va.clone(),
             coef,
+            gamma: gamma_columns(&inp.provinces.gamma),
+            price_gain: price_gains(inp, &params, &trade),
         };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
@@ -822,13 +1006,30 @@ impl EconWorld {
             Some(steady) => {
                 assert_eq!(
                     structural_digest(&w.inputs, &w.params, &w.trade),
-                    structural_digest(&w.inputs, &EconParams::default(), &TradeParams::default()),
+                    structural_digest(&w.inputs, &EconParams::default(), &w.inputs.trade_params()),
                     "the calibrated steady state was built under the default structural \
-                     parameters; start from the data state (`--data-state`) or recalibrate"
+                     parameters and the calibrated border friction (`EconInputs::trade_params`); \
+                     start from the data state (`--data-state`) or recalibrate"
                 );
                 w.start_steady(&steady)
             }
-            None => w.start_data_state(),
+            None => {
+                if w.inputs.market_elasticity.is_some() {
+                    assert_eq!(
+                        structural_digest(&w.inputs, &w.params, &w.trade),
+                        structural_digest(
+                            &w.inputs,
+                            &EconParams::default(),
+                            &w.inputs.trade_params()
+                        ),
+                        "the market elasticities were computed under the default structural \
+                         parameters and the calibrated border friction \
+                         (`EconInputs::trade_params`), so their price gains (ADR 0263) would be \
+                         stale; recalibrate, or start inputs without a calibration"
+                    );
+                }
+                w.start_data_state()
+            }
         }
         w
     }
@@ -838,33 +1039,27 @@ impl EconWorld {
         let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
         let (inp, lay) = (&*inp, &*lay);
         let accounts = &lay.accounts;
-        let edu_eff = |k: usize| self.params.edu_eff[usize::from(inp.pops.edu[k])];
-        // base income, minted: the national profit pool now, wages at E2
+        // one month of base dividends, minted: the national profit pool now, wages at E2
         let pool = base_profit_pool(inp);
-        let mut base_income = vec![0.0; inp.n_pops()];
-        for (k, income) in base_income.iter_mut().enumerate() {
+        for k in 0..inp.n_pops() {
             let i = inp.pops.province[k] as usize;
             let dividends = lay.ownership[k] * pool[inp.country_of(i)];
             self.ledger
                 .transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
-            *income = inp.provinces.w0[i] * edu_eff(k) * self.employed[k] + dividends;
         }
         // input stocks at one month of base use (Y0 = A VA0 / a_VA)
-        let n_ent = inp.n_enterprises();
-        let mut base_use = vec![0.0; n_ent * N_GOODS];
-        for e in 0..n_ent {
+        for e in 0..inp.n_enterprises() {
             let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
             for k in 0..N_GOODS {
                 let q = lay.coef[e][k] * y0;
                 if q > 0.0 {
                     self.ledger.create(accounts.enterprise[e], k, q);
-                    base_use[e * N_GOODS + k] = q;
                 }
             }
         }
         self.refresh_price_index();
         self.price_level = self.world_price_index();
-        self.stock_base_demand(&base_income, &base_use);
+        self.stock_base_output();
     }
 
     /// The calibrated steady state at the start of a tick (ADR 0089, stage 5), on a world
@@ -1004,61 +1199,37 @@ impl EconWorld {
         self.price_level = level;
     }
 
-    /// Origin inventories of the data state at coverage times initial demand: the orders
-    /// that one month of base demand places at each origin market at the data state's
-    /// prices, households spending their base income with PIGL at the price index and
-    /// enterprises buying one month of base use at the index.
-    fn stock_base_demand(&mut self, base_income: &[f64], base_use: &[f64]) {
+    /// Origin inventories of the data state at coverage times the origin's own base output
+    /// of the good, s_g Y0 with Y0 = A VA0 / a_VA, at every active traded cell; local goods
+    /// hold none.
+    fn stock_base_output(&mut self) {
         let (inp, lay) = (Arc::clone(&self.inputs), Arc::clone(&self.layout));
         let (inp, lay) = (&*inp, &*lay);
-        let np = inp.n_provinces();
-        let mut spend = vec![[0.0; 2]; np * N_GOODS];
-        let mut x = [0.0; N_GOODS];
-        for d in 0..np {
-            let row: [f64; N_GOODS] = self.price_index[d * N_GOODS..(d + 1) * N_GOODS]
-                .try_into()
-                .expect("one row of goods");
-            for k in lay.pops(d) {
-                lay.pop_demand(inp, &self.params, k, &row, base_income[k], &mut x);
-                for g in (0..N_GOODS).filter(|&g| TRADED[g] && x[g] > 0.0) {
-                    spend[d * N_GOODS + g][HOUSEHOLD] += x[g] * row[g];
-                }
-            }
-            for e in lay.enterprises(d) {
-                for g in (0..N_GOODS).filter(|&g| TRADED[g] && row[g].is_finite()) {
-                    spend[d * N_GOODS + g][INTERMEDIATE] += base_use[e * N_GOODS + g] * row[g];
-                }
-            }
-        }
-        let (mut price, mut active) = (vec![0.0; np], vec![false; np]);
-        let mut sourced = Sourced::new();
-        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
-            for o in 0..np {
-                price[o] = self.markets.price[o * N_GOODS + g];
-                active[o] = self.markets.active[o * N_GOODS + g];
-            }
-            let s: Vec<[f64; 2]> = (0..np).map(|d| spend[d * N_GOODS + g]).collect();
-            source(&self.kernel, g, &price, &active, &s, &mut sourced);
-            for o in (0..np).filter(|&o| active[o]) {
-                let stock = self.trade.coverage[g] * (sourced.orders[o][0] + sourced.orders[o][1]);
-                if stock > 0.0 {
-                    self.markets.inventory[o * N_GOODS + g] = stock;
-                    self.ledger.create(lay.accounts.market[o], g, stock);
-                }
+        for e in 0..inp.n_enterprises() {
+            let (o, g) = (
+                inp.enterprises.province[e] as usize,
+                usize::from(inp.enterprises.good[e]),
+            );
+            let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
+            let stock = self.trade.coverage[g] * y0;
+            if TRADED[g] && self.markets.active[o * N_GOODS + g] && stock > 0.0 {
+                self.markets.inventory[o * N_GOODS + g] += stock;
+                self.ledger.create(lay.accounts.market[o], g, stock);
             }
         }
     }
 
     /// Recomputes [`EconWorld::price_index`] and `Scratch::lead` at the current prices. For a
-    /// traded good, every destination spends one unit, sourced over the floored origin
-    /// weights (`ceteris_trade::source`) and dispatched in full: alpha_d is the units
-    /// arriving at d, q_d = 1 / alpha_d, and the lead is the mean arrival slot of those units.
+    /// traded good, every destination spends one unit, sourced over the origin weights
+    /// (`ceteris_trade::source`) and dispatched in full: q_d = Gamma_d P_d (ADR 0200), and the
+    /// lead is the mean arrival slot of the units arriving.
     pub fn refresh_price_index(&mut self) {
         let sc = &mut self.scratch;
         delivered_prices(
             &self.kernel,
             &self.markets.price,
             &self.markets.active,
+            &self.layout.gamma,
             &mut sc.sourced,
             &mut sc.columns,
             &mut self.price_index,
@@ -1085,7 +1256,9 @@ impl EconWorld {
     /// Called between ticks; the buyer prices of the last E3 stand until the next E3 sources
     /// over the new kernel, and goods already in flight arrive as scheduled, so the same
     /// network leaves the run unchanged. The network must keep the provinces and gateways,
-    /// whose accounts are open. In P2 the caller triggers it; shocks arrive in P3.
+    /// whose accounts are open. The price gains stay those of the calibration (ADR 0263, As
+    /// built), as the coefficients and Gamma do: J needs the calibrated spending, which a run
+    /// does not have. In P2 the caller triggers it; shocks arrive in P3.
     pub fn set_network(&mut self, network: Network) {
         let old = &self.inputs.network;
         assert!(
@@ -1141,10 +1314,11 @@ impl EconWorld {
 }
 
 impl Encode for EconWorld {
-    /// The static digest, the write-off threshold P148, then the dynamic state.
+    /// The static digest, the write-off threshold P148 and the storable price clip P151, then
+    /// the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         self.digest.iter().for_each(|&b| e.u8(b));
-        e.f64s(&[self.params.write_off_months]);
+        e.f64s(&[self.params.write_off_months, self.trade.c_max_storable]);
         self.ledger.encode(e);
         self.markets.encode(e);
         self.pipeline.encode(e);
@@ -1185,10 +1359,16 @@ impl State for EconWorld {
     /// Invariants that hold on any world, in order: ledger (money, goods sign, goods
     /// identity), population, labour bounds, price bounds (every price and wage), inventory
     /// (S >= 0, and held by the market account to 1e-9 of the turnover S + Q + D), transit
-    /// (pipeline and transit accounts agree), gateway clearing (money exact, goods 1e-9), and over this tick's evidence in
+    /// (pipeline and transit accounts agree to 1e-9, plus 1e-12 of the good's market turnover),
+    /// selection (what T2b created less what it destroyed is its selection term less its melt,
+    /// 1e-9 of its shipped and delivered units plus the transit rounding; ADR 0200), gateway
+    /// clearing (money exact, goods 1e-9), and over this tick's evidence in
     /// [`Scratch`]: Leontief (inputs used = coef_k Y, 1e-12 relative to the larger of
-    /// coef_k Y and what was available: the stock, and this tick's draws of a local good),
-    /// dispatch mass (units dispatched = origin sales, 1e-12)
+    /// coef_k Y and what was available: the stock, and this tick's draws of a local good; a
+    /// local good also [`CHAIN_STOP_TOLERANCE`] of the same and [`MARKET_DRAIN_TOLERANCE`] of
+    /// its province's draws),
+    /// dispatch mass (units dispatched = origin sales, 1e-12 of the larger plus the rounding below
+    /// the normal range the kernel carries, [`dispatch_tolerance`])
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
     /// its recorded income, exact in minor units).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
@@ -1267,10 +1447,30 @@ impl State for EconWorld {
         let in_flight = self.pipeline.in_flight_all();
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
             let (flight, held) = (in_flight[g], self.ledger.goods(account, g));
-            if (held - flight).abs() > GOODS_TOLERANCE * flight.max(held).max(1.0) {
+            // the account is filled with differences of market holdings, so it carries their
+            // rounding, a few ulps of each market's turnover: shipments far below a market's
+            // stock can vanish from it
+            let turnover: f64 = (0..lay.accounts.market.len())
+                .map(|i| i * N_GOODS + g)
+                .map(|c| {
+                    self.markets.inventory[c] + self.markets.supply[c] + self.markets.demand[c]
+                })
+                .sum();
+            let rounding = TRANSIT_ROUNDING * turnover;
+            if (held - flight).abs() > GOODS_TOLERANCE * flight.max(held).max(1.0) + rounding {
                 return fail(
                     "transit",
                     format!("good {g}: pipeline {flight}, account {held}"),
+                );
+            }
+            // ADR 0200: what T2b created less what it destroyed is its selection less its melt
+            let sc = &self.scratch;
+            let (made, due) = (sc.dispatch_made[g], sc.dispatch_due[g]);
+            let gap = (made - due).abs();
+            if gap.is_nan() || gap > GOODS_TOLERANCE * sc.dispatch_scale[g].max(1.0) + rounding {
+                return fail(
+                    "selection",
+                    format!("good {g}: dispatch made {made}, selection less melt {due}"),
                 );
             }
         }
@@ -1278,9 +1478,9 @@ impl State for EconWorld {
             .accounts
             .gateway
             .iter()
-            .find(|&&a| self.ledger.money(a) != 0)
+            .find(|&&a| self.ledger.money_wide(a) != 0)
         {
-            let detail = format!("gateway account {a:?} holds {}", self.ledger.money(*a));
+            let detail = format!("gateway account {a:?} holds {}", self.ledger.money_wide(*a));
             return fail("gateway clearing", detail);
         }
         for &a in &lay.accounts.gateway {
@@ -1296,27 +1496,52 @@ impl State for EconWorld {
 
         let sc = &self.scratch;
         for e in 0..inp.n_enterprises() {
-            for k in 0..N_GOODS {
+            let province = inp.enterprises.province[e] as usize;
+            for (k, &traded) in TRADED.iter().enumerate() {
                 let want = lay.coef[e][k] * sc.produced[e];
                 let (used, before) = (
                     sc.input_used[e * N_GOODS + k],
                     sc.input_before[e * N_GOODS + k],
                 );
                 let gap = (used - want).abs();
-                if gap.is_nan() || gap > LEONTIEF_TOLERANCE * want.max(before) {
+                let tolerance = if traded {
+                    LEONTIEF_TOLERANCE * want.max(before)
+                } else {
+                    (LEONTIEF_TOLERANCE + CHAIN_STOP_TOLERANCE) * want.max(before)
+                        + MARKET_DRAIN_TOLERANCE * sc.drawn[province * N_GOODS + k]
+                };
+                if gap.is_nan() || gap > tolerance {
                     let detail = format!("enterprise {e} used {used} of good {k}, a Y = {want}");
                     return fail("leontief", detail);
                 }
             }
         }
 
-        for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&self.markets.sales).enumerate() {
-            if !TRADED[cell % N_GOODS] {
+        let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+        let m = &self.markets;
+        for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&m.sales).enumerate() {
+            let (o, g) = (cell / N_GOODS, cell % N_GOODS);
+            let Ok(t) = traded.binary_search(&g) else {
                 continue;
-            }
-            // the absolute floor only matters for subnormal sales, which have no relative precision
+            };
+            // products below the normal range round absolutely: what the kernel carries for
+            // them, and a subnormal fill's own rounding of avail / D
+            let r = &sc.sourced[t];
+            let f = sc.fill[cell];
+            let below = |x: f64| {
+                if x < f64::MIN_POSITIVE {
+                    f64::from_bits(1)
+                } else {
+                    0.0
+                }
+            };
+            let rounding = r.shipped_rounding[o]
+                + f[0] * r.orders_rounding[o][0]
+                + f[1] * r.orders_rounding[o][1]
+                + below(f[0]) * m.demand_int[cell]
+                + below(f[1]) * m.demand_hh[cell];
             let gap = (sent - sold).abs();
-            if gap.is_nan() || gap > DISPATCH_TOLERANCE * sold + f64::MIN_POSITIVE {
+            if gap.is_nan() || gap > dispatch_tolerance(sent, sold, rounding) {
                 let detail = format!("cell {cell}: dispatched {sent} of sales {sold}");
                 return fail("dispatch mass", detail);
             }
@@ -1373,10 +1598,11 @@ impl State for EconWorld {
                 "snapshot belongs to other inputs or parameters".into(),
             ));
         }
-        let months = d.f64s()?;
-        if months != [self.params.write_off_months] {
+        let header = d.f64s()?;
+        if header != [self.params.write_off_months, self.trade.c_max_storable] {
             return Err(DecodeError(format!(
-                "snapshot taken with write-off threshold (P148) {months:?}"
+                "snapshot taken with write-off threshold (P148) and storable price clip (P151) \
+                 {header:?}"
             )));
         }
         let ledger = Ledger::decode(d)?;
@@ -1455,9 +1681,26 @@ impl State for EconWorld {
 mod tests {
     use super::*;
     use crate::fixture::small_world;
+    use crate::inputs::MarketElasticity;
     use ceteris_core::snapshot::{canonical, decode_canonical_with};
     use ceteris_trade::N_GOODS;
     use ceteris_trade::goods::TRADED;
+
+    /// Trade SPEC, Invariants, Dispatch mass: the x10 stop (block pack, tick 55, cell 33982)
+    /// differs by 1.3e-9 of its sales, far beyond 1e-12 and the 2^-1022 floor, and passes with
+    /// the rounding the kernel carries for it (here twice the gap); without it, it still fails,
+    /// as does a real mismatch of 1e-6 at normal flows.
+    #[test]
+    fn dispatch_tolerance_covers_the_carried_rounding() {
+        let (sent, sold): (f64, f64) = (1.4717616895918719e-297, 1.4717616915516175e-297);
+        let gap = (sent - sold).abs();
+        assert!(gap > DISPATCH_TOLERANCE * sold + f64::MIN_POSITIVE);
+        assert!(gap <= dispatch_tolerance(sent, sold, 2.0 * gap));
+        assert!(gap > dispatch_tolerance(sent, sold, 0.0));
+        let (sent, sold): (f64, f64) = (1.0, 1.000001);
+        assert!((sent - sold).abs() > dispatch_tolerance(sent, sold, 0.0));
+        assert!((sent - sold).abs() > dispatch_tolerance(sent, sold, 1e-300));
+    }
 
     /// Owner decision, 2026-10-25: ICIO coefficients are cost shares at base delivered prices.
     /// The base prices are the world's buyer prices at tick 0, and at them every input's cost
@@ -1470,7 +1713,15 @@ mod tests {
             EconParams::default(),
             TradeParams::default(),
         );
-        assert_eq!(w.price_index, inp.provinces.base_price.as_flattened());
+        // Gamma P_d reproduces 1 / alpha_d to two roundings, within about f64::EPSILON
+        // relative; twice that allowed (ADR 0200, As built)
+        let base = inp.provinces.base_price.as_flattened();
+        for (cell, (&q, &b)) in w.price_index.iter().zip(base).enumerate() {
+            assert!(
+                q == b || (q - b).abs() <= 2.0 * f64::EPSILON * b,
+                "cell {cell}: {q} vs {b}"
+            );
+        }
         assert!(
             inp.provinces
                 .base_price
@@ -1520,7 +1771,7 @@ mod tests {
     fn money_sum(w: &EconWorld) -> i128 {
         let n = w.layout.accounts.mint.0 as usize + 1;
         (0..n as u32)
-            .map(|a| i128::from(w.ledger.money(AccountId(a))))
+            .map(|a| w.ledger.money_wide(AccountId(a)))
             .sum()
     }
 
@@ -1586,7 +1837,7 @@ mod tests {
                 assert!((held - inp.coef(e, k) * y0).abs() <= 1e-12 * y0);
             }
         }
-        // origin inventories at coverage times initial demand; local goods and cells
+        // origin inventories at coverage times own base output; local goods and cells
         // without a market hold none
         for i in 0..25 {
             for (g, &traded) in TRADED.iter().enumerate() {
@@ -1596,19 +1847,95 @@ mod tests {
                 assert_eq!(held > 0.0, traded && w.markets.active[cell], "cell {cell}");
             }
         }
+        for e in 0..inp.n_enterprises() {
+            let (i, g) = (
+                inp.enterprises.province[e] as usize,
+                usize::from(inp.enterprises.good[e]),
+            );
+            if TRADED[g] {
+                let y0 = inp.enterprises.a[e] * inp.enterprises.va0[e] / w.layout.a_va[e];
+                let held = w.markets.inventory[i * N_GOODS + g];
+                let want = w.trade.coverage[g] * y0;
+                assert!(
+                    (held - want).abs() <= 1e-12 * want,
+                    "{i} {g}: {held} {want}"
+                );
+            }
+        }
         // nothing in flight; the price index starts at the data state's prices
         assert!((0..N_GOODS).all(|g| w.pipeline.in_flight(g) == 0.0));
         for i in 0..25 {
             for (g, &traded) in TRADED.iter().enumerate() {
                 let p = w.price_index[i * N_GOODS + g];
                 if traded {
-                    // q_d = 1 / alpha_d at prices 1: a mean of delivered unit costs, each at
-                    // least the price 1
+                    // Gamma P_d at prices 1 is 1 / alpha_d there (ADR 0200): a mean of delivered
+                    // unit costs, each at least the price 1
                     assert!(p.is_finite() && p >= 1.0, "{i} {g}: {p}");
                 } else {
                     assert_eq!(p, 1.0);
                 }
             }
+        }
+    }
+
+    /// Econ SPEC, Initial state (merchant stocks of the data state): a one-province economy
+    /// of Pitcairn's scale, the fixture's island at 1e-4 of its population and value added,
+    /// gets no windfall at tick 1. Its pops may hold at most their money before, one month of
+    /// its base value added, and the value of its whole stock and a month's output at the
+    /// step-clipped price. When merchants stocked coverage times the world's orders at prices 1
+    /// they held about 5,850 times their money.
+    #[test]
+    fn a_tiny_economy_has_no_tick_one_windfall() {
+        const ISLAND: u32 = 24;
+        const SCALE: f64 = 1e-4;
+        let mut inp = small_world();
+        for k in 0..inp.n_pops() {
+            if inp.pops.province[k] == ISLAND {
+                inp.pops.population[k] *= SCALE;
+                inp.pops.labour_force[k] *= SCALE;
+            }
+        }
+        inp.provinces.population[ISLAND as usize] *= SCALE;
+        for e in 0..inp.n_enterprises() {
+            if inp.enterprises.province[e] == ISLAND {
+                inp.enterprises.va0[e] *= SCALE;
+                inp.enterprises.va_target[e] *= SCALE;
+            }
+        }
+        inp.set_base_point(&EconParams::default().edu_eff);
+        let inp = Arc::new(inp);
+        let trade = TradeParams::default();
+        let c = inp.country_of(ISLAND as usize);
+        for params in [EconParams::default(), EconParams::frictionless()] {
+            let mut sim = EconWorld::sim(Arc::clone(&inp), params, trade.clone());
+            let money = |w: &EconWorld| -> f64 {
+                let lay = &w.layout;
+                lay.country_pops[c]
+                    .iter()
+                    .map(|&k| to_numeraire(w.ledger.money(lay.accounts.pop[k as usize])))
+                    .sum()
+            };
+            let before = money(sim.world());
+            let lay = Arc::clone(&sim.world().layout);
+            let (mut va, mut traded) = (0.0, 0.0);
+            for e in lay.enterprises(ISLAND as usize) {
+                va += inp.enterprises.va0[e];
+                if TRADED[usize::from(inp.enterprises.good[e])] {
+                    traded += inp.enterprises.a[e] * inp.enterprises.va0[e] / lay.a_va[e];
+                }
+            }
+            let cover = trade.coverage.iter().copied().fold(0.0, f64::max);
+            let clip = (0..N_GOODS)
+                .map(|g| trade.price_clip(g))
+                .fold(0.0, f64::max);
+            let bound = before + va + (1.0 + cover) * libm::exp(clip) * traded;
+            sim.step().unwrap();
+            let after = money(sim.world());
+            assert!(
+                after <= bound,
+                "island pops hold {after:.4e} after tick 1 against {before:.4e} before, \
+                 bound {bound:.4e}"
+            );
         }
     }
 
@@ -1735,6 +2062,22 @@ mod tests {
     }
 
     #[test]
+    fn restore_rejects_another_storable_clip() {
+        let w = world();
+        let bytes = canonical(0, &w);
+        let other = EconWorld::new(
+            Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams {
+                c_max_storable: 0.2,
+                ..TradeParams::default()
+            },
+        );
+        assert_eq!(other.digest(), w.digest());
+        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+    }
+
+    #[test]
     fn restore_rejects_other_inputs() {
         let w = world();
         let bytes = canonical(0, &w);
@@ -1764,6 +2107,170 @@ mod tests {
             TradeParams::default(),
         );
         assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+    }
+
+    /// ADR 0263: J = E + eta eps / (2 - eta) at the run's eta caps the gain of the markets
+    /// above J_ref = 2 m / kappa1 (20 at the defaults); inputs without a calibration run kappa1
+    /// everywhere, and P03d reaches the static digest only with a calibration.
+    #[test]
+    fn gain_per_cell_follows_eta() {
+        let trade = TradeParams::default();
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        for params in [EconParams::default(), EconParams::frictionless()] {
+            assert!(
+                price_gains(&inputs, &params, &trade)
+                    .iter()
+                    .all(|&k| k == trade.kappa1)
+            );
+        }
+        let other_share = TradeParams {
+            gain_share: 0.25,
+            ..trade.clone()
+        };
+        let digest =
+            |inp: &EconInputs, t: &TradeParams| static_digest(inp, &EconParams::default(), t);
+        assert_eq!(digest(&inputs, &trade), digest(&inputs, &other_share));
+
+        // cell 0: E 11.57, eps 30.4 (J 16.92 default, 41.97 frictionless); cell 1: E 25, eps 0
+        let (mut demand, mut supply) = (vec![1.0; n], vec![0.0; n]);
+        (demand[0], supply[0], demand[1]) = (11.57, 30.4, 25.0);
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand,
+            supply,
+            limit: [vec![f64::INFINITY; n], vec![f64::INFINITY; n]],
+        });
+        assert_ne!(digest(&inputs, &trade), digest(&inputs, &other_share));
+        let default = price_gains(&inputs, &EconParams::default(), &trade);
+        let frictionless = price_gains(&inputs, &EconParams::frictionless(), &trade);
+        assert_eq!(default[0], trade.kappa1);
+        assert!((frictionless[0] - 1.0 / (11.57 + 30.4)).abs() < 1e-16);
+        for gains in [&default, &frictionless] {
+            assert!((gains[1] - 1.0 / 25.0).abs() < 1e-16);
+            assert!(gains[2..].iter().all(|&k| k == trade.kappa1));
+        }
+        let mut w = EconWorld::new(Arc::new(inputs), EconParams::frictionless(), trade.clone());
+        assert_eq!(w.layout().price_gain, frictionless);
+        let mut net = w.inputs().network.clone();
+        for l in &mut net.crossings {
+            l.cost_per_t *= 4.0;
+        }
+        w.set_network(net);
+        assert_eq!(w.layout().price_gain, frictionless);
+    }
+
+    /// ADR 0267: each cell's gain is the per-market cap at the run's settings, capped at the
+    /// share P03d of its block's limit gain under the run's wage regime: at the defaults the
+    /// limit's share, and continuous in kappa1, P03d and eta around them, so a kappa1 just off
+    /// the default keeps the block cap.
+    #[test]
+    fn block_limit_caps_the_gain_continuously() {
+        let trade = TradeParams::default();
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        // cell 0: J 16.92 default (uncapped), 41.97 frictionless (capped at 1 / 41.97)
+        let (mut demand, mut supply) = (vec![1.0; n], vec![0.0; n]);
+        (demand[0], supply[0]) = (11.57, 30.4);
+        let (mut default, mut frictionless) = (vec![f64::INFINITY; n], vec![f64::INFINITY; n]);
+        // limits of blocks scaled by 0.5 (default) and 0.5, 0.25 (frictionless)
+        default[0] = 0.5 * trade.kappa1 / trade.gain_share;
+        frictionless[0] = 0.5 * trade.price_gain(11.57 + 30.4) / trade.gain_share;
+        frictionless[1] = 0.25 * trade.kappa1 / trade.gain_share;
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand,
+            supply,
+            limit: [default, frictionless],
+        });
+        let gain = |params: &EconParams, trade: &TradeParams| price_gains(&inputs, params, trade);
+        let at_default = gain(&EconParams::default(), &trade);
+        assert_eq!(at_default[0], 0.5 * trade.kappa1);
+        assert!(at_default[1..].iter().all(|&k| k == trade.kappa1));
+        let at_frictionless = gain(&EconParams::frictionless(), &trade);
+        assert!((at_frictionless[0] - 0.5 / (11.57 + 30.4)).abs() < 1e-16);
+        assert_eq!(at_frictionless[1], 0.25 * trade.kappa1);
+        // just off the default kappa1 the gains move by the relative change of kappa1 at most
+        let near = TradeParams {
+            kappa1: 0.0500000001,
+            ..trade.clone()
+        };
+        let moved = near.kappa1 / trade.kappa1 - 1.0;
+        for params in [EconParams::default(), EconParams::frictionless()] {
+            let (a, b) = (gain(&params, &trade), gain(&params, &near));
+            for (x, y) in a.iter().zip(&b) {
+                assert!((x - y).abs() <= 1.01 * moved * x, "{x} vs {y}");
+            }
+        }
+        // a larger kappa1 raises the unblocked cells only; a larger P03d raises the cap with it
+        let fast = TradeParams {
+            kappa1: 0.1,
+            ..trade.clone()
+        };
+        let g = gain(&EconParams::default(), &fast);
+        assert_eq!((g[0], g[1]), (0.5 * trade.kappa1, fast.kappa1));
+        let wide = TradeParams {
+            gain_share: 0.75,
+            ..trade.clone()
+        };
+        let g = gain(&EconParams::default(), &wide);
+        assert!((g[0] - 0.75 * trade.kappa1).abs() < 1e-16);
+        // at another eta the per-market cap moves with eta and the block cap stays
+        let other_eta = EconParams {
+            eta: 0.5,
+            ..EconParams::default()
+        };
+        let g = gain(&other_eta, &trade);
+        let per_market = trade.price_gain(11.57 + 0.5 * 30.4 / 1.5);
+        assert_eq!(g[0], per_market.min(0.5 * trade.kappa1));
+        let digest = |inp: &EconInputs| inp.digest();
+        let mut unscaled = inputs.clone();
+        unscaled.market_elasticity.as_mut().unwrap().limit =
+            [vec![f64::INFINITY; n], vec![f64::INFINITY; n]];
+        assert_ne!(digest(&inputs), digest(&unscaled));
+    }
+
+    /// A storage loss without speculation is an untargeted stock that spoils (ADR 0091; trade
+    /// SPEC, Competitive storage): refused.
+    #[test]
+    #[should_panic(expected = "no speculation intensity")]
+    fn storage_loss_without_speculation_is_refused() {
+        let mut trade = TradeParams::default();
+        trade.storage_loss[0] = 0.003;
+        EconWorld::new(Arc::new(small_world()), EconParams::default(), trade);
+    }
+
+    /// A data-state start keeps the calibration's price gains, whose block limits were
+    /// computed at its storage parameters (ADR 0267): a speculation intensity of its own is
+    /// refused.
+    #[test]
+    #[should_panic(expected = "market elasticities were computed under the default structural")]
+    fn data_state_start_refuses_elasticities_of_other_storage_parameters() {
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand: vec![1.0; n],
+            supply: vec![0.0; n],
+            limit: [vec![f64::INFINITY; n], vec![f64::INFINITY; n]],
+        });
+        let mut trade = TradeParams::default();
+        trade.speculation[5] = 5.714;
+        EconWorld::new(Arc::new(inputs), EconParams::default(), trade);
+    }
+
+    #[test]
+    #[should_panic(expected = "market elasticities were computed under the default structural")]
+    fn data_state_start_refuses_elasticities_of_other_structural_parameters() {
+        let mut inputs = small_world();
+        let n = inputs.n_provinces() * N_GOODS;
+        inputs.market_elasticity = Some(MarketElasticity {
+            demand: vec![1.0; n],
+            supply: vec![0.0; n],
+            limit: [vec![f64::INFINITY; n], vec![f64::INFINITY; n]],
+        });
+        let params = EconParams {
+            sigma_demand: EconParams::default().sigma_demand + 0.5,
+            ..EconParams::default()
+        };
+        EconWorld::new(Arc::new(inputs), params, TradeParams::default());
     }
 
     #[test]

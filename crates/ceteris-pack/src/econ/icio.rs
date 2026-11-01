@@ -7,9 +7,10 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray, UInt8Array, UInt32Array};
 
+use super::goods::TRADED;
 use super::people::donor;
 use crate::numeric::{median, pairwise_sum, py_sum};
-use crate::read::icio::{CountryIo, N_GOODS, Wdi};
+use crate::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi};
 use crate::read::people::{Observed, parts};
 use crate::read::wdi::Names;
 
@@ -133,38 +134,42 @@ pub fn median_va_over_gdp(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 
     .unwrap_or(f64::NAN)
 }
 
-/// ICIO crude oil and gas VA over WDI oil and gas rents, summed over the ICIO economies with GDP
-/// and a rent.
+/// Million USD: VA of crude oil and gas extraction (B06, B09), its output less its inputs, as
+/// `CountryIo::va` is for a good; good 1's VA less refining's (C19).
+pub fn extraction_va(c: &CountryIo) -> f64 {
+    c.extraction_output - pairwise_sum(&c.extraction)
+}
+
+/// ICIO crude oil and gas extraction VA over WDI oil and gas rents, summed over the ICIO
+/// economies with GDP and a rent. Extraction, not good 1 with refining, since the rents measure
+/// extraction and the rents path produces with the extraction column (ADRs 0270, 0281).
 pub fn oil_gas_va_over_rents(icio: &BTreeMap<String, CountryIo>, wdi: &Wdi) -> f64 {
     let (va, rents): (Vec<f64>, Vec<f64>) = icio
         .iter()
         .filter_map(|(k, c)| {
             let r = rents(wdi, k)?;
-            Some((c.va[OIL_GAS] * 1e6, wdi.gdp.get(k)? * r))
+            Some((extraction_va(c) * 1e6, wdi.gdp.get(k)? * r))
         })
         .unzip();
     pairwise_sum(&va) / pairwise_sum(&rents)
 }
 
-/// The largest share of crude oil and gas in the VA of goods 1 to 8 among the ICIO economies.
+/// The largest share of crude oil and gas extraction in the VA of goods 1 to 8 among the ICIO
+/// economies (ADR 0281).
 pub fn oil_gas_most_of_industry(icio: &BTreeMap<String, CountryIo>) -> f64 {
     icio.values()
-        .map(|c| c.va[OIL_GAS] / pairwise_sum(&c.va[1..9]))
+        .map(|c| extraction_va(c) / pairwise_sum(&c.va[1..9]))
         .filter(|x| x.is_finite())
         .fold(0.0, f64::max)
 }
 
-/// Inputs per unit of crude oil and gas output over all ICIO economies, weighted by their crude
-/// oil and gas output.
+/// Inputs per unit of crude oil and gas extraction output (B06, B09, without refining) over all
+/// ICIO economies, weighted by their extraction output (ADR 0270).
 pub fn world_oil_gas_column(icio: &BTreeMap<String, CountryIo>) -> [f64; N_GOODS] {
-    let output: Vec<f64> = icio.values().map(|c| c.output[OIL_GAS]).collect();
+    let output: Vec<f64> = icio.values().map(|c| c.extraction_output).collect();
     let total = pairwise_sum(&output);
     std::array::from_fn(|k| {
-        let inputs: Vec<f64> = icio
-            .values()
-            .zip(&output)
-            .map(|(c, x)| c.io[k][OIL_GAS] * x)
-            .collect();
+        let inputs: Vec<f64> = icio.values().map(|c| c.extraction[k]).collect();
         pairwise_sum(&inputs) / total
     })
 }
@@ -304,8 +309,8 @@ fn groups(s: SectorShares, ratio: f64) -> (Vec<(f64, Vec<usize>)>, Basis) {
 
 /// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most `cap` of the
 /// group's, so the group's local goods keep a producer.
-/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups count as one
-/// (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
+/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups
+/// count as one (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
 fn oil_gas_apart(
     mut groups: Vec<(f64, Vec<usize>)>,
     share: f64,
@@ -393,8 +398,9 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
 /// its group (all of industry where industry less manufacturing is too small) and at most the
 /// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
-/// world crude oil and gas inputs per unit of output (ADR 0256). With no GDP, population (WDI, else the WorldPop
-/// national total) times the donor's VA per person, scaled by own over donor income (donor).
+/// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP,
+/// population (WDI, else the WorldPop national total) times the donor's VA per person, scaled by
+/// own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
 pub fn impute(
@@ -521,6 +527,8 @@ pub fn impute(
                     io,
                     final_demand_shares: d.final_demand_shares,
                     coal_share: d.coal_share,
+                    extraction: [0.0; N_GOODS],
+                    extraction_output: 0.0,
                 },
                 donor: Some(name),
                 va_basis: basis,
@@ -712,6 +720,53 @@ pub fn io_columns(
             floats(
                 rows.iter()
                     .flat_map(|r| r.table.io.iter().flat_map(|row| row.iter().copied())),
+            ),
+        ),
+    ])
+}
+
+/// `econ_home_shares.arrow` (ADR 0092): one row per pack country and traded good, country-major:
+/// `home_share` the ICIO 2000 domestic-origin use over total use (intermediate plus final),
+/// `absorption` the total use (million USD), `icio` whether the country is an ICIO economy. A
+/// country outside ICIO has NaN share and absorption, and so has the share of a good an ICIO
+/// economy does not use.
+pub fn home_share_columns(
+    codes: &[String],
+    used: &BTreeMap<String, HomeUse>,
+    iso: &Names,
+) -> Result<Vec<(String, ArrayRef)>, String> {
+    let n = u32::try_from(codes.len()).map_err(|_| "too many countries for uint32")?;
+    let own: Vec<Option<&HomeUse>> = codes
+        .iter()
+        .map(|c| used.get(iso.get(c).unwrap_or(c)))
+        .collect();
+    let per_row = |f: &dyn Fn(&HomeUse, usize) -> f64| {
+        floats(
+            own.iter()
+                .flat_map(|u| (0..TRADED).map(move |g| u.map_or(f64::NAN, |u| f(u, g)))),
+        )
+    };
+    Ok(vec![
+        (
+            "country".into(),
+            Arc::new(UInt32Array::from_iter_values(
+                (0..n).flat_map(|c| std::iter::repeat_n(c, TRADED)),
+            )),
+        ),
+        (
+            "good".into(),
+            Arc::new(UInt8Array::from_iter_values(
+                (0..n).flat_map(|_| 0..TRADED as u8),
+            )),
+        ),
+        ("home_share".into(), per_row(&|u, g| u.share(g))),
+        ("absorption".into(), per_row(&|u, g| u.total[g])),
+        (
+            "icio".into(),
+            Arc::new(
+                own.iter()
+                    .flat_map(|u| std::iter::repeat_n(Some(u.is_some()), TRADED))
+                    .collect::<BooleanArray>(),
             ),
         ),
     ])

@@ -3,6 +3,7 @@
 Status: accepted (owner, 2026-10-24, PR 1); implemented on p2-econ (MIGRATION Task 9; the estimation part lands with PLAN Task 18)
 Date: 2026-10-24
 Design sections: 3.4, 15.2, 15.3 (V1), 17.1, 21.1 (P2); roadmap P2 gate
+Amended by ADR 0247 (proposed, 2026-10-30): per-class multipliers on P04's sea cost per tonne-km and port fee (bulk freight rate, P154 and P155).
 Paths (ADR 0113, 2026-10-29): the uniqueness check and PPML are `ceteris_reference::{uniqueness, ppml}`, the gravity estimation `ceteris_calibrate::gravity` (`ceteris gravity`), and the gate `crates/ceteris-cli/tests/p2_gate.rs`.
 
 ## Context
@@ -91,6 +92,9 @@ for the 80 ICIO economies (44,800 rows). Fixed effects exporter x good and impor
 
 Since the OECD key (ADR 0023 amendment, 2026-10-25) the P01 defaults are 2.62 for food, 5.19 for good 6
 and 10.57 for goods 0, 1, 2, 4 and 5. The estimates were made on the first partition and were not rerun.
+They also predate the bulk legs (ADR 0247, 2026-10-30): the S05 costs of class 3 now take its
+sea km and port fees at P154 and P155, so the P04 ratios above, fitted on base legs for every
+good, are stale. They are rerun (`ceteris gravity`, owner-side) at pre-P3 B8.
 
 theta is minus the coefficient on ln(1 + tariff), with ln tau (S05) as a free control. P05 pools the
 classes' ln(1 + nu_c) = b_c / beta_c (border and tariff coefficients of one fit; class nu 0.388, 0.158,
@@ -129,6 +133,88 @@ billion USD), chemicals, refined fuels and metals (1,276 to 1,586) and machinery
 vehicles (2,421 to 2,891); the rest move by less than 10%. The ADR 0023 rule regroups the goods (light
 manufacturing joins agriculture, mining and chemicals in the top class). The estimates above are
 pending a re-run on the new sample and classes; the owner decision stands.
+
+**Re-run after the C19 move and the four classes (2026-10-29, ADRs 0092 and 0101).** `ceteris
+gravity` on the 2000 pack with its econ tables rebuilt in scratch (refined petroleum in good 1; the
+installed pack is unchanged until it is rebuilt and recalibrated), BACI HS92 V202601 split by the
+OECD key: 242 countries, 218 trading, 4,266 unreached pairs, international trade 6,495.1 bn USD
+(6,495.0 bn in the sample), domestic flows for 80 ICIO economies with no cell dropped.
+
+| Parameter | Estimate (s.e.) | N | pseudo-R2 | Default |
+|---|---|---|---|---|
+| P01 class 0 (goods 3, 5) | 12.42 (0.97) | 92,880 | 0.840 | 2.91 |
+| P01 class 1 (good 6) | 14.01 (1.65) | 46,440 | 0.863 | 4.14 |
+| P01 class 2 (goods 0, 4) | 10.94 (1.38) | 92,880 | 0.871 | 7.68 |
+| P01 class 3 (goods 1, 2) | 14.05 (2.01) | 87,075 | 0.616 | 16.91 |
+| P05 border friction nu | 0.206 (0.036) | 44,800 | 0.990 | 0.3 |
+
+Class trade weights 0.268, 0.445, 0.174, 0.113. P05 by class: nu 0.263, 0.116, 0.342, 0.248 (s.e.
+0.038, 0.024, 0.078, 0.058) at same-fit thetas 12.05, 15.80, 10.19, 12.75 (border coefficients
+-2.81, -1.73, -3.00, -2.82). The ln tau coefficients of the theta fits are -8.49, -7.94, -8.80 and
+-7.50.
+
+The PPML thetas lie between 10.9 and 14.1 for every class, as on the earlier partitions: the
+tariff variation identifies the agreement effect (see Sensitivity), not the spread of the
+Caliendo-Parro classes. Only class 3 (16.91) has its default inside two standard errors of its
+estimate.
+
+P04 on the four classes: see the Amendment below. Without a guard the Gauss-Newton steps drove the
+air ratio down (-5.2 to -12.2 by step 6) until tau was no longer positive on an air path, and
+`ceteris gravity` stopped with "flows must be finite and nonnegative, regressors finite". On the
+same flows with the three classes of before (food; good 6; goods 0, 1, 2, 4, 5) the unguarded fit
+converged in 47 steps to rail 0.234 (s.e. 0.093), sea 0.102 (0.014) and air -1.59 (1.49); the P01
+estimates on those classes are 12.98 (1.19), 14.01 (1.65) and 12.21 (1.06), and P05 is 0.207
+(0.035).
+
+**Amendment (2026-10-29): guarded P04 fit, support threshold, non-fatal failure.** Owner-delegated
+ruling during pre-P3 B, for owner review. The estimator, objective and owner decision above are
+unchanged; this records how "Gauss-Newton" is carried out and what the diagnostic reports.
+
+- *Guard.* Each step is halved, at most `MODE_MAX_HALVINGS` = 30 times, until every tau is
+  positive, the profile PPML (without the step regressors, at the trial ratios) converges, and its
+  deviance D (`Fit.deviance`) does not rise beyond the resolution of the fits:
+  D_trial <= D + `ppml::TOL` (|D| + 0.1). That allowance is the IRLS stopping rule of the PPML,
+  so two deviances closer than it are not distinguishable at the tolerance the fits were solved
+  to; it adds no free number. A strict comparison fails on that noise near convergence, where
+  a step's true decrease falls below it and halving cuts the decrease but not the noise, and
+  would report a converged fit as a failure. The allowance is the decrease of a move of about
+  1e-5 of the ratios, far below the rises of order 1 to 1e3 the guard exists to stop. A trial
+  whose PPML fails is a rejected trial. Convergence is tested on the undamped step, so a heavily
+  halved step does not pass for convergence. The ln tau coefficients that scale the step
+  regressors are those of the profile fit at the current ratios. At the cap the fit returns an
+  error.
+- *Support.* A mode is fitted only if at least `MODE_MIN_PAIRS` = 50 unordered country pairs have a
+  positive flow on a least-cost path with km on that mode; otherwise it stays at its geo SPEC
+  start, has no estimate (NaN) and the report names it as not identified with its count. Pairs
+  are the clusters of the covariance. When the variation of a regressor comes from few clusters,
+  cluster-robust inference fails however many clusters the sample has in all (few treated
+  clusters: Conley and Taber 2011; MacKinnon and Webb 2017, 2018), so a ratio carried by a few
+  pairs has no usable standard error. The threshold does not bind: on 2000 BACI air has 3 such
+  pairs (about 70 least-cost rows, 4 to 6 positive per good, 0.1 bn USD; its step s.e. was 1.5
+  to 20), while rail and sea have thousands of pairs and positive flows on tens of thousands of
+  rows, so any threshold from about 5 to several thousand gives the same result. The synthetic
+  samples of the tests (30 countries, 435 pairs) clear it on every mode, and the test that drops
+  it keeps air on at most 10 pairs. This is an estimation rule, not a model parameter: an
+  unidentified mode has no estimate, the ordering stop rule fails on it and nothing is written,
+  so it cannot change a model input and has no register ID.
+- *Failure.* A P04 error (no step at the cap, no convergence in 50 steps, a failed PPML) no
+  longer stops `ceteris gravity`: P01 and P05 are reported, the report prints "P04 did not
+  converge: ...", a stop rule fires and `--write` leaves `gravity_2000.toml` as it is
+  (`gravity::write_toml`).
+- *Positive ratios.* The ordering stop rule also requires every ratio to be positive
+  (0 < sea < rail < 1 < air): a ratio at or below zero is not a cost and fires it.
+
+Result on the 2000 pack with the B1 econ tables (scratch rebuild, as above): air not identified (3
+pairs; rail 13,367, sea 14,654), held at 8; 33 steps, none halved (a strict deviance comparison
+took 37 steps, halving 5 of them on deviance noise near convergence); profile deviance 191,825 to 179,517; rail / road
+36.61 (s.e. 19.1), sea / road 84.59 (39.5); ln tau coefficients -0.99, -1.08, -1.05, -1.51; N
+319,275, pseudo-R2 0.873. This is the log-distance corner described under "P04 is not
+identified", now reached without a crash; the ordering stop rule fires and nothing is written.
+P01 and P05 are as in the table above. The earlier convergence on the three classes (rail 0.234,
+sea 0.102, air -1.59) was a local stationary point: the profile deviance there is 191,640, about
+10,000 above the corner (181,360 on those classes, started from the corner); the four classes
+remove the small barrier in front of the corner. Diagnosis:
+`.superpowers/sdd/PLAN-pre-p3-rust/p04-diagnosis.md`.
 
 ## Consequences
 

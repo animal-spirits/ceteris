@@ -1,6 +1,6 @@
 //! Province markets: origin clearing of traded goods with rationing between buyer classes
-//! (ADR 0016), perishing of local goods and the stock-flow price rule (`specs/trade/SPEC.md`,
-//! Equations).
+//! (ADR 0016), perishing of local goods, competitive storage of the storable goods (ADR 0091) and
+//! the stock-flow price rule (`specs/trade/SPEC.md`, Equations).
 //!
 //! All arrays are `[province * N_GOODS + g]`. A traded cell is the origin market of the
 //! province's output: the caller sets `supply` (Q, this tick's output) and the orders placed
@@ -71,6 +71,12 @@ pub struct Markets {
     /// Ticks at which the step clip c_max (P03c) bound at the cell, counted by `reprice`
     /// since the start of the run.
     pub clip_ticks: Vec<u32>,
+    /// pi^e_og, the expected log-price change of a storable good's origin market (ADR 0091),
+    /// updated by `reprice`; 0 at other cells.
+    pub expectation: Vec<f64>,
+    /// The merchants' storage order b of this tick at a storable good's origin market, written by
+    /// [`Markets::store`] and read by `reprice`; 0 at other cells.
+    pub storage: Vec<f64>,
 }
 
 impl Markets {
@@ -87,11 +93,54 @@ impl Markets {
             sales: vec![0.0; n],
             active: vec![true; n],
             clip_ticks: vec![0; n],
+            expectation: vec![0.0; n],
+            storage: vec![0.0; n],
         }
     }
 
     pub fn n_provinces(&self) -> usize {
         self.price.len() / N_GOODS
+    }
+
+    /// Q_floor of every good: 1e-9 of its world mean Q over active cells, 0 where that is 0.
+    fn floors(&self) -> [f64; N_GOODS] {
+        let mut floor = [0.0; N_GOODS];
+        let mut count = [0usize; N_GOODS];
+        for (i, &q) in self.supply.iter().enumerate() {
+            if self.active[i] {
+                floor[i % N_GOODS] += q;
+                count[i % N_GOODS] += 1;
+            }
+        }
+        for g in 0..N_GOODS {
+            floor[g] = Q_FLOOR_FRACTION * floor[g] / count[g].max(1) as f64;
+        }
+        floor
+    }
+
+    /// T3 before [`Markets::clear`], competitive storage at the active origins of the goods
+    /// [`TradeParams::stores`] (ADR 0091; off by default): the stock S carried in loses delta S, written to `spoiled[i]` (0 for
+    /// every other cell) for the caller to destroy in the ledger, and the merchants' order
+    /// b = max(delta S + lambda (S* - S), -(1 - delta) S) goes to `storage`: partial adjustment
+    /// (ADR 0280) at [`TradeParams::storage_adjustment`] toward [`TradeParams::storage_target`]
+    /// at D = `demand_int + demand_hh` and the cell's expectation. `reprice` reads it.
+    pub fn store(&mut self, p: &TradeParams, spoiled: &mut [f64]) {
+        assert_eq!(spoiled.len(), self.price.len());
+        spoiled.fill(0.0);
+        for (i, spoil) in spoiled.iter_mut().enumerate() {
+            let g = i % N_GOODS;
+            if !self.active[i] || !p.stores(g) {
+                continue;
+            }
+            let s = self.inventory[i];
+            let d = self.demand_int[i] + self.demand_hh[i];
+            let loss = p.storage_loss[g] * s;
+            let order =
+                loss + p.storage_adjustment(g) * (p.storage_target(g, d, self.expectation[i]) - s);
+            *spoil = loss;
+            self.inventory[i] = s - loss;
+            self.storage[i] = order.max(-self.inventory[i]);
+        }
     }
 
     /// Clears the active traded cells at the origin: D = `demand_int + demand_hh` (written to
@@ -141,39 +190,44 @@ impl Markets {
     }
 
     /// Price step of spec 8.2 for every active cell, after clearing, with the merchants'
-    /// expected inflation pi^e (ADR 0019):
-    /// dlnp = clip(pi^e + kappa1 (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_max, c_max),
-    /// S* = coverage D, Q_eff and S*_eff floored at 1e-9 of the good's world mean Q over
-    /// active cells. Local goods have coverage 0 so the stock term is absent. A good whose
-    /// world mean Q is 0 keeps its prices. Each cell whose step is clipped counts the tick in
-    /// `clip_ticks`.
-    pub fn reprice(&mut self, p: &TradeParams, expected_inflation: f64) {
-        let mut floor = [0.0; N_GOODS];
-        let mut count = [0usize; N_GOODS];
-        for (i, &q) in self.supply.iter().enumerate() {
-            if self.active[i] {
-                floor[i % N_GOODS] += q;
-                count[i % N_GOODS] += 1;
-            }
-        }
-        for g in 0..N_GOODS {
-            floor[g] = Q_FLOOR_FRACTION * floor[g] / count[g].max(1) as f64;
-        }
-        for i in 0..self.price.len() {
+    /// expected inflation pi^e (ADR 0019) and the price gain `gain[i]` of each cell, kappa1_cell
+    /// of ADR 0263 ([`TradeParams::price_gain`]; `p.kappa1` in a world without a calibration):
+    /// dlnp = pi^e + clip(kappa1_cell (D - Q) / Q_eff - kappa2 (S' - S*) / S*_eff, -c_g, c_g)
+    /// (ADR 0106), c_g = [`TradeParams::price_clip`], S* = coverage D, Q_eff and S*_eff floored
+    /// at 1e-9 of the good's world mean Q over active cells. Local goods have coverage 0 so the
+    /// stock term is absent. At the origin of a good [`TradeParams::stores`] the merchants' storage order b of
+    /// [`Markets::store`] joins D and the stock term is off (ADR 0091): the gap is kappa1_cell
+    /// (D + b - Q) / Q_eff, and the cell's expectation moves by g_s (P146) toward the step,
+    /// pi^e_og <- pi^e_og + g_s (dlnp - pi^e_og). A good whose world mean Q is 0 keeps its
+    /// prices. Each cell whose gap terms are clipped counts the tick in `clip_ticks`.
+    pub fn reprice(&mut self, p: &TradeParams, gain: &[f64], expected_inflation: f64) {
+        assert_eq!(gain.len(), self.price.len());
+        let floor = self.floors();
+        for (i, &gain) in gain.iter().enumerate() {
             let g = i % N_GOODS;
             if !self.active[i] || floor[g] <= 0.0 {
                 continue;
             }
             let (q, d) = (self.supply[i], self.demand[i]);
-            let mut dlnp = expected_inflation + p.kappa1 * (d - q) / q.max(floor[g]);
-            if p.coverage[g] > 0.0 {
+            let gap = if p.stores(g) {
+                gain * (d + self.storage[i] - q) / q.max(floor[g])
+            } else if p.coverage[g] > 0.0 {
                 let target = p.coverage[g] * d;
-                dlnp -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
-            }
-            if dlnp.abs() > p.c_max {
+                gain * (d - q) / q.max(floor[g])
+                    - p.kappa2 * (self.inventory[i] - target) / target.max(floor[g])
+            } else {
+                gain * (d - q) / q.max(floor[g])
+            };
+            let c_max = p.price_clip(g);
+            if gap.abs() > c_max {
                 self.clip_ticks[i] += 1;
             }
-            self.price[i] *= libm::exp(dlnp.clamp(-p.c_max, p.c_max));
+            let step = expected_inflation + gap.clamp(-c_max, c_max);
+            self.price[i] *= libm::exp(step);
+            if p.stores(g) {
+                let pi = self.expectation[i];
+                self.expectation[i] = pi + p.storage_gain * (step - pi);
+            }
         }
     }
 }
@@ -189,6 +243,8 @@ impl Encode for Markets {
         e.f64s(&self.sales);
         e.bools(&self.active);
         e.u32s(&self.clip_ticks);
+        e.f64s(&self.expectation);
+        e.f64s(&self.storage);
     }
 }
 
@@ -204,6 +260,8 @@ impl Decode for Markets {
             sales: d.f64s()?,
             active: d.bools()?,
             clip_ticks: d.u32s()?,
+            expectation: d.f64s()?,
+            storage: d.f64s()?,
         };
         let n = m.price.len();
         let lens = [
@@ -215,6 +273,8 @@ impl Decode for Markets {
             m.sales.len(),
             m.active.len(),
             m.clip_ticks.len(),
+            m.expectation.len(),
+            m.storage.len(),
         ];
         if !n.is_multiple_of(N_GOODS) || lens.iter().any(|&l| l != n) {
             return Err(DecodeError(format!("market arrays {n} and {lens:?}")));
@@ -226,6 +286,7 @@ impl Decode for Markets {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::goods::STORABLE;
     use ceteris_core::snapshot::canonical;
 
     const G: usize = 3; // food, traded
@@ -239,6 +300,11 @@ mod tests {
             kappa2: 0.1,
             ..TradeParams::default()
         }
+    }
+
+    /// kappa1 in every cell: no market capped.
+    fn kappa1(p: &TradeParams, m: &Markets) -> Vec<f64> {
+        vec![p.kappa1; m.price.len()]
     }
 
     fn one() -> (Markets, TradeParams) {
@@ -295,7 +361,7 @@ mod tests {
         clear(&mut m);
         // S' = 2.3 + 1.0 - 1.1 = 2.2 = S*, so only the flow term: 0.2 * 0.1
         let before = m.price[G];
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         let want = before * libm::exp(0.2 * (1.1 - 1.0));
         assert!((m.price[G] - want).abs() < 1e-12, "{}", m.price[G]);
         assert!(m.price[G] > before);
@@ -304,15 +370,38 @@ mod tests {
         let (mut m, p) = one();
         set(&mut m, G, 0.0, 1.0, 50.0);
         clear(&mut m);
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         assert_eq!(m.price[G], libm::exp(p.c_max));
 
         // clipped below: glut with stock far above target falls by exactly exp(-c_max)
         let (mut m, p) = one();
         set(&mut m, G, 100.0, 10.0, 0.1);
         clear(&mut m);
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         assert_eq!(m.price[G], libm::exp(-p.c_max));
+    }
+
+    /// ADR 0106: at pi^e = 0 the rule is the old one, p' = p exp(clip(gap)), bit for bit.
+    #[test]
+    fn zero_expected_inflation_is_the_old_rule() {
+        for (s, q, d) in [
+            (2.3, 1.0, 1.1),
+            (0.0, 1.0, 50.0),
+            (100.0, 10.0, 0.1),
+            (1.0, 3.0, 2.9),
+        ] {
+            let (mut m, p) = one();
+            set(&mut m, G, s, q, d);
+            clear(&mut m);
+            let floor = Q_FLOOR_FRACTION * q;
+            let target = p.coverage[G] * d;
+            let gap = p.kappa1 * (d - q) / q.max(floor)
+                - p.kappa2 * (m.inventory[G] - target) / target.max(floor);
+            let c = p.price_clip(G);
+            let old = m.price[G] * libm::exp(gap.clamp(-c, c));
+            m.reprice(&p, &kappa1(&p, &m), 0.0);
+            assert_eq!(m.price[G].to_bits(), old.to_bits(), "{s} {q} {d}");
+        }
     }
 
     #[test]
@@ -326,7 +415,7 @@ mod tests {
         m.clear_local(&mut spoiled);
         assert_eq!(m.inventory[G], p.coverage[G] * m.demand[G]);
         let pi = 0.0123;
-        m.reprice(&p, pi);
+        m.reprice(&p, &kappa1(&p, &m), pi);
         for c in [G, L] {
             assert_eq!(m.price[c], libm::exp(pi), "cell {c}");
         }
@@ -335,8 +424,52 @@ mod tests {
         let (mut m, p) = one();
         set(&mut m, G, 2.0, 1.0, 1.0);
         clear(&mut m);
-        m.reprice(&p, -0.004);
+        m.reprice(&p, &kappa1(&p, &m), -0.004);
         assert_eq!(m.price[G], libm::exp(-0.004));
+    }
+
+    #[test]
+    fn clip_lets_expected_inflation_through() {
+        // zero gap: D = Q, S' = S*; the step is pi^e however far beyond c_max
+        let (mut m, p) = one();
+        set(&mut m, G, 2.0, 1.0, 1.0);
+        clear(&mut m);
+        m.reprice(&p, &kappa1(&p, &m), 0.2);
+        assert_eq!(m.price[G], libm::exp(0.2));
+        assert_eq!(m.clip_ticks[G], 0);
+        // a clipped gap adds to pi^e: huge excess demand at pi^e 0.2 and at -0.2
+        for pi in [0.2, -0.2] {
+            let (mut m, p) = one();
+            set(&mut m, G, 0.0, 1.0, 50.0);
+            clear(&mut m);
+            m.reprice(&p, &kappa1(&p, &m), pi);
+            assert_eq!(m.price[G], libm::exp(pi + p.c_max));
+            assert_eq!(m.clip_ticks[G], 1);
+        }
+    }
+
+    #[test]
+    fn storable_goods_clip_at_0_3() {
+        let p = rule();
+        assert_eq!(p.c_max_storable, 0.3);
+        for g in 0..N_GOODS {
+            // huge excess demand, then a glut far above the stock target
+            for (s, q, d, sign) in [(0.0, 1.0, 50.0, 1.0), (100.0, 10.0, 0.1, -1.0)] {
+                let mut m = Markets::new(1);
+                set(&mut m, g, s, q, d);
+                if TRADED[g] {
+                    clear(&mut m);
+                }
+                m.reprice(&p, &kappa1(&p, &m), 0.0);
+                let c_max = if STORABLE[g] { 0.3 } else { p.c_max };
+                assert_eq!(m.price[g], libm::exp(sign * c_max), "good {g}");
+                assert_eq!(m.clip_ticks[g], 1, "good {g}");
+            }
+        }
+        assert_eq!(
+            (0..N_GOODS).filter(|&g| STORABLE[g]).collect::<Vec<_>>(),
+            [0, 1, 2, 5]
+        );
     }
 
     #[test]
@@ -353,22 +486,164 @@ mod tests {
             clear(m);
             let mut spoiled = vec![0.0; 2 * N_GOODS];
             m.clear_local(&mut spoiled);
-            m.reprice(&p, pi);
+            m.reprice(&p, &kappa1(&p, m), pi);
             cells.map(|c| m.clip_ticks[c])
         };
         assert_eq!(tick(&mut m, 0.0), [1, 1, 0, 0]);
         assert_eq!(tick(&mut m, 0.0), [2, 2, 0, 0]);
-        // expected inflation beyond the clip binds on the balanced cells too
-        assert_eq!(tick(&mut m, 0.5), [3, 3, 1, 1]);
-        assert_eq!(m.price[L], libm::exp(p.c_max));
+        // expected inflation beyond c_max passes through: the balanced cells do not clip
+        let before = m.price[L];
+        assert_eq!(tick(&mut m, 0.5), [3, 3, 0, 0]);
+        assert_eq!(m.price[L], before * libm::exp(0.5));
         // an inactive cell never counts
         m.active[N_GOODS + L] = false;
-        assert_eq!(tick(&mut m, -0.5), [4, 4, 2, 1]);
+        assert_eq!(tick(&mut m, -0.5), [4, 4, 0, 0]);
         let others: u32 = (0..2 * N_GOODS)
             .filter(|c| !cells.contains(c))
             .map(|c| m.clip_ticks[c])
             .sum();
         assert_eq!(others, 0);
+    }
+
+    /// ADR 0263: each cell's flow term uses its own gain; the inventory term keeps kappa2.
+    #[test]
+    fn reprice_uses_the_gain_of_each_cell() {
+        let mut m = Markets::new(2);
+        let p = rule();
+        for i in [0, N_GOODS] {
+            set(&mut m, i + G, 2.3, 1.0, 1.1);
+            set(&mut m, i + L, 0.0, 1.0, 1.05);
+        }
+        clear(&mut m);
+        let mut gain = kappa1(&p, &m);
+        gain[N_GOODS + G] = 0.05;
+        gain[N_GOODS + L] = 0.08;
+        m.reprice(&p, &gain, 0.0);
+        // S' = S* at the traded cells, so only the flow term moves them
+        let step = |i: usize| libm::log(m.price[i]);
+        assert!((step(G) - 0.2 * 0.1).abs() < 1e-15);
+        assert!((step(N_GOODS + G) - 0.05 * 0.1).abs() < 1e-15);
+        assert!((step(L) - 0.2 * 0.05).abs() < 1e-15);
+        assert!((step(N_GOODS + L) - 0.08 * 0.05).abs() < 1e-15);
+    }
+
+    /// The storable goods, by index.
+    fn storable() -> Vec<usize> {
+        (0..N_GOODS).filter(|&g| STORABLE[g]).collect()
+    }
+
+    /// Spoilage, storage, clearing and the price step of one tick at the approved storage values.
+    fn tick(m: &mut Markets, p: &TradeParams) -> Vec<f64> {
+        let mut spoiled = vec![f64::NAN; m.price.len()];
+        m.store(p, &mut spoiled);
+        clear(m);
+        m.reprice(p, &kappa1(p, m), 0.0);
+        spoiled
+    }
+
+    /// ADR 0091: at pi^e = 0 and S = s D the merchants order exactly the spoilage delta S, so
+    /// with output Q = D + delta S the price and the stock stay where they are.
+    #[test]
+    fn storage_orders_equal_spoilage_at_steady_state() {
+        let p = TradeParams::default().with_storage();
+        for g in storable() {
+            let mut m = Markets::new(1);
+            let d = 0.1 + 0.2;
+            let s = p.coverage[g] * d;
+            let loss = p.storage_loss[g] * s;
+            set(&mut m, g, s, d + loss, d);
+            m.price[g] = 1.3;
+            let spoiled = tick(&mut m, &p);
+            assert_eq!(spoiled[g].to_bits(), loss.to_bits(), "good {g}");
+            assert_eq!(m.storage[g].to_bits(), loss.to_bits(), "good {g}");
+            for _ in 0..20 {
+                let held = m.inventory[g];
+                set(&mut m, g, held, d + loss, d);
+                tick(&mut m, &p);
+            }
+            assert!((m.inventory[g] / s - 1.0).abs() < 1e-14, "good {g}");
+            assert!((m.price[g] / 1.3 - 1.0).abs() < 1e-14, "good {g}");
+            assert!(m.expectation[g].abs() < 1e-14, "good {g}");
+            assert_eq!(m.clip_ticks[g], 0);
+        }
+    }
+
+    /// ADR 0280: an origin with stock but no output and no buyers does not bid its own price up.
+    /// Province 0 is at its steady state; province 1 holds its stock target of old orders,
+    /// produces nothing and has no buyers left. Merchants there want no stock (target s D = 0),
+    /// so they release it rather than order spoilage replacement against no output.
+    #[test]
+    fn stock_without_supply_or_buyers_does_not_bid_the_price_up() {
+        let p = TradeParams::default().with_storage();
+        for g in storable() {
+            let mut m = Markets::new(2);
+            let q_star = 1.0 + p.storage_loss[g] * p.coverage[g];
+            set(&mut m, g, p.coverage[g], q_star, 1.0);
+            let dead = N_GOODS + g;
+            m.inventory[dead] = p.coverage[g];
+            for _ in 0..10 {
+                let (held, dead_held) = (m.inventory[g], m.inventory[dead]);
+                set(&mut m, g, held, q_star, 1.0);
+                set(&mut m, dead, dead_held, 0.0, 0.0);
+                tick(&mut m, &p);
+            }
+            assert!(m.price[dead] <= 1.0, "good {g}: price {}", m.price[dead]);
+        }
+    }
+
+    /// The order is floored at the stock left after spoilage: however far the expectation falls,
+    /// merchants offer at most what they hold, and clearing never leaves a negative stock.
+    #[test]
+    fn storage_never_sells_below_zero() {
+        let p = TradeParams::default().with_storage();
+        for g in storable() {
+            for (s, q, d, pi) in [
+                (5.0, 1.0, 1.0, -1.0),
+                (0.3, 0.0, 2.0, -0.5),
+                (0.0, 1.0, 1.0, -1.0),
+                (1e6, 1.0, 1e-3, -0.01),
+                (2.0, 0.5, 4.0, 0.2),
+            ] {
+                let mut m = Markets::new(1);
+                set(&mut m, g, s, q, d);
+                m.expectation[g] = pi;
+                tick(&mut m, &p);
+                let held = s - p.storage_loss[g] * s;
+                assert!(
+                    m.storage[g] >= -held,
+                    "good {g} {s} {d} {pi}: {}",
+                    m.storage[g]
+                );
+                assert!(m.inventory[g] >= 0.0, "good {g}");
+                assert!(
+                    m.storage[g].is_finite() && m.price[g].is_finite(),
+                    "good {g}"
+                );
+            }
+            // a strongly negative expectation empties the target: merchants release lambda S a
+            // month, above the floor (lambda < 1)
+            let mut m = Markets::new(1);
+            set(&mut m, g, 5.0, 1.0, 1.0);
+            m.expectation[g] = -10.0;
+            tick(&mut m, &p);
+            let release = p.storage_loss[g] * 5.0 - p.storage_adjustment(g) * 5.0;
+            assert_eq!(m.storage[g], release, "good {g}");
+        }
+        // goods without storage, and storable goods with storage off (the default), order
+        // nothing and lose nothing
+        let mut m = Markets::new(1);
+        set(&mut m, G, 5.0, 1.0, 1.0);
+        let spoiled = tick(&mut m, &p);
+        assert_eq!((spoiled[G], m.storage[G], m.inventory[G]), (0.0, 0.0, 5.0));
+        let off = TradeParams::default();
+        for g in storable() {
+            let mut m = Markets::new(1);
+            set(&mut m, g, 5.0, 1.0, 1.0);
+            m.expectation[g] = -1.0;
+            let spoiled = tick(&mut m, &off);
+            assert_eq!((spoiled[g], m.storage[g], m.inventory[g]), (0.0, 0.0, 5.0));
+            assert_eq!(m.expectation[g], -1.0);
+        }
     }
 
     #[test]
@@ -377,7 +652,7 @@ mod tests {
         set(&mut m, L, 1e6, 1.0, 1.1);
         // a stock far from the target, with the inventory term on: only the first term applies
         assert!(p.kappa2 > 0.0 && p.coverage[L] == 0.0);
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         assert!((m.price[L] - libm::exp(0.2 * 0.1)).abs() < 1e-12);
     }
 
@@ -407,7 +682,7 @@ mod tests {
         assert_eq!(fill[G], 0.5);
         assert!(fill[N_GOODS + G].is_nan() && fill[L].is_nan());
         assert_eq!((m.sales[N_GOODS + G], m.sales[L]), (0.0, 0.0));
-        m.reprice(&rule(), 0.0);
+        m.reprice(&rule(), &kappa1(&rule(), &m), 0.0);
         assert_eq!(m.price[N_GOODS + G], 3.0);
     }
 
@@ -423,7 +698,7 @@ mod tests {
         let mut fill = vec![0.0; 2 * N_GOODS];
         for _ in 0..50 {
             fill = clear(&mut m);
-            m.reprice(&p, 0.0);
+            m.reprice(&p, &kappa1(&p, &m), 0.0);
             assert!(m.price.iter().all(|x| x.is_finite() && *x > 0.0));
             assert!(m.inventory.iter().all(|&s| s >= 0.0));
             for g in 0..7 {
@@ -443,7 +718,7 @@ mod tests {
         set(&mut m, G, 0.0, 0.0, 4.0);
         m.price[G] = 2.5;
         clear(&mut m);
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         assert_eq!(m.price[G], 2.5);
     }
 
@@ -457,7 +732,7 @@ mod tests {
         set(&mut m, 2 * N_GOODS + G, 0.0, 1e12, 1.0);
         m.active[2 * N_GOODS + G] = false;
         clear(&mut m);
-        m.reprice(&p, 0.0);
+        m.reprice(&p, &kappa1(&p, &m), 0.0);
         // province 1: floor = 1e-9 * 2, flow term 0.2 * 1 / 2e-9 clips; stock term pushes down
         // from S' = 0 vs S* = 2 (kappa2 * 1) but the clip still binds upward
         assert_eq!(m.price[N_GOODS + G], libm::exp(p.c_max));
@@ -486,7 +761,7 @@ mod tests {
         for _ in 0..10 {
             clear(&mut m);
             m.clear_local(&mut spoiled);
-            m.reprice(&p, 0.0);
+            m.reprice(&p, &kappa1(&p, &m), 0.0);
         }
         for (a, b) in m.price.iter().zip(&before) {
             assert_eq!(a.to_bits(), b.to_bits());
