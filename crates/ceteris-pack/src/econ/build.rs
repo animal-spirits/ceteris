@@ -340,13 +340,15 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     let world = icio::impute_pack(&countries, &real, &wdi, &obs, &iso, &worldpop, &by_good)?;
 
     let pwt_levels = price_level::relative(&obs.price_level_pwt, "PWT")?;
+    let [gdp, ppp, pop] = price_level::WDI_PRICE_LEVEL.map(|n| read_wdi(&cache.join(n)));
+    let wdi_level = price_level::wdi_implied(&gdp?, &ppp?, &pop?);
     let screen = price_level::Screen::fit(&pwt_levels, &wdi.income)?;
     let levels = price_level::price_levels(
         &codes,
         &|c| parts(c, &iso),
         &|c| world.get(c).and_then(|e| e.donor.clone()),
         &pwt_levels,
-        &price_level::relative(&read_wdi(&cache.join(price_level::WDI_PRICE_LEVEL))?, "WDI")?,
+        &price_level::relative(&wdi_level, "WDI")?,
         &wdi.income,
         &screen,
     )?;

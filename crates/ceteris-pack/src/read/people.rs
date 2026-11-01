@@ -268,10 +268,13 @@ pub struct Pwt {
     /// Price level of domestic absorption, C + I + G (pl_da, PPP over the market rate; not 1 for
     /// the US; RFC 0282 D7).
     pub price_level: BTreeMap<String, ByYear>,
+    /// How the price level of `YEAR` was made (i_cig: Benchmark, Interpolated, Extrapolated or an
+    /// ICP time-series flag; RFC 0282 D8).
+    pub price_basis: BTreeMap<String, String>,
 }
 
 /// PWT 11 Data sheet: labour share, GDP per person, population and the price level of domestic
-/// absorption by year.
+/// absorption by year, and the price level's basis in `YEAR`.
 pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
     let origin = path.display().to_string();
     let number = |c: &Cell, name: &str| {
@@ -297,6 +300,9 @@ pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
                 .entry(code.clone())
                 .or_default()
                 .insert(year, number(c, "pl_da")?);
+        }
+        if let (Some(c), YEAR) = (r.get("i_cig"), year) {
+            out.price_basis.insert(code.clone(), c.to_text());
         }
         if let Some(c) = r.get("pop") {
             let pop = number(c, "pop")?;
