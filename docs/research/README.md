@@ -13,7 +13,7 @@ superset of what the study decided.
 | --- | --- | --- |
 | 2026-11-01 | Why PWT 11 and WDI disagree on 2000 price levels (ICP 2011 backcast vs PWT's 1996/2005 benchmarks), the corrupt archive PA.NUS.PPPC.RF file, and an enforceable variant of ADR 0098's real GDP check; project files research/pwt-wdi-price-levels-2026-11-01.md | none yet (feeds RFC 0282 D1, D7; ADR 0285) |
 | 2026-11-01 | Storage-on frictionless V1 misses of ADR 0280: cause (Q = 0 bang-bang steps at stored origins), fix screen of six rounds, local-goods trap (project files, `storage-misses/storage-on-frictionless-v1-2026-11-01.md`) | RFC 0286 (deferred) |
-| 2026-11-01 | [Filling the Eurostat 2000 manufacturing gaps for ADR 0275 (DK, CZ, HU, NO, BG, SI, FI, PT): coverage measured, replacement sources and licences](/mnt/project-files/research/eurostat-2000-mfg-gaps-2026-11-01.md) | none yet |
+| 2026-11-01 | [Filling the Eurostat 2000 manufacturing gaps for ADR 0275 (DK, CZ, HU, NO, BG, SI, FI, PT): coverage measured, replacement sources and licences](/mnt/project-files/research/eurostat-2000-mfg-gaps-2026-11-01.md) | ADR 0287 |
 | 2026-10-31 | [2026-10-31 explainer of how energy/electricity are modelled and tie to state, companies, construction](https://claude.ai/artifact/FB6N283kaQkXtQiphxcmso) | ADR 0028, 0034, 0035, 0084, 0095, 0122, 0171, 0178 and more |
 | 2026-10-31 | [Plan for the ADR 0271 50-goods pack (P4): B09 local, 7 theta classes, manufacturing spread by plants+census+RAS, goods count as pack value](https://claude.ai/artifact/Tvrf3V8oLyNpwPHE6BAt2L) | ADR 0023, 0248, 0271, 0273, 0274, 0275 |
 | 2026-10-31 | [2026-10-31 brainstorm of other Ceteris-like side projects for Antonio](https://claude.ai/artifact/7XSSvycFB8wB5UX2LMwYW2) | none recorded |
