@@ -13,7 +13,7 @@
 //! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
-//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, infinite where unreachable), gamma_0 to gamma_9 f64 (`ProvinceData::gamma`: selection constant of ADR 0200, buyers pay Gamma P_d) |
+//! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, the price level p_c for local goods (ADR 0098), infinite where unreachable), gamma_0 to gamma_9 f64 (`ProvinceData::gamma`: selection constant of ADR 0200, buyers pay Gamma P_d) |
 //! | `pack_provinces` | province u32, pack u32 (`ProvinceData::pack`); written only for a world loaded from a pack, which the calibration keys by pack province |
 //! | `pops` | pop u32, province u32, edu u8, labour_force f64, population f64 |
 //! | `enterprises` | enterprise u32, province u32, good u8, a f64, va0 f64, l0 f64, va_target f64 |

@@ -197,6 +197,7 @@ pub fn small_world() -> EconInputs {
         u_star: UNEMPLOYMENT.to_vec(),
         gini: GINI.to_vec(),
         pigl: None,
+        price_level: vec![1.0; n_countries],
     };
 
     let mut pops = PopData::default();

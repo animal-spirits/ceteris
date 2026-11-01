@@ -194,7 +194,8 @@ impl EconInputs {
 
     /// The uncalibrated P2 world of a pack, the data state, which the calibration starts from
     /// and `ceteris export` writes. Leg costs are least-cost paths
-    /// ([`EconInputs::network_from_graph`]); A is 1. The base point is filled with the default
+    /// ([`EconInputs::network_from_graph`]); A is 1 / p_o, 1 but for the local goods of a
+    /// country with a price level (ADR 0098, [`EconInputs::set_price_levels`]). The base point is filled with the default
     /// education efficiencies (`EconParams::default().edu_eff`) at the natural rate u*, base
     /// prices under the default trade parameters, coefficients with one vintage.
     pub fn from_pack_data(pack: &Pack, dir: &Path) -> Result<EconInputs, PackError> {
@@ -233,6 +234,12 @@ impl EconInputs {
             u_star: f64s(&c, "u_star")?,
             gini: f64s(&c, "gini")?,
             pigl: None,
+            // packs before ADR 0098 have no price level: their local goods start at 1
+            price_level: if c.column_by_name("price_level").is_some() {
+                f64s(&c, "price_level")?
+            } else {
+                vec![1.0; nc]
+            },
         };
 
         let t = table("econ_tariffs.arrow")?;
@@ -338,8 +345,8 @@ impl EconInputs {
         };
         inputs.network =
             inputs.network_from_graph(pack, &Gateways::read(dir)?, &TradeParams::default());
-        inputs.set_base_prices(&TradeParams::default());
-        inputs.set_coefficients();
+        let levels = inputs.countries.price_level.clone();
+        inputs.set_price_levels(levels, &TradeParams::default());
         inputs.set_base_point(&EconParams::default().edu_eff);
         Ok(inputs)
     }
