@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### BEHAVIOUR: a labour target at its input cap is not cut by it (ADR 0266, B9; pending the owner)
+### BEHAVIOUR: a labour target at its input cap is not cut by it (ADR 0266, B9; option A, owner, 2026-11-01)
 
 - `Scratch::short` marks an input as binding when the target without the cap exceeds the cap by
   more than `SCARCEST` (1e-9 relative, `systems::cap_cuts`), the tie margin of

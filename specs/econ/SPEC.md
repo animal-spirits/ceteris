@@ -438,8 +438,8 @@ meets. So:
   one month of every input). `systems::scarcest_inputs`; E1 keeps the set per enterprise
   (`Scratch::short`).
 - "Exceeds" carries the same relative margin: the cap cut the target when L*_notional > L_in
-  (1 + 1e-9) (`systems::cap_cuts`; B9, pending the owner). Frictionless and rationed, the wage
-  is w_top, the marginal value product of the marginal enterprise at its cap, so that
+  (1 + 1e-9) (`systems::cap_cuts`; B9; option A, owner, 2026-11-01). Frictionless and rationed,
+  the wage is w_top, the marginal value product of the marginal enterprise at its cap, so that
   enterprise's target at w_top equals L_in exactly in real numbers; computed, the two come from
   different closed forms (the labour target at w_top, and VA^-1(a_VA Y_in) inside w_top), which
   agree only to a few units in the last place, so with `>` alone the split rule was decided by
