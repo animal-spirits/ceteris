@@ -43,6 +43,22 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
+### Price levels from PWT, WDI and the donor (ADR 0282, RFC 0282; C1c, built, not installed)
+
+- `econ_countries` `price_level` p_c: PWT 11 pl_gdpo over the US's (179 pack countries), else
+  WDI PA.NUS.PPPC.RF over the US's of the same year (17), else the donor's (46);
+  `price_level_source` (new) names it and `price_level_imputed` is set where it is not PWT's.
+  Values are screened by Tukey's far-out fences on the residuals of the Penn effect fitted on
+  the PWT levels (ln p = -2.7317 + 0.2517 ln y, 179 economies, fences -1.198 to 1.169): rejected
+  PWT Bermuda, Somalia, Turks and Caicos; WDI unit errors such as New Caledonia 0.027 and the US
+  Virgin Islands 0.117. p_c runs 0.095 (Somalia) to 1.42 (Japan).
+- ADR 0098's rescale to 1999-2001 exchange rates is dropped (ADR 0283); values stay at 2000
+  market rates.
+- A scratch `pack build --econ-only` moves `econ_countries` only. No fixture golden moves; the
+  installed pack and its golden (`tests/golden/p2-pack.txt`) are unchanged until reinstall.
+- RAS of donor tables stays unwired: the ruled row targets are negative for 321 rows of 122
+  economies (RFC 0282, D3 and D6).
+
 ### The goods count is a pack value (P3 G2)
 
 - `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,
