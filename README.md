@@ -1,7 +1,7 @@
 # Ceteris Paribus
 
 A deterministic, forkable, agent-based world simulator starting on
-1 January 2000. The design is in [specs/DESIGN.md](specs/DESIGN.md), a snapshot of the
+1 January 2000. The design is in [spec/](spec/README.md), a snapshot of the
 living design document.
 
 ## Status
@@ -24,8 +24,11 @@ The data licence audit is in `crates/ceteris-pack/config/sources.toml` (ADR 0005
 ## Layout
 
 ```
-specs/          DESIGN.md, module specs (TEMPLATE.md, core/, geo/)
-adr/            architecture decision records
+spec/           the design, one file per section; rows.toml registry
+specs/          module specs and plans (DESIGN.md is a frozen stub)
+rfcs/           proposals (RFCs, incl. the former ADRs 0001-0281) and their decisions
+docs/research/  research index
+tools/rows/     registry check (cargo run -p ceteris-rows -- check)
 crates/
   ceteris-core/ entity IDs, scheduler, Philox RNG, ledger, event log, snapshots,
                 deterministic reductions, and the P0 toy world

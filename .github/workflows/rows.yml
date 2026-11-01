@@ -1,0 +1,31 @@
+name: rows
+
+# No paths-ignore: this is the check that spec, RFC and ADR-only PRs need.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rows:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Agent branches stay out of owner-only paths
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'claude/')
+        run: |
+          hits="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -E '^(\.github/|CODEOWNERS$)' || true)"
+          if [ -n "$hits" ]; then
+            echo "owner-only paths changed on an agent branch:"; echo "$hits"; exit 1
+          fi
+      - name: Registry, appendix, RFC numbers, research index, codes
+        run: cargo run -p ceteris-rows -- check
+      - run: cargo test -p ceteris-rows

@@ -1,0 +1,19 @@
+[package]
+name = "ceteris-rows"
+description = "Decision-row registry check for the Ceteris Paribus spec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "rows"
+path = "src/main.rs"
+
+[dependencies]
+regex = "1.13.1"
+toml = "1.1.8"
