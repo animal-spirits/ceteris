@@ -15,6 +15,7 @@ The 2000 pack is built from pinned sources; each is listed with its licence, evi
 | CEPII BACI | Bilateral trade, product level | Trade | Open licence | Fetch |
 | Subnational output (DOSE), gridded GDP | Regional output by sector | Province economies | CC BY 4.0 (likely) | Bundle aggregates |
 | World Bank WDI | Macro, social indicators | Initialization, targets | CC BY 4.0 | Bundle extracts |
+| Penn World Table 11 | GDP per person, labour share, GDP price level (pl_gdpo) | Donor ranking, labour shares, local base prices p_c (ADR 0282) | CC BY 4.0 | Bundle |
 | UN World Population Prospects | Fertility, mortality, age structure | Demography | CC BY 3.0 IGO | Bundle extracts |
 | UN international migrant stock; bilateral flow estimates | Migration | Migration | Varies | Fetch |
 | Barro-Lee, Wittgenstein Centre | Education attainment | Pops | Varies | Fetch |
@@ -35,4 +36,6 @@ The 2000 pack is built from pinned sources; each is listed with its licence, evi
 ### 16.1 Pipeline
 
 The `ceteris-pack` crate builds the pack reproducibly (`ceteris pack build`, ADR 0113): download with checksums, harmonize to the H3 grid and province map, impute with documented rules (for example, downscaling national ICIO output to provinces with subnational sector shares and night lights; imputing ICIO coefficients for the roughly 115 economies outside OECD ICIO from regional averages adjusted by income), reconcile to national totals, and emit versioned Parquet tables plus a manifest recording every source, version, licence and imputation flag. Fetch-only sources are downloaded on the user's machine at build time. The start year is a pipeline parameter (1995-2022).
+
+Values are US dollars at the start year's market exchange rates; ADR 0098's rescale to 1999-2001 rates is dropped (ADR 0283). Each country's local goods start at its price level p_c (ADR 0282): PWT 11 pl_gdpo over the US's, else WDI PA.NUS.PPPC.RF over the US's of the same year, else the imputation donor's, each kept only where its residual from the Penn effect (ln p on ln GDP per person, fitted on the PWT levels) lies within Tukey's far-out fences of the fit's residuals (3 interquartile ranges beyond the quartiles), the source recorded per country.
 
