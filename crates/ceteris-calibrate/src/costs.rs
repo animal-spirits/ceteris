@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BinaryHeap};
 use std::path::Path;
 
 use ceteris_core::rows::Rows;
+use ceteris_geo::graph::PathChoice;
 use ceteris_reference::io::pairwise_sum;
 use ceteris_trade::TradeParams;
 use rayon::prelude::*;
@@ -51,6 +52,8 @@ pub struct Transport {
     pub terrain_slope: f64,
     /// P04q.
     pub terrain_cap: f64,
+    /// How the kernel's legs choose their paths (ADR 0279).
+    pub path_choice: PathChoice,
 }
 
 impl Default for Transport {
@@ -64,6 +67,8 @@ impl Default for Transport {
             canal_fee: 5.0,
             terrain_slope: 0.5,
             terrain_cap: 3.0,
+            // the kernel's choice, so gravity sees the kernel's paths
+            path_choice: ceteris_geo::graph::TransportParams::default().path_choice,
         }
     }
 }
@@ -153,7 +158,29 @@ impl Ord for Entry {
 
 impl Graph {
     pub fn new(nodes: usize, a: &[usize], b: &[usize], q: &[Quantities], p: &Transport) -> Graph {
-        let cost: Vec<f64> = q.iter().map(|q| edge_cost(q, p)).collect();
+        Graph::by(nodes, a, b, q, p, 0.0)
+    }
+
+    /// [`Graph::new`] weighted by `c_e + kappa h_e`, the iceberg cost of a good over its weight
+    /// per value (ADR 0279); `kappa = 0` is the least-cost graph.
+    pub fn by(
+        nodes: usize,
+        a: &[usize],
+        b: &[usize],
+        q: &[Quantities],
+        p: &Transport,
+        kappa: f64,
+    ) -> Graph {
+        let cost: Vec<f64> = q
+            .iter()
+            .map(|q| {
+                if kappa == 0.0 {
+                    edge_cost(q, p)
+                } else {
+                    edge_cost(q, p) + kappa * q[Q_HOURS]
+                }
+            })
+            .collect();
         let mut arcs: Vec<(usize, usize, usize)> = a
             .iter()
             .zip(b)
@@ -190,8 +217,8 @@ impl Graph {
         self.n
     }
 
-    /// Least cost from `source` to every node and the path quantities along each least-cost
-    /// path; unreachable nodes have infinite cost and zero quantities. Ties between paths of
+    /// Least weight (the cost, or the iceberg weight of [`Graph::by`]) from `source` to every
+    /// node and the path quantities along each least-weight path; unreachable nodes have infinite cost and zero quantities. Ties between paths of
     /// equal cost go to the node scanned first, the scan taking the smallest distance and then
     /// the largest node index; the quantities are summed by pointer jumping, each pass doubling
     /// the stretch of path summed.
@@ -363,6 +390,8 @@ pub struct CostInputs {
     pub traded: usize,
     /// Value added by good, per province.
     pub va: Rows<f64>,
+    /// Weight per value w_g by good (tonnes per USD), for the iceberg paths (ADR 0279).
+    pub weight: Vec<f64>,
 }
 
 impl CostInputs {
@@ -390,8 +419,10 @@ impl CostInputs {
                     .ok_or_else(|| format!("province country {c} is not a pack country"))
             })
             .collect::<Result<_, _>>()?;
-        let is_traded = read("econ_goods.arrow")?.bool("traded")?;
+        let goods = read("econ_goods.arrow")?;
+        let is_traded = goods.bool("traded")?;
         let traded = is_traded.iter().take_while(|&&t| t).count();
+        let weight = goods.f64("weight")?;
         let va_cols = (0..is_traded.len())
             .map(|g| prov.f64(&format!("va_{g}")))
             .collect::<Result<Vec<_>, _>>()?;
@@ -413,6 +444,7 @@ impl CostInputs {
             province_country,
             n_countries: countries.len(),
             traded,
+            weight,
         })
     }
 
@@ -425,15 +457,46 @@ impl CostInputs {
     /// repriced at that rate, as the kernel's bulk legs; their path quantities are then
     /// [`bulk_quantities`], so that [`edge_cost`] at `p` prices them at the rate. The rate
     /// changes no edge's reachability, so `reach` is the same for every good.
+    ///
+    /// Under `PathChoice::Iceberg` (ADR 0279) each good's legs and chains minimise its iceberg
+    /// weight `c + kappa_g h` instead (kappa_g = lambda_g / (24 w_g), lambda from `trade`, w
+    /// from the pack), as the kernel's good legs, with one run per distinct (bulk rate, kappa).
     pub fn country_costs(&self, p: &Transport, trade: &TradeParams) -> CountryCosts {
         let q_edge = edge_quantities(&self.mode, &self.length_km, &self.tri_m, p);
-        let (mut q, reach) = self.means(&q_edge, p);
-        if let Some((classes, sea, port)) = trade.bulk_rate() {
-            let (bulk, _) = self.means(&bulk_quantities(&self.mode, &q_edge, sea, port), p);
-            let nt = self.traded;
-            for g in (0..nt).filter(|&g| classes[usize::from(trade.theta_class[g])]) {
-                for cell in 0..self.n_countries * self.n_countries {
-                    q[cell * nt + g] = bulk[cell * nt + g];
+        let nt = self.traded;
+        let bulk = trade
+            .bulk_rate()
+            .map(|(classes, sea, port)| (classes, bulk_quantities(&self.mode, &q_edge, sea, port)));
+        let key = |g: usize| {
+            let on_bulk = bulk
+                .as_ref()
+                .is_some_and(|b| b.0[usize::from(trade.theta_class[g])]);
+            let kappa = match p.path_choice {
+                PathChoice::Freight => 0.0,
+                PathChoice::Iceberg => ceteris_trade::kappa(self.weight[g], trade.time_cost[g]),
+            };
+            (on_bulk, kappa.to_bits())
+        };
+        let mut keys: Vec<(bool, u64)> = Vec::new();
+        for g in 0..nt {
+            if !keys.contains(&key(g)) {
+                keys.push(key(g));
+            }
+        }
+        let cells = self.n_countries * self.n_countries;
+        let (mut q, mut reach) = (vec![[0.0; N_Q]; cells * nt], Vec::new());
+        for (i, &(on_bulk, kappa)) in keys.iter().enumerate() {
+            let edges = match &bulk {
+                Some((_, b)) if on_bulk => b,
+                _ => &q_edge,
+            };
+            let (means, r) = self.means(edges, p, f64::from_bits(kappa));
+            if i == 0 {
+                reach = r;
+            }
+            for g in (0..nt).filter(|&g| key(g) == (on_bulk, kappa)) {
+                for cell in 0..cells {
+                    q[cell * nt + g] = means[cell * nt + g];
                 }
             }
         }
@@ -446,9 +509,14 @@ impl CostInputs {
     }
 
     /// The mean path quantities of every country pair and good, and whether the pair is
-    /// reached, on the graph whose edges have quantities `q_edge`.
-    fn means(&self, q_edge: &[Quantities], p: &Transport) -> (Vec<Quantities>, Vec<bool>) {
-        let graph = Graph::new(self.nodes, &self.edge_a, &self.edge_b, q_edge, p);
+    /// reached, on the graph whose edges have quantities `q_edge`, weighted by `c + kappa h`.
+    fn means(
+        &self,
+        q_edge: &[Quantities],
+        p: &Transport,
+        kappa: f64,
+    ) -> (Vec<Quantities>, Vec<bool>) {
+        let graph = Graph::by(self.nodes, &self.edge_a, &self.edge_b, q_edge, p, kappa);
         let (country, gnode, gcountry, va) = (
             &self.province_country,
             &self.gateway_node,

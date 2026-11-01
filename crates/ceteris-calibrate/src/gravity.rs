@@ -59,7 +59,7 @@ pub const TARIFF_GROUP: [usize; N_TRADED] = [0, 0, 0, 0, 1, 1, 1];
 /// The pack country index of every source economy code: each country's parts (or ISO code)
 /// and its own code, the first country to claim a code keeping it; BACI's Taiwan and Serbia and
 /// Montenegro codes follow their countries.
-fn pack_index(codes: &[String], iso: &IsoCodes) -> BTreeMap<String, usize> {
+pub(crate) fn pack_index(codes: &[String], iso: &IsoCodes) -> BTreeMap<String, usize> {
     let mut index = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         for s in parts(c, iso).into_iter().chain([c.clone()]) {

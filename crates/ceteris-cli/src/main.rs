@@ -12,6 +12,7 @@
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
+//! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
@@ -55,6 +56,12 @@
 //! sample counts and any stop rule that fires; it exits 1 when one fires. `--write` writes the
 //! estimates as TOML into `--out` (default `crates/ceteris-pack/config/gravity_2000.toml`, beside
 //! the pack configuration) when no stop rule fires.
+//!
+//! `air-share` fits P04d to the air share of 2000 imports by importer, origin and traded good
+//! (ADR 0277) through the kernel's gateway-pair sum on the pack (`--pack`): US 2000, EU15 2002
+//! hindcast to 2000, or both pooled (`--set`, default pooled), from the files in `--data`
+//! (default `data/raw/air-shares-2000`), printing the readers' notes and each outer step. It
+//! exits 1 when the fit stops.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -93,6 +100,7 @@ const USAGE: &str = "usage:
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
+  ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
@@ -526,6 +534,78 @@ fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     })
 }
 
+/// `air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]`: the path-consistent
+/// estimate of P04d / P04a (ADR 0277), or with `--profile` the grid it starts from.
+fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    use ceteris_calibrate::air_share::{
+        HS_1996, HS_2002, US_2000, US_2002, estimate, eu_hindcast, pack_countries, profile, trend,
+        us_imports,
+    };
+    use ceteris_calibrate::costs::Transport;
+    use ceteris_calibrate::gravity::N_TRADED;
+    let root = sources::workspace_root();
+    let (mut pack, mut data) = (
+        root.join("data/packs/2000"),
+        root.join("data/raw/air-shares-2000"),
+    );
+    let mut set = "pooled".to_owned();
+    let mut want_profile = false;
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--profile" => want_profile = true,
+            "--pack" => pack = PathBuf::from(args.next().ok_or("--pack needs a directory")?),
+            "--data" => data = PathBuf::from(args.next().ok_or("--data needs a directory")?),
+            "--set" => set = args.next().ok_or("--set needs pooled, us or eu")?,
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let cache = root.join(fetch::CACHE_DIR);
+    let codes = pack_countries(&pack)?;
+    let (us, us_notes) = us_imports(&data, US_2000, HS_1996, &cache, &codes)?;
+    println!("us 2000 {us_notes:?}");
+    let mut obs = Vec::new();
+    if set != "eu" {
+        obs.extend(us.iter().cloned());
+    }
+    if set != "us" {
+        let (us02, notes02) = us_imports(&data, US_2002, HS_2002, &cache, &codes)?;
+        println!("us 2002 {notes02:?}");
+        let shift = trend(&us, &us02);
+        println!("trend 2002 to 2000, log-odds by good {shift:?}");
+        let (eu, eu_notes) = eu_hindcast(&data, &cache, &codes, &shift)?;
+        println!("eu 2000 hindcast {eu_notes:?}");
+        obs.extend(eu);
+    }
+    if !["pooled", "us", "eu"].contains(&set.as_str()) {
+        return Err(format!("--set {set}: expected pooled, us or eu"));
+    }
+    println!("set {set}, cells {}", obs.len());
+    let all = TradeParams::default().theta;
+    let theta: [f64; N_TRADED] = std::array::from_fn(|g| all[g]);
+    let base = Transport::default();
+    if want_profile {
+        for point in profile(&pack, &obs, &theta, &base)? {
+            println!("{point:?}");
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let est = estimate(&pack, &obs, &theta, &base)?;
+    println!("{est:?}");
+    println!(
+        "P04d / P04a {:.4} (P04d {:.4} USD per tonne-km), se of ln r {:.4} (cluster bootstrap, \
+         {} of {} replications at a bracket edge) and {:.4} (curvature), 90% interval {:.4} to {:.4}",
+        est.ratio,
+        est.ratio * base.per_tkm[0],
+        est.se_ln_bootstrap,
+        est.at_edge,
+        ceteris_calibrate::air_share::BOOT_REPLICATIONS,
+        est.se_ln_curvature,
+        est.interval.0,
+        est.interval.1
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
 /// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
@@ -656,11 +736,12 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if ["pack", "reference", "calibrate", "gravity"].contains(&command.as_str()) {
+    if ["pack", "reference", "calibrate", "gravity", "air-share"].contains(&command.as_str()) {
         let result = match command.as_str() {
             "pack" => pack(argv),
             "reference" => reference(argv),
             "gravity" => gravity(argv),
+            "air-share" => air_share(argv),
             _ => calibrate(argv),
         };
         return result.unwrap_or_else(|e| {
@@ -676,7 +757,10 @@ fn main() -> ExitCode {
                 run(&args)
             }
         }),
-        _ => Err("expected a command, export, run, pack, reference, calibrate or gravity".into()),
+        _ => Err(
+            "expected a command, export, run, pack, reference, calibrate, gravity or air-share"
+                .into(),
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

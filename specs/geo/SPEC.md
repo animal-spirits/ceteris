@@ -67,6 +67,16 @@ Path cost: c_od = min over paths of the sum of edge prices (Dijkstra; heap keys 
 patterns of non-negative `f64`, ties pop the lower node first). Hours accumulate along the
 chosen least-cost path. A closed chokepoint prices its edges at infinity.
 
+Per-good trees (ADR 0279, accepted 2026-11-01; built, off by default: `TransportParams::path_choice`
+is `PathChoice::Freight`). Under `PathChoice::Iceberg`, for traded good g the edge weight is
+`w_g c_e + lambda_g h_e / 24`, so a leg's least-weight path is its least iceberg factor. The
+minimiser depends only on `kappa_g = lambda_g / (24 w_g)`, so `paths::shortest_by(g, source,
+kappa)` runs Dijkstra on `c_e + kappa h_e` (heap keys and ties as for freight trees) and returns
+the cost per tonne and hours along that path; `kappa = 0` is `shortest` bit for bit. One tree set
+per distinct `(kappa_g, bulk)`, the bulk flag giving a bulk class's goods the edge prices at its
+freight rate (ADR 0247). The freight-cost trees and `PathCache` stay for the map mode. The graph
+records the parameters it was last priced at (`TransportGraph::params`).
+
 ### Route choice (ADR 0017; `route_choice.rs`): built but off
 
 Built and tested in P2 but not used: route choice is deferred past P2 (owner, 2026-10-24; ADR
@@ -102,6 +112,45 @@ weights exp(-(theta_r ln t_kl + D_l - D_k)) lie in [0, 1], and tau = exp((D - ln
 is computed from logs, so it stays finite where z underflows. A warm start is a previous z.
 Deterministic: each solve is sequential; solves and the radius's rows run in parallel into fixed
 slots.
+
+### Air rate from mode shares (ADR 0277; `ceteris_calibrate::air_share`)
+
+P04d is fitted to the air share of import value by importer D, origin country O and traded
+good g. The model's share is the part of the trade kernel's gateway-pair sum (trade SPEC,
+Two-level kernel) that crosses by air, on the per-good least-iceberg trees of ADR 0279 whatever
+the default `path_choice` (under freight trees no crossing flies): one tree set per distinct
+(bulk rate, kappa_g) at `TradeParams::default()`, a bulk class's trees on its bulk-rate edge
+quantities:
+
+```
+v_a = sum_{o in O} w_o K_oa,   u_b = sum_{d in D} w_d K_bd       (access legs; road, so no r)
+K_ab(r) = tau_ab(r) ^ -theta_g,   tau_ab(r) = beta_ab + w_g f_road r q_ab[air]
+S_ODg(r) = sum_{(a,b) air} v_a K_ab u_b  /  sum_{(a,b)} v_a K_ab u_b
+```
+
+r = P04d / P04a. beta_ab is the crossing's S05 factor without its air km. An air crossing has
+q_ab[air] > 0. The weights are province VA: of the good at the origin, of all goods at the
+destination, as in `country_costs`. nu_AB and the tariff multiply every K_ab of a country pair
+alike, so they cancel.
+
+Estimator (ADR 0277, Amendment 2026-11-01, estimator; deferred, owner 2026-11-01: P04d stays at
+ADR 0269's BTS 5.37 times road, and this estimator is the first method on the 50-goods pack of
+ADR 0271): Bernoulli
+quasi-likelihood for fractional data (Papke and Wooldridge 1996), with weights equal to the
+cell's import value, maximised over ln r with the paths solved again at every r, so that the
+shares at each r are those on the paths air at r chooses. The objective is summed over a set
+fixed across r: every cell with a reached crossing (reachability does not depend on r), with
+the model's shares clipped to [1e-12, 1 - 1e-12]. `--profile` evaluates it on 25 points of r
+from 0.5 to 32, a quarter octave apart. The estimate takes the grid's best point (ties to the
+lowest r; a maximum at the grid's edge fails), then golden section in ln r between its
+neighbours to 1e-4, in a fixed number of steps. Errors of ln r: a clustered sandwich from the
+profile's curvature over 1/32 octave at r_hat, and a cluster bootstrap over (importer, origin),
+200 replications on core Philox streams with seed 0x0277, each maximised on a 1/32-octave grid
+across the bracket with a parabolic refine (a cell's share at r does not depend on the
+resample), with a 90% percentile interval. Cells informative at r_hat (both an air and another
+crossing) are counted for the shares by good. The fit fails, without clamping, if r does not
+exceed 1 (Mode ordering). The fixed-path Fisher fit with an outer re-solve that this replaces
+does not converge on the pack: its re-solve flips the air crossings (Amendment).
 
 ## System order
 
@@ -161,6 +210,10 @@ reference model's iceberg factors.
   two disjoint routes against the closed form z = q / (1 - 2q); expected hours against the walk
   sum on a path; far entries below the f64 range keep tau exact; subgraph and warm-started solves;
   a radius above 1 panics.
+- Air share (unit): on synthetic cells built at a known r the fit recovers r to 1e-9; S equals a
+  brute-force sum over gateway pairs to 1e-12; dS/dr against a central difference (1e-6); S
+  falls as r rises; S is unchanged when every K_ab of a pair is scaled alike (nu and tariff
+  cancel); a cell with no air crossing is dropped.
 - Pack properties: the invariants table above, on the built pack; skipped without one.
 - Measurement: `cargo run -p ceteris-geo --release --example route_choice_radius` prints, per
   traded good, the smallest theta_r with radius below 0.99, the radius at the ends of the P44
