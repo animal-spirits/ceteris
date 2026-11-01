@@ -115,6 +115,20 @@ impl Cell {
         reached(true) && reached(false)
     }
 
+    /// True when some crossing of the cell is reached from both ends.
+    fn reached(&self) -> bool {
+        self.crossings
+            .iter()
+            .any(|x| self.v[x.a] * self.u[x.b] > 0.0)
+    }
+
+    /// [`Self::quasi_loglik`] with ln S and ln (1 - S) at least ln [`PROFILE_CLIP`].
+    fn clipped_quasi_loglik(&self, r: f64) -> f64 {
+        let l = self.log_share(r);
+        let floor = PROFILE_CLIP.ln();
+        self.weight * (self.share * l.ln_s.max(floor) + (1.0 - self.share) * l.ln_1s.max(floor))
+    }
+
     fn quasi_loglik(&self, r: f64) -> f64 {
         let l = self.log_share(r);
         self.weight * (self.share * l.ln_s + (1.0 - self.share) * l.ln_1s)
@@ -836,6 +850,9 @@ pub fn estimate(
     ))
 }
 
+/// The share clip of [`ProfilePoint::quasi_loglik_reached`].
+pub const PROFILE_CLIP: f64 = 1e-12;
+
 /// The profile grid of r = P04d / P04a: 25 points from 0.5 to 32, a quarter octave apart.
 pub fn profile_grid() -> [f64; 25] {
     std::array::from_fn(|i| 0.5 * 2f64.powf(i as f64 / 4.0))
@@ -845,15 +862,19 @@ pub fn profile_grid() -> [f64; 25] {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProfilePoint {
     pub r: f64,
-    /// Import-value weighted air share over every cell (a cell without an air crossing counts 0,
-    /// one without another 1), model and data.
+    /// Import-value weighted air share over every cell with a reached crossing (a cell without an
+    /// air crossing counts 0, one without another 1), model and data.
     pub model_all: f64,
     pub data_all: f64,
     /// The same over the informative cells, as the fit weighs them.
     pub model_used: f64,
     pub data_used: f64,
-    /// The quasi-likelihood over the informative cells.
+    /// The quasi-likelihood over the informative cells, a set that changes with r.
     pub quasi_loglik: f64,
+    /// The quasi-likelihood over every cell with a reached crossing, a set fixed across the grid
+    /// (reachability does not depend on r), with the model's shares clipped to
+    /// [`PROFILE_CLIP`, 1 - `PROFILE_CLIP`] so a cell at 0 or 1 stays finite.
+    pub quasi_loglik_reached: f64,
     /// Per good: (informative cells, model share, data share) over the informative cells.
     pub by_good: [(usize, f64, f64); N_TRADED],
 }
@@ -885,7 +906,7 @@ pub fn profile(
                 let data = used.iter().map(|c| c.weight * c.share).sum::<f64>() / total;
                 (model, data)
             };
-            let all: Vec<&Cell> = cs.iter().collect();
+            let all: Vec<&Cell> = cs.iter().filter(|c| c.reached()).collect();
             let used: Vec<&Cell> = cs.iter().filter(|c| c.informative()).collect();
             let (model_all, data_all) = mean(&all);
             let (model_used, data_used) = mean(&used);
@@ -901,6 +922,7 @@ pub fn profile(
                 model_used,
                 data_used,
                 quasi_loglik: quasi_loglik(&used, r),
+                quasi_loglik_reached: all.iter().map(|c| c.clipped_quasi_loglik(r)).sum(),
                 by_good,
             })
         })
