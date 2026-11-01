@@ -1,5 +1,5 @@
 //! Price level p_c of each pack country, the base price of its local goods (specs/econ/SPEC.md,
-//! Price levels; ADR 0098 as amended by RFC 0282, D1).
+//! Price levels; ADR 0098 as amended by RFC 0282, D1 and D7).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub const FAR_OUT: f64 = 3.0;
 /// Where a country's price level comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
-    /// PWT 11 pl_gdpo over the US's.
+    /// PWT 11 pl_da over the US's.
     Pwt,
     /// WDI PA.NUS.PPPC.RF over the US's of the same year.
     Wdi,

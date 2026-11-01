@@ -265,12 +265,13 @@ pub struct Pwt {
     pub income: BTreeMap<String, ByYear>,
     /// Population, millions.
     pub population: BTreeMap<String, ByYear>,
-    /// Price level of output-side GDP (pl_gdpo, PPP over the market rate; the US is 0.66 in 2000,
-    /// not 1).
+    /// Price level of domestic absorption, C + I + G (pl_da, PPP over the market rate; not 1 for
+    /// the US; RFC 0282 D7).
     pub price_level: BTreeMap<String, ByYear>,
 }
 
-/// PWT 11 Data sheet: labour share, GDP per person, population and the GDP price level by year.
+/// PWT 11 Data sheet: labour share, GDP per person, population and the price level of domestic
+/// absorption by year.
 pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
     let origin = path.display().to_string();
     let number = |c: &Cell, name: &str| {
@@ -291,11 +292,11 @@ pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
                 .or_default()
                 .insert(year, number(c, "labsh")?);
         }
-        if let Some(c) = r.get("pl_gdpo") {
+        if let Some(c) = r.get("pl_da") {
             out.price_level
                 .entry(code.clone())
                 .or_default()
-                .insert(year, number(c, "pl_gdpo")?);
+                .insert(year, number(c, "pl_da")?);
         }
         if let Some(c) = r.get("pop") {
             let pop = number(c, "pop")?;
@@ -332,7 +333,7 @@ pub struct Observed {
     pub gini_wdi: BTreeMap<String, f64>,
     pub gini_swiid: BTreeMap<String, f64>,
     pub gdp_per_capita: BTreeMap<String, f64>,
-    /// PWT GDP price level (pl_gdpo) by year, not relative to the US.
+    /// PWT price level of domestic absorption (pl_da) by year, not relative to the US.
     pub price_level_pwt: BTreeMap<String, ByYear>,
     /// WDI population in `YEAR`.
     pub population: BTreeMap<String, f64>,
