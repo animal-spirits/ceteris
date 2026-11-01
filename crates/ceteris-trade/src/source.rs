@@ -27,11 +27,6 @@ use crate::kernel::{Access, Kernel};
 /// Provinces per parallel task at least, in loops over provinces.
 const ROWS: usize = 64;
 
-/// Origins and origin gateways per parallel task of [`dispatch`] and [`arrivals`], fixed so
-/// that their sums do not depend on the thread count.
-const ORIGIN_CHUNK: usize = 256;
-const GATEWAY_CHUNK: usize = 32;
-
 /// Buyer classes, the index into every `[f64; 2]` of this module and of `Markets::clear`.
 pub const INTERMEDIATE: usize = 0;
 pub const HOUSEHOLD: usize = 1;
@@ -165,48 +160,6 @@ struct Inflow {
     net: f64,
     units: [f64; 4],
     value: [f64; 4],
-}
-
-impl Inflow {
-    fn add(&mut self, other: &Inflow) {
-        self.gross += other.gross;
-        self.net += other.net;
-        for lag in 0..4 {
-            self.units[lag] += other.units[lag];
-            self.value[lag] += other.value[lag];
-        }
-    }
-}
-
-/// One chunk of origins of a dispatch pass: what its origins own (shipments, their legs'
-/// values), carried on from the pass so far, and what they add to every destination and
-/// origin gateway, summed from zero.
-struct OriginPart {
-    shipped: Vec<f64>,
-    rounding: Vec<f64>,
-    received: Vec<f64>,
-    home: Vec<f64>,
-    arrive0: Vec<f64>,
-    survived0: Vec<f64>,
-    domestic_value: Vec<f64>,
-    access_out_value: Vec<f64>,
-    paid: Vec<f64>,
-    arrive1: Vec<f64>,
-    survived1: Vec<f64>,
-    gross_a: Vec<f64>,
-    units_a: Vec<f64>,
-    origin_units_a: Vec<f64>,
-    lost: f64,
-    selected: f64,
-}
-
-/// One chunk of origin gateways of a dispatch pass: its crossings' values and units, carried
-/// on, and what it brings to every destination gateway, summed from zero.
-struct CrossingPart {
-    value: Vec<f64>,
-    units: Vec<f64>,
-    at_b: Vec<Inflow>,
-    lost: f64,
 }
 
 impl Sourced {
@@ -599,207 +552,108 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
             }
         }
 
-        // Origins: home, domestic and into the first gateway, in fixed chunks of origins in
-        // parallel. What an origin owns (its shipments, its legs) is carried on from the
-        // previous class in the same order; what it adds to destinations and gateways is
-        // summed per chunk and the chunks are added in order.
-        let parts: Vec<OriginPart> = (0..np.div_ceil(ORIGIN_CHUNK))
-            .into_par_iter()
-            .map(|k| {
-                let os = k * ORIGIN_CHUNK..((k + 1) * ORIGIN_CHUNK).min(np);
-                let dom =
-                    gk.domestic.offsets[os.start] as usize..gk.domestic.offsets[os.end] as usize;
-                let acc = gk.access.offsets[os.start] as usize..gk.access.offsets[os.end] as usize;
-                let mut p = OriginPart {
-                    shipped: shipped[os.clone()].to_vec(),
-                    rounding: shipped_rounding[os.clone()].to_vec(),
-                    received: received[os.clone()].to_vec(),
-                    home: home[os.clone()].iter().map(|h| h[c]).collect(),
-                    arrive0: arrive[0][os.clone()].iter().map(|x| x[c]).collect(),
-                    survived0: survived[0][os.clone()].to_vec(),
-                    domestic_value: domestic_value[dom.clone()].to_vec(),
-                    access_out_value: access_out_value[acc.clone()].to_vec(),
-                    paid: vec![0.0; np],
-                    arrive1: vec![0.0; np],
-                    survived1: vec![0.0; np],
-                    gross_a: vec![0.0; ng],
-                    units_a: vec![0.0; ng],
-                    origin_units_a: vec![0.0; ng],
-                    lost: 0.0,
-                    selected: 0.0,
-                };
-                for o in os.clone() {
-                    let j = o - os.start;
-                    let f = fill[o][c];
-                    if w[o] == 0.0 || f == 0.0 {
-                        continue;
-                    }
-                    // reach is 2^-up of E_d / Phi_d; every flow below is linear in m
-                    let (m, inv_p) = (times_two_to(f * w[o], s.up), 1.0 / price[o]);
-                    // the rounding of m, then of each route's products below the normal range,
-                    // times the factors after them, in units (`Sourced::shipped_rounding`)
-                    let dm = times_two_to(below_normal(f * w[o]), s.up) + below_normal(m);
-                    let units_of = |value: f64, err: f64| {
-                        (err + below_normal(value)) * inv_p + below_normal(value * inv_p)
-                    };
-                    let x = m * reach[o][c];
-                    p.rounding[j] += units_of(x, dm * reach[o][c]);
-                    if x > 0.0 {
-                        let units = x * inv_p;
-                        let got = x * inv_q[o];
-                        p.arrive0[j] += got;
-                        p.home[j] += units;
-                        p.survived0[j] += units;
-                        p.selected += got - units;
-                        p.shipped[j] += units;
-                        p.paid[o] += x;
-                        p.received[j] += x;
-                    }
-                    let lo = gk.domestic.offsets[o] as usize - dom.start;
-                    for (i, e) in gk.domestic.row(o).iter().enumerate() {
-                        let d = e.col as usize;
-                        let x = m * e.k * reach[d][c];
-                        let mk = (dm * e.k + below_normal(m * e.k)) * reach[d][c];
-                        p.rounding[j] += units_of(x, mk);
-                        if x == 0.0 {
-                            continue;
-                        }
-                        let units = x * inv_p;
-                        let melted = units * e.inv_tau;
-                        let got = x * inv_q[d];
-                        p.arrive1[d] += got;
-                        p.survived1[d] += melted;
-                        p.lost += units - melted;
-                        p.selected += got - melted;
-                        p.shipped[j] += units;
-                        p.domestic_value[lo + i] += x;
-                        p.paid[d] += x;
-                        p.received[j] += x;
-                    }
-                    let lo = gk.access.offsets[o] as usize - acc.start;
-                    for (i, e) in gk.access.row(o).iter().enumerate() {
-                        let a = e.col as usize;
-                        let x = m * e.k * s.z[a];
-                        let mk = ((dm * e.k + below_normal(m * e.k)) * s.z[a] + below_normal(x))
-                            * s.net_ratio[a];
-                        p.rounding[j] += units_of(x * s.net_ratio[a], mk);
-                        if x == 0.0 {
-                            continue;
-                        }
-                        let net = x * s.net_ratio[a];
-                        let units = net * inv_p;
-                        p.access_out_value[lo + i] += net;
-                        p.received[j] += net;
-                        p.shipped[j] += units;
-                        p.lost += units - units * e.inv_tau;
-                        let origin_units = x * inv_p;
-                        p.gross_a[a] += x;
-                        p.units_a[a] += origin_units * e.inv_tau;
-                        p.origin_units_a[a] += origin_units;
-                    }
-                }
-                p
-            })
-            .collect();
+        // Origins: home, domestic and into the first gateway.
         zeroed(&mut s.gross_a, ng);
         zeroed(&mut s.units_a, ng);
         zeroed(&mut s.origin_units_a, ng);
-        for (k, p) in parts.iter().enumerate() {
-            let o0 = k * ORIGIN_CHUNK;
-            let n = p.shipped.len();
-            shipped[o0..o0 + n].copy_from_slice(&p.shipped);
-            shipped_rounding[o0..o0 + n].copy_from_slice(&p.rounding);
-            received[o0..o0 + n].copy_from_slice(&p.received);
-            survived[0][o0..o0 + n].copy_from_slice(&p.survived0);
-            for j in 0..n {
-                home[o0 + j][c] = p.home[j];
-                arrive[0][o0 + j][c] = p.arrive0[j];
+        for o in 0..np {
+            let f = fill[o][c];
+            if w[o] == 0.0 || f == 0.0 {
+                continue;
             }
-            let dom = gk.domestic.offsets[o0] as usize;
-            domestic_value[dom..dom + p.domestic_value.len()].copy_from_slice(&p.domestic_value);
-            let acc = gk.access.offsets[o0] as usize;
-            access_out_value[acc..acc + p.access_out_value.len()]
-                .copy_from_slice(&p.access_out_value);
-            *lost += p.lost;
-            *selected += p.selected;
-            for a in 0..ng {
-                s.gross_a[a] += p.gross_a[a];
-                s.units_a[a] += p.units_a[a];
-                s.origin_units_a[a] += p.origin_units_a[a];
+            // reach is 2^-up of E_d / Phi_d; every flow below is linear in m
+            let (m, inv_p) = (times_two_to(f * w[o], s.up), 1.0 / price[o]);
+            // the rounding of m, then of each route's products below the normal range, times
+            // the factors after them, in units (`Sourced::shipped_rounding`)
+            let dm = times_two_to(below_normal(f * w[o]), s.up) + below_normal(m);
+            let units_of = |value: f64, err: f64| {
+                (err + below_normal(value)) * inv_p + below_normal(value * inv_p)
+            };
+            let x = m * reach[o][c];
+            shipped_rounding[o] += units_of(x, dm * reach[o][c]);
+            if x > 0.0 {
+                let units = x * inv_p;
+                let got = x * inv_q[o];
+                arrive[0][o][c] += got;
+                home[o][c] += units;
+                survived[0][o] += units;
+                *selected += got - units;
+                shipped[o] += units;
+                paid[o] += x;
+                paid_by_class[o][c] += x;
+                received[o] += x;
+            }
+            let lo = gk.domestic.offsets[o] as usize;
+            for (i, e) in gk.domestic.row(o).iter().enumerate() {
+                let d = e.col as usize;
+                let x = m * e.k * reach[d][c];
+                let mk = (dm * e.k + below_normal(m * e.k)) * reach[d][c];
+                shipped_rounding[o] += units_of(x, mk);
+                if x == 0.0 {
+                    continue;
+                }
+                let units = x * inv_p;
+                let melted = units * e.inv_tau;
+                let got = x * inv_q[d];
+                arrive[1][d][c] += got;
+                survived[1][d] += melted;
+                *lost += units - melted;
+                *selected += got - melted;
+                shipped[o] += units;
+                domestic_value[lo + i] += x;
+                paid[d] += x;
+                paid_by_class[d][c] += x;
+                received[o] += x;
+            }
+            let lo = gk.access.offsets[o] as usize;
+            for (i, e) in gk.access.row(o).iter().enumerate() {
+                let a = e.col as usize;
+                let x = m * e.k * s.z[a];
+                let mk = ((dm * e.k + below_normal(m * e.k)) * s.z[a] + below_normal(x))
+                    * s.net_ratio[a];
+                shipped_rounding[o] += units_of(x * s.net_ratio[a], mk);
+                if x == 0.0 {
+                    continue;
+                }
+                let net = x * s.net_ratio[a];
+                let units = net * inv_p;
+                access_out_value[lo + i] += net;
+                received[o] += net;
+                shipped[o] += units;
+                *lost += units - units * e.inv_tau;
+                let origin_units = x * inv_p;
+                s.gross_a[a] += x;
+                s.units_a[a] += origin_units * e.inv_tau;
+                s.origin_units_a[a] += origin_units;
             }
         }
-        // destination sums over the chunks in chunk order, destinations in parallel
-        (
-            paid.par_iter_mut(),
-            paid_by_class.par_iter_mut(),
-            arrive[1].par_iter_mut(),
-            survived[1].par_iter_mut(),
-        )
-            .into_par_iter()
-            .enumerate()
-            .with_min_len(ROWS)
-            .for_each(|(d, (paid, by_class, arrive, survived))| {
-                for p in &parts {
-                    *paid += p.paid[d];
-                    by_class[c] += p.paid[d];
-                    arrive[c] += p.arrive1[d];
-                    *survived += p.survived1[d];
-                }
-            });
 
-        // Origin gateways onto crossings, in fixed chunks of gateways in parallel; units are
-        // kept by transit lag from here on.
-        let (gross_a, units_a, origin_units_a) = (&s.gross_a, &s.units_a, &s.origin_units_a);
-        let (y, z) = (&s.y, &s.z);
-        let parts: Vec<CrossingPart> = (0..ng.div_ceil(GATEWAY_CHUNK))
-            .into_par_iter()
-            .map(|k| {
-                let gs = k * GATEWAY_CHUNK..((k + 1) * GATEWAY_CHUNK).min(ng);
-                let legs =
-                    gk.crossings.offsets[gs.start] as usize..gk.crossings.offsets[gs.end] as usize;
-                let mut p = CrossingPart {
-                    value: crossing_value[legs.clone()].to_vec(),
-                    units: crossing_units[legs.clone()].to_vec(),
-                    at_b: vec![Inflow::default(); ng],
-                    lost: 0.0,
-                };
-                for a in gs.filter(|&a| gross_a[a] > 0.0) {
-                    let lo = gk.crossings.offsets[a] as usize - legs.start;
-                    let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
-                    let inv_z = 1.0 / z[a];
-                    for (i, e) in gk.crossings.row(a).iter().enumerate() {
-                        let b = e.col as usize;
-                        let weight = e.k * carry_a[usize::from(gc[b])] * y[b];
-                        if weight == 0.0 {
-                            continue;
-                        }
-                        let share = over(weight, inv_z, z[a]);
-                        let gross = gross_a[a] * share;
-                        let net = gross * e.inv_duty;
-                        let units = units_a[a] * share * e.inv_duty;
-                        let got = units * e.inv_loss;
-                        p.value[lo + i] += net;
-                        p.units[lo + i] += origin_units_a[a] * share * e.inv_duty;
-                        p.lost += units - got;
-                        let at = &mut p.at_b[b];
-                        at.units[usize::from(e.lag)] += got;
-                        at.value[usize::from(e.lag)] += gross;
-                        at.gross += gross;
-                        at.net += net;
-                    }
-                }
-                p
-            })
-            .collect();
+        // Origin gateways onto crossings; units are kept by transit lag from here on.
         s.at_b.clear();
         s.at_b.resize(ng, Inflow::default());
-        for (k, p) in parts.iter().enumerate() {
-            let lo = gk.crossings.offsets[k * GATEWAY_CHUNK] as usize;
-            crossing_value[lo..lo + p.value.len()].copy_from_slice(&p.value);
-            crossing_units[lo..lo + p.units.len()].copy_from_slice(&p.units);
-            *lost += p.lost;
-            for (at, part) in s.at_b.iter_mut().zip(&p.at_b) {
-                at.add(part);
+        for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
+            let lo = gk.crossings.offsets[a] as usize;
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let inv_z = 1.0 / s.z[a];
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                let b = e.col as usize;
+                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                if weight == 0.0 {
+                    continue;
+                }
+                let share = over(weight, inv_z, s.z[a]);
+                let gross = s.gross_a[a] * share;
+                let net = gross * e.inv_duty;
+                let units = s.units_a[a] * share * e.inv_duty;
+                let got = units * e.inv_loss;
+                crossing_value[lo + i] += net;
+                crossing_units[lo + i] += s.origin_units_a[a] * share * e.inv_duty;
+                *lost += units - got;
+                let at = &mut s.at_b[b];
+                at.units[usize::from(e.lag)] += got;
+                at.value[usize::from(e.lag)] += gross;
+                at.gross += gross;
+                at.net += net;
             }
         }
 
@@ -874,74 +728,42 @@ pub fn arrivals(k: &Kernel, g: usize, out: &mut Sourced) {
             s.z[a] = gross;
         }
 
-        // the chunks and the order of their sums are those of `dispatch`
-        let parts: Vec<(Vec<f64>, Vec<f64>)> = (0..np.div_ceil(ORIGIN_CHUNK))
-            .into_par_iter()
-            .map(|k| {
-                let (mut arrive1, mut gross_a) = (vec![0.0; np], vec![0.0; ng]);
-                let os = k * ORIGIN_CHUNK..((k + 1) * ORIGIN_CHUNK).min(np);
-                for o in os.filter(|&o| w[o] != 0.0) {
-                    let m = times_two_to(w[o], s.up);
-                    for e in gk.domestic.row(o) {
-                        let d = e.col as usize;
-                        let x = m * e.k * reach[d][c];
-                        if x != 0.0 {
-                            arrive1[d] += x * inv_q[d];
-                        }
-                    }
-                    for e in gk.access.row(o) {
-                        let a = e.col as usize;
-                        let x = m * e.k * s.z[a];
-                        if x != 0.0 {
-                            gross_a[a] += x;
-                        }
-                    }
-                }
-                (arrive1, gross_a)
-            })
-            .collect();
+        zeroed(&mut s.gross_a, ng);
         for o in (0..np).filter(|&o| w[o] != 0.0) {
-            let x = times_two_to(w[o], s.up) * reach[o][c];
+            let m = times_two_to(w[o], s.up);
+            let x = m * reach[o][c];
             if x > 0.0 {
                 arrive[0][o][c] += x * inv_q[o];
             }
-        }
-        zeroed(&mut s.gross_a, ng);
-        for (arrive1, gross_a) in &parts {
-            for (a, x) in arrive[1].iter_mut().zip(arrive1) {
-                a[c] += x;
+            for e in gk.domestic.row(o) {
+                let d = e.col as usize;
+                let x = m * e.k * reach[d][c];
+                if x != 0.0 {
+                    arrive[1][d][c] += x * inv_q[d];
+                }
             }
-            for (a, x) in s.gross_a.iter_mut().zip(gross_a) {
-                *a += x;
+            for e in gk.access.row(o) {
+                let a = e.col as usize;
+                let x = m * e.k * s.z[a];
+                if x != 0.0 {
+                    s.gross_a[a] += x;
+                }
             }
         }
 
-        let (gross_a, y, z) = (&s.gross_a, &s.y, &s.z);
-        let parts: Vec<Vec<[f64; 4]>> = (0..ng.div_ceil(GATEWAY_CHUNK))
-            .into_par_iter()
-            .map(|k| {
-                let mut value = vec![[0.0; 4]; ng];
-                let gs = k * GATEWAY_CHUNK..((k + 1) * GATEWAY_CHUNK).min(ng);
-                for a in gs.filter(|&a| gross_a[a] > 0.0) {
-                    let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
-                    let inv_z = 1.0 / z[a];
-                    for e in gk.crossings.row(a) {
-                        let b = e.col as usize;
-                        let weight = e.k * carry_a[usize::from(gc[b])] * y[b];
-                        if weight == 0.0 {
-                            continue;
-                        }
-                        value[b][usize::from(e.lag)] += gross_a[a] * over(weight, inv_z, z[a]);
-                    }
-                }
-                value
-            })
-            .collect();
         s.at_b.clear();
         s.at_b.resize(ng, Inflow::default());
-        for value in &parts {
-            for (at, v) in s.at_b.iter_mut().zip(value) {
-                at.value.iter_mut().zip(v).for_each(|(a, x)| *a += x);
+        for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let inv_z = 1.0 / s.z[a];
+            for e in gk.crossings.row(a) {
+                let b = e.col as usize;
+                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                if weight == 0.0 {
+                    continue;
+                }
+                let gross = s.gross_a[a] * over(weight, inv_z, s.z[a]);
+                s.at_b[b].value[usize::from(e.lag)] += gross;
             }
         }
 
@@ -1332,15 +1154,8 @@ mod tests {
 
     #[test]
     fn arrivals_are_the_arrivals_of_a_full_dispatch() {
-        // the last world has several chunks of origins and of gateways
-        for seed in 0..9 {
-            let (net, wedges) = if seed < 8 {
-                random_world(seed)
-            } else {
-                let provinces = (0..600).map(|i| (i / 200) as u16).collect();
-                let gateways = (0..40).map(|i| (i / 8) as u16).collect();
-                complete_world(&mut rng(seed), provinces, gateways)
-            };
+        for seed in 0..8 {
+            let (net, wedges) = random_world(seed);
             let k = kernel(&net, &wedges);
             let np = net.n_provinces();
             let mut r = rng(seed + 100);
@@ -1371,12 +1186,12 @@ mod tests {
     fn parallel_splits_do_not_depend_on_the_thread_count() {
         // enough provinces and gateways that the loops over them split into several tasks
         let provinces = (0..300).map(|i| (i / 100) as u16).collect();
-        let gateways = (0..40).map(|i| (i / 8) as u16).collect();
+        let gateways = (0..24).map(|i| (i / 8) as u16).collect();
         let mut r = rng(7);
         let (net, wedges) = complete_world(&mut r, provinces, gateways);
         let k = kernel(&net, &wedges);
         let np = net.n_provinces();
-        assert!(np > 4 * ROWS && np > ORIGIN_CHUNK && net.n_gateways() > GATEWAY_CHUNK);
+        assert!(np > 4 * ROWS && net.n_gateways() > 16);
         let price = draw(&mut r, np, 0.5, 2.0);
         let active: Vec<bool> = (0..np).map(|o| o % 7 != 3).collect();
         let spend = draw2(&mut r, np, 0.0, 10.0);
