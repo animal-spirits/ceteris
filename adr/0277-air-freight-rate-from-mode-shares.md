@@ -91,7 +91,7 @@ It is one-dimensional, solved by Newton on the analytic derivative of S with res
 finite-difference check is part of the tests. Standard errors are clustered by country pair. The
 gravity sample's cheapest-chain costs stay as ADR 0022's diagnostic and are not used here.
 
-- **Value:** r_hat on Census 2000 (Amendment 2026-11-01; Comext has no 2000 mode data). **Range for P9:** the minimum to the maximum of
+- **Value:** r_hat on Census 2000 plus Comext hindcast to 2000 (Amendment 2026-11-01). **Range for P9:** the minimum to the maximum of
   r_hat on each importer set alone (Census, Comext, BTI once its licence is read), on 1999 and
   2001, and BTS 1990 to 2004 (ADR 0269).
 - **Ordering** (DESIGN 5.3): r_hat must exceed 1, so that air is dearer than road. If it does
@@ -144,8 +144,18 @@ gravity sample's cheapest-chain costs stay as ADR 0022's diagnostic and are not 
 - The register class of P04d becomes "Calibrated (2000 mode shares, ADR 0277)". The P9 plan of
   ADR 0269 becomes a joint refit of all mode ratios on the same moments.
 
-## Amendment (owner, 2026-11-01): EU data from 2002
+## Amendment (owner, 2026-11-01): EU data hindcast from 2002, pooled
 
-Eurostat publishes trade by mode of transport only from January 2002 (DS-059334); 1999 to 2001
-existed only on a paid Comext DVD. The owner ruled: the value is fitted on US 2000 imports alone,
-and the EU15 2002 fit enters only the P9 range, beside the other importer sets.
+Eurostat publishes trade by mode of transport only from January 2002 (DS-059334). 1999 to 2001
+existed only on a paid Comext DVD. The owner ruled that 2002 is hindcast to 2000 and pooled into
+the value:
+
+- **Composition.** Each EU15 importer, extra-EU origin and HS6 cell keeps its 2002 air share,
+  weighted by its 2000 import value from DS-045409 (EU trade since 1988, HS6, no mode). Cells
+  with 2000 trade but no 2002 mode record are dropped and counted.
+- **Trend.** Per traded good, the cell shares are shifted in log-odds by the US change from 2000
+  to 2002 (Schott's 2002 file), import-value weighted over the origins both years share.
+- **Value:** r_hat on US 2000 plus hindcast EU15 2000, pooled, clusters by (importer, origin).
+  **Range:** the US-only and EU-only fits, beside the sets listed under Decision.
+- Mode 0 (not declared, about 9.5% of 2002 EU15 import value) is left out of the share's
+  denominator and counted.
