@@ -437,6 +437,20 @@ meets. So:
   M_k / coef_k <= Y_in (1 + 1e-9), the margin taking in ties to the last bits (the data state holds
   one month of every input). `systems::scarcest_inputs`; E1 keeps the set per enterprise
   (`Scratch::short`).
+- "Exceeds" carries the same relative margin: the cap cut the target when L*_notional > L_in
+  (1 + 1e-9) (`systems::cap_cuts`; B9, pending the owner). Frictionless and rationed, the wage
+  is w_top, the marginal value product of the marginal enterprise at its cap, so that
+  enterprise's target at w_top equals L_in exactly in real numbers; computed, the two come from
+  different closed forms (the labour target at w_top, and VA^-1(a_VA Y_in) inside w_top), which
+  agree only to a few units in the last place, so with `>` alone the split rule was decided by
+  rounding (the fixture's frictionless run scaled by 1e4 decided enterprises 8 and 53 the other
+  way at tick 7 and differed by 16% in employment from tick 8). Within the margin both order
+  bases agree to it: notional output over capped output is VA(L*_notional) / VA(L_in) <= 1 +
+  1e-9 to first order (VA rises less than proportionally in L), so the choice moves no order by
+  more than 1e-9 relative, while 1e-9 is about 4.5e6 units in the last place, far above the
+  closed forms' rounding. It is the tie margin of `scarcest_inputs` (`SCARCEST`), a numerical
+  constant, not a parameter, and no register entry. With it the fixture's frictionless run is
+  homogeneous of degree zero over 120 ticks (`homogeneity_of_degree_zero`, 1e-9).
 - A binding input is ordered on notional output, VA(L_notional) / a_VA: L_notional is the
   employment E1 would have allocated on its targets without the input cap (the same eta step and
   L^s scaling from last tick's employment, at the wage the capped targets were set at: w_{t-1}

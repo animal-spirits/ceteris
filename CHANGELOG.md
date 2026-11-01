@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### BEHAVIOUR: a labour target at its input cap is not cut by it (ADR 0266, B9; pending the owner)
+
+- `Scratch::short` marks an input as binding when the target without the cap exceeds the cap by
+  more than `SCARCEST` (1e-9 relative, `systems::cap_cuts`), the tie margin of
+  `scarcest_inputs`; it was `f > cap`. Frictionless and rationed, the marginal enterprise's
+  target equals its cap up to the rounding of two closed forms, so the split order rule was
+  decided by rounding. Numerical, not a parameter (econ SPEC, Effective demand for inputs).
+- Default runs do not move (fixture 120 ticks bit for bit). The fixture's frictionless run
+  moves from the first tie: after 120 ticks flows by up to 3.5e-5, prices 5.3e-6, wages 4.3e-6.
+  `homogeneity_of_degree_zero` holds frictionless over 120 ticks again (6 before).
+
+Goldens: none re-blessed. `p2-econ.txt`, `p2-as-built-rule.txt` and `p2-pack.txt` are default
+runs or tables; `p2_acceptance` passes on the installed pack.
+
 ### BEHAVIOUR: the Sinkhorn sweep pins the level of ln w from below too (B9 review)
 
 - `steady::sinkhorn` shifts each good's ln w by its largest before every sweep; the largest
