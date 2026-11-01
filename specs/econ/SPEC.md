@@ -120,7 +120,11 @@ out of its group (all of industry where industry less manufacturing is too small
 largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
 weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WDI, else UN WPP,
-else the WorldPop national total) times the donor's VA per person scaled by income. A territory inside its
+else the WorldPop national total) times the donor's VA per person scaled by income. Regions the World Bank
+does not give come from an override table: Western Sahara Middle East and North Africa, Northern
+Cyprus Europe and Central Asia, Somaliland Sub-Saharan Africa, and Anguilla and Montserrat Latin
+America and Caribbean (dependencies the World Bank does not classify, whose sovereign's region,
+Europe and Central Asia, gave them a European donor; ADR 0098). A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
 basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.

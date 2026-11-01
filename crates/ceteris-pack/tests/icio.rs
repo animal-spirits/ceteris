@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
-    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, home_share_columns, impute, impute_pack,
-    median_va_over_gdp, oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
-    world_oil_gas_column,
+    Basis, Economy, ICIO, INSIDE, IncomeSource, REGIONS, Rules, home_share_columns, impute,
+    impute_pack, median_va_over_gdp, oil_gas_most_of_industry, oil_gas_va_over_rents,
+    sector_shares, world_oil_gas_column,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
@@ -699,6 +699,25 @@ fn region_override_places_an_unclassified_country() {
     let got = &run(&[("XXX", "XXX")], &donors(), &wdi(), &o, &case)["XXX"];
     assert_eq!(got.region.as_deref(), Some("R2"));
     assert_eq!(got.donor.as_deref(), Some("CCC"));
+    // Anguilla and Montserrat, which the World Bank does not classify, take Latin America and
+    // Caribbean donors through the pack table, not their sovereign's European region.
+    let lac = "Latin America & Caribbean";
+    let o = obs_with(None, &[("AAA", "Europe & Central Asia"), ("CCC", lac)], &[]);
+    let case = Case {
+        regions: &REGIONS,
+        ..PLAIN
+    };
+    let got = run(
+        &[("AIA", "AAA"), ("MSR", "AAA")],
+        &donors(),
+        &wdi(),
+        &o,
+        &case,
+    );
+    for code in ["AIA", "MSR"] {
+        assert_eq!(got[code].region.as_deref(), Some(lac), "{code}");
+        assert_eq!(got[code].donor.as_deref(), Some("CCC"), "{code}");
+    }
 }
 
 #[test]
@@ -995,6 +1014,8 @@ fn real_populated_territories_have_value_added() {
     assert_eq!(region("SAH"), "Middle East & North Africa");
     assert_eq!(region("CYN"), "Europe & Central Asia");
     assert_eq!(region("SOL"), "Sub-Saharan Africa");
+    assert_eq!(region("AIA"), "Latin America & Caribbean");
+    assert_eq!(region("MSR"), "Latin America & Caribbean");
 }
 
 #[test]
