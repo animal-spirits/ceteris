@@ -141,6 +141,8 @@ pub struct AirFit {
 
 pub const AIR_TOL: f64 = 1e-12;
 pub const AIR_MAX_ITER: usize = 100;
+/// Below this the fit stops: air at a millionth of road is no longer a freight rate.
+pub const AIR_FLOOR: f64 = 1e-6;
 
 fn quasi_loglik(cells: &[&Cell], r: f64) -> f64 {
     cells.iter().map(|c| c.quasi_loglik(r)).sum()
@@ -163,6 +165,12 @@ pub fn fit(cells: &[Cell], r0: f64) -> Result<AirFit, String> {
             let (sc, i) = c.score_info(r);
             score += sc;
             info += i;
+        }
+        if r < AIR_FLOOR {
+            return Err(format!(
+                "air share: r ran to {r}: the model's air shares stay below the data's at any \
+                 air rate on these paths"
+            ));
         }
         if !(info > 0.0 && info.is_finite()) {
             return Err(format!("air share: information {info} at r {r}"));
@@ -815,6 +823,17 @@ mod tests {
         let (sc, i) = c.score_info(3.0);
         assert!(sc.is_finite() && i.is_finite());
         assert!(c.quasi_loglik(3.0).is_finite());
+    }
+
+    #[test]
+    fn a_share_out_of_reach_stops_at_the_floor() {
+        let mut cells = sample(2.4);
+        for c in &mut cells {
+            // Data far above anything the cells can give: air pairs carry a fixed extra cost.
+            c.share = 0.99;
+            c.crossings[2].beta *= 50.0;
+        }
+        assert!(fit(&cells, 5.0).unwrap_err().contains("ran to"));
     }
 
     #[test]
