@@ -301,8 +301,8 @@ fn groups(s: SectorShares, ratio: f64) -> (Vec<(f64, Vec<usize>)>, Basis) {
 
 /// Takes crude oil and gas out of the group that holds it at `share` of GDP, at most `cap` of the
 /// group's, so the group's local goods keep a producer.
-/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups count as one
-/// (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
+/// Where `share` exceeds `cap` of that group and WDI gives manufacturing apart, the two groups
+/// count as one (WDI then counts hydrocarbons in manufacturing, as for Algeria and Iran in 2000).
 fn oil_gas_apart(
     mut groups: Vec<(f64, Vec<usize>)>,
     share: f64,
@@ -390,8 +390,9 @@ fn ranked_by(obs: &Observed, income: &BTreeMap<String, f64>) -> Observed {
 /// crude oil and gas takes GDP times the rents times the ICIO oil and gas VA over rents, out of
 /// its group (all of industry where industry less manufacturing is too small) and at most the
 /// largest ICIO share of crude oil and gas in industry of it (ADR 0249), produced with the ICIO
-/// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP, population (WDI, else the WorldPop
-/// national total) times the donor's VA per person, scaled by own over donor income (donor).
+/// world crude oil and gas extraction inputs per unit of output (ADRs 0256, 0270). With no GDP,
+/// population (WDI, else the WorldPop national total) times the donor's VA per person, scaled by
+/// own over donor income (donor).
 /// Output follows at the donor's output per unit of VA. A territory in `inside` takes its
 /// population share of the parent's VA and output out of the parent's (parent).
 pub fn impute(

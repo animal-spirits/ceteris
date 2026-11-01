@@ -1,4 +1,5 @@
-//! Inputs of the GE reference model, read from a `ceteris export` directory (export format 13).
+//! Inputs of the GE reference model, read from a `ceteris export` directory (export format
+//! [`EXPORT_FORMAT`], 15).
 
 use std::fs::File;
 use std::ops::{Index, IndexMut};

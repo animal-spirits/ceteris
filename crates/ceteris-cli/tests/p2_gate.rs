@@ -11,8 +11,8 @@
 //! and root come from the calibration tables (`write::read_reference`), and the test checks that
 //! the point solves the model. V1 runs from two starts, so that a run that never left the steady
 //! state cannot pass trivially: (a) the steady state with every price, wage and stock moved by
-//! its own draw in [-10%, 10%] (`EconWorld::perturb`, each of the seeds [`PERTURB_SEEDS`]) and (b) the 2000
-//! data state of the calibrated inputs (prices 1, base wages, one month of base use in stock,
+//! its own draw in [-10%, 10%] (`EconWorld::perturb`, each of the seeds [`PERTURB_SEEDS`]) and
+//! (b) the 2000 data state of the calibrated inputs (prices 1, base wages, one month of base use in stock,
 //! nothing in flight), the start before ADR 0089.
 
 use std::fs::File;
@@ -653,10 +653,8 @@ fn h2_theta_by_class() {
         .iter()
         .map(|v| v.as_u64().unwrap() as usize)
         .collect();
-    let theta_good: Vec<f64> = params["trade"]["theta"].as_array().unwrap()[..N_TRADED]
-        .iter()
-        .map(|v| v.as_f64().unwrap())
-        .collect();
+    // the kernel's theta, P150's scale included
+    let theta_good = &r.inputs.theta[..N_TRADED];
     // Tariff groups: primary goods 0 to 3, manufactures 4 to 6.
     let group = [0, 0, 0, 0, 1, 1, 1];
     let ln_k = {
