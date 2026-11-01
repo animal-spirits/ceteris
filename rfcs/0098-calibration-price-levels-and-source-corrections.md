@@ -1,6 +1,6 @@
 # 0098. Price levels and source corrections at calibration
 
-Status: proposed
+Status: proposed; amended by RFC 0282
 Date: 2026-10-26
 Design sections: 3.3, 6.5, 8.6, 15.1, 16; econ SPEC Calibration; amends ADRs 0014, 0020, 0089
 Phase: P2, before the gate
