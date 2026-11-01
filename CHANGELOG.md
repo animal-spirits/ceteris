@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### Storage order by partial adjustment (ADR 0278; storage off by default, no golden moves)
+### Storage order by partial adjustment (ADR 0280; storage off by default, no golden moves)
 
 - The competitive-storage order is b = max(delta S + lambda (S* - S), -(1 - delta) S), S* = s D
   max(0, 1 + pi^e / (zeta (k + delta))), lambda = psi zeta (k + delta) / s (Lovell 1961; owner,

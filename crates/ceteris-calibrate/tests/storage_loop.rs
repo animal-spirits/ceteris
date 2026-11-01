@@ -149,7 +149,7 @@ fn toy_state(
     ]
 }
 
-/// ADR 0278: the partial-adjustment order has ADR 0091's linearisation at the steady state, so
+/// ADR 0280: the partial-adjustment order has ADR 0091's linearisation at the steady state, so
 /// the Storage loop's map (and with it J's storage factor, the psi limit and the block map) is
 /// unchanged. For each stored good the toy market's tangent map over 1 and 5 ticks, by central
 /// differences, equals [`storage_matrix`] and its fifth power to 1e-7 (differencing at 1e-6).

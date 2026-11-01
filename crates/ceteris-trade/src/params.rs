@@ -220,7 +220,7 @@ impl TradeParams {
         (1.0 + self.speculation[g] * c) / (1.0 + self.storage_loss[g] * self.coverage[g])
     }
 
-    /// The merchants' adjustment speed lambda_g toward the target stock, per month (ADR 0278):
+    /// The merchants' adjustment speed lambda_g toward the target stock, per month (ADR 0280):
     /// psi zeta (k + delta) / s_g, the stock-persistence rate 1 - rho of Gorton, Hayashi and
     /// Rouwenhorst (2013) from which P144 psi is derived; 0.144, 0.15, 0.05 and 0.067 for goods
     /// 0, 1, 2 and 5 at the approved values.
@@ -230,7 +230,7 @@ impl TradeParams {
     }
 
     /// The stock S* merchants want to hold at buyers' orders `d` and expectation `pi` (ADR
-    /// 0278): s_g D max(0, 1 + pi / (zeta (k + delta))), the cover at which ADR 0091's expected
+    /// 0280): s_g D max(0, 1 + pi / (zeta (k + delta))), the cover at which ADR 0091's expected
     /// net return pi + (k + delta)(z^-zeta - 1) is zero, to first order in pi (Working 1949). At
     /// pi = 0 it is P02 cover; with no buyers it is 0.
     pub fn storage_target(&self, g: usize, d: f64, pi: f64) -> f64 {

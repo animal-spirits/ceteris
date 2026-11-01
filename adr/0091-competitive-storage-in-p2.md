@@ -3,7 +3,7 @@
 Status: proposed (owner chose the options, 2026-10-25)
 Date: 2026-10-25
 Design sections: 8.2, 12.2, 17 (P02, P56, S04); trade SPEC Origin market; ADRs 0016, 0019, 0029
-Amended by ADR 0278 (proposed, 2026-10-31): the storage order is a partial adjustment toward a target stock, b = delta S + lambda (S* - S).
+Amended by ADR 0280 (proposed, 2026-10-31): the storage order is a partial adjustment toward a target stock, b = delta S + lambda (S* - S).
 
 ## Context
 
@@ -180,13 +180,13 @@ the relative and aggregate terms apply unchanged.
   and V1; turning storage on by default is the owner's call.
   On the 2000 pack (B8 tables, storage-on calibration of a copy) the first rule failed (stv1: five
   of eight runs panicked on ledger overflow by tick 82, the default perturbed runs ended 2.2% to
-  3.3% off in flows). Under ADR 0278's partial adjustment (B8f) every run reaches 6,000 ticks;
+  3.3% off in flows). Under ADR 0280's partial adjustment (B8f) every run reaches 6,000 ticks;
   the default mode passes from seeds 20 to 22 and the data state (largest gap 9.7e-5, 5.9e-5,
   4.4e-5 and 3.2e-3 at 1,200, at most 2.3e-7 from 3,600 on, with or without Pitcairn), and
   frictionless passes seeds 21 and 22 (3.6e-5, 2.4e-3 at 1,200) but misses seed 20 (a good-1
   cycle in Switzerland, 0.48, 0.39, 0.48, 0.25 at 1,200, 3,600, 4,800, 6,000) and the data state
   (France's province 1094, 2.79 at 1,200 and 6.99 at 6,000; the storage-off frictionless data
-  state also fails, B8e). The V1 gate item stays unmet in the frictionless mode (ADR 0278, As built).
+  state also fails, B8e). The V1 gate item stays unmet in the frictionless mode (ADR 0280, As built).
 - **psi limit** (`stability::psi_limit`): reproduces agriculture's 43.5 at g_s 0.006. It binds at
   a corner no single fixture market has (E 0.3 with eps 30.4); at E 0.2 it is 42.5, and without
   the per-market gain cap (ADR 0263) it is 23.9, so the cap is what makes psi 20 safe.
