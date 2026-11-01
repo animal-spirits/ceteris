@@ -398,7 +398,7 @@ id = "osm"
 name = "OpenStreetMap"
 provider = "OpenStreetMap Foundation and contributors"
 version = "Dated planet or Geofabrik snapshot"
-role = "Roads, rail, ports, pipelines (5.3, 5.6)"
+role = "Roads, rail, ports, pipelines (5.3, 5.6); refinery sites (industrial=refinery) as the C19 seed (ADR 0275)"
 licence = "ODbL-1.0"
 licence_url = "https://www.openstreetmap.org/copyright"
 attribution = "(c) OpenStreetMap contributors, ODbL, openstreetmap.org/copyright"
@@ -823,6 +823,131 @@ reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
 notes = "Region keys reference GADM (GID_1) and carry no ISO 3166-2 codes: regions are joined to provinces by exact name (ignoring case), never through GADM geometries."
+
+[[source]]
+id = "sfi-geoasset"
+name = "Spatial Finance Initiative GeoAsset databases: iron and steel, cement"
+provider = "Oxford Sustainable Finance Group, Spatial Finance Initiative"
+version = "Iron and steel (1,598 plants); cement (3,117 plants, Dryad doi:10.5061/dryad.6t1g1jx4f)"
+role = "Plant capacity and start year: province seeds for C24A and C23 (ADR 0275)"
+licence = "CC-BY-4.0"
+licence_url = "https://gee-community-catalog.org/projects/gid/"
+attribution = "Spatial Finance Initiative (2021), GeoAsset Global Database of Iron and Steel Production Assets; Global Database of Cement Production Assets"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Iron and steel CC BY 4.0, cement CC0 1.0 (as stated by the Earth Engine community catalogue records)"
+checked = 2026-10-31
+confidence = "medium"
+notes = "The provider page (sustainablefinance.ox.ac.uk/geoasset-databases) states no licence; the licences come from the community catalogue records and Dryad's CC0 policy. Read the licence file in each download. Fields: capacity (Mt), start year, coordinates within about 10 km. The pulp and paper (3,403 mills) and ethylene (303) databases could seed C17_18 and C20 later."
+
+[[source]]
+id = "usgs-smelters"
+name = "USGS world copper smelters (OFR 03-75) and Primary Aluminum Plants Worldwide 1998"
+provider = "USGS"
+version = "OFR 03-75 (2003, from the 2000 directory); Primary Aluminum Plants Worldwide, 1998 edition"
+role = "Smelter capacity and location: province seeds for C24B (ADR 0275)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://www.usgs.gov/publications/primary-aluminum-plants-worldwide-1998"
+attribution = "Laboy Feliciano and Gonzalez (2003), USGS OFR 03-75; USGS (1999), Primary Aluminum Plants Worldwide 1998 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "US federal public domain; OFR 03-75 metadata lists access and use constraints as none"
+checked = 2026-10-31
+confidence = "high"
+notes = "Copper: 124 smelters with coordinates, status and capacity, no start year. Aluminium: a two-part report with capacity and location by plant; coordinates may need geocoding. The 2010 regional mineral facility files (OFR 2010-1254 to 1257) are dated about 2008 and serve only as a fallback."
+
+[[source]]
+id = "census-cbp"
+name = "US County Business Patterns 2000"
+provider = "US Census Bureau"
+version = "2000 (NAICS 1997), state level"
+role = "Payroll by state and NAICS industry: province seeds for manufacturing goods (ADR 0275)"
+licence = "LicenseRef-USGov-PublicDomain"
+licence_url = "https://www.census.gov/programs-surveys/cbp/data/api.html"
+attribution = "US Census Bureau, County Business Patterns 2000 (requested)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "US federal work, not subject to copyright (17 U.S.C. 105)"
+checked = 2026-10-31
+confidence = "medium"
+notes = "The API covers 2000 at state level, NAICS 2 to 6 digits, and needs an API key; the CBP pages state no licence, so the reading rests on 17 U.S.C. 105. Payroll, not VA. Industries map through the Census 1997 to 2002 NAICS bridge and the 2002 NAICS to ISIC Rev 3.1 concordance (census.gov/naics/concordances), same terms."
+
+[[source]]
+id = "meti-census-manufactures"
+name = "Japan Census of Manufactures (Kogyo Tokei), prefecture by two-digit industry"
+provider = "METI"
+version = "Historical table sa-200 (1985-2001, establishments with 4 or more employees)"
+role = "VA by prefecture and JSIC two-digit industry: province seeds for manufacturing goods (ADR 0275)"
+licence = "LicenseRef-GJSTU-2.0"
+licence_url = "https://www.e-stat.go.jp/en/terms-of-use"
+attribution = "METI, Census of Manufactures 2000 (edited)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Government of Japan Standard Terms of Use 2.0, compatible with CC BY 4.0; numerical data is not subject to copyright"
+checked = 2026-10-31
+confidence = "medium"
+notes = "Terms read on e-Stat; the METI archive (meti.go.jp/statistics/tyo/kougyo/library/library_1.html) was not checked for its own terms page. JSIC Rev 10 divisions map to ISIC Rev 3 by hand (about 24 rows)."
+
+[[source]]
+id = "eurostat-sbs-regional"
+name = "Eurostat SBS by NUTS 2 regions and NACE Rev. 1.1 (sbs_r_nuts03)"
+provider = "Eurostat"
+version = "1995-2007, NUTS 2006"
+role = "Wages and employment by NUTS 2 region and NACE division: province seeds for manufacturing goods (ADR 0275)"
+licence = "CC-BY-4.0"
+licence_url = "https://ec.europa.eu/eurostat/help/copyright-notice"
+attribution = "Eurostat, sbs_r_nuts03 (accessed <date>)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Eurostat data reusable for any purpose with attribution, for EU, EFTA and candidate countries"
+checked = 2026-10-31
+confidence = "high"
+notes = "Indicators: local units, wages and salaries, persons employed, investment; no VA. 2000 is present, coverage by country and division not yet checked. NACE Rev 1.1 divisions equal ISIC Rev 3.1 divisions. Non-EU country data in Eurostat is non-commercial; this table has none."
+
+[[source]]
+id = "hansen-gfc"
+name = "Global Forest Change (Hansen et al. 2013), treecover2000"
+provider = "University of Maryland, Google, USGS, NASA"
+version = "v1.7 or later, treecover2000 layer"
+role = "Tree cover in 2000: province proxy for A02 forestry (ADR 0275)"
+licence = "CC-BY-4.0"
+licence_url = "https://earthenginepartners.appspot.com/science-2013-global-forest/download_v1.7.html"
+attribution = "Hansen et al. (2013), Science 342; Source: Hansen/UMD/Google/USGS/NASA"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0"
+checked = 2026-10-31
+confidence = "high"
+notes = "30 m tiles; aggregate to the H3 grid at build time."
+
+[[source]]
+id = "esa-cci-lc"
+name = "ESA CCI Land Cover 1992-2015"
+provider = "ESA Climate Change Initiative, UCLouvain"
+version = "v2.0.7"
+role = "Considered for A02 forest cover"
+licence = "LicenseRef-ESA-CCI-LC"
+licence_url = "https://cds.climate.copernicus.eu/licences/satellite-land-cover"
+attribution = "ESA Climate Change Initiative - Land Cover, led by UCLouvain (2017)"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Free for educational and scientific use only; commercial use limited to advertising with prior approval. Hansen tree cover 2000 serves under CC BY 4.0"
+checked = 2026-10-31
+confidence = "high"
 
 [[source]]
 id = "kummu-gdp"
