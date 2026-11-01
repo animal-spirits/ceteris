@@ -100,7 +100,7 @@ order is delta S, as before. The floor stays; at lambda below 1 it does not bind
 - **Storage-on calibration of the 2000 pack** (scratch export of 31116a4 with a storage-on
   switch, never committed; a copy of the installed pack, manifest 3c7895d1, B8e tables): settles
   in 93 passes (last change 3.05e-14, Sinkhorn residual 9.95e-14; 64 min wall beside other jobs),
-  nu 2.5942, 0.8000, 0.3956, 0.0660 and 0 (clamped), the storage-off fit to the third decimal.
+  nu 2.5942, 0.7999, 0.3956, 0.0660 and 0 (clamped), the storage-off fit to the third decimal.
   GE reference residual 8.3e-14 at the calibrated point.
 - **Storage-on V1, 6,000 ticks** (largest relative gap of price, wage, flow units and flow value;
   V1 tolerance 0.01; Pitcairn moves only the 1e-7 tail, so the values are the same without it
