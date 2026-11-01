@@ -205,7 +205,7 @@ market rates: ADR 0098's rescale of ICIO blocks to 1999-2001 rates is dropped (A
 `a_country_of_several_economies_takes_their_mean`, `no_level_and_no_donor_is_an_error`; on the
 built tables `econ_build.rs` `price_levels_come_from_pwt_then_wdi_then_the_donor`.
 
-Real GDP check (ADR 0098, Tests; ADRs 0285, 0287 and 0288, RFC 0282 D5, D7 and D8). For each
+Real GDP check (ADR 0098, Tests; ADRs 0285, 0287 and 0290, RFC 0282 D5, D7 and D8). For each
 ICIO economy WDI reports, the pack's real GDP, `gdp` over p_c, against WDI NY.GDP.MKTP.PP.CD 2000
 (current international dollars, so of 2000 prices as the pack's values are; validation only,
 `validation.toml`). Totals, not per person: WDI's SP.POP.TOTL counts all of Cyprus while its GDP
@@ -1600,7 +1600,7 @@ texture fed from core columns.
     trade). KRAS (D6 B) can follow if the economies that keep the donor's table matter.
   - D4 (ADR 0284): the run's world price index keeps local goods; no code change. D5 (ADR
     0285): the real GDP check reads NY.GDP.PCAP.PP.CD (Price levels above). D7 (ADR 0287): PWT
-    pl_da replaces pl_gdpo, and the check's 5% is reported, not enforced. D8 (ADR 0288): the
+    pl_da replaces pl_gdpo, and the check's 5% is reported, not enforced. D8 (ADR 0290): the
     check compares totals on NY.GDP.MKTP.PP.CD and is enforced at 10% on the 31 economies whose
     PWT level of 2000 is a benchmark. D9 (ADR 0289): the WDI fallback is current WDI's implied
     level, not the archive PA.NUS.PPPC.RF.

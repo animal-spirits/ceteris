@@ -11,7 +11,7 @@ sha256 = "928deb36d48453ce03a61881c656aade30baee241c5315b0ea4b3b0b28963b65"
 bytes = 29863975
 url = "https://www.wto.org/english/res_e/reser_e/AdvancedGuideFiles.zip"
 
-# Real GDP check (ADR 0098 as amended by ADRs 0285 and 0288): WDI GDP at PPP in current international dollars, read only by crates/ceteris-pack/tests/econ_build.rs.
+# Real GDP check (ADR 0098 as amended by ADRs 0285 and 0290): WDI GDP at PPP in current international dollars, read only by crates/ceteris-pack/tests/econ_build.rs.
 [[file]]
 source = "wdi-ppp"
 name = "wdi_NY.GDP.MKTP.PP.CD.zip"

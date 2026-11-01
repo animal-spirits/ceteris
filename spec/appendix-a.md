@@ -286,9 +286,11 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0279 | [Leg paths minimise the full iceberg cost per good](../rfcs/0279-least-iceberg-paths-per-good.md) | 5.3, 5.4, 8.3, 17.2, 19.4 |
 | 0280 | [Storage order by partial adjustment toward a target stock](../rfcs/0280-storage-order-by-partial-adjustment.md) | 8.2, 12.2, 17 |
 | 0281 | [Rents-to-VA factor from extraction value added](../rfcs/0281-rents-to-value-added-from-extraction.md) | 16.1, 22.2 |
+| 0288 | [Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md) | 21 |
 | 0282, 0283 | [Price level source and market rates, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1 |
 | 0284 to 0286 | [World price index, real GDP check series and donor use-table balance, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 12.2, 16.1 |
 | 0287 | [Price level of domestic absorption, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1 |
+| 0289, 0290 | [Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1, 17 |
 | 0288, 0289 | [Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1, 17 |
 | 0287 | [Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](../rfcs/0283-manufacturing-seeds-nearest-year-and-finland.md) | 22 |
 | 0288 | [Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md) | 21 |
