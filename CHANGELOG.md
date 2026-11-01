@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### BEHAVIOUR: the Sinkhorn sweep pins the level of ln w from below too (B9 review)
+
+- `steady::sinkhorn` shifts each good's ln w by its largest before every sweep; the largest
+  started at 0, so a level below 0 was not shifted and carried through the sweep (a start at
+  -1,000 underflowed w to 0 and stopped at sweep 1). It starts at -infinity now
+  (`sinkhorn_pins_the_level_of_the_weights` adds the -1,000 start). The fixed point is the
+  same; the mixing takes other rounding.
+- Fixture: settles at pass 27 (last change 3.49e-14; 3.06e-14 before); 57 of 80 columns move,
+  the largest pipeline units 3.4e-13, lead 2.4e-13, all within the iterative tolerance.
+- 2000 pack (scratch recalibration, not installed): the same fitted nu, 71 passes (last change
+  8.57e-14, Sinkhorn residual 8.70e-14, 1,659 s); against the installed tables 61 of 80 columns
+  move, all within the iterative tolerance (pipeline units 3.6e-10, lead 1.9e-11, merchant
+  stocks 6.4e-13), the same size as B8e's move.
+
+Goldens re-blessed:
+
+- `tests/golden/p2-fixture/calibration/`: every table. `p2-pack.txt` (the installed tables),
+  `p2-econ.txt`, `p0-toy.txt`, `p1-pack.txt` and `p1-geo.txt` do not move.
+
 ### Storage order by partial adjustment (ADR 0280; storage off by default, no golden moves)
 
 - The competitive-storage order is b = max(delta S + lambda (S* - S), -(1 - delta) S), S* = s D

@@ -554,7 +554,8 @@ fn sinkhorn_is_unique_up_to_scale() {
 /// The scaling fixes ln w of each good only up to a common level, which a warm start or a
 /// mixed step can move: the sweep pins it, so the largest ln w of each good is 0 at the fixed
 /// point whatever the start, and a start at level 1,000 (where a unit in the last place of ln w
-/// is 1.1e-13, above SINKHORN_TOL) still converges.
+/// is 1.1e-13, above SINKHORN_TOL) or -1,000 (where w = e^ln w underflows to 0 unless shifted)
+/// still converges.
 #[test]
 fn sinkhorn_pins_the_level_of_the_weights() {
     let w = &worlds()[0];
@@ -570,14 +571,20 @@ fn sinkhorn_pins_the_level_of_the_weights() {
     }
     let origin = |p: usize, g: usize| inp.active[p][g] && inp.traded[g];
     let mut rng = Rng(11);
-    let mut start = Mat::zeros(n_p, n_g);
+    let (mut start, mut below) = (Mat::zeros(n_p, n_g), Mat::zeros(n_p, n_g));
     for p in 0..n_p {
         for g in (0..n_g).filter(|&g| origin(p, g)) {
-            start[(p, g)] = 1000.0 + rng.normal(0.0, 3.0);
+            let x = rng.normal(0.0, 3.0);
+            (start[(p, g)], below[(p, g)]) = (1000.0 + x, -1000.0 + x);
         }
     }
-    for start in [None, Some(&start)] {
-        let scaling = steady::sinkhorn(&m, &spend, &v, start).unwrap();
+    for (level, start) in [
+        ("0", None),
+        ("1,000", Some(&start)),
+        ("-1,000", Some(&below)),
+    ] {
+        let scaling = steady::sinkhorn(&m, &spend, &v, start)
+            .unwrap_or_else(|e| panic!("start {level}: {e}"));
         for g in (0..n_g).filter(|&g| inp.traded[g]) {
             let top = (0..n_p)
                 .filter(|&p| origin(p, g))
@@ -585,8 +592,7 @@ fn sinkhorn_pins_the_level_of_the_weights() {
                 .fold(f64::NEG_INFINITY, f64::max);
             assert!(
                 top.abs() <= 1e-12,
-                "good {g}: largest ln w {top} from start {}",
-                if start.is_some() { "1,000" } else { "0" }
+                "good {g}: largest ln w {top} from start {level}"
             );
         }
     }

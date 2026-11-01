@@ -426,7 +426,7 @@ pub fn sinkhorn_limited(
         cro: &net,
     };
     let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64) {
-        let mut top = vec![0.0; n_g];
+        let mut top = vec![f64::NEG_INFINITY; n_g];
         for i in (0..n).filter(|&i| origin[i]) {
             top[good[i]] = np_max(top[good[i]], lw[i]);
         }
