@@ -9,11 +9,11 @@
 use std::path::Path;
 
 use ceteris_core::rows::Rows;
-use ceteris_geo::graph::{TransportGraph, TransportParams};
+use ceteris_geo::graph::{PathChoice, TransportGraph};
 use ceteris_geo::pack::{Pack, PackError, bools, f64s, read_table, strings, u8s, u32s};
-use ceteris_geo::paths::{Tree, shortest};
+use ceteris_geo::paths::{Tree, shortest_by};
 use ceteris_trade::goods::p2;
-use ceteris_trade::{BulkLegs, Goods, Leg, Network, TradeParams, Wedges};
+use ceteris_trade::{BulkLegs, GoodLegs, Goods, Leg, LegSet, Network, TradeParams, Wedges, kappa};
 use rayon::prelude::*;
 
 use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
@@ -343,21 +343,75 @@ impl EconInputs {
     /// no leg. `route_taus` stays `None`: route choice is deferred past P2 (ADR 0017).
     ///
     /// Where `trade` gives theta classes a bulk freight rate (P154, P155, ADR 0247), the same
-    /// runs on a copy of the graph repriced at P04's defaults with that rate
-    /// (`TransportParams::bulk`; every pack in the workspace is loaded at the defaults) give
-    /// `Network::bulk`. The rate changes no edge's reachability, so the bulk legs have the base
-    /// legs' endpoints in the same order.
+    /// runs on a copy of the graph repriced at the graph's parameters with that rate
+    /// (`TransportParams::bulk`) give `Network::bulk`. The rate changes no edge's reachability,
+    /// so the bulk legs have the base legs' endpoints in the same order.
+    ///
+    /// Where the graph's parameters choose paths by the iceberg cost (`PathChoice::Iceberg`,
+    /// ADR 0279), each traded good also gets the same runs by `shortest_by` at its kappa, on the
+    /// bulk graph for a bulk class's goods: `Network::good_legs`, one set per distinct (kappa,
+    /// bulk rate) in the order of the goods.
     pub fn network_from_graph(
         &self,
         pack: &Pack,
         gateways: &Gateways,
         trade: &TradeParams,
     ) -> Network {
-        let [domestic, access, crossings] = self.legs_on(&pack.graph, gateways);
-        let bulk = trade.bulk_rate().map(|(classes, sea, port)| {
+        let transport = pack.graph.params();
+        let [domestic, access, crossings] = self.legs_on(&pack.graph, gateways, 0.0);
+        let bulk_graph = trade.bulk_rate().map(|(classes, sea, port)| {
             let mut graph = pack.graph.clone();
-            graph.reprice(&TransportParams::default().bulk(sea, port));
-            let [domestic, access, crossings] = self.legs_on(&graph, gateways);
+            graph.reprice(&transport.bulk(sea, port));
+            (classes, sea, port, graph)
+        });
+        let good_legs = (transport.path_choice == PathChoice::Iceberg).then(|| {
+            let on_bulk = |g: usize| {
+                bulk_graph
+                    .as_ref()
+                    .is_some_and(|b| b.0[usize::from(trade.theta_class[g])])
+            };
+            let traded = trade.goods.traded_goods();
+            let kappa: Vec<f64> = traded
+                .clone()
+                .map(|g| kappa(self.weight[g], trade.time_cost[g]))
+                .collect();
+            let mut keys: Vec<(bool, u64)> = Vec::new();
+            let set: Vec<u8> = traded
+                .map(|g| {
+                    assert!(
+                        self.weight[g] > 0.0 && trade.time_cost[g] >= 0.0,
+                        "good {g}: weight {} and time cost {} give no iceberg paths",
+                        self.weight[g],
+                        trade.time_cost[g]
+                    );
+                    let key = (on_bulk(g), kappa[g].to_bits());
+                    let s = keys.iter().position(|&k| k == key).unwrap_or_else(|| {
+                        keys.push(key);
+                        keys.len() - 1
+                    });
+                    u8::try_from(s).expect("fewer than 255 leg sets")
+                })
+                .collect();
+            let sets = keys
+                .iter()
+                .map(|&(bulk, k)| {
+                    let graph = match &bulk_graph {
+                        Some((.., g)) if bulk => g,
+                        _ => &pack.graph,
+                    };
+                    let [domestic, access, crossings] =
+                        self.legs_on(graph, gateways, f64::from_bits(k));
+                    LegSet {
+                        domestic,
+                        access,
+                        crossings,
+                    }
+                })
+                .collect();
+            GoodLegs { set, kappa, sets }
+        });
+        let bulk = bulk_graph.map(|(classes, sea, port, graph)| {
+            let [domestic, access, crossings] = self.legs_on(&graph, gateways, 0.0);
             BulkLegs {
                 classes,
                 sea,
@@ -376,11 +430,13 @@ impl EconInputs {
             crossings,
             route_taus: None,
             bulk,
+            good_legs,
         }
     }
 
-    /// Domestic, access and crossing legs on `graph` ([`Self::network_from_graph`]).
-    fn legs_on(&self, graph: &TransportGraph, gateways: &Gateways) -> [Vec<Leg>; 3] {
+    /// Domestic, access and crossing legs on `graph` ([`Self::network_from_graph`]), on the
+    /// least `c + kappa h` paths (`shortest_by`; kappa 0 is the least-cost path).
+    fn legs_on(&self, graph: &TransportGraph, gateways: &Gateways, kappa: f64) -> [Vec<Leg>; 3] {
         let nodes = &self.provinces.pack;
         assert!(
             !nodes.is_empty(),
@@ -411,7 +467,7 @@ impl EconInputs {
             .into_par_iter()
             .map(|s| {
                 if s < np {
-                    let t = shortest(graph, nodes[s]);
+                    let t = shortest_by(graph, nodes[s], kappa);
                     let c = usize::from(country[s]);
                     let domestic = provinces_of[c]
                         .iter()
@@ -425,7 +481,7 @@ impl EconInputs {
                     (domestic, access)
                 } else {
                     let a = s - np;
-                    let t = shortest(graph, gateways.node[a]);
+                    let t = shortest_by(graph, gateways.node[a], kappa);
                     let crossings = (0..ng)
                         .filter(|&b| gateways.country[b] != gateways.country[a])
                         .filter_map(|b| leg(&t, a, b, gateways.node[b]))
@@ -450,8 +506,11 @@ impl EconInputs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ceteris_geo::graph::{EdgeList, Mode, NodeKind, NodeList, TransportGraph, TransportParams};
+    use ceteris_geo::graph::{
+        EdgeList, Mode, NodeKind, NodeList, PathChoice, TransportGraph, TransportParams,
+    };
     use ceteris_geo::pack::Provinces;
+    use ceteris_trade::Kernel;
     #[allow(unused_imports)]
     use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
 
@@ -678,6 +737,180 @@ mod tests {
             leg(&b.domestic[0]),
             (0, 1, at(&bulk, &coastal).0, at(&bulk, &coastal).1)
         );
+    }
+
+    /// [`pack`] with airports 7 (province 0) and 8 (province 2), 2,000 km apart by air, as
+    /// gateways beside the ports, the graph priced for iceberg paths (ADR 0279), and inputs whose
+    /// good 6 weighs 2e-5 t per USD and goods 4 and 5 share a weight.
+    fn air_world() -> (Pack, EconInputs, Gateways) {
+        let mut pack = pack();
+        let g = &pack.graph;
+        let mut kind = g.kind.clone();
+        kind.extend([NodeKind::Airport, NodeKind::Airport]);
+        let mut province = g.node_province.clone();
+        province.extend([0, 2]);
+        let mut e: Vec<(u32, u32, Mode, f64, u8)> = (0..g.edges())
+            .map(|i| {
+                (
+                    g.edge_a[i],
+                    g.edge_b[i],
+                    g.mode[i],
+                    g.length_km[i],
+                    g.chokepoint[i],
+                )
+            })
+            .collect();
+        e.extend([
+            (0, 7, Mode::AirAccess, 10.0, 0),
+            (7, 8, Mode::Air, 2000.0, 0),
+            (8, 2, Mode::AirAccess, 10.0, 0),
+        ]);
+        let nodes = NodeList {
+            lon: vec![0.0; kind.len()],
+            lat: vec![0.0; kind.len()],
+            kind,
+            province,
+        };
+        let edges = EdgeList {
+            a: e.iter().map(|x| x.0).collect(),
+            b: e.iter().map(|x| x.1).collect(),
+            mode: e.iter().map(|x| x.2).collect(),
+            length_km: e.iter().map(|x| x.3).collect(),
+            tri_m: vec![0.0; e.len()],
+            chokepoint: e.iter().map(|x| x.4).collect(),
+        };
+        let iceberg = TransportParams {
+            path_choice: PathChoice::Iceberg,
+            ..TransportParams::default()
+        };
+        pack.graph = TransportGraph::new(4, nodes, edges, &iceberg);
+        let mut inputs = inputs();
+        inputs.weight = vec![0.5, 0.8, 0.9, 0.3, 0.002, 0.002, 2e-5, 0.0, 0.0, 0.0];
+        let gateways = Gateways {
+            node: vec![4, 5, 7, 8],
+            country: vec![0, 1, 0, 1],
+            kind: vec![0, 0, 1, 1],
+            mass: vec![0.5; 4],
+        };
+        (pack, inputs, gateways)
+    }
+
+    /// The (cost, hours) of the path over `edges` of `graph`.
+    fn path(graph: &TransportGraph, edges: &[usize]) -> (f64, f64) {
+        edges.iter().fold((0.0, 0.0), |(c, h), &e| {
+            (c + graph.cost[e], h + graph.hours[e])
+        })
+    }
+
+    /// ADR 0279: under `PathChoice::Iceberg` each traded good's legs are its least-iceberg paths:
+    /// the light good flies from airport to airport, the heavy goods sail,
+    /// goods of equal kappa share a set, the bulk class takes its paths at the bulk rate, and the
+    /// base and bulk lists are the freight ones.
+    #[test]
+    fn iceberg_legs_price_each_good_on_its_paths() {
+        let (pack, inputs, gateways) = air_world();
+        let trade = TradeParams::default();
+        let net = inputs.network_from_graph(&pack, &gateways, &trade);
+        let gl = net
+            .good_legs
+            .as_ref()
+            .expect("iceberg paths give good legs");
+        let mut freight_pack = air_world().0;
+        freight_pack.graph.reprice(&TransportParams::default());
+        let freight = inputs.network_from_graph(&freight_pack, &gateways, &trade);
+        assert!(freight.good_legs.is_none());
+        assert_eq!(
+            (&net.domestic, &net.access, &net.crossings, &net.bulk),
+            (
+                &freight.domestic,
+                &freight.access,
+                &freight.crossings,
+                &freight.bulk
+            )
+        );
+        assert_eq!(gl.set[4], gl.set[5]);
+        assert_eq!((gl.set.len(), gl.kappa.len()), (N_TRADED, N_TRADED));
+        let distinct: std::collections::BTreeSet<u8> = gl.set.iter().copied().collect();
+        assert_eq!(distinct.len(), gl.sets.len());
+        assert_eq!(gl.sets.len(), 6);
+        let g = &pack.graph;
+        let (sea, air) = (path(g, &[3, 4]), path(g, &[7]));
+        // airport 7 to airport 8, and port 4 to port 5
+        let crossing = |s: &LegSet, a: u32, b: u32| {
+            let l = s
+                .crossings
+                .iter()
+                .find(|l| (l.from, l.to) == (a, b))
+                .unwrap();
+            (l.cost_per_t, l.hours)
+        };
+        let (light, heavy) = (
+            &gl.sets[usize::from(gl.set[6])],
+            &gl.sets[usize::from(gl.set[0])],
+        );
+        assert_eq!(crossing(light, 2, 3), air);
+        // the heavy good leaves the airport by road for the port and sails
+        let (c, h) = crossing(heavy, 2, 3);
+        assert_eq!((c, h), path(g, &[6, 2, 3, 4, 5, 8]));
+        assert!(c < air.0 && h > air.1);
+        // port to port both sail: the sea leg is cheaper and quicker than the airport detour
+        assert_eq!((crossing(light, 0, 1), crossing(heavy, 0, 1)), (sea, sea));
+        assert_eq!(heavy.crossings, freight.crossings);
+        let bulk = &gl.sets[usize::from(gl.set[1])];
+        let bl = freight.bulk.as_ref().unwrap();
+        assert!(bl.classes[usize::from(trade.theta_class[1])]);
+        assert_eq!(bulk.crossings, bl.crossings);
+        for x in [&net, &freight] {
+            Kernel::build(x, &inputs.weight, &Wedges::none(2), &trade);
+        }
+    }
+
+    /// ADR 0279: at zero time costs the iceberg legs are the freight legs bit for bit, the bulk
+    /// class's on the bulk ones.
+    #[test]
+    fn iceberg_at_zero_time_cost_is_freight() {
+        let (pack, inputs, gateways) = air_world();
+        let trade = TradeParams {
+            time_cost: vec![0.0; N_GOODS],
+            ..TradeParams::default()
+        };
+        let net = inputs.network_from_graph(&pack, &gateways, &trade);
+        let gl = net.good_legs.as_ref().unwrap();
+        let bulk = net.bulk.as_ref().unwrap();
+        for g in 0..gl.set.len() {
+            let s = &gl.sets[usize::from(gl.set[g])];
+            let (d, a, c) = if bulk.classes[usize::from(trade.theta_class[g])] {
+                (&bulk.domestic, &bulk.access, &bulk.crossings)
+            } else {
+                (&net.domestic, &net.access, &net.crossings)
+            };
+            let bits = |l: &[Leg]| -> Vec<(u32, u32, u64, u64)> {
+                l.iter()
+                    .map(|l| (l.from, l.to, l.cost_per_t.to_bits(), l.hours.to_bits()))
+                    .collect()
+            };
+            assert_eq!(bits(&s.domestic), bits(d), "good {g}");
+            assert_eq!(bits(&s.access), bits(a), "good {g}");
+            assert_eq!(bits(&s.crossings), bits(c), "good {g}");
+        }
+        assert_eq!(gl.sets.len(), 2);
+    }
+
+    #[test]
+    fn iceberg_legs_are_thread_count_independent() {
+        let (pack, inputs, gateways) = air_world();
+        let trade = TradeParams::default();
+        let build = |threads: usize| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(|| inputs.network_from_graph(&pack, &gateways, &trade))
+        };
+        let (one, many) = (build(1), build(8));
+        assert!(one.good_legs.is_some());
+        assert_eq!(one.good_legs, many.good_legs);
+        assert_eq!(one.crossings, many.crossings);
     }
 
     /// Masses that do not sum to 1 per country, or are not in (0, 1], are a load error.

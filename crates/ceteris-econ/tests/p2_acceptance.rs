@@ -416,9 +416,9 @@ fn cheapest_crossings(net: &ceteris_trade::Network, legs: &[ceteris_trade::Leg])
 }
 
 /// The (exporter, importer, good) cells of traded goods whose cheapest crossing is more than 1%
-/// dearer on `closed` than on `open`, each good on the crossings the kernel prices it on: the
-/// bulk legs for a bulk class (ADR 0247), else the base legs. Also the number of cells with a
-/// crossing.
+/// dearer on `closed` than on `open`, each good on the crossings the kernel prices it on: its
+/// good legs (ADR 0279), else the bulk legs for a bulk class (ADR 0247), else the base legs.
+/// Also the number of cells with a crossing.
 fn dependent_cells(
     open: &ceteris_trade::Network,
     closed: &ceteris_trade::Network,
@@ -432,11 +432,21 @@ fn dependent_cells(
             .map(|b| (b.classes, cheapest_crossings(n, &b.crossings)));
         (cheapest_crossings(n, &n.crossings), bulk)
     };
+    let good = |n: &ceteris_trade::Network, g: usize| {
+        n.good_legs
+            .as_ref()
+            .map(|gl| cheapest_crossings(n, &gl.sets[usize::from(gl.set[g])].crossings))
+    };
+    let (open_net, closed_net) = (open, closed);
     let (open, closed) = (costs(open), costs(closed));
     let (mut dependent, mut all) = (Vec::new(), 0);
     for g in (0..N_GOODS).filter(|&g| g < N_TRADED) {
         let class = trade.theta_class[g];
-        let (open_cost, closed_cost) = (on_legs_of(&open, class), on_legs_of(&closed, class));
+        let (open_good, closed_good) = (good(open_net, g), good(closed_net, g));
+        let (open_cost, closed_cost) = match (&open_good, &closed_good) {
+            (Some(o), Some(c)) => (o, c),
+            _ => (on_legs_of(&open, class), on_legs_of(&closed, class)),
+        };
         all += open_cost.len();
         dependent.extend(
             open_cost

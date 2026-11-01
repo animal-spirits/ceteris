@@ -8,15 +8,20 @@
 //! migration carries are measured on their own: `price_refresh` (E3's unit `source` and
 //! `dispatch` per traded good, for q_d and the lead time L) and `local_chain` (the serial E2
 //! chain of local goods, every province). `kernel_build` is reported only.
+//!
+//! `network_freight` and `network_iceberg` time `EconInputs::network_from_graph` on the full
+//! pack with least-cost and least-iceberg legs (ADR 0279), and `kernel_build_iceberg` the kernel
+//! on the latter (budget 2 s with `kernel_build`, trade SPEC); pack only.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ceteris_core::sim::State;
 use ceteris_econ::fixture::small_world;
+use ceteris_econ::pack::Gateways;
 use ceteris_econ::systems::{self, cap_output};
 use ceteris_econ::{EconInputs, EconParams, EconWorld, local};
-use ceteris_geo::graph::TransportParams;
+use ceteris_geo::graph::{PathChoice, TransportParams};
 use ceteris_geo::pack::Pack;
 use ceteris_trade::Kernel;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
@@ -151,5 +156,37 @@ fn bench(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, bench);
+/// Network builds on the calibrated full pack (ADR 0279); nothing without one.
+fn networks(c: &mut Criterion) {
+    let dir = std::env::var_os("CETERIS_PACK").map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/packs/2000"),
+        PathBuf::from,
+    );
+    if !EconInputs::has_calibration(&dir) {
+        return;
+    }
+    let mut pack = Pack::load(&dir, &TransportParams::default()).expect("pack loads");
+    let inputs = EconInputs::from_pack(&pack, &dir).expect("pack inputs load");
+    let gateways = Gateways::read(&dir).expect("gateways load");
+    let trade = ceteris_trade::TradeParams::default();
+    let mut g = c.benchmark_group("network");
+    g.sample_size(10);
+    g.bench_function("network_freight", |b| {
+        b.iter(|| inputs.network_from_graph(&pack, &gateways, &trade))
+    });
+    pack.graph.reprice(&TransportParams {
+        path_choice: PathChoice::Iceberg,
+        ..TransportParams::default()
+    });
+    g.bench_function("network_iceberg", |b| {
+        b.iter(|| inputs.network_from_graph(&pack, &gateways, &trade))
+    });
+    let net = inputs.network_from_graph(&pack, &gateways, &trade);
+    g.bench_function("kernel_build_iceberg", |b| {
+        b.iter(|| Kernel::build(&net, &inputs.weight, &inputs.wedges, &trade))
+    });
+    g.finish();
+}
+
+criterion_group!(benches, bench, networks);
 criterion_main!(benches);

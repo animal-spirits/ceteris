@@ -34,6 +34,9 @@ pub struct Leg {
 ///
 /// `bulk`, when present, gives the theta classes it names their own least-cost legs at the bulk
 /// freight rate (ADR 0247).
+///
+/// `good_legs`, when present, gives each traded good its least-iceberg legs (ADR 0279), which
+/// the kernel prices it on in place of the base or bulk lists.
 #[derive(Clone, Debug, Default)]
 pub struct Network {
     pub province_country: Vec<u16>,
@@ -44,6 +47,34 @@ pub struct Network {
     pub crossings: Vec<Leg>,
     pub route_taus: Option<LegTaus>,
     pub bulk: Option<BulkLegs>,
+    pub good_legs: Option<GoodLegs>,
+}
+
+/// Least-iceberg legs per traded good (ADR 0279): `sets[set[g]]` holds traded good g's legs, on
+/// the paths that minimise `w_g c + lambda_g h / 24`, with the base lists' endpoints in their
+/// order; `set` and `kappa` have one entry per traded good. Goods with the same `kappa`
+/// (lambda_g / (24 w_g)) and the same bulk freight rate share a set. `kappa` records each traded
+/// good's value the sets were built with; the kernel refuses weights and time costs that give
+/// another.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GoodLegs {
+    pub set: Vec<u8>,
+    pub kappa: Vec<f64>,
+    pub sets: Vec<LegSet>,
+}
+
+/// One set of domestic, access and crossing legs, aligned with the lists of [`Network`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LegSet {
+    pub domestic: Vec<Leg>,
+    pub access: Vec<Leg>,
+    pub crossings: Vec<Leg>,
+}
+
+/// kappa_g = lambda_g / (24 w_g), the value of an hour per tonne that ranks a good's paths
+/// (ADR 0279).
+pub fn kappa(weight: f64, time_cost: f64) -> f64 {
+    time_cost / (24.0 * weight)
 }
 
 /// Least-cost legs at the bulk freight rate (P154, P155, ADR 0247), for the goods of the theta

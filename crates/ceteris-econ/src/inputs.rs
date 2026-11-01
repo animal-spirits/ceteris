@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Goods, Leg, LegTaus, Network, TradeParams, Wedges};
+use ceteris_trade::{Goods, Leg, LegSet, LegTaus, Network, TradeParams, Wedges};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
@@ -217,18 +217,23 @@ impl EconInputs {
     }
 
     /// Sets the network's route taus to the kernel's least-cost factors (S05) under `trade`,
-    /// from the bulk legs for the bulk classes' goods (ADR 0247), with each good's leg hours,
-    /// and drops the bulk legs, since route taus and bulk legs are exclusive. The world then
-    /// runs with the bulk freight rate off; its kernel is the one of these inputs at `trade`.
+    /// from each good's legs as the kernel picks them (its good legs, ADR 0279, else the bulk
+    /// legs for the bulk classes' goods, ADR 0247), with each good's leg hours, and drops the
+    /// bulk and good legs, since route taus exclude both. The world then runs with the bulk
+    /// freight rate off; its kernel is the one of these inputs at `trade`.
     pub fn fold_bulk_into_route_taus(&mut self, trade: &TradeParams) {
         let bulk = self.network.bulk.take();
+        let good_legs = self.network.good_legs.take();
         let (weight, n) = (&self.weight, self.n_goods());
         let on_bulk = |g: usize| {
             bulk.as_ref()
                 .is_some_and(|b| b.classes[usize::from(trade.theta_class[g])])
         };
-        let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>| {
-            let leg = |i: usize, g: usize| bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]);
+        let factors = |base: &[Leg], bulk: Option<&Vec<Leg>>, pick: fn(&LegSet) -> &Vec<Leg>| {
+            let leg = |i: usize, g: usize| match &good_legs {
+                Some(gl) if g < gl.set.len() => &pick(&gl.sets[usize::from(gl.set[g])])[i],
+                _ => bulk.filter(|_| on_bulk(g)).map_or(&base[i], |b| &b[i]),
+            };
             let taus = Rows::from_flat(
                 (0..base.len())
                     .flat_map(|i| {
@@ -250,10 +255,16 @@ impl EconInputs {
             (taus, hours)
         };
         let net = &self.network;
-        let (domestic, domestic_hours) = factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic));
-        let (access, access_hours) = factors(&net.access, bulk.as_ref().map(|b| &b.access));
+        let (domestic, domestic_hours) =
+            factors(&net.domestic, bulk.as_ref().map(|b| &b.domestic), |s| {
+                &s.domestic
+            });
+        let (access, access_hours) =
+            factors(&net.access, bulk.as_ref().map(|b| &b.access), |s| &s.access);
         let (crossings, crossing_hours) =
-            factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings));
+            factors(&net.crossings, bulk.as_ref().map(|b| &b.crossings), |s| {
+                &s.crossings
+            });
         self.network.route_taus = Some(LegTaus {
             domestic,
             access,
@@ -570,6 +581,7 @@ impl EconInputs {
             crossings,
             route_taus,
             bulk,
+            good_legs,
         } = network;
         let Countries {
             omega,
@@ -701,6 +713,18 @@ impl EconInputs {
             b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
             for legs in [&b.domestic, &b.access, &b.crossings] {
                 encode_legs(&mut e, legs);
+            }
+        }
+        // appended only when present, so least-cost networks keep their digest
+        if let Some(gl) = good_legs {
+            b"good-legs".iter().for_each(|&b| e.u8(b));
+            gl.set.iter().for_each(|&s| e.u8(s));
+            e.f64s(&gl.kappa);
+            e.count(gl.sets.len());
+            for s in &gl.sets {
+                for legs in [&s.domestic, &s.access, &s.crossings] {
+                    encode_legs(&mut e, legs);
+                }
             }
         }
         state_hash(&e.into_bytes())

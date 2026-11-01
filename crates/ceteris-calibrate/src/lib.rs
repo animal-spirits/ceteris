@@ -3,6 +3,7 @@
 //! `EconInputs::from_pack` loads; [`benchmark`] runs a calibrated pack under [`shock`]s and
 //! measures welfare (ADRs 0200, 0207).
 
+pub mod air_share;
 pub mod benchmark;
 pub mod block;
 pub mod border;
