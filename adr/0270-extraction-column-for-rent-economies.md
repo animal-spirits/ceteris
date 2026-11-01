@@ -1,6 +1,7 @@
 # 0270. Extraction column for crude oil and gas set by rents
 
-Status: accepted (owner, 2026-10-31)
+Status: accepted (owner, 2026-10-31); amended by ADR 0281 (proposed: the rents-to-VA factor and
+its cap from extraction VA)
 Date: 2026-10-31
 Design sections: 16.1, 22.2; amends ADR 0256
 

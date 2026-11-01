@@ -107,9 +107,10 @@ always against the donors' in the same source, never the region median when an i
 agriculture, industry or services missing, the known shares keep their goods and the goods they
 do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
-rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas VA to
-rents, out of its group (all of industry where industry less manufacturing is too small) and at
-most the largest ICIO share of crude oil and gas in industry VA of it (ADR 0249), with the ICIO
+rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas
+extraction VA (B06, B09 output less their inputs, without refining; ADR 0281, proposed) to rents,
+out of its group (all of industry where industry less manufacturing is too small) and at most the
+largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
 weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WorldPop national
 total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
