@@ -119,6 +119,8 @@ where the text's form cannot give an exact steady state of the model as built:
   passes. On the 2000 pack it takes 46 passes and 11,010 Sinkhorn sweeps (about 40 ms each, cold
   start about 1,000), 473 s and 0.85 GB. Exactness: r_g and the PIGL weights depend on sourcing as
   the rebates do. The Sinkhorn tolerance (1e-13 in ln) leaves a floor near 1e-12 on the passes.
+  Now (pre-P3 B8e, 2026-10-31): the pass tolerance is P159, 1e-13 relative (`steady::PASS_TOL`),
+  derived from stage 5's 1e-12 check; the 2000 pack settles in 71 passes (last change 8.39e-14).
 - **Per-good index scaling.** Stage 2 fixes one scale per traded good, not one in total: each
   good's part of the world price index (Omega_g times province household income as weights) is
   1, and local goods take p = 1, so the index is 1. Exactness: the scaling is unique up to a

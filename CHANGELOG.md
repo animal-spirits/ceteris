@@ -590,6 +590,14 @@ Goldens re-blessed:
 - `tests/golden/p2-econ.txt`, `p0-toy.txt`, `p1-geo.txt` and `p1-pack.txt` do not move.
   `p2-pack.txt` waits for the pack rebuild (pre-P3 B8).
 
+### BEHAVIOUR: the as-built price rule's hashes re-recorded at 33fd1fa (ADR 0090; 5f26feb)
+
+- `tests/golden/p2-as-built-rule.txt` holds the hashes of the price rule as built just before
+  ADR 0090's split rule, which that ADR's special-case test compares against at the mapped
+  gains. The model moved since f2f5e5b (theta classes, masses, border friction per class, the
+  exact local fill, i128 aggregates, pi^e outside the clip), so all 360 hashes were recorded again
+  from the unchanged rule at 33fd1fa. No rule or equation changes; the other goldens do not move.
+
 ### BEHAVIOUR: calibration passes mixed in relative units
 
 - The Anderson mixing of the calibration passes holds the rebates and the PIGL scales relative to
