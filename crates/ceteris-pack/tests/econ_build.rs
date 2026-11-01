@@ -21,6 +21,7 @@ use ceteris_pack::econ::icio::{ICIO, INSIDE};
 use ceteris_pack::read::baci::{read_hs_cpa, trade_by_good};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::tariffs::{DTA, GRAVITY};
+use ceteris_pack::read::wdi::read_wdi;
 use ceteris_pack::sources;
 use common::{cached, pack_table, strings};
 use sha2::{Digest, Sha256};
@@ -273,6 +274,59 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
         .iter()
         .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(*p), b.max(*p)));
     assert!(lo > 0.09 && hi < 1.5, "{lo} {hi}");
+}
+
+/// ADR 0098's real GDP check on the series of ADR 0285: GDP per person over p_c against WDI
+/// NY.GDP.PCAP.PP.CD 2000 for the ICIO economies with WDI population. Pinned as measured: ADR
+/// 0098's 5% holds for fewer than half (RFC 0282, D5).
+#[test]
+fn real_gdp_per_person_against_wdi_ppp() {
+    let Some(f) = full() else { return };
+    let Some(ppp) = cached("wdi_NY.GDP.PCAP.PP.CD.zip") else {
+        return;
+    };
+    let ppp = read_wdi(&ppp).unwrap();
+    let pop = read_wdi(&f.cache.join("wdi_SP.POP.TOTL.zip")).unwrap();
+    let path = f.out.path().join("econ_countries.arrow");
+    let (code, basis) = (strings(&path, "code"), strings(&path, "va_basis"));
+    let gdp = values::<Float64Type>(&path, "gdp");
+    let level = values::<Float64Type>(&path, "price_level");
+    let (mut ln_y, mut ln_r) = (Vec::new(), Vec::new());
+    for i in 0..code.len() {
+        let at_2000 =
+            |s: &BTreeMap<String, BTreeMap<i64, f64>>| s.get(&code[i])?.get(&2000).copied();
+        let (Some(p), Some(w)) = (at_2000(&pop), at_2000(&ppp)) else {
+            continue;
+        };
+        if basis[i] != "icio" {
+            continue;
+        }
+        let y = gdp[i] / p;
+        ln_y.push(y.ln());
+        ln_r.push((y / level[i] / w).ln());
+    }
+    let n = ln_y.len() as f64;
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / n;
+    let (my, mr) = (mean(&ln_y), mean(&ln_r));
+    let sxy: f64 = ln_y
+        .iter()
+        .zip(&ln_r)
+        .map(|(y, r)| (y - my) * (r - mr))
+        .sum();
+    let sxx: f64 = ln_y.iter().map(|y| (y - my).powi(2)).sum();
+    let srr: f64 = ln_r.iter().map(|r| (r - mr).powi(2)).sum();
+    let (slope, corr) = (sxy / sxx, sxy / (sxx * srr).sqrt());
+    let within = ln_r
+        .iter()
+        .filter(|r| (r.exp() - 1.0).abs() <= 0.05)
+        .count();
+    eprintln!(
+        "real GDP check: {within} of {} within 5%, slope {slope:.4}, correlation {corr:.4}",
+        ln_y.len()
+    );
+    assert_eq!((ln_y.len(), within), (79, 32));
+    assert!((slope - 0.0487).abs() < 5e-5, "{slope}");
+    assert!((corr - 0.2588).abs() < 5e-5, "{corr}");
 }
 
 /// Donor tables balanced by RAS (ADR 0286): every `ras` economy's use table [Z | F] meets its
