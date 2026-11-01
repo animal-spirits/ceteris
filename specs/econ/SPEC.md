@@ -794,7 +794,7 @@ without it the level depended on the start and the mixing path, by up to 4e-4 fr
 +-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-13 relative
-(Anderson-mixed; `PASS_TOL`, P158, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
+(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
 point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
 `stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
 settled at the last pass's r, rebates, buyer prices and PIGL weights, with D, the orders at the
@@ -814,7 +814,7 @@ undamped pass map is not a contraction (it locks onto a period-6 cycle in the go
 the DR Congo's interior and that country's PIGL weights), so settling rests on the mixing, and
 the mixing only saw the rebates. The passes still stop on `change` alone; the units change no
 equation and no fixed point. The stopping tolerance is a solver setting, not a model
-parameter; it is in the register (P158) since its value is derived from the stage-5 check.
+parameter; it is in the register (P159) since its value is derived from the stage-5 check.
 Within a pass the income and local-output fixed point is
 iterated until no local output changes by more than 1e-14 relative.
 
@@ -1457,7 +1457,7 @@ texture fed from core columns.
   the first failing cell 1.12e-12). It is not rounding: Q is the settled output and D the
   orders at the settled prices from the spending the last pass's values give, which moved by up
   to the pass change (3.55e-13 at pass 68, PASS_TOL 1e-12), and D carries that change about four
-  times. PASS_TOL is now 1e-13 (P158; Calibration, stage 1). The other option, a check bound
+  times. PASS_TOL is now 1e-13 (P159; Calibration, stage 1). The other option, a check bound
   derived from the pass tolerance, needs D's sensitivity to the pass inputs and was not taken.
 
 ## Changes for the next design-doc snapshot

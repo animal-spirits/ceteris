@@ -13,9 +13,9 @@
   market without output or buyers releases its stock instead of bidding its price up.
   `TradeParams::storage_return` is replaced by `storage_adjustment` and `storage_target`.
 
-### BEHAVIOUR: calibration passes settle to 1e-13 (P158, owner, 2026-10-31; B8e)
+### BEHAVIOUR: calibration passes settle to 1e-13 (P159, owner, 2026-10-31; B8e)
 
-- `steady::PASS_TOL` 1e-12 to 1e-13 (register P158). Stage 5's check (1e-12) compares Q, settled
+- `steady::PASS_TOL` 1e-12 to 1e-13 (register P159). Stage 5's check (1e-12) compares Q, settled
   at the last pass's values, with D, the orders those values' spending gives; its gap is about
   3.8 times the last pass change plus about 3e-13 of rounding (B8d: 1.34e-12 at a last change of
   3.55e-13 on the B8 pack), so the tolerance must be at most 1.8e-13. Nothing else changes.
