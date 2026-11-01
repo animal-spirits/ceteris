@@ -61,6 +61,7 @@ fn observed() -> Observed {
         gini_wdi: map(&[("AAA", 0.3), ("CCC", 0.4)]),
         gini_swiid: map(&[("AAA", 0.9), ("BBB", 0.35)]),
         gdp_per_capita: map(&income),
+        price_level_pwt: BTreeMap::new(),
         population: map(&[("AAA", 1.0), ("BBB", 3.0)]),
         population_wpp: BTreeMap::new(),
         region: income
