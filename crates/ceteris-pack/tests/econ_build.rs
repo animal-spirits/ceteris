@@ -232,9 +232,9 @@ fn missing_manual_icio_stops_the_build() {
     assert!(!cache.path().join(ICIO).exists());
 }
 
-/// ADR 0282: p_c from PWT pl_gdpo over the US's for 179 pack countries, WDI for 17, the donor for
-/// 46; Bermuda's PWT level (1,059) gives way to WDI's, and WDI's unit errors (New Caledonia 0.027,
-/// the US Virgin Islands 0.117) to the donor's.
+/// ADRs 0282 and 0287: p_c from PWT pl_da over the US's for 181 pack countries, WDI for 15, the
+/// donor for 46; Somalia's PWT level (1.04) gives way to WDI's, and WDI's unit errors (New
+/// Caledonia 0.027, the US Virgin Islands 0.117, Kosovo 0.149) to the donor's.
 #[test]
 fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     let Some(f) = full() else { return };
@@ -256,14 +256,16 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     assert_eq!(level.len(), rows(&path));
     assert!(level.iter().all(|p| p.is_finite() && *p > 0.0));
     let count = |s: &str| source.iter().filter(|x| *x == s).count();
-    assert_eq!((count("pwt"), count("wdi"), count("donor")), (179, 17, 46));
+    assert_eq!((count("pwt"), count("wdi"), count("donor")), (181, 15, 46));
     for i in 0..code.len() {
         assert_eq!(imputed[i], source[i] != "pwt", "{}", code[i]);
     }
     let at = |c: &str| code.iter().position(|x| x == c).unwrap();
     assert_eq!((level[at("USA")], source[at("USA")].as_str()), (1.0, "pwt"));
     for (c, s) in [
-        ("BMU", "wdi"),
+        ("BMU", "pwt"),
+        ("SOM", "wdi"),
+        ("KOS", "donor"),
         ("NCL", "donor"),
         ("VIR", "donor"),
         ("TUR", "pwt"),
@@ -273,12 +275,16 @@ fn price_levels_come_from_pwt_then_wdi_then_the_donor() {
     let (lo, hi) = level
         .iter()
         .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(*p), b.max(*p)));
-    assert!(lo > 0.09 && hi < 1.5, "{lo} {hi}");
+    // Somalia (WDI) to Bermuda.
+    assert!(
+        (lo - 0.0948).abs() < 5e-5 && (hi - 1.8004).abs() < 5e-5,
+        "{lo} {hi}"
+    );
 }
 
 /// ADR 0098's real GDP check on the series of ADR 0285: GDP per person over p_c against WDI
 /// NY.GDP.PCAP.PP.CD 2000 for the ICIO economies with WDI population. Pinned as measured: ADR
-/// 0098's 5% holds for fewer than half (RFC 0282, D5).
+/// 0098's 5% holds for fewer than half and is reported, not enforced (RFC 0282, D5 and D7).
 #[test]
 fn real_gdp_per_person_against_wdi_ppp() {
     let Some(f) = full() else { return };
@@ -320,13 +326,20 @@ fn real_gdp_per_person_against_wdi_ppp() {
         .iter()
         .filter(|r| (r.exp() - 1.0).abs() <= 0.05)
         .count();
+    let mut sorted = ln_r.clone();
+    sorted.sort_by(f64::total_cmp);
+    let median = sorted[sorted.len() / 2].exp();
     eprintln!(
-        "real GDP check: {within} of {} within 5%, slope {slope:.4}, correlation {corr:.4}",
-        ln_y.len()
+        "real GDP check: {within} of {} within 5%, median {median:.4}, {:.4} to {:.4}, slope \
+         {slope:.4}, correlation {corr:.4}",
+        ln_y.len(),
+        sorted[0].exp(),
+        sorted[sorted.len() - 1].exp(),
     );
-    assert_eq!((ln_y.len(), within), (79, 32));
-    assert!((slope - 0.0487).abs() < 5e-5, "{slope}");
-    assert!((corr - 0.2588).abs() < 5e-5, "{corr}");
+    assert_eq!((ln_y.len(), within), (79, 34));
+    assert!((median - 0.9503).abs() < 5e-5, "{median}");
+    assert!((slope - 0.0509).abs() < 5e-5, "{slope}");
+    assert!((corr - 0.2596).abs() < 5e-5, "{corr}");
 }
 
 /// Donor tables balanced by RAS (ADR 0286): every `ras` economy's use table [Z | F] meets its

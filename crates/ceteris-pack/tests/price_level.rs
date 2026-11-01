@@ -1,6 +1,6 @@
-//! Price level p_c of each pack country (ADR 0098 as amended by ADR 0282): PWT 11 pl_gdpo over the
-//! US's, else WDI PA.NUS.PPPC.RF over the US's, else the donor's, each screened by Tukey's far-out
-//! fences on the residuals of the Penn effect fitted on the PWT levels.
+//! Price level p_c of each pack country (ADR 0098 as amended by ADRs 0282 and 0287): PWT 11 pl_da
+//! over the US's, else WDI PA.NUS.PPPC.RF over the US's, else the donor's, each screened by Tukey's
+//! far-out fences on the residuals of the Penn effect fitted on the PWT levels.
 
 mod common;
 
@@ -23,14 +23,16 @@ fn by_year(v: &[(&str, &[(i64, f64)])]) -> BTreeMap<String, ByYear> {
         .collect()
 }
 
+/// RFC 0282 D7: the price level of domestic absorption pl_da, not the output-side pl_gdpo.
 #[test]
-fn pwt_reader_keeps_the_gdp_price_level() {
+fn pwt_reader_keeps_the_domestic_absorption_price_level() {
     let dir = tempfile::tempdir().unwrap();
     let row = |code: &'static str, year: f64, pl: f64| {
         vec![
             ("countrycode", V::T(code)),
             ("year", V::N(year)),
-            ("pl_gdpo", V::N(pl)),
+            ("pl_da", V::N(pl)),
+            ("pl_gdpo", V::N(10.0 * pl)),
         ]
     };
     let path = write_rows(
