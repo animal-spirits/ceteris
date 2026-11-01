@@ -200,12 +200,12 @@ The first addition in this section is the consistency solver in 1.4 (climate, 1.
 
 | Item | Section | Release | Depends on | Profile |
 | --- | --- | --- | --- | --- |
+| Event cards, chronicle, outliner, alerts | 23.8 | 1.3 | Event log | View only |
+| Policy catalog: labour, social, health, education, markets, finance | 23.7 | 1.3 | God-mode edits (14.2) | Lab |
 | Objectives, score against the AI baseline, Ironman | 23.4 | 2.0-alpha | Steward mode, ensembles | Lab and extended |
 | Steward mode and office seats (ADR 0237) | 12.6, 23.4 | 2.0-alpha | P6 | Lab and extended |
 | Planned-economy seat (ADR 0237) | 23.4 | 2.0-alpha or later | Steward mode, ADRs 0084, 0206 | Lab and extended |
 | Firm seat (ADR 0237) | 23.4 | 2.0-alpha or later | Steward mode | Extended |
-| Event cards, chronicle, outliner, alerts | 23.8 | 1.3 | Event log | View only |
-| Policy catalog: labour, social, health, education, markets, finance | 23.7 | 1.3 | God-mode edits (14.2) | Lab |
 | Consistency solver and editors | 23.2 | 1.4 | P2, P4, P5 complete | Lab and extended |
 | Mod manifest (data and parameters only) | 23.3 | 1.4 | Solver | Extended |
 | Policy catalog: property, citizenship, information | 23.7 | 2.0-alpha | P6 legislative process | Lab if it passes pattern tests |
