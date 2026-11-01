@@ -267,6 +267,16 @@ impl Kernel {
             want == built,
             "bulk freight rate {want:?} of the parameters against {built:?} of the network (ADR 0247)"
         );
+        if let Some(gl) = &net.good_legs {
+            for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+                let want = crate::network::kappa(weight[g], p.time_cost[g]);
+                assert!(
+                    want.to_bits() == gl.kappa[g].to_bits(),
+                    "good {g}: kappa {want} of the parameters against {} of the network's good legs (ADR 0279)",
+                    gl.kappa[g]
+                );
+            }
+        }
         if !net.crossings.is_empty() {
             let n_countries = wedges.n_countries();
             let max = net
@@ -559,6 +569,43 @@ fn validate(net: &Network, np: usize, ng: usize) {
             }
         }
     }
+    if let Some(gl) = &net.good_legs {
+        assert!(
+            net.route_taus.is_none(),
+            "route taus and good legs together (ADR 0279)"
+        );
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            assert!(
+                usize::from(gl.set[g]) < gl.sets.len(),
+                "good {g}: leg set {} of {}",
+                gl.set[g],
+                gl.sets.len()
+            );
+        }
+        for (s, set) in gl.sets.iter().enumerate() {
+            for (name, legs, base) in [
+                ("domestic", &set.domestic, &net.domestic),
+                ("access", &set.access, &net.access),
+                ("crossing", &set.crossings, &net.crossings),
+            ] {
+                assert_eq!(
+                    legs.len(),
+                    base.len(),
+                    "good leg set {s}, {name} legs: count"
+                );
+                for (x, y) in legs.iter().zip(base) {
+                    assert!(
+                        (x.from, x.to) == (y.from, y.to),
+                        "good leg set {s}, {name} leg {x:?} against base {y:?}"
+                    );
+                    assert!(
+                        x.cost_per_t >= 0.0 && x.hours >= 0.0,
+                        "negative good leg cost: {x:?}"
+                    );
+                }
+            }
+        }
+    }
     if let Some(rt) = &net.route_taus {
         let lists = [
             (
@@ -615,8 +662,12 @@ fn good_kernel(
 ) -> GoodKernel {
     let least = |l: &Leg| 1.0 + l.cost_per_t * w + p.time_cost[g] * l.hours / 24.0;
     let rt = net.route_taus.as_ref();
-    let (domestic, access, crossing_legs) = match &net.bulk {
-        Some(b) if b.classes[usize::from(p.theta_class[g])] => {
+    let (domestic, access, crossing_legs) = match (&net.good_legs, &net.bulk) {
+        (Some(gl), _) => {
+            let s = &gl.sets[usize::from(gl.set[g])];
+            (&s.domestic, &s.access, &s.crossings)
+        }
+        (None, Some(b)) if b.classes[usize::from(p.theta_class[g])] => {
             (&b.domestic, &b.access, &b.crossings)
         }
         _ => (&net.domestic, &net.access, &net.crossings),
@@ -670,7 +721,9 @@ fn good_kernel(
 mod tests {
     use super::*;
     use crate::goods::{N_GOODS, tariff_group};
-    use crate::network::{BulkLegs, Leg, LegTaus, Network, Wedges, equal_gateway_mass};
+    use crate::network::{
+        BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, Wedges, equal_gateway_mass,
+    };
     use crate::params::TradeParams;
 
     const W: [f64; N_GOODS] = [0.5, 0.8, 0.9, 0.3, 0.002, 0.004, 0.001, 0.0, 0.0, 0.0];
@@ -898,6 +951,94 @@ mod tests {
             assert_eq!(a.good(g).domestic.entries, b.good(g).domestic.entries);
             assert_eq!(a.good(g).access.entries, b.good(g).access.entries);
         }
+    }
+
+    /// Good legs (ADR 0279) for `net`: good g on set g % 2, each set's legs redrawn.
+    fn good_legs(net: &Network, p: &TradeParams, rng: &mut Rng) -> GoodLegs {
+        let mut redraw =
+            |legs: &[Leg]| -> Vec<Leg> { legs.iter().map(|l| rng.leg(l.from, l.to)).collect() };
+        let sets = (0..2)
+            .map(|_| LegSet {
+                domestic: redraw(&net.domestic),
+                access: redraw(&net.access),
+                crossings: redraw(&net.crossings),
+            })
+            .collect();
+        GoodLegs {
+            set: std::array::from_fn(|g| if TRADED[g] { (g % 2) as u8 } else { u8::MAX }),
+            kappa: std::array::from_fn(|g| {
+                if TRADED[g] {
+                    crate::network::kappa(W[g], p.time_cost[g])
+                } else {
+                    0.0
+                }
+            }),
+            sets,
+        }
+    }
+
+    #[test]
+    fn good_legs_price_each_good_on_its_set() {
+        let p = TradeParams::default();
+        let base = world(&mut Rng(9));
+        let mut classes = [false; crate::params::N_CLASSES];
+        classes[3] = true;
+        let net = Network {
+            bulk: Some(BulkLegs {
+                classes,
+                sea: p.bulk_sea[3],
+                port: p.bulk_port[3],
+                domestic: base.domestic.clone(),
+                access: base.access.clone(),
+                crossings: base.crossings.clone(),
+            }),
+            good_legs: Some(good_legs(&base, &p, &mut Rng(33))),
+            ..base.clone()
+        };
+        let gl = net.good_legs.as_ref().unwrap();
+        let k = Kernel::build(&net, &W, &Wedges::none(2), &p);
+        for g in (0..N_GOODS).filter(|&g| TRADED[g]) {
+            let (s, gk) = (&gl.sets[g % 2], k.good(g));
+            for (csr, legs) in [(&gk.domestic, &s.domestic), (&gk.access, &s.access)] {
+                for l in legs {
+                    assert_eq!(entry(csr, l).inv_tau, 1.0 / leg_tau(&p, g, l), "good {g}");
+                }
+            }
+            let nu = 1.0 + p.border_nu_of(g);
+            for l in &s.crossings {
+                let e = crossing(&gk.crossings, l);
+                assert_eq!(e.inv_loss, 1.0 / (leg_tau(&p, g, l) * nu), "good {g}");
+                let lag = (l.hours / HOURS_PER_MONTH).round().min(MAX_LAG) as u8;
+                assert_eq!(e.lag, lag, "good {g}");
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "kappa")]
+    fn good_legs_must_match_the_time_costs() {
+        let mut p = TradeParams::default().bulk_off();
+        let base = world(&mut Rng(9));
+        let net = Network {
+            good_legs: Some(good_legs(&base, &p, &mut Rng(33))),
+            ..base
+        };
+        p.time_cost[4] *= 2.0;
+        Kernel::build(&net, &W, &Wedges::none(2), &p);
+    }
+
+    #[test]
+    #[should_panic(expected = "good leg set 1, crossing leg")]
+    fn good_legs_must_match_the_base_legs() {
+        let p = TradeParams::default().bulk_off();
+        let base = world(&mut Rng(9));
+        let mut gl = good_legs(&base, &p, &mut Rng(33));
+        gl.sets[1].crossings.swap(0, 1);
+        let net = Network {
+            good_legs: Some(gl),
+            ..base
+        };
+        Kernel::build(&net, &W, &Wedges::none(2), &p);
     }
 
     #[test]

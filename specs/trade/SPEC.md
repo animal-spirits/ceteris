@@ -94,10 +94,12 @@ g good, theta = theta_g = P01 of good g (its class's value, ADR 0023) times P150
   appends the sets only when present. `ceteris_calibrate::costs::country_costs` follows
   `Transport::path_choice` with the same per-good weights, so the gravity sample sees the
   kernel's paths. The freight-cost trees stay for the map mode. Tests:
-  `iceberg_flies_light_goods_and_ships_heavy_ones` and `iceberg_at_zero_time_cost_is_freight`
-  (geo), `iceberg_legs_are_thread_count_independent` and
-  `iceberg_legs_price_each_good_on_its_paths` (econ pack), `iceberg_country_costs_follow_the_kernel`
-  (calibrate).
+  `iceberg_flies_light_goods_and_ships_heavy_ones`, `iceberg_at_zero_time_cost_is_freight` and
+  `iceberg_tree_is_least_weight` (geo paths), `good_legs_price_each_good_on_its_set`,
+  `good_legs_must_match_the_time_costs` and `good_legs_must_match_the_base_legs` (kernel),
+  `iceberg_legs_price_each_good_on_its_paths`, `iceberg_at_zero_time_cost_is_freight` and
+  `iceberg_legs_are_thread_count_independent` (econ pack),
+  `iceberg_country_costs_follow_the_kernel` (calibrate gravity).
 - Route choice (ADR 0017, `LegTaus`; built and tested but off in P2: `Network.route_taus` stays
   `None`, route choice is deferred past P2, owner 2026-10-24): per good,
   `tau_leg,g = z^(-1/theta_r)` over every walk on the transport graph with edge factors
