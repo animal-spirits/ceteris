@@ -66,8 +66,8 @@ sum over good 1's VA above (refining VA is not negative), in place of 0.5 to 3.
   and the fixture is synthetic). A copy of the installed pack rebuilt `--econ-only` at HEAD
   reproduces every econ table bit for bit; at 198c0c8 only `econ_countries` (sha256 0395240b...,
   was 1ba6b89c...) and `econ_provinces` (65fca14a..., was a55e0b9b...) move, and in them only
-  the VA columns (largest relative move 0.31 in good 1, 0.93 in goods 3 to 6 of an economy whose
-  crude oil and gas came out of a merged industry group). Good-1 VA source shares: gem 81.4%
+  the VA columns (largest relative move 0.31 in good 1; 0.93 in goods 3 to 6, the same in
+  each, as when the rest of crude oil and gas's group takes the VA it gives up). Good-1 VA source shares: gem 81.4%
   (82.3%), eia 14.7% (13.9%), population 3.9% (3.8%).
 - **Calibration** (with the B9 Sinkhorn pin): nu 2.60516 (class 0), 0.80014 (class 1), 0.39731
   (class 2), 0.046059 (good 1, was 0.065907) and 0 (good 2, clamped: share 0.2260 against its
