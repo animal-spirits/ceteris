@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
+
+- Owner, 2026-11-01: ADR 0281 option A. A full pack build at dbda425 (owner-side, GEOS 3.15)
+  rewrites `manifest.json`; `pack build --econ-only` writes the tables but not the manifest.
+  Every P1 table is byte-identical to the installed one (`p1-pack.txt` does not move).
+  `econ_countries` and `econ_provinces` move (VA columns of the rent economies outside ICIO,
+  ADR 0281); the other econ tables do not.
+- Calibrated at dbda425 with the pinned Sinkhorn (ffa7a62): nu 2.60516, 0.80014, 0.39731,
+  good 1 0.046059 (was 0.065907), good 2 0 (clamped); 70 passes, last change 8.39e-14,
+  Sinkhorn residual 8.70e-14. The six tables equal B9's scratch calibration bit for bit.
+
+Goldens re-blessed: `p2-pack.txt` (econ_countries, econ_provinces and the six calibration
+tables; econ_io moves in the golden only, as the manifest had kept its pre-ADR 0270 digest since
+B8b installed the 0270 table without rewriting the manifest). `p1-pack.txt`, `p1-geo.txt`,
+`p2-econ.txt` and the fixture goldens do not move.
+
 ### BEHAVIOUR: a labour target at its input cap is not cut by it (ADR 0266, B9; option A, owner, 2026-11-01)
 
 - `Scratch::short` marks an input as binding when the target without the cap exceeds the cap by
