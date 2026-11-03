@@ -301,7 +301,7 @@ fn final_demand_shares_sum_to_one() {
     ));
 }
 
-/// ADR 0099 (RFC 0301 D2): households (HFCE), government (NPISH and GGFC) and investment (GFCF)
+/// ADRs 0099, 0302: households (HFCE), government (NPISH and GGFC) and investment (GFCF)
 /// split each good's final demand, inventory change shared in proportion to them, so the parts
 /// add up to the final demand shares.
 #[test]

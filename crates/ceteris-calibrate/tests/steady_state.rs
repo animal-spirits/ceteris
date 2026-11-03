@@ -1923,7 +1923,7 @@ fn fixture_with_three_demanders() -> Inputs {
     inp
 }
 
-/// ADR 0099 (RFC 0301 D4): stage 4 inverts PIGL on the households' part of final demand at
+/// ADRs 0099, 0304: stage 4 inverts PIGL on the households' part of final demand at
 /// their share of spending; government and investment keep the balanced shares. In the
 /// calibrated state the households' PIGL spending alone is what the three demanders buy less
 /// government's and investment's shares (1e-12); the fixture is balanced at the data to about

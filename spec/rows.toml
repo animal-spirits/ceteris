@@ -1460,3 +1460,8 @@ sections = "9.5, 16, 17"
 rows = "0299, 0300"
 topic = "[Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
 sections = "9.5, 15, 16"
+
+[[entry]]
+rows = "0301 to 0306"
+topic = "[Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md)"
+sections = "8.6, 9.6"

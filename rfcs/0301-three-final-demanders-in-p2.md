@@ -1,6 +1,6 @@
 # RFC 0301. Three final demanders in P2: who buys, inventory change, shares, balance, composition and the accelerator (accepts and amends ADR 0099)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-03
 Design sections: 7.4, 8.6, 9.6, 17.2; econ SPEC (Pack additions, Final demand, Calibration, Parameters)
 Research: none separate; the reading of ADR 0099 against the code at the C2 head (b7d824c).
@@ -17,7 +17,7 @@ and s_c as shares of GDP, while the transfers of ADR 0100 make absorption differ
 (D3). RFC 0287 D1 balances each country's final demand against world sales, and ADR 0099 holds
 government and investment fixed in those targets (D4). "Fixed composition" can be fixed nominal
 shares or a fixed basket (D5). The accelerator's smoothed income has no rule (D6). This RFC
-accepts ADR 0099 with these answers.
+accepts ADR 0099 with these answers (ADRs 0301 to 0306).
 
 ## Decisions
 
@@ -42,7 +42,8 @@ Options:
 Recommendation: A, because the goods flows are the same in P2 and the accounts are the hooks of
 phases that replace these rules anyway.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0301
 
 ### D2. What happens to inventory change (ICIO INVNT)?
 
@@ -59,7 +60,8 @@ Options:
 Recommendation: A, because final demand by good is unchanged, which ADR 0099's t = 0 test
 checks, and nothing can go negative.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0302
 
 ### D3. Are g_c and s_c shares of absorption or of GDP?
 
@@ -73,7 +75,8 @@ Options:
 Recommendation: A, because it is the data's own split of final demand and needs no
 household-only rule for the transfer.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0303
 
 ### D4. Which final demand does the balance of RFC 0287 D1 (ADR 0295) rescale?
 
@@ -91,7 +94,8 @@ Options:
 
 Recommendation: A, because B moves every discrepancy onto the smallest buyer of capital goods.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0304
 
 ### D5. How do government and investment compose their spending?
 
@@ -106,7 +110,8 @@ Options:
 Recommendation: A, because ADR 0099 calls them fixed shares and A holds them exactly with no
 inversion in stage 4.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0305
 
 ### D6. Is the accelerator built now, and with what smoothing?
 
@@ -120,12 +125,15 @@ Options:
 
 Recommendation: A, because the pre-P3 plan lists it with default 1, which moves no golden.
 
-Decision: pending.
+Decision: B, Antonio, 2026-11-03.
+Row: ADR 0306
 
 ## Spec changes
 
 - 8.6: final demand is three demanders per country (households, government, investment), spent
-  through the pops in P2.
-- 17.2: the accelerator elasticity beta and the half-life of its smoothed income.
+  through the pops in P2; PIGL on households' part only; the accelerator waits for P4 (ADRs 0301
+  to 0306).
+- 9.6: the fiscal and investment accounts come with the fiscal block; in P2 the pops spend the
+  government and investment shares (ADRs 0301, 0303).
 - Econ SPEC: Pack additions (`hfce_g`, `gov_g`, `inv_g`, `gov_share`, `inv_share` in
   `econ_countries.arrow`); Final demand; Calibration stages 1 and 4; Parameters.
