@@ -12,7 +12,7 @@
 4. The 0234 flatness gate: median tick time over years 96 to 100 within 25% of years 1 to 5, decade row counts within each table's 0236 bound.
 5. DESIGN 21.2 done: invariants over 100 years, budgets (19.2 as restated by 0235), the 20% regression gate.
 
-**Starts from:** main after pre-P3 ends (B8 and C6 recalibrated, D1 and D2 snapshots across interventions and parameters as state, E lanes with `const L`, the benchmark rerun passed). The native app shell (ADR 0088 stages 1 and 2, `specs/app`) is a separate track; the P3 app tasks (Branch W) start once its exit criteria pass.
+**Starts from:** main after pre-P3 ends (B8 and C6 recalibrated, D1 and D2 snapshots across interventions and parameters as state, the benchmark rerun passed). Lanes are Branch L here (ADR 0288), no longer a pre-P3 item. The native app shell (ADR 0088 stages 1 and 2, `specs/app`) is a separate track; the P3 app tasks (Branch W) start once its exit criteria pass.
 
 **Spec:** new `specs/workbench/SPEC.md` (state, edit vocabulary, store, invariants, bounds), `specs/core/SPEC.md` (hazard draws, chunk store), `specs/econ/SPEC.md` and `specs/trade/SPEC.md` (edit targets, ADR 0027), `specs/app/SPEC.md` (P3 views). DESIGN 14, 19.2, 19.4, 21; ADRs 0002, 0024, 0027, 0049, 0087, 0116, 0128, 0137, 0143, 0155, 0188, 0197, 0207, 0211, 0212, 0234, 0235, 0236, 0241.
 
@@ -105,11 +105,15 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 - [ ] `ceteris rebase`, `cherry-pick`, `bisect` on branches; bisect probes are ensemble runs cached by (run hash, edit subset). Edits whose target is absent in the new parent are reported and skipped.
 - [ ] Failing tests (0116): `bisect_finds_planted_edit_in_log2_probes` (20 edits, at most ceil(log2 20) + 1 probes); `rebase_onto_own_parent_reproduces`; `cherry_pick_all_onto_parent_reproduces`. Commit. `blame` lands in C4.
 
+## Branch L: `p3/lanes` (ADR 0024, moved from pre-P3 by ADR 0288)
+
+Starts with A; must merge before C1. Requirements as in `specs/pre-p3/PLAN.md` Branch E: economic kernels and the route-choice solve generic over `const L: usize`, lane innermost after goods, read-only data stored once; release builds at `L = 1` reproduce the goldens bit for bit at 1, 3 and all threads; lane l of an `L = 8` run equals the `L = 1` run with lane l's parameters and seed; criterion benchmarks of `L = 8` against `L = 1` set the ensemble budget and the block size C1 uses. Its own task plan is written when it starts, against the kernel signatures D leaves.
+
 ## Branch C: `p3/ensembles` (lanes, CRN, effects, attribution)
 
 ### Task C1: Ensembles on lanes with member draws (0024, Q1)
 
-**Interfaces:** `Ensemble { branch, k }` runs in lane blocks of `L` (8 to 32, set by pre-P3 E's benchmark); member k draws its uncertain parameters from their register priors with streams keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id), applied as tick-0 parameter edits from the calibrated steady state (pre-P3 D2's path), so the draw is in the log. Members of a branch and its baseline with the same k share draws. The set of drawn parameters and their priors is a table in the workbench SPEC.
+**Interfaces:** `Ensemble { branch, k }` runs in lane blocks of `L` (8 to 32, set by Branch L's benchmark); member k draws its uncertain parameters from their register priors with streams keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id), applied as tick-0 parameter edits from the calibrated steady state (pre-P3 D2's path), so the draw is in the log. Members of a branch and its baseline with the same k share draws. The set of drawn parameters and their priors is a table in the workbench SPEC.
 
 - [ ] Failing tests: `lane_k_equals_scalar_run_with_seed_k` at every snapshot; `crn_pair_in_two_lanes_equals_two_scalar_runs`; `member_draws_are_shared_by_branch_and_baseline`; `k_identical_seeds_without_draws_give_identical_members` (documents why Q1 matters). Implement, commit.
 
@@ -231,6 +235,7 @@ W1 to W4 are the views the gate names. W5 and W6 belong to the lab-UI track afte
 
 ```
 0 ── A ── B ── C ── J
+     L ────────┘
      │    └─ D    │
      └─ F1-F3 ───┘
 G, H, E: from day one, in parallel
@@ -239,16 +244,17 @@ W1-W4: after the app shell exits and C3 lands
 
 - 0 first (records, no code). A then B then C in order, each PR reviewed before the next starts from main; a waiting PR may have the next stacked on it.
 - D starts after B1 (replay emits edits). F1 to F3 follow A and grow with each branch's verbs.
+- L runs beside A and B and merges before C1.
 - G, H and E touch nothing in A to D and run alongside. E's re-bless (if S12 goes on) lands before J's goldens.
 - W needs the shell's exit and C3's effect tables; W1 can start after B2.
 
 ## Estimate
 
-Owner-weeks of attention with agents coding, anchored like ADR 0207's: Branch 0 0.5; A 1 to 1.5; B 1 to 1.5; C 1.5 to 2.5; D 0.5; E 0.5 to 1; F1 to F3 0.5 to 1; G 1 to 1.5; H 0.5; W1 to W4 1.5 to 2.5; J 0.5 to 1. Total 9 to 14 owner-weeks on the recommended answers, against 0207's 4 to 6. The gap is mostly work 0207 did not count: ADRs 0234 to 0236 (G), 0241 (D, C2), the C1 member draws, and the views the gate needs. W5, W6 and F4 (4 to 7 more) go to the lab-UI track after the gate (Q2). The roadmap re-estimate thread should take these numbers.
+Owner-weeks of attention with agents coding, anchored like ADR 0207's: Branch 0 0.5; A 1 to 1.5; B 1 to 1.5; C 1.5 to 2.5; D 0.5; E 0.5 to 1; F1 to F3 0.5 to 1; G 1 to 1.5; H 0.5; W1 to W4 1.5 to 2.5; J 0.5 to 1; L 1.5 to 2.5 (moved from pre-P3 by ADR 0288). Total 10.5 to 16.5 owner-weeks with L, 9 to 14 without on the recommended answers, against 0207's 4 to 6. The gap is mostly work 0207 did not count: ADRs 0234 to 0236 (G), 0241 (D, C2), the C1 member draws, and the views the gate needs. W5, W6 and F4 (4 to 7 more) go to the lab-UI track after the gate (Q2). The roadmap re-estimate thread should take these numbers.
 
 ## Risks
 
-- **Pre-P3 E slips.** C1 needs lanes; without them C1 runs members as processes (slower, same hashes) and the lane benchmark moves to C.
+- **Branch L slips.** C1 needs lanes; without them C1 runs members as processes (slower, same hashes) and the lane benchmark moves to C.
 - **CI minutes.** The cross-platform job (H) and nightly full-pack gates run on the self-hosted runner where possible; Linux-hosted jobs stay on path filters.
 - **Member draws move the baseline off its steady state.** Each member starts its transition at tick 0; outcomes are reported as paired differences, so the level drift cancels, but the 100-year invariant run must use the undrawn baseline too.
 - **Chunk store size.** If A3's measurement misses 0212's budgets, snapshot intervals widen before retention tiers change.

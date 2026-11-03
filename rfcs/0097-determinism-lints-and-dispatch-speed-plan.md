@@ -239,3 +239,10 @@ History memory falls without touching state. Any later warm-started solver has t
 warm-start vector as snapshot state or pay for a cold start.
 
 2026-10-30 (pre-P3 B2, with the masses and the nu fit, bulk rate off): the 300-gateway pack fits nu (2.588, 0.789, 0.370, class 3 clamped at 0; its class-3 nu-0 share 0.1935) but does not calibrate: pass 3's Sinkhorn stops at 100,000 sweeps, residual 4.2e-5. H2 at 300, the source and dispatch timing and |d ln Phi_d| with the masses are not measured.
+
+2026-11-01 (pre-P3 D3, RFC 0285): warm starts audited. The only iterative solve that enters state
+and starts from state is E1's frictionless clearing wage, which starts from the last wage, itself
+state. The same-tick local chain starts from fills of 1; the PIGL inversion, lognormal dispersion
+and Gauss-Hermite nodes run at load into the layout, which a restore rebuilds from inputs and
+parameters; storage (ADR 0280) is closed form; `settle`'s income iteration runs only at a start.
+The seek tests of RFC 0285 run in both modes.

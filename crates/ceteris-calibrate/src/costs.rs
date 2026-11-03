@@ -59,7 +59,7 @@ pub struct Transport {
 impl Default for Transport {
     fn default() -> Self {
         Transport {
-            per_tkm: [0.10, 0.04, 0.008, 0.80],
+            per_tkm: [0.10, 0.0164, 0.0121, 0.537],
             circuity: [1.3, 1.3, 1.0, 1.05],
             speed_kmh: [40.0, 25.0, 25.0, 500.0],
             fee: [5.0, 8.0, 20.0, 60.0],

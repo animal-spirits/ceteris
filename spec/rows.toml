@@ -1338,13 +1338,13 @@ sections = "8.2"
 
 [[entry]]
 rows = "0268"
-topic = "Per-province ACR with income weights (held by open branch)"
-sections = "15"
+topic = "[The ACR criterion graded per province](../rfcs/0268-acr-graded-per-province.md)"
+sections = "15.2, 21"
 
 [[entry]]
 rows = "0269"
-topic = "P04 mode ratios from 2000 shares (held by open branch)"
-sections = "17"
+topic = "[P04 mode cost ratios borrowed from freight rates](../rfcs/0269-p04-mode-cost-ratios-borrowed.md)"
+sections = "5.3, 17.1, 21"
 
 [[entry]]
 rows = "0270"
@@ -1405,3 +1405,28 @@ sections = "8.2, 12.2, 17"
 rows = "0281"
 topic = "[Rents-to-VA factor from extraction value added](../rfcs/0281-rents-to-value-added-from-extraction.md)"
 sections = "16.1, 22.2"
+
+[[entry]]
+rows = "0287"
+topic = "[Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](../rfcs/0283-manufacturing-seeds-nearest-year-and-finland.md)"
+sections = "22"
+
+[[entry]]
+rows = "0288"
+topic = "[Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md)"
+sections = "21"
+
+[[entry]]
+rows = "0291"
+topic = "[Seek replays timed interventions; an edit after a seek back drops the later timeline](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"
+
+[[entry]]
+rows = "0292"
+topic = "[Snapshots name their network by its content digest](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"
+
+[[entry]]
+rows = "0293"
+topic = "[A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"

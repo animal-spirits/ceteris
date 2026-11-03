@@ -302,6 +302,116 @@ fn set_network_to_the_same_network_changes_nothing() {
     assert_eq!(a.snapshot_hashes(), b.snapshot_hashes());
 }
 
+fn fixture_sim(params: &EconParams) -> Sim<EconWorld> {
+    EconWorld::sim(
+        Arc::new(small_world()),
+        params.clone(),
+        TradeParams::default(),
+    )
+}
+
+/// Hashes at every tick from `from` to `to`, after a seek to `from`.
+fn hashes_from(sim: &mut Sim<EconWorld>, from: u32, to: u32) -> Vec<(u32, [u8; 32])> {
+    sim.seek(from).unwrap();
+    let mut out = vec![(from, sim.state_hash())];
+    while sim.tick() < to {
+        sim.step().unwrap_or_else(|v| panic!("{v}"));
+        out.push((sim.tick(), sim.state_hash()));
+    }
+    out
+}
+
+/// Seeks from snapshots on either side of an intervention at tick 17 (snapshots every 12
+/// ticks) replay the continuous run: back to 14 restores the tick-12 snapshot and replays the
+/// change, forward to 26 restores the tick-24 snapshot taken after it, also from a live world
+/// before the change. Frictionless, E1's clearing wage warm-starts from the last wage, which
+/// is state (ADR 0097, warm starts), so a restored child, its scratch zeroed and its kernel and
+/// layout rebuilt where the snapshot's network or parameters differ, matches too.
+fn assert_seeks_replay(change: impl Fn(&mut EconWorld) + Clone + Send + Sync + 'static) {
+    for params in [EconParams::default(), EconParams::frictionless()] {
+        assert_seeks_replay_from(&params, change.clone());
+    }
+}
+
+fn assert_seeks_replay_from(
+    params: &EconParams,
+    change: impl Fn(&mut EconWorld) + Send + Sync + 'static,
+) {
+    let mut sim = fixture_sim(params);
+    sim.run_until(17).unwrap();
+    sim.intervene(change);
+    sim.run_until(40).unwrap();
+    let continuous = hashes_from(&mut sim, 17, 40);
+    let unchanged = hashes_from(&mut fixture_sim(params), 17, 40);
+    assert_ne!(continuous[5], unchanged[5], "the change moves the run");
+    for from in [14, 26, 2, 17] {
+        let replayed = hashes_from(&mut sim, from, 40);
+        let want: Vec<_> = continuous.iter().filter(|(t, _)| *t >= from).collect();
+        let got: Vec<_> = replayed.iter().filter(|(t, _)| *t >= 17).collect();
+        assert_eq!(got, want, "seek to {from}");
+    }
+    sim.seek(14).unwrap();
+    sim.seek(26).unwrap();
+    assert_eq!(
+        (26, sim.state_hash()),
+        continuous[9],
+        "seek forward from before the change"
+    );
+}
+
+/// A snapshot taken before `set_network`, restored after it, replays to the hashes of the
+/// continuous run; and one taken after it restores onto the new network from a live world
+/// back on the old one.
+#[test]
+fn seek_across_network_change_replays() {
+    let mut net = small_world().network;
+    net.crossings[0].hours += 300.0;
+    net.crossings[0].cost_per_t *= 3.0;
+    assert_seeks_replay(move |w| w.set_network(net.clone()));
+}
+
+/// Setting the network the world already has is a null intervention: the hashes are the
+/// parent's, before and after a seek across it.
+#[test]
+fn null_intervention_reproduces_parent() {
+    let mut parent = fixture_sim(&EconParams::default());
+    parent.run_until(40).unwrap();
+    let mut sim = fixture_sim(&EconParams::default());
+    sim.run_until(17).unwrap();
+    let net = sim.world().inputs().network.clone();
+    sim.intervene(move |w| w.set_network(net.clone()));
+    sim.run_until(40).unwrap();
+    assert_eq!(sim.snapshot_hashes(), parent.snapshot_hashes());
+    sim.seek(14).unwrap();
+    sim.run_until(40).unwrap();
+    assert_eq!(sim.state_hash(), parent.state_hash());
+}
+
+/// Both parameter sets are snapshot state: seeks across an edit of either replay it.
+#[test]
+fn seek_across_param_edit_replays() {
+    assert_seeks_replay(|w| {
+        w.set_trade_params(TradeParams {
+            kappa1: 0.03,
+            theta_scale: 1.4,
+            ..w.trade().clone()
+        })
+    });
+    assert_seeks_replay(|w| {
+        w.set_params(EconParams {
+            kappa_w: 0.2,
+            edu_eff: [1.0, 1.6, 2.4],
+            ..w.params().clone()
+        })
+    });
+    assert_seeks_replay(|w| {
+        w.set_params(EconParams {
+            frictionless: !w.params().frictionless,
+            ..w.params().clone()
+        })
+    });
+}
+
 /// The built pack and its directory, or None (with the notice of `ceteris-geo`'s pack tests)
 /// where it has not been built, as in CI.
 fn built_pack() -> Option<(ceteris_geo::pack::Pack, PathBuf)> {

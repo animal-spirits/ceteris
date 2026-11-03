@@ -285,6 +285,8 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0265 | [The ACR criterion with input-output linkages](0265-acr-criterion-with-input-output-linkages.md) | proposed | ADR 0265 |
 | 0266 | [Labour capped at what inputs allow](0266-labour-capped-at-what-inputs-allow.md) | proposed | ADR 0266 |
 | 0267 | [Price gain capped per coupled block of commodity markets](0267-price-gain-capped-per-coupled-block.md) | proposed | ADR 0267 |
+| 0268 | [The ACR criterion graded per province](0268-acr-graded-per-province.md) | accepted | ADR 0268 |
+| 0269 | [P04 mode cost ratios borrowed from freight rates](0269-p04-mode-cost-ratios-borrowed.md) | accepted | ADR 0269 |
 | 0270 | [Extraction column for crude oil and gas set by rents](0270-extraction-column-for-rent-economies.md) | accepted | ADR 0270 |
 | 0271 | [Goods at the ICIO industry level](0271-full-icio-goods-list.md) | proposed | ADR 0271 |
 | 0272 | [Log-distance trade cost on the border crossing](0272-log-distance-crossing-friction.md) | accepted | ADR 0272 |
@@ -297,3 +299,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0279 | [Leg paths minimise the full iceberg cost per good](0279-least-iceberg-paths-per-good.md) | accepted | ADR 0279 |
 | 0280 | [Storage order by partial adjustment toward a target stock](0280-storage-order-by-partial-adjustment.md) | proposed | ADR 0280 |
 | 0281 | [Rents-to-VA factor from extraction value added](0281-rents-to-value-added-from-extraction.md) | proposed | ADR 0281 |
+| 0283 | [Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](0283-manufacturing-seeds-nearest-year-and-finland.md) | accepted | ADR 0287 |
+| 0284 | [Ensemble lanes move from pre-P3 into P3 (amends ADR 0207)](0284-ensemble-lanes-in-p3.md) | accepted | ADR 0288 |
+| 0285 | [Interventions replay on seek, and parameters are snapshot state](0285-interventions-and-parameters-as-snapshot-state.md) | accepted | ADR 0291 to 0293 |
+| 0286 | [Storage-on frictionless V1 misses: cause recorded, fix deferred to P5](0286-storage-on-frictionless-misses-deferred.md) | deferred | none |

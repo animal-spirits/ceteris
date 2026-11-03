@@ -14,12 +14,12 @@ use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source};
-use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Sourced, TradeParams};
+use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
 use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
-use crate::inputs::EconInputs;
+use crate::inputs::{EconInputs, network_digest};
 use crate::params::{EconParams, Pigl, Technology};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
@@ -150,6 +150,59 @@ pub struct Layout {
 }
 
 impl Layout {
+    /// The layout of `inp` under `params` and `trade`, over the accounts opened at load.
+    pub fn build(
+        inp: &EconInputs,
+        params: &EconParams,
+        trade: &TradeParams,
+        accounts: Accounts,
+    ) -> Layout {
+        let (np, n_pops, n_ent) = (inp.n_provinces(), inp.n_pops(), inp.n_enterprises());
+        let mut country_pops = vec![Vec::new(); inp.n_countries()];
+        for k in 0..n_pops {
+            country_pops[inp.country_of(inp.pops.province[k] as usize)].push(k as u32);
+        }
+        let (pigl, sigma_income) = household_preferences(inp, params);
+        let coef = match params.technology {
+            Technology::PuttyClay => inp.enterprises.coef.clone(),
+            Technology::FixedLeontief => inp.enterprises.column.clone(),
+        };
+        let (_, country_people) = pop_people(inp);
+        let ownership = (0..n_pops)
+            .map(|k| {
+                let c = inp.country_of(inp.pops.province[k] as usize);
+                inp.pops.population[k] / country_people[c]
+            })
+            .collect();
+        // an infinite M turns the write-off off
+        let cap = |v: f64| {
+            let months = params.write_off_months;
+            if months.is_finite() {
+                to_minor(months * v)
+            } else {
+                i64::MAX
+            }
+        };
+        Layout {
+            ent_loss_cap: (0..n_ent)
+                .map(|e| cap(inp.enterprises.va0[e] / inp.enterprises.a_va[e]))
+                .collect(),
+            index_weights: price_index_weights(inp, params),
+            pigl,
+            sigma_income,
+            accounts,
+            pop_offsets: offsets(&inp.pops.province, np),
+            ent_offsets: offsets(&inp.enterprises.province, np),
+            labour_supply: inp.labour_supply(&params.edu_eff),
+            ownership,
+            country_pops,
+            a_va: inp.enterprises.a_va.clone(),
+            coef,
+            gamma: gamma_columns(&inp.provinces.gamma, &inp.goods),
+            price_gain: price_gains(inp, params, trade),
+        }
+    }
+
     pub fn pops(&self, i: usize) -> Range<usize> {
         self.pop_offsets[i] as usize..self.pop_offsets[i + 1] as usize
     }
@@ -373,6 +426,13 @@ pub struct EconWorld {
     pub(crate) trade: TradeParams,
     pub(crate) layout: Arc<Layout>,
     digest: Hash,
+    /// [`EconInputs::base_digest`] and the [`network_digest`] of the inputs' network, which
+    /// open the encoding.
+    base_digest: Hash,
+    network_digest: Hash,
+    /// Every network this run has had, by digest, so a restore can return to one; shared
+    /// with restored copies and not state.
+    networks: Arc<Vec<(Hash, Arc<Network>)>>,
     pub ledger: Ledger,
     /// Prices (origin markets of traded goods, province markets of local goods), merchant
     /// inventories, last D, Q and sales.
@@ -911,6 +971,8 @@ impl EconWorld {
             &trade,
         ));
         let digest = static_digest(inp, &params, &trade);
+        let (base_digest, network) = (inp.base_digest(), network_digest(&inp.network));
+        let networks = Arc::new(vec![(network, Arc::new(inp.network.clone()))]);
 
         assert_eq!(
             trade.goods, inp.goods,
@@ -930,58 +992,13 @@ impl EconWorld {
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
-        let pop_offsets = offsets(&inp.pops.province, np);
-        let ent_offsets = offsets(&inp.enterprises.province, np);
-        let labour_supply = inp.labour_supply(&params.edu_eff);
-        let mut country_pops = vec![Vec::new(); nc];
-        for k in 0..n_pops {
-            country_pops[inp.country_of(inp.pops.province[k] as usize)].push(k as u32);
-        }
+        let layout = Layout::build(inp, &params, &trade, accounts);
         let employed: Vec<f64> = (0..n_pops)
             .map(|k| {
                 let i = inp.pops.province[k] as usize;
                 (1.0 - inp.countries.u_star[inp.country_of(i)]) * inp.pops.labour_force[k]
             })
             .collect();
-        let (pigl, sigma_income) = household_preferences(inp, &params);
-        let coef = match params.technology {
-            Technology::PuttyClay => inp.enterprises.coef.clone(),
-            Technology::FixedLeontief => inp.enterprises.column.clone(),
-        };
-        let (_, country_people) = pop_people(inp);
-        let ownership = (0..n_pops)
-            .map(|k| {
-                let c = inp.country_of(inp.pops.province[k] as usize);
-                inp.pops.population[k] / country_people[c]
-            })
-            .collect();
-        // an infinite M turns the write-off off
-        let cap = |v: f64| {
-            let months = params.write_off_months;
-            if months.is_finite() {
-                to_minor(months * v)
-            } else {
-                i64::MAX
-            }
-        };
-        let layout = Layout {
-            ent_loss_cap: (0..n_ent)
-                .map(|e| cap(inp.enterprises.va0[e] / inp.enterprises.a_va[e]))
-                .collect(),
-            index_weights: price_index_weights(inp, &params),
-            pigl,
-            sigma_income,
-            accounts,
-            pop_offsets,
-            ent_offsets,
-            labour_supply,
-            ownership,
-            country_pops,
-            a_va: inp.enterprises.a_va.clone(),
-            coef,
-            gamma: gamma_columns(&inp.provinces.gamma, &inp.goods),
-            price_gain: price_gains(inp, &params, &trade),
-        };
         for i in 0..np {
             let l0: f64 = layout.enterprises(i).map(|e| inp.enterprises.l0[e]).sum();
             let u = inp.countries.u_star[inp.country_of(i)];
@@ -1020,6 +1037,9 @@ impl EconWorld {
             trade,
             layout: Arc::new(layout),
             digest,
+            base_digest,
+            network_digest: network,
+            networks,
         };
         match w.inputs.steady.clone() {
             Some(steady) => {
@@ -1276,7 +1296,9 @@ impl EconWorld {
     /// network leaves the run unchanged. The network must keep the provinces and gateways,
     /// whose accounts are open. The price gains stay those of the calibration (ADR 0263, As
     /// built), as the coefficients and Gamma do: J needs the calibrated spending, which a run
-    /// does not have. In P2 the caller triggers it; shocks arrive in P3.
+    /// does not have. Snapshots name the network by its digest; the run keeps every network
+    /// it has had, so a restore returns to the one its snapshot names. Crossing lags set by
+    /// [`EconWorld::set_crossing_lags`] do not carry over to the new kernel.
     pub fn set_network(&mut self, network: Network) {
         let old = &self.inputs.network;
         assert!(
@@ -1284,16 +1306,80 @@ impl EconWorld {
                 && network.gateway_country == old.gateway_country,
             "a new network must keep the provinces and gateways"
         );
+        let digest = network_digest(&network);
+        if !self.networks.iter().any(|(d, _)| *d == digest) {
+            Arc::make_mut(&mut self.networks).push((digest, Arc::new(network.clone())));
+        }
         let mut inputs = (*self.inputs).clone();
         inputs.network = network;
-        self.kernel = Arc::new(Kernel::build(
-            &inputs.network,
-            &inputs.weight,
-            &inputs.wedges,
-            &self.trade,
-        ));
-        self.digest = static_digest(&inputs, &self.params, &self.trade);
-        self.inputs = Arc::new(inputs);
+        self.configure(
+            Arc::new(inputs),
+            digest,
+            self.params.clone(),
+            self.trade.clone(),
+        );
+    }
+
+    /// Replaces the economic parameters between ticks, an ex-post intervention: the layout
+    /// is rebuilt under them and the dynamic state stands. A structural change (see
+    /// [`structural_digest`]) moves a calibrated world off its steady state, the PIGL
+    /// parameters too, since the calibrated weights were inverted at the defaults.
+    pub fn set_params(&mut self, params: EconParams) {
+        self.configure(
+            Arc::clone(&self.inputs),
+            self.network_digest,
+            params,
+            self.trade.clone(),
+        );
+    }
+
+    /// Replaces the trade parameters between ticks, an ex-post intervention as
+    /// [`EconWorld::set_params`]; the kernel is rebuilt under them. Panics on parameters for
+    /// other goods or an invalid storage set ([`TradeParams::check_storage`]).
+    pub fn set_trade_params(&mut self, trade: TradeParams) {
+        assert_eq!(
+            trade.goods, self.inputs.goods,
+            "the trade parameters are for other goods than the inputs"
+        );
+        trade.check_storage().unwrap_or_else(|e| panic!("{e}"));
+        self.configure(
+            Arc::clone(&self.inputs),
+            self.network_digest,
+            self.params.clone(),
+            trade,
+        );
+    }
+
+    /// Moves the world's static parts to `inputs` (its network named by `network`) under
+    /// `params` and `trade`, rebuilding the kernel and the layout where they change.
+    fn configure(
+        &mut self,
+        inputs: Arc<EconInputs>,
+        network: Hash,
+        params: EconParams,
+        trade: TradeParams,
+    ) {
+        if network != self.network_digest || trade != self.trade {
+            self.kernel = Arc::new(Kernel::build(
+                &inputs.network,
+                &inputs.weight,
+                &inputs.wedges,
+                &trade,
+            ));
+        }
+        if params != self.params || trade != self.trade {
+            self.layout = Arc::new(Layout::build(
+                &inputs,
+                &params,
+                &trade,
+                self.layout.accounts.clone(),
+            ));
+        }
+        self.digest = static_digest(&inputs, &params, &trade);
+        self.network_digest = network;
+        self.inputs = inputs;
+        self.params = params;
+        self.trade = trade;
     }
 
     /// A run of this world from the data state on the P2 schedule.
@@ -1325,18 +1411,238 @@ impl EconWorld {
         &self.layout
     }
 
-    /// [`static_digest`] of this world, the first 32 bytes of its encoding.
+    /// [`static_digest`] of this world.
     pub fn digest(&self) -> Hash {
         self.digest
     }
 }
 
+fn encode_hash(e: &mut Encoder, h: &Hash) {
+    h.iter().for_each(|&b| e.u8(b));
+}
+
+fn decode_hash(d: &mut Decoder) -> Result<Hash, DecodeError> {
+    let mut h = [0u8; 32];
+    for b in &mut h {
+        *b = d.u8()?;
+    }
+    Ok(h)
+}
+
+/// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, as
+/// in [`static_digest`], since with one both settings run identically.
+fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
+    // destructured so a new parameter cannot be left out of snapshots
+    let EconParams {
+        sigma_demand,
+        pigl,
+        sigma_fl,
+        kappa_w,
+        delta_w,
+        eta,
+        edu_eff,
+        frictionless,
+        rationing,
+        technology,
+        write_off_months,
+    } = params;
+    let Pigl {
+        sigma_b,
+        phi,
+        gamma,
+        theta,
+        eps,
+    } = pigl;
+    e.f64s(&[*sigma_demand, *sigma_fl, *kappa_w, *delta_w, *eta]);
+    e.f64s(&[*sigma_b, *phi, *gamma, *eps]);
+    e.f64s(theta);
+    e.f64s(edu_eff);
+    e.bools(&[*frictionless]);
+    e.u8(*rationing as u8);
+    if !one_vintage {
+        e.u8(*technology as u8);
+    }
+    e.f64(*write_off_months);
+}
+
+fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N], DecodeError> {
+    let v = d.f64s()?;
+    let n = v.len();
+    v.try_into()
+        .map_err(|_| DecodeError(format!("{what}: {n} entries, want {N}")))
+}
+
+/// Decodes [`encode_params`]; with one vintage S09 is `technology`, the restoring world's.
+fn decode_params(
+    d: &mut Decoder,
+    one_vintage: bool,
+    technology: Technology,
+) -> Result<EconParams, DecodeError> {
+    let [sigma_demand, sigma_fl, kappa_w, delta_w, eta] = decode_array(d, "econ parameters")?;
+    let [sigma_b, phi, gamma, eps] = decode_array(d, "PIGL parameters")?;
+    let theta = decode_array(d, "PIGL theta")?;
+    let edu_eff = decode_array(d, "education efficiencies")?;
+    let [frictionless] = decode_array_bool(d)?;
+    let rationing = match d.u8()? {
+        0 => Rationing::Priority,
+        1 => Rationing::Proportional,
+        2 => Rationing::Mixed,
+        b => return Err(DecodeError(format!("rationing {b}"))),
+    };
+    let technology = if one_vintage {
+        technology
+    } else {
+        match d.u8()? {
+            0 => Technology::PuttyClay,
+            1 => Technology::FixedLeontief,
+            b => return Err(DecodeError(format!("technology {b}"))),
+        }
+    };
+    Ok(EconParams {
+        sigma_demand,
+        pigl: Pigl {
+            sigma_b,
+            phi,
+            gamma,
+            theta,
+            eps,
+        },
+        sigma_fl,
+        kappa_w,
+        delta_w,
+        eta,
+        edu_eff,
+        frictionless,
+        rationing,
+        technology,
+        write_off_months: d.f64()?,
+    })
+}
+
+fn decode_array_bool(d: &mut Decoder) -> Result<[bool; 1], DecodeError> {
+    let v = d.bools()?;
+    let n = v.len();
+    v.try_into()
+        .map_err(|_| DecodeError(format!("frictionless switch: {n} entries")))
+}
+
+fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
+    // destructured so a new parameter cannot be left out of snapshots
+    let TradeParams {
+        // the inputs' goods
+        goods: _,
+        theta,
+        theta_class,
+        theta_scale,
+        coverage,
+        kappa1,
+        gain_share,
+        kappa2,
+        c_max,
+        c_max_storable,
+        expectation_gain,
+        border_nu,
+        time_cost,
+        theta_r,
+        bulk_sea,
+        bulk_port,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+        storage_gain,
+    } = trade;
+    e.f64s(theta);
+    e.count(theta_class.len());
+    theta_class.iter().for_each(|&c| e.u8(c));
+    e.f64s(&[
+        *theta_scale,
+        *kappa1,
+        *gain_share,
+        *kappa2,
+        *c_max,
+        *c_max_storable,
+        *expectation_gain,
+        *theta_r,
+        *storage_gain,
+    ]);
+    for column in [
+        coverage,
+        border_nu,
+        time_cost,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+    ] {
+        e.f64s(column);
+    }
+    e.f64s(bulk_sea);
+    e.f64s(bulk_port);
+}
+
+fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeError> {
+    let theta = d.f64s()?;
+    let theta_class = (0..d.count()?).map(|_| d.u8()).collect::<Result<_, _>>()?;
+    let [
+        theta_scale,
+        kappa1,
+        gain_share,
+        kappa2,
+        c_max,
+        c_max_storable,
+        expectation_gain,
+        theta_r,
+        storage_gain,
+    ] = decode_array(d, "trade parameters")?;
+    let mut columns = Vec::with_capacity(7);
+    for _ in 0..7 {
+        columns.push(d.f64s()?);
+    }
+    let [
+        coverage,
+        border_nu,
+        time_cost,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+    ]: [Vec<f64>; 7] = columns.try_into().expect("seven columns");
+    let trade = TradeParams {
+        goods: goods.clone(),
+        theta,
+        theta_class,
+        theta_scale,
+        coverage,
+        kappa1,
+        gain_share,
+        kappa2,
+        c_max,
+        c_max_storable,
+        expectation_gain,
+        border_nu,
+        time_cost,
+        theta_r,
+        bulk_sea: decode_array(d, "bulk sea rates")?,
+        bulk_port: decode_array(d, "bulk port rates")?,
+        storage_loss,
+        storage_cost,
+        speculation,
+        convenience,
+        storage_gain,
+    };
+    trade.check_goods().map_err(DecodeError)?;
+    Ok(trade)
+}
+
 impl Encode for EconWorld {
-    /// The static digest, the write-off threshold P148 and the storable price clip P151, then
-    /// the dynamic state.
+    /// The inputs' digest without the network, the network's digest and both parameter sets,
+    /// then the dynamic state.
     fn encode(&self, e: &mut Encoder) {
-        self.digest.iter().for_each(|&b| e.u8(b));
-        e.f64s(&[self.params.write_off_months, self.trade.c_max_storable]);
+        encode_hash(e, &self.base_digest);
+        encode_hash(e, &self.network_digest);
+        encode_params(e, &self.params, self.inputs.one_vintage());
+        encode_trade(e, &self.trade);
         self.ledger.encode(e);
         self.markets.encode(e);
         self.pipeline.encode(e);
@@ -1600,29 +1906,20 @@ impl State for EconWorld {
         Ok(())
     }
 
-    /// Restores a snapshot of a world built from the same inputs and parameters. The
-    /// snapshot opens with the static digest (inputs and both parameter sets, none of which
-    /// snapshots carry); a digest other than this live world's is a `DecodeError`. On a
-    /// match the restored world shares this world's inputs `Arc`, kernel, parameters and
-    /// layout, and only the dynamic state is decoded.
+    /// Restores a snapshot of a world built from the same inputs. The snapshot opens with the
+    /// inputs' digest without the network, which must be this live world's (else a
+    /// `DecodeError`), the digest of its network, which must be one this run has had, and
+    /// its parameters. The restored world shares this world's inputs, kernel and layout where
+    /// the network and parameters are this world's, and rebuilds them where not; only the
+    /// dynamic state is decoded.
     fn restore(&self, d: &mut Decoder) -> Result<Self, DecodeError> {
         let ng = self.inputs.n_goods();
-        let mut digest = [0u8; 32];
-        for b in &mut digest {
-            *b = d.u8()?;
+        if decode_hash(d)? != self.base_digest {
+            return Err(DecodeError("snapshot belongs to other inputs".into()));
         }
-        if digest != self.digest {
-            return Err(DecodeError(
-                "snapshot belongs to other inputs or parameters".into(),
-            ));
-        }
-        let header = d.f64s()?;
-        if header != [self.params.write_off_months, self.trade.c_max_storable] {
-            return Err(DecodeError(format!(
-                "snapshot taken with write-off threshold (P148) and storable price clip (P151) \
-                 {header:?}"
-            )));
-        }
+        let network = decode_hash(d)?;
+        let params = decode_params(d, self.inputs.one_vintage(), self.params.technology)?;
+        let trade = decode_trade(d, &self.inputs.goods)?;
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d, &self.inputs.goods)?;
         let pipeline = Pipeline::decode(d, ng)?;
@@ -1669,13 +1966,16 @@ impl State for EconWorld {
             expect_len(what, column.len(), n_ent)?;
         }
 
-        Ok(EconWorld {
+        let mut restored = EconWorld {
             inputs: Arc::clone(&self.inputs),
             kernel: Arc::clone(&self.kernel),
             params: self.params.clone(),
             trade: self.trade.clone(),
             layout: Arc::clone(&self.layout),
-            digest,
+            digest: self.digest,
+            base_digest: self.base_digest,
+            network_digest: self.network_digest,
+            networks: Arc::clone(&self.networks),
             ledger,
             markets,
             pipeline,
@@ -1691,7 +1991,25 @@ impl State for EconWorld {
             sales,
             profit,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
-        })
+        };
+        if network != self.network_digest || params != self.params || trade != self.trade {
+            let inputs = if network == self.network_digest {
+                Arc::clone(&self.inputs)
+            } else {
+                let (_, net) = self
+                    .networks
+                    .iter()
+                    .find(|(d, _)| *d == network)
+                    .ok_or_else(|| {
+                        DecodeError("snapshot names a network this run has not had".into())
+                    })?;
+                let mut inputs = (*self.inputs).clone();
+                inputs.network = (**net).clone();
+                Arc::new(inputs)
+            };
+            restored.configure(inputs, network, params, trade);
+        }
+        Ok(restored)
     }
 }
 
@@ -2066,43 +2384,52 @@ mod tests {
         assert_eq!(back.markets.clip_ticks, w.markets.clip_ticks);
     }
 
+    /// Parameters are snapshot state: a world under other parameters restores a snapshot
+    /// under the snapshot's, its kernel and layout rebuilt.
     #[test]
-    fn restore_rejects_another_write_off_threshold() {
+    fn restore_takes_the_snapshots_parameters() {
         let w = world();
         let bytes = canonical(0, &w);
-        let other = EconWorld::new(
-            Arc::new(small_world()),
-            EconParams {
-                write_off_months: 6.0,
-                ..EconParams::default()
-            },
-            TradeParams::default(),
-        );
-        assert_eq!(other.digest(), w.digest());
-        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
-    }
-
-    #[test]
-    fn restore_rejects_another_storable_clip() {
-        let w = world();
-        let bytes = canonical(0, &w);
-        let other = EconWorld::new(
-            Arc::new(small_world()),
-            EconParams::default(),
-            TradeParams {
-                c_max_storable: 0.2,
-                ..TradeParams::default()
-            },
-        );
-        assert_eq!(other.digest(), w.digest());
-        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+        let others = [
+            (
+                EconParams {
+                    write_off_months: 6.0,
+                    ..EconParams::default()
+                },
+                TradeParams::default(),
+            ),
+            (
+                EconParams::default(),
+                TradeParams {
+                    c_max_storable: 0.2,
+                    ..TradeParams::default()
+                },
+            ),
+            (
+                EconParams::default(),
+                TradeParams {
+                    theta: vec![6.0; N_GOODS],
+                    ..TradeParams::default()
+                },
+            ),
+            (EconParams::frictionless(), TradeParams::default()),
+        ];
+        for (k, (params, trade)) in others.into_iter().enumerate() {
+            let other = EconWorld::new(Arc::new(small_world()), params, trade);
+            let (_, back) = decode_canonical_with(&bytes, |d| other.restore(d)).unwrap();
+            assert_eq!(back.params, w.params, "world {k}");
+            assert_eq!(back.trade, w.trade, "world {k}");
+            assert_eq!(back.digest(), w.digest(), "world {k}");
+            assert_eq!(back.layout.price_gain, w.layout.price_gain, "world {k}");
+            assert_eq!(back.layout.ent_loss_cap, w.layout.ent_loss_cap, "world {k}");
+            assert_eq!(canonical(0, &back), bytes, "world {k}");
+        }
     }
 
     #[test]
     fn restore_rejects_other_inputs() {
         let w = world();
         let bytes = canonical(0, &w);
-
         let mut inputs = small_world();
         inputs.weight[0] *= 1.01;
         let other = EconWorld::new(
@@ -2110,24 +2437,25 @@ mod tests {
             EconParams::default(),
             TradeParams::default(),
         );
-        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+        let err = decode_canonical_with(&bytes, |d| other.restore(d)).unwrap_err();
+        assert!(err.0.contains("other inputs"), "{err}");
+    }
 
+    /// A network the restoring run has never had cannot be named back.
+    #[test]
+    fn restore_rejects_a_network_the_run_has_not_had() {
+        let w = world();
+        let bytes = canonical(0, &w);
+        let mut inputs = small_world();
+        inputs.network.crossings[0].hours += 1.0;
         let other = EconWorld::new(
-            Arc::new(small_world()),
+            Arc::new(inputs),
             EconParams::default(),
-            TradeParams {
-                theta: vec![6.0; N_GOODS],
-                ..TradeParams::default()
-            },
-        );
-        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
-
-        let other = EconWorld::new(
-            Arc::new(small_world()),
-            EconParams::frictionless(),
             TradeParams::default(),
         );
-        assert!(decode_canonical_with(&bytes, |d| other.restore(d)).is_err());
+        assert_eq!(other.base_digest, w.base_digest);
+        let err = decode_canonical_with(&bytes, |d| other.restore(d)).unwrap_err();
+        assert!(err.0.contains("network"), "{err}");
     }
 
     /// ADR 0263: J = E + eta eps / (2 - eta) at the run's eta caps the gain of the markets

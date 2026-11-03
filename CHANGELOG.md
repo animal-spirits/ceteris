@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+### BEHAVIOUR: snapshot format 3, interventions replay on seek (RFC 0285)
+
+- Snapshots open with the inputs digest without the network, the network's digest and both
+  parameter sets, then the same dynamic state as before; `Sim::intervene` records between-tick
+  edits that seek replays; `EconWorld::set_params` and `set_trade_params` join `set_network`;
+  a restore rebuilds the kernel and layout where the snapshot's network or parameters differ.
+- Goldens re-blessed: `tests/golden/p0-toy.txt` (format number) and `tests/golden/p2-econ.txt`
+  (format number and header). The fixture's dynamic state is bit for bit main f3bd6a3's at ticks
+  12, 600 and 1200 (ledger, markets, pipeline and every column hashed apart from the header).
+  No pack golden moves.
+- `ceteris run --data-state` refuses an uncalibrated pack; `EconInputs::from_pack` refuses a
+  P2 pack whose `econ_goods` coverage differs from `TradeParams::coverage` (P02).
+
+### BEHAVIOUR: P154 rescaled to the borrowed P04c (ADR 0269, owner ruling 2026-10-31)
+
+- Class 3's bulk sea multiplier is 0.017, 2.05e-4 / 0.0121, so its sea cost per tonne-km stays
+  at the sourced UNCTAD slope; at 0.026 it would sit 1.51 times above it on the new P04c. The P9
+  range for sea per road is 0.05 to 0.20.
+- Goldens re-blessed: the fixture export (`legs`, `kernel_crossing`, `provinces`, `params.json`
+  for class 3 only), its calibration and reference, and every `tests/golden/p2-econ.txt` hash
+  (the inputs digest carries the bulk legs). The pack goldens move with the next pack build.
+
+### BEHAVIOUR: P04 mode cost ratios borrowed from BTS 2000 (ADR 0269)
+
+- P04a-d default to road 0.10, rail 0.0164, sea 0.0121 and air 0.537 USD per tonne-km: road at
+  the prior, the others at BTS 2000 freight revenue per ton-mile over the truck row (National
+  Transportation Statistics Table 3-21). Against the placeholders rail falls to 0.41 times, sea
+  rises to 1.51 times and air falls to 0.67 times; least-cost paths shift towards rail. The PPML
+  estimate of ADR 0022 is a diagnostic only.
+- Every pack golden that prices edges moves (`tests/golden/p1-geo.txt` and the econ pack
+  goldens); they are re-blessed on the B8 pack, not here. The P2 fixture prices its legs
+  directly and does not move.
+
+### ACR criterion graded per province (ADR 0268)
+
+- The flow window records each province's absorption at origin prices; `benchmark::Outcome`
+  carries province income, buyer prices and home shares. `acr_io_province` and
+  `welfare_province` reduce the input-output ACR formula and the real income change from
+  provinces with base income weights; the report prints them beside the country forms with
+  the per-country gap. The flow window is scratch: no golden hash moves.
+
 ### The goods count is a pack value (P3 G2)
 
 - `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,

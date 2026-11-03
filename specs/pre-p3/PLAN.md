@@ -4,7 +4,7 @@
 
 **Goal:** Bring P2 as built (main fc7ce3d; B onward from main 7219de2, Python removed) to the state P3 (counterfactual workbench, DESIGN 21.1 item 4) needs: enforced determinism and the dispatch speed plan, the P2 economics review (ADRs 0090 to 0095, 0101, 0200), main's assumption-audit ADRs (0098, 0099, 0100, 0103, 0104, 0106), P3 prerequisites (snapshots across interventions, structural edits, ensemble lanes), the open P2 issues, the records, and the rerun of the 28 October benchmark that closes pre-P3 (ADR 0207).
 
-**Architecture:** Five code branches, each a PR off the previous one's merge (A, then B, C, D, E), plus one records branch (F) that is independent. A changes speed and the kernel; B changes the price rule, storage, the trade frictions and the buyer price (selection, ADR 0200), lands the benchmark harness, then recalibrates and re-runs the P2 gate; C changes the calibration data and the demand and income blocks, recalibrates, re-runs the gate and reruns the 28 October benchmark as pre-P3's economic gate; D adds what P3's seek, branching and sweeps need; E retrofits the kernels over a const lane count once the economics have settled (the retrofit generic over `Real` moved to P9, ADR 0207). `ceteris-reference` mirrors every model change, because V1 compares against it.
+**Architecture:** Four code branches here (A, then B, C, D; E moved to P3 by ADR 0288), plus one records branch (F) that is independent. A changes speed and the kernel; B changes the price rule, storage, the trade frictions and the buyer price (selection, ADR 0200), lands the benchmark harness, then recalibrates and re-runs the P2 gate; C changes the calibration data and the demand and income blocks, recalibrates, re-runs the gate and reruns the 28 October benchmark as pre-P3's economic gate; D adds what P3's seek, branching and sweeps need. E, the retrofit of the kernels over a const lane count, is P3 Branch L since ADR 0288 (the retrofit generic over `Real` moved to P9, ADR 0207). `ceteris-reference` mirrors every model change, because V1 compares against it.
 
 **Tech Stack:** Rust 2024 workspace only (ADRs 0113, 0207: no Python, including tools): `ceteris-core`, `-geo`, `-trade`, `-econ` (rayon, libm, arrow); `ceteris-pack` (pack build, `src/econ/`, configs in `crates/ceteris-pack/config/`), `ceteris-reference` (GE reference, PPML, uniqueness), `ceteris-calibrate` (steady-state calibration, gravity), `ceteris-cli` (the `ceteris` binary and the P2 gate tests); GitHub Actions.
 
@@ -29,6 +29,12 @@
 10. ADR 0200 (selection on trade links) is accepted and built in B together with ADR 0092's per-class nu.
 11. Pre-P3 ends with a rerun of the 28 October benchmark: openness within 1.5 times the ICIO shares, the ACR formula holding, and a x10 border shock converging. Amended 2026-10-31 (owner, "A"): x10 is beyond P2's valid range and is reported, not asserted; it moves to P5 (ADR 0090, Deferred to P5).
 
+## Owner decisions (2026-11-01, P3 readiness review)
+
+12. D starts now in parallel with C, from main, and rebases (re-blessing any moved hashes) after C6 merges.
+13. Ensemble lanes leave pre-P3: Branch E becomes P3 Branch L, before P3 C1 (ADR 0288, amending ADR 0207).
+14. D5's workflow and script are drafted by an agent and committed to main by the owner, since the `rows` guard fails `claude/*` branches that touch `.github/`.
+
 ## Controller rulings in this plan (cost if wrong in brackets)
 
 - ADR 0111's rational-expectations storage switch for 0091 is deferred to P9, where it is fitted and could become the default; P2 keeps adaptive expectations (owner choice D5b). [one task in P9]
@@ -39,7 +45,7 @@
 - ADR 0200 is its own task (B2a) after B2, not folded into it: ADR 0207 asks for both in branch B, and 0200's tests do not depend on the nu values. Each carries its own re-bless. [one extra re-bless commit]
 - The ICIO 2000 home shares (domestic over absorption, per country and traded good) become a pack table, `econ_home_shares.arrow`, read by B2's nu fit and by C7's openness check, rather than read from the fetch cache at calibration time as `gravity::icio_domestic` does. [one pack table; if the owner prefers the cache, the fit and C7 read it through `ceteris_calibrate::gravity` instead]
 - The harness lands on main in B (Task B2b), not only at the end: ADR 0200's own tests are benchmark cases (Japan, Brexit). Its shock files name countries by ISO3 code instead of table rows, so they survive pack rebuilds. Openness, welfare and the ACR value are computed in Rust (`ceteris_calibrate::benchmark`), since the 28 October numbers were computed outside the repository. [one small module]
-- The three ADR 0207 criteria are made checkable as: (openness) per theta class, and for all traded goods together, the world absorption-weighted foreign share 1 - lambda in the model within [1/1.5, 1.5] times ICIO 2000's; (ACR) under every crossing tau x 1.1, every ICIO country with |ACR| above 1e-4 has the ACR sign, the median model/ACR ratio is in [0.8, 1.25] and the correlation across countries is at least 0.9, with ACR the multi-sector formula with input-output linkages d ln W_c = -omega_c' (I - A_c')^-1 diag(1/theta) d ln lambda_c, A_c the country's cost shares and d ln lambda 0 for local goods (Costinot and Rodriguez-Clare 2014; Caliendo and Parro 2015; ADR 0265, owner 2026-10-30; the plain -sum_g omega_cg / theta_g d ln lambda_cg of the original plan stays reported); (x10) every crossing tau x 10 runs 1,200 ticks frictionless with no invariant violation and the largest |d ln p| over the last 50 ticks at most 1e-6 (the baseline's is 2e-7); since 2026-10-31 reported only, a P5 criterion (ADR 0090). [the constants in C7's assertions change if the owner reads "holding" or "converging" otherwise]
+- The three ADR 0207 criteria are made checkable as: (openness) per theta class, and for all traded goods together, the world absorption-weighted foreign share 1 - lambda in the model within [1/1.5, 1.5] times ICIO 2000's; (ACR) under every crossing tau x 1.1, every ICIO country with |ACR| above 1e-4 has the ACR sign, the median model/ACR ratio is in [0.8, 1.25] and the correlation across countries is at least 0.9, with ACR the multi-sector formula with input-output linkages d ln W_c = -omega_c' (I - A_c')^-1 diag(1/theta) d ln lambda_c, A_c the country's cost shares and d ln lambda 0 for local goods (Costinot and Rodriguez-Clare 2014; Caliendo and Parro 2015; ADR 0265, owner 2026-10-30; the plain -sum_g omega_cg / theta_g d ln lambda_cg of the original plan stays reported), graded per province since ADR 0268 (owner 2026-10-31): the formula on each province's home share lambda_p, and the model's real income change per province, both income-weighted up to countries (Ramondo, Rodriguez-Clare and Saborio-Rodriguez 2016); the country forms stay reported; (x10) every crossing tau x 10 runs 1,200 ticks frictionless with no invariant violation and the largest |d ln p| over the last 50 ticks at most 1e-6 (the baseline's is 2e-7); since 2026-10-31 reported only, a P5 criterion (ADR 0090). [the constants in C7's assertions change if the owner reads "holding" or "converging" otherwise]
 - The P2 gate tests live in `crates/ceteris-cli/tests/p2_gate.rs` (ported there in migration step 4f), not in `ceteris-calibrate/tests`; the plan names them where they are. [none]
 
 ## Global Constraints
@@ -375,15 +381,17 @@ Closes pre-P3's economics. D and E do not move the economics (E reproduces the g
 
 ## Branch D: `pre-p3/p3-prereqs` (Section 4 and the P2 minors)
 
-Starts from main after C merges, except D5, which can go any time. Not yet rewritten for the migration: D1 and D2's ADR is the next free number (0243 at 7219de2), not 0113; D4's `python/tests/test_reference.py:59` and D5's `pytest python/tests/test_p2_gate.py` read as `crates/ceteris-reference/tests/reference.rs` and `cargo test -p ceteris-cli --release --test p2_gate` with `CETERIS_PACK_EXPORT` (ADR 0113).
+Starts from main now, in parallel with C, and rebases after C6 (owner decision 12); D5 can go any time. Not yet rewritten for the migration: D1 and D2's ADR is the next free number (0243 at 7219de2), not 0113; D4's `python/tests/test_reference.py:59` and D5's `pytest python/tests/test_p2_gate.py` read as `crates/ceteris-reference/tests/reference.rs` and `cargo test -p ceteris-cli --release --test p2_gate` with `CETERIS_PACK_EXPORT` (ADR 0113).
 
 ### Task D1: Snapshots across network changes
+
+As built (RFC 0285, branch `claude/project-thread-qd8p06`): `Sim::intervene` logs between-tick edits and seek replays them; snapshots name the network by its content digest (not a version number) and carry both parameter sets (format 3); the static digest keeps its meaning. D3's list is in RFC 0285, As built (ADR 0097 is not edited: its file predates the RFC split). D4: the Review Focus references at SPEC Equations and Test plan are replaced; `test_reference.py:59` no longer exists after the migration.
 
 **Files:** `crates/ceteris-econ/src/world.rs` (`set_network`, `encode`, `restore`, `static_digest`), `crates/ceteris-core/src/sim.rs`, new `adr/0113-interventions-and-snapshot-state.md`.
 
 **Interfaces:** the static digest leaves out the network and keeps the inputs digest of everything else; `EconWorld` keeps an append-only `networks: Arc<Vec<Arc<Network>>>` (shared across restores, not state) and a `network_version: u32` that is state; `restore` rebuilds the kernel when the snapshot's version differs from the live one.
 
-- [ ] Failing tests: `seek_across_network_change_replays` (snapshot at t, `set_network` at t + 5, seek to t + 2, run to t + 20: hashes equal the continuous run); `null_intervention_reproduces_parent` (same network set again: identical hashes). Implement, commit.
+- [x] Failing tests: `seek_across_network_change_replays` (snapshot at t, `set_network` at t + 5, seek to t + 2, run to t + 20: hashes equal the continuous run); `null_intervention_reproduces_parent` (same network set again: identical hashes). Implement, commit.
 
 ### Task D2: Structural parameters as ex-post interventions
 
@@ -391,15 +399,15 @@ Starts from main after C merges, except D5, which can go any time. Not yet rewri
 
 **Interfaces:** `EconWorld::set_trade_params(&mut self, trade: TradeParams)` and `set_params(&mut self, params: EconParams)` between ticks; a structural change rebuilds the kernel; both parameter sets are encoded in the snapshot (codec version bump) and leave the static digest. Load stays guarded: calibrated tables start only under the structural parameters they were built with. An edit of the PIGL parameters moves the world off its steady state like any other structural edit, since the calibrated weights were inverted at the defaults; the SPEC says so.
 
-- [ ] Failing tests: `seek_across_param_edit_replays`; `theta_sweep_starts_from_baseline_steady_state` (load the fixture calibration, `set_trade_params` with theta x 1.4 at tick 0, tick 0 state equals the baseline's); `load_guard_still_panics_with_other_structural_params`. Implement, commit.
+- [x] Failing tests: `seek_across_param_edit_replays`; `theta_sweep_starts_from_baseline_steady_state` (load the fixture calibration, `set_trade_params` with theta x 1.4 at tick 0, tick 0 state equals the baseline's); `load_guard_still_panics_with_other_structural_params`. Implement, commit.
 
 ### Task D3: Warm-start audit
 
-- [ ] List every iterative solve whose result enters state (`clearing_wage` warm-starts from the last wage, which is state; B7's storage and B6's anchor are closed form) and assert in `seek_across_*` tests that a cold-restored child matches. Record the list in ADR 0097 as built. Commit `test(econ): warm starts are snapshot state (adr 0097)`.
+- [x] List every iterative solve whose result enters state (`clearing_wage` warm-starts from the last wage, which is state; B7's storage and B6's anchor are closed form) and assert in `seek_across_*` tests that a cold-restored child matches. Record the list in ADR 0097 as built. Commit `test(econ): warm starts are snapshot state (adr 0097)`.
 
 ### Task D4: P2 minors
 
-- [ ] One batch: the SPEC Initial state guard text (if D2 left any), "Review Focus" references at `python/tests/test_reference.py:59` and SPEC lines near 407 and 821 replaced by SPEC section names, an assert in `from_pack` that the pack `coverage` column equals `TradeParams::coverage` (or drop the column), `--data-state` rejected on uncalibrated packs, `demand.rs` near line 126 wording. Commit `chore(econ): p2 review minors`.
+- [x] One batch: the SPEC Initial state guard text (if D2 left any), "Review Focus" references at `python/tests/test_reference.py:59` and SPEC lines near 407 and 821 replaced by SPEC section names, an assert in `from_pack` that the pack `coverage` column equals `TradeParams::coverage` (or drop the column), `--data-state` rejected on uncalibrated packs, `demand.rs` near line 126 wording. Commit `chore(econ): p2 review minors`.
 
 ### Task D5: Nightly pack gate on a self-hosted runner
 
@@ -409,9 +417,9 @@ Starts from main after C merges, except D5, which can go any time. Not yet rewri
 
 ---
 
-## Branch E: `pre-p3/lanes` (ADR 0024)
+## Branch E: moved to P3 Branch L (ADR 0288)
 
-Starts after D merges, so kernel signatures are final. This branch gets its own plan then (signatures written now would be stale after B and C). The retrofit generic over `Real` and the `Dual<N>` gradients (ADR 0096) moved to P9 (ADR 0207); E does not introduce a `Real` trait, and its lane layout must not preclude adding one later. Its fixed requirements:
+Kept here for its requirements, which P3 Branch L builds; it starts once D merges, so kernel signatures are final. This branch gets its own plan then (signatures written now would be stale after B and C). The retrofit generic over `Real` and the `Dual<N>` gradients (ADR 0096) moved to P9 (ADR 0207); E does not introduce a `Real` trait, and its lane layout must not preclude adding one later. Its fixed requirements:
 
 - Economic kernels and the route-choice solve generic over `const L: usize` (ensemble lanes, ADR 0024), lane innermost after goods; read-only data stored once; lanes differ only in their parameters and random streams (common random numbers per lane as ADR 0024 sets them).
 - Release builds instantiate `L = 1`; goldens reproduce bit for bit, at 1, 3 and all threads.
@@ -430,4 +438,4 @@ Starts after D merges, so kernel signatures are final. This branch gets its own 
 
 ## Order and parallelism
 
-A is merged (PR #28). F runs any time. D5 can run as soon as the owner registers the runner. B starts now from main 7219de2 (owner decision 9); within B, B1 and B3 to B7 are independent of each other, B2 follows B1 (class values), B2a follows B2, B2b follows B2a, and B8 runs last. Then C (C1 to C5 in order, C6, C7), D and E run in order, each PR reviewed by the owner before the next branch starts from main; while a PR waits, the next branch may start stacked on it and rebase after the merge. Pre-P3 closes when C7's three criteria pass (or the owner accepts a recorded miss) and D and E have merged.
+A is merged (PR #28). F runs any time. D5 can run as soon as the owner registers the runner. B starts now from main 7219de2 (owner decision 9); within B, B1 and B3 to B7 are independent of each other, B2 follows B1 (class values), B2a follows B2, B2b follows B2a, and B8 runs last. Then C (C1 to C5 in order, C6, C7), with D in parallel from main (owner decision 12), rebased after C6; each PR is reviewed by the owner. Pre-P3 closes when C7's three criteria pass (or the owner accepts a recorded miss) and D has merged; E is P3 Branch L (ADR 0288).

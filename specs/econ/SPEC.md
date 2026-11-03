@@ -160,7 +160,8 @@ the graph repriced at that rate give the bulk legs (`Network.bulk`: same endpoin
 paths' cost per tonne and hours), which the class's goods use; the export's `legs` table carries
 them as `bulk_cost_per_t` and `bulk_hours` (NaN without bulk legs; export format 12).
 `network_from_graph` is that step alone, and `EconWorld::set_network` installs a rebuilt
-network (system T0 of the trade SPEC; the caller triggers it in P2, shocks arrive in P3).
+network (system T0 of the trade SPEC; the caller triggers it in P2, through `Sim::intervene` so a
+seek replays it, and shocks arrive in P3).
 
 **Calibration tables** (not built by the pack pipeline; written by
 `ceteris calibrate --pack DIR`, Calibration below), keyed by pack province:
@@ -215,6 +216,20 @@ goods hold none, as before), nothing in flight and one month of base dividends m
 pop. The stock ignores storage loss: with competitive storage on, the steady state holds
 coverage times sales, Y / (1 + delta s) (Calibration, stage 5), so the data state starts above it
 by the factor 1 + delta s; with storage off (the default, delta 0) the two agree.
+
+**Load guard and interventions** (ADRs 0291 to 0293). A calibrated start runs only under the structural
+parameters its tables were built under (`structural_digest`: the defaults with the calibrated
+border friction, `EconInputs::trade_params`); other structural parameters panic at
+`EconWorld::new`, and `ceteris run --data-state` starts the calibrated inputs from their data
+state instead (it needs a calibrated pack; an uncalibrated pack starts there anyway). A run under
+other structural parameters starts from the baseline steady state as an ex-post intervention:
+load under the calibration's parameters, then `EconWorld::set_params` or `set_trade_params`
+between ticks (`Sim::intervene` records it for seek). An edit leaves the dynamic state as it
+is and rebuilds the kernel and the layout under the new parameters, so a structural edit moves
+the world off its steady state, an edit of the PIGL parameters too, since the calibrated weights
+were inverted at the defaults. `set_network` is the same kind of edit. Snapshots carry both
+parameter sets and the digest of the network, and a restore returns to them, so a seek across
+an edit replays it (format 3).
 
 Merchant stocks of the data state (amendment 2026-10-31, B8e; owner, 2026-10-31, relayed by the
 coordinator). The
@@ -708,7 +723,7 @@ s_c = sB_c + lambda (Dt / B)^gamma (sD_c - sB_c) (m / B)^-eps exp(-eps (1 - eps)
 ```
 
 Shares below 0 (a pop far poorer than its country's base) are set to 0 and the rest rescaled to
-sum to 1 (Review Focus 4). Spending on good g is s_c(g) times its within-category share times
+sum to 1 (test `pigl_shares_stay_in_unit_interval_far_from_base`). Spending on good g is s_c(g) times its within-category share times
 the money balance: spending equals money.
 
 *Inversion (per country, over its pops; ADR 0094, Amendment).* Parameters theta, sigma_B, phi,
@@ -963,13 +978,42 @@ the flow window. Two ACR predictions sit beside it:
   inverse. With one good using itself at cost share a the change is 1 / (1 - a) times `acr`
   (fn. 20 there). The model has Leontief intermediates, so its welfare follows `acr_io`.
 
-A good bought at home in one run only makes the country's ACR NaN in both forms. ADR 0207's
-criterion grades `acr_io` (ADR 0265): under every crossing tau x 1.1, every ICIO country with
-|ACR| above 1e-4 has its sign, the median model / ACR ratio is in [0.8, 1.25] and the correlation
-across countries is at least 0.9; `acr` stays reported. C7 asserts it at B8 on the final pack.
-On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) `acr_io` has median 1.077
-(p10 0.931, p90 1.325), correlation 0.862 (misses 0.9: ADR 0265's tier 1 item, for C7) and 0
-wrong signs over 80; `acr` median 2.417 (p10 1.868, p90 3.016), correlation 0.855.
+A good bought at home in one run only makes the country's ACR NaN in both forms.
+
+`Outcome` also carries each province's pop income I_p, buyer prices q_pg and home share
+lambda_pg: what p buys from itself over what p buys from every origin, domestic and foreign, by
+value at origin prices over the flow window (the province's payment net of tariff,
+`flows::MeanFlows::absorption`). Both sides of the graded pair are reduced from provinces with
+base-run income weights s_p = I_p / I_c (ADR 0268; Ramondo, Rodriguez-Clare and
+Saborio-Rodriguez 2016, section 2.6, Proposition 4), provinces with no base income left out:
+
+- `acr_io_province`: sum_p s_p d ln W_p, d ln W_p = -Omega_c' (I - A_c')^-1 diag(1/theta)
+  d ln lambda_p with the country's Omega and A. A province NaN makes its country NaN.
+- `welfare_province`: sum_p s_p (d ln I_p - sum_g Omega_cg d ln q_pg). It differs from
+  `welfare` at first order by -sum_g Omega_cg sum_p (s_p - pi_p) d ln q_pg, pi_p the population
+  share: the covariance of income per head with price changes inside the country. A province
+  with no buyer price for a good with Omega_cg > 0 makes its country NaN (`welfare` averages the
+  finite prices instead); the report counts such countries with the NaN ACR ones and grades
+  neither.
+
+With one province per country the province forms are the country forms bit for bit. ADR 0207's
+criterion grades `welfare_province` against `acr_io_province` (ADR 0268, amending ADR 0265):
+under every crossing tau x 1.1, every ICIO country with |ACR| above 1e-4 has its sign, the median
+model / ACR ratio is in [0.8, 1.25] and the correlation across countries is at least 0.9. `acr`
+and `acr_io` against `welfare` stay reported, with each country's gap `acr_io -
+acr_io_province`. C7 asserts the criterion at B8 on the final pack.
+On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) the country forms read:
+`acr_io` median 1.077 (p10 0.931, p90 1.325), correlation 0.862 and 0 wrong signs over 80;
+`acr` median 2.417 (p10 1.868, p90 3.016), correlation 0.855 (before ADR 0268 and 0269).
+
+| Test | Checks |
+|---|---|
+| `province_forms_weight_provinces_by_base_income` | hand-computed two-province forms to 1e-14; a zero-income province adds nothing, as does a good a province absorbs in neither run; a vanishing province home share gives NaN |
+| `income_weights_differ_from_population_weights_by_the_price_covariance` | the first-order gap of point 2 of ADR 0268, remainder below (d ln q)^2 |
+| `province_forms_reduce_to_each_province_country` | two countries with interleaved provinces: each reduces to its own provinces and income |
+| `welfare_and_acr_match_the_hand_computed_toy` | one province: province forms equal the country forms bit for bit |
+| `outcome_aggregates_the_flow_window` | province incomes add to the country's; lambda_p is home over absorption, in [0, 1] |
+| `flows::tests::pairs_account_for_everything_dispatched` | province absorption adds to the country's home purchases and pairs into it, to 1e-12 |
 
 ## GE reference model (`ceteris-reference`)
 
@@ -1355,7 +1399,7 @@ texture fed from core columns.
 
 ## Outputs
 
-`ceteris run` writes `run_prices`, `run_wages`, `run_enterprises`, `run_flows`, `run_home` and `run.json` (the state at the final tick; flows and home purchases are means over the last 12 ticks, `ticks_averaged` in `run.json`, and fewer after a snapshot restore or `seek`, since the window is scratch and not state). `--data-state` needs `--pack`. With `--history [--history-every N]` it also writes `run_history_world`, `run_history_provinces` and `run_history_markets`, one row per sampled tick (tick 0, every N-th, the final tick) for charting the dynamics; recording only reads the state, so state hashes and the default output are unchanged. Columns: `crates/ceteris-econ/src/history.rs`.
+`ceteris run` writes `run_prices`, `run_wages`, `run_enterprises`, `run_flows`, `run_home` and `run.json` (the state at the final tick; flows and home purchases are means over the last 12 ticks, `ticks_averaged` in `run.json`, and fewer after a snapshot restore or `seek`, since the window is scratch and not state). `--data-state` needs a calibrated pack. With `--history [--history-every N]` it also writes `run_history_world`, `run_history_provinces` and `run_history_markets`, one row per sampled tick (tick 0, every N-th, the final tick) for charting the dynamics; recording only reads the state, so state hashes and the default output are unchanged. Columns: `crates/ceteris-econ/src/history.rs`.
 
 ## Test plan
 
@@ -1390,7 +1434,7 @@ texture fed from core columns.
   identical; pi^e is a log difference and stays; run with the loss write-off off, whose cap is
   nominal, ADR 0112); pi^e follows the world price index
   (`expected_inflation_follows_the_world_index`); clip counts (`world_counts_clip_bindings`).
-- Unreachable destination at world level (Review Focus 1, `fixture::unreachable_island`:
+- Unreachable destination at world level (`fixture::unreachable_island`:
   machinery has no route to or from the island, and of the island's sectors only light
   manufacturing uses it): over 240 ticks in both modes the island's q_d of machinery is the only
   infinite buyer price and the world index leaves it out, island pops buy none of it and spend
