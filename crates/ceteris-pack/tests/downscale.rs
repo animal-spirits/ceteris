@@ -20,7 +20,7 @@ use ceteris_pack::econ::people::{country_labour, national_population, scale_to_n
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, cell_of, province_population};
 use ceteris_pack::read::downscale::{Asset, Dose};
-use ceteris_pack::read::icio::{CountryIo, N_GOODS, aggregate, load_wdi};
+use ceteris_pack::read::icio::{CountryIo, HOUSEHOLDS_ONLY, N_GOODS, aggregate, load_wdi};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::load_observed;
 use common::{Uniform, approx, cached, pack_table, strings};
@@ -47,6 +47,7 @@ fn io(va: [f64; N_GOODS], basis: Basis) -> Economy {
             va,
             io: [[0.0; N_GOODS]; N_GOODS],
             final_demand_shares: [1.0 / N_GOODS as f64; N_GOODS],
+            final_demand_split: HOUSEHOLDS_ONLY,
             coal_share: 0.4,
             extraction: [0.0; N_GOODS],
             extraction_output: 0.0,

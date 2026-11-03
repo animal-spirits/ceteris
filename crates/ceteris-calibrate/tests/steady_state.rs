@@ -1909,3 +1909,56 @@ fn r_g_removed_and_residual_reported() {
         }
     }
 }
+
+/// The fixture with ADR 0099's three demanders: government buys 15% of every good's final
+/// demand, investment half of goods 5 and 6 and 5% of the rest (as the econ crate's
+/// `with_three_demanders`).
+fn fixture_with_three_demanders() -> Inputs {
+    let mut inp = io::load(fixture()).unwrap();
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    inp.gov = Mat::from_fn(n_c, n_g, |c, g| 0.15 * inp.omega[(c, g)]);
+    inp.inv = Mat::from_fn(n_c, n_g, |c, g| {
+        (if g == 5 || g == 6 { 0.5 } else { 0.05 }) * inp.omega[(c, g)]
+    });
+    inp
+}
+
+/// ADR 0099 (RFC 0301 D4): stage 4 inverts PIGL on the households' part of final demand at
+/// their share of spending; government and investment keep the balanced shares. In the
+/// calibrated state the households' PIGL spending alone is what the three demanders buy less
+/// government's and investment's shares (1e-12); the fixture is balanced at the data to about
+/// 1e-7 (ADR 0299), so the shares and the aggregate are the data's to 1e-6.
+#[test]
+fn pigl_inverted_on_hfce_only() {
+    let inp = fixture_with_three_demanders();
+    let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    let w = &s.weights;
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let (_, gov, inv) = inp.final_demand_split(&Mat::filled(n_c, n_g, 1.0));
+    allclose("gov", &w.gov.data, &gov.data, 1e-6, 0.0);
+    allclose("inv", &w.inv.data, &inv.data, 1e-6, 0.0);
+    let price = s.consumer.select_rows(&inp.pop_province);
+    let spend = s.pop_spending();
+    let all = aggregate_shares(&inp, w, &price, &spend);
+    allclose(
+        "all demanders",
+        &all.data,
+        &omega_shares(&inp).data,
+        1e-6,
+        0.0,
+    );
+
+    let h = w.household_share();
+    let country = inp.pop_country();
+    let budget: Vec<f64> = (0..spend.len()).map(|k| h[country[k]] * spend[k]).collect();
+    let pigl_only = demand::Weights {
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
+        ..w.clone()
+    };
+    let got = aggregate_shares(&inp, &pigl_only, &price, &budget);
+    let want = Mat::from_fn(n_c, n_g, |c, g| {
+        (all[(c, g)] - w.gov[(c, g)] - w.inv[(c, g)]) / h[c]
+    });
+    allclose("households", &got.data, &want.data, 0.0, 1e-12);
+}

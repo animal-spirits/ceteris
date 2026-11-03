@@ -253,6 +253,14 @@ pub fn write_inputs(
     for g in 0..ng {
         columns.push(f64s(&format!("omega_{g}"), c.omega.iter().map(|o| o[g])));
     }
+    // government's and investment's parts of omega (ADR 0099), where the inputs have them
+    for (name, part) in [("gov", &c.gov), ("inv", &c.inv)] {
+        if !part.is_empty() {
+            for g in 0..ng {
+                columns.push(f64s(&format!("{name}_{g}"), part.iter().map(|o| o[g])));
+            }
+        }
+    }
     // the steady state is calibrated at the 2000 shares (ADR 0100); without transfers the
     // table keeps its columns
     if transfers_on(inputs, params) {

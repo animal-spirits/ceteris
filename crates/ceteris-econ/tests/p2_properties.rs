@@ -16,7 +16,7 @@ use ceteris_econ::production::{labour_for_value_added, marginal_value_added, rho
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
     DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, TRANSFER, WRITE_OFF, active_cells,
-    static_digest, to_minor, to_numeraire,
+    pop_base_income, static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::p2::{N as N_GOODS, STORABLE, TRADED as N_TRADED};
@@ -3796,4 +3796,111 @@ fn observed_path_fades_after_2024() {
         0.02
     );
     assert_eq!(systems::transfer_share(&inp, Transfers::Off, 0, 0), 0.0);
+}
+
+/// The fixture with ADR 0099's three demanders: government buys 15% of every good's final
+/// demand, investment half of goods 5 and 6 (machinery and heavy industry) and 5% of the rest.
+fn with_three_demanders() -> EconInputs {
+    let mut inp = small_world();
+    let c = &mut inp.countries;
+    let ng = c.omega.width();
+    let part = |f: &dyn Fn(usize) -> f64| {
+        Rows::from_rows(
+            ng,
+            c.omega
+                .iter()
+                .map(|o| (0..ng).map(|g| f(g) * o[g]).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+        )
+    };
+    let (gov, inv) = (
+        part(&|_| 0.15),
+        part(&|g| if g == 5 || g == 6 { 0.5 } else { 0.05 }),
+    );
+    (c.gov, c.inv) = (gov, inv);
+    inp
+}
+
+/// ADR 0099 (RFC 0301 D1): at the data state's prices and the pops' base incomes, households
+/// by PIGL and government and investment at their fixed shares buy each country's final demand
+/// shares, and each pop spends what it holds.
+#[test]
+fn three_demanders_spend_the_final_demand_shares_at_the_data_state() {
+    let inputs = Arc::new(with_three_demanders());
+    let w = EconWorld::new(
+        Arc::clone(&inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let (lay, params) = (w.layout(), EconParams::default());
+    let income = pop_base_income(&inputs, &params);
+    let ng = inputs.n_goods();
+    let mut spent = vec![vec![0.0; ng]; inputs.n_countries()];
+    let mut x = vec![0.0; ng];
+    for (k, &m) in income.iter().enumerate() {
+        let i = inputs.pops.province[k] as usize;
+        let price: Vec<f64> = (0..ng).map(|g| inputs.data_state_price(i, g)).collect();
+        let money = inputs.pops.population[k] * m;
+        lay.pop_demand(&inputs, &params, k, &price, money, &mut x);
+        let total: f64 = (0..ng).map(|g| x[g] * price[g]).sum();
+        assert!((total / money - 1.0).abs() <= 1e-12, "pop {k}");
+        for g in 0..ng {
+            spent[inputs.country_of(i)][g] += x[g] * price[g];
+        }
+    }
+    for (c, s) in spent.iter().enumerate() {
+        let (omega, total) = (&inputs.countries.omega[c], s.iter().sum::<f64>());
+        let want: f64 = omega.iter().sum();
+        for g in 0..ng {
+            assert!(
+                (s[g] / total - omega[g] / want).abs() <= 1e-10,
+                "country {c} good {g}"
+            );
+        }
+    }
+}
+
+/// The three demanders spend each pop's money in full and mint nothing: the money stock is
+/// unchanged over 120 ticks, and the ledger's invariants hold every tick.
+#[test]
+fn money_stock_unchanged_by_three_demanders() {
+    let w = EconWorld::new(
+        Arc::new(with_three_demanders()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let mint = w.layout().accounts.mint;
+    let issued = w.ledger.money_wide(mint);
+    let mut sim = sim_of(w);
+    for tick in 0..120 {
+        sim.step().unwrap();
+        assert_eq!(sim.world().ledger.money_wide(mint), issued, "tick {tick}");
+    }
+    assert!(
+        sim.world()
+            .markets
+            .price
+            .iter()
+            .all(|p| p.is_finite() && *p > 0.0)
+    );
+}
+
+/// Without the split, the fixture's digest and state are what they were (households buy all
+/// final demand), and with it the digest moves.
+#[test]
+fn households_only_keeps_the_fixture() {
+    let base = world(EconParams::default());
+    let split = EconWorld::new(
+        Arc::new(with_three_demanders()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    assert!(base.layout().pigl.iter().all(|w| w.gov.is_empty()));
+    assert!(
+        base.layout()
+            .pigl
+            .iter()
+            .all(|w| w.household_share() == 1.0)
+    );
+    assert_ne!(base.digest(), split.digest());
 }

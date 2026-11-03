@@ -231,6 +231,17 @@ impl EconInputs {
         expect_rows("econ_io", a.len(), nc * ng * ng)?;
         let countries = Countries {
             omega: per_good(&c, "fd_", ng)?,
+            // packs before ADR 0099 have no split: households buy all final demand
+            gov: if c.column_by_name("gov_0").is_some() {
+                per_good(&c, "gov_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            inv: if c.column_by_name("inv_0").is_some() {
+                per_good(&c, "inv_", ng)?
+            } else {
+                Rows::new(ng)
+            },
             io: Rows::from_flat(a, ng * ng),
             s_l: f64s(&c, "labour_share")?,
             unemployment: f64s(&c, "unemployment")?,

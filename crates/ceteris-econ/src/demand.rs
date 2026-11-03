@@ -22,6 +22,34 @@ pub struct PiglWeights {
     /// Within-pop log income dispersion s_w the weights were inverted with, which every pop of
     /// the country uses (ADR 0094).
     pub sigma: f64,
+    /// Not PIGL: government's and investment's fixed shares of a pop's spending by good (ADR
+    /// 0099, RFC 0301), so households spend [`PiglWeights::household_share`] of it by PIGL.
+    /// Empty where households buy all final demand.
+    pub gov: Vec<f64>,
+    pub inv: Vec<f64>,
+}
+
+impl PiglWeights {
+    /// The share of a pop's spending its households spend by PIGL: 1 less government's and
+    /// investment's.
+    pub fn household_share(&self) -> f64 {
+        1.0 - self.gov.iter().sum::<f64>() - self.inv.iter().sum::<f64>()
+    }
+}
+
+/// Adds to `out` the quantities that `money` buys at fixed spending shares `share` (ADR 0099,
+/// RFC 0301 D5): each good with a share and a finite price gets its share of `money`, the
+/// shares of goods with no reachable origin spread over the others in proportion.
+pub fn fixed_shares(share: &[f64], price: &[f64], money: f64, out: &mut [f64]) {
+    let reachable = |g: &usize| share[*g] > 0.0 && price[*g].is_finite();
+    let total: f64 = share.iter().sum();
+    let reached: f64 = (0..share.len()).filter(reachable).map(|g| share[g]).sum();
+    if reached <= 0.0 {
+        return;
+    }
+    for g in (0..share.len()).filter(reachable) {
+        out[g] += money * total * (share[g] / reached) / price[g];
+    }
 }
 
 /// Log standard deviation of a lognormal with Gini `gini`: sqrt(2) Phi^-1((G + 1) / 2), which
@@ -206,6 +234,8 @@ pub fn invert_pigl(
         within,
         category: category.to_vec(),
         sigma: sigma_income,
+        gov: Vec::new(),
+        inv: Vec::new(),
     }
 }
 
@@ -292,6 +322,8 @@ pub fn invert_pigl_pops(
             .collect(),
         category: category.to_vec(),
         sigma,
+        gov: Vec::new(),
+        inv: Vec::new(),
     };
     let spent: f64 = pops.iter().map(|k| k.spend).sum();
     let q = &p.pigl;
