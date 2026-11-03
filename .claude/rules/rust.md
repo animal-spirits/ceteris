@@ -24,3 +24,20 @@ or optimizer.
 
 Adding a new banned path to `clippy.toml` also updates the fixture count in
 `scripts/check_clippy_bans.sh`.
+
+## Workflow (DESIGN 21.2)
+
+1. Spec first: update `specs/<module>/SPEC.md` (template `specs/TEMPLATE.md`) before code. The
+   owner approves specs for P2, P5 and P6 modules; do not start code on an unapproved spec there.
+2. Tests before code: unit tests per equation, proptest for invariants, an equilibrium-nesting
+   test where it applies.
+3. One system or one data table per task; the world stays runnable after each.
+4. A change that moves a golden hash says why in the commit and the CHANGELOG
+   (`### BEHAVIOUR: ...`), and updates the hashes in the same commit.
+5. No silent tuning: a parameter changed to pass a test is recorded in the register
+   (DESIGN 17) with its justification.
+6. Any deviation from the design or an accepted ADR is an RFC.
+7. Done = spec updated, tests pass, invariants hold over 100 years, benchmarks within budget,
+   new mechanisms pass the ablation test (15.7) or stay off by default.
+
+After non-trivial code changes, run the `spec-reviewer` agent against the module's SPEC.
