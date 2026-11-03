@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
-use ceteris_trade::{Goods, Leg, LegSet, LegTaus, Network, TradeParams, Wedges};
+use ceteris_trade::{
+    BulkLegs, GoodLegs, Goods, Leg, LegSet, LegTaus, Network, TradeParams, Wedges,
+};
 
 use crate::calibration::Steady;
 use crate::demand::PiglWeights;
@@ -557,6 +559,16 @@ impl EconInputs {
 
     /// BLAKE3 of a canonical encoding of every field.
     pub fn digest(&self) -> Hash {
+        self.digest_with(true)
+    }
+
+    /// [`EconInputs::digest`] without the network, which snapshots name by
+    /// [`network_digest`].
+    pub fn base_digest(&self) -> Hash {
+        self.digest_with(false)
+    }
+
+    fn digest_with(&self, with_network: bool) -> Hash {
         // destructured so a new field cannot be left out of the digest
         let EconInputs {
             goods,
@@ -632,11 +644,13 @@ impl EconInputs {
             e.bools(&goods.storable);
             goods.group.iter().for_each(|&g| e.u8(g));
         }
-        u16s(&mut e, province_country);
-        u16s(&mut e, gateway_country);
-        e.f64s(gateway_mass);
-        for legs in [domestic, access, crossings] {
-            encode_legs(&mut e, legs);
+        if with_network {
+            u16s(&mut e, province_country);
+            u16s(&mut e, gateway_country);
+            e.f64s(gateway_mass);
+            for legs in [domestic, access, crossings] {
+                encode_legs(&mut e, legs);
+            }
         }
         e.f64s(weight);
         e.count(wedges.tariff.len());
@@ -693,41 +707,78 @@ impl EconInputs {
             b"pack-provinces".iter().for_each(|&b| e.u8(b));
             e.u32s(pack);
         }
-        // appended only when present, so least-cost networks keep their digest
-        if let Some(rt) = route_taus {
-            b"route-taus".iter().for_each(|&b| e.u8(b));
-            for list in [
-                &rt.domestic,
-                &rt.access,
-                &rt.crossings,
-                &rt.domestic_hours,
-                &rt.access_hours,
-                &rt.crossing_hours,
-            ] {
-                e.f64s(list.as_flat());
-            }
-        }
-        // appended only when present, so networks without a bulk freight rate keep their digest
-        if let Some(b) = bulk {
-            b"bulk-legs".iter().for_each(|&b| e.u8(b));
-            b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
-            for legs in [&b.domestic, &b.access, &b.crossings] {
-                encode_legs(&mut e, legs);
-            }
-        }
-        // appended only when present, so least-cost networks keep their digest
-        if let Some(gl) = good_legs {
-            b"good-legs".iter().for_each(|&b| e.u8(b));
-            gl.set.iter().for_each(|&s| e.u8(s));
-            e.f64s(&gl.kappa);
-            e.count(gl.sets.len());
-            for s in &gl.sets {
-                for legs in [&s.domestic, &s.access, &s.crossings] {
-                    encode_legs(&mut e, legs);
-                }
-            }
+        if with_network {
+            encode_network_tail(&mut e, route_taus, bulk, good_legs);
         }
         state_hash(&e.into_bytes())
+    }
+}
+
+/// BLAKE3 of a canonical encoding of every field of `net`, the network [`EconInputs::digest`]
+/// covers.
+pub fn network_digest(net: &Network) -> Hash {
+    let Network {
+        province_country,
+        gateway_country,
+        gateway_mass,
+        domestic,
+        access,
+        crossings,
+        route_taus,
+        bulk,
+        good_legs,
+    } = net;
+    let mut e = Encoder::default();
+    b"ceteris-econ-network-1".iter().for_each(|&b| e.u8(b));
+    u16s(&mut e, province_country);
+    u16s(&mut e, gateway_country);
+    e.f64s(gateway_mass);
+    for legs in [domestic, access, crossings] {
+        encode_legs(&mut e, legs);
+    }
+    encode_network_tail(&mut e, route_taus, bulk, good_legs);
+    state_hash(&e.into_bytes())
+}
+
+fn encode_network_tail(
+    e: &mut Encoder,
+    route_taus: &Option<LegTaus>,
+    bulk: &Option<BulkLegs>,
+    good_legs: &Option<GoodLegs>,
+) {
+    // appended only when present, so least-cost networks keep their digest
+    if let Some(rt) = route_taus {
+        b"route-taus".iter().for_each(|&b| e.u8(b));
+        for list in [
+            &rt.domestic,
+            &rt.access,
+            &rt.crossings,
+            &rt.domestic_hours,
+            &rt.access_hours,
+            &rt.crossing_hours,
+        ] {
+            e.f64s(list.as_flat());
+        }
+    }
+    // appended only when present, so networks without a bulk freight rate keep their digest
+    if let Some(b) = bulk {
+        b"bulk-legs".iter().for_each(|&b| e.u8(b));
+        b.classes.iter().for_each(|&c| e.u8(u8::from(c)));
+        for legs in [&b.domestic, &b.access, &b.crossings] {
+            encode_legs(e, legs);
+        }
+    }
+    // appended only when present, so least-cost networks keep their digest
+    if let Some(gl) = good_legs {
+        b"good-legs".iter().for_each(|&b| e.u8(b));
+        gl.set.iter().for_each(|&s| e.u8(s));
+        e.f64s(&gl.kappa);
+        e.count(gl.sets.len());
+        for s in &gl.sets {
+            for legs in [&s.domestic, &s.access, &s.crossings] {
+                encode_legs(e, legs);
+            }
+        }
     }
 }
 

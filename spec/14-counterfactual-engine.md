@@ -28,7 +28,7 @@ In-world edits are distinguished from god-mode edits in the log, because only in
 
 ### 14.3 Snapshots and replay
 
-Full state snapshots are written every 12 ticks as compressed columnar chunks, content-addressed so unchanged tables are shared across branches. Reaching any tick means loading the nearest earlier snapshot and replaying deterministically. Forking at tick t costs one snapshot load. A null intervention must reproduce the parent bit for bit (a CI test).
+Full state snapshots are written every 12 ticks as compressed columnar chunks, content-addressed so unchanged tables are shared across branches. Reaching any tick means loading the nearest earlier snapshot and replaying deterministically. Forking at tick t costs one snapshot load. A null intervention must reproduce the parent bit for bit (a CI test). A snapshot carries the run's parameters and names the network it was taken on by the network's content digest, so a restore returns to both; seek reapplies the branch's timed edits as it replays past their ticks, a snapshot at a tick holding the world before that tick's edits; an edit made after seeking back starts a new timeline and drops the later snapshots and edits (RFC 0285).
 
 ### 14.4 Common random numbers
 

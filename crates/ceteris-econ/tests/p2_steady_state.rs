@@ -478,6 +478,44 @@ fn calibrated_start_rejects_other_theta() {
     EconWorld::new(calibrated_fixture(), EconParams::default(), trade);
 }
 
+fn theta_times(trade: &TradeParams, factor: f64) -> TradeParams {
+    TradeParams {
+        theta: trade.theta.iter().map(|t| t * factor).collect(),
+        ..trade.clone()
+    }
+}
+
+/// A structural sweep on a calibrated pack is an ex-post intervention: the world loads under
+/// the calibration's parameters and the edit at tick 0 leaves the tick-0 state the baseline's
+/// steady state; only the parameters (and so the hash) differ.
+#[test]
+fn theta_sweep_starts_from_baseline_steady_state() {
+    let inputs = calibrated_fixture();
+    let trade = inputs.trade_params();
+    let baseline = EconWorld::new(Arc::clone(&inputs), EconParams::default(), trade.clone());
+    let mut swept = baseline.clone();
+    swept.set_trade_params(theta_times(&trade, 1.4));
+    assert_eq!(swept.markets, baseline.markets);
+    assert_eq!(swept.pipeline, baseline.pipeline);
+    assert_eq!(swept.wage, baseline.wage);
+    assert_eq!(swept.employment, baseline.employment);
+    assert_eq!(swept.income, baseline.income);
+    assert_eq!(swept.price_index, baseline.price_index);
+    assert_eq!(swept.ledger, baseline.ledger);
+    assert_eq!(swept.trade().theta, theta_times(&trade, 1.4).theta);
+    assert_ne!(swept.digest(), baseline.digest());
+}
+
+/// The intervention path leaves the load guard as it was: a calibrated start under other
+/// structural parameters still panics.
+#[test]
+#[should_panic(expected = "calibrated steady state")]
+fn load_guard_still_panics_with_other_structural_params() {
+    let inputs = calibrated_fixture();
+    let trade = theta_times(&inputs.trade_params(), 1.4);
+    EconWorld::new(inputs, EconParams::default(), trade);
+}
+
 /// The storage parameters are structural (ADRs 0091, 0267): the calibration's block map and
 /// market elasticities were computed at them, so a run with a speculation intensity, a
 /// convenience elasticity, a money cost or an expectation gain of its own is refused, though

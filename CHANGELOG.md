@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### BEHAVIOUR: snapshot format 3, interventions replay on seek (RFC 0285)
+
+- Snapshots open with the inputs digest without the network, the network's digest and both
+  parameter sets, then the same dynamic state as before; `Sim::intervene` records between-tick
+  edits that seek replays; `EconWorld::set_params` and `set_trade_params` join `set_network`;
+  a restore rebuilds the kernel and layout where the snapshot's network or parameters differ.
+- Goldens re-blessed: `tests/golden/p0-toy.txt` (format number) and `tests/golden/p2-econ.txt`
+  (format number and header). The fixture's dynamic state is bit for bit main f3bd6a3's at ticks
+  12, 600 and 1200 (ledger, markets, pipeline and every column hashed apart from the header).
+  No pack golden moves.
+- `ceteris run --data-state` refuses an uncalibrated pack; `EconInputs::from_pack` refuses a
+  P2 pack whose `econ_goods` coverage differs from `TradeParams::coverage` (P02).
+
 ### BEHAVIOUR: P154 rescaled to the borrowed P04c (ADR 0269, owner ruling 2026-10-31)
 
 - Class 3's bulk sea multiplier is 0.017, 2.05e-4 / 0.0121, so its sea cost per tonne-km stays
