@@ -37,8 +37,10 @@ the sector mix is capital-light, and r near 0 where VA is mostly imputed rent (S
 
 Options:
 
-- A. SEA 2016 r_g,c; economies outside SEA take the mean r of SEA economies in their World Bank
-  income group (all SEA economies where the group has none), flagged; s_L,c,g clipped to [0.05,
+- A. SEA 2016 r_g,c; economies outside SEA take, good by good, the mean r of the 5 SEA
+  economies nearest in log GDP per person (ADR 0104's income group; the pack has no
+  income-group table), flagged; mining (WIOD B, one industry) counts in full for goods 1 and 2;
+  s_L,c,g clipped to [0.05,
   0.95] and the unclipped goods rescaled until the VA-weighted mean equals PWT (at most 10 goods,
   so at most 10 rounds), flagged per country where a clip binds.
 - B. As A, but a share outside (0, 1) stops the build.

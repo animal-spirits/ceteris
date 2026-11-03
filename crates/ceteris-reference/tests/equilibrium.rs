@@ -813,6 +813,7 @@ fn two_provinces(
         base_price: Mat::filled(2, 1, 1.0),
         gamma: None,
         s_l: vec![s_l],
+        s_l_good: Mat::zeros(0, 1),
         unemployment: vec![u],
         u_star: vec![0.0],
         gini: vec![0.35],
@@ -830,6 +831,7 @@ fn two_provinces(
         pop_province: vec![0, 0, 1, 1],
         pop_effective: [0.3, 0.7, 0.3, 0.7].iter().map(|s| s * labour).collect(),
         pop_population: vec![4e5, 6e5, 4e5, 6e5],
+        pop_dividend: vec![0.2, 0.3, 0.2, 0.3],
         domestic: Legs {
             good: vec![0, 0],
             row: vec![0, 1],
