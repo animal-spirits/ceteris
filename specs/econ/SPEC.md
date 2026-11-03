@@ -217,7 +217,7 @@ pop. The stock ignores storage loss: with competitive storage on, the steady sta
 coverage times sales, Y / (1 + delta s) (Calibration, stage 5), so the data state starts above it
 by the factor 1 + delta s; with storage off (the default, delta 0) the two agree.
 
-**Load guard and interventions** (RFC 0285). A calibrated start runs only under the structural
+**Load guard and interventions** (ADRs 0291 to 0293). A calibrated start runs only under the structural
 parameters its tables were built under (`structural_digest`: the defaults with the calibrated
 border friction, `EconInputs::trade_params`); other structural parameters panic at
 `EconWorld::new`, and `ceteris run --data-state` starts the calibrated inputs from their data

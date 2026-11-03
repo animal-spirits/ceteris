@@ -1,7 +1,7 @@
 # RFC 0285. Interventions replay on seek, and parameters are snapshot state
 
-Status: proposed
-Date: 2026-11-01
+Status: accepted
+Date: 2026-11-01 (decided 2026-11-03)
 Design sections: 14.3
 Research: P3 readiness review, 2026-11-01 (project files, `research/p3-readiness-2026-11-01.md`); pre-P3 plan, Branch D (`specs/pre-p3/PLAN.md`)
 
@@ -46,8 +46,8 @@ Recommendation: A, because 14.1 already defines a branch as timed edits replayed
 snapshots, and dropping the stale future is what an edit after a seek back means. `world_mut`
 stays for edits that seek should not replay.
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0291
 
 ### D2. How should a snapshot name the network it was taken on?
 
@@ -61,8 +61,8 @@ Recommendation: A, because state hashes then depend only on content, which keeps
 set the same networks comparable and makes a null intervention reproduce the parent by
 construction (14.3).
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0292
 
 ### D3. Are a run's parameters snapshot state?
 
@@ -75,8 +75,8 @@ Options:
 Recommendation: A, as the pre-P3 plan ruled (Task D2): 14.2 lists parameter edits as ex post,
 and an ex-post edit must survive a restore.
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0293
 
 ## As built
 
@@ -103,6 +103,7 @@ Row: pending
 
 ## Spec changes
 
-- 14.3: snapshots carry the run's parameters and name its network; seek replays the logged
-  interventions; an intervention after a seek back drops the later timeline (rows pending).
+- 14.3: seek replays the logged interventions and an intervention after a seek back drops the
+  later timeline (ADR 0291); snapshots name their network by its content digest (ADR 0292) and
+  carry the run's parameters (ADR 0293). Rows 0289 and 0290 are held by `pre-p3/audit`.
 - `specs/econ/SPEC.md`, Initial state: the load guard and the intervention path.
