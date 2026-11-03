@@ -4,7 +4,7 @@
 
 **Goal:** Bring P2 as built (main fc7ce3d; B onward from main 7219de2, Python removed) to the state P3 (counterfactual workbench, DESIGN 21.1 item 4) needs: enforced determinism and the dispatch speed plan, the P2 economics review (ADRs 0090 to 0095, 0101, 0200), main's assumption-audit ADRs (0098, 0099, 0100, 0103, 0104, 0106), P3 prerequisites (snapshots across interventions, structural edits, ensemble lanes), the open P2 issues, the records, and the rerun of the 28 October benchmark that closes pre-P3 (ADR 0207).
 
-**Architecture:** Five code branches, each a PR off the previous one's merge (A, then B, C, D, E), plus one records branch (F) that is independent. A changes speed and the kernel; B changes the price rule, storage, the trade frictions and the buyer price (selection, ADR 0200), lands the benchmark harness, then recalibrates and re-runs the P2 gate; C changes the calibration data and the demand and income blocks, recalibrates, re-runs the gate and reruns the 28 October benchmark as pre-P3's economic gate; D adds what P3's seek, branching and sweeps need; E retrofits the kernels over a const lane count once the economics have settled (the retrofit generic over `Real` moved to P9, ADR 0207). `ceteris-reference` mirrors every model change, because V1 compares against it.
+**Architecture:** Four code branches here (A, then B, C, D; E moved to P3 by ADR 0288), plus one records branch (F) that is independent. A changes speed and the kernel; B changes the price rule, storage, the trade frictions and the buyer price (selection, ADR 0200), lands the benchmark harness, then recalibrates and re-runs the P2 gate; C changes the calibration data and the demand and income blocks, recalibrates, re-runs the gate and reruns the 28 October benchmark as pre-P3's economic gate; D adds what P3's seek, branching and sweeps need. E, the retrofit of the kernels over a const lane count, is P3 Branch L since ADR 0288 (the retrofit generic over `Real` moved to P9, ADR 0207). `ceteris-reference` mirrors every model change, because V1 compares against it.
 
 **Tech Stack:** Rust 2024 workspace only (ADRs 0113, 0207: no Python, including tools): `ceteris-core`, `-geo`, `-trade`, `-econ` (rayon, libm, arrow); `ceteris-pack` (pack build, `src/econ/`, configs in `crates/ceteris-pack/config/`), `ceteris-reference` (GE reference, PPML, uniqueness), `ceteris-calibrate` (steady-state calibration, gravity), `ceteris-cli` (the `ceteris` binary and the P2 gate tests); GitHub Actions.
 
@@ -28,6 +28,12 @@
 9. B1 to B7 start now (migration steps 2 and 4 have landed); B8 and C recalibrate on the Rust-built pack.
 10. ADR 0200 (selection on trade links) is accepted and built in B together with ADR 0092's per-class nu.
 11. Pre-P3 ends with a rerun of the 28 October benchmark: openness within 1.5 times the ICIO shares, the ACR formula holding, and a x10 border shock converging. Amended 2026-10-31 (owner, "A"): x10 is beyond P2's valid range and is reported, not asserted; it moves to P5 (ADR 0090, Deferred to P5).
+
+## Owner decisions (2026-11-01, P3 readiness review)
+
+12. D starts now in parallel with C, from main, and rebases (re-blessing any moved hashes) after C6 merges.
+13. Ensemble lanes leave pre-P3: Branch E becomes P3 Branch L, before P3 C1 (ADR 0288, amending ADR 0207).
+14. D5's workflow and script are drafted by an agent and committed to main by the owner, since the `rows` guard fails `claude/*` branches that touch `.github/`.
 
 ## Controller rulings in this plan (cost if wrong in brackets)
 
@@ -375,7 +381,7 @@ Closes pre-P3's economics. D and E do not move the economics (E reproduces the g
 
 ## Branch D: `pre-p3/p3-prereqs` (Section 4 and the P2 minors)
 
-Starts from main after C merges, except D5, which can go any time. Not yet rewritten for the migration: D1 and D2's ADR is the next free number (0243 at 7219de2), not 0113; D4's `python/tests/test_reference.py:59` and D5's `pytest python/tests/test_p2_gate.py` read as `crates/ceteris-reference/tests/reference.rs` and `cargo test -p ceteris-cli --release --test p2_gate` with `CETERIS_PACK_EXPORT` (ADR 0113).
+Starts from main now, in parallel with C, and rebases after C6 (owner decision 12); D5 can go any time. Not yet rewritten for the migration: D1 and D2's ADR is the next free number (0243 at 7219de2), not 0113; D4's `python/tests/test_reference.py:59` and D5's `pytest python/tests/test_p2_gate.py` read as `crates/ceteris-reference/tests/reference.rs` and `cargo test -p ceteris-cli --release --test p2_gate` with `CETERIS_PACK_EXPORT` (ADR 0113).
 
 ### Task D1: Snapshots across network changes
 
@@ -411,9 +417,9 @@ As built (RFC 0285, branch `claude/project-thread-qd8p06`): `Sim::intervene` log
 
 ---
 
-## Branch E: `pre-p3/lanes` (ADR 0024)
+## Branch E: moved to P3 Branch L (ADR 0288)
 
-Starts after D merges, so kernel signatures are final. This branch gets its own plan then (signatures written now would be stale after B and C). The retrofit generic over `Real` and the `Dual<N>` gradients (ADR 0096) moved to P9 (ADR 0207); E does not introduce a `Real` trait, and its lane layout must not preclude adding one later. Its fixed requirements:
+Kept here for its requirements, which P3 Branch L builds; it starts once D merges, so kernel signatures are final. This branch gets its own plan then (signatures written now would be stale after B and C). The retrofit generic over `Real` and the `Dual<N>` gradients (ADR 0096) moved to P9 (ADR 0207); E does not introduce a `Real` trait, and its lane layout must not preclude adding one later. Its fixed requirements:
 
 - Economic kernels and the route-choice solve generic over `const L: usize` (ensemble lanes, ADR 0024), lane innermost after goods; read-only data stored once; lanes differ only in their parameters and random streams (common random numbers per lane as ADR 0024 sets them).
 - Release builds instantiate `L = 1`; goldens reproduce bit for bit, at 1, 3 and all threads.
@@ -432,4 +438,4 @@ Starts after D merges, so kernel signatures are final. This branch gets its own 
 
 ## Order and parallelism
 
-A is merged (PR #28). F runs any time. D5 can run as soon as the owner registers the runner. B starts now from main 7219de2 (owner decision 9); within B, B1 and B3 to B7 are independent of each other, B2 follows B1 (class values), B2a follows B2, B2b follows B2a, and B8 runs last. Then C (C1 to C5 in order, C6, C7), D and E run in order, each PR reviewed by the owner before the next branch starts from main; while a PR waits, the next branch may start stacked on it and rebase after the merge. Pre-P3 closes when C7's three criteria pass (or the owner accepts a recorded miss) and D and E have merged.
+A is merged (PR #28). F runs any time. D5 can run as soon as the owner registers the runner. B starts now from main 7219de2 (owner decision 9); within B, B1 and B3 to B7 are independent of each other, B2 follows B1 (class values), B2a follows B2, B2b follows B2a, and B8 runs last. Then C (C1 to C5 in order, C6, C7), with D in parallel from main (owner decision 12), rebased after C6; each PR is reviewed by the owner. Pre-P3 closes when C7's three criteria pass (or the owner accepts a recorded miss) and D has merged; E is P3 Branch L (ADR 0288).
