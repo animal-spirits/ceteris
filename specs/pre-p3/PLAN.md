@@ -385,11 +385,13 @@ Starts from main now, in parallel with C, and rebases after C6 (owner decision 1
 
 ### Task D1: Snapshots across network changes
 
+As built (RFC 0285, branch `claude/project-thread-qd8p06`): `Sim::intervene` logs between-tick edits and seek replays them; snapshots name the network by its content digest (not a version number) and carry both parameter sets (format 3); the static digest keeps its meaning. D3's list is in RFC 0285, As built (ADR 0097 is not edited: its file predates the RFC split). D4: the Review Focus references at SPEC Equations and Test plan are replaced; `test_reference.py:59` no longer exists after the migration.
+
 **Files:** `crates/ceteris-econ/src/world.rs` (`set_network`, `encode`, `restore`, `static_digest`), `crates/ceteris-core/src/sim.rs`, new `adr/0113-interventions-and-snapshot-state.md`.
 
 **Interfaces:** the static digest leaves out the network and keeps the inputs digest of everything else; `EconWorld` keeps an append-only `networks: Arc<Vec<Arc<Network>>>` (shared across restores, not state) and a `network_version: u32` that is state; `restore` rebuilds the kernel when the snapshot's version differs from the live one.
 
-- [ ] Failing tests: `seek_across_network_change_replays` (snapshot at t, `set_network` at t + 5, seek to t + 2, run to t + 20: hashes equal the continuous run); `null_intervention_reproduces_parent` (same network set again: identical hashes). Implement, commit.
+- [x] Failing tests: `seek_across_network_change_replays` (snapshot at t, `set_network` at t + 5, seek to t + 2, run to t + 20: hashes equal the continuous run); `null_intervention_reproduces_parent` (same network set again: identical hashes). Implement, commit.
 
 ### Task D2: Structural parameters as ex-post interventions
 
@@ -397,15 +399,15 @@ Starts from main now, in parallel with C, and rebases after C6 (owner decision 1
 
 **Interfaces:** `EconWorld::set_trade_params(&mut self, trade: TradeParams)` and `set_params(&mut self, params: EconParams)` between ticks; a structural change rebuilds the kernel; both parameter sets are encoded in the snapshot (codec version bump) and leave the static digest. Load stays guarded: calibrated tables start only under the structural parameters they were built with. An edit of the PIGL parameters moves the world off its steady state like any other structural edit, since the calibrated weights were inverted at the defaults; the SPEC says so.
 
-- [ ] Failing tests: `seek_across_param_edit_replays`; `theta_sweep_starts_from_baseline_steady_state` (load the fixture calibration, `set_trade_params` with theta x 1.4 at tick 0, tick 0 state equals the baseline's); `load_guard_still_panics_with_other_structural_params`. Implement, commit.
+- [x] Failing tests: `seek_across_param_edit_replays`; `theta_sweep_starts_from_baseline_steady_state` (load the fixture calibration, `set_trade_params` with theta x 1.4 at tick 0, tick 0 state equals the baseline's); `load_guard_still_panics_with_other_structural_params`. Implement, commit.
 
 ### Task D3: Warm-start audit
 
-- [ ] List every iterative solve whose result enters state (`clearing_wage` warm-starts from the last wage, which is state; B7's storage and B6's anchor are closed form) and assert in `seek_across_*` tests that a cold-restored child matches. Record the list in ADR 0097 as built. Commit `test(econ): warm starts are snapshot state (adr 0097)`.
+- [x] List every iterative solve whose result enters state (`clearing_wage` warm-starts from the last wage, which is state; B7's storage and B6's anchor are closed form) and assert in `seek_across_*` tests that a cold-restored child matches. Record the list in ADR 0097 as built. Commit `test(econ): warm starts are snapshot state (adr 0097)`.
 
 ### Task D4: P2 minors
 
-- [ ] One batch: the SPEC Initial state guard text (if D2 left any), "Review Focus" references at `python/tests/test_reference.py:59` and SPEC lines near 407 and 821 replaced by SPEC section names, an assert in `from_pack` that the pack `coverage` column equals `TradeParams::coverage` (or drop the column), `--data-state` rejected on uncalibrated packs, `demand.rs` near line 126 wording. Commit `chore(econ): p2 review minors`.
+- [x] One batch: the SPEC Initial state guard text (if D2 left any), "Review Focus" references at `python/tests/test_reference.py:59` and SPEC lines near 407 and 821 replaced by SPEC section names, an assert in `from_pack` that the pack `coverage` column equals `TradeParams::coverage` (or drop the column), `--data-state` rejected on uncalibrated packs, `demand.rs` near line 126 wording. Commit `chore(econ): p2 review minors`.
 
 ### Task D5: Nightly pack gate on a self-hosted runner
 

@@ -47,12 +47,18 @@ impl From<DecodeError> for SimError {
     }
 }
 
+/// A change to the world between ticks, replayed by seek; it must be deterministic.
+pub type Intervention<W> = Box<dyn Fn(&mut W) + Send + Sync>;
+
 pub struct Sim<W> {
     world: W,
     schedule: Schedule<W>,
     seed: Seed,
     tick: u32,
     store: SnapshotStore,
+    /// Interventions by the tick they apply at, in the order made. A snapshot at a tick is
+    /// taken before that tick's interventions.
+    interventions: Vec<(u32, Intervention<W>)>,
 }
 
 impl<W: State> Sim<W> {
@@ -63,6 +69,7 @@ impl<W: State> Sim<W> {
             seed,
             tick: 0,
             store: SnapshotStore::default(),
+            interventions: Vec::new(),
         };
         sim.snapshot();
         sim
@@ -73,9 +80,28 @@ impl<W: State> Sim<W> {
     }
 
     /// The world between ticks, for changes the schedule does not make (a shock). Snapshots
-    /// taken before the change keep the world as it was.
+    /// taken before the change keep the world as it was, and a seek does not replay it; see
+    /// [`Sim::intervene`].
     pub fn world_mut(&mut self) -> &mut W {
         &mut self.world
+    }
+
+    /// Applies `change` to the world now and records it at this tick, so that a seek across
+    /// it replays it. After a seek back, the snapshots and interventions later than this tick
+    /// belong to the timeline being left and are dropped.
+    pub fn intervene(&mut self, change: impl Fn(&mut W) + Send + Sync + 'static) {
+        let t = self.tick;
+        self.store.truncate_after(t);
+        self.interventions.retain(|(at, _)| *at <= t);
+        change(&mut self.world);
+        self.interventions.push((t, Box::new(change)));
+    }
+
+    fn apply_interventions(&mut self) {
+        let t = self.tick;
+        for (_, change) in self.interventions.iter().filter(|(at, _)| *at == t) {
+            change(&mut self.world);
+        }
     }
 
     /// Number of completed ticks.
@@ -106,6 +132,7 @@ impl<W: State> Sim<W> {
         if self.tick.is_multiple_of(SNAPSHOT_EVERY) {
             self.snapshot();
         }
+        self.apply_interventions();
         Ok(())
     }
 
@@ -116,7 +143,8 @@ impl<W: State> Sim<W> {
         Ok(())
     }
 
-    /// Moves to any tick: restores the nearest snapshot at or before it and replays.
+    /// Moves to any tick: restores the nearest snapshot at or before it and replays, with the
+    /// interventions recorded on the way.
     pub fn seek(&mut self, tick: u32) -> Result<(), SimError> {
         let (t, bytes) = self
             .store
@@ -127,6 +155,7 @@ impl<W: State> Sim<W> {
         debug_assert_eq!(decoded_tick, t);
         self.world = world;
         self.tick = t;
+        self.apply_interventions();
         self.run_until(tick)?;
         Ok(())
     }

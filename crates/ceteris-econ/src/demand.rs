@@ -122,8 +122,8 @@ fn raw_shares(
 
 /// Budget shares by good of a pop with mean income `income` per person and log income
 /// dispersion `sigma_income`, at buyer prices `price`. Category shares below 0 (a pop far
-/// from its country's base) are set to 0 and the rest rescaled to sum to 1 (as for the fixture's island pops);
-/// goods without a weight or at an infinite price get 0.
+/// from its country's base, such as the fixture's island pops) are set to 0 and the rest
+/// rescaled to sum to 1; goods without a weight or at an infinite price get 0.
 pub fn pigl_shares(
     w: &PiglWeights,
     price: &[f64],

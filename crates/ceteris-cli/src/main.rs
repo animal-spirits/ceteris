@@ -252,8 +252,12 @@ fn run(args: &Args) -> Result<(), String> {
         return Err("--data-state needs --pack: the fixture has no calibrated steady state".into());
     }
     let mut inputs = args.source.load(true)?;
-    if args.data_state {
-        inputs.steady = None;
+    if args.data_state && inputs.steady.take().is_none() {
+        return Err(
+            "--data-state needs a calibrated pack: this one has no calibration tables and \
+             starts from its data state already"
+                .into(),
+        );
     }
     let trade = inputs.trade_params();
     let inputs = Arc::new(inputs);
