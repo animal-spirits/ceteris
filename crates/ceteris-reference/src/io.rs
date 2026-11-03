@@ -236,6 +236,10 @@ pub struct Inputs {
     pub transfer: Vec<f64>,
     /// (C, G)
     pub omega: Mat,
+    /// (C, G) government's and investment's parts of `omega` (ADR 0099, RFC 0301; the export's
+    /// `gov_g`, `inv_g`); no rows where households buy all final demand.
+    pub gov: Mat,
+    pub inv: Mat,
     /// Per country (G, G): `io[c][(k, g)]` = a_kg.
     pub io: Vec<Mat>,
     /// (P, G): origin markets of traded goods, province markets of local goods.
@@ -514,8 +518,17 @@ impl Inputs {
             .map(|(m, n)| m * n)
             .collect();
         let price = self.data_state_price().select_rows(&self.pop_province);
-        demand::invert_pops(
-            &self.omega,
+        let (household, gov, inv) =
+            self.final_demand_split(&Mat::filled(self.omega.rows, self.omega.cols, 1.0));
+        let h = fixed_household_share(&gov, &inv, self.omega.rows);
+        let income: Vec<f64> = income
+            .iter()
+            .zip(&country)
+            .map(|(m, &c)| h[c] * m)
+            .collect();
+        let spend: Vec<f64> = spend.iter().zip(&country).map(|(m, &c)| h[c] * m).collect();
+        let mut w = demand::invert_pops(
+            &household,
             &demand::Pops {
                 country: &country,
                 price: &price,
@@ -526,7 +539,29 @@ impl Inputs {
             &self.category,
             self.sigma_demand,
             &self.pigl,
-        )
+        )?;
+        (w.gov, w.inv) = (gov, inv);
+        Ok(w)
+    }
+
+    /// The final demand split over its demanders (ADR 0099) with each country and good's final
+    /// demand scaled by `factor` (C, G) (stage 1's balance, ADR 0295; 1 at the data):
+    /// households' part of the scaled shares (C, G), and government's and investment's spending
+    /// shares, their scaled parts over the country's scaled total (no rows without the split).
+    pub fn final_demand_split(&self, factor: &Mat) -> (Mat, Mat, Mat) {
+        let (n_c, n_g) = (self.omega.rows, self.omega.cols);
+        let scaled = |m: &Mat| Mat::from_fn(n_c, n_g, |c, g| m[(c, g)] * factor[(c, g)]);
+        let total = scaled(&self.omega);
+        if self.gov.rows == 0 {
+            return (total, Mat::zeros(0, n_g), Mat::zeros(0, n_g));
+        }
+        let (gov, inv) = (scaled(&self.gov), scaled(&self.inv));
+        let sum = total.row_sums();
+        let household = Mat::from_fn(n_c, n_g, |c, g| {
+            (total[(c, g)] - gov[(c, g)] - inv[(c, g)]).max(0.0)
+        });
+        let per = |m: &Mat| Mat::from_fn(n_c, n_g, |c, g| m[(c, g)] / sum[c]);
+        (household, per(&gov), per(&inv))
     }
 
     /// (P, G) base household consumption quantities at prices 1: weights of the world price index.
@@ -781,6 +816,16 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
             vec![0.0; n_c]
         },
         omega: columns(&countries, "omega", n_c)?,
+        gov: if countries.has("gov_0") {
+            columns(&countries, "gov", n_c)?
+        } else {
+            Mat::zeros(0, n_goods)
+        },
+        inv: if countries.has("inv_0") {
+            columns(&countries, "inv", n_c)?
+        } else {
+            Mat::zeros(0, n_goods)
+        },
         io: a,
         active: act,
         ent_province: ent.usize("province")?,
@@ -868,6 +913,16 @@ pub fn validate(inp: &Inputs) -> Result<(), String> {
         return Err("an enterprise has a nonpositive value-added coefficient".into());
     }
     inp.pigl_weights().map(|_| ())
+}
+
+/// (C,) households' share of spending at government's and investment's spending shares `gov`,
+/// `inv` (no rows without the split: 1), as `demand::Weights::household_share`.
+pub fn fixed_household_share(gov: &Mat, inv: &Mat, n_c: usize) -> Vec<f64> {
+    if gov.rows == 0 {
+        return vec![1.0; n_c];
+    }
+    let (g, i) = (gov.row_sums(), inv.row_sums());
+    g.iter().zip(&i).map(|(g, i)| 1.0 - g - i).collect()
 }
 
 #[cfg(test)]

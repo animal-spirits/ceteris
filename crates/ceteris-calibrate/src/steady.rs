@@ -53,7 +53,7 @@ use std::time::Instant;
 
 use ceteris_econ::EconParams;
 use ceteris_reference::demand::{self, N_CATEGORIES, Weights};
-use ceteris_reference::io::{Inputs, Mat};
+use ceteris_reference::io::{Inputs, Mat, fixed_household_share};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
 use ceteris_trade::TradeParams;
@@ -1025,6 +1025,9 @@ struct State {
     scale_unit: f64,
     /// (P, G) the prices of the data state, whose local goods' (p_c) the passes keep.
     level: Mat,
+    /// Whether the weights carry government's and investment's shares (ADR 0099), which then
+    /// follow the within-good weights.
+    split: bool,
 }
 
 /// The largest magnitude in `v`, or 1 where every entry is 0: the unit of a block of the state.
@@ -1047,6 +1050,10 @@ impl State {
         z.extend(w.scale.iter().map(|x| x / self.scale_unit));
         z.extend_from_slice(&w.omega.data);
         z.extend_from_slice(&w.within.data);
+        if self.split {
+            z.extend_from_slice(&w.gov.data);
+            z.extend_from_slice(&w.inv.data);
+        }
         z
     }
 
@@ -1077,11 +1084,17 @@ impl State {
             data: z[at..at + n_c * N_CATEGORIES].to_vec(),
         };
         at += n_c * N_CATEGORIES;
-        let within = Mat {
-            rows: n_c,
-            cols: n_g,
-            data: z[at..].to_vec(),
+        let mut block = || {
+            let rows = if at < z.len() { n_c } else { 0 };
+            let m = Mat {
+                rows,
+                cols: n_g,
+                data: z[at..at + rows * n_g].to_vec(),
+            };
+            at += rows * n_g;
+            m
         };
+        let (within, gov, inv) = (block(), block(), block());
         (
             q,
             rebate,
@@ -1090,6 +1103,8 @@ impl State {
                 omega,
                 within,
                 sigma: self.sigma.clone(),
+                gov,
+                inv,
             },
         )
     }
@@ -1236,6 +1251,7 @@ pub fn calibrate_from(
         rebate_unit: 0.0,
         scale_unit: block_unit(&weights.scale),
         level: local_price.clone(),
+        split: weights.gov.rows > 0,
     };
     let mut lw: Option<Mat> = None;
     let mut history: Vec<Pass> = Vec::new();
@@ -1340,33 +1356,44 @@ pub fn calibrate_from(
         });
         let target: Vec<f64> = (0..n_g).map(|g| world_sales[g] - column[g]).collect();
         let ras = balance::balance(&seed, &net, &target, traded, ras_start.as_deref())?;
-        let omega_target = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] * ras.factor[(k, g)]);
+        // the balance moves all final demand; PIGL is inverted on the households' part at their
+        // share of spending, government and investment keep their balanced shares (ADR 0099,
+        // RFC 0301 D4)
+        let (omega_target, gov, inv) = inp.final_demand_split(&ras.factor);
+        let h = fixed_household_share(&gov, &inv, n_c);
         ras_start = Some(ras.b.clone());
-        let per_person: Vec<f64> = hh
-            .spending
+        let budget: Vec<f64> = (0..kc.len()).map(|k| h[kc[k]] * hh.spending[k]).collect();
+        let per_person: Vec<f64> = budget
             .iter()
             .zip(people)
             .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
             .collect();
-        let weights_new = demand::invert_pops(
+        let mut weights_new = demand::invert_pops(
             &omega_target,
             &demand::Pops {
                 country: &kc,
                 price: &q.select_rows(kp),
                 income: &per_person,
-                spend: &hh.spending,
+                spend: &budget,
             },
             &sigma_within,
             &inp.category,
             inp.sigma_demand,
             &inp.pigl,
         )?;
+        (weights_new.gov, weights_new.inv) = (gov, inv);
 
         change = py_max([
             relative(&rebate_new, &rebate),
             relative(&q_new.data, &q.data),
             relative(&weights_new.scale, &weights.scale),
             relative(&weights_new.omega.data, &weights.omega.data),
+            if state.split {
+                relative(&weights_new.gov.data, &weights.gov.data)
+                    .max(relative(&weights_new.inv.data, &weights.inv.data))
+            } else {
+                0.0
+            },
         ]);
         history.push(Pass {
             pass: passes,
@@ -1675,6 +1702,7 @@ mod tests {
             rebate_unit: 4e9,
             scale_unit: 2.5,
             level: Mat::from_fn(2, 2, |p, g| if g == 0 { 1.0 } else { 1.0 + 0.3 * p as f64 }),
+            split: true,
         };
         // the local good keeps its price level (ADR 0098), which the state does not carry
         let q = Mat::from_fn(2, 2, |p, g| {
@@ -1690,6 +1718,8 @@ mod tests {
             omega: Mat::from_fn(2, N_CATEGORIES, |c, j| 0.1 * (c + j) as f64),
             within: Mat::from_fn(2, 2, |c, g| 0.3 + 0.1 * (c + g) as f64),
             sigma: state.sigma.clone(),
+            gov: Mat::from_fn(2, 2, |c, g| 0.01 * (1 + c + g) as f64),
+            inv: Mat::from_fn(2, 2, |c, g| 0.02 * (1 + c + g) as f64),
         };
         let z = state.pack(&q, &rebate, &w);
         assert_eq!(&z[..2], &[1.5f64.ln(), 2.5f64.ln()]);
@@ -1704,8 +1734,8 @@ mod tests {
         assert!(close(&q2.data, &q.data) && close(&rebate2, &rebate));
         assert!(close(&w2.scale, &w.scale));
         assert_eq!(
-            (w2.omega.data, w2.within.data),
-            (w.omega.data, w.within.data)
+            (w2.omega.data, w2.within.data, w2.gov, w2.inv),
+            (w.omega.data, w.within.data, w.gov, w.inv)
         );
         assert_eq!(block_unit(&[0.0, 0.0]), 1.0);
         assert_eq!(block_unit(&[-3.0, 2.0]), 3.0);

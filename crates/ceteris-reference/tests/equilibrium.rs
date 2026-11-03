@@ -818,6 +818,8 @@ fn two_provinces(
         gini: vec![0.35],
         transfer: vec![0.0],
         omega: Mat::filled(1, 1, 1.0),
+        gov: Mat::zeros(0, 1),
+        inv: Mat::zeros(0, 1),
         io: vec![Mat::zeros(1, 1)],
         active: vec![vec![true]; 2],
         ent_province: vec![0, 0, 1, 1],

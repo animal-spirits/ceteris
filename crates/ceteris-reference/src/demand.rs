@@ -26,6 +26,43 @@ pub struct Weights {
     pub omega: Mat,
     pub within: Mat,
     pub sigma: Vec<f64>,
+    /// Not PIGL: government's and investment's fixed shares of a pop's spending (C, G) (ADR
+    /// 0099, RFC 0301); households spend the rest by PIGL ([`Weights::household_share`]). No
+    /// rows where households buy all final demand.
+    pub gov: Mat,
+    pub inv: Mat,
+}
+
+impl Weights {
+    /// (C,) the share of a pop's spending its households spend by PIGL, 1 without the split.
+    pub fn household_share(&self) -> Vec<f64> {
+        if self.gov.rows == 0 {
+            return vec![1.0; self.scale.len()];
+        }
+        let (g, i) = (self.gov.row_sums(), self.inv.row_sums());
+        g.iter().zip(&i).map(|(g, i)| 1.0 - g - i).collect()
+    }
+}
+
+/// Spending shares (G,) of a demander that buys at fixed shares `share` (ADR 0099, RFC 0301
+/// D5): each good with a share and a finite price keeps it, the shares of unreachable goods
+/// spread over the others in proportion; all zero where none is reachable.
+pub fn fixed_shares(share: &[f64], price: &[f64]) -> Vec<f64> {
+    let reachable = |g: usize| share[g] > 0.0 && price[g].is_finite();
+    let total: f64 = share.iter().sum();
+    let reached: f64 = (0..share.len())
+        .filter(|&g| reachable(g))
+        .map(|g| share[g])
+        .sum();
+    (0..share.len())
+        .map(|g| {
+            if reached > 0.0 && reachable(g) {
+                total * (share[g] / reached)
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 /// sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G). Infinite for |G| >= 1 (`io::validate` keeps G in [0, 1)).
@@ -121,11 +158,14 @@ pub fn invert(
             z[r] * base_spend[r].powf(eps) * (eps * (1.0 - eps) * sigma[r].powi(2) / 2.0).exp()
         })
         .collect();
+    let n_g = within.cols;
     Ok(Weights {
         scale,
         omega: weight,
         within,
         sigma: sigma.to_vec(),
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
     })
 }
 
@@ -168,6 +208,8 @@ pub fn invert_pops(
         omega: Mat::zeros(n_c, N_CATEGORIES),
         within: Mat::zeros(n_c, n_g),
         sigma: sigma.to_vec(),
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
     };
     let (om, cat) = by_category(omega, category);
     for c in 0..n_c {
@@ -471,6 +513,36 @@ fn aggregate(weight: &Mat, index: &Mat, sigma: f64) -> (Vec<f64>, Mat) {
 /// and the rest rescaled; goods without a weight or at an infinite price get 0.
 #[allow(clippy::too_many_arguments)]
 pub fn shares(
+    w: &Weights,
+    country: &[usize],
+    price: &Mat,
+    income: &[f64],
+    sigma: &[f64],
+    category: &[usize],
+    sigma_demand: f64,
+    p: &Pigl,
+) -> Mat {
+    if w.gov.rows == 0 {
+        return pigl_shares(w, country, price, income, sigma, category, sigma_demand, p);
+    }
+    let h = w.household_share();
+    let budget: Vec<f64> = income.iter().zip(country).map(|(m, &c)| h[c] * m).collect();
+    let mut out = pigl_shares(w, country, price, &budget, sigma, category, sigma_demand, p);
+    for (r, &c) in country.iter().enumerate() {
+        let (gov, inv) = (
+            fixed_shares(w.gov.row(c), price.row(r)),
+            fixed_shares(w.inv.row(c), price.row(r)),
+        );
+        for (g, v) in out.row_mut(r).iter_mut().enumerate() {
+            *v = h[c] * *v + gov[g] + inv[g];
+        }
+    }
+    out
+}
+
+/// The PIGL shares of households' spending, at income per person `income`.
+#[allow(clippy::too_many_arguments)]
+fn pigl_shares(
     w: &Weights,
     country: &[usize],
     price: &Mat,

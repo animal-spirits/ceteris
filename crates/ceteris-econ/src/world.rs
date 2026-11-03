@@ -17,7 +17,7 @@ use ceteris_trade::source::{INTERMEDIATE, dispatch, source};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
-use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
+use crate::demand::{PiglWeights, PopAt, fixed_shares, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
 use crate::params::{EconParams, Pigl, Technology, Transfers};
@@ -235,16 +235,28 @@ impl Layout {
         }
         let c = inp.country_of(inp.pops.province[k] as usize);
         let people = inp.pops.population[k];
+        let w = &self.pigl[c];
+        // households spend their share by PIGL, government and investment theirs at fixed
+        // shares (ADR 0099); without the split the household share is exactly 1
+        let household = if w.gov.is_empty() {
+            money
+        } else {
+            w.household_share() * money
+        };
         pigl(
-            &self.pigl[c],
+            w,
             price,
-            money / people,
+            household / people,
             self.sigma_income[c],
             params,
             out,
         );
         for x in out.iter_mut() {
             *x *= people;
+        }
+        if !w.gov.is_empty() {
+            fixed_shares(&w.gov, price, money, out);
+            fixed_shares(&w.inv, price, money, out);
         }
     }
 }
@@ -758,6 +770,7 @@ pub fn household_preferences(
                         .map(|&k| (inp.pops.population[k], income[k]))
                         .collect();
                     let sigma = within_sigma(inp.countries.gini[c], &people);
+                    let split = Split::of(inp, c);
                     let at: Vec<PopAt> = members
                         .iter()
                         .zip(&people)
@@ -765,23 +778,58 @@ pub fn household_preferences(
                             price: (0..ng)
                                 .map(|g| inp.data_state_price(inp.pops.province[k] as usize, g))
                                 .collect(),
-                            income: m,
-                            spend: n * m,
+                            income: split.household * m,
+                            spend: n * split.household * m,
                         })
                         .collect();
-                    invert_pigl_pops(
-                        &inp.countries.omega[c],
-                        &inp.goods.category,
-                        &at,
-                        sigma,
-                        params,
-                    )
+                    let mut w =
+                        invert_pigl_pops(&split.omega, &inp.goods.category, &at, sigma, params);
+                    (w.gov, w.inv) = (split.gov, split.inv);
+                    w
                 })
                 .collect()
         }
     };
     let sigma = weights.iter().map(|w| w.sigma).collect();
     (weights, sigma)
+}
+
+/// A country's final demand split over its demanders at the data (ADR 0099): households' part
+/// of the final demand shares, the spending shares of government and investment (their parts
+/// over all final demand, empty without the split) and the households' share of spending.
+struct Split {
+    omega: Vec<f64>,
+    gov: Vec<f64>,
+    inv: Vec<f64>,
+    household: f64,
+}
+
+impl Split {
+    fn of(inp: &EconInputs, c: usize) -> Split {
+        let (omega, cs) = (&inp.countries.omega[c], &inp.countries);
+        if cs.gov.is_empty() {
+            return Split {
+                omega: omega.to_vec(),
+                gov: Vec::new(),
+                inv: Vec::new(),
+                household: 1.0,
+            };
+        }
+        let total: f64 = omega.iter().sum();
+        let (gov, inv) = (&cs.gov[c], &cs.inv[c]);
+        let hh: Vec<f64> = (0..omega.len())
+            .map(|g| (omega[g] - gov[g] - inv[g]).max(0.0))
+            .collect();
+        let gov: Vec<f64> = gov.iter().map(|x| x / total).collect();
+        let inv: Vec<f64> = inv.iter().map(|x| x / total).collect();
+        Split {
+            // as `PiglWeights::household_share`, so the run spends what was inverted
+            household: 1.0 - gov.iter().sum::<f64>() - inv.iter().sum::<f64>(),
+            omega: hh,
+            gov,
+            inv,
+        }
+    }
 }
 
 /// Base household consumption quantities at prices 1, the weights of the world price index
