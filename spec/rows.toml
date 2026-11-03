@@ -1407,6 +1407,11 @@ topic = "[Rents-to-VA factor from extraction value added](../rfcs/0281-rents-to-
 sections = "16.1, 22.2"
 
 [[entry]]
+rows = "0287"
+topic = "[Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](../rfcs/0283-manufacturing-seeds-nearest-year-and-finland.md)"
+sections = "22"
+
+[[entry]]
 rows = "0288"
 topic = "[Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md)"
 sections = "21"
