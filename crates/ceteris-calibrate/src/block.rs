@@ -801,11 +801,7 @@ pub fn blocks(
     }
     // Households: each province's pops, their spending at each place and its derivatives.
     let (pop_spend, money, cross) = pop_derivatives(m, s);
-    let kc = inp.pop_country();
-    let mut people = vec![0.0; n_c];
-    for (k, &c) in kc.iter().enumerate() {
-        people[c] += inp.pop_population[k];
-    }
+    let dividend_share = inp.dividend_shares();
     let mut pops_of: Vec<Vec<usize>> = vec![Vec::new(); n_p];
     for (k, &p) in inp.pop_province.iter().enumerate() {
         pops_of[p].push(k);
@@ -841,7 +837,7 @@ pub fn blocks(
                 if sk <= 0.0 || income <= 0.0 {
                     continue;
                 }
-                let dividend = inp.pop_population[k] / people[ci] * pool0[ci];
+                let dividend = dividend_share[k] * pool0[ci];
                 wage += sk * money[(k, g)] * s.pop_wage[k] / income;
                 pool += sk * money[(k, g)] * dividend / income;
                 spend += sk;

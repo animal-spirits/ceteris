@@ -226,6 +226,9 @@ pub struct Inputs {
     /// does at every pass (it then sets Gamma = q_d / P_d at the calibrated point).
     pub gamma: Option<Mat>,
     pub s_l: Vec<f64>,
+    /// (C, G) labour share of each good (ADR 0104; the export's `s_l_g`); no rows where every
+    /// sector takes `s_l`.
+    pub s_l_good: Mat,
     /// (C,) 2000 rate (data).
     pub unemployment: Vec<f64>,
     /// (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s.
@@ -253,6 +256,9 @@ pub struct Inputs {
     /// (K,) e_k LF_k: the pop's share of its province's wages and dividends.
     pub pop_effective: Vec<f64>,
     pub pop_population: Vec<f64>,
+    /// (K,) share of its country's profit pool (the export's `dividend`, by wealth, ADR 0104);
+    /// empty where it is the population share, [`Inputs::dividend_shares`].
+    pub pop_dividend: Vec<f64>,
     pub domestic: Legs,
     pub access: Legs,
     pub crossing: Crossings,
@@ -376,8 +382,19 @@ impl Inputs {
             .collect()
     }
 
+    /// (E,) labour share of each enterprise: its country's for its good (ADR 0104), else
+    /// national.
     pub fn ent_s_l(&self) -> Vec<f64> {
-        self.ent_country().iter().map(|&c| self.s_l[c]).collect()
+        let c = self.ent_country();
+        (0..c.len())
+            .map(|e| {
+                if self.s_l_good.rows == 0 {
+                    self.s_l[c[e]]
+                } else {
+                    self.s_l_good[(c[e], self.ent_good[e])]
+                }
+            })
+            .collect()
     }
 
     /// (P, G) final demand shares of each province's country.
@@ -411,8 +428,8 @@ impl Inputs {
     }
 
     /// Household income per province at the base point, rebates aside: w0 (1 - u*) L^s wages
-    /// plus the province's population share of its country's profit pool sum (1 - s_L) VA0
-    /// (national ownership), as `world::base_income`.
+    /// plus its pops' dividend shares of their country's profit pool sum (1 - s_L) VA0
+    /// (national ownership; by population, or by wealth, ADR 0104), as `world::base_income`.
     pub fn base_income(&self) -> Vec<f64> {
         let c = &self.province_country;
         let n_c = self.n_countries();
@@ -424,15 +441,24 @@ impl Inputs {
             .map(|(s, va)| (1.0 - s) * va)
             .collect();
         let pool = bincount(&ent_c, &profit, n_c);
-        let people = bincount(c, &self.population, n_c);
+        let share = if self.pop_dividend.is_empty() {
+            let people = bincount(c, &self.population, n_c);
+            (0..self.n_provinces())
+                .map(|p| {
+                    if people[c[p]] > 0.0 {
+                        self.population[p] / people[c[p]]
+                    } else {
+                        0.0
+                    }
+                })
+                .collect()
+        } else {
+            bincount(&self.pop_province, &self.pop_dividend, self.n_provinces())
+        };
         (0..self.n_provinces())
             .map(|p| {
-                let share = if people[c[p]] > 0.0 {
-                    self.population[p] / people[c[p]]
-                } else {
-                    0.0
-                };
-                self.w0[p] * (1.0 - self.u_star[c[p]]) * self.labour_supply[p] + share * pool[c[p]]
+                self.w0[p] * (1.0 - self.u_star[c[p]]) * self.labour_supply[p]
+                    + share[p] * pool[c[p]]
             })
             .collect()
     }
@@ -452,6 +478,26 @@ impl Inputs {
             .collect()
     }
 
+    /// (K,) each pop's share of its country's profit pool: `pop_dividend`, else its population
+    /// share (0 in a country without people).
+    pub fn dividend_shares(&self) -> Vec<f64> {
+        if !self.pop_dividend.is_empty() {
+            return self.pop_dividend.clone();
+        }
+        let country = self.pop_country();
+        let people = bincount(&country, &self.pop_population, self.n_countries());
+        (0..country.len())
+            .map(|k| {
+                let n = people[country[k]];
+                if n > 0.0 {
+                    self.pop_population[k] / n
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+
     /// (K,) country of each pop.
     pub fn pop_country(&self) -> Vec<usize> {
         self.pop_province
@@ -461,8 +507,8 @@ impl Inputs {
     }
 
     /// (K,) base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times
-    /// its effective labour, plus its share of its country's pops' population times the
-    /// country's profit pool sum (1 - s_L) VA0, over its population; 0 without people.
+    /// its effective labour, plus its dividend share of its country's profit pool sum (1 - s_L)
+    /// VA0, over its population; 0 without people.
     pub fn pop_base_income(&self) -> Vec<f64> {
         let n_c = self.n_countries();
         let country = self.pop_country();
@@ -478,13 +524,13 @@ impl Inputs {
             .map(|(s, va)| (1.0 - s) * va)
             .collect();
         let pool = bincount(&ent_c, &profit, n_c);
-        let people = bincount(&country, &self.pop_population, n_c);
+        let dividend = self.dividend_shares();
         (0..country.len())
             .map(|k| {
                 let (p, c, n) = (self.pop_province[k], country[k], self.pop_population[k]);
                 if n > 0.0 {
                     let wage = self.w0[p] * (1.0 - self.u_star[c]) * self.pop_effective[k];
-                    (wage + n / people[c] * pool[c]) / n
+                    (wage + dividend[k] * pool[c]) / n
                 } else {
                     0.0
                 }
@@ -771,6 +817,11 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         .map(|(&e, lf)| edu_eff[e] * lf)
         .collect();
     let pop_population = pops.f64("population")?;
+    let pop_dividend = if pops.has("dividend") {
+        pops.f64("dividend")?
+    } else {
+        Vec::new()
+    };
     let columns = |t: &Table, prefix: &str, rows: usize| -> Result<Mat, String> {
         let cols = (0..n_goods)
             .map(|g| t.f64(&format!("{prefix}_{g}")))
@@ -807,6 +858,11 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         base_price: columns(&provinces, "base_price", n_p)?,
         gamma: Some(columns(&provinces, "gamma", n_p)?),
         s_l: countries.f64("s_l")?,
+        s_l_good: if countries.has("s_l_0") {
+            columns(&countries, "s_l", n_c)?
+        } else {
+            Mat::zeros(0, n_goods)
+        },
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,
         gini: countries.f64("gini")?,
@@ -836,6 +892,7 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         pop_province,
         pop_effective,
         pop_population,
+        pop_dividend,
         domestic: legs(&Table::open(d, "kernel_domestic")?, "o", "d")?,
         access: legs(&Table::open(d, "kernel_access")?, "province", "gateway")?,
         crossing: crossings(&Table::open(d, "kernel_crossing")?)?,

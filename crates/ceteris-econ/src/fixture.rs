@@ -222,6 +222,8 @@ fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
         inv: Rows::new(N_GOODS),
         io: Rows::from_rows(N_GOODS * N_GOODS, vec![io; n_countries]),
         s_l: S_L.to_vec(),
+        s_l_good: Rows::new(N_GOODS),
+        wealth: Rows::new(3),
         unemployment: UNEMPLOYMENT.to_vec(),
         // a generated world has no 1995 to 2005 window: its 2000 rate is its natural rate
         u_star: UNEMPLOYMENT.to_vec(),
