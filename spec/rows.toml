@@ -1450,3 +1450,13 @@ sections = "16, 16.1"
 rows = "0289, 0290"
 topic = "[Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
 sections = "16, 16.1, 17"
+
+[[entry]]
+rows = "0295 to 0298"
+topic = "[Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+sections = "9.5, 16, 17"
+
+[[entry]]
+rows = "0299, 0300"
+topic = "[Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+sections = "9.5, 15, 16"

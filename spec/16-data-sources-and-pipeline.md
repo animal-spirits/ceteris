@@ -14,7 +14,7 @@ The 2000 pack is built from pinned sources; each is listed with its licence, evi
 | OECD ICIO | Input-output, 45 industries, 1995-2022 (2025 edition), 80+ economies | Production, IO structure | OECD open terms | Fetch |
 | CEPII BACI | Bilateral trade, product level | Trade | Open licence | Fetch |
 | Subnational output (DOSE), gridded GDP | Regional output by sector | Province economies | CC BY 4.0 (likely) | Bundle aggregates |
-| World Bank WDI | Macro, social indicators; GDP per person at PPP | Initialization, targets; fallback local base prices p_c (ADR 0289) | CC BY 4.0 | Bundle extracts |
+| World Bank WDI | Macro, social indicators; GDP per person at PPP; current account balance (BN.CAB.XOKA.CD, 2000 to 2024) | Initialization, targets; fallback local base prices p_c (ADR 0289); trade-imbalance transfers (ADRs 0100, 0296, 0300) | CC BY 4.0 | Bundle extracts |
 | Penn World Table 11 | GDP per person, labour share, price level of domestic absorption (pl_da) | Donor ranking, labour shares, local base prices p_c (ADRs 0282, 0294) | CC BY 4.0 | Bundle |
 | UN World Population Prospects | Fertility, mortality, age structure | Demography | CC BY 3.0 IGO | Bundle extracts |
 | UN international migrant stock; bilateral flow estimates | Migration | Migration | Varies | Fetch |

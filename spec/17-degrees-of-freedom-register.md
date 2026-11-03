@@ -96,6 +96,7 @@ Held or proposed, not built in P2: P143 kappa\_n (ADR 0090, proposed; its split 
 | S09 | Intermediate technology | Putty-clay vintages / fixed 2000 Leontief coefficients |
 | S10 | Climate damages | Level effects / growth effects |
 | S11 | Rationing | Priority / proportional / mixed (Pichler et al. 2022) |
+| S22 | Trade-imbalance transfers (ADR 0100) | Off (balanced trade) / fixed 2000 shares of world GDP (default) / observed current-account path 2000 to 2024, fading with a 10-year half-life (lab profile) |
 
 A conclusion is reported as robust only if it survives the plausible settings of the relevant switches.
 
