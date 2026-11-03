@@ -1357,8 +1357,8 @@ pub fn calibrate_from(
         let target: Vec<f64> = (0..n_g).map(|g| world_sales[g] - column[g]).collect();
         let ras = balance::balance(&seed, &net, &target, traded, ras_start.as_deref())?;
         // the balance moves all final demand; PIGL is inverted on the households' part at their
-        // share of spending, government and investment keep their balanced shares (ADR 0099,
-        // RFC 0301 D4)
+        // share of spending, government and investment keep their balanced shares (ADRs 0099,
+        // 0304)
         let (omega_target, gov, inv) = inp.final_demand_split(&ras.factor);
         let h = fixed_household_share(&gov, &inv, n_c);
         ras_start = Some(ras.b.clone());

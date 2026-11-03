@@ -38,7 +38,7 @@ impl PiglWeights {
 }
 
 /// Adds to `out` the quantities that `money` buys at fixed spending shares `share` (ADR 0099,
-/// RFC 0301 D5): each good with a share and a finite price gets its share of `money`, the
+/// ADR 0305): each good with a share and a finite price gets its share of `money`, the
 /// shares of goods with no reachable origin spread over the others in proportion.
 pub fn fixed_shares(share: &[f64], price: &[f64], money: f64, out: &mut [f64]) {
     let reachable = |g: &usize| share[*g] > 0.0 && price[*g].is_finite();
