@@ -18,4 +18,4 @@ pub use network::{
 };
 pub use params::{N_CLASSES, TradeParams};
 pub use pipeline::Pipeline;
-pub use source::{Sourced, dispatch, source};
+pub use source::{Sourced, arrivals, dispatch, source};

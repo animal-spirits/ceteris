@@ -888,13 +888,14 @@ pub fn dispatch(w: &mut EconWorld) {
             }
         }
 
-        // the buyers' payments, then the legs
-        w.ledger.post(&legs.entries, &mut w.scratch.post);
         w.scratch.dispatch_made[g] = made;
         w.scratch.dispatch_due[g] = r.selected - r.lost;
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    // every good's buyers' payments, then its legs; nothing above reads money
+    let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
+    w.ledger.post_all(&blocks, &mut w.scratch.post);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();
