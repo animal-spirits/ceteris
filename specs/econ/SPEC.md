@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0287, 0289): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -174,7 +174,7 @@ Tests (`tests/ras.rs`, `tests/icio.rs`): `ras_balances_a_rectangular_table`,
 `trade_by_good_sums_exports_and_imports_by_the_good_of_each_line`; on the built tables
 `econ_build.rs` `donor_tables_are_balanced_to_domestic_use`.
 
-**Price levels** (`econ::price_level`; ADR 0098 as amended by ADRs 0282, 0287 and 0289, RFC 0282
+**Price levels** (`econ::price_level`; ADR 0098 as amended by ADRs 0282, 0289 and 0294, RFC 0282
 D1, D7 and D9). A country's price level p_c, the base price of its local goods, is PWT 11 pl_da (the
 price level of domestic absorption, C + I + G) over the US's; else the level WDI implies
 (`wdi_implied`), NY.GDP.MKTP.CD over NY.GDP.PCAP.PP.CD times SP.POP.TOTL (GDP at market rates over
@@ -205,7 +205,7 @@ market rates: ADR 0098's rescale of ICIO blocks to 1999-2001 rates is dropped (A
 `a_country_of_several_economies_takes_their_mean`, `no_level_and_no_donor_is_an_error`; on the
 built tables `econ_build.rs` `price_levels_come_from_pwt_then_wdi_then_the_donor`.
 
-Real GDP check (ADR 0098, Tests; ADRs 0285, 0287 and 0290, RFC 0282 D5, D7 and D8). For each
+Real GDP check (ADR 0098, Tests; ADRs 0285, 0290 and 0294, RFC 0282 D5, D7 and D8). For each
 ICIO economy WDI reports, the pack's real GDP, `gdp` over p_c, against WDI NY.GDP.MKTP.PP.CD 2000
 (current international dollars, so of 2000 prices as the pack's values are; validation only,
 `validation.toml`). Totals, not per person: WDI's SP.POP.TOTL counts all of Cyprus while its GDP
@@ -1599,7 +1599,7 @@ texture fed from core columns.
     X_k + M_k - E_k - F_k (negative for 321 rows of 122 of the 133 imputed economies with BACI
     trade). KRAS (D6 B) can follow if the economies that keep the donor's table matter.
   - D4 (ADR 0284): the run's world price index keeps local goods; no code change. D5 (ADR
-    0285): the real GDP check reads NY.GDP.PCAP.PP.CD (Price levels above). D7 (ADR 0287): PWT
+    0285): the real GDP check reads NY.GDP.PCAP.PP.CD (Price levels above). D7 (ADR 0294): PWT
     pl_da replaces pl_gdpo, and the check's 5% is reported, not enforced. D8 (ADR 0290): the
     check compares totals on NY.GDP.MKTP.PP.CD and is enforced at 10% on the 31 economies whose
     PWT level of 2000 is a benchmark. D9 (ADR 0289): the WDI fallback is current WDI's implied

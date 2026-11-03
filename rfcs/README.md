@@ -299,11 +299,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0279 | [Leg paths minimise the full iceberg cost per good](0279-least-iceberg-paths-per-good.md) | accepted | ADR 0279 |
 | 0280 | [Storage order by partial adjustment toward a target stock](0280-storage-order-by-partial-adjustment.md) | proposed | ADR 0280 |
 | 0281 | [Rents-to-VA factor from extraction value added](0281-rents-to-value-added-from-extraction.md) | proposed | ADR 0281 |
-| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0287, 0289, 0290 |
-| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0289 |
-| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0287 |
-| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0286 |
-| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282, 0283 |
+| 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0286, 0289, 0290, 0294 |
 | 0283 | [Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](0283-manufacturing-seeds-nearest-year-and-finland.md) | accepted | ADR 0287 |
 | 0284 | [Ensemble lanes move from pre-P3 into P3 (amends ADR 0207)](0284-ensemble-lanes-in-p3.md) | accepted | ADR 0288 |
 | 0285 | [Interventions replay on seek, and parameters are snapshot state](0285-interventions-and-parameters-as-snapshot-state.md) | accepted | ADR 0291 to 0293 |

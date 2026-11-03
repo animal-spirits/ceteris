@@ -250,7 +250,7 @@ closest PWT series to what households, firms and the state pay for local goods, 
 as any series on the check.
 
 Decision: A, Antonio, 2026-11-01 (20:45Z).
-Row: ADR 0287
+Row: ADR 0294
 
 Why the 5% is not enforced: with the pack's GDP equal to WDI's, the check measures PWT's price
 level against the one implied by WDI's PPP GDP, two ICP vintages of the same quantity. ADR 0098
@@ -366,17 +366,17 @@ before). Only `econ_countries.arrow` moves, and in it only `price_level` and
 
 - 12.2: the inflation expectations read is that of a world price index over all goods, local
   goods at p_c (ADR 0284).
-- 16: the PWT row in the source table names the price level, pl_da (ADRs 0282, 0287); the WDI
+- 16: the PWT row in the source table names the price level, pl_da (ADRs 0282, 0294); the WDI
   row names GDP per person at PPP, the fallback p_c (ADR 0289).
 - 16.1: price levels from PWT, WDI and the donor with the far-out screen (ADR 0282); values at
   2000 market rates (ADR 0283); donor tables balanced by RAS to domestic use (ADR 0286); ADR
   0098's real GDP check reads NY.GDP.PCAP.PP.CD (ADR 0285); PWT pl_da, and the check
-  reported, not enforced (ADR 0287); the check on totals, NY.GDP.MKTP.PP.CD, enforced at 10% on
+  reported, not enforced (ADR 0294); the check on totals, NY.GDP.MKTP.PP.CD, enforced at 10% on
   PWT's 2000 benchmark economies and reported for the rest (ADR 0290); the WDI fallback level
   from GDP over GDP at PPP (ADR 0289).
 - 17: P160, the check's 10% tolerance on the benchmark economies (ADR 0290).
 - econ SPEC (module spec): `econ_countries.arrow` price level columns, Local base price, Open
   questions (ADRs 0282 and 0283); Economies outside ICIO, the RAS balance and the
   `io_basis` column (ADR 0286); the real GDP check (ADR 0285);
-  PWT pl_da in Price levels and the check reported only (ADR 0287); the gated check (ADR 0290);
+  PWT pl_da in Price levels and the check reported only (ADR 0294); the gated check (ADR 0290);
   the WDI level in Price levels (ADR 0289).
