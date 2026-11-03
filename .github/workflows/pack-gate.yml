@@ -1,0 +1,33 @@
+name: pack-gate
+
+# Nightly full-pack gate on the owner's Mac (pre-P3 D5). Never on pull requests: the pack lives
+# only on that machine, and fork code must not reach it.
+on:
+  schedule:
+    - cron: "0 9 * * *" # 03:00 US Central (CST)
+  workflow_dispatch:
+
+concurrency:
+  group: pack-gate
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pack:
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    timeout-minutes: 360
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/pack-gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - run: scripts/pack-gate.sh "${{ github.workspace }}/../pack-gate-logs"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-gate-logs
+          path: ${{ github.workspace }}/../pack-gate-logs
+          retention-days: 14
