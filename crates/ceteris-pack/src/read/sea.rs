@@ -1,6 +1,6 @@
 //! WIOD Socio-Economic Accounts, 2016 release (Timmer et al. 2015; CC BY 4.0): labour
 //! compensation (LAB, the self-employed included) and value added (VA) by industry in 2000,
-//! summed onto the 10 goods (RFC 0302 D1).
+//! summed onto the 10 goods (ADR 0307).
 
 use std::collections::BTreeMap;
 use std::path::Path;

@@ -298,4 +298,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0295 to 0298 | [Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 16, 17 |
 | 0299, 0300 | [Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 15, 16 |
 | 0301 to 0306 | [Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md) | 8.6, 9.6 |
+| 0307 to 0310 | [Sector labour shares from WIOD SEA clipped and rescaled to PWT, dividends by WID wealth ranked on base income in one pass, foreign-owned shares from OECD AAMNE 2000, foreign dividends as income through a world dividend account, accepting ADR 0104](../rfcs/0302-sector-labour-shares-and-wealth-weighted-dividends.md) | 6.1, 7.2, 9.1, 16 |
 <!-- rows:end -->

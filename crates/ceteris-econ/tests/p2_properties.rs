@@ -3991,7 +3991,7 @@ fn with_wealth() -> EconInputs {
     inp
 }
 
-/// ADR 0104, RFC 0302 D2: a pop's dividend share is the integral of the wealth density over its
+/// ADR 0308: a pop's dividend share is the integral of the wealth density over its
 /// lognormal income, ranked in its country's mixture of the pops' lognormals at the base incomes
 /// with dividends per person: against a trapezoid over 200,001 points of log income (1e-4
 /// relative, its step error at the two bracket edges), the shares of each country summing to 1
