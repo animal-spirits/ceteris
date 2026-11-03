@@ -3821,7 +3821,7 @@ fn with_three_demanders() -> EconInputs {
     inp
 }
 
-/// ADR 0099 (RFC 0301 D1): at the data state's prices and the pops' base incomes, households
+/// ADRs 0099, 0301: at the data state's prices and the pops' base incomes, households
 /// by PIGL and government and investment at their fixed shares buy each country's final demand
 /// shares, and each pop spends what it holds.
 #[test]

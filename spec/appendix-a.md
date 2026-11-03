@@ -297,4 +297,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0289, 0290 | [Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1, 17 |
 | 0295 to 0298 | [Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 16, 17 |
 | 0299, 0300 | [Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 15, 16 |
+| 0301 to 0306 | [Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md) | 8.6, 9.6 |
 <!-- rows:end -->

@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADR 0099, RFC 0301: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -819,15 +819,14 @@ country's amount is split over its pops in proportion to the income credited to 
 The account is opened only where the transfers are on and some share is nonzero, so a world
 without transfers keeps its ledger, and the switch enters the static digest and snapshots only
 then (`transfers_net_to_zero_every_tick`, `off_switch_reproduces_balanced_trade`). Pops spend the
-transfer with their money next tick, at their PIGL shares (ADR 0297; to the three final demanders
-of ADR 0099 once they exist).
+transfer with their money next tick, through the three final demanders (ADRs 0297, 0303).
 
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
 province price for local goods; a good with no reachable origin has q_d infinite and gets
 nothing): PIGL across three categories, a CES over goods within each.
 
-*Three demanders (ADR 0099, RFC 0301; pending the owner's answers).* Where the inputs split final
+*Three demanders (ADR 0099 as accepted by ADRs 0301 to 0306, RFC 0301).* Where the inputs split final
 demand (`Countries::gov`, `inv`), a pop's money is spent by three demanders: government buys
 g_cg M and investment s_cg M of good g at fixed nominal shares (`demand::fixed_shares`; a good with
 no reachable origin gets nothing and its share goes to the demander's other goods in proportion),
@@ -836,7 +835,7 @@ N. g_cg and s_cg are the shares of all final demand, absorption income + D_c, so
 spent by the three; calibrated in stage 4 (`PiglWeights::gov`, `inv`), else the data's parts over
 the country's final demand. The government and investment goods are consumed on arrival like the
 households': in P2 they are demand only (the fiscal and capital blocks, 9.6 and 7.4, replace the
-fixed shares). Without the split h_c = 1 exactly and nothing changes
+fixed shares; the accelerator of ADR 0099 waits for P4, ADR 0306). Without the split h_c = 1 exactly and nothing changes
 (`households_only_keeps_the_fixture`); at the data state the three buy the final demand shares
 (`three_demanders_spend_the_final_demand_shares_at_the_data_state`, 1e-10) and leave the money
 stock unchanged (`money_stock_unchanged_by_three_demanders`).
@@ -1111,8 +1110,7 @@ Amendment; `demand::invert_pops`), each pop at its province's buyer prices q of 
 income per person, and weighted by its income (rebates included), at the within-pop dispersion
 s_w fixed by the inputs. Pops then spend by PIGL at those prices and incomes, so in the data
 state each country's aggregate household shares are Omega
-(`aggregate_data_state_shares_match_omega`, 1e-12). Where final demand is split (ADR 0099, RFC
-0301 D4), stage 1's balance rescales all of it with one factor per country and good; PIGL is
+(`aggregate_data_state_shares_match_omega`, 1e-12). Where final demand is split (ADR 0304), stage 1's balance rescales all of it with one factor per country and good; PIGL is
 inverted on the households' part of the balanced shares, each pop at its households' share h_c of
 its spending, and government and investment keep their balanced parts over the country's
 balanced total as their spending shares (`Inputs::final_demand_split`,
