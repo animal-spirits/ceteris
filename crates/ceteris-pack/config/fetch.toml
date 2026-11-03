@@ -470,6 +470,14 @@ sha256 = "9df6be2133ae76306e9242918cf27ea8ddc5cb35a9661d5524c6508b603a7cf3"
 bytes = 4238783
 url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/sbs_r_nuts03?format=TSV&compressed=true"
 
+# Finland's manufacturing seeds (ADR 0287): the whole PX file of table 12bd. Revised each release, so the
+# pin is the release recorded; the 2000 column moves only at benchmark revisions.
+[[file]]
+source = "statfin-regional-accounts"
+name = "statfin_altp_pxt_12bd.px"
+optional = true
+url = "https://pxdata.stat.fi/database/StatFin/altp/statfin_altp_pxt_12bd.px"
+
 # Overpass at a fixed attic date returns the same bytes on every call (checked twice).
 [[file]]
 source = "osm"

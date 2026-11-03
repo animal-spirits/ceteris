@@ -912,7 +912,25 @@ policy = "bundle-aggregates"
 reason = "Eurostat data reusable for any purpose with attribution, for EU, EFTA and candidate countries"
 checked = 2026-10-31
 confidence = "high"
-notes = "Indicators: local units, wages and salaries, persons employed, investment; no VA. 2000 is present, coverage by country and division not yet checked. NACE Rev 1.1 divisions equal ISIC Rev 3.1 divisions. Non-EU country data in Eurostat is non-commercial; this table has none."
+notes = "Indicators: local units, wages and salaries, persons employed, investment; no VA. NACE Rev 1.1 divisions equal ISIC Rev 3.1 divisions. Non-EU country data in Eurostat is non-commercial; this table has none. Coverage measured 2026-11-01: DK and SI are one NUTS 2 region each and BG is absent; 2000 has no cells for HU, NO, CZ, so ADR 0287 seeds them from 2001 (HU), 2003 (NO), 2004 (CZ), PT from 2002, and splits Finland's merged groups by 2005."
+
+[[source]]
+id = "statfin-regional-accounts"
+name = "Statistics Finland regional accounts, table 12bd (income and production by area, 2000-)"
+provider = "Statistics Finland"
+version = "release current at fetch; 2000-2024*"
+role = "Gross value added by maakunta and 11 manufacturing groups (TOL 2008) in 2000: Finland's province seeds for manufacturing goods (ADR 0287)"
+licence = "CC-BY-4.0"
+licence_url = "https://stat.fi/en/about-us/get-to-know-statistics-finland/legislation/terms-of-use"
+attribution = "Source: Statistics Finland, regional accounts (table 12bd)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Statistics Finland open data is CC BY 4.0, commercial use allowed, source attribution required"
+checked = 2026-11-03
+confidence = "high"
+notes = "Transaction B1GPH (gross value added at basic prices), EUR million at current prices. Groups 19-22, 24-25, 26-27 and 29-30 are merged; ADR 0287 splits them by Eurostat 2005 division shares. Areas include maakunta (MK), sub-regions (SK) and wellbeing services counties (HVA); the pack reads MK."
 
 [[source]]
 id = "hansen-gfc"
