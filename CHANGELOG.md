@@ -62,7 +62,7 @@
   `price_level_source`). No fixture golden moves; the installed pack is unchanged until
   reinstall.
 
-### Price level of domestic absorption (ADR 0287, RFC 0282 D7; C1e, built, not installed)
+### Price level of domestic absorption (ADR 0294, RFC 0282 D7; C1e, built, not installed)
 
 - RFC 0282 D7, Antonio, 2026-11-01: PWT 11 pl_da (domestic absorption, C + I + G) over the US's
   replaces pl_gdpo as p_c's primary source. The first answer, pl_gdpe, was void: PWT 11 has no
