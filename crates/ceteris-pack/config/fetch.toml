@@ -476,7 +476,9 @@ url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/sbs_r_nuts0
 source = "statfin-regional-accounts"
 name = "statfin_altp_pxt_12bd.px"
 optional = true
-url = "https://pxdata.stat.fi/database/StatFin/altp/statfin_altp_pxt_12bd.px"
+sha256 = "d1162125842a025234df8e086c6d8c375bab85193d82fb88566352db307d77d6"
+bytes = 79317379
+url = "https://pxdata.stat.fi/database/StatFin/altp/12bd.px"
 
 # Overpass at a fixed attic date returns the same bytes on every call (checked twice).
 [[file]]
