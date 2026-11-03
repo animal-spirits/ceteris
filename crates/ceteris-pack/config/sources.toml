@@ -918,7 +918,7 @@ notes = "Indicators: local units, wages and salaries, persons employed, investme
 id = "statfin-regional-accounts"
 name = "Statistics Finland regional accounts, table 12bd (income and production by area, 2000-)"
 provider = "Statistics Finland"
-version = "release current at fetch; 2000-2024*"
+version = "release of 2025-11-28, 2000-2024*"
 role = "Gross value added by maakunta and 11 manufacturing groups (TOL 2008) in 2000: Finland's province seeds for manufacturing goods (ADR 0287)"
 licence = "CC-BY-4.0"
 licence_url = "https://stat.fi/en/about-us/get-to-know-statistics-finland/legislation/terms-of-use"
@@ -930,7 +930,7 @@ policy = "bundle-aggregates"
 reason = "Statistics Finland open data is CC BY 4.0, commercial use allowed, source attribution required"
 checked = 2026-11-03
 confidence = "high"
-notes = "Transaction B1GPH (gross value added at basic prices), EUR million at current prices. Groups 19-22, 24-25, 26-27 and 29-30 are merged; ADR 0287 splits them by Eurostat 2005 division shares. Areas include maakunta (MK), sub-regions (SK) and wellbeing services counties (HVA); the pack reads MK."
+notes = "Transaction B1GPH (gross value added at basic prices), EUR million at current prices. Groups 19-22, 24-25, 26-27 and 29-30 are merged; ADR 0287 splits them by Eurostat 2005 division shares. Areas include maakunta (MK), sub-regions (SK) and wellbeing services counties (HVA); the pack reads MK. The PX header says CHARSET=\"ANSI\" but the file is UTF-8 with a BOM; decode as UTF-8. Release pinned: LAST-UPDATED 2025-11-28; the next release (2026-11-26) changes the bytes."
 
 [[source]]
 id = "hansen-gfc"
