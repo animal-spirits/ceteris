@@ -295,4 +295,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0284 to 0286 | [World price index, real GDP check series and donor use-table balance, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 12.2, 16.1 |
 | 0294 | [Price level of domestic absorption, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1 |
 | 0289, 0290 | [Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1, 17 |
+| 0295 to 0298 | [Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 16, 17 |
+| 0299, 0300 | [Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 15, 16 |
 <!-- rows:end -->

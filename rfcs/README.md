@@ -304,3 +304,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0284 | [Ensemble lanes move from pre-P3 into P3 (amends ADR 0207)](0284-ensemble-lanes-in-p3.md) | accepted | ADR 0288 |
 | 0285 | [Interventions replay on seek, and parameters are snapshot state](0285-interventions-and-parameters-as-snapshot-state.md) | accepted | ADR 0291 to 0293 |
 | 0286 | [Storage-on frictionless V1 misses: cause recorded, fix deferred to P5](0286-storage-on-frictionless-misses-deferred.md) | deferred | none |
+| 0287 | [Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)](0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | accepted | ADR 0295 to 0300 |
