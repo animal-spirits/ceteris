@@ -65,8 +65,14 @@ pub struct Countries {
     pub inv: Rows<f64>,
     /// Input coefficients a_kg, units of k per unit of g, at `[k * n_goods + g]`.
     pub io: Rows<f64>,
-    /// Labour share s_L, used for every sector.
+    /// National labour share s_L (PWT), every sector's where `s_l_good` is empty.
     pub s_l: Vec<f64>,
+    /// Labour share s_L,c,g of each good (ADR 0104, RFC 0302): the VA-weighted mean equals
+    /// `s_l`. Empty where the inputs have none (a generated world, a pack before ADR 0104).
+    pub s_l_good: Rows<f64>,
+    /// WID 2000 shares of net personal wealth of the bottom 50%, middle 40% and top 10% (ADR
+    /// 0104), width 3; empty where the inputs have none, and dividends are paid per person.
+    pub wealth: Rows<f64>,
     /// 2000 unemployment rate (data; the model runs on `u_star`).
     pub unemployment: Vec<f64>,
     /// Natural rate u*, the mean unemployment rate 1995 to 2005 (ADR 0089): the base point,
@@ -127,6 +133,10 @@ pub struct PopData {
     pub edu: Vec<u8>,
     pub labour_force: Vec<f64>,
     pub population: Vec<f64>,
+    /// Share of its country's profit pool (ADR 0104, RFC 0302 D2), by wealth; empty where
+    /// every pop's share is its population share N_k / N_c. See
+    /// [`EconInputs::set_dividend_shares`].
+    pub dividend: Vec<f64>,
 }
 
 /// Enterprises, one per (province, sector), sorted by province and then sector.
@@ -220,6 +230,68 @@ impl EconInputs {
     /// Country of province `i`.
     pub fn country_of(&self, i: usize) -> usize {
         usize::from(self.provinces.country[i])
+    }
+
+    /// Each pop's share of its country's profit pool: `PopData::dividend`, or its population
+    /// share N_k / N_c (0 in a country without people).
+    pub fn pop_dividend_shares(&self) -> Vec<f64> {
+        if !self.pops.dividend.is_empty() {
+            return self.pops.dividend.clone();
+        }
+        let mut people = vec![0.0; self.n_countries()];
+        for k in 0..self.n_pops() {
+            people[self.country_of(self.pops.province[k] as usize)] += self.pops.population[k];
+        }
+        (0..self.n_pops())
+            .map(|k| {
+                let n = people[self.country_of(self.pops.province[k] as usize)];
+                if n > 0.0 {
+                    self.pops.population[k] / n
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+
+    /// Fills `PopData::dividend` from `Countries::wealth` (ADR 0104, RFC 0302 D2), once, after
+    /// the base point: each country's pops are ranked by the mixture of their lognormal incomes
+    /// at their base incomes per person with dividends per person and the within-pop dispersion
+    /// those imply ([`crate::wealth::dividend_shares`]). Without wealth shares, empty.
+    pub fn set_dividend_shares(&mut self, params: &EconParams) {
+        self.pops.dividend.clear();
+        if self.countries.wealth.is_empty() {
+            return;
+        }
+        let income = crate::world::pop_base_income(self, params);
+        let mut members = vec![Vec::new(); self.n_countries()];
+        for k in 0..self.n_pops() {
+            members[self.country_of(self.pops.province[k] as usize)].push(k);
+        }
+        let mut dividend = vec![0.0; self.n_pops()];
+        for (c, ks) in members.iter().enumerate() {
+            let pops: Vec<(f64, f64)> = ks
+                .iter()
+                .map(|&k| (self.pops.population[k], income[k]))
+                .collect();
+            let sigma = crate::demand::within_sigma(self.countries.gini[c], &pops);
+            let w = &self.countries.wealth[c];
+            let shares = crate::wealth::dividend_shares(&[w[0], w[1], w[2]], &pops, sigma);
+            for (&k, d) in ks.iter().zip(shares) {
+                dividend[k] = d;
+            }
+        }
+        self.pops.dividend = dividend;
+    }
+
+    /// Labour share of enterprise `e`: its country's for its good (ADR 0104), else national.
+    pub fn ent_s_l(&self, e: usize) -> f64 {
+        let c = self.country_of(self.enterprises.province[e] as usize);
+        if self.countries.s_l_good.is_empty() {
+            self.countries.s_l[c]
+        } else {
+            self.countries.s_l_good[c][usize::from(self.enterprises.good[e])]
+        }
     }
 
     /// Input coefficient a_kg of country `c`: units of `k` per unit of `g`.
@@ -418,7 +490,7 @@ impl EconInputs {
         let mut bill = vec![0.0; self.n_provinces()];
         for e in 0..self.n_enterprises() {
             let i = self.enterprises.province[e] as usize;
-            bill[i] += self.countries.s_l[self.country_of(i)] * self.enterprises.va0[e];
+            bill[i] += self.ent_s_l(e) * self.enterprises.va0[e];
         }
         self.provinces.w0 = (0..self.n_provinces())
             .map(|i| {
@@ -432,8 +504,7 @@ impl EconInputs {
         self.enterprises.l0 = (0..self.n_enterprises())
             .map(|e| {
                 let i = self.enterprises.province[e] as usize;
-                self.countries.s_l[self.country_of(i)] * self.enterprises.va0[e]
-                    / self.provinces.w0[i]
+                self.ent_s_l(e) * self.enterprises.va0[e] / self.provinces.w0[i]
             })
             .collect();
     }
@@ -467,6 +538,8 @@ impl EconInputs {
                 && (c.transfer.is_empty() || c.transfer.len() == nc)
                 && (c.gov.is_empty() || (c.gov.len() == nc && c.gov.width() == n))
                 && c.inv.len() == c.gov.len()
+                && (c.s_l_good.is_empty() || (c.s_l_good.len() == nc && c.s_l_good.width() == n))
+                && (c.wealth.is_empty() || (c.wealth.len() == nc && c.wealth.width() == 3))
                 && (c.inv.is_empty() || c.inv.width() == n)
                 && (c.transfer_path.is_empty()
                     || (c.transfer_path.len() == nc && c.transfer_path.width() == TRANSFER_YEARS)),
@@ -483,6 +556,20 @@ impl EconInputs {
                 "country {k}: labour share {}",
                 c.s_l[k]
             );
+            if !c.wealth.is_empty() {
+                let w = &c.wealth[k];
+                assert!(
+                    w.iter().all(|&x| x >= 0.0) && (w.iter().sum::<f64>() - 1.0).abs() < 1e-9,
+                    "country {k}: wealth shares {w:?}"
+                );
+            }
+            if !c.s_l_good.is_empty() {
+                assert!(
+                    c.s_l_good[k].iter().all(|&s| s > 0.0 && s < 1.0),
+                    "country {k}: labour shares {:?}",
+                    &c.s_l_good[k]
+                );
+            }
             assert!(
                 (0.0..1.0).contains(&c.unemployment[k]),
                 "country {k}: unemployment {}",
@@ -676,6 +763,9 @@ impl EconInputs {
             inv,
             io,
             s_l,
+            s_l_good,
+            // acts only through `PopData::dividend`, which is derived from it
+            wealth: _,
             unemployment,
             u_star,
             gini,
@@ -697,6 +787,7 @@ impl EconInputs {
             edu,
             labour_force,
             population: pop_population,
+            dividend,
         } = pops;
         let EntData {
             province: ent_province,
@@ -779,6 +870,15 @@ impl EconInputs {
         if price_level.iter().any(|&p| p != 1.0) {
             b"price-level".iter().for_each(|&b| e.u8(b));
             e.f64s(price_level);
+        }
+        // appended only where present, so worlds before ADR 0104 keep their digest
+        if !s_l_good.is_empty() {
+            b"sector-labour-shares".iter().for_each(|&b| e.u8(b));
+            e.f64s(s_l_good.as_flat());
+        }
+        if !dividend.is_empty() {
+            b"dividend-shares".iter().for_each(|&b| e.u8(b));
+            e.f64s(dividend);
         }
         // appended only where present, so worlds without the split keep their digest
         if !gov.is_empty() {

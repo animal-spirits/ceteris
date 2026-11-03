@@ -257,7 +257,7 @@ pub fn labour(w: &mut EconWorld) {
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
-            let (s_l, u_star) = (inp.countries.s_l[c], inp.countries.u_star[c]);
+            let u_star = inp.countries.u_star[c];
             let supply = lay.labour_supply[i];
             let row = i * ng..(i + 1) * ng;
             let (p, p_in) = (&price[row.clone()], &index[row]);
@@ -274,13 +274,14 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .map(|e| {
                     let va = lay.a_va[e] * input_output(world, e);
-                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], inp.ent_s_l(e), r)
                 })
                 .collect();
             let targets = |w: f64| -> Vec<f64> {
                 ents.clone()
                     .zip(p_va.iter().zip(&equipped))
                     .map(|(e, (&pv, &cap))| {
+                        let s_l = inp.ent_s_l(e);
                         labour_target(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
                             .min(cap)
                     })
@@ -290,6 +291,7 @@ pub fn labour(w: &mut EconWorld) {
             let (w1, t, clipped) = if params.frictionless {
                 let natural = (1.0 - u_star) * supply;
                 let free = |e: usize, pv: f64, w: f64| {
+                    let s_l = inp.ent_s_l(e);
                     labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
                 };
                 let hiring = || {
@@ -326,7 +328,14 @@ pub fn labour(w: &mut EconWorld) {
                         .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
                     let top = hiring()
                         .map(|(e, (&pv, &cap))| {
-                            pv * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, cap)
+                            pv * marginal_value_added(
+                                ent.a[e],
+                                ent.va0[e],
+                                ent.l0[e],
+                                inp.ent_s_l(e),
+                                r,
+                                cap,
+                            )
                         })
                         .reduce(f64::min);
                     match top {
@@ -349,7 +358,16 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .zip(&p_va)
                 .map(|(e, &pv)| {
-                    labour_target(pv, wt, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                    labour_target(
+                        pv,
+                        wt,
+                        ent.a[e],
+                        ent.va0[e],
+                        ent.l0[e],
+                        inp.ent_s_l(e),
+                        r,
+                        supply,
+                    )
                 })
                 .collect();
             let short: Vec<u64> = ents
@@ -479,7 +497,7 @@ pub fn cap_output(w: &mut EconWorld) {
         .into_par_iter()
         .map(|e| {
             let ent = &inp.enterprises;
-            let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
+            let s_l = inp.ent_s_l(e);
             let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
             let mut y = va / lay.a_va[e];
             for k in 0..nt {
@@ -545,7 +563,7 @@ pub fn demand(w: &mut EconWorld) {
         .for_each(|(e, (orders, spend))| {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
-            let (prices, s_l) = (row(i), inp.countries.s_l[inp.country_of(i)]);
+            let (prices, s_l) = (row(i), inp.ent_s_l(e));
             let output =
                 |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
             let capacity = output(w.employment[e]);
@@ -1019,7 +1037,15 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
     let mut parts = Vec::new();
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
-            let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
+            // the pool by dividend share (by wealth, ADR 0104), the rebate by population
+            let weights = pops.iter().map(|&k| {
+                let k = k as usize;
+                if flow == DIVIDEND && !inp.pops.dividend.is_empty() {
+                    inp.pops.dividend[k]
+                } else {
+                    inp.pops.population[k]
+                }
+            });
             split(w.ledger.money_wide(payer), weights, &mut parts);
             for (&k, &part) in pops.iter().zip(&parts) {
                 pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
@@ -1536,7 +1562,7 @@ mod tests {
         demand(&mut w);
         let ent = &w.inputs.enterprises;
         let i = ent.province[e] as usize;
-        let s_l = w.inputs.countries.s_l[w.inputs.country_of(i)];
+        let s_l = w.inputs.ent_s_l(e);
         let r = rho(w.params.sigma_fl);
         let output = |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
         let (notional, constrained) = (output(spare.employment[e]), output(w.employment[e]));

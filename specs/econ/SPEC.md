@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, with `wealth_source` `wid`, `region` or `world` and `wealth_clipped`; Factor shares, below; ADR 0104, RFC 0302), where SEA and WID are in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: WID shweal992j p0p50, p50p90, p90p100, nearest year 1995 to 2005 (terms to confirm, `closed_source_only`) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -85,6 +85,19 @@ the P2 digests and golden hashes do not move.
 snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The
 `econ_goods.arrow` column is the pack's copy of the default, never read by Rust; it must equal
 `TradeParams::default().coverage`, and a change to one is made to both.
+
+**Factor shares (ADR 0104 as accepted by RFC 0302 D1, D2; `econ::factors`).** Labour shares:
+s_L,c,g = s_L,c r_g,c / (sum_h VA_c,h r_h,c / VA_c), s_L,c the PWT share, VA_c,h the table's
+national VA by good, r_g,c = (LAB_g / VA_g) / (LAB / VA) from SEA 2000 summed over the country's
+economies (WIOD's one mining industry B counts in full for goods 1 and 2); a good SEA does not
+give takes the mean r of the 5 SEA economies nearest in log GDP per person (PWT), else 1
+(`labour_share_pooled`). A share outside [0.05, 0.95] is clipped and the rest rescaled until the
+VA-weighted mean is s_L,c again (`labour_share_clipped`; `labour_share_va_weighted_mean_equals_pwt`,
+1e-12). Wealth shares: WID's three shares, a negative one at 0 and the three rescaled to sum to 1
+(`wealth_clipped`); a country without WID takes the population-weighted mean of the WID
+economies of its World Bank region (`region`), else of all (`world`)
+(`missing_source_falls_back_with_flag`). WID is keyed by ISO alpha-2, mapped by Natural Earth's
+ISO_A2_EH.
 
 **Value added convention.** National VA by good is output less intermediate inputs, summed over
 all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
@@ -305,7 +318,7 @@ build, another format or other coefficients stop the load with a `PackError`.
 | Employed | pop | `f64` | persons | (1 - u*) x labour force (natural rate, ADR 0089) |
 | Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership) |
 | Income last tick | pop | `f64` | numeraire | |
-| Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table; in the data state A = 1 / p_o (1 for traded goods, 1 / p_c for local goods, ADR 0098) |
+| Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table; in the data state A = 1 / p_o (1 for traded goods, 1 / p_c for local goods, ADR 0098); s_L its country's for its good (`Countries::s_l_good`, ADR 0104), else national |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
 | Output, sales, profit last tick | enterprise | `f64` | | |
 | Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage, the 2000 column `EntData::column`: calibrated a_kg p_o / q_ik (calibration tables), else the country's ICIO column at base delivered prices, a_kg p_o / q_k(base), p_o the base price of the output (1 for traded goods, p_c for local goods, ADR 0098) |
@@ -748,14 +761,28 @@ solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_
 u*_i) L^s_i), and the data state starts at unemployment u* (a generated world, which has no 1995
 to 2005 window, takes its 2000 rate as u*). P4 matching replaces u* with matching frictions.
 
-**Income (national profit ownership, owner 2026-10-25).** Labour income stays local; profits
-and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
+**Income (national profit ownership, owner 2026-10-25; dividends by wealth, ADR 0104).** Labour
+income stays local; profits and rebates are national, rebates paid per person, profits by
+dividend share d_k (N_k / N_c where the inputs have no wealth shares). Pop k of country c in
+province i receives, per tick:
 
 ```
 income_k = w_i * e_k * employed_k                  (wages, local)
-         + N_k / N_c * sum_(e in c) profit_e       (profits, national)
+         + d_k * sum_(e in c) profit_e             (profits, national)
          + N_k / N_c * rebate_c                    (tariffs, national)
 ```
+
+*Dividend shares (RFC 0302 D2; `wealth::dividend_shares`, `EconInputs::set_dividend_shares`).*
+Fixed at load from the country's wealth shares W_b of the bottom 50%, middle 40% and top 10%,
+with perfect rank correlation of income and wealth: the country's income distribution is the
+mixture of its pops' lognormals (mean the pop's base income per person with dividends per
+person, dispersion s_w those incomes imply; Pop demand), cut at its quantiles 0.5 and 0.9 by
+bisection, and d_k = sum_b W_b n_kb / n_b, n_kb the pop's population in bracket b and n_b the
+bracket's; with s_w = 0 the pops fill the ranks in order of income, then of ID. The shares sum
+to 1 over the country's pops and are positive for every pop with people
+(`dividend_shares_integrate_wealth_over_income`, against a quadrature, 1e-4 relative). Base incomes and
+s_w are then those of the shares (one pass, no fixed point). The export writes d_k (`pops`
+`dividend`), which the GE reference and the calibration read.
 
 employed_k = LF_k L_i / L^s_i is set by E1 (LF_k the pop's labour force, L_i = sum_g L_ig the
 province's employment, L^s_i its labour supply), so sum_(k in i) e_k employed_k = L_i exactly and
@@ -773,7 +800,8 @@ written off, and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
 `io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
-population of its pops. A pack country with enterprises but no pops stops the load (`PackError`):
+population of its pops (with dividend shares, sum_(k in i) d_k in place of N_i / N_c). A pack
+country with enterprises but no pops stops the load (`PackError`):
 nobody would own its profits.
 
 *Rounding (E4).* Every enterprise pays its balance when positive, and every province market its
@@ -781,7 +809,8 @@ signed cash flow, in minor units, into its country's profit pool account; an ent
 negative balance pays nothing and keeps it. Each country then pays its pool, one i128 sum per tick,
 and its rebate account to its pops in pop ID order by cumulative population shares rounded half
 to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
-pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
+pops, the last pop taking P - round(P S_(n-1) / S) (the pool by cumulative dividend shares d_k
+where the inputs have them, `wealth_dividends_pay_the_pool_by_share`). The parts add up to the pool exactly, so the
 pool, the rebate account and every market end the tick at zero, every enterprise at its
 retained losses or zero, and money is conserved exactly; each part is within one minor unit of
 N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,

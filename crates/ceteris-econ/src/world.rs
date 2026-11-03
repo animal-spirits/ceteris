@@ -128,9 +128,12 @@ pub struct Layout {
     pub ent_offsets: Vec<u32>,
     /// Effective labour supply L^s per province.
     pub labour_supply: Vec<f64>,
-    /// Pop's share N_k / N_c of its country's profit pool and rebate (national ownership,
-    /// owner 2026-10-25): its population over its country's pops' population.
+    /// Pop's share N_k / N_c of its country's rebate (national ownership, owner 2026-10-25):
+    /// its population over its country's pops' population.
     pub ownership: Vec<f64>,
+    /// Pop's share of its country's profit pool: `ownership`, or by wealth (ADR 0104,
+    /// [`EconInputs::pop_dividend_shares`]).
+    pub dividend: Vec<f64>,
     /// Input coefficients each enterprise runs on (S09): its own putty-clay coefficients
     /// `EntData::coef`, or its 2000 column `EntData::column` under fixed Leontief.
     pub coef: Rows<f64>,
@@ -201,6 +204,7 @@ impl Layout {
             ent_offsets: offsets(&inp.enterprises.province, np),
             labour_supply: inp.labour_supply(&params.edu_eff),
             ownership,
+            dividend: inp.pop_dividend_shares(),
             country_pops,
             a_va: inp.enterprises.a_va.clone(),
             coef,
@@ -675,28 +679,39 @@ fn base_profit_pool(inp: &EconInputs) -> Vec<f64> {
     let mut pool = vec![0.0; inp.n_countries()];
     for e in 0..inp.n_enterprises() {
         let c = inp.country_of(inp.enterprises.province[e] as usize);
-        pool[c] += (1.0 - inp.countries.s_l[c]) * inp.enterprises.va0[e];
+        pool[c] += (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e];
     }
     pool
 }
 
 /// Household income per province at the base point, rebates aside: wages w0 (1 - u*) L^s
-/// plus the province's population share N_i / N_c of its country's profit pool sum (1 -
-/// s_L) VA0 (national ownership). As `ceteris_reference::io::Inputs::base_income`.
+/// plus its pops' dividend shares of their country's profit pool sum (1 - s_L) VA0 (national
+/// ownership; by population, or by wealth, ADR 0104). As
+/// `ceteris_reference::io::Inputs::base_income`.
 pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let supply = inp.labour_supply(&params.edu_eff);
     let pool = base_profit_pool(inp);
-    let (people, country_people) = pop_people(inp);
+    // by population as N_i / N_c, the order of the hashes before ADR 0104
+    let share = if inp.pops.dividend.is_empty() {
+        let (people, country_people) = pop_people(inp);
+        (0..inp.n_provinces())
+            .map(|i| {
+                let n = country_people[inp.country_of(i)];
+                if n > 0.0 { people[i] / n } else { 0.0 }
+            })
+            .collect()
+    } else {
+        let mut share = vec![0.0; inp.n_provinces()];
+        for (k, &d) in inp.pops.dividend.iter().enumerate() {
+            share[inp.pops.province[k] as usize] += d;
+        }
+        share
+    };
     (0..inp.n_provinces())
         .map(|i| {
             let c = inp.country_of(i);
             let u = inp.countries.u_star[c];
-            let share = if country_people[c] > 0.0 {
-                people[i] / country_people[c]
-            } else {
-                0.0
-            };
-            inp.provinces.w0[i] * (1.0 - u) * supply[i] + share * pool[c]
+            inp.provinces.w0[i] * (1.0 - u) * supply[i] + share[i] * pool[c]
         })
         .collect()
 }
@@ -721,11 +736,11 @@ pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times its
-/// effective labour, plus its population share of its country's base profit pool, over its
+/// effective labour, plus its dividend share of its country's base profit pool, over its
 /// population; 0 without people. As `ceteris_reference::io::Inputs::pop_base_income`.
 pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let pool = base_profit_pool(inp);
-    let (_, country_people) = pop_people(inp);
+    let dividend = inp.pop_dividend_shares();
     (0..inp.n_pops())
         .map(|k| {
             let i = inp.pops.province[k] as usize;
@@ -735,7 +750,7 @@ pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
                 let effective =
                     params.edu_eff[usize::from(inp.pops.edu[k])] * inp.pops.labour_force[k];
                 let wage = inp.provinces.w0[i] * (1.0 - inp.countries.u_star[c]) * effective;
-                (wage + n / country_people[c] * pool[c]) / n
+                (wage + dividend[k] * pool[c]) / n
             } else {
                 0.0
             }
@@ -1151,7 +1166,7 @@ impl EconWorld {
         let pool = base_profit_pool(inp);
         for k in 0..inp.n_pops() {
             let i = inp.pops.province[k] as usize;
-            let dividends = lay.ownership[k] * pool[inp.country_of(i)];
+            let dividends = lay.dividend[k] * pool[inp.country_of(i)];
             self.ledger
                 .transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
         }
@@ -2387,10 +2402,9 @@ mod tests {
         let inp = small_world();
         let lay = &w.layout;
         for (c, pops) in lay.country_pops.iter().enumerate() {
-            let s_l = inp.countries.s_l[c];
             let pool: f64 = (0..inp.n_enterprises())
                 .filter(|&e| inp.country_of(inp.enterprises.province[e] as usize) == c)
-                .map(|e| (1.0 - s_l) * inp.enterprises.va0[e])
+                .map(|e| (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e])
                 .sum();
             let people: f64 = pops.iter().map(|&k| inp.pops.population[k as usize]).sum();
             for &k in pops {

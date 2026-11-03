@@ -1001,6 +1001,23 @@ reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
 
+[[source]]
+id = "wiod-sea"
+name = "WIOD Socio-Economic Accounts"
+provider = "Groningen Growth and Development Centre"
+version = "2016 release (Nov16), 2000-2014"
+role = "Relative labour shares by sector, 2000 (7.2; ADR 0104, RFC 0302)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.rug.nl/ggdc/valuechain/wiod/wiod-2016-release"
+attribution = "Timmer, Dietzenbacher, Los, Stehrer and de Vries (2015), Review of International Economics"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0; 43 economies with labour compensation (self-employed included) and value added by industry in 2000"
+checked = 2026-11-03
+confidence = "high"
+
 # ---------------------------------------------------------------- macro, money, finance, fiscal
 
 [[source]]
@@ -1319,7 +1336,7 @@ id = "wid"
 name = "World Inequality Database"
 provider = "World Inequality Lab"
 version = "Current"
-role = "Wealth distribution per pop (15.7)"
+role = "Wealth distribution per pop (15.7); 2000 shares of net personal wealth, bottom 50%, middle 40%, top 10%, for dividends (ADR 0104, RFC 0302)"
 licence = "LicenseRef-NoLicence"
 licence_url = "https://wid.world/data/"
 attribution = "WID.world and series source papers"

@@ -244,6 +244,18 @@ impl EconInputs {
             },
             io: Rows::from_flat(a, ng * ng),
             s_l: f64s(&c, "labour_share")?,
+            // packs before ADR 0104 have one labour share per country
+            s_l_good: if c.column_by_name("labour_share_0").is_some() {
+                per_good(&c, "labour_share_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            // packs before ADR 0104 pay dividends per person
+            wealth: if c.column_by_name("wealth_0").is_some() {
+                per_good(&c, "wealth_", 3)?
+            } else {
+                Rows::new(3)
+            },
             unemployment: f64s(&c, "unemployment")?,
             u_star: f64s(&c, "u_star")?,
             gini: f64s(&c, "gini")?,
@@ -381,6 +393,7 @@ impl EconInputs {
         let levels = inputs.countries.price_level.clone();
         inputs.set_price_levels(levels, &TradeParams::default());
         inputs.set_base_point(&EconParams::default().edu_eff);
+        inputs.set_dividend_shares(&EconParams::default());
         Ok(inputs)
     }
 

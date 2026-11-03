@@ -737,6 +737,7 @@ struct Setup<'a> {
     pop_country: Vec<usize>,
     wage_share: Vec<f64>,
     people_share: Vec<f64>,
+    /// (P,) the province's pops' dividend shares of their country's profit pool (ADR 0104).
     province_share: Vec<f64>,
     s_l: Vec<f64>,
     sigma_k: Vec<f64>,
@@ -777,13 +778,17 @@ impl<'a> Setup<'a> {
                 divide_where(people[k], n, n > 0.0, 0.0)
             })
             .collect();
-        let province_people = bincount(c, inp.population.iter().copied(), n_c);
-        let province_share = (0..n_p)
-            .map(|p| {
-                let n = province_people[c[p]];
-                divide_where(inp.population[p], n, n > 0.0, 0.0)
-            })
-            .collect();
+        let province_share = if inp.pop_dividend.is_empty() {
+            let province_people = bincount(c, inp.population.iter().copied(), n_c);
+            (0..n_p)
+                .map(|p| {
+                    let n = province_people[c[p]];
+                    divide_where(inp.population[p], n, n > 0.0, 0.0)
+                })
+                .collect()
+        } else {
+            bincount(kp, inp.pop_dividend.iter().copied(), n_p)
+        };
         let sigma_within = inp.within_sigma();
         let v_data: Vec<f64> = (0..n_e)
             .map(|e| {
@@ -880,9 +885,19 @@ impl<'a> Setup<'a> {
             }),
             n_c,
         );
-        let owned: Vec<f64> = (0..n_c).map(|c| pool[c] - loss[c] + rebate[c]).collect();
+        // the pool (net of the markets' spoilage) by dividend share, the rebate by population;
+        // without dividend shares both by population, in the order of the hashes before ADR 0104
+        let owned: Vec<f64> = (0..n_c).map(|c| pool[c] - loss[c]).collect();
         let income: Vec<f64> = (0..kp.len())
-            .map(|k| self.wage_share[k] * bill[kp[k]] + self.people_share[k] * owned[kc[k]])
+            .map(|k| {
+                let c = kc[k];
+                let wage = self.wage_share[k] * bill[kp[k]];
+                if inp.pop_dividend.is_empty() {
+                    wage + self.people_share[k] * (owned[c] + rebate[c])
+                } else {
+                    wage + inp.pop_dividend[k] * owned[c] + self.people_share[k] * rebate[c]
+                }
+            })
             .collect();
         let spending = model::with_transfers(&income, kc, &inp.transfer);
         let per_person: Vec<f64> = spending
