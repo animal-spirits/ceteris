@@ -1,6 +1,6 @@
 //! WID.world bulk data: the 2000 shares of net personal wealth (adults, equal split,
 //! `shweal992j`) of the bottom 50%, middle 40% and top 10%, nearest year within the window
-//! (RFC 0302 D2).
+//! (ADR 0308).
 
 use std::collections::BTreeMap;
 use std::fs::File;

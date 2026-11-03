@@ -67,7 +67,7 @@ pub struct Countries {
     pub io: Rows<f64>,
     /// National labour share s_L (PWT), every sector's where `s_l_good` is empty.
     pub s_l: Vec<f64>,
-    /// Labour share s_L,c,g of each good (ADR 0104, RFC 0302): the VA-weighted mean equals
+    /// Labour share s_L,c,g of each good (ADRs 0307, 0308): the VA-weighted mean equals
     /// `s_l`. Empty where the inputs have none (a generated world, a pack before ADR 0104).
     pub s_l_good: Rows<f64>,
     /// WID 2000 shares of net personal wealth of the bottom 50%, middle 40% and top 10% (ADR
@@ -133,7 +133,7 @@ pub struct PopData {
     pub edu: Vec<u8>,
     pub labour_force: Vec<f64>,
     pub population: Vec<f64>,
-    /// Share of its country's profit pool (ADR 0104, RFC 0302 D2), by wealth; empty where
+    /// Share of its country's profit pool (ADR 0308), by wealth; empty where
     /// every pop's share is its population share N_k / N_c. See
     /// [`EconInputs::set_dividend_shares`].
     pub dividend: Vec<f64>,
@@ -254,7 +254,7 @@ impl EconInputs {
             .collect()
     }
 
-    /// Fills `PopData::dividend` from `Countries::wealth` (ADR 0104, RFC 0302 D2), once, after
+    /// Fills `PopData::dividend` from `Countries::wealth` (ADR 0308), once, after
     /// the base point: each country's pops are ranked by the mixture of their lognormal incomes
     /// at their base incomes per person with dividends per person and the within-pop dispersion
     /// those imply ([`crate::wealth::dividend_shares`]). Without wealth shares, empty.

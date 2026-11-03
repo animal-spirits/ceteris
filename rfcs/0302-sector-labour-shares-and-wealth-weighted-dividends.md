@@ -1,6 +1,6 @@
 # RFC 0302. Sector labour shares, wealth-weighted and foreign dividends: sources, bounds, ranks and routing (accepts and amends ADR 0104)
 
-Status: draft
+Status: accepted
 Date: 2026-11-03
 Design sections: 6.1, 7.2, 8.7, 9.1, 16; econ SPEC (Pack additions, Production, Income, Calibration)
 Research: none separate; the reading of ADR 0104 against the code at the C3 head (080b7f9).
@@ -17,7 +17,7 @@ contains its dividend (D2). CDIS reports inward positions by source country only
 sector, and the pack has no capital stock, so f_c,g cannot be formed as ADR 0104 writes it;
 OECD Analytical AMNE has the 2000 foreign-owned share by host, sector and parent on the ICIO
 grid that ADR 0201 already chose for P5 (D3). The foreign share needs a route and a status in
-income (D4). This RFC accepts ADR 0104 with these answers.
+income (D4). This RFC accepts ADR 0104 with these answers (ADRs 0307 to 0310).
 
 Sources (terms checked 2026-11-03): WIOD Socio-Economic Accounts 2016 release, CC BY 4.0
 (Timmer et al. 2015), one Excel file on DataverseNL (doi:10.34894/PJ2M1C), the host PWT is
@@ -49,8 +49,8 @@ Options:
 Recommendation: A, because it keeps ADR 0104's exact PWT mean and every share interior, which
 the CES production function needs.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0307
 
 ### D2. How are pops' incomes ranked against wealth brackets?
 
@@ -72,8 +72,8 @@ Options:
 Recommendation: A, because it is deterministic, closed and one step; B's fixed point may not
 contract and C ranks owners of capital by the wrong income.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0308
 
 ### D3. Which source gives the foreign-owned share and its owners?
 
@@ -90,8 +90,8 @@ Options:
 Recommendation: A, because it is the start year, has the sector, sits on the ICIO grid and is the
 data ADR 0201 brings in P5, so P5 extends the table instead of replacing it.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0309
 
 ### D4. How are foreign dividends paid and counted?
 
@@ -108,8 +108,8 @@ Recommendation: A, because they are primary income in the current account the tr
 built from: with them, a country's modelled trade balance is its current account less its net
 dividends, as in the data; as transfers they would leave income at GDP.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-03.
+Row: ADR 0310
 
 ## Spec changes
 
@@ -133,5 +133,8 @@ Row:
 ## Consequences
 
 - Without the three tables (the fixture, the installed pack) every hash is unchanged.
+- As built (C4, part 1): labour shares and dividends by wealth in the simulator, export, GE
+  reference, calibration and pack builder (columns only where SEA and WID are in the fetch
+  cache); foreign dividends (ADRs 0309, 0310) follow.
 - The installed pack needs a rebuild (C6): w0, the profit pools, A and the balance of RFC 0287 D1
   all move.

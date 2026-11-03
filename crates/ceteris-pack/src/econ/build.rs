@@ -428,7 +428,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &gdp_by_year,
     );
     countries_columns.extend(transfers::columns(&imbalances));
-    // sector labour shares and wealth shares (ADR 0104, RFC 0302) where SEA and WID are cached
+    // sector labour shares and wealth shares (ADRs 0307, 0308) where SEA and WID are cached
     let (sea_path, wid_path) = (cache.join(sea::SEA), cache.join(wid::WID));
     if sea_path.exists() && wid_path.exists() {
         let iso2 = iso3_by_iso2(&admin0)?;

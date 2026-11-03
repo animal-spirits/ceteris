@@ -1,4 +1,4 @@
-//! Dividend shares by wealth (specs/econ/SPEC.md, Income; ADR 0104 as accepted by RFC 0302 D2):
+//! Dividend shares by wealth (specs/econ/SPEC.md, Income; ADR 0308):
 //! a country's profit pool is paid by the WID wealth shares of its bottom 50%, middle 40% and top
 //! 10%, ranked by income with perfect rank correlation, so a pop's share is the wealth share of
 //! each bracket times the part of the bracket's population that is the pop's.
