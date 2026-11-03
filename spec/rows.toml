@@ -1415,3 +1415,18 @@ sections = "22"
 rows = "0288"
 topic = "[Ensemble lanes move from pre-P3 into P3, amending ADR 0207](../rfcs/0284-ensemble-lanes-in-p3.md)"
 sections = "21"
+
+[[entry]]
+rows = "0291"
+topic = "[Seek replays timed interventions; an edit after a seek back drops the later timeline](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"
+
+[[entry]]
+rows = "0292"
+topic = "[Snapshots name their network by its content digest](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"
+
+[[entry]]
+rows = "0293"
+topic = "[A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
+sections = "14.3"

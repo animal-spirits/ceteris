@@ -211,7 +211,16 @@ impl EconInputs {
         };
         let goods = table("econ_goods.arrow")?;
         let weight = f64s(&goods, "weight")?;
+        // runs read P02 from the trade parameters, so a pack column that disagrees is stale
+        let coverage = f64s(&goods, "coverage")?;
         let goods = read_goods(&goods)?;
+        let default = TradeParams::default();
+        if goods == default.goods && coverage != default.coverage {
+            return Err(err(format!(
+                "econ_goods: coverage {coverage:?} is not TradeParams::coverage (P02) {:?}",
+                default.coverage
+            )));
+        }
         let ng = goods.n();
         let io_table = table("econ_io.arrow")?;
         let a = f64s(&io_table, "a")?;

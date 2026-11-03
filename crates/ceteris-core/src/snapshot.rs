@@ -10,8 +10,9 @@ use std::collections::HashMap;
 use std::fmt;
 
 const MAGIC: &[u8; 4] = b"CETS";
-/// 2: ledger accounts carry their kind and wide balances are `i128` (ADR 0106).
-const FORMAT: u32 = 2;
+/// 2: ledger accounts carry their kind and wide balances are `i128` (ADR 0106). 3: worlds
+/// carry their parameters and name their network.
+const FORMAT: u32 = 3;
 const ZSTD_LEVEL: i32 = 1;
 
 pub type Hash = [u8; 32];
@@ -227,6 +228,13 @@ impl SnapshotStore {
         let (&t, hash) = self.by_tick.range(..=tick).next_back()?;
         let bytes = zstd::stream::decode_all(&self.blobs[hash][..]).expect("corrupt snapshot blob");
         Some((t, bytes))
+    }
+
+    /// Drops the snapshots after `tick`, which belong to a timeline left by an intervention.
+    pub fn truncate_after(&mut self, tick: u32) {
+        self.by_tick.split_off(&(tick + 1));
+        let kept: std::collections::BTreeSet<Hash> = self.by_tick.values().copied().collect();
+        self.blobs.retain(|h, _| kept.contains(h));
     }
 
     pub fn hashes(&self) -> impl Iterator<Item = (u32, Hash)> + '_ {
