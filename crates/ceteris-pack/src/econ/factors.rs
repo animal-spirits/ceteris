@@ -1,5 +1,5 @@
 //! Sector labour shares and wealth shares of the pack countries (specs/econ/SPEC.md, Pack
-//! additions; ADR 0104 as accepted by RFC 0302 D1 and D2).
+//! additions; ADRs 0307 and 0308).
 //!
 //! Labour shares: s_L,c,g = s_L,c r_g,c / (sum_h VA_c,h r_h,c / VA_c), r the WIOD SEA 2000
 //! relative labour share of the good, so the VA-weighted mean is the PWT national share; a share
@@ -13,11 +13,11 @@ use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray};
 
 use crate::read::icio::N_GOODS;
 
-/// Bounds of a sector labour share (RFC 0302 D1).
+/// Bounds of a sector labour share (ADR 0307).
 pub const S_L_MIN: f64 = 0.05;
 pub const S_L_MAX: f64 = 0.95;
 /// SEA economies nearest in log GDP per person whose mean relative shares a country outside SEA
-/// takes (RFC 0302 D1: the income group, which the pack has no table of).
+/// takes (ADR 0307: the income group, which the pack has no table of).
 pub const NEAREST: usize = 5;
 
 /// Labour shares of one country's goods and whether a bound binds.
@@ -202,7 +202,7 @@ pub fn columns(f: &Factors) -> Vec<(String, ArrayRef)> {
     out
 }
 
-/// The factor columns of every pack country (RFC 0302 D1, D2). `s_l` and `va` are each country's
+/// The factor columns of every pack country (ADRs 0307, 0308). `s_l` and `va` are each country's
 /// PWT labour share and national VA by good, `parts` its economies (ISO3), `income` and
 /// `population` per economy, `region` the World Bank region per economy; `sea` SEA's LAB and VA
 /// by economy, `wid` WID's three shares by economy (ISO3).

@@ -1465,3 +1465,8 @@ sections = "9.5, 15, 16"
 rows = "0301 to 0306"
 topic = "[Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md)"
 sections = "8.6, 9.6"
+
+[[entry]]
+rows = "0307 to 0310"
+topic = "[Sector labour shares from WIOD SEA clipped and rescaled to PWT, dividends by WID wealth ranked on base income in one pass, foreign-owned shares from OECD AAMNE 2000, foreign dividends as income through a world dividend account, accepting ADR 0104](../rfcs/0302-sector-labour-shares-and-wealth-weighted-dividends.md)"
+sections = "6.1, 7.2, 9.1, 16"

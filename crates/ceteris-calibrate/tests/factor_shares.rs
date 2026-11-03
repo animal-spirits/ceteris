@@ -1,4 +1,4 @@
-//! ADR 0104 (RFC 0302): sector labour shares and dividends by wealth. The GE reference reads the
+//! ADRs 0307, 0308: sector labour shares and dividends by wealth. The GE reference reads the
 //! labour share of every enterprise and the dividend share of every pop the simulator exports,
 //! and the calibrated steady state of a fixture with both is the run's.
 

@@ -1,4 +1,4 @@
-//! Sector labour shares and wealth shares of the pack countries (ADR 0104, RFC 0302): the
+//! Sector labour shares and wealth shares of the pack countries (ADRs 0307, 0308): the
 //! VA-weighted mean of a country's labour shares is its PWT share, and a country missing a source
 //! takes the documented fallback with its flag set.
 
