@@ -563,3 +563,42 @@ fn cells_outside_region_is_empty_on_the_fixture() {
     gains.kappa[pushed] = 2.5 / gains.j[pushed];
     assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![pushed]);
 }
+
+/// ADR 0100: each pop spends its income plus its share of its country's transfer D_c = s_c Y, Y
+/// world income, in proportion to its income; the transfers add up to zero, and at the data
+/// state a receiving country buys more traded goods, a paying one less.
+#[test]
+fn reference_spends_the_transfers() {
+    use ceteris_reference::model::{self, Model};
+    let income = [3.0, 1.0, 2.0, 4.0];
+    let country = [0, 0, 1, 1];
+    let spent = model::with_transfers(&income, &country, &[0.1, -0.1]);
+    // world income 10: country 0 (income 4) receives 1, country 1 (income 6) pays 1
+    let want = [3.75, 1.25, 2.0 - 1.0 / 3.0, 4.0 - 2.0 / 3.0];
+    assert!(
+        spent.iter().zip(&want).all(|(s, w)| close(*s, *w, 1e-15)),
+        "{spent:?}"
+    );
+    assert_eq!(
+        model::with_transfers(&income, &country, &[0.0, 0.0]),
+        income
+    );
+
+    let balanced = inputs();
+    let mut with = balanced.clone();
+    with.transfer = vec![0.02, -0.012, -0.013, 0.005];
+    let (a, b) = (Model::new(&balanced).unwrap(), Model::new(&with).unwrap());
+    let x = a.data_state();
+    let (ea, eb) = (
+        model::evaluate(&x, &a, &balanced.ent_a),
+        model::evaluate(&x, &b, &with.ent_a),
+    );
+    let traded = |e: &model::Evaluation, c: usize| -> f64 {
+        (0..balanced.n_provinces())
+            .filter(|&p| balanced.province_country[p] == c)
+            .map(|p| e.spend.row(p).iter().sum::<f64>())
+            .sum()
+    };
+    assert!(traded(&eb, 0) > traded(&ea, 0));
+    assert!(traded(&eb, 1) < traded(&ea, 1));
+}

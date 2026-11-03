@@ -816,6 +816,7 @@ fn two_provinces(
         unemployment: vec![u],
         u_star: vec![0.0],
         gini: vec![0.35],
+        transfer: vec![0.0],
         omega: Mat::filled(1, 1, 1.0),
         io: vec![Mat::zeros(1, 1)],
         active: vec![vec![true]; 2],

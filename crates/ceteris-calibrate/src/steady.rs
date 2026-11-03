@@ -6,16 +6,18 @@
 //! (their province's wages s_L VA by effective labour share; their country's profits (1 - s_L) VA
 //! and tariff rebate by population, national ownership) plus sum a_kg V of the province's
 //! enterprises; country profits carry the spoilage of competitively stored goods, V delta s / (1 +
-//! delta s) at their origins (ADR 0091). One scalar r_g per traded good rescales its V (and VA)
-//! so that world spending net of tariffs equals world sales value, V / (1 + delta s). Spending scales with the r, so that fixes them only up to
-//! one common factor; each pass rescales them so that world traded value added, sum_e r_g VA_e, is
-//! the data's (ADR 0106: the fixed point is then unique, not one of a ray). Rebates depend on
-//! sourcing, local output on income and income on local output, so passes of stages 1, 2 and 4
-//! repeat until rebates, r, buyer prices and the PIGL weights settle ([`PASS_TOL`]).
+//! delta s) at their origins (ADR 0091). Households also receive their country's transfer D_c =
+//! s_c Y (ADR 0100; Y world income) in proportion to income and spend income + D_c. V and VA stay
+//! at the data (ADR 0100 removes ADR 0089's rescale r_g): world spending net of tariffs meets
+//! world sales value V / (1 + delta s) of every good through stage 4's targets, each country's
+//! traded final demand rescaled biproportionally ([`crate::balance`], ADR 0295) with its traded
+//! total kept. Rebates depend on sourcing, local output on income and income on local output, so
+//! passes of stages 1, 2 and 4 repeat until rebates, buyer prices and the PIGL weights settle
+//! ([`PASS_TOL`]).
 //!
 //! Stage 2, origin prices. Per traded good, the balanced scaling
-//! w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o / (1 + delta_g s_g), Phi_d = sum_o K_od w_o,
-//! on the two-level
+//! w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o / (1 + delta_g s_g), Phi_d = sum_o K_od w_o
+//! (r_g received over sales within the scaling, 1 at the fixed point), on the two-level
 //! kernel ([`sinkhorn`]), unique up to scale (Sinkhorn 1967). Then p_o = w_o^(-1/theta), one
 //! scale per good, set so that the good's part of the world price index (base consumption
 //! weights at the calibrated incomes) is 1; local goods take their country's price level p_c
@@ -31,7 +33,8 @@
 //!
 //! Stage 4, demand. Per country, PIGL weights inverted jointly over its pops, each at its own
 //! province's buyer prices q and its income per person, weighted by its income, so that their
-//! aggregate shares are the country's final demand shares (`demand::invert_pops`, ADR 0094);
+//! aggregate shares are the country's final demand shares as balanced in stage 1
+//! (`demand::invert_pops`, ADR 0094);
 //! every pop spends at the country's within-pop dispersion (`Inputs::within_sigma`), and
 //! households then spend by PIGL at their own province's q and income, which is the E of stage 1.
 //!
@@ -39,7 +42,7 @@
 //! of use; the pipeline holds, j ticks ahead, one month of shipments of every arrival slot j or
 //! later; merchant stocks coverage times sales (S* = coverage D; D = Q, or Q / (1 + delta s) for
 //! the competitively stored goods, ADR 0091); pops hold one month
-//! of income less the wages of the tick (dividends and rebates); pi^e = 0.
+//! of income less the wages of the tick, plus their transfer (dividends, rebates and D_c); pi^e = 0.
 //!
 //! Sums run in a fixed order (sequential per index, pairwise row sums), so the steady state is
 //! reproducible to the last bit.
@@ -55,7 +58,7 @@ use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
 use ceteris_trade::TradeParams;
 
-use crate::{block, elasticity};
+use crate::{balance, block, elasticity};
 
 /// P149, the order rule's cover (`systems::COVER`): stage 5's stocks and the block gain's
 /// order-up-to position hold the months of use the run's order rule holds.
@@ -184,7 +187,13 @@ pub struct Pass {
 
 #[derive(Clone, Debug)]
 pub struct Info {
-    pub r: Vec<f64>,
+    /// (G,) [`Steady::column_factor`].
+    pub column_factor: Vec<f64>,
+    /// (G,) r_g - 1 of the last pass's scaling, received over sales, 0 for local goods: 0 at the
+    /// fixed point, where stage 4's targets balance every good.
+    pub balance_residual: Vec<f64>,
+    /// The final demand balance's mu - 1 at the last pass (`balance::Balanced::mu`).
+    pub balance_mu: f64,
     pub passes: usize,
     pub pass_history: Vec<Pass>,
     /// Per good, the smallest origin weight relative to the largest, log10; None for local
@@ -206,8 +215,9 @@ impl Info {
 pub struct Steady {
     /// (C,)
     pub u_star: Vec<f64>,
-    /// (G,)
-    pub r: Vec<f64>,
+    /// (G,) beta_g of the final demand balance (ADR 0295), 1 for local goods and goods without
+    /// final demand: the residual of ADR 0089's r_g.
+    pub column_factor: Vec<f64>,
     /// (P, G) posted: origin markets of traded goods, 1 for local goods, 0 elsewhere.
     pub price: Mat,
     /// (P, G) buyer price q of traded goods, the local price of local goods.
@@ -244,9 +254,11 @@ pub struct Steady {
     pub w0: Vec<f64>,
     /// (E, G) traded input spending per month.
     pub ent_spend: Mat,
-    /// (K,)
+    /// (K,) income, transfers aside.
     pub pop_income: Vec<f64>,
     pub pop_wage: Vec<f64>,
+    /// (K,) the pop's share of its country's transfer D_c (ADR 0100).
+    pub pop_transfer: Vec<f64>,
     /// (K, G)
     pub pop_spend: Mat,
     /// (P, G) household spending (local goods at p_c).
@@ -293,12 +305,17 @@ impl Steady {
         })
     }
 
-    /// (K,) money at the start of a tick: dividends and rebates, wages come at E2.
+    /// (K,) what each pop spends a tick: its income and its transfer (ADR 0100).
+    pub fn pop_spending(&self) -> Vec<f64> {
+        (0..self.pop_income.len())
+            .map(|k| self.pop_income[k] + self.pop_transfer[k])
+            .collect()
+    }
+
+    /// (K,) money at the start of a tick: dividends, rebates and the transfer; wages come at E2.
     pub fn pop_money(&self) -> Vec<f64> {
-        self.pop_income
-            .iter()
-            .zip(&self.pop_wage)
-            .map(|(i, w)| i - w)
+        (0..self.pop_income.len())
+            .map(|k| self.pop_income[k] - self.pop_wage[k] + self.pop_transfer[k])
             .collect()
     }
 }
@@ -701,7 +718,10 @@ fn relative(new: &[f64], old: &[f64]) -> f64 {
 struct Households {
     /// (P,) household income rebates aside, the weights of the world price index.
     base: Vec<f64>,
+    /// (K,) transfers aside.
     income: Vec<f64>,
+    /// (K,) income plus the pop's share of its country's transfer (ADR 0100), what it spends.
+    spending: Vec<f64>,
     pop_spend: Mat,
     spend_hh: Mat,
 }
@@ -864,7 +884,8 @@ impl<'a> Setup<'a> {
         let income: Vec<f64> = (0..kp.len())
             .map(|k| self.wage_share[k] * bill[kp[k]] + self.people_share[k] * owned[kc[k]])
             .collect();
-        let per_person: Vec<f64> = income
+        let spending = model::with_transfers(&income, kc, &inp.transfer);
+        let per_person: Vec<f64> = spending
             .iter()
             .zip(&inp.pop_population)
             .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
@@ -880,8 +901,8 @@ impl<'a> Setup<'a> {
             &inp.pigl,
         );
         let pop_spend = Mat::from_fn(kp.len(), n_g, |k, g| {
-            if income[k] > 0.0 {
-                share[(k, g)] * income[k]
+            if spending[k] > 0.0 {
+                share[(k, g)] * spending[k]
             } else {
                 0.0
             }
@@ -899,17 +920,18 @@ impl<'a> Setup<'a> {
         Households {
             base,
             income,
+            spending,
             pop_spend,
             spend_hh,
         }
     }
 
-    fn values(&self, r: &[f64], y_local: &[f64]) -> Vec<f64> {
-        let eg = &self.inp.ent_good;
-        (0..eg.len())
+    /// Output values: the data's for traded enterprises, `y_local` for local ones.
+    fn values(&self, y_local: &[f64]) -> Vec<f64> {
+        (0..self.v_data.len())
             .map(|e| {
                 if self.traded_e[e] {
-                    r[eg[e]] * self.v_data[e]
+                    self.v_data[e]
                 } else {
                     y_local[e]
                 }
@@ -917,10 +939,9 @@ impl<'a> Setup<'a> {
             .collect()
     }
 
-    /// Income and local output at given r, rebates, buyer prices and weights: output values V.
+    /// Income and local output at given rebates, buyer prices and weights: output values V.
     fn settle(
         &self,
-        r: &[f64],
         rebate: &[f64],
         q: &Mat,
         weights: &Weights,
@@ -931,7 +952,7 @@ impl<'a> Setup<'a> {
         let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
         let mut y_local = y_local.to_vec();
         for _ in 0..max_local {
-            let v = self.values(r, &y_local);
+            let v = self.values(&y_local);
             let spend_hh = self.households(&v, rebate, q, weights).spend_hh;
             let mut used = Mat::zeros(n_p, n_g);
             for e in (0..v.len()).filter(|&e| self.traded_e[e]) {
@@ -951,7 +972,7 @@ impl<'a> Setup<'a> {
                 .all(|(n, o)| (n - o).abs() <= LOCAL_TOL * n.abs());
             y_local = y_new;
             if settled {
-                return Ok(self.values(r, &y_local));
+                return Ok(self.values(&y_local));
             }
         }
         Err(format!("income and local output did not settle in {max_local} iterations").into())
@@ -989,7 +1010,7 @@ fn spoilage(inp: &Inputs) -> Result<Vec<f64>, CalibrationError> {
 }
 
 /// The fixed point of the passes as one vector, in the units `change` measures it in: ln q of
-/// traded goods, rebates over `rebate_unit`, ln r of traded goods, the PIGL scales over
+/// traded goods, rebates over `rebate_unit`, the PIGL scales over
 /// `scale_unit`, the PIGL omega and within-good weights. Anderson's least squares weighs every
 /// entry alike, so in money units the rebates would decide the mixing alone.
 struct State {
@@ -1013,7 +1034,7 @@ fn block_unit(v: &[f64]) -> f64 {
 }
 
 impl State {
-    fn pack(&self, q: &Mat, rebate: &[f64], r: &[f64], w: &Weights) -> Vec<f64> {
+    fn pack(&self, q: &Mat, rebate: &[f64], w: &Weights) -> Vec<f64> {
         let mut z = Vec::new();
         for p in 0..self.n_p {
             z.extend(
@@ -1023,14 +1044,13 @@ impl State {
             );
         }
         z.extend(rebate.iter().map(|x| x / self.rebate_unit));
-        z.extend((0..r.len()).filter(|&g| self.traded[g]).map(|g| r[g].ln()));
         z.extend(w.scale.iter().map(|x| x / self.scale_unit));
         z.extend_from_slice(&w.omega.data);
         z.extend_from_slice(&w.within.data);
         z
     }
 
-    fn unpack(&self, z: &[f64]) -> (Mat, Vec<f64>, Vec<f64>, Weights) {
+    fn unpack(&self, z: &[f64]) -> (Mat, Vec<f64>, Weights) {
         let (n_p, n_c, n_g) = (self.n_p, self.n_c, self.traded.len());
         let goods: Vec<usize> = (0..n_g).filter(|&g| self.traded[g]).collect();
         let mut at = 0;
@@ -1046,11 +1066,6 @@ impl State {
             .map(|x| x * self.rebate_unit)
             .collect();
         at += n_c;
-        let mut r = vec![1.0; n_g];
-        for &g in &goods {
-            r[g] = z[at].exp();
-            at += 1;
-        }
         let scale = z[at..at + n_c]
             .iter()
             .map(|x| x * self.scale_unit)
@@ -1070,7 +1085,6 @@ impl State {
         (
             q,
             rebate,
-            r,
             Weights {
                 scale,
                 omega,
@@ -1081,8 +1095,8 @@ impl State {
     }
 }
 
-/// Stage 1 at the data state: traded spending E (P, G) of households and enterprises at r = 1, no
-/// rebates, the data state's buyer prices (`Inputs::base_price`) and the inputs' PIGL weights,
+/// Stage 1 at the data state: traded spending E (P, G) of households (transfers included, ADR
+/// 0100) and enterprises at the data's output values, no rebates, the data state's buyer prices (`Inputs::base_price`) and the inputs' PIGL weights,
 /// with income and local output settled; and the sales value V / (1 + delta s) (P, G) of traded
 /// origins, their output value less the spoilage it replaces (ADR 0091).
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
@@ -1091,10 +1105,9 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let traded = &inp.traded;
     // traded goods at their base buyer prices, local goods at p_c (ADR 0098)
     let q = inp.base_price.clone();
-    let (r, rebate) = (vec![1.0; n_g], vec![0.0; n_c]);
+    let rebate = vec![0.0; n_c];
     let weights = inp.pigl_weights()?;
     let v = setup.settle(
-        &r,
         &rebate,
         &q,
         &weights,
@@ -1154,10 +1167,6 @@ pub fn calibrate_from(
     {
         return Err("start prices must be positive and finite, one per province and good".into());
     }
-    let va_target = inp
-        .ent_va_target
-        .as_ref()
-        .ok_or("the inputs carry no value-added target")?;
     let coverage = inp
         .coverage
         .as_ref()
@@ -1202,11 +1211,10 @@ pub fn calibrate_from(
     let sigma_within = inp.within_sigma();
     let omega_total = inp.omega.row_sums();
     let om = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] / omega_total[k]);
-    let traded_va_data: f64 = (0..n_e)
-        .filter(|&e| traded_e[e])
-        .map(|e| va_target[e])
-        .sum();
     let sales_data = setup.sales_data();
+    let world_sales: Vec<f64> = (0..n_g)
+        .map(|g| (0..n_p).map(|p| sales_data[(p, g)]).sum())
+        .collect();
     let origin = |p: usize, g: usize| inp.active[p][g] && traded[g];
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
@@ -1215,8 +1223,9 @@ pub fn calibrate_from(
     let local_price = inp.data_state_price();
 
     let mut q = start.clone();
-    let mut r = vec![1.0; n_g];
     let mut rebate = vec![0.0; n_c];
+    let mut ras_start: Option<Vec<f64>> = None;
+    let mut balanced = None;
     let mut y_local = setup.local_start()?;
     let mut weights = inp.pigl_weights()?;
     let mut state = State {
@@ -1235,7 +1244,7 @@ pub fn calibrate_from(
     let mut settled = None;
     let mut change = f64::NAN;
     for passes in 1..=limits.max_passes {
-        let v = setup.settle(&r, &rebate, &q, &weights, &y_local, limits.max_local)?;
+        let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
         y_local = (0..n_e)
             .map(|e| if traded_e[e] { 0.0 } else { v[e] })
             .collect();
@@ -1249,17 +1258,7 @@ pub fn calibrate_from(
             }
         });
 
-        let mut scaling =
-            sinkhorn_limited(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps)?;
-        // spending scales with r, so the passes fix r only up to one common factor: pin it
-        let model_va: f64 = (0..n_e)
-            .filter(|&e| traded_e[e])
-            .map(|e| scaling.r[eg[e]] * va_target[e])
-            .sum();
-        let r_level = traded_va_data / model_va;
-        for g in (0..n_g).filter(|&g| traded[g]) {
-            scaling.r[g] *= r_level;
-        }
+        let scaling = sinkhorn_limited(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps)?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for p in 0..n_p {
@@ -1311,19 +1310,51 @@ pub fn calibrate_from(
         let duty = m.flows(&price, &ones, &src).tariff;
         let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
         let rebate_new = bincount(c, duty_bill, n_c);
+        // stage 4's targets: each country's traded final demand at its data shares, balanced so
+        // that every good's world net spending meets its sales (ADR 0295)
+        let absorbed = bincount(&kc, hh.spending.iter().copied(), n_c);
+        let seed = Mat::from_fn(n_c, n_g, |k, g| {
+            if traded[g] {
+                om[(k, g)] * absorbed[k]
+            } else {
+                0.0
+            }
+        });
+        let (mut net_hh, mut gross_hh) = (Mat::zeros(n_c, n_g), Mat::zeros(n_c, n_g));
+        let mut column = vec![0.0; n_g];
+        for p in 0..n_p {
+            for g in (0..n_g).filter(|&g| traded[g]) {
+                let net = 1.0 - duty[(p, g)];
+                net_hh[(c[p], g)] += net * hh.spend_hh[(p, g)];
+                gross_hh[(c[p], g)] += hh.spend_hh[(p, g)];
+                column[g] += net * spend_int[(p, g)];
+            }
+        }
+        let net = Mat::from_fn(n_c, n_g, |k, g| {
+            divide_where(
+                net_hh[(k, g)],
+                gross_hh[(k, g)],
+                gross_hh[(k, g)] > 0.0,
+                1.0,
+            )
+        });
+        let target: Vec<f64> = (0..n_g).map(|g| world_sales[g] - column[g]).collect();
+        let ras = balance::balance(&seed, &net, &target, traded, ras_start.as_deref())?;
+        let omega_target = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] * ras.factor[(k, g)]);
+        ras_start = Some(ras.b.clone());
         let per_person: Vec<f64> = hh
-            .income
+            .spending
             .iter()
             .zip(people)
             .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
             .collect();
         let weights_new = demand::invert_pops(
-            &inp.omega,
+            &omega_target,
             &demand::Pops {
                 country: &kc,
                 price: &q.select_rows(kp),
                 income: &per_person,
-                spend: &hh.income,
+                spend: &hh.spending,
             },
             &sigma_within,
             &inp.category,
@@ -1333,7 +1364,6 @@ pub fn calibrate_from(
 
         change = py_max([
             relative(&rebate_new, &rebate),
-            relative(&scaling.r, &r),
             relative(&q_new.data, &q.data),
             relative(&weights_new.scale, &weights.scale),
             relative(&weights_new.omega.data, &weights.omega.data),
@@ -1352,16 +1382,17 @@ pub fn calibrate_from(
         ));
         lw = Some(log_weight);
         if change <= PASS_TOL {
-            (rebate, r, q, weights) = (rebate_new, scaling.r, q_new, weights_new);
+            (rebate, q, weights) = (rebate_new, q_new, weights_new);
             settled = Some((passes, price, src, top));
+            balanced = Some((ras, scaling.r));
             break;
         }
         // Anderson mixing of the passes' fixed point (prices, rebates, r and the PIGL weights).
         if state.rebate_unit == 0.0 {
             state.rebate_unit = block_unit(&rebate_new);
         }
-        let z = state.pack(&q, &rebate, &r, &weights);
-        let f = state.pack(&q_new, &rebate_new, &scaling.r, &weights_new);
+        let z = state.pack(&q, &rebate, &weights);
+        let f = state.pack(&q_new, &rebate_new, &weights_new);
         let fz: Vec<f64> = f.iter().zip(&z).map(|(f, z)| f - z).collect();
         if zs.len() > ANDERSON_MEMORY {
             zs.remove(0);
@@ -1372,9 +1403,9 @@ pub fn calibrate_from(
         if fs.len() > 1 {
             let (dz, df) = (diffs(&zs), diffs(&fs));
             let gamma = lstsq(&df, &fz)?;
-            (q, rebate, r, weights) = state.unpack(&mix(&f, &dz, &df, &gamma));
+            (q, rebate, weights) = state.unpack(&mix(&f, &dz, &df, &gamma));
         } else {
-            (rebate, r, q, weights) = (rebate_new, scaling.r, q_new, weights_new);
+            (rebate, q, weights) = (rebate_new, q_new, weights_new);
         }
     }
     let Some((passes, price, src, top)) = settled else {
@@ -1384,8 +1415,16 @@ pub fn calibrate_from(
         });
     };
     let lw = lw.expect("a pass ran");
+    let (ras, r) = balanced.expect("the settled pass balanced");
+    if let Some(&g) = ras.held.first() {
+        return Err(format!(
+            "final demand balance: at the settled passes good {g} has final demand but its world \
+             sales do not exceed its intermediate use"
+        )
+        .into());
+    }
 
-    let v = setup.settle(&r, &rebate, &q, &weights, &y_local, limits.max_local)?;
+    let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
     let va0: Vec<f64> = a_va.iter().zip(&v).map(|(a, v)| a * v).collect();
     let hh = setup.households(&v, &rebate, &q, &weights);
     let mut spend_int = setup.input_spending(&v);
@@ -1467,7 +1506,11 @@ pub fn calibrate_from(
         })
         .collect();
     let info = Info {
-        r: r.clone(),
+        column_factor: ras.column_factor.clone(),
+        balance_residual: (0..n_g)
+            .map(|g| if traded[g] { r[g] - 1.0 } else { 0.0 })
+            .collect(),
+        balance_mu: ras.mu - 1.0,
         passes,
         pass_history: history,
         min_log10_relative_weight,
@@ -1478,11 +1521,14 @@ pub fn calibrate_from(
     let pop_wage: Vec<f64> = (0..kp.len())
         .map(|k| setup.wage_share[k] * bill[kp[k]])
         .collect();
+    let pop_transfer = (0..kp.len())
+        .map(|k| hh.spending[k] - hh.income[k])
+        .collect();
     let pop_pipeline = in_flight(&arrive, &hh.pop_spend, kp);
     let ent_pipeline = in_flight(&arrive, &ent_spend, ep);
     let mut steady = Steady {
         u_star: u_star.to_vec(),
-        r,
+        column_factor: ras.column_factor,
         price: Mat::from_fn(n_p, n_g, |p, g| {
             if origin(p, g) || !traded[g] {
                 price[(p, g)]
@@ -1520,6 +1566,7 @@ pub fn calibrate_from(
         ent_spend,
         pop_income: hh.income,
         pop_wage,
+        pop_transfer,
         pop_spend: hh.pop_spend,
         spend_hh: hh.spend_hh,
         spend_int,
@@ -1637,25 +1684,24 @@ mod tests {
                 1.0 + 0.3 * p as f64
             }
         });
-        let (rebate, r) = (vec![1e9, 4e9], vec![1.1, 1.0]);
+        let rebate = vec![1e9, 4e9];
         let w = Weights {
             scale: vec![2.5, 0.5],
             omega: Mat::from_fn(2, N_CATEGORIES, |c, j| 0.1 * (c + j) as f64),
             within: Mat::from_fn(2, 2, |c, g| 0.3 + 0.1 * (c + g) as f64),
             sigma: state.sigma.clone(),
         };
-        let z = state.pack(&q, &rebate, &r, &w);
+        let z = state.pack(&q, &rebate, &w);
         assert_eq!(&z[..2], &[1.5f64.ln(), 2.5f64.ln()]);
         assert_eq!(&z[2..4], &[0.25, 1.0]);
-        assert_eq!(z[4], 1.1f64.ln());
-        assert_eq!(&z[5..7], &[1.0, 0.2]);
-        let (q2, rebate2, r2, w2) = state.unpack(&z);
+        assert_eq!(&z[4..6], &[1.0, 0.2]);
+        let (q2, rebate2, w2) = state.unpack(&z);
         let close = |a: &[f64], b: &[f64]| {
             a.iter()
                 .zip(b)
                 .all(|(x, y)| (x - y).abs() <= 1e-15 * y.abs())
         };
-        assert!(close(&q2.data, &q.data) && close(&rebate2, &rebate) && close(&r2, &r));
+        assert!(close(&q2.data, &q.data) && close(&rebate2, &rebate));
         assert!(close(&w2.scale, &w.scale));
         assert_eq!(
             (w2.omega.data, w2.within.data),

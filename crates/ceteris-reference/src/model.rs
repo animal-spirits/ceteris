@@ -802,7 +802,9 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     // income per person. E4: a pop earns its effective-labour share e_k LF_k / L^s of its
     // province's wages w (1 - u*) L^s, and its population share of its country's profits
     // (national ownership) and of its country's rebate, the tariff share of spending; rebates
-    // depend on household spending, so income is a fixed point.
+    // depend on household spending, so income is a fixed point. A pop also receives its
+    // country's transfer D_c = s_c Y (ADR 0100), Y world income, in proportion to its income,
+    // and spends income + D_c.
     let ones = Mat::filled(n_p, n_g, 1.0);
     let duty_share = m.flows(&price, &ones, &src).tariff;
     let c = &inp.province_country;
@@ -839,7 +841,7 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let mut rebate = vec![0.0; n_c];
     let mut spend_hh = Mat::zeros(n_p, n_g);
     for _ in 0..MAX_REBATE_ITERATIONS {
-        let pop_income = pop_income_at(&rebate);
+        let pop_income = with_transfers(&pop_income_at(&rebate), kc, &inp.transfer);
         let per_person: Vec<f64> = (0..n_k)
             .map(|k| {
                 if people[k] > 0.0 {
@@ -934,6 +936,28 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
         income,
         index,
     }
+}
+
+/// What each pop spends, its `income` plus its share of its country's transfer D_c = s_c Y
+/// (ADR 0100): Y world income, the pop's share its income over its country's.
+pub fn with_transfers(income: &[f64], country: &[usize], share: &[f64]) -> Vec<f64> {
+    if share.iter().all(|&s| s == 0.0) {
+        return income.to_vec();
+    }
+    let world = pairwise_sum(income);
+    let national = bincount(country, income.iter().copied(), share.len());
+    income
+        .iter()
+        .zip(country)
+        .map(|(&m, &c)| {
+            let n = national[c];
+            m + if n > 0.0 {
+                share[c] * world * m / n
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 /// Scaled excess demand of every market at `x`, all labour markets included, at the inputs' A.

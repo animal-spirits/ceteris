@@ -459,8 +459,9 @@ fn pop_derivatives(m: &Model, s: &Steady) -> (Mat, Mat, Mat) {
     let sigma_c = inp.within_sigma();
     let sigma: Vec<f64> = kc.iter().map(|&c| sigma_c[c]).collect();
     let price = s.consumer.select_rows(&inp.pop_province);
+    // each pop spends its income and its transfer (ADR 0100)
     let per_person: Vec<f64> = s
-        .pop_income
+        .pop_spending()
         .iter()
         .zip(&inp.pop_population)
         .map(|(&i, &n)| if n > 0.0 { i / n } else { 0.0 })
@@ -836,7 +837,7 @@ pub fn blocks(
             let (mut wage, mut pool, mut spend) = (0.0, 0.0, 0.0);
             let mut prices = vec![0.0; n_g];
             for &k in &pops_of[p] {
-                let (sk, income) = (pop_spend[(k, g)], s.pop_income[k]);
+                let (sk, income) = (pop_spend[(k, g)], s.pop_income[k] + s.pop_transfer[k]);
                 if sk <= 0.0 || income <= 0.0 {
                     continue;
                 }

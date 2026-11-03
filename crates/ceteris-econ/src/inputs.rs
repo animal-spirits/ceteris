@@ -75,7 +75,19 @@ pub struct Countries {
     /// Price level p_c (ADR 0098): the base price of the country's local goods, at which the
     /// data state starts them. See [`EconInputs::set_price_levels`].
     pub price_level: Vec<f64>,
+    /// Transfer share s_c of 2000 (ADR 0100): minus the country's current account, less its GDP
+    /// share of the world discrepancy, over world GDP; D_c = s_c times world income. Empty
+    /// where the inputs have no current accounts (a generated world, a pack before ADR 0100).
+    pub transfer: Vec<f64>,
+    /// The share of each year 2000 to 2024 ([`TRANSFER_YEARS`] per country), the observed path
+    /// (ADR 0300); empty with `transfer`.
+    pub transfer_path: Rows<f64>,
 }
+
+/// Years of the observed transfer path, 2000 to 2024 (ADR 0100), from [`TRANSFER_FIRST_YEAR`].
+pub const TRANSFER_YEARS: usize = 25;
+/// The first year of the observed transfer path, the year of tick 0.
+pub const TRANSFER_FIRST_YEAR: usize = 2000;
 
 /// Per-province data, indexed by province.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -368,6 +380,16 @@ impl EconInputs {
         self.enterprises.coef == self.enterprises.column
     }
 
+    /// Whether some country has a nonzero transfer share (ADR 0100), so that the S22 switch
+    /// changes the run; without one all three settings run alike.
+    pub fn has_transfers(&self) -> bool {
+        let c = &self.countries;
+        c.transfer
+            .iter()
+            .chain(c.transfer_path.as_flat())
+            .any(|&s| s != 0.0)
+    }
+
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
     pub fn a_va(&self, c: usize, g: usize) -> f64 {
         1.0 - (0..self.n_goods()).map(|k| self.a(c, k, g)).sum::<f64>()
@@ -436,7 +458,10 @@ impl EconInputs {
                 && c.u_star.len() == nc
                 && c.gini.len() == nc
                 && c.price_level.len() == nc
-                && c.pigl.as_ref().is_none_or(|w| w.len() == nc),
+                && c.pigl.as_ref().is_none_or(|w| w.len() == nc)
+                && (c.transfer.is_empty() || c.transfer.len() == nc)
+                && (c.transfer_path.is_empty()
+                    || (c.transfer_path.len() == nc && c.transfer_path.width() == TRANSFER_YEARS)),
             "country columns disagree in length"
         );
         assert_eq!(
@@ -646,6 +671,8 @@ impl EconInputs {
             gini,
             pigl,
             price_level,
+            transfer,
+            transfer_path,
         } = countries;
         let ProvinceData {
             country,
@@ -737,6 +764,12 @@ impl EconInputs {
         if price_level.iter().any(|&p| p != 1.0) {
             b"price-level".iter().for_each(|&b| e.u8(b));
             e.f64s(price_level);
+        }
+        // appended only where some share is nonzero, so worlds without transfers keep their digest
+        if self.has_transfers() {
+            b"transfers".iter().for_each(|&b| e.u8(b));
+            e.f64s(transfer);
+            e.f64s(transfer_path.as_flat());
         }
         if let Some(nu) = border_nu {
             b"border-nu".iter().for_each(|&b| e.u8(b));

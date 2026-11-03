@@ -16,7 +16,10 @@ use ceteris_trade::goods::p2;
 use ceteris_trade::{BulkLegs, GoodLegs, Goods, Leg, LegSet, Network, TradeParams, Wedges, kappa};
 use rayon::prelude::*;
 
-use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
+use crate::inputs::{
+    Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData, TRANSFER_FIRST_YEAR,
+    TRANSFER_YEARS,
+};
 use crate::params::EconParams;
 
 /// Million USD per year, the pack's VA unit, to numeraire (USD) per month.
@@ -239,6 +242,25 @@ impl EconInputs {
                 f64s(&c, "price_level")?
             } else {
                 vec![1.0; nc]
+            },
+            // packs before ADR 0100 have no current accounts: they run without transfers
+            transfer: if c.column_by_name("transfer").is_some() {
+                f64s(&c, "transfer")?
+            } else {
+                Vec::new()
+            },
+            transfer_path: if c.column_by_name("transfer").is_some() {
+                let years = (0..TRANSFER_YEARS)
+                    .map(|y| f64s(&c, &format!("transfer_{}", TRANSFER_FIRST_YEAR + y)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Rows::from_flat(
+                    (0..nc)
+                        .flat_map(|k| years.iter().map(move |y| y[k]))
+                        .collect(),
+                    TRANSFER_YEARS,
+                )
+            } else {
+                Rows::new(TRANSFER_YEARS)
             },
         };
 

@@ -15,7 +15,7 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::theta::{self, ClassTable};
-use super::{goods, icio, people, price_level, tariffs};
+use super::{goods, icio, people, price_level, tariffs, transfers};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
@@ -341,7 +341,8 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
 
     let pwt_levels = price_level::relative(&obs.price_level_pwt, "PWT")?;
     let [gdp, ppp, pop] = price_level::WDI_PRICE_LEVEL.map(|n| read_wdi(&cache.join(n)));
-    let wdi_level = price_level::wdi_implied(&gdp?, &ppp?, &pop?);
+    let gdp_by_year = gdp?;
+    let wdi_level = price_level::wdi_implied(&gdp_by_year, &ppp?, &pop?);
     let screen = price_level::Screen::fit(&pwt_levels, &wdi.income)?;
     let levels = price_level::price_levels(
         &codes,
@@ -417,6 +418,15 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
     countries_columns.extend(price_level::columns(&levels));
+    let (pack_gdp, _) = icio::country_gdp(&codes, &world, &wdi, &iso)?;
+    let imbalances = transfers::transfers(
+        &codes,
+        &iso,
+        &pack_gdp,
+        &read_wdi(&cache.join(transfers::CURRENT_ACCOUNT))?,
+        &gdp_by_year,
+    );
+    countries_columns.extend(transfers::columns(&imbalances));
     let [
         goods_t,
         countries_t,
@@ -454,6 +464,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             tariffs::report(&rates, &codes, &trade),
             gateways::report(&gw, &codes),
             price_level::report(&levels, &screen),
+            transfers::report(&imbalances, &codes, &pack_gdp),
         ],
     })
 }

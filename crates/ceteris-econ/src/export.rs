@@ -10,7 +10,7 @@
 //! |---|---|
 //! | `goods` | good u8, name str, traded bool, tariff_group i8 (-1 for local goods), weight f64, coverage f64, storage_loss f64 (P56 delta, 0 for goods without competitive storage), time_cost f64, theta f64 (P01, 0 for local goods), theta_class u8 (ADR 0023, 0 for local goods), category u8 (PIGL category, 0 A, 1 M, 2 S, ADR 0021) |
 //! | `gateways` | gateway u32, country u32, mass f64 (share of the country's trade throughput, ADR 0092) |
-//! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64 |
+//! | `countries` | country u32, s_l f64, unemployment f64 (2000), u_star f64 (natural rate, ADR 0089), gini f64, omega_0 to omega_9 f64; transfer f64 (the 2000 transfer share s_c, ADR 0100), only where S22 is on and some share is nonzero |
 //! | `country_io` | country u32, input u8 (k), sector u8 (g), a f64 (a_kg: units of k per unit of g) |
 //! | `tariffs` | importer u32, exporter u32, group u8, rate f32 |
 //! | `provinces` | province u32, country u32, population f64, w0 f64, base_price_0 to base_price_9 f64 (`ProvinceData::base_price`: base delivered unit price, the price level p_c for local goods (ADR 0098), infinite where unreachable), gamma_0 to gamma_9 f64 (`ProvinceData::gamma`: selection constant of ADR 0200, buyers pay Gamma P_d) |
@@ -56,9 +56,10 @@ use ceteris_core::schedule::SystemId;
 use crate::demand::pigl;
 use crate::flows::WINDOW;
 use crate::inputs::EconInputs;
-use crate::params::{EconParams, Technology};
+use crate::params::{EconParams, Technology, Transfers};
 use crate::world::{
     EconWorld, MINOR_PER_UNIT, active_cells, base_spend, household_preferences, static_digest,
+    transfers_on,
 };
 
 /// Bumped when a table or `params.json` changes shape or meaning; the reference checks it.
@@ -251,6 +252,11 @@ pub fn write_inputs(
     ];
     for g in 0..ng {
         columns.push(f64s(&format!("omega_{g}"), c.omega.iter().map(|o| o[g])));
+    }
+    // the steady state is calibrated at the 2000 shares (ADR 0100); without transfers the
+    // table keeps its columns
+    if transfers_on(inputs, params) {
+        columns.push(f64s("transfer", c.transfer.iter().copied()));
     }
     write_table(dir, "countries", columns)?;
     let cells =
@@ -530,6 +536,7 @@ fn params_json(
         ("rationing", "S11"),
         ("technology", "S09"),
         ("write_off_months", "P148"),
+        ("transfers", "S22"),
     ];
     let register: Vec<String> = register
         .iter()
@@ -563,6 +570,15 @@ fn params_json(
             match p.technology {
                 Technology::PuttyClay => "\"putty_clay\"",
                 Technology::FixedLeontief => "\"fixed_leontief\"",
+            }
+            .to_string(),
+        ),
+        (
+            "transfers",
+            match p.transfers {
+                Transfers::Off => "\"off\"",
+                Transfers::FixedShares => "\"fixed_shares\"",
+                Transfers::ObservedPath => "\"observed_path\"",
             }
             .to_string(),
         ),

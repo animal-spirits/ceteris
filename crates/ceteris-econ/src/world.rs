@@ -20,7 +20,7 @@ use crate::calibration::Steady;
 use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
-use crate::params::{EconParams, Pigl, Technology};
+use crate::params::{EconParams, Pigl, Technology, Transfers};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 pub const MINOR_PER_UNIT: f64 = 1e4;
@@ -65,6 +65,7 @@ pub const DIVIDEND: Flow = Flow(6);
 pub const REBATE: Flow = Flow(7);
 pub const MINT: Flow = Flow(8);
 pub const WRITE_OFF: Flow = Flow(9);
+pub const TRANSFER: Flow = Flow(10);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -109,6 +110,11 @@ pub struct Accounts {
     pub dividend: Vec<AccountId>,
     /// Issues the initial money; holds minus all money ever minted.
     pub mint: AccountId,
+    /// The world transfer account of ADR 0100: takes the paying countries' transfers and pays
+    /// the receiving countries', ending every tick at zero. Opened only where S22 is on and
+    /// some transfer share is nonzero, after the mint, so a world without transfers keeps its
+    /// ledger.
+    pub transfer: Option<AccountId>,
 }
 
 /// Static structure derived at load from the inputs and parameters: never in snapshots,
@@ -487,6 +493,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // fires only on retained losses, which the steady states that calibration and the
         // reference solutions describe do not have; the snapshot header carries it
         write_off_months: _,
+        transfers,
     } = params;
     let TradeParams {
         // the inputs' goods (`EconWorld::new`), in their digest
@@ -537,6 +544,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     if !inputs.one_vintage() {
         e.u8(*technology as u8);
     }
+    // without transfer shares all three settings run identically
+    if inputs.has_transfers() {
+        e.u8(*transfers as u8);
+    }
     e.f64s(theta);
     e.f64(*theta_scale);
     e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain]);
@@ -571,6 +582,7 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
             pigl: params.pigl.clone(),
             sigma_fl: params.sigma_fl,
             edu_eff: params.edu_eff,
+            transfers: params.transfers.calibrated(),
             ..EconParams::default()
         },
         &TradeParams {
@@ -792,6 +804,12 @@ pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     out
 }
 
+/// Whether a world of `inp` under `params` pays transfers (ADR 0100): S22 on and some share
+/// nonzero.
+pub fn transfers_on(inp: &EconInputs, params: &EconParams) -> bool {
+    params.transfers != Transfers::Off && inp.has_transfers()
+}
+
 fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
     (0..n).map(|_| ledger.open()).collect()
 }
@@ -990,6 +1008,7 @@ impl EconWorld {
             rebate: open_wide_n(&mut ledger, nc),
             dividend: open_wide_n(&mut ledger, nc),
             mint: ledger.open_wide(),
+            transfer: transfers_on(inp, &params).then(|| ledger.open_wide()),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -1373,13 +1392,12 @@ impl EconWorld {
                 &trade,
             ));
         }
-        if params != self.params || trade != self.trade {
-            self.layout = Arc::new(Layout::build(
-                &inputs,
-                &params,
-                &trade,
-                self.layout.accounts.clone(),
-            ));
+        let mut accounts = self.layout.accounts.clone();
+        if accounts.transfer.is_none() && transfers_on(&inputs, &params) {
+            accounts.transfer = Some(self.ledger.open_wide());
+        }
+        if params != self.params || trade != self.trade || accounts != self.layout.accounts {
+            self.layout = Arc::new(Layout::build(&inputs, &params, &trade, accounts));
         }
         self.digest = static_digest(&inputs, &params, &trade);
         self.network_digest = network;
@@ -1437,7 +1455,7 @@ fn decode_hash(d: &mut Decoder) -> Result<Hash, DecodeError> {
 
 /// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, as
 /// in [`static_digest`], since with one both settings run identically.
-fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
+fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool, transfers_on: bool) {
     // destructured so a new parameter cannot be left out of snapshots
     let EconParams {
         sigma_demand,
@@ -1451,6 +1469,7 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
         rationing,
         technology,
         write_off_months,
+        transfers,
     } = params;
     let Pigl {
         sigma_b,
@@ -1469,6 +1488,9 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
         e.u8(*technology as u8);
     }
     e.f64(*write_off_months);
+    if transfers_on {
+        e.u8(*transfers as u8);
+    }
 }
 
 fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N], DecodeError> {
@@ -1478,11 +1500,12 @@ fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N],
         .map_err(|_| DecodeError(format!("{what}: {n} entries, want {N}")))
 }
 
-/// Decodes [`encode_params`]; with one vintage S09 is `technology`, the restoring world's.
+/// Decodes [`encode_params`]; with one vintage S09 is `technology`, and without transfer shares
+/// S22 is `transfers`, the restoring world's.
 fn decode_params(
     d: &mut Decoder,
-    one_vintage: bool,
-    technology: Technology,
+    (one_vintage, technology): (bool, Technology),
+    (transfers_on, transfers): (bool, Transfers),
 ) -> Result<EconParams, DecodeError> {
     let [sigma_demand, sigma_fl, kappa_w, delta_w, eta] = decode_array(d, "econ parameters")?;
     let [sigma_b, phi, gamma, eps] = decode_array(d, "PIGL parameters")?;
@@ -1522,6 +1545,16 @@ fn decode_params(
         rationing,
         technology,
         write_off_months: d.f64()?,
+        transfers: if transfers_on {
+            match d.u8()? {
+                0 => Transfers::Off,
+                1 => Transfers::FixedShares,
+                2 => Transfers::ObservedPath,
+                b => return Err(DecodeError(format!("transfers {b}"))),
+            }
+        } else {
+            transfers
+        },
     })
 }
 
@@ -1647,7 +1680,12 @@ impl Encode for EconWorld {
     fn encode(&self, e: &mut Encoder) {
         encode_hash(e, &self.base_digest);
         encode_hash(e, &self.network_digest);
-        encode_params(e, &self.params, self.inputs.one_vintage());
+        encode_params(
+            e,
+            &self.params,
+            self.inputs.one_vintage(),
+            self.inputs.has_transfers(),
+        );
         encode_trade(e, &self.trade);
         self.ledger.encode(e);
         self.markets.encode(e);
@@ -1700,7 +1738,8 @@ impl State for EconWorld {
     /// dispatch mass (units dispatched = origin sales, 1e-12 of the larger plus the rounding below
     /// the normal range the kernel carries, [`dispatch_tolerance`])
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
-    /// its recorded income, exact in minor units).
+    /// its recorded income, exact in minor units); and the world transfer account at zero
+    /// (ADR 0100, exact).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
         let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
         self.ledger.check(tick)?;
@@ -1823,6 +1862,12 @@ impl State for EconWorld {
                 return fail("gateway clearing", detail);
             }
         }
+        if let Some(a) = lay.accounts.transfer
+            && self.ledger.money_wide(a) != 0
+        {
+            let detail = format!("world transfer account holds {}", self.ledger.money_wide(a));
+            return fail("transfers", detail);
+        }
 
         let sc = &self.scratch;
         for e in 0..inp.n_enterprises() {
@@ -1923,7 +1968,11 @@ impl State for EconWorld {
             return Err(DecodeError("snapshot belongs to other inputs".into()));
         }
         let network = decode_hash(d)?;
-        let params = decode_params(d, self.inputs.one_vintage(), self.params.technology)?;
+        let params = decode_params(
+            d,
+            (self.inputs.one_vintage(), self.params.technology),
+            (self.inputs.has_transfers(), self.params.transfers),
+        )?;
         let trade = decode_trade(d, &self.inputs.goods)?;
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d, &self.inputs.goods)?;

@@ -6,14 +6,16 @@ use std::sync::Arc;
 use ceteris_core::ledger::AccountId;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
-use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
-use ceteris_econ::inputs::EconInputs;
+use ceteris_econ::fixture::{
+    ISLAND_USER, UNREACHABLE, small_world, unbalanced_world, unreachable_island,
+};
+use ceteris_econ::inputs::{EconInputs, TRANSFER_YEARS};
 use ceteris_econ::local::{self, Province};
-use ceteris_econ::params::Technology;
+use ceteris_econ::params::{Technology, Transfers};
 use ceteris_econ::production::{labour_for_value_added, marginal_value_added, rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
-    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, WRITE_OFF, active_cells,
+    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, TRANSFER, WRITE_OFF, active_cells,
     static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
@@ -687,7 +689,7 @@ fn up_to_dispatch(w: &mut EconWorld) {
 fn from_dispatch(w: &mut EconWorld, tick: u32) {
     systems::dispatch(w);
     systems::reprice(w);
-    systems::distribute(w);
+    systems::distribute(w, tick);
     w.end_tick(tick).unwrap();
 }
 
@@ -946,7 +948,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
             );
 
             systems::reprice(&mut w);
-            systems::distribute(&mut w);
+            systems::distribute(&mut w, 0);
             w.end_tick(tick).unwrap();
         }
     }
@@ -983,7 +985,7 @@ fn national_profit_pool_conserves_money_exactly() {
             }
             let held: Vec<i64> = acc.enterprise.iter().map(|&a| w.ledger.money(a)).collect();
             let start = w.ledger.journal().len();
-            systems::distribute(&mut w);
+            systems::distribute(&mut w, 0);
             let pop_of = |a| acc.pop.iter().position(|&p| p == a);
             let mut dividend = vec![0i64; inp.n_pops()];
             for e in &w.ledger.journal()[start..] {
@@ -1061,7 +1063,7 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
     w.ledger
         .transfer(MINT, acc.enterprise[e], acc.mint, profit + loss);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(w.ledger.money(acc.enterprise[e]), -loss, "the loss stays");
     let enterprise_account = acc.enterprise[e].0 as usize;
     assert!(dividends(&w, start, Some(enterprise_account)).is_empty());
@@ -1077,7 +1079,7 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
     systems::reprice(&mut w);
     let balance = w.ledger.money(acc.enterprise[e]);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     let paid: i64 = dividends(&w, start, Some(enterprise_account)).iter().sum();
     assert_eq!(
         paid,
@@ -1113,7 +1115,12 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
 ///   notional output (ADR 0266).
 #[test]
 fn frictionless_unemployment_is_the_natural_rate() {
-    let mut sim = sim_of(world(EconParams::frictionless()));
+    // the fixture before ADR 0299's balance, whose data state rations labour in these provinces
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(unbalanced_world()),
+        EconParams::frictionless(),
+        TradeParams::default(),
+    ));
     let mut rationed = Vec::new();
     for tick in 0..24 {
         let mut probe = sim.world().clone();
@@ -1531,8 +1538,10 @@ const SERVICES: usize = 9;
 const LOCAL: [usize; 3] = [7, 8, 9];
 
 /// The fixture with input coefficients `(k, g, a_kg)` set in every country, one vintage.
+/// The fixture before ADR 0299's balance with `coefficients` set in every country: the
+/// same-tick chain's scenarios were built on its data state.
 fn fixture_with(coefficients: &[(usize, usize, f64)]) -> EconInputs {
-    let mut inputs = small_world();
+    let mut inputs = unbalanced_world();
     for io in &mut inputs.countries.io {
         for &(k, g, a) in coefficients {
             io[k * N_GOODS + g] = a;
@@ -1693,7 +1702,11 @@ fn local_chain_respects_intermediate_priority() {
     assert!((cut.scratch.drawn[cell] - supply).abs() <= 1e-12 * supply);
     assert!(to_households(&cut) <= 1e-12 * supply);
 
-    let mut sim = sim_of(world(EconParams::default()));
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(unbalanced_world()),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
     let mut short = 0;
     for _ in 0..36 {
         sim.step().unwrap();
@@ -3005,7 +3018,7 @@ fn exact_fill_equals_converged_iteration() {
         (CONSTRUCTION, SERVICES, 0.2),
     ];
     let (mut bound, mut compared_bound) = (0, 0);
-    for (inputs, ticks) in [(small_world(), 60), (fixture_with(&cycles), 120)] {
+    for (inputs, ticks) in [(unbalanced_world(), 60), (fixture_with(&cycles), 120)] {
         let mut sim = EconWorld::sim(
             Arc::new(inputs),
             EconParams::default(),
@@ -3225,7 +3238,7 @@ fn write_off_takes_the_excess_beyond_the_cap_from_the_pops() {
     let excess = 12_345;
     set_balance(&mut w, account, -cap - excess);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(w.ledger.money(account), -cap, "only the excess goes");
     assert_eq!(written(&w, start, account), excess);
     let levied: i64 = lay.country_pops[c]
@@ -3257,7 +3270,7 @@ fn write_off_spares_losses_within_the_cap() {
     let cap = lay.ent_loss_cap[0];
     set_balance(&mut w, acc.enterprise[0], -cap);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert!(
         w.ledger.journal()[start..]
             .iter()
@@ -3295,7 +3308,7 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
     set_balance(&mut w, a1, -cap1 - x1);
     set_balance(&mut w, a2, -cap2 - x2);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(written(&w, start, a1) + written(&w, start, a2), room);
     assert!(
         (written(&w, start, a1) - 3 * room / 4).abs() <= 1,
@@ -3331,7 +3344,7 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
         set_balance(&mut w, acc.pop[k], 10 * room);
     }
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(
         written(&w, start, a1) + written(&w, start, a2),
         x1 + x2 - room
@@ -3602,4 +3615,185 @@ fn price_level_one_is_the_data_state() {
     ones.set_price_levels(vec![1.0; ones.n_countries()], &TradeParams::default());
     ones.set_base_point(&EconParams::default().edu_eff);
     assert_eq!(ones.digest(), base.digest());
+}
+
+/// The fixture with transfer shares (ADR 0100): two paying and two receiving countries, summing
+/// to zero, and an observed path that grows by a tenth of the 2000 share a year.
+fn with_transfers() -> EconInputs {
+    let mut inp = small_world();
+    let share = vec![0.02, -0.012, -0.013, 0.005];
+    inp.countries.transfer_path = Rows::from_rows(
+        TRANSFER_YEARS,
+        share.iter().map(|s| {
+            (0..TRANSFER_YEARS)
+                .map(|y| s * (1.0 + 0.1 * y as f64))
+                .collect::<Vec<_>>()
+        }),
+    );
+    inp.countries.transfer = share;
+    inp
+}
+
+fn with_mode(transfers: Transfers) -> EconParams {
+    EconParams {
+        transfers,
+        ..EconParams::default()
+    }
+}
+
+/// Each pop's net transfer of the tick from the journal, summed by country.
+fn country_transfers(w: &EconWorld) -> Vec<i64> {
+    let inp = w.inputs();
+    let mut out = vec![0i64; inp.n_countries()];
+    let country = |a: AccountId| {
+        ((a.0 as usize) < inp.n_pops())
+            .then(|| inp.country_of(inp.pops.province[a.0 as usize] as usize))
+    };
+    for entry in w.ledger.journal().iter().filter(|e| e.flow == TRANSFER) {
+        if let Some(c) = country(entry.to) {
+            out[c] += entry.amount;
+        }
+        if let Some(c) = country(entry.from) {
+            out[c] -= entry.amount;
+        }
+    }
+    out
+}
+
+/// ADR 0100: the world transfer account ends every tick at zero (`end_tick` checks it too), every
+/// paying country gives exactly round(|s_c| Y) minor units, Y last tick's world income (this
+/// tick's at the first tick of the data state), and the receivers get the payers' total in
+/// proportion to their shares, each within one minor unit per country of s_c Y; under both
+/// settings that pay, over 120 ticks.
+#[test]
+fn transfers_net_to_zero_every_tick() {
+    let inputs = Arc::new(with_transfers());
+    for mode in [Transfers::FixedShares, Transfers::ObservedPath] {
+        let w = EconWorld::new(Arc::clone(&inputs), with_mode(mode), TradeParams::default());
+        let account = w
+            .layout()
+            .accounts
+            .transfer
+            .expect("the transfer account is open");
+        let mut sim = sim_of(w);
+        let nc = inputs.n_countries();
+        for tick in 0..120u32 {
+            let before = ceteris_core::reduce::fixed_sum(&sim.world().income);
+            sim.step().unwrap();
+            let w = sim.world();
+            assert_eq!(w.ledger.money_wide(account), 0, "{mode:?} tick {tick}");
+            let world = if before > 0.0 {
+                before
+            } else {
+                ceteris_core::reduce::fixed_sum(&w.income)
+            };
+            let got = country_transfers(w);
+            assert_eq!(got.iter().sum::<i64>(), 0, "{mode:?} tick {tick}");
+            for (c, &net) in got.iter().enumerate() {
+                let s = systems::transfer_share(&inputs, mode, c, tick);
+                if s < 0.0 {
+                    assert_eq!(
+                        net,
+                        -to_minor(-s * world),
+                        "{mode:?} tick {tick} country {c}"
+                    );
+                } else {
+                    let want = s * world * MINOR_PER_UNIT;
+                    assert!(
+                        (net as f64 - want).abs() <= nc as f64,
+                        "{mode:?} tick {tick} country {c}: {net} against {want}"
+                    );
+                }
+            }
+            assert!(got[0] > 0 && got[1] < 0, "{mode:?} tick {tick}: {got:?}");
+        }
+    }
+}
+
+/// The encoding of everything a snapshot carries after its header (ledger, markets, pipeline
+/// and the dynamic columns): the state that the inputs' digest and the parameters leave out.
+fn dynamic_state(w: &EconWorld) -> Vec<u8> {
+    use ceteris_core::snapshot::{Encode, Encoder};
+    let mut e = Encoder::default();
+    w.ledger.encode(&mut e);
+    w.markets.encode(&mut e);
+    w.pipeline.encode(&mut e);
+    for column in [
+        &w.wage,
+        &w.employment,
+        &w.employed,
+        &w.income,
+        &w.output,
+        &w.sales,
+        &w.profit,
+        &w.price_index,
+    ] {
+        e.f64s(column);
+    }
+    e.f64s(&[w.expected_inflation, w.price_level]);
+    e.into_bytes()
+}
+
+/// ADR 0100, "with transfers off, results equal a balanced-trade run": on inputs without
+/// transfer shares the three S22 settings run bit for bit alike, state hashes included; on inputs
+/// with shares, Off opens no transfer account and the run's state is the balanced run's every
+/// tick (the hashes differ only by the inputs digest that names the shares).
+#[test]
+fn off_switch_reproduces_balanced_trade() {
+    let modes = [
+        Transfers::Off,
+        Transfers::FixedShares,
+        Transfers::ObservedPath,
+    ];
+    let mut sims = modes.map(|m| sim_of(world(with_mode(m))));
+    assert!(
+        sims.iter()
+            .all(|s| s.world().layout().accounts.transfer.is_none())
+    );
+    let digest = sims[0].world().digest();
+    assert!(sims.iter().all(|s| s.world().digest() == digest));
+    for tick in 0..120 {
+        for s in &mut sims {
+            s.step().unwrap();
+        }
+        let hash = sims[0].state_hash();
+        assert!(sims.iter().all(|s| s.state_hash() == hash), "tick {tick}");
+    }
+
+    let off = EconWorld::new(
+        Arc::new(with_transfers()),
+        with_mode(Transfers::Off),
+        TradeParams::default(),
+    );
+    assert!(off.layout().accounts.transfer.is_none());
+    let (mut off, mut balanced) = (sim_of(off), sim_of(world(with_mode(Transfers::Off))));
+    for tick in 0..120 {
+        off.step().unwrap();
+        balanced.step().unwrap();
+        assert_eq!(
+            dynamic_state(off.world()),
+            dynamic_state(balanced.world()),
+            "tick {tick}"
+        );
+    }
+}
+
+/// The observed path (ADR 0100, lab profile): the share of the tick's year from 2000 to 2024,
+/// then the 2024 share halving every 120 months.
+#[test]
+fn observed_path_fades_after_2024() {
+    let inp = with_transfers();
+    let path = &inp.countries.transfer_path[0];
+    let at = |tick| systems::transfer_share(&inp, Transfers::ObservedPath, 0, tick);
+    assert_eq!(at(0), path[0]);
+    assert_eq!(at(11), path[0]);
+    assert_eq!(at(12), path[1]);
+    assert_eq!(at(299), path[24]);
+    assert!((at(300) / path[24] - libm::exp2(-1.0 / 120.0)).abs() < 1e-15);
+    assert!((at(419) / path[24] - 0.5).abs() < 1e-15);
+    assert_eq!(
+        systems::transfer_share(&inp, Transfers::FixedShares, 0, 500),
+        0.02
+    );
+    assert_eq!(systems::transfer_share(&inp, Transfers::Off, 0, 0), 0.0);
 }

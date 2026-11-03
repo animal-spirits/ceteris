@@ -42,6 +42,30 @@ pub enum Technology {
     FixedLeontief,
 }
 
+/// S22: the trade-imbalance transfers D_c of ADR 0100 (as amended by ADRs 0295 to 0300), paid at
+/// E4 from one world transfer account (`specs/econ/SPEC.md`, Transfers).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transfers {
+    /// No transfers: balanced trade, each pop spends its income.
+    Off,
+    /// Each country's 2000 share of world income, `Countries::transfer` (default).
+    FixedShares,
+    /// The share of the tick's year, 2000 to 2024, `Countries::transfer_path`, fading with a
+    /// 10-year half-life after it (lab profile; holdout scores are conditional forecasts).
+    ObservedPath,
+}
+
+impl Transfers {
+    /// The setting a steady state is calibrated under: the observed path starts from the 2000
+    /// shares the fixed-share mode holds.
+    pub fn calibrated(self) -> Transfers {
+        match self {
+            Transfers::ObservedPath => Transfers::FixedShares,
+            other => other,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct EconParams {
     /// P06 goods substitution sigma within a final demand category, prior 0.3 to 0.9.
@@ -70,6 +94,9 @@ pub struct EconParams {
     /// months of its base sales; the rest is written off. Province markets keep the signed
     /// rule. An infinite M turns the write-off off.
     pub write_off_months: f64,
+    /// S22 trade-imbalance transfers (ADR 0100): `FixedShares` (default), `Off` or
+    /// `ObservedPath`. Inputs without transfer shares run alike under all three.
+    pub transfers: Transfers,
 }
 
 impl Default for EconParams {
@@ -86,6 +113,7 @@ impl Default for EconParams {
             rationing: Rationing::Priority,
             technology: Technology::PuttyClay,
             write_off_months: 3.0,
+            transfers: Transfers::FixedShares,
         }
     }
 }
