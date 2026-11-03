@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### BEHAVIOUR: trade imbalances as transfers, r_g removed (ADR 0100, RFC 0287 D1 to D6)
+
+- Each country receives D_c = s_c Y each tick from one world transfer account (Y last tick's
+  world income), paid to its pops by income after the rebates; the account nets to zero every
+  tick (`end_tick`). S22 `EconParams::transfers`: `FixedShares` (default, the 2000 shares),
+  `ObservedPath` (2000 to 2024, 10-year half-life after) or `Off`. Inputs without shares run
+  alike under all three, state hashes included; the switch enters the static digest and the
+  snapshot only where some share is nonzero.
+- Pack: `econ_countries` gains `ca_2000`, `ca_missing`, `transfer` and `transfer_2000` to
+  `transfer_2024` from WDI BN.CAB.XOKA.CD (pinned); missing current accounts at 0, the world
+  discrepancy spread pro rata to GDP (ADRs 0296, 0298, 0300). A pack without them loads with no
+  transfers, so the installed pack does not move until the C6 rebuild.
+- Calibration: no r_g. V and VA stay at the data; each pass balances every country's traded
+  final demand biproportionally (`balance::balance`, ADR 0295) and stage 4 inverts PIGL on the
+  balanced shares at income + D_c (ADR 0297). The summary and the tables' metadata report
+  `column_factor` (the residual of the old r_g), `balance_residual` (the scaling's r_g - 1) and
+  `balance_mu`; `r` is gone. The export writes `countries.transfer` only where transfers are on.
+- Fixture (ADR 0299): its traded VA is scaled by the r_g its calibration solved before
+  (`fixture::BALANCE`), so it is balanced at D_c = 0. Goldens re-blessed: the fixture export
+  (`enterprises`, `provinces`, `pigl_check`, `params.json`, which also gains `transfers`), its
+  calibration and reference, and `tests/golden/p2-econ.txt`. The calibrated state is the one
+  before to rounding (column factors 1 within 1.1e-14, 26 passes against 27; every table
+  within the iterative tolerance) except the PIGL within-pop dispersion (up to 1.27e-2) and
+  scale (8.7e-4): the dispersion is fixed by the data state's between-pop incomes, which the
+  scaled VA moves, and lambda follows it. The data-state reference solution moves with the
+  inputs.
+
 ### BEHAVIOUR: snapshot format 3, interventions replay on seek (RFC 0285)
 
 - Snapshots open with the inputs digest without the network, the network's digest and both
