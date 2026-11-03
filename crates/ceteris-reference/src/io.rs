@@ -231,6 +231,9 @@ pub struct Inputs {
     /// (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s.
     pub u_star: Vec<f64>,
     pub gini: Vec<f64>,
+    /// (C,) transfer share s_c of ADR 0100: households of country c receive s_c times world
+    /// income (`countries.transfer`, 0 where the export has none).
+    pub transfer: Vec<f64>,
     /// (C, G)
     pub omega: Mat,
     /// Per country (G, G): `io[c][(k, g)]` = a_kg.
@@ -611,6 +614,11 @@ impl Table {
             .collect()
     }
 
+    /// Whether every batch has column `col`.
+    fn has(&self, col: &str) -> bool {
+        self.batches.iter().all(|b| b.column_by_name(col).is_some())
+    }
+
     fn f64(&self, col: &str) -> Result<Vec<f64>, String> {
         Ok(self
             .column(col, &DataType::Float64)?
@@ -767,6 +775,11 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,
         gini: countries.f64("gini")?,
+        transfer: if countries.has("transfer") {
+            countries.f64("transfer")?
+        } else {
+            vec![0.0; n_c]
+        },
         omega: columns(&countries, "omega", n_c)?,
         io: a,
         active: act,

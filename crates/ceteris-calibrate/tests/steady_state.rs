@@ -11,6 +11,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
+use ceteris_calibrate::json::Json;
 use ceteris_calibrate::steady::{
     self, COVER, CalibrationError, Limits, PASS_TOL, SINKHORN_TOL, SLOTS, Steady,
 };
@@ -282,7 +283,7 @@ fn calibration_unique_from_eight_starts() {
         let what = format!("seed {seed}");
         allclose(&what, &s.price.data, &base.price.data, 1e-9, 0.0);
         allclose(&what, &s.consumer.data, &base.consumer.data, 1e-9, 0.0);
-        allclose(&what, &s.r, &base.r, 1e-9, 0.0);
+        allclose(&what, &s.column_factor, &base.column_factor, 1e-9, 0.0);
         allclose(
             &what,
             &s.output,
@@ -497,7 +498,7 @@ fn sinkhorn_is_unique_up_to_scale() {
         for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
             // the stage 2 target is the sales value, V / (1 + delta s) (ADR 0091)
             v[(p, g)] += if inp.traded[g] {
-                s.value[e] / s.r[g] / (1.0 + s.spoilage[g])
+                s.value[e] / (1.0 + s.spoilage[g])
             } else {
                 0.0
             };
@@ -545,9 +546,10 @@ fn sinkhorn_is_unique_up_to_scale() {
             );
         }
         allclose(w.name, &one.r, &other.r, 1e-12, 0.0);
+        // stage 4's targets balance every good (ADR 0295): the scaling rescales no sales
         let traded: Vec<usize> = (0..n_g).filter(|&g| inp.traded[g]).collect();
         let pick = |r: &[f64]| traded.iter().map(|&g| r[g]).collect::<Vec<_>>();
-        allclose(w.name, &pick(&one.r), &pick(&s.r), 1e-12, 0.0);
+        allclose(w.name, &pick(&one.r), &vec![1.0; traded.len()], 1e-12, 0.0);
     }
 }
 
@@ -566,7 +568,7 @@ fn sinkhorn_pins_the_level_of_the_weights() {
     let mut v = Mat::zeros(n_p, n_g);
     for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
         if inp.traded[g] {
-            v[(p, g)] += s.value[e] / s.r[g] / (1.0 + s.spoilage[g]);
+            v[(p, g)] += s.value[e] / (1.0 + s.spoilage[g]);
         }
     }
     let origin = |p: usize, g: usize| inp.active[p][g] && inp.traded[g];
@@ -636,10 +638,8 @@ fn closed_forms_zero_the_reference_residual() {
             .filter(|&e| inp.traded[inp.ent_good[e]])
             .collect();
         let va0: Vec<f64> = traded.iter().map(|&e| s.va0[e]).collect();
-        let want: Vec<f64> = traded
-            .iter()
-            .map(|&e| s.r[inp.ent_good[e]] * target[e])
-            .collect();
+        // output and value added stay at the data (ADR 0100, no r_g)
+        let want: Vec<f64> = traded.iter().map(|&e| target[e]).collect();
         allclose(w.name, &va0, &want, 1e-13, 0.0);
         assert!(s.a.iter().all(|a| a.is_finite() && *a > 0.0), "{}", w.name);
         assert!(s.a_va.iter().all(|a| *a > 0.0), "{}", w.name);
@@ -770,7 +770,12 @@ fn every_province_produces_and_pays_a_wage() {
 }
 
 /// The fixture with competitive storage on at the approved values (ADR 0091), as an export of
-/// those parameters would carry them, calibrated once.
+/// those parameters would carry them, calibrated once. Storage takes delta s of each stored
+/// good's output to replace spoilage, so its sales are no longer balanced (ADR 0299 balanced the
+/// fixture with storage off): stage 4's targets balance every good with final demand (ADR
+/// 0295), and the VA of crude oil, which has none, is rescaled by the scaling's r_g until its
+/// sales meet its intermediate use (its intermediate demand does not depend on its own VA, so
+/// one rescale settles it to rounding).
 fn fixture_with_storage() -> &'static (Inputs, Steady) {
     static WORLD: OnceLock<(Inputs, Steady)> = OnceLock::new();
     WORLD.get_or_init(|| {
@@ -783,7 +788,24 @@ fn fixture_with_storage() -> &'static (Inputs, Steady) {
             convenience: on.convenience.to_vec(),
             gain: on.storage_gain,
         };
-        let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        let no_final_demand: Vec<bool> = (0..inp.n_goods())
+            .map(|g| inp.traded[g] && (0..inp.n_countries()).all(|c| inp.omega[(c, g)] == 0.0))
+            .collect();
+        let mut s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        for _ in 0..3 {
+            let r = s.info.balance_residual.clone();
+            if (0..inp.n_goods()).all(|g| !no_final_demand[g] || r[g].abs() <= 1e-13) {
+                break;
+            }
+            for e in 0..inp.ent_good.len() {
+                let g = inp.ent_good[e];
+                if no_final_demand[g] {
+                    inp.ent_va0[e] *= 1.0 + r[g];
+                    inp.ent_va_target.as_mut().unwrap()[e] *= 1.0 + r[g];
+                }
+            }
+            s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        }
         (inp, s)
     })
 }
@@ -941,7 +963,8 @@ fn calibration_tables_have_the_documented_layout() {
     let meta: serde_json::Value =
         serde_json::from_str(&ent.schema().metadata()["calibration"]).unwrap();
     assert_eq!(meta["format"], steady::FORMAT);
-    assert_eq!(meta["r"].as_array().unwrap().len(), n_g);
+    assert_eq!(meta["column_factor"].as_array().unwrap().len(), n_g);
+    assert!(meta.get("r").is_none());
 
     let cells = read(tmp.path(), "econ_calib_cells.arrow");
     assert_eq!(cells.num_rows(), inp.n_provinces() * n_g);
@@ -1826,6 +1849,61 @@ fn supply_elasticity_is_the_enterprise_maximum() {
                     s.demand_elasticity.data[c], inp.sigma_demand,
                     "{} cell {c}",
                     w.name
+                );
+            }
+        }
+    }
+}
+
+/// ADR 0100: calibration has no rescale r_g; the summary reports what replaced it, the column
+/// factors of the final demand balance (the residual of the old r_g, ADR 0295), the scaling's
+/// r_g - 1 and the balance's mu - 1, both 0 at the fixed point. On the fixture, balanced by ADR
+/// 0299, the column factors are 1 to the passes' tolerance.
+#[test]
+fn r_g_removed_and_residual_reported() {
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let n_g = inp.n_goods();
+        let summary = s.info.json();
+        let key = |k: &str| summary.iter().find(|(name, _)| name == k).map(|(_, v)| v);
+        assert!(key("r").is_none(), "{}: the summary still has r", w.name);
+        let floats = |k: &str| -> Vec<f64> {
+            match key(k) {
+                Some(Json::List(v)) => v
+                    .iter()
+                    .map(|x| match x {
+                        Json::Float(f) => *f,
+                        other => panic!("{k}: {other:?}"),
+                    })
+                    .collect(),
+                other => panic!("{}: {k} is {other:?}", w.name),
+            }
+        };
+        let (factor, residual) = (floats("column_factor"), floats("balance_residual"));
+        assert_eq!((factor.len(), residual.len()), (n_g, n_g), "{}", w.name);
+        for g in 0..n_g {
+            eprintln!(
+                "{}: good {g} column factor {:.6} residual {:.3e}",
+                w.name, factor[g], residual[g]
+            );
+            assert!(
+                residual[g].abs() <= 1e-12,
+                "{}: good {g} r_g - 1 {}",
+                w.name,
+                residual[g]
+            );
+        }
+        assert!(
+            s.info.balance_mu.abs() <= 1e-12,
+            "{}: mu - 1 {}",
+            w.name,
+            s.info.balance_mu
+        );
+        if w.name == "fixture" {
+            for (g, f) in factor.iter().enumerate() {
+                assert!(
+                    (f - 1.0).abs() <= 1e-9,
+                    "fixture good {g}: column factor {f}"
                 );
             }
         }

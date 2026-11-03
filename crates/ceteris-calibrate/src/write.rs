@@ -117,8 +117,8 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
     let meta = Json::object([
         ("format", Json::Str(FORMAT.into())),
         (
-            "r",
-            Json::List(s.r.iter().map(|&x| Json::Float(x)).collect()),
+            "column_factor",
+            Json::List(s.column_factor.iter().map(|&x| Json::Float(x)).collect()),
         ),
         (
             "border_nu",

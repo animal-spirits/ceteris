@@ -756,12 +756,14 @@ fn rows<'a>(
 
 /// `econ_countries.arrow` columns of the input-output tables, in `codes` order, after `code`.
 /// VA is million USD per year; GDP is USD, WDI's where the country has its own, else its VA.
-pub fn country_columns(
+/// Each pack country's GDP 2000 (`gdp`, USD) and whether it is imputed: the sum of WDI
+/// NY.GDP.MKTP.CD (nearest year) over its economies, else its VA.
+pub fn country_gdp(
     codes: &[String],
     world: &BTreeMap<String, Economy>,
     wdi: &Wdi,
     iso: &Names,
-) -> Result<Vec<(String, ArrayRef)>, String> {
+) -> Result<(Vec<f64>, Vec<bool>), String> {
     let rows = rows(codes, world)?;
     let (mut gdp, mut gdp_imputed) = (Vec::new(), Vec::new());
     for (c, r) in codes.iter().zip(&rows) {
@@ -777,6 +779,17 @@ pub fn country_columns(
         });
         gdp_imputed.push(!own);
     }
+    Ok((gdp, gdp_imputed))
+}
+
+pub fn country_columns(
+    codes: &[String],
+    world: &BTreeMap<String, Economy>,
+    wdi: &Wdi,
+    iso: &Names,
+) -> Result<Vec<(String, ArrayRef)>, String> {
+    let rows = rows(codes, world)?;
+    let (gdp, gdp_imputed) = country_gdp(codes, world, wdi, iso)?;
     let mut out: Vec<(String, ArrayRef)> = vec![
         (
             "donor".into(),

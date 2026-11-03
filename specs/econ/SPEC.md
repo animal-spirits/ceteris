@@ -1004,8 +1004,11 @@ output, rebates and incomes are those of the pass), hence mu; at the fixed point
 identity makes it 1 (`balance_residual`, reported with the Sinkhorn's r_g - 1). b_g is iterated
 on its own, a_c following from the rows, until the column ratios agree to `RAS_TOL` (1e-14, the
 local fixed point's tolerance; at most `MAX_RAS` 10,000 rounds, an iteration cap); a good with no
-final demand anywhere (the fixture's crude oil) is left out, and a negative column target with
-final demand stops the calibration. The targets of stage 4 are then F'_cg / (Y_c + D_c) for
+final demand anywhere (the fixture's crude oil) is left out, and must be balanced by its data
+(else its imbalance stays in its r_g - 1 and in mu); a good with final demand whose column target
+is not positive within a pass (intermediate use above sales, a transient of the passes' local
+output) is held at its previous factor for that pass, and stops the calibration only at the
+settled pass. The targets of stage 4 are then F'_cg / (Y_c + D_c) for
 traded goods and the data's Omega_cg for local goods. The column factors beta_g = sum_c F'_cg /
 sum_c F_cg are the residual of the old r_g (`column_factor` in the summary). The fixture's
 traded value added is its generated value times the r_g its calibration solved before ADR 0100

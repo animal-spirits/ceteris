@@ -26,16 +26,17 @@ use ceteris_core::sim::State;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
 
-use crate::inputs::EconInputs;
+use crate::inputs::{EconInputs, TRANSFER_YEARS};
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local;
+use crate::params::Transfers;
 use crate::production::{
     labour_for_value_added, labour_target, labour_target_uncapped, marginal_value_added, rho,
     value_added,
 };
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
+    TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -78,7 +79,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(206, "clear", |w, _| clear(w)),
         def(207, "dispatch", |w, _| dispatch(w)),
         def(208, "reprice", |w, _| reprice(w)),
-        def(209, "distribute", |w, _| distribute(w)),
+        def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -992,10 +993,10 @@ pub fn reprice(w: &mut EconWorld) {
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
 /// end the tick at zero. Each pool is one i128 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
-/// parts add up to the pool exactly. Then [`write_off`]. Records each pop's income of the
-/// tick, and as each enterprise's profit its balance before the payout
-/// (this tick's cash flow less any loss it carries).
-pub fn distribute(w: &mut EconWorld) {
+/// parts add up to the pool exactly. Then the transfers of tick `tick` ([`transfer`]), then
+/// [`write_off`]. Records each pop's income of the tick, and as each enterprise's profit its
+/// balance before the payout (this tick's cash flow less any loss it carries).
+pub fn distribute(w: &mut EconWorld, tick: u32) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
     for i in 0..inp.n_provinces() {
@@ -1026,10 +1027,99 @@ pub fn distribute(w: &mut EconWorld) {
             }
         }
     }
+    transfer(w, tick);
     for (income, &paid) in w.income.iter_mut().zip(&w.scratch.income_paid) {
         *income = to_numeraire(paid);
     }
     write_off(w);
+}
+
+/// Months of the half-life with which the observed transfer path fades after 2024 (ADR 0100:
+/// ten years; not tuned).
+pub const TRANSFER_HALF_LIFE: f64 = 120.0;
+
+/// Country `c`'s transfer share s_c at tick `tick` under `mode` (ADR 0100, S22): the 2000 share
+/// (`FixedShares`), the share of the tick's year 2000 + tick / 12 (`ObservedPath`), which after
+/// the last year fades as s_c(2024) 2^-((tick - 299) / 120), or 0 (`Off`, or inputs without
+/// shares).
+pub fn transfer_share(inp: &EconInputs, mode: Transfers, c: usize, tick: u32) -> f64 {
+    let countries = &inp.countries;
+    match mode {
+        Transfers::Off => 0.0,
+        Transfers::FixedShares => countries.transfer.get(c).copied().unwrap_or(0.0),
+        Transfers::ObservedPath => {
+            if countries.transfer_path.is_empty() {
+                return 0.0;
+            }
+            let path = &countries.transfer_path[c];
+            let year = tick as usize / 12;
+            if year < TRANSFER_YEARS {
+                path[year]
+            } else {
+                let last = (TRANSFER_YEARS * 12 - 1) as f64;
+                path[TRANSFER_YEARS - 1]
+                    * libm::exp2(-(f64::from(tick) - last) / TRANSFER_HALF_LIFE)
+            }
+        }
+    }
+}
+
+/// E4 transfers (ADR 0100 as amended by ADRs 0295 to 0300): each country's D_c = s_c Y, Y the
+/// world income of the previous tick (sum of `EconWorld::income`; the tick's own where there is
+/// none, at the first tick of a data-state start). Each paying country (s_c < 0) puts
+/// round_half_even(|s_c| Y) minor units into the world transfer account, its pops in proportion
+/// to the income credited to them this tick; the account pays their total out over the
+/// receiving countries in proportion to s_c, and each over its pops the same way ([`split`]),
+/// so it ends at zero. Nothing without the account (`world::transfers_on`).
+pub fn transfer(w: &mut EconWorld, tick: u32) {
+    let Some(account) = w.layout.accounts.transfer else {
+        return;
+    };
+    if w.params.transfers == Transfers::Off {
+        return;
+    }
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let acc = &lay.accounts;
+    let mode = w.params.transfers;
+    let mut world = fixed_sum(&w.income);
+    if world <= 0.0 {
+        let paid: Vec<f64> = w
+            .scratch
+            .income_paid
+            .iter()
+            .map(|&m| to_numeraire(m))
+            .collect();
+        world = fixed_sum(&paid);
+    }
+    let share: Vec<f64> = (0..inp.n_countries())
+        .map(|c| transfer_share(inp, mode, c, tick))
+        .collect();
+    let income = |k: u32| w.scratch.income_paid[k as usize].max(0) as f64;
+    let mut parts = Vec::new();
+    let mut paid: i128 = 0;
+    for (c, pops) in lay.country_pops.iter().enumerate() {
+        if share[c] >= 0.0 || pops.is_empty() {
+            continue;
+        }
+        let amount = to_minor(-share[c] * world);
+        split(amount, pops.iter().map(|&k| income(k)), &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, TRANSFER, acc.pop[k as usize], account, part);
+        }
+        paid += i128::from(amount);
+    }
+    let receivers: Vec<usize> = (0..inp.n_countries())
+        .filter(|&c| share[c] > 0.0 && !lay.country_pops[c].is_empty())
+        .collect();
+    let mut amounts = Vec::new();
+    split(paid, receivers.iter().map(|&c| share[c]), &mut amounts);
+    for (&c, &amount) in receivers.iter().zip(&amounts) {
+        let pops = &lay.country_pops[c];
+        split(amount, pops.iter().map(|&k| income(k)), &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, TRANSFER, account, acc.pop[k as usize], part);
+        }
+    }
 }
 
 /// The loss write-off of E4 (ADR 0112): per country, the excess of every enterprise's retained
