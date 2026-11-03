@@ -1035,7 +1035,7 @@ commercial_use = true
 share_alike = false
 use = "validation"
 policy = "fetch"
-reason = "API metadata License_Type CC BY-4.0 on 2026-11-01 (source line: ICP PPPs). Read only by a test, never in a pack; kept apart from the wdi source because validation files must name a validation-only source. NY.GDP.PCAP.PP.CD, which the check read before ADR 0288, is a pack input of the wdi source since ADR 0289."
+reason = "API metadata License_Type CC BY-4.0 on 2026-11-01 (source line: ICP PPPs). Read only by a test, never in a pack; kept apart from the wdi source because validation files must name a validation-only source. NY.GDP.PCAP.PP.CD, which the check read before ADR 0290, is a pack input of the wdi source since ADR 0289."
 checked = 2026-11-01
 confidence = "high"
 
