@@ -301,6 +301,38 @@ fn final_demand_shares_sum_to_one() {
     ));
 }
 
+/// ADR 0099 (RFC 0301 D2): households (HFCE), government (NPISH and GGFC) and investment (GFCF)
+/// split each good's final demand, inventory change shared in proportion to them, so the parts
+/// add up to the final demand shares.
+#[test]
+fn final_demand_splits_into_three_demanders() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, parts) = write_table(dir.path(), "2000_SML.csv", None, None);
+    let got = &aggregate(&path, 2000).unwrap()["BBB"];
+    for (g, split) in got.final_demand_split.iter().enumerate() {
+        assert!((split.iter().sum::<f64>() - 1.0).abs() < 1e-12, "good {g}");
+        assert!(split.iter().all(|s| *s >= 0.0), "good {g}");
+    }
+    // good 0 is rows 0, 1, 6 and 7; BBB's HFCE, NPISH, GGFC, GFCF are columns 6 to 9
+    let col = |j: usize| -> f64 { [0, 1, 6, 7].iter().map(|&i| parts.fd[i][j]).sum() };
+    let bought = [col(6), col(7) + col(8), col(9)];
+    let sum: f64 = bought.iter().sum();
+    for (d, b) in bought.iter().enumerate() {
+        assert!(
+            approx(got.final_demand_split[0][d], b / sum, 1e-12),
+            "demander {d}"
+        );
+    }
+    let parts_total: f64 = (0..N_GOODS)
+        .map(|g| {
+            (0..3)
+                .map(|d| got.final_demand_shares[g] * got.final_demand_split[g][d])
+                .sum::<f64>()
+        })
+        .sum();
+    assert!((parts_total - 1.0).abs() < 1e-12);
+}
+
 #[test]
 fn inventory_changes_enter_final_demand() {
     let dir = tempfile::tempdir().unwrap();

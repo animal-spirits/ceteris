@@ -217,6 +217,9 @@ fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
     }
     let countries = Countries {
         omega: Rows::from_rows(N_GOODS, vec![OMEGA; n_countries]),
+        // households buy all of a generated world's final demand
+        gov: Rows::new(N_GOODS),
+        inv: Rows::new(N_GOODS),
         io: Rows::from_rows(N_GOODS * N_GOODS, vec![io; n_countries]),
         s_l: S_L.to_vec(),
         unemployment: UNEMPLOYMENT.to_vec(),

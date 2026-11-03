@@ -652,6 +652,7 @@ pub fn impute(
             va,
             io,
             final_demand_shares: d.final_demand_shares,
+            final_demand_split: d.final_demand_split,
             coal_share: d.coal_share,
             extraction: [0.0; N_GOODS],
             extraction_output: 0.0,
@@ -834,6 +835,18 @@ pub fn country_columns(
             format!("fd_{g}"),
             floats(rows.iter().map(|r| r.table.final_demand_shares[g])),
         ));
+    }
+    // government's and investment's parts of the final demand shares (ADR 0099)
+    for (d, name) in [(1, "gov"), (2, "inv")] {
+        for g in 0..N_GOODS {
+            out.push((
+                format!("{name}_{g}"),
+                floats(
+                    rows.iter()
+                        .map(|r| r.table.final_demand_shares[g] * r.table.final_demand_split[g][d]),
+                ),
+            ));
+        }
     }
     for g in 0..N_GOODS {
         out.push((

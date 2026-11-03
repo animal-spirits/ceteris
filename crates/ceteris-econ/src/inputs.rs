@@ -58,6 +58,11 @@ pub const N_EDU: usize = 3;
 pub struct Countries {
     /// Final demand shares Omega_g from all 2000 final demand.
     pub omega: Rows<f64>,
+    /// Government's (GGFC and NPISH) and investment's (GFCF) parts of `omega` by good (ADR
+    /// 0099, RFC 0301), on the same scale; households buy the rest. Empty where households buy
+    /// all final demand (a generated world, a pack before ADR 0099).
+    pub gov: Rows<f64>,
+    pub inv: Rows<f64>,
     /// Input coefficients a_kg, units of k per unit of g, at `[k * n_goods + g]`.
     pub io: Rows<f64>,
     /// Labour share s_L, used for every sector.
@@ -460,6 +465,9 @@ impl EconInputs {
                 && c.price_level.len() == nc
                 && c.pigl.as_ref().is_none_or(|w| w.len() == nc)
                 && (c.transfer.is_empty() || c.transfer.len() == nc)
+                && (c.gov.is_empty() || (c.gov.len() == nc && c.gov.width() == n))
+                && c.inv.len() == c.gov.len()
+                && (c.inv.is_empty() || c.inv.width() == n)
                 && (c.transfer_path.is_empty()
                     || (c.transfer_path.len() == nc && c.transfer_path.width() == TRANSFER_YEARS)),
             "country columns disagree in length"
@@ -664,6 +672,8 @@ impl EconInputs {
         } = network;
         let Countries {
             omega,
+            gov,
+            inv,
             io,
             s_l,
             unemployment,
@@ -758,12 +768,23 @@ impl EconInputs {
                 e.f64s(&w.omega);
                 e.f64s(&w.within);
                 e.f64(w.sigma);
+                // only where present, so calibrations before ADR 0099 keep their digest
+                if !w.gov.is_empty() {
+                    e.f64s(&w.gov);
+                    e.f64s(&w.inv);
+                }
             }
         }
         // appended only where some country's is not 1, so worlds before ADR 0098 keep their digest
         if price_level.iter().any(|&p| p != 1.0) {
             b"price-level".iter().for_each(|&b| e.u8(b));
             e.f64s(price_level);
+        }
+        // appended only where present, so worlds without the split keep their digest
+        if !gov.is_empty() {
+            b"final-demanders".iter().for_each(|&b| e.u8(b));
+            e.f64s(gov.as_flat());
+            e.f64s(inv.as_flat());
         }
         // appended only where some share is nonzero, so worlds without transfers keep their digest
         if self.has_transfers() {

@@ -14,7 +14,9 @@ use ceteris_pack::econ::icio::{
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use ceteris_pack::read::baci::Trade;
-use ceteris_pack::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi, aggregate, load_wdi};
+use ceteris_pack::read::icio::{
+    CountryIo, HOUSEHOLDS_ONLY, HomeUse, N_GOODS, Wdi, aggregate, load_wdi,
+};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{Observed, load_observed};
 use ceteris_pack::read::wdi::Names;
@@ -41,6 +43,7 @@ fn country(colsum: f64, fd: [f64; N_GOODS]) -> CountryIo {
         va: DONOR_VA,
         io: [[colsum / 10.0; N_GOODS]; N_GOODS],
         final_demand_shares: fd,
+        final_demand_split: HOUSEHOLDS_ONLY,
         coal_share: 0.0,
         extraction: [0.0; N_GOODS],
         extraction_output: 0.0,
