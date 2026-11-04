@@ -136,5 +136,11 @@ Row: ADR 0310
 - As built (C4, part 1): labour shares and dividends by wealth in the simulator, export, GE
   reference, calibration and pack builder (columns only where SEA and WID are in the fetch
   cache); foreign dividends (ADRs 0309, 0310) follow.
+- As built (C4, part 2): SEA, WID and AAMNE pinned owner-side; AAMNE is the 2026 edition (2000
+  to 2023, 81 economies, on the ICIO 2025 grid the pack reads) rather than the 2023 edition the
+  Sources paragraph names. f and the owners are `econ_countries.arrow` columns (`foreign_g`,
+  `owner_c`) rather than a separate `econ_foreign.arrow`, as the labour and wealth shares are.
+  Foreign dividends run through E4, the base point, the steady state, export, GE reference and
+  calibration's steady state; the stability blocks still take each pool as wholly domestic.
 - The installed pack needs a rebuild (C6): w0, the profit pools, A and the balance of RFC 0287 D1
   all move.

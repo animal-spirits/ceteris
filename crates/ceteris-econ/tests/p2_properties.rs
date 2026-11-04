@@ -15,8 +15,8 @@ use ceteris_econ::params::{Technology, Transfers};
 use ceteris_econ::production::{labour_for_value_added, marginal_value_added, rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
-    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, TRANSFER, WRITE_OFF, active_cells,
-    pop_base_income, static_digest, to_minor, to_numeraire,
+    DIVIDEND, FOREIGN_DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, TRANSFER, WRITE_OFF,
+    active_cells, base_income, pop_base_income, static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::p2::{N as N_GOODS, STORABLE, TRADED as N_TRADED};
@@ -4091,4 +4091,119 @@ fn wealth_dividends_pay_the_pool_by_share() {
         assert_eq!(sim.world().ledger.money_wide(mint), issued, "tick {tick}");
     }
     assert_ne!(sim.world().digest(), world(EconParams::default()).digest());
+}
+
+/// The fixture with foreign owners (ADR 0310): goods 1 to 6 of country 0 are 30% owned by
+/// country 1, those of every other country 10% by country 0.
+fn with_foreign() -> EconInputs {
+    let mut inp = small_world();
+    let nc = inp.n_countries();
+    let f = |c: usize, g: usize| match (c, (1..=6).contains(&g)) {
+        (_, false) => 0.0,
+        (0, true) => 0.3,
+        _ => 0.1,
+    };
+    let owner = |h: usize| if h == 0 { 1 } else { 0 };
+    inp.countries.foreign = Rows::from_flat(
+        (0..nc)
+            .flat_map(|c| (0..N_GOODS).map(move |g| f(c, g)))
+            .collect(),
+        N_GOODS,
+    );
+    inp.countries.owners = Rows::from_flat(
+        (0..nc)
+            .flat_map(|h| (0..nc).map(move |o| if o == owner(h) { 1.0 } else { 0.0 }))
+            .collect(),
+        nc,
+    );
+    inp.validate();
+    inp
+}
+
+/// ADRs 0309, 0310: each positive payout of goods 1 to 6 sends round(f x payout) to the world
+/// dividend account (within one minor unit), which pays each host's total to its owner's pool
+/// in the same tick and ends at zero, as do the pools; money is conserved over 24 ticks, the
+/// shares enter the digest, and the base point counts foreign profits in the owners' income.
+#[test]
+fn foreign_dividends_net_to_zero_worldwide() {
+    let inp = with_foreign();
+    let nc = inp.n_countries();
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(inp.clone()),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
+    let acc = sim.world().layout().accounts.clone();
+    let account = acc.foreign.expect("the world dividend account is open");
+    assert!(
+        world(EconParams::default())
+            .layout()
+            .accounts
+            .foreign
+            .is_none()
+    );
+    let issued = sim.world().ledger.money_wide(acc.mint);
+    let n_ent = inp.n_enterprises();
+    let host = |e: usize| inp.country_of(inp.enterprises.province[e] as usize);
+    let mut paid_abroad = 0i64;
+    for tick in 0..24 {
+        sim.step().unwrap();
+        let w = sim.world();
+        let (mut sent, mut received) = (vec![0i64; nc], vec![0i64; nc]);
+        let mut domestic = vec![0i64; n_ent];
+        let mut foreign = vec![0i64; n_ent];
+        for entry in w.ledger.journal() {
+            let ent = (entry.from.0 as usize)
+                .checked_sub(acc.enterprise[0].0 as usize)
+                .filter(|&e| e < n_ent);
+            match (entry.flow, ent) {
+                (FOREIGN_DIVIDEND, Some(e)) => {
+                    assert_eq!(entry.to, account, "tick {tick}");
+                    foreign[e] += entry.amount;
+                    sent[host(e)] += entry.amount;
+                }
+                (FOREIGN_DIVIDEND, None) => {
+                    assert_eq!(entry.from, account);
+                    let o = acc.dividend.iter().position(|&d| d == entry.to).unwrap();
+                    received[o] += entry.amount;
+                }
+                (DIVIDEND, Some(e)) => domestic[e] += entry.amount,
+                _ => {}
+            }
+        }
+        for e in 0..n_ent {
+            let total = domestic[e] + foreign[e];
+            let f = inp.ent_foreign(e);
+            assert!(
+                (foreign[e] as f64 - f * total as f64).abs() <= 0.5 + 1e-9,
+                "tick {tick} enterprise {e}: {} of {total} at f {f}",
+                foreign[e]
+            );
+        }
+        // country 0 owns every other host's foreign part, country 1 country 0's
+        assert_eq!(received[1], sent[0], "tick {tick}");
+        assert_eq!(received[0], sent[1..].iter().sum::<i64>(), "tick {tick}");
+        assert!(received[2..].iter().all(|&x| x == 0));
+        assert_eq!(w.ledger.money_wide(account), 0);
+        for &pool in &acc.dividend {
+            assert_eq!(w.ledger.money_wide(pool), 0, "tick {tick}");
+        }
+        assert_eq!(w.ledger.money_wide(acc.mint), issued, "tick {tick}");
+        paid_abroad += sent.iter().sum::<i64>();
+    }
+    assert!(paid_abroad > 0);
+    assert_ne!(sim.world().digest(), world(EconParams::default()).digest());
+    let (base, plain) = (
+        base_income(&inp, &EconParams::default()),
+        base_income(&small_world(), &EconParams::default()),
+    );
+    let by_country = |income: &[f64], c: usize| -> f64 {
+        (0..inp.n_provinces())
+            .filter(|&i| inp.country_of(i) == c)
+            .map(|i| income[i])
+            .sum()
+    };
+    let (world_base, world_plain): (f64, f64) = (base.iter().sum(), plain.iter().sum());
+    assert!((world_base / world_plain - 1.0).abs() < 1e-12);
+    assert!(by_country(&base, 1) > by_country(&plain, 1));
 }

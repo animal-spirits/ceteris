@@ -15,7 +15,7 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::theta::{self, ClassTable};
-use super::{factors, goods, icio, people, price_level, tariffs, transfers};
+use super::{factors, foreign, goods, icio, people, price_level, tariffs, transfers};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
@@ -27,7 +27,7 @@ use crate::read::natural_earth::{iso3_by_iso2, read_codes};
 use crate::read::people::{load_observed, parts};
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use crate::read::wdi::{read_rates, read_wdi};
-use crate::read::{sea, wid};
+use crate::read::{aamne, sea, wid};
 use crate::table;
 
 /// The written tables, in writing order.
@@ -449,6 +449,22 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         )?;
         countries_columns.extend(factors::columns(&f));
     }
+    // foreign-owned shares and their owners (ADR 0309) where AAMNE is cached
+    let (aamne_va, aamne_output) = (cache.join(aamne::VA), cache.join(aamne::OUTPUT));
+    let foreign = if aamne_va.exists() && aamne_output.exists() {
+        let f = foreign::foreign(
+            &codes,
+            &|c| parts(c, &iso),
+            &|c| world.get(c).and_then(|e| e.donor.clone()),
+            &pack_gdp,
+            &aamne::read_owned(&aamne_va)?,
+            &aamne::read_parents(&aamne_output)?,
+        )?;
+        countries_columns.extend(foreign::columns(&f));
+        Some(f)
+    } else {
+        None
+    };
     let [
         goods_t,
         countries_t,
@@ -487,6 +503,9 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             gateways::report(&gw, &codes),
             price_level::report(&levels, &screen),
             transfers::report(&imbalances, &codes, &pack_gdp),
-        ],
+        ]
+        .into_iter()
+        .chain(foreign.map(|f| foreign::report(&f, &codes)))
+        .collect(),
     })
 }
