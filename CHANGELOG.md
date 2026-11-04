@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### BEHAVIOUR: largest income-effect weight the household shares allow (ADR 0313, RFC 0304)
+
+- PIGL inversion: z = min_c Omega_c / theta_c, the binding category's omega 0; omega_A = 0
+  wherever it fits, so the fixture and every country that inverted before keep their weights and
+  hashes. On the rebuilt C6 pack six countries bind on M (NGA, ETH, GHA, TCD, MOZ, TZA).
+- Calibration pass cap `MAX_PASSES` 100 to 300 (an iteration cap): the C6 pack settles at pass 187.
+- Reference equilibrium: profits by dividend share, the foreign-owned part of a positive profit
+  to the host's owners (ADRs 0104, 0310), as the simulator and the calibration.
+- `tests/golden/p2-pack.txt` re-blessed for the C6 calibration tables (scratch pack; the owner's
+  installed pack is unchanged).
+
 ### BEHAVIOUR: trade imbalances as transfers, r_g removed (ADR 0100, RFC 0287 D1 to D6)
 
 - Each country receives D_c = s_c Y each tick from one world transfer account (Y last tick's
