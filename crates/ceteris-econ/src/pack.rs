@@ -296,6 +296,17 @@ impl EconInputs {
             } else {
                 Rows::new(nc)
             },
+            // packs before ADR 0103 start without drift
+            drift_a: if c.column_by_name("g_a").is_some() {
+                f64s(&c, "g_a")?
+            } else {
+                Vec::new()
+            },
+            drift_f: if c.column_by_name("g_a").is_some() {
+                f64s(&c, "f_gap")?
+            } else {
+                Vec::new()
+            },
         };
 
         let t = table("econ_tariffs.arrow")?;

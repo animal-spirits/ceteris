@@ -69,6 +69,7 @@ fn observed() -> Observed {
             .zip(region)
             .map(|((k, _), r)| ((*k).to_owned(), r.to_owned()))
             .collect(),
+        drift_pwt: BTreeMap::new(),
     }
 }
 

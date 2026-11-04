@@ -29,7 +29,7 @@ use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source
 use crate::inputs::{EconInputs, TRANSFER_YEARS};
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local;
-use crate::params::Transfers;
+use crate::params::{EconParams, Transfers};
 use crate::production::{
     labour_for_value_added, labour_target, labour_target_uncapped, marginal_value_added, rho,
     value_added,
@@ -71,7 +71,10 @@ pub fn schedule() -> Schedule<EconWorld> {
         run,
     };
     Schedule::new(vec![
-        def(201, "deliver", |w, _| deliver(w)),
+        def(201, "deliver", |w, ctx| {
+            drift(w, ctx.tick);
+            deliver(w)
+        }),
         def(202, "labour", |w, _| labour(w)),
         def(203, "produce", |w, _| produce(w)),
         def(204, "demand", |w, _| demand(w)),
@@ -82,6 +85,40 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
+}
+
+/// Each country's multipliers of A and L0 at `tick` from the initial drift (ADR 0103, S23 and
+/// P153): with fade(t) = 1 - 2^(-t / h), t = tick / 12 years, ln alpha = g_A h / ln 2 fade(t)
+/// (TFP growing at g_A 2^(-t / h)) and ln phi = f fade(t) (the fixed factor F closing its log gap
+/// f at half-life h). F enters VA as F / F0 = phi, and by homogeneity VA(A, F, L) =
+/// VA(A phi, F0, L / phi): the multipliers are [alpha phi, phi]. Ones at tick 0, under S23 off
+/// and for inputs without drifts.
+pub fn drift_factors(inp: &EconInputs, params: &EconParams, tick: u32) -> Vec<[f64; 2]> {
+    let c = &inp.countries;
+    let n = inp.n_countries();
+    if !params.drift || !inp.has_drift() {
+        return vec![[1.0; 2]; n];
+    }
+    let h = params.drift_half_life;
+    let fade = 1.0 - libm::exp2(-f64::from(tick) / 12.0 / h);
+    (0..n)
+        .map(|k| {
+            let ln_phi = c.drift_f[k] * fade;
+            let ln_alpha = c.drift_a[k] * h / std::f64::consts::LN_2 * fade;
+            [libm::exp(ln_alpha + ln_phi), libm::exp(ln_phi)]
+        })
+        .collect()
+}
+
+/// E0: this tick's drift multipliers into `Scratch::drift`.
+pub fn drift(w: &mut EconWorld, tick: u32) {
+    w.scratch.drift = drift_factors(&w.inputs, &w.params, tick);
+}
+
+/// Enterprise `e`'s A and L0 under this tick's drift multipliers.
+fn tech(inp: &EconInputs, drift: &[[f64; 2]], e: usize) -> (f64, f64) {
+    let [a, l0] = drift[inp.country_of(inp.enterprises.province[e] as usize)];
+    (inp.enterprises.a[e] * a, inp.enterprises.l0[e] * l0)
 }
 
 fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
@@ -252,6 +289,7 @@ pub fn labour(w: &mut EconWorld) {
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
     let (index, pi) = (&w.price_index, w.expected_inflation);
+    let drift = &w.scratch.drift;
     type PerProvince = (f64, Vec<f64>, bool, Vec<f64>, Vec<u64>);
     let results: Vec<PerProvince> = (0..inp.n_provinces())
         .into_par_iter()
@@ -274,16 +312,16 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .map(|e| {
                     let va = lay.a_va[e] * input_output(world, e);
-                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], inp.ent_s_l(e), r)
+                    let (a, l0) = tech(inp, drift, e);
+                    labour_for_value_added(va, a, ent.va0[e], l0, inp.ent_s_l(e), r)
                 })
                 .collect();
             let targets = |w: f64| -> Vec<f64> {
                 ents.clone()
                     .zip(p_va.iter().zip(&equipped))
                     .map(|(e, (&pv, &cap))| {
-                        let s_l = inp.ent_s_l(e);
-                        labour_target(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
-                            .min(cap)
+                        let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                        labour_target(pv, w, a, ent.va0[e], l0, s_l, r, supply).min(cap)
                     })
                     .collect()
             };
@@ -291,8 +329,8 @@ pub fn labour(w: &mut EconWorld) {
             let (w1, t, clipped) = if params.frictionless {
                 let natural = (1.0 - u_star) * supply;
                 let free = |e: usize, pv: f64, w: f64| {
-                    let s_l = inp.ent_s_l(e);
-                    labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                    let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                    labour_target_uncapped(pv, w, a, ent.va0[e], l0, s_l, r)
                 };
                 let hiring = || {
                     ents.clone()
@@ -328,14 +366,8 @@ pub fn labour(w: &mut EconWorld) {
                         .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
                     let top = hiring()
                         .map(|(e, (&pv, &cap))| {
-                            pv * marginal_value_added(
-                                ent.a[e],
-                                ent.va0[e],
-                                ent.l0[e],
-                                inp.ent_s_l(e),
-                                r,
-                                cap,
-                            )
+                            let (a, l0) = tech(inp, drift, e);
+                            pv * marginal_value_added(a, ent.va0[e], l0, inp.ent_s_l(e), r, cap)
                         })
                         .reduce(f64::min);
                     match top {
@@ -358,16 +390,8 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .zip(&p_va)
                 .map(|(e, &pv)| {
-                    labour_target(
-                        pv,
-                        wt,
-                        ent.a[e],
-                        ent.va0[e],
-                        ent.l0[e],
-                        inp.ent_s_l(e),
-                        r,
-                        supply,
-                    )
+                    let (a, l0) = tech(inp, drift, e);
+                    labour_target(pv, wt, a, ent.va0[e], l0, inp.ent_s_l(e), r, supply)
                 })
                 .collect();
             let short: Vec<u64> = ents
@@ -497,8 +521,8 @@ pub fn cap_output(w: &mut EconWorld) {
         .into_par_iter()
         .map(|e| {
             let ent = &inp.enterprises;
-            let s_l = inp.ent_s_l(e);
-            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
+            let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, &w.scratch.drift, e));
+            let va = value_added(a, ent.va0[e], l0, s_l, r, employment[e]);
             let mut y = va / lay.a_va[e];
             for k in 0..nt {
                 let a = lay.coef[e][k];
@@ -555,7 +579,7 @@ pub fn demand(w: &mut EconWorld) {
             }
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
-    let (short, notional) = (&sc.short, &sc.notional);
+    let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
     sc.ent_order
         .par_chunks_mut(ng)
         .zip(sc.ent_spend.par_chunks_mut(ng))
@@ -563,9 +587,8 @@ pub fn demand(w: &mut EconWorld) {
         .for_each(|(e, (orders, spend))| {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
-            let (prices, s_l) = (row(i), inp.ent_s_l(e));
-            let output =
-                |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+            let (prices, s_l, (a, l0)) = (row(i), inp.ent_s_l(e), tech(inp, drift, e));
+            let output = |l: f64| value_added(a, ent.va0[e], l0, s_l, r, l) / lay.a_va[e];
             let capacity = output(w.employment[e]);
             let free = if short[e] != 0 {
                 output(notional[e])
@@ -1438,6 +1461,69 @@ mod tests {
         assert_eq!(out, [0, 5]);
         split(0, [0.4, 0.6].into_iter(), &mut out);
         assert_eq!(out, [0, 0]);
+    }
+
+    /// ADR 0103: TFP grows at g_A 2^(-t / h) and F closes half its gap f by one half-life, so
+    /// at t = h the log multipliers are g_A h / (2 ln 2) and f / 2, and at t = 2h three quarters
+    /// of the totals g_A h / ln 2 and f.
+    #[test]
+    fn drift_fades_with_half_life() {
+        use crate::fixture::small_world;
+
+        let mut inp = small_world();
+        let n = inp.n_countries();
+        let g: Vec<f64> = (0..n).map(|k| 0.01 * (k as f64 + 1.0)).collect();
+        let f: Vec<f64> = (0..n).map(|k| 0.2 - 0.15 * k as f64).collect();
+        (inp.countries.drift_a, inp.countries.drift_f) = (g.clone(), f.clone());
+        let params = EconParams::default();
+        let h = params.drift_half_life;
+        for (years, done) in [(h, 0.5), (2.0 * h, 0.75)] {
+            let factors = drift_factors(&inp, &params, (12.0 * years) as u32);
+            for k in 0..n {
+                let [a, l0] = factors[k];
+                let ln_phi = f[k] * done;
+                let ln_alpha = g[k] * h / std::f64::consts::LN_2 * done;
+                assert!((l0.ln() - ln_phi).abs() < 1e-14, "country {k}: {l0}");
+                assert!(
+                    (a.ln() - ln_alpha - ln_phi).abs() < 1e-14,
+                    "country {k}: {a}"
+                );
+            }
+        }
+        // the rate halves every half-life: the log multiplier's monthly step at t = h is half
+        // its step at t = 0
+        let step = |t: u32| {
+            let (now, next) = (
+                drift_factors(&inp, &params, t),
+                drift_factors(&inp, &params, t + 1),
+            );
+            next[0][0].ln() - next[0][1].ln() - (now[0][0].ln() - now[0][1].ln())
+        };
+        let ratio = step((12.0 * h) as u32) / step(0);
+        assert!((ratio - 0.5).abs() < 1e-2, "{ratio}");
+    }
+
+    /// ADR 0103: the drift is zero at the data state's first tick and with S23 off.
+    #[test]
+    fn drift_factors_are_one_at_tick_0_and_when_off() {
+        use crate::fixture::small_world;
+
+        let mut inp = small_world();
+        let n = inp.n_countries();
+        (inp.countries.drift_a, inp.countries.drift_f) = (vec![0.03; n], vec![0.1; n]);
+        let off = EconParams {
+            drift: false,
+            ..EconParams::default()
+        };
+        assert_eq!(
+            drift_factors(&inp, &EconParams::default(), 0),
+            vec![[1.0; 2]; n]
+        );
+        assert_eq!(drift_factors(&inp, &off, 120), vec![[1.0; 2]; n]);
+        assert_ne!(
+            drift_factors(&inp, &EconParams::default(), 1),
+            vec![[1.0; 2]; n]
+        );
     }
 
     #[test]

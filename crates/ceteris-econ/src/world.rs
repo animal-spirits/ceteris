@@ -343,6 +343,9 @@ pub struct Scratch {
     /// those inputs on the output at that employment (ADR 0266).
     pub short: Vec<u64>,
     pub notional: Vec<f64>,
+    /// Per country, this tick's multipliers of A and of L0 from the initial drift
+    /// (`systems::drift`, ADR 0103), set at E0; 1 until then.
+    pub drift: Vec<[f64; 2]>,
 }
 
 impl Scratch {
@@ -377,6 +380,7 @@ impl Scratch {
             dispatch_scale: vec![0.0; n_traded],
             short: vec![0; n_ent],
             notional: vec![0.0; n_ent],
+            drift: vec![[1.0; 2]; nc],
         }
     }
 }
@@ -516,6 +520,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // reference solutions describe do not have; the snapshot header carries it
         write_off_months: _,
         transfers,
+        drift,
+        drift_half_life,
     } = params;
     let TradeParams {
         // the inputs' goods (`EconWorld::new`), in their digest
@@ -569,6 +575,13 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     // without transfer shares all three settings run identically
     if inputs.has_transfers() {
         e.u8(*transfers as u8);
+    }
+    // without drifts both settings and every half-life run identically
+    if inputs.has_drift() {
+        e.u8(u8::from(*drift));
+        if *drift {
+            e.f64(*drift_half_life);
+        }
     }
     e.f64s(theta);
     e.f64(*theta_scale);
@@ -1532,9 +1545,16 @@ fn decode_hash(d: &mut Decoder) -> Result<Hash, DecodeError> {
     Ok(h)
 }
 
-/// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, as
-/// in [`static_digest`], since with one both settings run identically.
-fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool, transfers_on: bool) {
+/// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, S22
+/// only where they have transfer shares and S23 and P153 only where they have drifts, as in
+/// [`static_digest`], since without them every setting runs identically.
+fn encode_params(
+    e: &mut Encoder,
+    params: &EconParams,
+    one_vintage: bool,
+    transfers_on: bool,
+    has_drift: bool,
+) {
     // destructured so a new parameter cannot be left out of snapshots
     let EconParams {
         sigma_demand,
@@ -1549,6 +1569,8 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool, transf
         technology,
         write_off_months,
         transfers,
+        drift,
+        drift_half_life,
     } = params;
     let Pigl {
         sigma_b,
@@ -1570,6 +1592,10 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool, transf
     if transfers_on {
         e.u8(*transfers as u8);
     }
+    if has_drift {
+        e.bools(&[*drift]);
+        e.f64(*drift_half_life);
+    }
 }
 
 fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N], DecodeError> {
@@ -1579,12 +1605,13 @@ fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N],
         .map_err(|_| DecodeError(format!("{what}: {n} entries, want {N}")))
 }
 
-/// Decodes [`encode_params`]; with one vintage S09 is `technology`, and without transfer shares
-/// S22 is `transfers`, the restoring world's.
+/// Decodes [`encode_params`]; with one vintage S09 is `technology`, without transfer shares S22
+/// is `transfers`, and without drifts S23 and P153 are `drift`, the restoring world's.
 fn decode_params(
     d: &mut Decoder,
     (one_vintage, technology): (bool, Technology),
     (transfers_on, transfers): (bool, Transfers),
+    (has_drift, drift): (bool, (bool, f64)),
 ) -> Result<EconParams, DecodeError> {
     let [sigma_demand, sigma_fl, kappa_w, delta_w, eta] = decode_array(d, "econ parameters")?;
     let [sigma_b, phi, gamma, eps] = decode_array(d, "PIGL parameters")?;
@@ -1634,6 +1661,13 @@ fn decode_params(
         } else {
             transfers
         },
+        drift: if has_drift {
+            let [on] = decode_array_bool(d)?;
+            on
+        } else {
+            drift.0
+        },
+        drift_half_life: if has_drift { d.f64()? } else { drift.1 },
     })
 }
 
@@ -1641,7 +1675,7 @@ fn decode_array_bool(d: &mut Decoder) -> Result<[bool; 1], DecodeError> {
     let v = d.bools()?;
     let n = v.len();
     v.try_into()
-        .map_err(|_| DecodeError(format!("frictionless switch: {n} entries")))
+        .map_err(|_| DecodeError(format!("switch: {n} entries, want 1")))
 }
 
 fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
@@ -1764,6 +1798,7 @@ impl Encode for EconWorld {
             &self.params,
             self.inputs.one_vintage(),
             self.inputs.has_transfers(),
+            self.inputs.has_drift(),
         );
         encode_trade(e, &self.trade);
         self.ledger.encode(e);
@@ -2057,6 +2092,10 @@ impl State for EconWorld {
             d,
             (self.inputs.one_vintage(), self.params.technology),
             (self.inputs.has_transfers(), self.params.transfers),
+            (
+                self.inputs.has_drift(),
+                (self.params.drift, self.params.drift_half_life),
+            ),
         )?;
         let trade = decode_trade(d, &self.inputs.goods)?;
         let ledger = Ledger::decode(d)?;
