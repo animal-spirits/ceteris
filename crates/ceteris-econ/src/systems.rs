@@ -1185,7 +1185,14 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
     let national: Vec<f64> = lay
         .country_pops
         .iter()
-        .map(|pops| fixed_sum(&pops.iter().map(|&k| income_k[k as usize]).collect::<Vec<_>>()))
+        .map(|pops| {
+            fixed_sum(
+                &pops
+                    .iter()
+                    .map(|&k| income_k[k as usize])
+                    .collect::<Vec<_>>(),
+            )
+        })
         .collect();
     let world = fixed_sum(&national);
     let rho: Vec<f64> = (0..inp.n_countries())
