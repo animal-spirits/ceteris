@@ -302,4 +302,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0311, 0312 | [Wealth-bracket shares from the income Gini by a variance-additive lognormal fitted to the US DFA, WID as a research check only, amending ADR 0308](../rfcs/0303-open-wealth-shares-from-the-income-gini.md) | 9.1, 17 |
 | 0313 | [The largest income-effect weight the household shares allow: omega_A = 0 where it fits, else the binding category's omega 0, amending ADR 0094](../rfcs/0304-largest-income-effect-weight-the-shares-allow.md) | 8.6 |
 | 0315 | [Transfers as the current account's share of national income, the world discrepancy spread by income, amending ADR 0100](../rfcs/0306-transfers-as-a-share-of-national-income.md) | 9.5 |
+| 0316 | [Invert PIGL on the shares the run spends, a negative category share at 0, amending ADR 0094](../rfcs/0307-invert-pigl-on-the-clamped-shares.md) | 8.6 |
 <!-- rows:end -->

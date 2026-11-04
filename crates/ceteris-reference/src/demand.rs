@@ -195,6 +195,8 @@ pub struct Pops<'a> {
 const MAX_ROUNDS: usize = 1000;
 /// Secant steps of one split in [`invert_pops`] before it errs.
 const MAX_SECANT_STEPS: usize = 400;
+/// Doublings of lambda's bracket where shares are clamped (ADR 0316).
+const MAX_DOUBLINGS: usize = 64;
 /// Largest relative miss of an aggregate good share at which [`invert_pops`] stops.
 const SHARE_TOL: f64 = 1e-14;
 
@@ -204,7 +206,8 @@ const SHARE_TOL: f64 = 1e-14;
 /// steps from alpha_g = Omega_g / Omega_c: at the current alpha, the split t = omega_M of
 /// omega_M + omega_S = 1 solves the M aggregate by a bracketed secant, lambda following in
 /// closed form from food (omega_A = 0), or where M (S) binds instead, omega_M (omega_S) = 0,
-/// lambda from its aggregate and t = omega_A meeting food (ADR 0313); then alpha_g is rescaled
+/// lambda from its aggregate and t = omega_A meeting food (ADR 0313), on the shares [`shares`]
+/// spends, a negative one at 0 (ADR 0316); then alpha_g is rescaled
 /// by Omega_g over its aggregate share and renormalized within its category. A country with no
 /// spending pop takes [`invert`] at spending 0. Errs where no split meets the aggregates or the
 /// rounds do not settle.
@@ -263,6 +266,39 @@ pub fn invert_pops(
         out.within.row_mut(c).copy_from_slice(&within[..n_g]);
     }
     Ok(out)
+}
+
+/// The root in [0, 1] of `f`, increasing with f(0) <= 0 <= f(1): a bracketed secant (Illinois)
+/// to the last bit or [`MAX_SECANT_STEPS`] steps, then the end with the smaller miss.
+fn illinois(f: impl Fn(f64) -> f64) -> f64 {
+    let (mut a, mut b) = (0.0, 1.0);
+    let (mut fa, mut fb) = (f(a), f(b));
+    let mut side = 0;
+    for _ in 0..MAX_SECANT_STEPS {
+        if fa == 0.0 || fb == 0.0 {
+            break;
+        }
+        let t = (a * fb - b * fa) / (fb - fa);
+        let t = if t > a && t < b { t } else { 0.5 * (a + b) };
+        if t <= a || t >= b {
+            break;
+        }
+        let ft = f(t);
+        if ft < 0.0 {
+            (a, fa) = (t, ft);
+            if side == -1 {
+                fb /= 2.0;
+            }
+            side = -1;
+        } else {
+            (b, fb) = (t, ft);
+            if side == 1 {
+                fa /= 2.0;
+            }
+            side = 1;
+        }
+    }
+    if fa == 0.0 || -fa <= fb { a } else { b }
 }
 
 /// The categories other than the binding one, whose weights are t and 1 - t (ADR 0313).
@@ -389,19 +425,50 @@ impl Country<'_> {
         let bound: f64 = (0..fixed.len())
             .map(|i| spend(i) * at[i].1 * fixed[i].s_d[bind])
             .sum();
-        let lambda = if self.cat[bind] > 0.0 {
-            self.cat[bind] * total / bound
-        } else {
-            0.0
+        let raw = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            at.iter()
+                .zip(fixed)
+                .map(|((s_b, factor), f)| {
+                    std::array::from_fn(|j| s_b[j] + lambda * factor * (f.s_d[j] - s_b[j]))
+                })
+                .collect()
         };
-        let shares = at
-            .iter()
-            .zip(fixed)
-            .map(|((s_b, factor), f)| {
-                std::array::from_fn(|j| s_b[j] + lambda * factor * (f.s_d[j] - s_b[j]))
-            })
-            .collect();
-        (lambda, shares)
+        if self.cat[bind] <= 0.0 {
+            return (0.0, raw(0.0));
+        }
+        let closed = self.cat[bind] * total / bound;
+        let unclamped = raw(closed);
+        if unclamped.iter().all(|r| r.iter().all(|&s| s >= 0.0)) {
+            return (closed, unclamped);
+        }
+        // ADR 0316: negative shares set to 0 and the rest rescaled, as `shares` spends them;
+        // lambda then meets the binding aggregate by a bracketed secant
+        let clamped = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            raw(lambda)
+                .into_iter()
+                .map(|r| {
+                    let r = r.map(|s| s.max(0.0));
+                    let sum: f64 = r.iter().sum();
+                    r.map(|s| s / sum)
+                })
+                .collect()
+        };
+        let short = |lambda: f64| -> f64 {
+            let shares = clamped(lambda);
+            (0..fixed.len())
+                .map(|i| spend(i) * shares[i][bind])
+                .sum::<f64>()
+                - self.cat[bind] * total
+        };
+        let mut hi = closed;
+        for _ in 0..MAX_DOUBLINGS {
+            if short(hi) >= 0.0 {
+                break;
+            }
+            hi *= 2.0;
+        }
+        let lambda = hi * illinois(|u| short(hi * u));
+        (lambda, clamped(lambda))
     }
 
     /// The miss of the aggregate of the first category other than `bind` at split t.
