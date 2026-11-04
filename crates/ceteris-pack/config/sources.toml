@@ -1018,6 +1018,24 @@ reason = "CC BY 4.0; 43 economies with labour compensation (self-employed includ
 checked = 2026-11-03
 confidence = "high"
 
+[[source]]
+id = "oecd-aamne"
+name = "OECD Analytical AMNE database"
+provider = "OECD"
+version = "2026 edition (2000-2023, ICIO 2025 grid, 81 economies, 41 industries)"
+role = "Foreign-owned shares of value added by host and good, and their parent countries, 2000 (8.7, 9.1; ADRs 0309, 0310)"
+licence = "LicenseRef-OECD-Terms"
+licence_url = "https://www.oecd.org/en/about/terms-conditions.html"
+attribution = "OECD (2026), Analytical AMNE database, <URL> (accessed <date>); pass on to sub-licensees"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "OECD data terms as for ICIO; the start year by host, industry and ownership, with gross output by parent, on the ICIO grid"
+checked = 2026-11-03
+confidence = "medium"
+notes = "Dataset page www.oecd.org/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services.html (403 to scripts, read in a browser). The 2026 edition is on the ICIO 2025 grid the pack reads; RFC 0302 named the 2023 edition (2000-2019, 76 economies). Mining is one industry (B05T09), so goods 1 and 2 both take it."
+
 # ---------------------------------------------------------------- macro, money, finance, fiscal
 
 [[source]]
