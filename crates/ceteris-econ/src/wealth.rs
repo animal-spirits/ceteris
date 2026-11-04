@@ -1,7 +1,7 @@
 //! Dividend shares by wealth (specs/econ/SPEC.md, Income; ADR 0308):
-//! a country's profit pool is paid by the WID wealth shares of its bottom 50%, middle 40% and top
-//! 10%, ranked by income with perfect rank correlation, so a pop's share is the wealth share of
-//! each bracket times the part of the bracket's population that is the pop's.
+//! a country's profit pool is paid by the wealth shares (ADR 0311) of its bottom 50%, middle 40%
+//! and top 10%, ranked by income with perfect rank correlation, so a pop's share is the wealth
+//! share of each bracket times the part of the bracket's population that is the pop's.
 
 /// Population fractions of the wealth brackets, bottom 50%, middle 40%, top 10%.
 pub const BRACKETS: [f64; 3] = [0.5, 0.4, 0.1];

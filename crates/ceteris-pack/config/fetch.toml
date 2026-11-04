@@ -139,13 +139,6 @@ sha256 = "8cf5ed3d1b7d7ddae93037cc5e1c1d0a2721b9a7679dcc076b85ac5220c576ce"
 bytes = 5536437
 url = "https://dataverse.nl/api/access/datafile/199095"
 
-[[file]]
-source = "wid"
-name = "wid_all_data.zip"
-sha256 = "68766d928869de7cf3b85ead83a55152061feb8037f444a21597927f0c9f8f70"
-bytes = 886891414
-url = "https://wid.world/bulk_download/wid_all_data.zip"
-
 # Foreign-owned shares and their parents (ADR 0309).
 [[file]]
 source = "oecd-aamne"

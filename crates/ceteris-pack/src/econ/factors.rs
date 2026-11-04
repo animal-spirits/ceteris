@@ -1,15 +1,16 @@
 //! Sector labour shares and wealth shares of the pack countries (specs/econ/SPEC.md, Pack
-//! additions; ADRs 0307 and 0308).
+//! additions; ADRs 0307, 0308 and 0311).
 //!
 //! Labour shares: s_L,c,g = s_L,c r_g,c / (sum_h VA_c,h r_h,c / VA_c), r the WIOD SEA 2000
 //! relative labour share of the good, so the VA-weighted mean is the PWT national share; a share
 //! outside [`S_L_MIN`, `S_L_MAX`] is clipped and the others rescaled until the mean holds again.
-//! Wealth: WID 2000 shares of the bottom 50%, middle 40% and top 10%, a negative share at 0.
+//! Wealth: shares of the bottom 50%, middle 40% and top 10% of a lognormal whose log variance is
+//! the income Gini's plus tau^2, tau fitted so the US top decile holds [`DFA_TOP10`].
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, BooleanArray, Float64Array, StringArray};
+use arrow_array::{ArrayRef, BooleanArray, Float64Array};
 
 use crate::read::icio::N_GOODS;
 
@@ -19,6 +20,13 @@ pub const S_L_MAX: f64 = 0.95;
 /// SEA economies nearest in log GDP per person whose mean relative shares a country outside SEA
 /// takes (ADR 0307: the income group, which the pack has no table of).
 pub const NEAREST: usize = 5;
+/// P161: US top-10% share of net worth, Federal Reserve Distributional Financial Accounts 2000Q1
+/// (ADR 0311).
+pub const DFA_TOP10: f64 = 0.638;
+/// The economy whose Gini fixes tau.
+pub const DFA_COUNTRY: &str = "USA";
+/// Population quantile at the top decile's lower bound.
+const TOP_DECILE: f64 = 0.9;
 
 /// Labour shares of one country's goods and whether a bound binds.
 #[derive(Clone, Debug, PartialEq)]
@@ -135,42 +143,90 @@ pub fn pooled(
     (r, pooled_any)
 }
 
-/// Wealth shares of the bottom 50%, middle 40% and top 10% from WID's p0p50, p50p90 and p90p100
-/// (each may be negative or not sum to 1 exactly): a negative share is set to 0 and the three
-/// rescaled to sum to 1. The flag says whether a share was negative.
-pub fn wealth_brackets(raw: [f64; 3]) -> Result<([f64; 3], bool), String> {
-    let clipped = raw.iter().any(|&x| x < 0.0);
-    let pos = raw.map(|x| x.max(0.0));
-    let total: f64 = pos.iter().sum();
-    if total <= 0.0 {
-        return Err(format!("wealth shares {raw:?}"));
+fn phi(z: f64) -> f64 {
+    0.5 * libm::erfc(-z / std::f64::consts::SQRT_2)
+}
+
+/// Inverse of [`phi`] by bisection to the nearest double, for p in (0, 1).
+fn phi_inv(p: f64) -> f64 {
+    let (mut lo, mut hi) = (-40.0, 40.0);
+    loop {
+        let mid = 0.5 * (lo + hi);
+        if mid <= lo || mid >= hi {
+            return mid;
+        }
+        if phi(mid) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
     }
-    Ok((pos.map(|x| x / total), clipped))
 }
 
-/// Population-weighted mean wealth shares of `members` that have their own.
-pub fn mean_wealth(members: &[(&[f64; 3], f64)]) -> Option<[f64; 3]> {
-    let n: f64 = members.iter().map(|m| m.1).sum();
-    (n > 0.0)
-        .then(|| std::array::from_fn(|b| members.iter().map(|(w, p)| w[b] * p).sum::<f64>() / n))
+/// Log dispersion of a lognormal with Gini `g`.
+fn sigma_of_gini(g: f64) -> f64 {
+    std::f64::consts::SQRT_2 * phi_inv((g + 1.0) / 2.0)
 }
 
-/// Per pack country: labour shares and flags, wealth shares and their source.
+/// tau^2, the log-wealth variance above the income Gini's, from the US Gini 2000: the US
+/// lognormal wealth distribution has top-decile share [`DFA_TOP10`].
+pub fn tau2(us_gini: f64) -> Result<f64, String> {
+    let sigma_w = phi_inv(TOP_DECILE) - phi_inv(1.0 - DFA_TOP10);
+    let t = sigma_w.powi(2) - sigma_of_gini(us_gini).powi(2);
+    if t < 0.0 {
+        return Err(format!(
+            "US Gini {us_gini} implies more dispersion than the DFA's wealth"
+        ));
+    }
+    Ok(t)
+}
+
+/// Wealth shares of the bottom 50%, middle 40% and top 10% at Gini 2000 `g` (ADR 0311).
+pub fn wealth_proxy(g: f64, tau2: f64) -> [f64; 3] {
+    let sigma_w = (sigma_of_gini(g).powi(2) + tau2).sqrt();
+    let bottom = phi(-sigma_w);
+    let top = 1.0 - phi(phi_inv(TOP_DECILE) - sigma_w);
+    [bottom, 1.0 - bottom - top, top]
+}
+
+/// Wealth shares of every pack country from its Gini 2000, tau fitted at [`DFA_COUNTRY`]'s.
+pub fn wealth(
+    codes: &[String],
+    gini: &dyn Fn(&str) -> Option<f64>,
+) -> Result<Vec<[f64; 3]>, String> {
+    let t = tau2(gini(DFA_COUNTRY).ok_or("wealth proxy: no US Gini")?)?;
+    codes
+        .iter()
+        .map(|c| {
+            gini(c)
+                .map(|g| wealth_proxy(g, t))
+                .ok_or_else(|| format!("{c}: no Gini"))
+        })
+        .collect()
+}
+
+/// `econ_countries.arrow` columns `wealth_0` to `wealth_2` (bottom 50%, middle 40%, top 10%).
+pub fn wealth_columns(wealth: &[[f64; 3]]) -> Vec<(String, ArrayRef)> {
+    (0..3)
+        .map(|b| {
+            let a: ArrayRef = Arc::new(Float64Array::from(
+                wealth.iter().map(|w| w[b]).collect::<Vec<_>>(),
+            ));
+            (format!("wealth_{b}"), a)
+        })
+        .collect()
+}
+
+/// Per pack country: labour shares and flags.
 #[derive(Clone, Debug, Default)]
 pub struct Factors {
     pub labour: Vec<LabourShares>,
     /// Some good's relative share is pooled from other SEA economies.
     pub labour_pooled: Vec<bool>,
-    pub wealth: Vec<[f64; 3]>,
-    /// `wid`, `region` (its region's WID countries) or `world` (every WID country).
-    pub wealth_source: Vec<&'static str>,
-    /// A WID share was negative and set to 0.
-    pub wealth_clipped: Vec<bool>,
 }
 
 /// `econ_countries.arrow` columns: `labour_share_0` to `labour_share_9`, `labour_share_pooled`,
-/// `labour_share_clipped`, `wealth_0` to `wealth_2` (bottom 50%, middle 40%, top 10%),
-/// `wealth_source`, `wealth_clipped`.
+/// `labour_share_clipped`.
 pub fn columns(f: &Factors) -> Vec<(String, ArrayRef)> {
     let mut out: Vec<(String, ArrayRef)> = (0..N_GOODS)
         .map(|g| {
@@ -186,58 +242,24 @@ pub fn columns(f: &Factors) -> Vec<(String, ArrayRef)> {
         "labour_share_clipped".into(),
         flag(f.labour.iter().map(|l| l.clipped).collect()),
     ));
-    for b in 0..3 {
-        out.push((
-            format!("wealth_{b}"),
-            Arc::new(Float64Array::from(
-                f.wealth.iter().map(|w| w[b]).collect::<Vec<_>>(),
-            )),
-        ));
-    }
-    out.push((
-        "wealth_source".into(),
-        Arc::new(StringArray::from(f.wealth_source.clone())),
-    ));
-    out.push(("wealth_clipped".into(), flag(f.wealth_clipped.clone())));
     out
 }
 
-/// The factor columns of every pack country (ADRs 0307, 0308). `s_l` and `va` are each country's
-/// PWT labour share and national VA by good, `parts` its economies (ISO3), `income` and
-/// `population` per economy, `region` the World Bank region per economy; `sea` SEA's LAB and VA
-/// by economy, `wid` WID's three shares by economy (ISO3).
-#[allow(clippy::too_many_arguments)]
+/// The labour share columns of every pack country (ADR 0307). `s_l` and `va` are each country's
+/// PWT labour share and national VA by good, `parts` its economies (ISO3), `income` per economy,
+/// `sea` SEA's LAB and VA by economy.
 pub fn factors(
     codes: &[String],
     s_l: &dyn Fn(&str) -> Option<f64>,
     va: &dyn Fn(&str) -> Option<[f64; N_GOODS]>,
     parts: &dyn Fn(&str) -> Vec<String>,
     income: &BTreeMap<String, f64>,
-    population: &BTreeMap<String, f64>,
-    region: &BTreeMap<String, String>,
     sea: &crate::read::sea::Sea,
-    wid: &BTreeMap<String, [f64; 3]>,
 ) -> Result<Factors, String> {
     let sea_r: BTreeMap<String, [Option<f64>; N_GOODS]> = sea
         .iter()
         .filter_map(|(c, (lab, va))| Some((c.clone(), relative_shares(lab, va)?)))
         .collect();
-    let mut wid_clean: BTreeMap<String, ([f64; 3], bool)> = BTreeMap::new();
-    for (c, raw) in wid {
-        wid_clean.insert(
-            c.clone(),
-            wealth_brackets(*raw).map_err(|e| format!("WID {c}: {e}"))?,
-        );
-    }
-    let pool = |pick: &dyn Fn(&str) -> bool| -> Option<([f64; 3], bool)> {
-        let members: Vec<(&[f64; 3], f64)> = wid_clean
-            .iter()
-            .filter(|(c, _)| pick(c))
-            .filter_map(|(c, (w, _))| Some((w, *population.get(c)?)))
-            .collect();
-        let clipped = wid_clean.iter().any(|(c, (_, k))| pick(c) && *k);
-        mean_wealth(&members).map(|w| (w, clipped))
-    };
     let mut out = Factors::default();
     for code in codes {
         let ps = parts(code);
@@ -259,19 +281,6 @@ pub fn factors(
         out.labour
             .push(labour_shares(s, &v, &r).map_err(|e| format!("{code}: {e}"))?);
         out.labour_pooled.push(pooled_any);
-
-        let own_w = pool(&|c| ps.iter().any(|p| p == c));
-        let reg = ps.first().and_then(|p| region.get(p));
-        let (w, source) = match own_w {
-            Some(w) => (w, "wid"),
-            None => match reg.and_then(|r| pool(&|c| region.get(c) == Some(r))) {
-                Some(w) => (w, "region"),
-                None => (pool(&|_| true).ok_or("WID has no countries")?, "world"),
-            },
-        };
-        out.wealth.push(w.0);
-        out.wealth_clipped.push(w.1);
-        out.wealth_source.push(source);
     }
     Ok(out)
 }
@@ -309,14 +318,5 @@ mod tests {
         assert_eq!(l.share[1], S_L_MIN);
         assert!(l.share.iter().all(|&s| (S_L_MIN..=S_L_MAX).contains(&s)));
         assert!((mean(&l.share, &va) - 0.5).abs() < 1e-15);
-    }
-
-    #[test]
-    fn negative_wealth_share_is_zero_and_the_rest_rescaled() {
-        let (w, clipped) = wealth_brackets([-0.02, 0.32, 0.72]).unwrap();
-        assert!(clipped);
-        assert_eq!(w[0], 0.0);
-        assert!((w[1] + w[2] - 1.0).abs() < 1e-15);
-        assert!((w[1] / w[2] - 0.32 / 0.72).abs() < 1e-15);
     }
 }
