@@ -98,6 +98,8 @@ pub struct Model<'a> {
     pop_labour_share: Vec<f64>,
     /// The pop's share of its country's people.
     pop_country_share: Vec<f64>,
+    /// (K,) each pop's share of its country's profit pool and market cash (ADR 0104).
+    pop_dividend_share: Vec<f64>,
     pop_sigma: Vec<f64>,
     dom_zero: Vec<f64>,
     dom_arrive: Vec<f64>,
@@ -329,6 +331,7 @@ impl<'a> Model<'a> {
             pop_country,
             pop_labour_share,
             pop_country_share,
+            pop_dividend_share: inp.dividend_shares(),
             pop_sigma,
             dom_zero: dom.k.iter().map(|k| 0.0 * k).collect(),
             dom_arrive: times(&dom.k, &dom.inv_tau),
@@ -800,8 +803,10 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
 
     // E3, households: PIGL per pop (ADR 0021) at its province's consumer prices and its mean
     // income per person. E4: a pop earns its effective-labour share e_k LF_k / L^s of its
-    // province's wages w (1 - u*) L^s, and its population share of its country's profits
-    // (national ownership) and of its country's rebate, the tariff share of spending; rebates
+    // province's wages w (1 - u*) L^s, its dividend share of its country's profit pool (ADR
+    // 0104; the foreign-owned part f of a positive profit paid to the host's owners, ADR 0310)
+    // and market cash, and its population share of its country's rebate, the tariff share of
+    // spending (national ownership, as `equilibrium.rs`); rebates
     // depend on household spending, so income is a fixed point. A pop also receives its
     // country's transfer D_c = s_c Y (ADR 0100), Y world income, in proportion to its income,
     // and spends income + D_c.
@@ -814,7 +819,23 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let n_k = kp.len();
     // ADR 0091: each origin of a stored good buys its output and sells Q / (1 + delta s), the
     // rest replacing spoilage, a cash loss its country's profit pool carries (merchant rule)
-    let mut country_profit = bincount(&m.ent_country, profit.iter().copied(), n_c);
+    let mut country_profit = vec![0.0; n_c];
+    let mut abroad = vec![0.0; n_c];
+    for (e, &x) in profit.iter().enumerate() {
+        let h = m.ent_country[e];
+        let out = if inp.foreign.rows == 0 {
+            0.0
+        } else {
+            inp.foreign[(h, inp.ent_good[e])] * x.max(0.0)
+        };
+        country_profit[h] += x - out;
+        abroad[h] += out;
+    }
+    for (h, &paid) in abroad.iter().enumerate().filter(|(_, x)| **x > 0.0) {
+        for (o, slot) in country_profit.iter_mut().enumerate() {
+            *slot += inp.owners[(h, o)] * paid;
+        }
+    }
     for p in 0..n_p {
         for g in (0..n_g).filter(|&g| m.spoilage[g] > 0.0) {
             let share = m.spoilage[g] / (1.0 + m.spoilage[g]);
@@ -824,7 +845,7 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     let earned: Vec<f64> = (0..n_k)
         .map(|k| {
             m.pop_labour_share[k] * (wage[kp[k]] * m.employed_supply[kp[k]])
-                + m.pop_country_share[k] * country_profit[kc[k]]
+                + m.pop_dividend_share[k] * country_profit[kc[k]]
         })
         .collect();
     let duty_bill = |spend: &Mat| -> Vec<f64> {
