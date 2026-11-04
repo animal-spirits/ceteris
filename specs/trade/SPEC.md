@@ -1047,6 +1047,11 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   14 threads. Sim loop with `--timing`, 60 ticks, three alternating rounds on the M4 Pro (load
   10 to 22): dispatch 17.4 to 17.5 ms before, 16.2 to 16.4 after; a tick 40.0 before, 38.8 to
   39.2 after. The serial tail is now the column write-back and `push_all`, 1.2 ms.
+  The end_tick income check (RFC 0287 item 3, 2026-11-04) reads `Ledger::tally` of WAGE,
+  DIVIDEND and REBATE, kept as they are posted, instead of scanning the whole journal; the
+  journal stays one contiguous record. Same alternating rounds: end_tick 3.55 to 3.61 ms before,
+  2.67 to 2.69 after; the tick 38.3 to 38.6 before, 37.8 to 38.2 after, within the noise of
+  that load.
 
 ## Open questions
 
