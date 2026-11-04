@@ -310,3 +310,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0303 | [Wealth-bracket shares from the income Gini, WID as a check only (amends ADR 0308)](0303-open-wealth-shares-from-the-income-gini.md) | accepted | ADR 0311, 0312 |
 | 0304 | [The largest income-effect weight the household shares allow (amends ADR 0094)](0304-largest-income-effect-weight-the-shares-allow.md) | accepted | ADR 0313 |
 | 0306 | [Transfers as the current account's share of national income (amends ADR 0100)](0306-transfers-as-a-share-of-national-income.md) | accepted | ADR 0315 |
+| 0307 | [Invert PIGL on the shares the run spends, clamps included (amends ADR 0094)](0307-invert-pigl-on-the-clamped-shares.md) | accepted | ADR 0316 |

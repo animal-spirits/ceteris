@@ -287,6 +287,8 @@ pub struct PopAt {
 const MAX_ROUNDS: usize = 1000;
 /// Secant steps of one split in [`invert_pigl_pops`] before it panics.
 const MAX_SECANT_STEPS: usize = 400;
+/// Doublings of lambda's bracket in [`invert_pigl_pops`] where shares are clamped (ADR 0316).
+const MAX_DOUBLINGS: usize = 64;
 
 /// A pop at the current alpha: category indexes, shares within them, sD and the factor of
 /// lambda without B, Dt^gamma m^-eps exp(-eps (1 - eps) s^2 / 2).
@@ -297,7 +299,8 @@ type Fixed = ([f64; N_CATEGORIES], Vec<f64>, [f64; N_CATEGORIES], f64);
 /// shares `omega` (normalized). From alpha_g = Omega_g / Omega_c, rounds of: the split t =
 /// omega_M of omega_M + omega_S = 1 that meets the M aggregate (bracketed secant), with lambda
 /// from the food aggregate in closed form (omega_A = 0); where M (S) binds instead, omega_M
-/// (omega_S) = 0, lambda from its aggregate and t = omega_A meets food (ADR 0313); then alpha_g times Omega_g over its
+/// (omega_S) = 0, lambda from its aggregate and t = omega_A meets food (ADR 0313), on the shares
+/// [`pigl_shares`] spends, a negative one at 0 (ADR 0316); then alpha_g times Omega_g over its
 /// aggregate share, renormalized within its category; until every aggregate share is within
 /// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
 /// out; without any, [`invert_pigl`] at spending 0. Panics where no split meets the aggregates or
@@ -357,8 +360,9 @@ pub fn invert_pigl_pops(
             _ => (0, 1),
         }
     };
-    // lambda (from the b aggregate in closed form, omega_b = 0) and every pop's category shares
-    // at the split t
+    // lambda (from the b aggregate, omega_b = 0) and every pop's category shares at the split t,
+    // negative ones set to 0 and the rest rescaled as `pigl_shares` does: lambda in closed form
+    // where no pop's share is negative there, else by a bracketed secant (ADR 0316)
     let at = |fixed: &[Fixed], b: usize, t: f64| -> (f64, Vec<[f64; N_CATEGORIES]>) {
         let (o1, o2) = others(b);
         let mut weight = [0.0; N_CATEGORIES];
@@ -370,25 +374,56 @@ pub fn invert_pigl_pops(
                 (s_b, x * libm::pow(b, eps - q.gamma))
             })
             .collect();
+        let raw = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            parts
+                .iter()
+                .zip(fixed)
+                .map(|((s_b, f), (_, _, s_d, _))| {
+                    std::array::from_fn(|c| s_b[c] + lambda * f * (s_d[c] - s_b[c]))
+                })
+                .collect()
+        };
+        let clamped = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            raw(lambda)
+                .into_iter()
+                .map(|r| {
+                    let r = r.map(|s| s.max(0.0));
+                    let total: f64 = r.iter().sum();
+                    r.map(|s| s / total)
+                })
+                .collect()
+        };
         let bound: f64 = parts
             .iter()
             .zip(fixed)
             .zip(&pops)
             .map(|(((_, f), (_, _, s_d, _)), k)| k.spend * f * s_d[b])
             .sum();
-        let lambda = if cat[b] > 0.0 {
-            cat[b] * spent / bound
-        } else {
-            0.0
+        if cat[b] <= 0.0 {
+            return (0.0, raw(0.0));
+        }
+        let closed = cat[b] * spent / bound;
+        let unclamped = raw(closed);
+        if unclamped.iter().all(|r| r.iter().all(|&s| s >= 0.0)) {
+            return (closed, unclamped);
+        }
+        let short = |lambda: f64| -> f64 {
+            clamped(lambda)
+                .iter()
+                .zip(&pops)
+                .map(|(s, k)| k.spend * s[b])
+                .sum::<f64>()
+                - cat[b] * spent
         };
-        let shares = parts
-            .iter()
-            .zip(fixed)
-            .map(|((s_b, f), (_, _, s_d, _))| {
-                std::array::from_fn(|c| s_b[c] + lambda * f * (s_d[c] - s_b[c]))
-            })
-            .collect();
-        (lambda, shares)
+        let mut hi = closed;
+        for _ in 0..MAX_DOUBLINGS {
+            if short(hi) >= 0.0 {
+                break;
+            }
+            hi *= 2.0;
+        }
+        let lambda = hi * illinois(|u| short(hi * u));
+        (lambda, clamped(lambda))
     };
     let miss = |fixed: &[Fixed], b: usize, t: f64| -> f64 {
         let o1 = others(b).0;
@@ -773,6 +808,43 @@ mod tests {
         // a spread beyond the national dispersion leaves none within
         assert_eq!(within_sigma(0.05, &[(1.0, 0.1), (1.0, 10.0)]), 0.0);
         assert_eq!(within_sigma(0.4, &[]), s);
+    }
+
+    /// ADR 0316: a pop far below its country's base has negative raw category shares, which
+    /// `pigl_shares` sets to 0; the inversion meets the country's shares on those clamped shares,
+    /// as the run spends them.
+    #[test]
+    fn inversion_meets_the_shares_with_clamped_pops() {
+        let p = EconParams::default();
+        let omega = [0.25, 0.0, 0.0, 0.25, 0.01, 0.01, 0.0, 0.0, 0.0, 0.48];
+        let pops: Vec<PopAt> = [0.02, 1.0, 4.0]
+            .iter()
+            .map(|&f| PopAt {
+                price: (0..N_GOODS)
+                    .map(|g| if g < N_TRADED { 1.0 } else { 0.3 })
+                    .collect(),
+                income: BASE * f,
+                spend: 10.0 * BASE * f,
+            })
+            .collect();
+        let w = invert_pigl_pops(&omega, &CATEGORY, &pops, SIGMA, &p);
+        let total: f64 = omega.iter().sum();
+        let (mut agg, mut s) = ([0.0; N_GOODS], [0.0; N_GOODS]);
+        let mut clamped = false;
+        for k in &pops {
+            pigl_shares(&w, &k.price, k.income, SIGMA, &p, &mut s);
+            let services: f64 = (7..N_GOODS).map(|g| s[g]).sum();
+            clamped |= services == 0.0;
+            for g in 0..N_GOODS {
+                agg[g] += s[g] * k.spend;
+            }
+        }
+        assert!(clamped, "the poorest pop's services share is clamped");
+        let spent: f64 = agg.iter().sum();
+        for g in (0..N_GOODS).filter(|&g| omega[g] > 0.0) {
+            let miss = agg[g] / spent / (omega[g] / total) - 1.0;
+            assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
+        }
     }
 
     /// ADR 0313: where omega_A = 0 would leave M or S negative (services below z theta_S; Ghana's
