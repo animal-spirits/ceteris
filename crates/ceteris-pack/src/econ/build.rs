@@ -23,11 +23,11 @@ use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
 use crate::read::baci::{read_hs_cpa, trade_by_country, trade_by_good};
 use crate::read::icio::{aggregate, home_use, load_wdi};
-use crate::read::natural_earth::{iso3_by_iso2, read_codes};
+use crate::read::natural_earth::read_codes;
 use crate::read::people::{load_observed, parts};
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
 use crate::read::wdi::{read_rates, read_wdi};
-use crate::read::{aamne, sea, wid};
+use crate::read::{aamne, sea};
 use crate::table;
 
 /// The written tables, in writing order.
@@ -428,24 +428,20 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         &gdp_by_year,
     );
     countries_columns.extend(transfers::columns(&imbalances));
-    // sector labour shares and wealth shares (ADRs 0307, 0308) where SEA and WID are cached
-    let (sea_path, wid_path) = (cache.join(sea::SEA), cache.join(wid::WID));
-    if sea_path.exists() && wid_path.exists() {
-        let iso2 = iso3_by_iso2(&admin0)?;
-        let wid_iso3: BTreeMap<String, [f64; 3]> = wid::read_wid(&wid_path)?
-            .into_iter()
-            .filter_map(|(a2, w)| Some((iso2.get(&a2)?.clone(), w)))
-            .collect();
+    // wealth shares from the Gini 2000 in every profile (ADRs 0311, 0312)
+    countries_columns.extend(factors::wealth_columns(&factors::wealth(&codes, &|c| {
+        labour.get(c).map(|l| l.gini)
+    })?));
+    // sector labour shares (ADR 0307) where SEA is cached
+    let sea_path = cache.join(sea::SEA);
+    if sea_path.exists() {
         let f = factors::factors(
             &codes,
             &|c| labour.get(c).map(|l| l.labour_share),
             &|c| world.get(c).map(|e| e.table.va),
             &|c| parts(c, &iso),
             &obs.gdp_per_capita,
-            &obs.population,
-            &obs.region,
             &sea::read_sea(&sea_path)?,
-            &wid_iso3,
         )?;
         countries_columns.extend(factors::columns(&f));
     }

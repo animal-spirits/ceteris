@@ -1354,18 +1354,35 @@ id = "wid"
 name = "World Inequality Database"
 provider = "World Inequality Lab"
 version = "Current"
-role = "Wealth distribution per pop (15.7); 2000 shares of net personal wealth, bottom 50%, middle 40%, top 10%, for dividends (ADRs 0307, 0308)"
+role = "Check of the wealth-bracket proxy (ADR 0312): 2000 shares of net personal wealth, bottom 50%, middle 40%, top 10%, listed against the proxy in the C6 gate report of a research pack"
 licence = "LicenseRef-NoLicence"
 licence_url = "https://wid.world/data/"
 attribution = "WID.world and series source papers"
 commercial_use = false
 share_alike = false
-use = "fallback"
+use = "validation"
 policy = "fetch"
-reason = "No licence found; PIP and SWIID cover income, nothing open covers wealth distribution"
+reason = "No licence found; not a pack input since ADR 0312, the pack's wealth shares come from the Gini proxy (ADR 0311)"
 checked = 2026-10-23
 confidence = "low"
 closed_source_only = true
+
+[[source]]
+id = "fed-dfa"
+name = "Distributional Financial Accounts"
+provider = "Board of Governors of the Federal Reserve System"
+version = "2000Q1 net worth shares"
+role = "P161 (ADR 0311): the US top-10% share of net worth in 2000Q1, 0.638, that fixes the wealth proxy's tau; one published number in the code, no file"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://www.federalreserve.gov/releases/z1/dataviz/dfa/"
+attribution = "Board of Governors of the Federal Reserve System, Distributional Financial Accounts"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US government work"
+checked = 2026-11-04
+confidence = "medium"
 
 [[source]]
 id = "wb-gfdd"
