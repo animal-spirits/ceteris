@@ -1125,10 +1125,10 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
 /// ten years; not tuned).
 pub const TRANSFER_HALF_LIFE: f64 = 120.0;
 
-/// Country `c`'s transfer share s_c at tick `tick` under `mode` (ADR 0100, S22): the 2000 share
-/// (`FixedShares`), the share of the tick's year 2000 + tick / 12 (`ObservedPath`), which after
-/// the last year fades as s_c(2024) 2^-((tick - 299) / 120), or 0 (`Off`, or inputs without
-/// shares).
+/// Country `c`'s transfer ratio rho_c, minus its current account over its GDP, at tick `tick`
+/// under `mode` (ADRs 0100, 0315, S22): the 2000 ratio (`FixedShares`), the ratio of the tick's
+/// year 2000 + tick / 12 (`ObservedPath`), which after the last year fades as rho_c(2024)
+/// 2^-((tick - 299) / 120), or 0 (`Off`, or inputs without ratios).
 pub fn transfer_share(inp: &EconInputs, mode: Transfers, c: usize, tick: u32) -> f64 {
     let countries = &inp.countries;
     match mode {
@@ -1151,13 +1151,15 @@ pub fn transfer_share(inp: &EconInputs, mode: Transfers, c: usize, tick: u32) ->
     }
 }
 
-/// E4 transfers (ADR 0100 as amended by ADRs 0295 to 0300): each country's D_c = s_c Y, Y the
-/// world income of the previous tick (sum of `EconWorld::income`; the tick's own where there is
-/// none, at the first tick of a data-state start). Each paying country (s_c < 0) puts
-/// round_half_even(|s_c| Y) minor units into the world transfer account, its pops in proportion
-/// to the income credited to them this tick; the account pays their total out over the
-/// receiving countries in proportion to s_c, and each over its pops the same way ([`split`]),
-/// so it ends at zero. Nothing without the account (`world::transfers_on`).
+/// E4 transfers (ADR 0100 as amended by ADRs 0295 to 0300 and 0315): each country's D_c =
+/// (rho_c - rho_bar) Y_c, Y_c its pops' income of the previous tick (`EconWorld::income`; the
+/// tick's own where the world has none, at the first tick of a data-state start) and rho_bar =
+/// sum_c rho_c Y_c / Y, Y = sum_c Y_c, so the transfers net to zero. With s_c = D_c / Y, each
+/// paying country (s_c < 0) puts round_half_even(|s_c| Y) minor units into the world transfer
+/// account, its pops in proportion to the income credited to them this tick; the account pays
+/// their total out over the receiving countries in proportion to s_c, and each over its pops the
+/// same way ([`split`]), so it ends at zero. Nothing without the account
+/// (`world::transfers_on`).
 pub fn transfer(w: &mut EconWorld, tick: u32) {
     let Some(account) = w.layout.accounts.transfer else {
         return;
@@ -1168,18 +1170,41 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
     let mode = w.params.transfers;
-    let mut world = fixed_sum(&w.income);
-    if world <= 0.0 {
-        let paid: Vec<f64> = w
+    let paid: Vec<f64>;
+    let income_k: &[f64] = if fixed_sum(&w.income) > 0.0 {
+        &w.income
+    } else {
+        paid = w
             .scratch
             .income_paid
             .iter()
             .map(|&m| to_numeraire(m))
             .collect();
-        world = fixed_sum(&paid);
-    }
-    let share: Vec<f64> = (0..inp.n_countries())
+        &paid
+    };
+    let national: Vec<f64> = lay
+        .country_pops
+        .iter()
+        .map(|pops| fixed_sum(&pops.iter().map(|&k| income_k[k as usize]).collect::<Vec<_>>()))
+        .collect();
+    let world = fixed_sum(&national);
+    let rho: Vec<f64> = (0..inp.n_countries())
         .map(|c| transfer_share(inp, mode, c, tick))
+        .collect();
+    let weighted: Vec<f64> = rho.iter().zip(&national).map(|(r, y)| r * y).collect();
+    let rho_bar = if world > 0.0 {
+        fixed_sum(&weighted) / world
+    } else {
+        0.0
+    };
+    let share: Vec<f64> = (0..inp.n_countries())
+        .map(|c| {
+            if world > 0.0 {
+                (rho[c] - rho_bar) * national[c] / world
+            } else {
+                0.0
+            }
+        })
         .collect();
     let income = |k: u32| w.scratch.income_paid[k as usize].max(0) as f64;
     let mut parts = Vec::new();

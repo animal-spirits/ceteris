@@ -1480,3 +1480,8 @@ sections = "9.1, 17"
 rows = "0313"
 topic = "[The largest income-effect weight the household shares allow: omega_A = 0 where it fits, else the binding category's omega 0, amending ADR 0094](../rfcs/0304-largest-income-effect-weight-the-shares-allow.md)"
 sections = "8.6"
+
+[[entry]]
+rows = "0315"
+topic = "[Transfers as the current account's share of national income, the world discrepancy spread by income, amending ADR 0100](../rfcs/0306-transfers-as-a-share-of-national-income.md)"
+sections = "9.5"
