@@ -291,4 +291,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0291 | [Seek replays timed interventions; an edit after a seek back drops the later timeline](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0292 | [Snapshots name their network by its content digest](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0293 | [A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
+| 0314 | [New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md) | 21 |
 <!-- rows:end -->
