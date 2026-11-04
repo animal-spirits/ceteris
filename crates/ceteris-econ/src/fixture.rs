@@ -233,6 +233,8 @@ fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
         // a generated world has no current accounts: its trade is balanced (ADR 0299)
         transfer: Vec::new(),
         transfer_path: Rows::new(TRANSFER_YEARS),
+        foreign: Rows::new(N_GOODS),
+        owners: Rows::new(n_countries),
     };
 
     let mut pops = PopData::default();

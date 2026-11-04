@@ -285,6 +285,17 @@ impl EconInputs {
             } else {
                 Rows::new(TRANSFER_YEARS)
             },
+            // packs before ADR 0309 have no foreign owners
+            foreign: if c.column_by_name("foreign_0").is_some() {
+                per_good(&c, "foreign_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            owners: if c.column_by_name("foreign_0").is_some() {
+                per_good(&c, "owner_", nc)?
+            } else {
+                Rows::new(nc)
+            },
         };
 
         let t = table("econ_tariffs.arrow")?;

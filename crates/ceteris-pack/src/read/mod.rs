@@ -1,6 +1,7 @@
 //! Readers of the econ sources in the fetch cache: each turns one file into typed rows, as the
 //! Python readers of `packs/econ` did, value for value.
 
+pub mod aamne;
 pub mod baci;
 pub mod downscale;
 pub mod geojson;

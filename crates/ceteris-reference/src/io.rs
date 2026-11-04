@@ -229,6 +229,10 @@ pub struct Inputs {
     /// (C, G) labour share of each good (ADR 0104; the export's `s_l_g`); no rows where every
     /// sector takes `s_l`.
     pub s_l_good: Mat,
+    /// (C, G) foreign-owned share of each good's profits and (C, C) each host's owners (ADRs
+    /// 0309, 0310; the export's `foreign_g`, `owner_c`); no rows without foreign owners.
+    pub foreign: Mat,
+    pub owners: Mat,
     /// (C,) 2000 rate (data).
     pub unemployment: Vec<f64>,
     /// (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s.
@@ -397,6 +401,33 @@ impl Inputs {
             .collect()
     }
 
+    /// (C,) each country's profit pool from each enterprise's profit `profit` (E,): the
+    /// domestic part (1 - f) of its own enterprises' and its owner share of every host's
+    /// foreign-owned part f (ADR 0310), as `world::base_profit_pool`.
+    pub fn profit_pool(&self, profit: &[f64]) -> Vec<f64> {
+        let c = self.ent_country();
+        let n_c = self.n_countries();
+        let mut pool = vec![0.0; n_c];
+        if self.foreign.rows == 0 {
+            for (e, &x) in profit.iter().enumerate() {
+                pool[c[e]] += x;
+            }
+            return pool;
+        }
+        let mut abroad = vec![0.0; n_c];
+        for (e, &x) in profit.iter().enumerate() {
+            let f = self.foreign[(c[e], self.ent_good[e])];
+            pool[c[e]] += (1.0 - f) * x;
+            abroad[c[e]] += f * x;
+        }
+        for (h, &paid) in abroad.iter().enumerate().filter(|(_, x)| **x > 0.0) {
+            for (o, slot) in pool.iter_mut().enumerate() {
+                *slot += self.owners[(h, o)] * paid;
+            }
+        }
+        pool
+    }
+
     /// (P, G) final demand shares of each province's country.
     pub fn omega_p(&self) -> Mat {
         self.omega.select_rows(&self.province_country)
@@ -433,14 +464,13 @@ impl Inputs {
     pub fn base_income(&self) -> Vec<f64> {
         let c = &self.province_country;
         let n_c = self.n_countries();
-        let ent_c: Vec<usize> = self.ent_province.iter().map(|&p| c[p]).collect();
         let profit: Vec<f64> = self
             .ent_s_l()
             .iter()
             .zip(&self.ent_va0)
             .map(|(s, va)| (1.0 - s) * va)
             .collect();
-        let pool = bincount(&ent_c, &profit, n_c);
+        let pool = self.profit_pool(&profit);
         let share = if self.pop_dividend.is_empty() {
             let people = bincount(c, &self.population, n_c);
             (0..self.n_provinces())
@@ -510,20 +540,14 @@ impl Inputs {
     /// its effective labour, plus its dividend share of its country's profit pool sum (1 - s_L)
     /// VA0, over its population; 0 without people.
     pub fn pop_base_income(&self) -> Vec<f64> {
-        let n_c = self.n_countries();
         let country = self.pop_country();
-        let ent_c: Vec<usize> = self
-            .ent_province
-            .iter()
-            .map(|&p| self.province_country[p])
-            .collect();
         let profit: Vec<f64> = self
             .ent_s_l()
             .iter()
             .zip(&self.ent_va0)
             .map(|(s, va)| (1.0 - s) * va)
             .collect();
-        let pool = bincount(&ent_c, &profit, n_c);
+        let pool = self.profit_pool(&profit);
         let dividend = self.dividend_shares();
         (0..country.len())
             .map(|k| {
@@ -862,6 +886,19 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
             columns(&countries, "s_l", n_c)?
         } else {
             Mat::zeros(0, n_goods)
+        },
+        foreign: if countries.has("foreign_0") {
+            columns(&countries, "foreign", n_c)?
+        } else {
+            Mat::zeros(0, n_goods)
+        },
+        owners: if countries.has("foreign_0") {
+            let cols = (0..n_c)
+                .map(|o| countries.f64(&format!("owner_{o}")))
+                .collect::<Result<Vec<_>, _>>()?;
+            Mat::from_fn(n_c, n_c, |h, o| cols[o][h])
+        } else {
+            Mat::zeros(0, n_c)
         },
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,

@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, with `wealth_source` `wid`, `region` or `world` and `wealth_clipped`; Factor shares, below; ADRs 0307, 0308), where SEA and WID are in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: WID shweal992j p0p50, p50p90, p90p100, nearest year 1995 to 2005 (terms to confirm, `closed_source_only`) |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, with `wealth_source` `wid`, `region` or `world` and `wealth_clipped`; Factor shares, below; ADRs 0307, 0308), where SEA and WID are in the fetch cache, the foreign-owned share of each good (`foreign_g`, 10, nonzero for goods 1 to 6) and each host's owners by country index (`owner_c`, one per country, summing to 1 where a share is nonzero), with `foreign_source` `aamne`, `donor` or `none` and `foreign_capped` (Foreign owners, below; ADR 0309), where AAMNE is in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: WID shweal992j p0p50, p50p90, p90p100, nearest year 1995 to 2005 (terms to confirm, `closed_source_only`); foreign owners: OECD Analytical AMNE 2026 edition (ICIO 2025 grid), GVA by ownership and the bilateral output matrix of 2000 (OECD terms) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -98,6 +98,16 @@ VA-weighted mean is s_L,c again (`labour_share_clipped`; `labour_share_va_weight
 economies of its World Bank region (`region`), else of all (`world`)
 (`missing_source_falls_back_with_flag`). WID is keyed by ISO alpha-2, mapped by Natural Earth's
 ISO_A2_EH.
+
+**Foreign owners (ADR 0309; `econ::foreign`).** f_c,g = F_g / (D_g + F_g), AAMNE 2000 GVA of
+foreign- and domestic-owned firms summed over the country's AAMNE economies, for goods 1 to 6
+(AAMNE's one mining industry B05T09 counts in full for goods 1 and 2, and C19 for good 1), capped
+at 0.8 (`foreign_capped`); other goods 0. The owners are the parents of the foreign-owned gross
+output of those goods (the host's own column left out), each mapped to the pack country whose
+economy it is; AAMNE's rest of the world, and a parent outside the pack, is spread over the pack
+countries outside AAMNE by GDP 2000. A country outside AAMNE takes its ICIO donor's shares and
+owners (`donor`), else none; a country whose owners sum to 0 has no foreign shares
+(`shares_owners_donors_and_the_rest_of_the_world`, pack crate).
 
 **Value added convention.** National VA by good is output less intermediate inputs, summed over
 all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
@@ -327,7 +337,7 @@ build, another format or other coefficients stop the load with a `PackError`.
 | Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u*_i) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
-| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint, world transfer account (only where S22 is on and some transfer share is nonzero, ADR 0100) | ledger | money in minor units (1 minor unit = 1e-4 numeraire): `i64` for pops and enterprises, `i128` for markets, gateways, rebate and profit pools and the mint (ADR 0106); goods `f64` | |
+| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint, world transfer account (only where S22 is on and some transfer share is nonzero, ADR 0100), world dividend account (only where some foreign-owned share is nonzero, after the transfer account, ADR 0310) | ledger | money in minor units (1 minor unit = 1e-4 numeraire): `i64` for pops and enterprises, `i128` for markets, gateways, rebate and profit pools and the mint (ADR 0106); goods `f64` | |
 
 **Initial state.** A world whose inputs carry the calibration tables (`EconInputs::calibrate`,
 `EconInputs::from_pack` when the pack holds them) starts from the calibrated steady state of ADR
@@ -768,9 +778,14 @@ province i receives, per tick:
 
 ```
 income_k = w_i * e_k * employed_k                  (wages, local)
-         + d_k * sum_(e in c) profit_e             (profits, national)
+         + d_k * pool_c                            (profits, national)
          + N_k / N_c * rebate_c                    (tariffs, national)
 ```
+
+pool_c = sum_(e in c) (1 - f_e) profit_e + sum_h o_h,c sum_(e in h) f_e profit_e, f_e the
+foreign-owned share of e's country and good and o_h,c country c's share of host h's foreign-owned
+profits (ADR 0310; f = 0 and pool_c the national sum without foreign owners). Foreign dividends
+are income of the owners' pops, so they enter Y, the transfer base.
 
 *Dividend shares (ADR 0308; `wealth::dividend_shares`, `EconInputs::set_dividend_shares`).*
 Fixed at load from the country's wealth shares W_b of the bottom 50%, middle 40% and top 10%,
@@ -799,7 +814,7 @@ at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, n
 written off, and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
-`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
+`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c pool_c at profit_e = (1 - s_L) VA0_e, N_i the
 population of its pops (with dividend shares, sum_(k in i) d_k in place of N_i / N_c). A pack
 country with enterprises but no pops stops the load (`PackError`):
 nobody would own its profits.
@@ -810,7 +825,11 @@ negative balance pays nothing and keeps it. Each country then pays its pool, one
 and its rebate account to its pops in pop ID order by cumulative population shares rounded half
 to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
 pops, the last pop taking P - round(P S_(n-1) / S) (the pool by cumulative dividend shares d_k
-where the inputs have them, `wealth_dividends_pay_the_pool_by_share`). The parts add up to the pool exactly, so the
+where the inputs have them, `wealth_dividends_pay_the_pool_by_share`). With foreign owners (ADR
+0310) an enterprise of a good with f > 0 splits a positive payout by the same rule into (1 - f)
+to its pool and f to the world dividend account (flow `FOREIGN_DIVIDEND`), which pays each host's
+total, an i128 sum, over the owners' pools by its owner shares before the pools pay their pops; the
+account ends every tick at zero (`foreign_dividends_net_to_zero_worldwide`). The parts add up to the pool exactly, so the
 pool, the rebate account and every market end the tick at zero, every enterprise at its
 retained losses or zero, and money is conserved exactly; each part is within one minor unit of
 N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
@@ -1304,6 +1323,7 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
 | Transfers | The world transfer account ends every tick at zero: what paying countries' pops put in is exactly what receiving countries' pops take out (ADR 0100) | exact in ledger | every tick (`end_tick`); `transfers_net_to_zero_every_tick` |
+| Foreign dividends | The world dividend account ends every tick at zero: each host's foreign-owned payouts reach its owners' pools in the same tick (ADR 0310) | exact in ledger | every tick (`end_tick`); `foreign_dividends_net_to_zero_worldwide` |
 | Determinism | Same inputs, same hashes; 1 vs 8 threads; replay from snapshots | exact | P2 acceptance |
 | Long run | 1,200 ticks on the full pack: no violation, all prices and wages finite and positive | exact | P2 acceptance |
 
@@ -1666,6 +1686,14 @@ texture fed from core columns.
   after 2024 (`observed_path_fades_after_2024`); the pack's shares sum to zero with missing
   current accounts at 0 (`transfer_shares_spread_the_discrepancy_by_gdp`, pack crate); calibration
   reports the column factors and the balance residual and has no r column
+- Foreign dividends (ADRs 0309, 0310): every positive payout of goods 1 to 6 sends round(f x
+  payout) to the world dividend account, which pays each host's total to its owners' pools and ends
+  every tick at zero, as the pools do; money is conserved over 24 ticks and the base point counts
+  foreign profits in the owners' income (`foreign_dividends_net_to_zero_worldwide`,
+  `p2_properties.rs`); AAMNE shares, caps, owners and fallbacks
+  (`shares_owners_donors_and_the_rest_of_the_world`, pack crate). Open: the calibration's stability
+  blocks (`block.rs`) still treat each country's pool as wholly its own enterprises' (no foreign
+  part, no inflow), to be revisited with the C6 recalibration.
   (`r_g_removed_and_residual_reported`, `steady_state.rs`); the GE reference spends D_c
   (`reference_spends_the_transfers`).
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
