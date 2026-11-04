@@ -291,4 +291,9 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0291 | [Seek replays timed interventions; an edit after a seek back drops the later timeline](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0292 | [Snapshots name their network by its content digest](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0293 | [A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
+| 0294 | [Speed work goes bit-identical first, gated by a 24-tick hash and journal identity](../rfcs/0287-tick-speed-programme.md) | 19.4 |
+| 0295 | [Unchecked indexing is the only unsafe, in hot modules, with a safe twin compared in CI](../rfcs/0287-tick-speed-programme.md) | 19.4 |
+| 0296 | [Profile-guided release and bench builds with a fixed CPU baseline](../rfcs/0287-tick-speed-programme.md) | 19.4 |
+| 0297 | [mimalloc as global allocator where measured](../rfcs/0287-tick-speed-programme.md) | 19.4 |
+| 0298 | [Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 <!-- rows:end -->
