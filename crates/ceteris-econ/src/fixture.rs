@@ -235,6 +235,8 @@ fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
         transfer_path: Rows::new(TRANSFER_YEARS),
         foreign: Rows::new(N_GOODS),
         owners: Rows::new(n_countries),
+        drift_a: Vec::new(),
+        drift_f: Vec::new(),
     };
 
     let mut pops = PopData::default();

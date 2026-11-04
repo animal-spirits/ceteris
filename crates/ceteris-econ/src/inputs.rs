@@ -101,6 +101,12 @@ pub struct Countries {
     /// width the country count, summing to 1 where some `foreign` share is nonzero; empty with
     /// `foreign`.
     pub owners: Rows<f64>,
+    /// TFP drift g_A,c of 2000, per year (ADR 0103): the 1995-2000 PWT TFP trend relative to
+    /// the world, shrunk to the regional mean. Empty where the inputs have none.
+    pub drift_a: Vec<f64>,
+    /// Log rise of the fixed factor F that closes the 2000 capital-output gap (ADR 0103); empty
+    /// with `drift_a`.
+    pub drift_f: Vec<f64>,
 }
 
 /// Years of the observed transfer path, 2000 to 2024 (ADR 0100), from [`TRANSFER_FIRST_YEAR`].
@@ -465,6 +471,13 @@ impl EconInputs {
         self.enterprises.coef == self.enterprises.column
     }
 
+    /// Whether some country has a nonzero drift (ADR 0103), so that the S23 switch and P153
+    /// change the run.
+    pub fn has_drift(&self) -> bool {
+        let c = &self.countries;
+        c.drift_a.iter().chain(&c.drift_f).any(|&g| g != 0.0)
+    }
+
     /// Whether some country has a nonzero transfer share (ADR 0100), so that the S22 switch
     /// changes the run; without one all three settings run alike.
     pub fn has_transfers(&self) -> bool {
@@ -824,6 +837,8 @@ impl EconInputs {
             transfer_path,
             foreign,
             owners,
+            drift_a,
+            drift_f,
         } = countries;
         let ProvinceData {
             country,
@@ -948,6 +963,12 @@ impl EconInputs {
             b"foreign-owners".iter().for_each(|&b| e.u8(b));
             e.f64s(foreign.as_flat());
             e.f64s(owners.as_flat());
+        }
+        // appended only where some drift is nonzero, so worlds without drifts keep their digest
+        if self.has_drift() {
+            b"drift".iter().for_each(|&b| e.u8(b));
+            e.f64s(drift_a);
+            e.f64s(drift_f);
         }
         if let Some(nu) = border_nu {
             b"border-nu".iter().for_each(|&b| e.u8(b));

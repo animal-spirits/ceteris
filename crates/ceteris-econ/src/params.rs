@@ -97,6 +97,12 @@ pub struct EconParams {
     /// S22 trade-imbalance transfers (ADR 0100): `FixedShares` (default), `Off` or
     /// `ObservedPath`. Inputs without transfer shares run alike under all three.
     pub transfers: Transfers,
+    /// S23 initial drift (ADR 0103): A and F of each enterprise grow by its country's drift,
+    /// `Countries::drift_a` and `Countries::drift_f`, fading from the first tick. Inputs
+    /// without drifts run alike either way.
+    pub drift: bool,
+    /// P153 half-life h of the initial drift, years, prior 3 to 15 (ADR 0103).
+    pub drift_half_life: f64,
 }
 
 impl Default for EconParams {
@@ -114,6 +120,8 @@ impl Default for EconParams {
             technology: Technology::PuttyClay,
             write_off_months: 3.0,
             transfers: Transfers::FixedShares,
+            drift: true,
+            drift_half_life: 7.0,
         }
     }
 }

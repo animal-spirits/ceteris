@@ -287,7 +287,12 @@ fn run(
     assert!(inputs.steady.is_some(), "{what}: inputs are not calibrated");
     let trade = inputs.trade_params();
     let inputs = Arc::new(inputs);
-    let world = EconWorld::new(Arc::clone(&inputs), EconParams::default(), trade);
+    // the initial drift leaves the steady state by design (ADR 0103)
+    let params = EconParams {
+        drift: false,
+        ..EconParams::default()
+    };
+    let world = EconWorld::new(Arc::clone(&inputs), params, trade);
     let steady = world.inputs().steady.clone().unwrap();
     let cells: Vec<usize> = (0..world.markets.active.len())
         .filter(|&c| world.markets.active[c])
@@ -448,6 +453,66 @@ fn fixture_calibrated_state_holds_to_1e_9() {
         .unwrap();
     let records = run(inputs, &[], FIXTURE_TICKS, FIXTURE, "fixture");
     assert_fixed(&records, FIXTURE_TICKS, "fixture");
+}
+
+/// Drifts on every fixture country, added after the calibration they would otherwise void.
+fn with_drift(mut inputs: EconInputs) -> EconInputs {
+    let n = inputs.n_countries();
+    inputs.countries.drift_a = (0..n).map(|k| 0.02 - 0.01 * k as f64).collect();
+    inputs.countries.drift_f = (0..n).map(|k| 0.15 - 0.05 * k as f64).collect();
+    assert!(inputs.has_drift());
+    inputs
+}
+
+/// ADR 0103: with S23 off the drift columns change nothing, and the calibrated fixture holds
+/// to 1e-9 as without them (`run` starts with drift off).
+#[test]
+fn drift_off_keeps_the_steady_state() {
+    let records = run(
+        with_drift(Arc::unwrap_or_clone(calibrated_fixture())),
+        &[],
+        FIXTURE_TICKS,
+        FIXTURE,
+        "fixture with drift off",
+    );
+    assert_fixed(&records, FIXTURE_TICKS, "fixture with drift off");
+}
+
+/// ADR 0103: the first tick of the calibrated start is the steady state's under drift on as
+/// under drift off; the second moves output.
+#[test]
+fn drift_is_zero_at_the_first_tick() {
+    let inputs = Arc::new(with_drift(Arc::unwrap_or_clone(calibrated_fixture())));
+    let trade = inputs.trade_params();
+    let sim = |drift: bool| {
+        let params = EconParams {
+            drift,
+            ..EconParams::default()
+        };
+        Sim::new(
+            EconWorld::new(Arc::clone(&inputs), params, trade.clone()),
+            schedule(),
+            SEED,
+        )
+    };
+    let (mut on, mut off) = (sim(true), sim(false));
+    for s in [&mut on, &mut off] {
+        s.step().unwrap();
+    }
+    let (a, b) = (on.world(), off.world());
+    assert_eq!(a.output, b.output);
+    assert_eq!(a.employment, b.employment);
+    assert_eq!(a.wage, b.wage);
+    assert_eq!(a.markets.price, b.markets.price);
+    for s in [&mut on, &mut off] {
+        s.step().unwrap();
+    }
+    let (a, b) = (on.world(), off.world());
+    let moved = a.output.iter().zip(&b.output).any(|(x, y)| x != y);
+    assert!(
+        moved,
+        "drift on left output at the steady state at the second tick"
+    );
 }
 
 /// Calibration tables of other inputs do not load: the static digest guards them.
