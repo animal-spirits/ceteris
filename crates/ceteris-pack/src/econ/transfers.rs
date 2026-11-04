@@ -1,6 +1,6 @@
-//! Transfer shares of the trade imbalances (specs/econ/SPEC.md, Transfers; ADR 0100 as amended
-//! by ADRs 0296, 0298 and 0300, RFC 0287): each pack country's current account, its share of
-//! world GDP, net of its GDP share of the world discrepancy.
+//! Transfer ratios of the trade imbalances (specs/econ/SPEC.md, Transfers; ADR 0100 as amended
+//! by ADRs 0296, 0298, 0300 and 0315): minus each pack country's current account over its own
+//! GDP; the model scales it by national income and spreads the world discrepancy by income.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -19,16 +19,17 @@ pub const CURRENT_ACCOUNT: &str = "wdi_BN.CAB.XOKA.CD.zip";
 pub const FIRST: i64 = 2000;
 pub const LAST: i64 = 2024;
 
-/// The 2000 current accounts and the shares of every year.
+/// The 2000 current accounts and the ratios of every year.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Transfers {
     /// USD, 0 where none of the country's economies reports one.
     pub ca_2000: Vec<f64>,
     pub missing: Vec<bool>,
-    /// The fixed-share mode's s_c: 2000 over the pack's own world GDP (ADR 0298).
+    /// The fixed-share mode's rho_c: the 2000 current account over the pack's `gdp` (ADRs
+    /// 0298, 0315).
     pub share: Vec<f64>,
-    /// s_c of each year FIRST to LAST, over that year's world GDP of the reporting countries
-    /// (ADR 0300); `path[year - FIRST][country]`.
+    /// rho_c of each year FIRST to LAST, over the country's GDP that year (ADRs 0300, 0315);
+    /// `path[year - FIRST][country]`.
     pub path: Vec<Vec<f64>>,
 }
 
@@ -46,16 +47,15 @@ pub fn of_country(
     (!found.is_empty()).then(|| pairwise_sum(&found))
 }
 
-/// s_c = -(CA_c - GDP_c sum CA / W) / W, W = sum GDP: a missing current account counts as 0
-/// (ADR 0296) and a missing GDP takes no part of the discrepancy, so the shares sum to zero.
+/// rho_c = -CA_c / GDP_c (ADR 0315): 0 where the current account is missing (ADR 0296) or the
+/// GDP is missing or not positive. The model spreads the world discrepancy.
 pub fn shares(ca: &[Option<f64>], gdp: &[Option<f64>]) -> Vec<f64> {
-    let known = |v: &[Option<f64>]| -> Vec<f64> { v.iter().map(|x| x.unwrap_or(0.0)).collect() };
-    let (ca, gdp) = (known(ca), known(gdp));
-    let world = pairwise_sum(&gdp);
-    let discrepancy = pairwise_sum(&ca) / world;
     ca.iter()
-        .zip(&gdp)
-        .map(|(c, g)| -(c - g * discrepancy) / world)
+        .zip(gdp)
+        .map(|(c, g)| match (c, g) {
+            (Some(c), Some(g)) if *g > 0.0 => -c / g,
+            _ => 0.0,
+        })
         .collect()
 }
 
@@ -115,7 +115,7 @@ pub fn report(t: &Transfers, codes: &[String], gdp: &[f64]) -> String {
     let name = |c: usize| format!("{} {:+.5}", codes[c], t.share[c]);
     format!(
         "transfers: 2000 current accounts for {} of {} countries (missing {:.4} of world GDP), \
-         their sum {:+.5} of world GDP; largest deficits {}; largest surpluses {}",
+         their sum {:+.5} of world GDP; largest deficits over GDP {}; largest surpluses {}",
         codes.len() - missing.len(),
         codes.len(),
         pairwise_sum(&missing) / world,
@@ -140,24 +140,13 @@ pub fn report(t: &Transfers, codes: &[String], gdp: &[f64]) -> String {
 mod tests {
     use super::*;
 
-    /// ADR 0296: a missing current account is 0, the discrepancy is spread by GDP, and the shares
-    /// sum to zero; a country without GDP that year takes none of it (ADR 0300).
+    /// ADR 0315: rho_c = -CA_c / GDP_c, 0 where the current account (ADR 0296) or the GDP is
+    /// missing.
     #[test]
-    fn transfer_shares_spread_the_discrepancy_by_gdp() {
-        let ca = [Some(-40.0), Some(10.0), None, Some(20.0)];
-        let gdp = [Some(500.0), Some(300.0), Some(200.0), None];
-        let s = shares(&ca, &gdp);
-        // world GDP 1,000, discrepancy -10: -0.01 of each unit of GDP
-        let want = [
-            -(-40.0 + 5.0) / 1000.0,
-            -(10.0 + 3.0) / 1000.0,
-            -(0.0 + 2.0) / 1000.0,
-            -20.0 / 1000.0,
-        ];
-        for (got, want) in s.iter().zip(want) {
-            assert!((got - want).abs() < 1e-17, "{s:?}");
-        }
-        assert!(pairwise_sum(&s).abs() < 1e-17);
+    fn transfer_ratios_are_minus_the_current_account_over_gdp() {
+        let ca = [Some(-40.0), Some(10.0), None, Some(20.0), Some(5.0)];
+        let gdp = [Some(500.0), Some(300.0), Some(200.0), None, Some(0.0)];
+        assert_eq!(shares(&ca, &gdp), [0.08, -10.0 / 300.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]
