@@ -108,6 +108,10 @@ fn reference() -> Option<&'static Reference> {
             let pack_province = write::read_pack_provinces(&export).unwrap();
             let (inputs, x) = write::read_reference(&pack, inp, &pack_province).unwrap();
             let m = Model::new(&inputs).unwrap();
+            // the calibration pins the traded goods' index to 1, local goods at p_c (ADR 0098);
+            // the reference pins the world index over every good: the same point, in its units
+            let shift = model::evaluate(&x, &m, &m.inp.ent_a).index.ln();
+            let x: Vec<f64> = x.iter().map(|v| v - shift).collect();
             let residual = max_abs(&model::residual(&x, &m));
             assert!(
                 residual <= REFERENCE_TOL,
