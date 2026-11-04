@@ -66,7 +66,7 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, from the Gini 2000 for every country; Factor shares, below; ADRs 0307, 0308, 0311), labour shares where SEA is in the fetch cache, the foreign-owned share of each good (`foreign_g`, 10, nonzero for goods 1 to 6) and each host's owners by country index (`owner_c`, one per country, summing to 1 where a share is nonzero), with `foreign_source` `aamne`, `donor` or `none` and `foreign_capped` (Foreign owners, below; ADR 0309), where AAMNE is in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer share D_c / W of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below); the initial drift (`g_a` per year, `f_gap`, `drift_source`; Initial drift, below; ADR 0103); an imputed flag per series | ICIO, PWT 11 (labsh; rtfpna, rnna, rgdpna, csh_i, delta and pop 1995 to 2000 for the drift), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: the Gini 2000 above and P161, the Federal Reserve DFA 2000Q1 top-10% net worth share (US government work); foreign owners: OECD Analytical AMNE 2026 edition (ICIO 2025 grid), GVA by ownership and the bilateral output matrix of 2000 (OECD terms) |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, from the Gini 2000 for every country; Factor shares, below; ADRs 0307, 0308, 0311), labour shares where SEA is in the fetch cache, the foreign-owned share of each good (`foreign_g`, 10, nonzero for goods 1 to 6) and each host's owners by country index (`owner_c`, one per country, summing to 1 where a share is nonzero), with `foreign_source` `aamne`, `donor` or `none` and `foreign_capped` (Foreign owners, below; ADR 0309), where AAMNE is in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer ratio -CA_c / GDP_c of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below; ADR 0315); the initial drift (`g_a` per year, `f_gap`, `drift_source`; Initial drift, below; ADR 0103); an imputed flag per series | ICIO, PWT 11 (labsh; rtfpna, rnna, rgdpna, csh_i, delta and pop 1995 to 2000 for the drift), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0294): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0296, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: the Gini 2000 above and P161, the Federal Reserve DFA 2000Q1 top-10% net worth share (US government work); foreign owners: OECD Analytical AMNE 2026 edition (ICIO 2025 grid), GVA by ownership and the bilateral output matrix of 2000 (OECD terms) |
 | `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
 | `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
@@ -261,21 +261,23 @@ the gap at fixed A and L where VA is Cobb-Douglas. A pack country takes the rgdp
 over its economies (`parts`); with no TFP trend, its first economy's regional mean g_A and no
 capital drift (`drift_source` `pwt`, `region` or `none`).
 
-**Transfers** (`econ::transfers`; ADR 0100 as amended by ADRs 0296, 0298 and 0300, RFC 0287).
-A pack country's current account CA_c is the sum of BN.CAB.XOKA.CD over its WDI economies
-(`parts`) in the year; a country none of whose economies reports it is 0 and flagged
-(`ca_missing`, 2000 only). Its transfer share is minus its current account less its GDP share of
-the world discrepancy, over world GDP:
+**Transfers** (`econ::transfers`; ADR 0100 as amended by ADRs 0296, 0298, 0300 and 0315, RFCs
+0287, 0306). A pack country's current account CA_c is the sum of BN.CAB.XOKA.CD over its WDI
+economies (`parts`) in the year; a country none of whose economies reports it is 0 and flagged
+(`ca_missing`, 2000 only). Its transfer ratio is minus its current account over its own GDP:
 
 ```
-s_c = -(CA_c - GDP_c sum_c' CA_c' / W) / W,   W = sum_c GDP_c
+rho_c = -CA_c / GDP_c
 ```
 
-so the shares sum to zero over the pack's countries (up to rounding) and a country with D_c > 0
-runs a deficit. For 2000 (`transfer`, the fixed-share mode) GDP_c is the pack's `gdp` column (ADR
-0298); for each year y of the path (`transfer_y`, 2000 to 2024, ADR 0300) GDP_c is the sum of
-NY.GDP.MKTP.CD over the country's economies in year y and W the sum over the countries that report
-it; a country with no GDP that year takes no part of the discrepancy. A pack without these columns
+0 where GDP_c is missing or not positive; a country with rho_c > 0 runs a deficit. The model
+scales it by national income and spreads the world discrepancy by income (Transfers, below), so
+the ratios need not sum to zero. For 2000 (`transfer`, the fixed-share mode) GDP_c is the pack's
+`gdp` column (ADR 0298); for each year y of the path (`transfer_y`, 2000 to 2024, ADR 0300) GDP_c
+is the sum of NY.GDP.MKTP.CD over the country's economies in year y. Before ADR 0315 the columns
+held s_c, the current account less its GDP share of the world discrepancy over world GDP, which
+paid a country whose model income is far below its GDP more than it earns (Aruba, whose tourism
+the model cannot export: income 7% of GDP, D_c -1.59 times income). A pack without these columns
 (built before ADR 0100) loads with no transfers.
 
 **Gateways.** Per country: k gateways, the k-medoids on great-circle distance of its
@@ -882,15 +884,23 @@ P153 enter the static digest and snapshots only where some drift is nonzero. The
 test, the P2 gate (`--no-drift`) and the benchmark run with S23 off
 (`drift_off_keeps_the_steady_state`).
 
-**Transfers (ADR 0100 as amended by ADRs 0295 to 0300; S22 `EconParams::transfers`).** At E4,
-after dividends and rebates, each country receives D_c = s_c(t) Y_{t-1} from one world transfer
-account (wide), Y_{t-1} = sum_k income_k of the previous tick, world nominal income (wages,
-dividends and rebates; at the first tick of a data-state start, which has no previous income, the
-tick's own). s_c(t) is the pack's 2000 share (`Transfers::FixedShares`, the default), or the
-observed share of the tick's year (`Transfers::ObservedPath`, tick t in year 2000 + t / 12, lab
-profile), which after 2024 fades as s_c(2024) 2^-((t - 299) / 120) (a 10-year half-life, ADR
-0100); `Transfers::Off` pays nothing (balanced trade). Exactly: every paying country (s_c < 0)
-pays round_half_even(|s_c| Y) minor units, the account splits their total over the receiving
+**Transfers (ADR 0100 as amended by ADRs 0295 to 0300 and 0315; S22 `EconParams::transfers`).**
+At E4, after dividends and rebates, each country receives
+
+```
+D_c = (rho_c(t) - rho_bar) Y_c,t-1,   rho_bar = sum_c rho_c(t) Y_c,t-1 / Y_t-1
+```
+
+from one world transfer account (wide), Y_c,t-1 the sum of its pops' income_k of the previous
+tick (wages, dividends and rebates; at the first tick of a data-state start, which has no previous
+income, the tick's own) and Y_t-1 = sum_c Y_c,t-1, so the transfers net to zero, the world
+discrepancy spread pro rata to income, and a pop spends (1 + rho_c - rho_bar) times its income,
+positive while |CA_c| < GDP_c (ADR 0315). rho_c(t) is the pack's 2000 ratio
+(`Transfers::FixedShares`, the default), or the observed ratio of the tick's year
+(`Transfers::ObservedPath`, tick t in year 2000 + t / 12, lab profile), which after 2024 fades as
+rho_c(2024) 2^-((t - 299) / 120) (a 10-year half-life, ADR 0100); `Transfers::Off` pays nothing
+(balanced trade). Exactly: with s_c = D_c / Y, every paying country (s_c < 0) pays
+round_half_even(|s_c| Y) minor units, the account splits their total over the receiving
 countries in proportion to s_c ([`split`], so it pays out exactly what it took in), and each
 country's amount is split over its pops in proportion to the income credited to them this tick.
 The account is opened only where the transfers are on and some share is nonzero, so a world
@@ -1082,8 +1092,8 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
 pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
 plus sum_g' a_gg' V_dg' of the province's enterprises. Household income follows Income above:
 the province's wages s_L VA by effective labour share, and the country's profits (1 - s_L) VA and
-tariff rebate by population; households also receive the transfer D_c = s_c Y in
-proportion to income, Y = sum_k income_k world income (Transfers, above; 0 where the export has no
+tariff rebate by population; households also receive the transfer D_c = (rho_c - rho_bar) Y_c
+(ADR 0315) in proportion to income, Y_c = sum of the country's pops' income_k (Transfers, above; 0 where the export has no
 `transfer` column, which it writes only when S22 is on and some share is nonzero) and spend
 income + D_c by PIGL. V and VA stay at the data: ADR 0100 removes the per-good rescale r_g of ADR
 0089, which assigned the 2000 imbalances to goods. World spending net of tariffs then meets world

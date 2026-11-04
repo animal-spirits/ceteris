@@ -959,25 +959,26 @@ pub fn evaluate(x: &[f64], m: &Model, a: &[f64]) -> Evaluation {
     }
 }
 
-/// What each pop spends, its `income` plus its share of its country's transfer D_c = s_c Y
-/// (ADR 0100): Y world income, the pop's share its income over its country's.
+/// What each pop spends, its `income` plus its share of its country's transfer D_c = (rho_c -
+/// rho_bar) Y_c (ADRs 0100, 0315): Y_c the country's income, `share` rho_c minus its current
+/// account over its GDP, rho_bar = sum_c rho_c Y_c / sum_c Y_c so the transfers net to zero, the
+/// pop's share its income over its country's: it spends (1 + rho_c - rho_bar) times its income.
 pub fn with_transfers(income: &[f64], country: &[usize], share: &[f64]) -> Vec<f64> {
     if share.iter().all(|&s| s == 0.0) {
         return income.to_vec();
     }
-    let world = pairwise_sum(income);
     let national = bincount(country, income.iter().copied(), share.len());
+    let world = pairwise_sum(&national);
+    let weighted: Vec<f64> = share.iter().zip(&national).map(|(s, y)| s * y).collect();
+    let rho_bar = if world > 0.0 {
+        pairwise_sum(&weighted) / world
+    } else {
+        0.0
+    };
     income
         .iter()
         .zip(country)
-        .map(|(&m, &c)| {
-            let n = national[c];
-            m + if n > 0.0 {
-                share[c] * world * m / n
-            } else {
-                0.0
-            }
-        })
+        .map(|(&m, &c)| m + (share[c] - rho_bar) * m)
         .collect()
 }
 

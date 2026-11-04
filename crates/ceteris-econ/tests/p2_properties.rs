@@ -3621,8 +3621,8 @@ fn price_level_one_is_the_data_state() {
     assert_eq!(ones.digest(), base.digest());
 }
 
-/// The fixture with transfer shares (ADR 0100): two paying and two receiving countries, summing
-/// to zero, and an observed path that grows by a tenth of the 2000 share a year.
+/// The fixture with transfer ratios (ADRs 0100, 0315): two paying and two receiving countries,
+/// and an observed path that grows by a tenth of the 2000 ratio a year.
 fn with_transfers() -> EconInputs {
     let mut inp = small_world();
     let share = vec![0.02, -0.012, -0.013, 0.005];
@@ -3664,11 +3664,12 @@ fn country_transfers(w: &EconWorld) -> Vec<i64> {
     out
 }
 
-/// ADR 0100: the world transfer account ends every tick at zero (`end_tick` checks it too), every
-/// paying country gives exactly round(|s_c| Y) minor units, Y last tick's world income (this
-/// tick's at the first tick of the data state), and the receivers get the payers' total in
-/// proportion to their shares, each within one minor unit per country of s_c Y; under both
-/// settings that pay, over 120 ticks.
+/// ADRs 0100, 0315: the world transfer account ends every tick at zero (`end_tick` checks it
+/// too), every paying country gives exactly round(|D_c|) minor units, D_c = (rho_c - rho_bar)
+/// Y_c with Y_c its pops' income of last tick (this tick's at the first tick of the data state)
+/// and rho_bar their income-weighted mean, and the receivers get the payers' total in proportion
+/// to their D_c, each within one minor unit per country; under both settings that pay, over 120
+/// ticks.
 #[test]
 fn transfers_net_to_zero_every_tick() {
     let inputs = Arc::new(with_transfers());
@@ -3681,20 +3682,35 @@ fn transfers_net_to_zero_every_tick() {
             .expect("the transfer account is open");
         let mut sim = sim_of(w);
         let nc = inputs.n_countries();
+        let national = |income: &[f64]| -> Vec<f64> {
+            let mut out = vec![Vec::new(); nc];
+            for (k, &m) in income.iter().enumerate() {
+                out[inputs.country_of(inputs.pops.province[k] as usize)].push(m);
+            }
+            out.iter()
+                .map(|v| ceteris_core::reduce::fixed_sum(v))
+                .collect::<Vec<_>>()
+        };
         for tick in 0..120u32 {
-            let before = ceteris_core::reduce::fixed_sum(&sim.world().income);
+            let before = sim.world().income.clone();
             sim.step().unwrap();
             let w = sim.world();
             assert_eq!(w.ledger.money_wide(account), 0, "{mode:?} tick {tick}");
-            let world = if before > 0.0 {
-                before
+            let y = if ceteris_core::reduce::fixed_sum(&before) > 0.0 {
+                national(&before)
             } else {
-                ceteris_core::reduce::fixed_sum(&w.income)
+                national(&w.income)
             };
+            let world = ceteris_core::reduce::fixed_sum(&y);
+            let rho: Vec<f64> = (0..nc)
+                .map(|c| systems::transfer_share(&inputs, mode, c, tick))
+                .collect();
+            let weighted: Vec<f64> = (0..nc).map(|c| rho[c] * y[c]).collect();
+            let rho_bar = ceteris_core::reduce::fixed_sum(&weighted) / world;
             let got = country_transfers(w);
             assert_eq!(got.iter().sum::<i64>(), 0, "{mode:?} tick {tick}");
             for (c, &net) in got.iter().enumerate() {
-                let s = systems::transfer_share(&inputs, mode, c, tick);
+                let s = (rho[c] - rho_bar) * y[c] / world;
                 if s < 0.0 {
                     assert_eq!(
                         net,

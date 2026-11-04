@@ -632,17 +632,19 @@ fn cells_outside_region_is_empty_on_the_fixture() {
     assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![pushed]);
 }
 
-/// ADR 0100: each pop spends its income plus its share of its country's transfer D_c = s_c Y, Y
-/// world income, in proportion to its income; the transfers add up to zero, and at the data
-/// state a receiving country buys more traded goods, a paying one less.
+/// ADRs 0100, 0315: each pop spends its income plus its share of its country's transfer D_c =
+/// (rho_c - rho_bar) Y_c in proportion to its income, rho_bar the income-weighted mean ratio;
+/// the transfers add up to zero, and at the data state a receiving country buys more traded
+/// goods, a paying one less.
 #[test]
 fn reference_spends_the_transfers() {
     use ceteris_reference::model::{self, Model};
     let income = [3.0, 1.0, 2.0, 4.0];
     let country = [0, 0, 1, 1];
     let spent = model::with_transfers(&income, &country, &[0.1, -0.1]);
-    // world income 10: country 0 (income 4) receives 1, country 1 (income 6) pays 1
-    let want = [3.75, 1.25, 2.0 - 1.0 / 3.0, 4.0 - 2.0 / 3.0];
+    // incomes 4 and 6: rho_bar = (0.4 - 0.6) / 10 = -0.02, so country 0 receives 0.12 of its
+    // income (0.48) and country 1 pays 0.08 of its own (0.48)
+    let want = [3.36, 1.12, 1.84, 3.68];
     assert!(
         spent.iter().zip(&want).all(|(s, w)| close(*s, *w, 1e-15)),
         "{spent:?}"
