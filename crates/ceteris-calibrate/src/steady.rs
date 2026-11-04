@@ -83,7 +83,9 @@ pub const ANDERSON_STALL: usize = 20;
 /// Q = D, whose gap is about 3.8 times the last pass change plus about 3e-13 of rounding, so
 /// the tolerance must be at most 1.8e-13); a solver tolerance, not a model parameter.
 pub const PASS_TOL: f64 = 1e-13;
-pub const MAX_PASSES: usize = 100;
+/// Passes before the calibration gives up, an iteration cap: the B8d pack settled at pass 71;
+/// the rebuilt C6 pack was still contracting at pass 100 (change 3.3e-7, about 0.85 per pass).
+pub const MAX_PASSES: usize = 300;
 /// Largest relative change of any local output that ends the income fixed point.
 pub const LOCAL_TOL: f64 = 1e-14;
 pub const MAX_LOCAL: usize = 1_000;
