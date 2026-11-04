@@ -130,17 +130,36 @@ sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
 bytes = 5839841
 url = "https://dataverse.nl/api/access/datafile/554105"
 
-# Sector labour shares and wealth shares (ADRs 0307, 0308); sha256 and bytes by `--record`
-# owner-side (the cloud network blocks both hosts).
+# Sector labour shares and wealth shares (ADRs 0307, 0308), recorded owner-side 2026-11-03 (the
+# cloud network blocks both hosts). WID replaces its bulk file in place: a new release is a re-pin.
 [[file]]
 source = "wiod-sea"
 name = "WIOD_SEA_Nov16.xlsx"
+sha256 = "8cf5ed3d1b7d7ddae93037cc5e1c1d0a2721b9a7679dcc076b85ac5220c576ce"
+bytes = 5536437
 url = "https://dataverse.nl/api/access/datafile/199095"
 
 [[file]]
 source = "wid"
 name = "wid_all_data.zip"
+sha256 = "68766d928869de7cf3b85ead83a55152061feb8037f444a21597927f0c9f8f70"
+bytes = 886891414
 url = "https://wid.world/bulk_download/wid_all_data.zip"
+
+# Foreign-owned shares and their parents (ADR 0309).
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-xvem.csv"
+sha256 = "4e80473b9f6918bfc45b2326f5a4a178399610fedd15f073ffb65d2c283d8dc0"
+bytes = 13054238
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-xvem.csv"
+
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-bilateral-output.csv"
+sha256 = "4aea799162e631d568b7c5fbb73d16592e5b375645c0384daba85f4f6e125f3c"
+bytes = 44041316
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-bilateral-output.csv"
 
 [[file]]
 source = "wdi"
