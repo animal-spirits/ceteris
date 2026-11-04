@@ -267,6 +267,18 @@ pub fn write_inputs(
     if transfers_on(inputs, params) {
         columns.push(f64s("transfer", c.transfer.iter().copied()));
     }
+    // foreign-owned shares by good and each host's owners (ADRs 0309, 0310), where some is nonzero
+    if inputs.has_foreign() {
+        for g in 0..ng {
+            columns.push(f64s(
+                &format!("foreign_{g}"),
+                c.foreign.iter().map(|f| f[g]),
+            ));
+        }
+        for o in 0..nc {
+            columns.push(f64s(&format!("owner_{o}"), c.owners.iter().map(|w| w[o])));
+        }
+    }
     write_table(dir, "countries", columns)?;
     let cells =
         || (0..nc).flat_map(move |c| (0..ng).flat_map(move |k| (0..ng).map(move |g| (c, k, g))));

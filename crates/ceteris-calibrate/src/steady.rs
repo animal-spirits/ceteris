@@ -864,11 +864,18 @@ impl<'a> Setup<'a> {
         let (ep, kp, kc) = (&inp.ent_province, &inp.pop_province, &self.pop_country);
         let va: Vec<f64> = self.a_va.iter().zip(v).map(|(a, v)| a * v).collect();
         let bill = bincount(ep, self.s_l.iter().zip(&va).map(|(s, va)| s * va), n_p);
-        let pool = bincount(
-            &self.ent_country,
-            self.s_l.iter().zip(&va).map(|(s, va)| (1.0 - s) * va),
-            n_c,
-        );
+        let profit: Vec<f64> = self
+            .s_l
+            .iter()
+            .zip(&va)
+            .map(|(s, va)| (1.0 - s) * va)
+            .collect();
+        // with foreign owners, the domestic part and the owner shares from abroad (ADR 0310)
+        let pool = if inp.foreign.rows == 0 {
+            bincount(&self.ent_country, profit.iter().copied(), n_c)
+        } else {
+            inp.profit_pool(&profit)
+        };
         // the markets' spoilage, p delta S = V delta s / (1 + delta s) at stored goods' origins
         // (ADR 0091), which the country's profit pool carries; the index weights (`base`) keep
         // the gross pool, as `Inputs::base_income` and the world's

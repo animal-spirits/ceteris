@@ -66,6 +66,7 @@ pub const REBATE: Flow = Flow(7);
 pub const MINT: Flow = Flow(8);
 pub const WRITE_OFF: Flow = Flow(9);
 pub const TRANSFER: Flow = Flow(10);
+pub const FOREIGN_DIVIDEND: Flow = Flow(11);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -115,6 +116,11 @@ pub struct Accounts {
     /// some transfer share is nonzero, after the mint, so a world without transfers keeps its
     /// ledger.
     pub transfer: Option<AccountId>,
+    /// The world dividend account of ADR 0310: takes the foreign-owned part of each payout and
+    /// pays it to the owners' profit pools, ending every tick at zero. Opened only where some
+    /// foreign-owned share is nonzero, after the transfer account, so a world without foreign
+    /// owners keeps its ledger.
+    pub foreign: Option<AccountId>,
 }
 
 /// Static structure derived at load from the inputs and parameters: never in snapshots,
@@ -674,13 +680,19 @@ fn pop_people(inp: &EconInputs) -> (Vec<f64>, Vec<f64>) {
     (province, country)
 }
 
-/// The profit pool of each country at the base point, sum (1 - s_L) VA0 over its enterprises.
+/// The profit pool of each country at the base point: sum (1 - f) (1 - s_L) VA0 over its
+/// enterprises, plus its owner share of every host's foreign-owned sum f (1 - s_L) VA0 (ADR 0310).
 fn base_profit_pool(inp: &EconInputs) -> Vec<f64> {
-    let mut pool = vec![0.0; inp.n_countries()];
+    let nc = inp.n_countries();
+    let (mut pool, mut abroad) = (vec![0.0; nc], vec![0.0; nc]);
     for e in 0..inp.n_enterprises() {
         let c = inp.country_of(inp.enterprises.province[e] as usize);
-        pool[c] += (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e];
+        let profit = (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e];
+        let f = inp.ent_foreign(e);
+        pool[c] += (1.0 - f) * profit;
+        abroad[c] += f * profit;
     }
+    inp.pay_abroad(&abroad, &mut pool);
     pool
 }
 
@@ -1072,6 +1084,7 @@ impl EconWorld {
             dividend: open_wide_n(&mut ledger, nc),
             mint: ledger.open_wide(),
             transfer: transfers_on(inp, &params).then(|| ledger.open_wide()),
+            foreign: inp.has_foreign().then(|| ledger.open_wide()),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -1458,6 +1471,9 @@ impl EconWorld {
         let mut accounts = self.layout.accounts.clone();
         if accounts.transfer.is_none() && transfers_on(&inputs, &params) {
             accounts.transfer = Some(self.ledger.open_wide());
+        }
+        if accounts.foreign.is_none() && inputs.has_foreign() {
+            accounts.foreign = Some(self.ledger.open_wide());
         }
         if params != self.params || trade != self.trade || accounts != self.layout.accounts {
             self.layout = Arc::new(Layout::build(&inputs, &params, &trade, accounts));
@@ -1930,6 +1946,12 @@ impl State for EconWorld {
         {
             let detail = format!("world transfer account holds {}", self.ledger.money_wide(a));
             return fail("transfers", detail);
+        }
+        if let Some(a) = lay.accounts.foreign
+            && self.ledger.money_wide(a) != 0
+        {
+            let detail = format!("world dividend account holds {}", self.ledger.money_wide(a));
+            return fail("foreign dividends", detail);
         }
 
         let sc = &self.scratch;

@@ -35,8 +35,8 @@ use crate::production::{
     value_added,
 };
 use crate::world::{
-    Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
+    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, Order, PURCHASE, Payments,
+    REBATE, SALE, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -1011,30 +1011,68 @@ pub fn reprice(w: &mut EconWorld) {
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
 /// end the tick at zero. Each pool is one i128 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
-/// parts add up to the pool exactly. Then the transfers of tick `tick` ([`transfer`]), then
-/// [`write_off`]. Records each pop's income of the tick, and as each enterprise's profit its
-/// balance before the payout (this tick's cash flow less any loss it carries).
+/// parts add up to the pool exactly. With foreign owners (ADR 0310) the foreign-owned share f
+/// of each positive enterprise payout goes to the world dividend account instead ([`split`]
+/// of the payout by 1 - f and f), which pays each host's total over its owners' pools by its
+/// parent vector before the pools pay their pops. Then the transfers of tick `tick`
+/// ([`transfer`]), then [`write_off`]. Records each pop's income of the tick, and as each
+/// enterprise's profit its balance before the payout (this tick's cash flow less any loss it
+/// carries).
 pub fn distribute(w: &mut EconWorld, tick: u32) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
+    let mut parts = Vec::new();
+    let mut abroad: Vec<i128> = vec![
+        0;
+        if acc.foreign.is_some() {
+            inp.n_countries()
+        } else {
+            0
+        }
+    ];
     for i in 0..inp.n_provinces() {
-        let pool = acc.dividend[inp.country_of(i)];
+        let c = inp.country_of(i);
+        let pool = acc.dividend[c];
         for e in lay.enterprises(i) {
             let cash = w.ledger.money(acc.enterprise[e]);
             w.profit[e] = to_numeraire(cash);
-            pay(
-                &mut w.ledger,
-                DIVIDEND,
-                acc.enterprise[e],
-                pool,
-                cash.max(0),
-            );
+            let paid = cash.max(0);
+            let f = inp.ent_foreign(e);
+            match acc.foreign {
+                Some(account) if paid > 0 && f > 0.0 => {
+                    split(paid, [1.0 - f, f].into_iter(), &mut parts);
+                    pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, parts[0]);
+                    pay(
+                        &mut w.ledger,
+                        FOREIGN_DIVIDEND,
+                        acc.enterprise[e],
+                        account,
+                        parts[1],
+                    );
+                    abroad[c] += i128::from(parts[1]);
+                }
+                _ => pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, paid),
+            }
         }
         let cash = i64::try_from(w.ledger.money_wide(acc.market[i]))
             .expect("ledger overflow: a market's cash beyond one payment");
         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
     }
-    let mut parts = Vec::new();
+    if let Some(account) = acc.foreign {
+        for (h, &total) in abroad.iter().enumerate().filter(|(_, x)| **x > 0) {
+            let owners = &inp.countries.owners[h];
+            split(total, owners.iter().copied(), &mut parts);
+            for (o, &part) in parts.iter().enumerate() {
+                pay(
+                    &mut w.ledger,
+                    FOREIGN_DIVIDEND,
+                    account,
+                    acc.dividend[o],
+                    part,
+                );
+            }
+        }
+    }
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
             // the pool by dividend share (by wealth, ADR 0104), the rebate by population

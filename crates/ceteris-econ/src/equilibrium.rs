@@ -193,7 +193,7 @@ impl EconWorld {
         // enterprises: inputs used, traded inputs bought at a Y q_d, profits
         let mut ent_spend = vec![0.0; n_ent * ng];
         let mut output = vec![0.0; np * ng];
-        let mut pool = vec![0.0; nc];
+        let (mut pool, mut abroad) = (vec![0.0; nc], vec![0.0; nc]);
         for e in 0..n_ent {
             let i = inp.enterprises.province[e] as usize;
             let g = usize::from(inp.enterprises.good[e]);
@@ -209,9 +209,13 @@ impl EconWorld {
                     cost += ent_spend[e * ng + k];
                 }
             }
-            pool[inp.country_of(i)] +=
-                price(i * ng + g) * y - self.wage[i] * self.employment[e] - cost;
+            let profit = price(i * ng + g) * y - self.wage[i] * self.employment[e] - cost;
+            // the foreign-owned part of a positive payout goes to the owners (ADR 0310)
+            let out = inp.ent_foreign(e) * profit.max(0.0);
+            pool[inp.country_of(i)] += profit - out;
+            abroad[inp.country_of(i)] += out;
         }
+        inp.pay_abroad(&abroad, &mut pool);
 
         // households: wages, by dividend share their country's profits and market cash, and by
         // population share its rebate (national ownership), by fixed point

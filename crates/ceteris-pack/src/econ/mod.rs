@@ -3,6 +3,7 @@
 pub mod build;
 pub mod downscale;
 pub mod factors;
+pub mod foreign;
 pub mod gateways;
 pub mod goods;
 pub mod icio;

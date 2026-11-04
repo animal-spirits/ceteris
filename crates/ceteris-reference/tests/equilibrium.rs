@@ -814,6 +814,8 @@ fn two_provinces(
         gamma: None,
         s_l: vec![s_l],
         s_l_good: Mat::zeros(0, 1),
+        foreign: Mat::zeros(0, 1),
+        owners: Mat::zeros(0, 1),
         unemployment: vec![u],
         u_star: vec![0.0],
         gini: vec![0.35],

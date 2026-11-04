@@ -93,6 +93,14 @@ pub struct Countries {
     /// The share of each year 2000 to 2024 ([`TRANSFER_YEARS`] per country), the observed path
     /// (ADR 0300); empty with `transfer`.
     pub transfer_path: Rows<f64>,
+    /// Foreign-owned share f_c,g of each good's profits (ADR 0309, AAMNE 2000; nonzero only for
+    /// goods 1 to 6, at most 0.8), paid abroad through the world dividend account (ADR 0310).
+    /// Empty where the inputs have none (a generated world, a pack before ADR 0309).
+    pub foreign: Rows<f64>,
+    /// Each host's parent vector, the share of its foreign-owned profits each country owns,
+    /// width the country count, summing to 1 where some `foreign` share is nonzero; empty with
+    /// `foreign`.
+    pub owners: Rows<f64>,
 }
 
 /// Years of the observed transfer path, 2000 to 2024 (ADR 0100), from [`TRANSFER_FIRST_YEAR`].
@@ -467,6 +475,32 @@ impl EconInputs {
             .any(|&s| s != 0.0)
     }
 
+    /// Whether some country has a nonzero foreign-owned share (ADR 0310), so that the world
+    /// dividend account opens.
+    pub fn has_foreign(&self) -> bool {
+        self.countries.foreign.as_flat().iter().any(|&f| f != 0.0)
+    }
+
+    /// Foreign-owned share of enterprise `e`'s payout: its country's share of its good, 0
+    /// without foreign shares.
+    pub fn ent_foreign(&self, e: usize) -> f64 {
+        if self.countries.foreign.is_empty() {
+            return 0.0;
+        }
+        let c = self.country_of(self.enterprises.province[e] as usize);
+        self.countries.foreign[c][usize::from(self.enterprises.good[e])]
+    }
+
+    /// Adds each host's foreign-owned profits `abroad` to its owners' `pool` by its parent
+    /// vector (ADR 0310); nothing without foreign shares.
+    pub fn pay_abroad(&self, abroad: &[f64], pool: &mut [f64]) {
+        for (h, &paid) in abroad.iter().enumerate().filter(|(_, x)| **x > 0.0) {
+            for (slot, &o) in pool.iter_mut().zip(&self.countries.owners[h]) {
+                *slot += o * paid;
+            }
+        }
+    }
+
     /// Value-added coefficient a_VA = 1 - sum_k a_kg of sector `g` in country `c`.
     pub fn a_va(&self, c: usize, g: usize) -> f64 {
         1.0 - (0..self.n_goods()).map(|k| self.a(c, k, g)).sum::<f64>()
@@ -542,7 +576,10 @@ impl EconInputs {
                 && (c.wealth.is_empty() || (c.wealth.len() == nc && c.wealth.width() == 3))
                 && (c.inv.is_empty() || c.inv.width() == n)
                 && (c.transfer_path.is_empty()
-                    || (c.transfer_path.len() == nc && c.transfer_path.width() == TRANSFER_YEARS)),
+                    || (c.transfer_path.len() == nc && c.transfer_path.width() == TRANSFER_YEARS))
+                && (c.foreign.is_empty() || (c.foreign.len() == nc && c.foreign.width() == n))
+                && c.owners.len() == c.foreign.len()
+                && (c.owners.is_empty() || c.owners.width() == nc),
             "country columns disagree in length"
         );
         assert_eq!(
@@ -561,6 +598,18 @@ impl EconInputs {
                 assert!(
                     w.iter().all(|&x| x >= 0.0) && (w.iter().sum::<f64>() - 1.0).abs() < 1e-9,
                     "country {k}: wealth shares {w:?}"
+                );
+            }
+            if !c.foreign.is_empty() {
+                let (f, o) = (&c.foreign[k], &c.owners[k]);
+                assert!(
+                    f.iter().all(|&x| (0.0..1.0).contains(&x)) && o.iter().all(|&x| x >= 0.0),
+                    "country {k}: foreign shares {f:?}, owners {o:?}"
+                );
+                assert!(
+                    f.iter().all(|&x| x == 0.0) || (o.iter().sum::<f64>() - 1.0).abs() < 1e-9,
+                    "country {k}: owners sum to {}",
+                    o.iter().sum::<f64>()
                 );
             }
             if !c.s_l_good.is_empty() {
@@ -773,6 +822,8 @@ impl EconInputs {
             price_level,
             transfer,
             transfer_path,
+            foreign,
+            owners,
         } = countries;
         let ProvinceData {
             country,
@@ -891,6 +942,12 @@ impl EconInputs {
             b"transfers".iter().for_each(|&b| e.u8(b));
             e.f64s(transfer);
             e.f64s(transfer_path.as_flat());
+        }
+        // appended only where some share is nonzero, so worlds without foreign owners keep theirs
+        if self.has_foreign() {
+            b"foreign-owners".iter().for_each(|&b| e.u8(b));
+            e.f64s(foreign.as_flat());
+            e.f64s(owners.as_flat());
         }
         if let Some(nu) = border_nu {
             b"border-nu".iter().for_each(|&b| e.u8(b));
