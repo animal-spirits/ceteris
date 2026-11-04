@@ -25,6 +25,8 @@ pub fn goods_of(code: &str) -> Vec<usize> {
         return good_of_division(&division).into_iter().collect();
     }
     match code.chars().next() {
+        // WIOD's total over industries, not an industry
+        _ if code == "TOT" => Vec::new(),
         Some('B') => vec![1, 2],
         Some('F') => vec![8],
         Some(c) if ('G'..='U').contains(&c) => vec![9],
