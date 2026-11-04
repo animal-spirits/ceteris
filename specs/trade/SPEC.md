@@ -1072,6 +1072,15 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   10.6 to 11.8 before, 10.1 to 10.2 after. Tried and not kept: the z pass parallel over origin
   gateways inside each good's task (slowest good unchanged, 10.3 to 10.5 ms), and two rows
   interleaved in the z pass (kernel time 41.9 to 42.7 ms, slower).
+  E3 PIGL once per province (RFC 0287 item 10, 2026-11-04; econ SPEC demand): the part of a
+  pop's PIGL demand that depends only on its country's weights and the buyer prices (category
+  indexes, within-category shares, Dtilde(P), B(P) and `scale (Dt / B)^gamma`, `demand::PiglAt`)
+  is computed once per province and shared by its pops, with the same operations in the same
+  order (`pigl` itself goes through `PiglAt`). Same alternating rounds, load 4 to 8: demand
+  5.91 to 5.96 ms before, 5.59 to 5.71 after (of which the price refresh, 4.2, is unchanged).
+  The `pow` in E1 labour sits in each enterprise's CES target at each trial wage and is not
+  shared; fewer parallel regions was not pursued after items 7 and 9 put allocation and
+  posting below the noise.
 
 ## Open questions
 

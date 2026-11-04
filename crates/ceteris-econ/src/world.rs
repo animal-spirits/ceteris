@@ -20,7 +20,7 @@ use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
-use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
+use crate::demand::{PiglAt, PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
 use crate::params::{EconParams, Pigl, Technology};
@@ -233,6 +233,49 @@ impl Layout {
         let c = inp.country_of(inp.pops.province[k] as usize);
         let people = inp.pops.population[k];
         pigl(
+            &self.pigl[c],
+            price,
+            money / people,
+            self.sigma_income[c],
+            params,
+            out,
+        );
+        for x in out.iter_mut() {
+            *x *= people;
+        }
+    }
+
+    /// The price-only part of PIGL demand for the pops of province `i` at `price`
+    /// ([`Layout::pop_demand_at`]).
+    pub fn pigl_at(
+        &self,
+        inp: &EconInputs,
+        params: &EconParams,
+        i: usize,
+        price: &[f64],
+    ) -> PiglAt {
+        PiglAt::new(&self.pigl[inp.country_of(i)], price, params)
+    }
+
+    /// [`Layout::pop_demand`] from its province's [`Layout::pigl_at`] at the same prices.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pop_demand_at(
+        &self,
+        inp: &EconInputs,
+        params: &EconParams,
+        k: usize,
+        at: &PiglAt,
+        price: &[f64],
+        money: f64,
+        out: &mut [f64],
+    ) {
+        out.fill(0.0);
+        if money <= 0.0 {
+            return;
+        }
+        let c = inp.country_of(inp.pops.province[k] as usize);
+        let people = inp.pops.population[k];
+        at.demand(
             &self.pigl[c],
             price,
             money / people,
