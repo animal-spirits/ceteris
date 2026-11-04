@@ -15,7 +15,7 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::theta::{self, ClassTable};
-use super::{factors, foreign, goods, icio, people, price_level, tariffs, transfers};
+use super::{drift, factors, foreign, goods, icio, people, price_level, tariffs, transfers};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
@@ -432,6 +432,15 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     countries_columns.extend(factors::wealth_columns(&factors::wealth(&codes, &|c| {
         labour.get(c).map(|l| l.gini)
     })?));
+    // initial drift from PWT 1995-2000 in every profile (ADR 0103)
+    let drifts = drift::drifts(
+        &codes,
+        &|c| parts(c, &iso),
+        &|c| labour.get(c).map(|l| l.labour_share),
+        &obs.drift_pwt,
+        &obs.region,
+    )?;
+    countries_columns.extend(drift::columns(&drifts));
     // sector labour shares (ADR 0307) where SEA is cached
     let sea_path = cache.join(sea::SEA);
     if sea_path.exists() {
@@ -499,6 +508,7 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
             gateways::report(&gw, &codes),
             price_level::report(&levels, &screen),
             transfers::report(&imbalances, &codes, &pack_gdp),
+            drift::report(&drifts, &codes),
         ]
         .into_iter()
         .chain(foreign.map(|f| foreign::report(&f, &codes)))

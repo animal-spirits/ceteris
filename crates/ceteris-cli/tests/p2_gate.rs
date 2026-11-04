@@ -134,7 +134,9 @@ fn reference() -> Option<&'static Reference> {
 fn run(out: &Path, flags: &[&str]) -> String {
     let pack = pack();
     let (ticks, every) = (TICKS.to_string(), HISTORY_EVERY.to_string());
+    // the gate measures the steady state, which the initial drift leaves (ADR 0103)
     let mut args = vec!["run", "--pack", pack.to_str().unwrap(), "--ticks", &ticks];
+    args.push("--no-drift");
     args.extend(flags);
     args.extend([
         "--history",

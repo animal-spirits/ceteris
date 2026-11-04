@@ -14,7 +14,7 @@
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
-//! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
+//! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
 //! ```
 //!
@@ -26,7 +26,8 @@
 //! starts a calibrated pack from the data state of its calibrated inputs (prices 1, base
 //! wages and employment, one month of base use in stock, nothing in flight) instead of the
 //! steady state. `--perturb SEED` moves the start by `EconWorld::perturb` (10%, ADR 0089) and
-//! prints the factors' range. `--history` also writes the per-tick series of
+//! prints the factors' range. `--no-drift` turns the initial drift off (S23, ADR 0103), as the
+//! P2 gate runs. `--history` also writes the per-tick series of
 //! `ceteris_econ::history`, every N ticks (default 1), as Arrow with zstd compression or, with
 //! `--history-format csv`, as CSV.
 //!
@@ -102,7 +103,7 @@ const USAGE: &str = "usage:
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
-  ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--from-equilibrium DIR]
+  ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
 
 /// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
@@ -139,6 +140,7 @@ struct Args {
     out: PathBuf,
     ticks: Option<u32>,
     frictionless: bool,
+    no_drift: bool,
     equilibrium: Option<PathBuf>,
     data_state: bool,
     perturb: Option<u64>,
@@ -150,7 +152,7 @@ struct Args {
 fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut args = args;
     let (mut source, mut out, mut ticks, mut frictionless) = (None, None, None, false);
-    let mut equilibrium = None;
+    let (mut equilibrium, mut no_drift) = (None, false);
     let (mut data_state, mut perturb) = (false, None);
     let (mut history, mut history_every, mut history_format) = (false, None, None);
     while let Some(a) = args.next() {
@@ -161,6 +163,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
                 source = Some(Source::Pack(PathBuf::from(dir)));
             }
             "--frictionless" => frictionless = true,
+            "--no-drift" => no_drift = true,
             "--from-equilibrium" => {
                 let dir = args.next().ok_or("--from-equilibrium needs a directory")?;
                 equilibrium = Some(PathBuf::from(dir));
@@ -198,6 +201,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         out: out.ok_or("--out is required")?,
         ticks,
         frictionless,
+        no_drift,
         equilibrium,
         data_state,
         perturb,
@@ -210,6 +214,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
 fn export(args: &Args) -> Result<(), String> {
     if args.ticks.is_some()
         || args.frictionless
+        || args.no_drift
         || args.equilibrium.is_some()
         || args.data_state
         || args.perturb.is_some()
@@ -218,7 +223,7 @@ fn export(args: &Args) -> Result<(), String> {
         || args.history_format.is_some()
     {
         return Err(
-            "--ticks, --frictionless, --from-equilibrium, --data-state, --perturb, --history, \
+            "--ticks, --frictionless, --no-drift, --from-equilibrium, --data-state, --perturb, --history, \
              --history-every and --history-format belong to run"
                 .into(),
         );
@@ -240,10 +245,13 @@ fn run(args: &Args) -> Result<(), String> {
     if args.history_format.is_some() && !args.history {
         return Err("--history-format needs --history".into());
     }
-    let params = if args.frictionless {
-        EconParams::frictionless()
-    } else {
-        EconParams::default()
+    let params = EconParams {
+        drift: !args.no_drift,
+        ..if args.frictionless {
+            EconParams::frictionless()
+        } else {
+            EconParams::default()
+        }
     };
     if args.data_state && args.equilibrium.is_some() {
         return Err("--data-state and --from-equilibrium choose different starts".into());

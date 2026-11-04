@@ -271,7 +271,13 @@ pub struct Pwt {
     /// How the price level of `YEAR` was made (i_cig: Benchmark, Interpolated, Extrapolated or an
     /// ICP time-series flag; RFC 0282 D8).
     pub price_basis: BTreeMap<String, String>,
+    /// The series of the initial drift (ADR 0103), by [`DRIFT_SERIES`] name.
+    pub drift: BTreeMap<&'static str, BTreeMap<String, ByYear>>,
 }
+
+/// PWT 11 series of the initial drift (ADR 0103): TFP at constant national prices, the capital
+/// stock and GDP at constant national prices, the investment share and the depreciation rate.
+pub const DRIFT_SERIES: [&str; 5] = ["rtfpna", "rnna", "rgdpna", "csh_i", "delta"];
 
 /// PWT 11 Data sheet: labour share, GDP per person, population and the price level of domestic
 /// absorption by year, and the price level's basis in `YEAR`.
@@ -300,6 +306,16 @@ pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
                 .entry(code.clone())
                 .or_default()
                 .insert(year, number(c, "pl_da")?);
+        }
+        for name in DRIFT_SERIES {
+            if let Some(c) = r.get(name) {
+                out.drift
+                    .entry(name)
+                    .or_default()
+                    .entry(code.clone())
+                    .or_default()
+                    .insert(year, number(c, name)?);
+            }
         }
         if let (Some(c), YEAR) = (r.get("i_cig"), year) {
             out.price_basis.insert(code.clone(), c.to_text());
@@ -346,6 +362,8 @@ pub struct Observed {
     /// UN WPP population in `YEAR`, for economies WDI does not list.
     pub population_wpp: BTreeMap<String, f64>,
     pub region: BTreeMap<String, String>,
+    /// PWT [`DRIFT_SERIES`] and population (`pop`) by year, the drift's inputs (ADR 0103).
+    pub drift_pwt: BTreeMap<&'static str, BTreeMap<String, ByYear>>,
 }
 
 fn scaled(m: BTreeMap<String, f64>, by: f64) -> BTreeMap<String, f64> {
@@ -388,6 +406,11 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
         gini_swiid: nearest(&read_swiid(&cache.join("swiid9_92.zip"), &names)?),
         gdp_per_capita: nearest(&pwt.income),
         price_level_pwt: std::mem::take(&mut pwt.price_level),
+        drift_pwt: {
+            let mut d = std::mem::take(&mut pwt.drift);
+            d.insert("pop", pwt.population.clone());
+            d
+        },
         population: pop
             .into_iter()
             .filter_map(|(k, v)| Some((k, *v.get(&YEAR)?)))
