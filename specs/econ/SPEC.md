@@ -1112,7 +1112,8 @@ calibrated state is the one before to rounding. With V fixed the
 fixed point has no free level (ADR 0106's pin of sum_e r_g VA_e is gone with r). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
 repeat until rebates, buyer prices and the PIGL weights change by at most 1e-13 relative
-(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
+(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before; at most `MAX_PASSES` 300, an
+iteration cap, 100 before the C6 pack, which was still contracting at pass 100), so the returned state is a fixed
 point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
 `stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
 settled at the last pass's rebates, buyer prices and PIGL weights, with D, the orders at the
