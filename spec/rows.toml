@@ -1475,3 +1475,8 @@ sections = "6.1, 7.2, 9.1, 16"
 rows = "0311, 0312"
 topic = "[Wealth-bracket shares from the income Gini by a variance-additive lognormal fitted to the US DFA, WID as a research check only, amending ADR 0308](../rfcs/0303-open-wealth-shares-from-the-income-gini.md)"
 sections = "9.1, 17"
+
+[[entry]]
+rows = "0313"
+topic = "[The largest income-effect weight the household shares allow: omega_A = 0 where it fits, else the binding category's omega 0, amending ADR 0094](../rfcs/0304-largest-income-effect-weight-the-shares-allow.md)"
+sections = "8.6"
