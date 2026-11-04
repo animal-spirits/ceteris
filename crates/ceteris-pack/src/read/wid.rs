@@ -1,6 +1,7 @@
 //! WID.world bulk data: the 2000 shares of net personal wealth (adults, equal split,
-//! `shweal992j`) of the bottom 50%, middle 40% and top 10%, nearest year within the window
-//! (ADR 0308).
+//! `shweal992j`) of the bottom 50%, middle 40% and top 10%, nearest year within the window.
+//! Not a pack input: only the C6 gate report of a research pack reads it, to list the wealth
+//! proxy's top-10% share against WID's (ADR 0312).
 
 use std::collections::BTreeMap;
 use std::fs::File;
