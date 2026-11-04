@@ -278,8 +278,16 @@ pub fn factors(
         let own = any.then(|| relative_shares(&lab_sum, &va_sum)).flatten();
         let inc = ps.first().and_then(|p| income.get(p)).copied();
         let (r, pooled_any) = pooled(own.as_ref(), inc, &sea_r, income);
-        out.labour
-            .push(labour_shares(s, &v, &r).map_err(|e| format!("{code}: {e}"))?);
+        // an economy without value added (a territory such as ATC) has no mean to hold: flat
+        let l = if v.iter().sum::<f64>() > 0.0 {
+            labour_shares(s, &v, &r).map_err(|e| format!("{code}: {e}"))?
+        } else {
+            LabourShares {
+                share: [s; N_GOODS],
+                clipped: false,
+            }
+        };
+        out.labour.push(l);
         out.labour_pooled.push(pooled_any);
     }
     Ok(out)
