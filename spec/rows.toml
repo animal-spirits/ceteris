@@ -1485,3 +1485,8 @@ sections = "8.6"
 rows = "0315"
 topic = "[Transfers as the current account's share of national income, the world discrepancy spread by income, amending ADR 0100](../rfcs/0306-transfers-as-a-share-of-national-income.md)"
 sections = "9.5"
+
+[[entry]]
+rows = "0316"
+topic = "[Invert PIGL on the shares the run spends, a negative category share at 0, amending ADR 0094](../rfcs/0307-invert-pigl-on-the-clamped-shares.md)"
+sections = "8.6"

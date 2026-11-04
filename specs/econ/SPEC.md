@@ -998,8 +998,11 @@ sum_k E_k s_kg(q_k, m_k, s_w) = Omega_g sum_k E_k
 ```
 
 over the country's pops k, each at its own buyer prices q_k and income per person m_k, weighted
-by its spending E_k (unclamped shares). Rounds from alpha_g = Omega_g / Omega_c(g): at the
-current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) for each t, and
+by its spending E_k, at the shares the run spends: a negative category share 0 and the rest
+rescaled, as above (ADR 0316; the unclamped shares before it). Rounds from alpha_g = Omega_g / Omega_c(g): at the
+current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) for each t (where
+some pop's share is negative at that lambda, by a bracketed secant on the clamped food aggregate,
+its bracket doubled from the closed form, ADR 0316), and
 t solves the M aggregate by a bracketed secant (Illinois) on [0, 1]; then alpha_g is rescaled by
 Omega_g over its aggregate share and renormalized within its category (the contraction of Berry,
 Levinsohn and Pakes 1995). The rounds stop when every aggregate share is within 1e-14 of Omega

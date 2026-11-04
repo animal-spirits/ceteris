@@ -257,6 +257,62 @@ fn inversion_outside_omega_a_zero_binds_another_category() {
     }
 }
 
+/// ADR 0316: a pop far below its country's base has negative raw category shares, which
+/// `demand::shares` sets to 0; the inversion meets the country's shares on the clamped shares.
+#[test]
+fn inversion_meets_the_shares_with_clamped_pops() {
+    let inp = inputs();
+    let omega = Mat {
+        rows: 1,
+        cols: 10,
+        data: vec![0.25, 0.0, 0.0, 0.25, 0.01, 0.01, 0.0, 0.0, 0.0, 0.48],
+    };
+    let base = 2.0;
+    let factor = [0.02, 1.0, 4.0];
+    let income: Vec<f64> = factor.iter().map(|f| base * f).collect();
+    let spend: Vec<f64> = income.iter().map(|m| 10.0 * m).collect();
+    let country = vec![0; 3];
+    let price = Mat::from_fn(3, 10, |_, g| if g < 7 { 1.0 } else { 0.3 });
+    let sigma = vec![0.7];
+    let w = demand::invert_pops(
+        &omega,
+        &demand::Pops {
+            country: &country,
+            price: &price,
+            income: &income,
+            spend: &spend,
+        },
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    )
+    .unwrap();
+    let share = demand::shares(
+        &w,
+        &country,
+        &price,
+        &income,
+        &[0.7; 3],
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    );
+    assert_eq!((7..10).map(|g| share[(0, g)]).sum::<f64>(), 0.0);
+    let total: f64 = omega.row(0).iter().sum();
+    let mut agg = [0.0; 10];
+    for k in 0..3 {
+        for (g, a) in agg.iter_mut().enumerate() {
+            *a += share[(k, g)] * spend[k];
+        }
+    }
+    let spent: f64 = agg.iter().sum();
+    for g in (0..10).filter(|&g| omega[(0, g)] > 0.0) {
+        let miss = agg[g] / spent / (omega[(0, g)] / total) - 1.0;
+        assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
+    }
+}
+
 /// ADR 0094: the within-pop dispersion and the population-weighted variance of the pops' log
 /// base income per person add up to the national s^2 = (2 erfinv G)^2, or s_w = 0 where the
 /// between-pop variance alone exceeds it.
