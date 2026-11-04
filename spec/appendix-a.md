@@ -296,4 +296,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0296 | [Profile-guided release and bench builds with a fixed CPU baseline](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0297 | [mimalloc as global allocator where measured](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0298 | [Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md) | 19.4 |
+| 0314 | [New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md) | 21 |
 <!-- rows:end -->

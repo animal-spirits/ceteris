@@ -1455,3 +1455,8 @@ sections = "19.4"
 rows = "0298"
 topic = "[Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md)"
 sections = "19.4"
+
+[[entry]]
+rows = "0314"
+topic = "[New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md)"
+sections = "21"
