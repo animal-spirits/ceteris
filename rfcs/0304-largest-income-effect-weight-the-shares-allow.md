@@ -76,8 +76,11 @@ Row: ADR 0313
 
 ## Consequences
 
-- C6 calibrates on the rebuilt pack; Ghana, Nigeria and Chad bind on M with omega_A > 0, so their
-  rich pops keep buying some food in B(P). No other country's weights change, so no table
-  columns, format or digest change.
+- C6 calibrates on the rebuilt pack (settled at pass 187, change 6.7e-14; the pass cap moved from
+  100 to 300, an iteration cap). Six countries bind on M with omega_A > 0 in the calibrated tables,
+  where the passes' balanced household shares are inverted: Nigeria 0.40, Ethiopia 0.17, Ghana
+  0.15, Chad 0.13, Mozambique 0.08 and Tanzania 0.02. Their rich pops keep buying some food in
+  B(P). Every other country keeps omega_A = 0; no table column, format or digest changes beyond
+  the recalibration.
 - Nigeria's ICIO household column stays as ICIO reports it; an ICP-based correction of artifacts
   is left to a later data RFC.
