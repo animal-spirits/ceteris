@@ -13,6 +13,7 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
+use ceteris_core::timing;
 use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
@@ -1261,6 +1262,7 @@ impl EconWorld {
     /// (`ceteris_trade::source`) and dispatched in full: q_d = Gamma_d P_d (ADR 0200), and the
     /// lead is the mean arrival slot of the units arriving.
     pub fn refresh_price_index(&mut self) {
+        let _span = timing::span("e3.price_refresh", timing::NONE);
         let sc = &mut self.scratch;
         delivered_prices(
             false,

@@ -81,6 +81,20 @@ systems (19.4) arrive with the first module that needs them.
 each chunk with a pairwise tree, then combines chunk sums with a pairwise tree. The
 tree shape depends only on `xs.len()`, so 1 and 8 threads give identical bits.
 
+## Timing spans (Section 19.4; ADR 0294)
+
+`timing` records wall-time spans for the sim-loop harness: `enable()` turns it on for the
+process, `span(name, good)` returns a guard that records (tick, name, good, rayon worker,
+start, end) when it drops, and `take()` returns and clears the spans. While it is off a span is
+one relaxed atomic load. `Sim::step` spans the tick, `begin_tick`, `end_tick` and the snapshot;
+`Schedule::run_tick` spans each system by name; econ adds the T2b phases (`t2b.goods`,
+`t2b.moves`, `t2b.post`, `t2b.transit`), each good's T2b task and its parts (`t2b.good`,
+`t2b.kernel`, `t2b.record`, `t2b.legs`), `e2.local_chain` and `e3.price_refresh`. Spans read
+only the clock, so state hashes and the journal are the same with timing on or off
+(checked by `cargo run --release -p ceteris-econ --example identity`, which prints the
+state hash and journal hash per tick). The QoS class of each worker is not recorded: reading it
+needs an FFI call, which is `unsafe` outside ADR 0295's exception.
+
 ## Snapshots (Sections 4.1, 14.3)
 
 Canonical encoding: little-endian, `f64` by bit pattern, slices length-prefixed,
