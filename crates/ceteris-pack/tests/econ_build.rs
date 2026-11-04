@@ -16,13 +16,15 @@ use arrow_ipc::reader::FileReader;
 use ceteris_pack::econ::build::{BACI, HS_KEY};
 use ceteris_pack::econ::build::{BuildReport, BuildStats, TABLES, WORLDPOP, build};
 use ceteris_pack::econ::downscale::{GEM, KUMMU, Level};
+use ceteris_pack::econ::factors::wealth_proxy;
 use ceteris_pack::econ::goods::hs_goods;
 use ceteris_pack::econ::icio::{ICIO, INSIDE};
 use ceteris_pack::read::baci::{read_hs_cpa, trade_by_good};
-use ceteris_pack::read::natural_earth::read_codes;
+use ceteris_pack::read::natural_earth::{ADMIN0, iso3_by_iso2, read_codes};
 use ceteris_pack::read::people::read_pwt;
 use ceteris_pack::read::tariffs::{DTA, GRAVITY};
 use ceteris_pack::read::wdi::read_wdi;
+use ceteris_pack::read::wid::{INCOME, WEALTH, read_wid};
 use ceteris_pack::sources;
 use common::{cached, pack_table, strings};
 use sha2::{Digest, Sha256};
@@ -383,6 +385,71 @@ fn real_gdp_against_wdi_ppp() {
     assert!((median - 0.9552).abs() < 5e-5, "{median}");
     assert!((slope - 0.0523).abs() < 5e-5, "{slope}");
     assert!((corr - 0.2674).abs() < 5e-5, "{corr}");
+}
+
+/// ADR 0312's check, reported only: the proxy's top-10% wealth share (ADR 0311) against WID's
+/// `shweal992j` 2000, and the lognormal-from-Gini top-10% income share (tau = 0) against WID's
+/// pre-tax `sptinc992j` (the Gini is disposable income, so the income ratio sits below 1). Needs
+/// WID in the fetch cache, a research profile.
+#[test]
+fn wealth_proxy_against_wid() {
+    let Some(f) = full() else { return };
+    let Some(wid) = cached("wid_all_data.zip") else {
+        return;
+    };
+    let wealth = read_wid(&wid, WEALTH).unwrap();
+    let income = read_wid(&wid, INCOME).unwrap();
+    let iso3: BTreeMap<String, String> = iso3_by_iso2(&f.cache.join(ADMIN0))
+        .unwrap()
+        .into_iter()
+        .map(|(a2, a3)| (a3, a2))
+        .collect();
+    let path = f.out.path().join("econ_countries.arrow");
+    let code = strings(&path, "code");
+    let (top, gini) = (
+        values::<Float64Type>(&path, "wealth_2"),
+        values::<Float64Type>(&path, "gini"),
+    );
+    let summary = |name: &str, r: &[f64]| {
+        if r.is_empty() {
+            return eprintln!("{name}: no countries in WID");
+        }
+        let mut s = r.to_vec();
+        s.sort_by(f64::total_cmp);
+        eprintln!(
+            "{name}: {} countries, median ratio {:.3}, {:.3} to {:.3}, {} within 20%",
+            s.len(),
+            s[s.len() / 2],
+            s[0],
+            s[s.len() - 1],
+            s.iter().filter(|r| (**r - 1.0).abs() <= 0.2).count(),
+        );
+    };
+    let (mut rw, mut ri) = (Vec::new(), Vec::new());
+    eprintln!("code  proxy_w  wid_w  ratio  proxy_y  wid_y  ratio");
+    for i in 0..code.len() {
+        let Some(a2) = iso3.get(&code[i]) else {
+            continue;
+        };
+        let w = wealth.get(a2).map(|s| s[2]);
+        let y = income.get(a2).map(|s| s[2]);
+        if w.is_none() && y.is_none() {
+            continue;
+        }
+        let py = wealth_proxy(gini[i], 0.0)[2];
+        let cell = |p: f64, v: Option<f64>, out: &mut Vec<f64>| match v {
+            Some(v) => {
+                out.push(p / v);
+                format!("{p:.3}  {v:.3}  {:.3}", p / v)
+            }
+            None => format!("{p:.3}  -  -"),
+        };
+        let cw = cell(top[i], w, &mut rw);
+        let cy = cell(py, y, &mut ri);
+        eprintln!("{}  {cw}  {cy}", code[i]);
+    }
+    summary("top-10% wealth, proxy over WID", &rw);
+    summary("top-10% income, Gini lognormal over WID pre-tax", &ri);
 }
 
 /// Donor tables balanced by RAS (ADR 0286): every `ras` economy's use table [Z | F] meets its

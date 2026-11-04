@@ -1,7 +1,7 @@
-//! WID.world bulk data: the 2000 shares of net personal wealth (adults, equal split,
-//! `shweal992j`) of the bottom 50%, middle 40% and top 10%, nearest year within the window.
-//! Not a pack input: only the C6 gate report of a research pack reads it, to list the wealth
-//! proxy's top-10% share against WID's (ADR 0312).
+//! WID.world bulk data: the 2000 shares of the bottom 50%, middle 40% and top 10% of adults
+//! (equal split) in one WID share variable, nearest year within the window. Not a pack input: only
+//! the C6 gate report of a research pack reads it, to list the proxy's top-10% shares against
+//! WID's (ADR 0312); the report names the file.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -13,14 +13,15 @@ use zip::ZipArchive;
 
 use super::{ByYear, Csv, WINDOW, YEAR, cell, err, float, nearest_year};
 
-/// The bulk download in the fetch cache.
-pub const WID: &str = "wid_all_data.zip";
-pub const VARIABLE: &str = "shweal992j";
+/// Net personal wealth.
+pub const WEALTH: &str = "shweal992j";
+/// Pre-tax national income.
+pub const INCOME: &str = "sptinc992j";
 pub const PERCENTILES: [&str; 3] = ["p0p50", "p50p90", "p90p100"];
 
-/// Shares of the three brackets by WID country code (ISO 3166 alpha-2), each the value of the
+/// Shares of the three brackets in `variable` by WID country code (ISO 3166 alpha-2), each the value of the
 /// year nearest 2000 within the window; a country missing any bracket is left out.
-pub fn read_wid(path: &Path) -> Result<BTreeMap<String, [f64; 3]>, String> {
+pub fn read_wid(path: &Path, variable: &str) -> Result<BTreeMap<String, [f64; 3]>, String> {
     let file = File::open(path).map_err(|e| err(path, e))?;
     let mut zip = ZipArchive::new(BufReader::new(file)).map_err(|e| err(path, e))?;
     let mut series: BTreeMap<(String, usize), ByYear> = BTreeMap::new();
@@ -33,13 +34,13 @@ pub fn read_wid(path: &Path) -> Result<BTreeMap<String, [f64; 3]>, String> {
         }
         let mut csv = Csv::new_delimited(member, path, b';')?;
         let cols = ["country", "variable", "percentile", "year", "value"].map(|c| csv.col(c));
-        let [country, variable, percentile, year, value] = cols;
-        let (country, variable, percentile, year, value) =
-            (country?, variable?, percentile?, year?, value?);
+        let [country, column, percentile, year, value] = cols;
+        let (country, column, percentile, year, value) =
+            (country?, column?, percentile?, year?, value?);
         let mut row = StringRecord::new();
         let origin = format!("{}:{name}", path.display());
         while csv.next(&mut row)? {
-            if cell(&row, variable) != VARIABLE {
+            if cell(&row, column) != variable {
                 continue;
             }
             let Some(b) = PERCENTILES
