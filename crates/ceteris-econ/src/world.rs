@@ -298,8 +298,12 @@ pub struct Scratch {
     pub payments: Vec<Payments>,
     /// Working space of `Ledger::post` at T2b.
     pub post: PostScratch,
-    /// Per traded good, its ledger column while T2b moves its goods.
+    /// Per traded good, its ledger column while T2b moves its goods; per local good at T3.
     pub stock: Vec<GoodColumn>,
+    /// Per local good, its T3 clearing ([`LocalClear`]), and every local purchase in posting
+    /// order.
+    pub local: Vec<LocalClear>,
+    pub local_entries: Vec<Entry>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * ng + g]`, refreshed with
@@ -348,6 +352,8 @@ impl Scratch {
             payments: vec![Payments::default(); n_traded],
             post: PostScratch::default(),
             stock: Vec::new(),
+            local: Vec::new(),
+            local_entries: Vec::new(),
             lead: vec![0.0; np * ng],
             flows: FlowWindow::new(nc, np, ng, n_traded),
             dispatch_made: vec![0.0; n_traded],
@@ -401,6 +407,15 @@ pub struct Payments {
     /// the per-good tasks, and the goods its selection created.
     pub pushes: Vec<ceteris_trade::pipeline::Push>,
     pub made: f64,
+}
+
+/// One local good's T3 clearing: its buyers in the province at hand (account, allocation,
+/// whether it consumes), its purchases, and where each province's end in them.
+#[derive(Clone, Debug, Default)]
+pub struct LocalClear {
+    pub buyers: Vec<(AccountId, f64, bool)>,
+    pub entries: Vec<Entry>,
+    pub ends: Vec<u32>,
 }
 
 /// One buyer of a traded good at its destination: ledger account, pipeline index, class
