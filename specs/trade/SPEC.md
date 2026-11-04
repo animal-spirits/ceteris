@@ -1093,6 +1093,12 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   14: a tick 35.9 to 36.0 ms before, 33.8 to 34.0 after in three of four rounds (one noisy
   round each); demand 5.9 to 6.1 before, 1.5 after, while deliver (1.3 to 3.0) and labour
   (1.2 to 1.5) slow as they share the cores with it.
+  mimalloc (ADR 0297, 2026-11-04) is the global allocator of the `ceteris` binary and the
+  `identity` example; allocation never touches results (identity equal to `main` at 1 and 14
+  threads). Alternating rounds against the system allocator: E2's local chain 1.8 to 2.5 ms
+  before, 0.6 to 0.8 after, produce 5.6 to 6.2 before, 4.2 to 4.8 after in every round; the tick
+  lower in 5 of 6 rounds of a loaded run (44 to 48 ms), by 0.9 to 2.3 ms (median about 1.3).
+  The criterion benches keep the system allocator.
 
 ## Open questions
 
