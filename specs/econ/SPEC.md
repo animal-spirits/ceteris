@@ -980,7 +980,7 @@ the money balance: spending equals money.
 
 *Inversion (per country, over its pops; ADR 0094, Amendment).* Parameters theta, sigma_B, phi,
 gamma, eps and omega_A = 0 from the pooled PIGL column of the paper (Tables 3 and A3, column 3,
-pp. 24 and 48). The unknowns lambda, omega_M = t, omega_S = 1 - t and alpha (summing to 1 within
+pp. 24 and 48), omega_A = 0 wherever a country's shares allow it (ADR 0313, below). The unknowns lambda, omega_M = t, omega_S = 1 - t and alpha (summing to 1 within
 each category over the goods with demand) solve, for every good,
 
 ```
@@ -993,13 +993,18 @@ current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) 
 t solves the M aggregate by a bracketed secant (Illinois) on [0, 1]; then alpha_g is rescaled by
 Omega_g over its aggregate share and renormalized within its category (the contraction of Berry,
 Levinsohn and Pakes 1995). The rounds stop when every aggregate share is within 1e-14 of Omega
-relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000 is an error. No
-sign change of the M aggregate on [0, 1] or a negative lambda is a negative weight and stops the
-load (never clipped). At load without a calibration the pops are at the data state's prices (1
+relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000 is an error.
+Where the M aggregate is above Omega_M even at t = 0, M binds instead of A (ADR 0313): omega_M =
+0, lambda follows from the M aggregate and t = omega_A of omega_A + omega_S = 1 solves the food
+aggregate by the same secant; where it is below Omega_M at t = 1, S binds likewise (omega_S = 0,
+t = omega_A of omega_A + omega_M = 1). The income-effect weight is so the largest at which every
+omega is nonnegative, and the same as with omega_A = 0 wherever that fits. No sign change for the
+binding category or a negative lambda stops the load (never clipped). At load without a calibration the pops are at the data state's prices (1
 for traded goods, p_c for local goods, ADR 0098) with E_k their base
 income and m_k their base income per person (`world::household_preferences`); with one pop, or
-pops alike, the solve is the closed form of one lognormal: z = Omega_A / theta_A, omega_c =
-(Omega_c - z theta_c) / (1 - z), lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g =
+pops alike, the solve is the closed form of one lognormal: z = min_c Omega_c / theta_c (A on a
+tie, so z = Omega_A / theta_A wherever omega_A = 0 fits; z >= 1 only where Omega = theta, which
+panics), omega_c = (Omega_c - z theta_c) / (1 - z), 0 for the binding category, lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g =
 Omega_g / Omega_c(g) (`invert_pigl`). The simulator (`demand::invert_pigl_pops`) and the GE
 reference (`demand::invert_pops`) implement it independently.
 

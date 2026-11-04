@@ -189,6 +189,74 @@ fn one_pop_inversion_equals_old_at_prices_one() {
     assert_eq!(joint.sigma, sigma);
 }
 
+/// ADR 0313: where omega_A = 0 would leave M or S negative (low services; Ghana's manufactures;
+/// food above theta_A), z = min_c Omega_c / theta_c, the binding category's omega 0 and omega_A
+/// positive; the joint inversion of one pop at prices 1 is the same closed form and meets the
+/// shares.
+#[test]
+fn inversion_outside_omega_a_zero_binds_another_category() {
+    let inp = inputs();
+    let omega = Mat {
+        rows: 3,
+        cols: 10,
+        data: vec![
+            0.30, 0.0, 0.0, 0.30, 0.3, 0.0, 0.0, 0.0, 0.0, 0.1, //
+            0.23, 0.006, 0.0, 0.21, 0.006, 0.008, 0.0013, 0.003, 0.0001, 0.535, //
+            0.40, 0.0, 0.0, 0.30, 0.1, 0.0, 0.0, 0.0, 0.0, 0.2,
+        ],
+    };
+    let (spend, sigma, country) = (vec![2.0; 3], vec![0.7; 3], vec![0, 1, 2]);
+    let old = demand::invert(&omega, &spend, &sigma, &inp.category, &inp.pigl).unwrap();
+    for (r, c) in [(0, 2), (1, 1), (2, 2)] {
+        assert_eq!(old.omega[(r, c)], 0.0);
+        assert!(old.omega[(r, 0)] > 0.0);
+    }
+    let ones = Mat::filled(3, 10, 1.0);
+    let pops = demand::Pops {
+        country: &country,
+        price: &ones,
+        income: &spend,
+        spend: &spend,
+    };
+    let joint = demand::invert_pops(
+        &omega,
+        &pops,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    )
+    .unwrap();
+    for (what, a, b) in [
+        ("scale", &joint.scale, &old.scale),
+        ("omega", &joint.omega.data, &old.omega.data),
+    ] {
+        for (x, y) in a.iter().zip(b) {
+            assert!(
+                (x - y).abs() <= 1e-12 * y.abs().max(1.0),
+                "{what}: {x} vs {y}"
+            );
+        }
+    }
+    let share = demand::shares(
+        &joint,
+        &country,
+        &ones,
+        &spend,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    );
+    for r in 0..3 {
+        let total: f64 = omega.row(r).iter().sum();
+        for g in 0..10 {
+            let want = omega[(r, g)] / total;
+            assert!((share[(r, g)] - want).abs() <= 1e-12, "row {r} good {g}");
+        }
+    }
+}
+
 /// ADR 0094: the within-pop dispersion and the population-weighted variance of the pops' log
 /// base income per person add up to the national s^2 = (2 erfinv G)^2, or s_w = 0 where the
 /// between-pop variance alone exceeds it.

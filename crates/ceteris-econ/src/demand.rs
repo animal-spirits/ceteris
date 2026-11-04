@@ -13,7 +13,8 @@ pub const N_CATEGORIES: usize = 3;
 pub struct PiglWeights {
     /// lambda = nu / kappa, the scale of the income-effect term.
     pub scale: f64,
-    /// Weights omega_c of B(P); omega_A = 0.
+    /// Weights omega_c of B(P); 0 for the category that binds the income-effect weight, A
+    /// wherever omega_A = 0 fits (ADR 0313).
     pub omega: [f64; N_CATEGORIES],
     /// Within-category CES weights alpha_g, summing to 1 over each category with demand.
     pub within: Vec<f64>,
@@ -192,11 +193,11 @@ pub fn pigl(
 
 /// The weights that reproduce the final demand shares `omega` (normalized) at prices 1 and
 /// mean spending per person `base_spend`: within-category weights alpha_g = Omega_g / Omega_c;
-/// with omega_A = 0, category shares Omega_c = (1 - z) omega_c + z theta_c give
-/// z = Omega_A / theta_A, omega_c = (Omega_c - z theta_c) / (1 - z) and
-/// lambda = z base_spend^eps exp(eps (1 - eps) s^2 / 2). Panics where a weight would be
-/// negative (z >= 1 or Omega_c < z theta_c): the country's shares are outside the form.
-/// `category` is each good's (`Goods::category`).
+/// category shares Omega_c = (1 - z) omega_c + z theta_c with the largest income-effect weight
+/// at which every omega_c >= 0, z = min_c Omega_c / theta_c (ADR 0313; the binding category,
+/// A on a tie, gets omega 0, so omega_A = 0 wherever that fits), omega_c = (Omega_c - z
+/// theta_c) / (1 - z) and lambda = z base_spend^eps exp(eps (1 - eps) s^2 / 2). Panics where
+/// z >= 1 (Omega = theta). `category` is each good's (`Goods::category`).
 pub fn invert_pigl(
     omega: &[f64],
     category: &[u8],
@@ -216,15 +217,16 @@ pub fn invert_pigl(
     for g in (0..n).filter(|&g| omega[g] > 0.0) {
         within[g] = omega[g] / total / cat[of(g)];
     }
-    let z = cat[0] / q.theta[0];
-    let mut weight = [0.0; N_CATEGORIES];
-    for c in 1..N_CATEGORIES {
-        weight[c] = (cat[c] - z * q.theta[c]) / (1.0 - z);
-    }
+    let bind = binding(&cat, &q.theta);
+    let z = cat[bind] / q.theta[bind];
     assert!(
-        z < 1.0 && weight.iter().all(|&o| o >= 0.0),
-        "PIGL inversion gives a negative weight: category shares {cat:?}, z {z}, omega {weight:?}"
+        z < 1.0,
+        "PIGL inversion gives no weight: category shares {cat:?} are theta"
     );
+    let mut weight = [0.0; N_CATEGORIES];
+    for c in (0..N_CATEGORIES).filter(|&c| c != bind) {
+        weight[c] = ((cat[c] - z * q.theta[c]) / (1.0 - z)).max(0.0);
+    }
     let eps = q.eps;
     PiglWeights {
         scale: z
@@ -237,6 +239,17 @@ pub fn invert_pigl(
         gov: Vec::new(),
         inv: Vec::new(),
     }
+}
+
+/// The category whose Omega_c / theta_c is least, the first on a tie (ADR 0313).
+fn binding(cat: &[f64; N_CATEGORIES], theta: &[f64; N_CATEGORIES]) -> usize {
+    (1..N_CATEGORIES).fold(0, |b, c| {
+        if cat[c] * theta[b] < cat[b] * theta[c] {
+            c
+        } else {
+            b
+        }
+    })
 }
 
 /// ADR 0094: a country's within-pop dispersion s_w = sqrt(max(0, s_nat^2 - Var ln m)), s_nat
@@ -283,10 +296,11 @@ type Fixed = ([f64; N_CATEGORIES], Vec<f64>, [f64; N_CATEGORIES], f64);
 /// prices and income, with dispersion `sigma`), weighted by their spending, are its final demand
 /// shares `omega` (normalized). From alpha_g = Omega_g / Omega_c, rounds of: the split t =
 /// omega_M of omega_M + omega_S = 1 that meets the M aggregate (bracketed secant), with lambda
-/// from the food aggregate in closed form (omega_A = 0); then alpha_g times Omega_g over its
+/// from the food aggregate in closed form (omega_A = 0); where M (S) binds instead, omega_M
+/// (omega_S) = 0, lambda from its aggregate and t = omega_A meets food (ADR 0313); then alpha_g times Omega_g over its
 /// aggregate share, renormalized within its category; until every aggregate share is within
 /// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
-/// out; without any, [`invert_pigl`] at spending 0. Panics where a weight would be negative or
+/// out; without any, [`invert_pigl`] at spending 0. Panics where no split meets the aggregates or
 /// a split takes more than [`MAX_SECANT_STEPS`] secant steps. `category` is each good's
 /// (`Goods::category`).
 pub fn invert_pigl_pops(
@@ -335,6 +349,57 @@ pub fn invert_pigl_pops(
         )
     };
     let (mut best, mut stalled) = (f64::INFINITY, 0);
+    // the categories other than the binding one b, whose weights are t and 1 - t
+    let others = |b: usize| -> (usize, usize) {
+        match b {
+            0 => (1, 2),
+            1 => (0, 2),
+            _ => (0, 1),
+        }
+    };
+    // lambda (from the b aggregate in closed form, omega_b = 0) and every pop's category shares
+    // at the split t
+    let at = |fixed: &[Fixed], b: usize, t: f64| -> (f64, Vec<[f64; N_CATEGORIES]>) {
+        let (o1, o2) = others(b);
+        let mut weight = [0.0; N_CATEGORIES];
+        (weight[o1], weight[o2]) = (t, 1.0 - t);
+        let parts: Vec<([f64; N_CATEGORIES], f64)> = fixed
+            .iter()
+            .map(|(index, _, _, x)| {
+                let (b, s_b) = aggregate(&weight, index, q.sigma_b);
+                (s_b, x * libm::pow(b, eps - q.gamma))
+            })
+            .collect();
+        let bound: f64 = parts
+            .iter()
+            .zip(fixed)
+            .zip(&pops)
+            .map(|(((_, f), (_, _, s_d, _)), k)| k.spend * f * s_d[b])
+            .sum();
+        let lambda = if cat[b] > 0.0 {
+            cat[b] * spent / bound
+        } else {
+            0.0
+        };
+        let shares = parts
+            .iter()
+            .zip(fixed)
+            .map(|((s_b, f), (_, _, s_d, _))| {
+                std::array::from_fn(|c| s_b[c] + lambda * f * (s_d[c] - s_b[c]))
+            })
+            .collect();
+        (lambda, shares)
+    };
+    let miss = |fixed: &[Fixed], b: usize, t: f64| -> f64 {
+        let o1 = others(b).0;
+        let (_, shares) = at(fixed, b, t);
+        shares
+            .iter()
+            .zip(&pops)
+            .map(|(s, k)| k.spend * s[o1])
+            .sum::<f64>()
+            - cat[o1] * spent
+    };
     for _ in 0..MAX_ROUNDS {
         let fixed: Vec<Fixed> = pops
             .iter()
@@ -347,90 +412,28 @@ pub fn invert_pigl_pops(
                 (index, within, s_d, x)
             })
             .collect();
-        // lambda and every pop's category shares at the split t
-        let at = |t: f64| -> (f64, Vec<[f64; N_CATEGORIES]>) {
-            let weight = [0.0, t, 1.0 - t];
-            let parts: Vec<([f64; N_CATEGORIES], f64)> = fixed
-                .iter()
-                .map(|(index, _, _, x)| {
-                    let (b, s_b) = aggregate(&weight, index, q.sigma_b);
-                    (s_b, x * libm::pow(b, eps - q.gamma))
-                })
-                .collect();
-            let food: f64 = parts
-                .iter()
-                .zip(&fixed)
-                .zip(&pops)
-                .map(|(((_, f), (_, _, s_d, _)), k)| k.spend * f * s_d[0])
-                .sum();
-            let lambda = if cat[0] > 0.0 {
-                cat[0] * spent / food
-            } else {
-                0.0
-            };
-            let shares = parts
-                .iter()
-                .zip(&fixed)
-                .map(|((s_b, f), (_, _, s_d, _))| {
-                    std::array::from_fn(|c| s_b[c] + lambda * f * (s_d[c] - s_b[c]))
-                })
-                .collect();
-            (lambda, shares)
+        // omega_A = 0 where it fits; else M (S) binds: its aggregate is above (below) Omega
+        // even at omega_M = 0 (omega_S = 0), ADR 0313
+        let (fa, fb) = (miss(&fixed, 0, 0.0), miss(&fixed, 0, 1.0));
+        let bind = if fa > 0.0 {
+            1
+        } else if fb < 0.0 {
+            2
+        } else {
+            0
         };
-        let miss_m = |t: f64| -> f64 {
-            let (_, shares) = at(t);
-            shares
-                .iter()
-                .zip(&pops)
-                .map(|(s, k)| k.spend * s[1])
-                .sum::<f64>()
-                - cat[1] * spent
-        };
-        let t = {
-            let (mut a, mut b) = (0.0, 1.0);
-            let (mut fa, mut fb) = (miss_m(a), miss_m(b));
-            if fa > 0.0 || fb < 0.0 {
-                negative();
-            }
-            // Illinois: the retained end's value is halved when the same end moves twice
-            let mut last = 0i8;
-            let mut steps = 0;
-            while fa != 0.0 && fb != 0.0 {
-                steps += 1;
-                assert!(
-                    steps <= MAX_SECANT_STEPS,
-                    "PIGL inversion: the split did not settle in {MAX_SECANT_STEPS} steps"
-                );
-                let mut t = (a * fb - b * fa) / (fb - fa);
-                if !(t > a && t < b) {
-                    t = 0.5 * (a + b);
-                }
-                if !(t > a && t < b) {
-                    break;
-                }
-                let ft = miss_m(t);
-                if ft <= 0.0 {
-                    (a, fa) = (t, ft);
-                    if last == 1 {
-                        fb *= 0.5;
-                    }
-                    last = 1;
-                } else {
-                    (b, fb) = (t, ft);
-                    if last == 2 {
-                        fa *= 0.5;
-                    }
-                    last = 2;
-                }
-            }
-            if fa == 0.0 || -fa <= fb { a } else { b }
-        };
-        let (lambda, shares) = at(t);
+        if bind != 0 && (miss(&fixed, bind, 0.0) > 0.0 || miss(&fixed, bind, 1.0) < 0.0) {
+            negative();
+        }
+        let t = illinois(|t| miss(&fixed, bind, t));
+        let (lambda, shares) = at(&fixed, bind, t);
         if !(lambda.is_finite() && lambda >= 0.0) {
             negative();
         }
         w.scale = lambda;
-        w.omega = [0.0, t, 1.0 - t];
+        let (o1, o2) = others(bind);
+        w.omega = [0.0; N_CATEGORIES];
+        (w.omega[o1], w.omega[o2]) = (t, 1.0 - t);
         let mut model = vec![0.0; n];
         for ((s, (_, within, _, _)), k) in shares.iter().zip(&fixed).zip(&pops) {
             for g in 0..n {
@@ -462,6 +465,45 @@ pub fn invert_pigl_pops(
         "PIGL inversion over {} pops did not settle in {MAX_ROUNDS} rounds",
         pops.len()
     );
+}
+
+/// The root in [0, 1] of `f`, increasing with f(0) <= 0 <= f(1): a bracketed secant (Illinois:
+/// the retained end's value is halved when the same end moves twice) to the last bit, then the
+/// end with the smaller miss. Panics after [`MAX_SECANT_STEPS`] steps.
+fn illinois(f: impl Fn(f64) -> f64) -> f64 {
+    let (mut a, mut b) = (0.0, 1.0);
+    let (mut fa, mut fb) = (f(a), f(b));
+    let mut last = 0i8;
+    let mut steps = 0;
+    while fa != 0.0 && fb != 0.0 {
+        steps += 1;
+        assert!(
+            steps <= MAX_SECANT_STEPS,
+            "PIGL inversion: the split did not settle in {MAX_SECANT_STEPS} steps"
+        );
+        let mut t = (a * fb - b * fa) / (fb - fa);
+        if !(t > a && t < b) {
+            t = 0.5 * (a + b);
+        }
+        if !(t > a && t < b) {
+            break;
+        }
+        let ft = f(t);
+        if ft <= 0.0 {
+            (a, fa) = (t, ft);
+            if last == 1 {
+                fb *= 0.5;
+            }
+            last = 1;
+        } else {
+            (b, fb) = (t, ft);
+            if last == 2 {
+                fa *= 0.5;
+            }
+            last = 2;
+        }
+    }
+    if fa == 0.0 || -fa <= fb { a } else { b }
 }
 
 #[cfg(test)]
@@ -733,12 +775,60 @@ mod tests {
         assert_eq!(within_sigma(0.4, &[]), s);
     }
 
+    /// ADR 0313: where omega_A = 0 would leave M or S negative (services below z theta_S; Ghana's
+    /// manufactures below z theta_M; food above theta_A), the income-effect weight is the
+    /// largest that keeps every omega nonnegative: the binding category's omega is 0, omega_A
+    /// takes the rest, and the shares are met, in the closed form and over pops at their own
+    /// prices and incomes.
     #[test]
-    #[should_panic(expected = "negative")]
-    fn inversion_refuses_a_negative_weight() {
-        // services below z theta_S: omega_S would be negative
-        let omega = [0.30, 0.0, 0.0, 0.30, 0.3, 0.0, 0.0, 0.0, 0.0, 0.1];
-        invert_pigl(&omega, &CATEGORY, BASE, SIGMA, &EconParams::default());
+    fn inversion_outside_omega_a_zero_binds_another_category() {
+        let p = EconParams::default();
+        let low_s = [0.30, 0.0, 0.0, 0.30, 0.3, 0.0, 0.0, 0.0, 0.0, 0.1];
+        let low_m = [
+            0.23, 0.006, 0.0, 0.21, 0.006, 0.008, 0.0013, 0.003, 0.0001, 0.535,
+        ];
+        let food = [0.40, 0.0, 0.0, 0.30, 0.1, 0.0, 0.0, 0.0, 0.0, 0.2];
+        for (omega, c) in [(low_s, 2), (low_m, 1), (food, 2)] {
+            let w = weights_at(&omega);
+            assert_eq!(w.omega[c], 0.0);
+            assert!(w.omega[0] > 0.0 && w.scale > 0.0);
+            assert!((w.omega.iter().sum::<f64>() - 1.0).abs() <= 1e-15);
+            let total: f64 = omega.iter().sum();
+            let mut s = [0.0; N_GOODS];
+            pigl_shares(&w, &[1.0; N_GOODS], BASE, SIGMA, &p, &mut s);
+            for g in 0..N_GOODS {
+                assert!((s[g] - omega[g] / total).abs() <= 1e-12, "good {g}");
+            }
+            let pops: Vec<PopAt> = (0..4)
+                .map(|k| PopAt {
+                    price: (0..N_GOODS)
+                        .map(|g| {
+                            if g < N_TRADED {
+                                1.0
+                            } else {
+                                0.6 + 0.1 * k as f64
+                            }
+                        })
+                        .collect(),
+                    income: BASE * (1.0 + 0.2 * k as f64),
+                    spend: 10.0 - k as f64,
+                })
+                .collect();
+            let w = invert_pigl_pops(&omega, &CATEGORY, &pops, SIGMA, &p);
+            assert!(w.omega[c] == 0.0 && w.omega[0] > 0.0);
+            let mut agg = [0.0; N_GOODS];
+            for k in &pops {
+                pigl_shares(&w, &k.price, k.income, SIGMA, &p, &mut s);
+                for g in 0..N_GOODS {
+                    agg[g] += s[g] * k.spend;
+                }
+            }
+            let spent: f64 = agg.iter().sum();
+            for g in (0..N_GOODS).filter(|&g| omega[g] > 0.0) {
+                let miss = agg[g] / spent / (omega[g] / total) - 1.0;
+                assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
+            }
+        }
     }
 
     #[test]
