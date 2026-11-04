@@ -1470,3 +1470,8 @@ sections = "8.6, 9.6"
 rows = "0307 to 0310"
 topic = "[Sector labour shares from WIOD SEA clipped and rescaled to PWT, dividends by WID wealth ranked on base income in one pass, foreign-owned shares from OECD AAMNE 2000, foreign dividends as income through a world dividend account, accepting ADR 0104](../rfcs/0302-sector-labour-shares-and-wealth-weighted-dividends.md)"
 sections = "6.1, 7.2, 9.1, 16"
+
+[[entry]]
+rows = "0311, 0312"
+topic = "[Wealth-bracket shares from the income Gini by a variance-additive lognormal fitted to the US DFA, WID as a research check only, amending ADR 0308](../rfcs/0303-open-wealth-shares-from-the-income-gini.md)"
+sections = "9.1, 17"

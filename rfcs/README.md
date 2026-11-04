@@ -307,3 +307,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0287 | [Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)](0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | accepted | ADR 0295 to 0300 |
 | 0301 | [Three final demanders in P2: who buys, inventory change, shares, balance, composition and the accelerator (accepts and amends ADR 0099)](0301-three-final-demanders-in-p2.md) | accepted | ADR 0301 to 0306 |
 | 0302 | [Sector labour shares, wealth-weighted and foreign dividends: sources, bounds, ranks and routing (accepts and amends ADR 0104)](0302-sector-labour-shares-and-wealth-weighted-dividends.md) | accepted | ADR 0307 to 0310 |
+| 0303 | [Wealth-bracket shares from the income Gini, WID as a check only (amends ADR 0308)](0303-open-wealth-shares-from-the-income-gini.md) | accepted | ADR 0311, 0312 |
