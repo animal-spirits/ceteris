@@ -645,7 +645,9 @@ fn closed_forms_zero_the_reference_residual() {
         let residual = max_abs(&model::residual(&x, &m));
         assert!(residual <= 1e-10, "{}: residual {residual}", w.name);
         let e = model::evaluate(&x, &m, &reference.ent_a);
-        allclose(w.name, &e.value_added, &s.va0, 1e-10, 0.0);
+        // value added back in the calibration's units
+        let va: Vec<f64> = e.value_added.iter().map(|v| v * shift.exp()).collect();
+        allclose(w.name, &va, &s.va0, 1e-10, 0.0);
         allclose(w.name, &e.employment, &s.l0, 1e-10, 0.0);
         allclose(w.name, &e.output, &s.output, 1e-10, 0.0);
         let target = inp.ent_va_target.as_ref().unwrap();
