@@ -226,15 +226,17 @@ fn inversion_at_given_prices_reproduces_the_shares() {
 }
 
 /// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its
-/// province's buyer prices and its income, are each country's final demand shares Omega. A
-/// country with no pops (on the pack, ICIO territories without an economy province, such as the
-/// Ashmore and Cartier Islands) has no spending to share.
+/// province's buyer prices and its spending (income and transfer, ADR 0100), are each country's
+/// final demand shares Omega for local goods, and for traded goods the shares stage 1 balanced
+/// (ADR 0295), which keep each country's traded total. A country with no pops (on the pack, ICIO
+/// territories without an economy province, such as the Ashmore and Cartier Islands) has no
+/// spending to share.
 #[test]
 fn aggregate_data_state_shares_match_omega() {
     for w in worlds() {
         let (inp, s) = (&w.inp, &w.s);
         let price = s.consumer.select_rows(&inp.pop_province);
-        let got = aggregate_shares(inp, &s.weights, &price, &s.pop_income);
+        let got = aggregate_shares(inp, &s.weights, &price, &s.pop_spending());
         let want = omega_shares(inp);
         let with_pops: Vec<usize> = (0..inp.n_countries())
             .filter(|c| inp.pop_country().contains(c))
@@ -242,7 +244,16 @@ fn aggregate_data_state_shares_match_omega() {
         let rows = |m: &Mat| -> Vec<f64> {
             with_pops
                 .iter()
-                .flat_map(|&c| (0..inp.n_goods()).map(move |g| m[(c, g)]))
+                .flat_map(|&c| {
+                    let traded: f64 = (0..inp.n_goods())
+                        .filter(|&g| inp.traded[g])
+                        .map(|g| m[(c, g)])
+                        .sum();
+                    (0..inp.n_goods())
+                        .filter(|&g| !inp.traded[g])
+                        .map(move |g| m[(c, g)])
+                        .chain(std::iter::once(traded))
+                })
                 .collect()
         };
         allclose(w.name, &rows(&got), &rows(&want), 0.0, 1e-12);
@@ -627,6 +638,10 @@ fn closed_forms_zero_the_reference_residual() {
         let reference = steady::reference_inputs(inp, s);
         let x = steady::reference_point(inp, s);
         let m = Model::new(&reference).unwrap();
+        // the calibration pins the traded goods' index to 1, local goods at p_c (ADR 0098); the
+        // reference the world index over every good: the same point in its units
+        let shift = model::evaluate(&x, &m, &reference.ent_a).index.ln();
+        let x: Vec<f64> = x.iter().map(|v| v - shift).collect();
         let residual = max_abs(&model::residual(&x, &m));
         assert!(residual <= 1e-10, "{}: residual {residual}", w.name);
         let e = model::evaluate(&x, &m, &reference.ent_a);
@@ -715,8 +730,8 @@ fn steady_state_unchanged_by_selection() {
     }
 }
 
-/// Local goods at p = 1: output solves each province's Leontief system against household and
-/// intermediate local demand.
+/// Local goods: output (units, at the province's p_c, ADR 0098) solves each province's Leontief
+/// system against household spending at p_c and intermediate local demand.
 #[test]
 fn local_output_is_nonnegative_and_clears_locally() {
     for w in worlds() {
@@ -738,7 +753,7 @@ fn local_output_is_nonnegative_and_clears_locally() {
         for p in 0..n_p {
             for g in (0..n_g).filter(|&g| !inp.traded[g]) {
                 got.push(out[(p, g)]);
-                want.push(s.spend_hh[(p, g)] + used[(p, g)]);
+                want.push(s.spend_hh[(p, g)] / s.consumer[(p, g)] + used[(p, g)]);
             }
         }
         allclose(w.name, &got, &want, 1e-12, 0.0);
@@ -884,8 +899,14 @@ fn stage5_holds(name: &str, inp: &Inputs, s: &Steady) {
         let money: Vec<f64> = (0..s.pop_income.len())
             .map(|k| s.pop_income[k] - s.pop_wage[k])
             .collect();
+        let money: Vec<f64> = money
+            .iter()
+            .zip(&s.pop_transfer)
+            .map(|(m, t)| m + t)
+            .collect();
         allclose(name, &s.pop_money(), &money, 1e-15, 0.0);
-        allclose(name, &s.pop_spend.row_sums(), &s.pop_income, 1e-12, 0.0);
+        // pops spend their income and transfer (ADR 0100)
+        allclose(name, &s.pop_spend.row_sums(), &s.pop_spending(), 1e-12, 0.0);
     }
 }
 
