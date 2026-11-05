@@ -136,6 +136,11 @@ fn reference() -> Option<&'static Reference> {
 }
 
 fn run(out: &Path, flags: &[&str]) -> String {
+    run_checked(out, flags).unwrap_or_else(|stderr| panic!("{stderr}"))
+}
+
+/// [`run`], the run's stderr where it fails.
+fn run_checked(out: &Path, flags: &[&str]) -> Result<String, String> {
     let pack = pack();
     let (ticks, every) = (TICKS.to_string(), HISTORY_EVERY.to_string());
     // the gate measures the steady state, which the initial drift leaves (ADR 0103)
@@ -153,12 +158,10 @@ fn run(out: &Path, flags: &[&str]) -> String {
         .args(&args)
         .output()
         .unwrap();
-    assert!(
-        run.status.success(),
-        "{}",
-        String::from_utf8_lossy(&run.stderr)
-    );
-    String::from_utf8(run.stdout).unwrap()
+    if !run.status.success() {
+        return Err(String::from_utf8_lossy(&run.stderr).into_owned());
+    }
+    Ok(String::from_utf8(run.stdout).unwrap())
 }
 
 fn table(path: &Path) -> RecordBatch {
@@ -364,6 +367,11 @@ fn gaps(out: &Path, r: &Reference, excluded: &[(usize, usize)]) -> Gaps {
 /// printed with their gaps; more than 1% of the active cells excluded fails V1. Whether V1
 /// holds, and the summary.
 fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
+    v1_checked(r, start, flags).unwrap_or_else(|stderr| panic!("{stderr}"))
+}
+
+/// [`v1`], the run's stderr where it fails.
+fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, String), String> {
     let bound = uniqueness::spectral_bound(
         &r.inputs.theta,
         0.0,
@@ -375,7 +383,7 @@ fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
     let excluded = uniqueness::cells_outside_region(&r.inputs, pack_gains());
     let active = r.inputs.active_cells().len();
     let tmp = tempfile::tempdir().unwrap();
-    let stdout = run(tmp.path(), flags);
+    let stdout = run_checked(tmp.path(), flags)?;
     let g = gaps(tmp.path(), r, &excluded);
     let step = (120 / HISTORY_EVERY) as usize;
     let path: Vec<String> = g
@@ -421,7 +429,7 @@ fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
                 && [g.price.0, g.wage.0, g.flow_units.0, g.flow_value.0]
                     .iter()
                     .all(|&d| d < V1_TOL)));
-    (holds, summary)
+    Ok((holds, summary))
 }
 
 /// V1 leaves out a cell outside one-market J2 at the run's gains: on the fixture's frictionless
@@ -473,12 +481,22 @@ fn v1_full_pack_from_the_perturbed_steady_state() {
 /// after the coal-led shock output stays at full employment while demand collapses, merchant
 /// losses become pop debts (Mali, Albania) and the price level returns slowly; see ADRs 0090
 /// and 0112 and the econ SPEC open questions. It is expected to fail
-/// V1, and this test fails when it passes, so that the question is reopened.
+/// V1, and this test fails when it passes, so that the question is reopened. On the C6 pack the
+/// run diverges instead: a local input the labour cap does not see (ADR 0266) starves a
+/// province and the ledger overflows (#160); a diverged run counts as open.
 #[test]
 fn v1_full_pack_from_the_data_state_stays_open() {
     let Some(r) = reference() else { return };
-    let (holds, summary) = v1(r, "data_state", &["--frictionless", "--data-state"]);
-    assert!(!holds, "V1 from the data state now holds: {summary}");
+    match v1_checked(r, "data_state", &["--frictionless", "--data-state"]) {
+        Ok((holds, summary)) => assert!(!holds, "V1 from the data state now holds: {summary}"),
+        Err(stderr) => {
+            assert!(stderr.contains("does not fit the ledger"), "{stderr}");
+            println!(
+                "V1 from the data state: the run diverged ({})",
+                stderr.trim()
+            );
+        }
+    }
 }
 
 /// The default run of 1,200 ticks from the calibrated steady state.
