@@ -10,6 +10,7 @@ use std::path::Path;
 
 use csv::StringRecord;
 
+use super::icio::N_GOODS;
 use super::people::parts;
 use super::wdi::Names;
 use super::xlsx::{self, Cell};
@@ -279,6 +280,70 @@ pub fn trade_by_country(
         if value > 0.0 {
             out.insert(c.clone(), value);
         }
+    }
+    Ok(out)
+}
+
+/// One pack country's 2000 goods trade by good, USD.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Trade {
+    pub exports: [f64; N_GOODS],
+    pub imports: [f64; N_GOODS],
+}
+
+/// 2000 exports and imports (USD) by good of each pack country in `codes` that BACI lists, summing
+/// the economies a country combines as [`trade_by_country`] does; `goods` gives the good of an HS
+/// line, and lines it leaves out and flows without a value are left out.
+pub fn trade_by_good(
+    baci: &Path,
+    goods: &BTreeMap<&str, usize>,
+    iso: &Names,
+    codes: &[String],
+) -> Result<BTreeMap<String, Trade>, String> {
+    let numeric = country_codes(baci)?;
+    let mut by_code: BTreeMap<i64, Trade> = BTreeMap::new();
+    let mut line = String::new();
+    for_each_flow(baci, |flow| {
+        let Some(f) = flow else { return };
+        line.clear();
+        line.push_str(&lpad6(&f.k.to_string()));
+        let Some(&g) = goods.get(line.as_str()) else {
+            return;
+        };
+        if f.v.is_nan() {
+            return;
+        }
+        by_code.entry(f.i).or_default().exports[g] += f.v * 1000.0;
+        by_code.entry(f.j).or_default().imports[g] += f.v * 1000.0;
+    })?;
+    let mut by_iso: BTreeMap<String, Trade> = BTreeMap::new();
+    for (k, t) in by_code {
+        let Some(c) = numeric.get(&k) else { continue };
+        let c = BACI_ALIASES
+            .iter()
+            .find(|(a, _)| a == c)
+            .map_or(c.as_str(), |(_, b)| b);
+        let c = if c == "SCG" { "SRB" } else { c };
+        let e = by_iso.entry(c.to_owned()).or_default();
+        for g in 0..N_GOODS {
+            e.exports[g] += t.exports[g];
+            e.imports[g] += t.imports[g];
+        }
+    }
+    let mut out = BTreeMap::new();
+    for c in codes {
+        let found: Vec<&Trade> = parts(c, iso).iter().filter_map(|p| by_iso.get(p)).collect();
+        if found.is_empty() {
+            continue;
+        }
+        let mut t = Trade::default();
+        for f in found {
+            for g in 0..N_GOODS {
+                t.exports[g] += f.exports[g];
+                t.imports[g] += f.imports[g];
+            }
+        }
+        out.insert(c.clone(), t);
     }
     Ok(out)
 }

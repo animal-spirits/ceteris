@@ -1,5 +1,5 @@
-//! Readers of the people sources (ILOSTAT, WIC, Barro-Lee, WDI, SWIID, PWT, Natural Earth) and
-//! of xlsx worksheets.
+//! Readers of the people sources (ILOSTAT, WIC, Barro-Lee, WDI, SWIID, PWT, UN WPP, Natural
+//! Earth) and of xlsx worksheets.
 
 mod common;
 
@@ -8,7 +8,8 @@ use std::fs;
 
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{
-    load_observed, read_barro_lee, read_ilostat, read_ilostat_mean, read_swiid, read_wic,
+    WPP, load_observed, read_barro_lee, read_ilostat, read_ilostat_mean, read_swiid, read_wic,
+    read_wpp,
 };
 use ceteris_pack::read::wdi::{read_wdi, read_wdi_regions};
 use ceteris_pack::read::xlsx::{self, Cell};
@@ -152,6 +153,31 @@ fn read_swiid_places_countries_by_name() {
     assert_eq!(got.keys().collect::<Vec<_>>(), ["ALB", "COD"]);
     assert!(approx(got["ALB"][&2000], 0.314, 1e-12));
     assert_eq!(got["COD"], [(2000, 0.4)].into());
+}
+
+#[test]
+fn read_wpp_keeps_the_medium_variant_of_2000_in_persons() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("wpp.csv.gz");
+    let text = "\u{feff}SortOrder,LocID,Notes,ISO3_code,ISO2_code,SDMX_code,LocTypeID,LocTypeName,ParentID,Location,VarID,Variant,Time,MidPeriod,PopMale,PopFemale,PopTotal,PopDensity\n\
+        ,5507,,,,,,,,ADB region,2,Medium,2000,2000.5,1,1,69213.424,1\n\
+        101,732,,ESH,EH,732,4,Country/Area,912,Western Sahara,2,Medium,2000,2000.5,141.629,130.315,271.943,1.022\n\
+        101,732,,ESH,EH,732,4,Country/Area,912,Western Sahara,2,Medium,2001,2001.5,1,1,280.0,1\n\
+        101,732,,ESH,EH,732,4,Country/Area,912,Western Sahara,3,High,2000,2000.5,1,1,290.0,1\n";
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut gz, text.as_bytes()).unwrap();
+    fs::write(&path, gz.finish().unwrap()).unwrap();
+    let got = read_wpp(&path).unwrap();
+    assert_eq!(got.len(), 1);
+    assert!(approx(got["ESH"], 271_943.0, 1e-12));
+}
+
+#[test]
+fn wpp_has_western_sahara_which_wdi_lacks() {
+    let Some(path) = cached(WPP) else { return };
+    let got = read_wpp(&path).unwrap();
+    assert!(approx(got["ESH"], 271_943.0, 1e-9));
+    assert_eq!(got.len(), 237);
 }
 
 #[test]

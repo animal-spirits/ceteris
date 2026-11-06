@@ -20,6 +20,42 @@ use crate::numeric::pairwise_sum;
 pub const N_GOODS: usize = 10;
 /// Final demand columns that enter the shares.
 pub const FINAL_DEMAND: [&str; 5] = ["HFCE", "NPISH", "GGFC", "GFCF", "INVNT"];
+/// Final demanders (ADR 0099): households (HFCE), government (GGFC and NPISH) and investment
+/// (GFCF), in that order.
+pub const N_DEMANDERS: usize = 3;
+/// Each good's final demand bought by households alone.
+pub const HOUSEHOLDS_ONLY: [[f64; N_DEMANDERS]; N_GOODS] = [[1.0, 0.0, 0.0]; N_GOODS];
+
+/// The demander of an ICIO final demand column other than INVNT.
+fn demander(tail: &str) -> Option<usize> {
+    match tail {
+        "HFCE" => Some(0),
+        "GGFC" | "NPISH" => Some(1),
+        "GFCF" => Some(2),
+        _ => None,
+    }
+}
+
+/// Each good's split of final demand over the demanders (sums to 1): their purchases, a
+/// negative one taken as 0, so that inventory change (INVNT) is shared in proportion to them;
+/// a good that only inventory change buys goes to investment, one with no final demand to
+/// households.
+fn final_demand_split(
+    parts: &[[f64; N_GOODS]; N_DEMANDERS],
+    total: &[f64; N_GOODS],
+) -> [[f64; N_DEMANDERS]; N_GOODS] {
+    std::array::from_fn(|g| {
+        let bought: [f64; N_DEMANDERS] = std::array::from_fn(|d| parts[d][g].max(0.0));
+        let sum: f64 = bought.iter().sum();
+        if sum > 0.0 {
+            bought.map(|b| b / sum)
+        } else if total[g] > 0.0 {
+            [0.0, 0.0, 1.0]
+        } else {
+            [1.0, 0.0, 0.0]
+        }
+    })
+}
 const SPECIAL_ROWS: [&str; 3] = ["TLS", "VA", "OUT"];
 /// ADB Key Indicators file of GDP per capita (Cook Islands).
 pub const ADB_INCOME: &str = "adb_kidb_NY_GDP_PCAP_CD_COO.csv";
@@ -52,6 +88,8 @@ pub struct CountryIo {
     /// `io[k][g]` is units of k per unit of g, all source economies.
     pub io: [[f64; N_GOODS]; N_GOODS],
     pub final_demand_shares: [f64; N_GOODS],
+    /// `final_demand_split[g][d]` is demander d's part of good g's final demand (ADR 0099).
+    pub final_demand_split: [[f64; N_DEMANDERS]; N_GOODS],
     /// Coal (B05) in the value added of good 2.
     pub coal_share: f64,
     /// Million USD: inputs by good of crude oil and gas extraction (B06, B09), good 1 without
@@ -155,6 +193,7 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
     let mut inputs: BTreeMap<&str, Matrix> = BTreeMap::new();
     let mut output: BTreeMap<&str, [f64; N_GOODS]> = BTreeMap::new();
     let mut fin: BTreeMap<&str, [f64; N_GOODS]> = BTreeMap::new();
+    let mut by_demander: BTreeMap<&str, [[f64; N_GOODS]; N_DEMANDERS]> = BTreeMap::new();
     let mut coal: BTreeMap<&str, f64> = BTreeMap::new();
     let mut mining: BTreeMap<&str, f64> = BTreeMap::new();
     let mut extraction: BTreeMap<&str, ([f64; N_GOODS], f64)> = BTreeMap::new();
@@ -170,6 +209,14 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
             let f = fin.entry(code).or_insert([0.0; N_GOODS]);
             for (a, b) in f.iter_mut().zip(add) {
                 *a += b;
+            }
+            if let Some(d) = demander(tail) {
+                let parts = by_demander
+                    .entry(code)
+                    .or_insert([[0.0; N_GOODS]; N_DEMANDERS]);
+                for (a, b) in parts[d].iter_mut().zip(add) {
+                    *a += b;
+                }
             }
         } else if tail != "DPABR" {
             let g = icio_good(tail)?;
@@ -233,6 +280,13 @@ pub fn aggregate(path: &Path, year: i64) -> Result<BTreeMap<String, CountryIo>, 
                 va,
                 io,
                 final_demand_shares: shares,
+                final_demand_split: final_demand_split(
+                    &by_demander
+                        .get(code)
+                        .copied()
+                        .unwrap_or([[0.0; N_GOODS]; N_DEMANDERS]),
+                    f,
+                ),
                 coal_share,
                 extraction,
                 extraction_output,
