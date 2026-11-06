@@ -20,6 +20,7 @@ impl Info {
                     ("change", Json::Float(p.change)),
                     ("sweeps", Json::Int(p.sweeps as i64)),
                     ("sinkhorn_residual", Json::Float(p.sinkhorn_residual)),
+                    ("column_factor", floats(&p.column_factor)),
                 ])
             })
             .collect();
