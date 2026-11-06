@@ -100,7 +100,7 @@ jobs:
   report:
     if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     needs: [slow, gates]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
     permissions:
       issues: write
     steps:
