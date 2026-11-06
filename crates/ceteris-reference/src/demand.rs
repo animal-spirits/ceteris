@@ -26,6 +26,43 @@ pub struct Weights {
     pub omega: Mat,
     pub within: Mat,
     pub sigma: Vec<f64>,
+    /// Not PIGL: government's and investment's fixed shares of a pop's spending (C, G) (ADR
+    /// 0099, RFC 0301); households spend the rest by PIGL ([`Weights::household_share`]). No
+    /// rows where households buy all final demand.
+    pub gov: Mat,
+    pub inv: Mat,
+}
+
+impl Weights {
+    /// (C,) the share of a pop's spending its households spend by PIGL, 1 without the split.
+    pub fn household_share(&self) -> Vec<f64> {
+        if self.gov.rows == 0 {
+            return vec![1.0; self.scale.len()];
+        }
+        let (g, i) = (self.gov.row_sums(), self.inv.row_sums());
+        g.iter().zip(&i).map(|(g, i)| 1.0 - g - i).collect()
+    }
+}
+
+/// Spending shares (G,) of a demander that buys at fixed shares `share` (ADR 0099, RFC 0301
+/// D5): each good with a share and a finite price keeps it, the shares of unreachable goods
+/// spread over the others in proportion; all zero where none is reachable.
+pub fn fixed_shares(share: &[f64], price: &[f64]) -> Vec<f64> {
+    let reachable = |g: usize| share[g] > 0.0 && price[g].is_finite();
+    let total: f64 = share.iter().sum();
+    let reached: f64 = (0..share.len())
+        .filter(|&g| reachable(g))
+        .map(|g| share[g])
+        .sum();
+    (0..share.len())
+        .map(|g| {
+            if reached > 0.0 && reachable(g) {
+                total * (share[g] / reached)
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 /// sqrt(2) Phi^-1((G + 1) / 2) = 2 erfinv(G). Infinite for |G| >= 1 (`io::validate` keeps G in [0, 1)).
@@ -85,8 +122,9 @@ fn negative_weight(bad: &[usize]) -> String {
     format!("PIGL inversion gives a negative weight in countries {bad:?}")
 }
 
-/// `invert_pigl` for every country: omega (C, G), base spending per person and sigma (C,). Errs
-/// where a weight would be negative.
+/// `invert_pigl` for every country: omega (C, G), base spending per person and sigma (C,). The
+/// income-effect weight is the largest at which every omega_c >= 0, z = min_c Omega_c / theta_c,
+/// the binding category (A on a tie) at omega 0 (ADR 0313). Errs where z >= 1.
 pub fn invert(
     omega: &Mat,
     base_spend: &[f64],
@@ -102,16 +140,28 @@ pub fn invert(
             0.0
         }
     });
-    let z: Vec<f64> = (0..cat.rows).map(|r| cat[(r, 0)] / p.theta[0]).collect();
-    let mut weight = Mat::from_fn(cat.rows, N_CATEGORIES, |r, j| {
-        (cat[(r, j)] - z[r] * p.theta[j]) / (1.0 - z[r])
-    });
-    for r in 0..weight.rows {
-        weight[(r, 0)] = 0.0;
-    }
-    let bad: Vec<usize> = (0..weight.rows)
-        .filter(|&r| z[r] >= 1.0 || weight.row(r).iter().any(|&w| w < 0.0))
+    let bind: Vec<usize> = (0..cat.rows)
+        .map(|r| {
+            (1..N_CATEGORIES).fold(0, |b, j| {
+                if cat[(r, j)] * p.theta[b] < cat[(r, b)] * p.theta[j] {
+                    j
+                } else {
+                    b
+                }
+            })
+        })
         .collect();
+    let z: Vec<f64> = (0..cat.rows)
+        .map(|r| cat[(r, bind[r])] / p.theta[bind[r]])
+        .collect();
+    let weight = Mat::from_fn(cat.rows, N_CATEGORIES, |r, j| {
+        if j == bind[r] {
+            0.0
+        } else {
+            ((cat[(r, j)] - z[r] * p.theta[j]) / (1.0 - z[r])).max(0.0)
+        }
+    });
+    let bad: Vec<usize> = (0..weight.rows).filter(|&r| z[r] >= 1.0).collect();
     if !bad.is_empty() {
         return Err(negative_weight(&bad));
     }
@@ -121,11 +171,14 @@ pub fn invert(
             z[r] * base_spend[r].powf(eps) * (eps * (1.0 - eps) * sigma[r].powi(2) / 2.0).exp()
         })
         .collect();
+    let n_g = within.cols;
     Ok(Weights {
         scale,
         omega: weight,
         within,
         sigma: sigma.to_vec(),
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
     })
 }
 
@@ -142,6 +195,8 @@ pub struct Pops<'a> {
 const MAX_ROUNDS: usize = 1000;
 /// Secant steps of one split in [`invert_pops`] before it errs.
 const MAX_SECANT_STEPS: usize = 400;
+/// Doublings of lambda's bracket where shares are clamped (ADR 0316).
+const MAX_DOUBLINGS: usize = 64;
 /// Largest relative miss of an aggregate good share at which [`invert_pops`] stops.
 const SHARE_TOL: f64 = 1e-14;
 
@@ -150,10 +205,12 @@ const SHARE_TOL: f64 = 1e-14;
 /// weighted by their spending, are its final demand shares `omega` (normalized). Rounds of two
 /// steps from alpha_g = Omega_g / Omega_c: at the current alpha, the split t = omega_M of
 /// omega_M + omega_S = 1 solves the M aggregate by a bracketed secant, lambda following in
-/// closed form from food (omega_A = 0); then alpha_g is rescaled by Omega_g over its aggregate
-/// share and renormalized within its category. A country with no spending pop takes [`invert`]
-/// at spending 0. Errs where a weight would be negative (no root t in [0, 1]) or the rounds do
-/// not settle.
+/// closed form from food (omega_A = 0), or where M (S) binds instead, omega_M (omega_S) = 0,
+/// lambda from its aggregate and t = omega_A meeting food (ADR 0313), on the shares [`shares`]
+/// spends, a negative one at 0 (ADR 0316); then alpha_g is rescaled
+/// by Omega_g over its aggregate share and renormalized within its category. A country with no
+/// spending pop takes [`invert`] at spending 0. Errs where no split meets the aggregates or the
+/// rounds do not settle.
 pub fn invert_pops(
     omega: &Mat,
     pops: &Pops,
@@ -168,6 +225,8 @@ pub fn invert_pops(
         omega: Mat::zeros(n_c, N_CATEGORIES),
         within: Mat::zeros(n_c, n_g),
         sigma: sigma.to_vec(),
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
     };
     let (om, cat) = by_category(omega, category);
     for c in 0..n_c {
@@ -191,7 +250,7 @@ pub fn invert_pops(
             sigma_demand,
             p,
         };
-        let (scale, split, within) = country.solve().map_err(|e| match e {
+        let (scale, weight, within) = country.solve().map_err(|e| match e {
             Unsettled(miss) => format!(
                 "the PIGL inversion over the pops of country {c} did not settle in \
                  {MAX_ROUNDS} rounds (miss {miss:e})"
@@ -203,12 +262,60 @@ pub fn invert_pops(
             Negative => negative_weight(&[c]),
         })?;
         out.scale[c] = scale;
-        out.omega
-            .row_mut(c)
-            .copy_from_slice(&[0.0, split, 1.0 - split]);
+        out.omega.row_mut(c).copy_from_slice(&weight);
         out.within.row_mut(c).copy_from_slice(&within[..n_g]);
     }
     Ok(out)
+}
+
+/// The root in [0, 1] of `f`, increasing with f(0) <= 0 <= f(1): a bracketed secant (Illinois)
+/// to the last bit or [`MAX_SECANT_STEPS`] steps, then the end with the smaller miss.
+fn illinois(f: impl Fn(f64) -> f64) -> f64 {
+    let (mut a, mut b) = (0.0, 1.0);
+    let (mut fa, mut fb) = (f(a), f(b));
+    let mut side = 0;
+    for _ in 0..MAX_SECANT_STEPS {
+        if fa == 0.0 || fb == 0.0 {
+            break;
+        }
+        let t = (a * fb - b * fa) / (fb - fa);
+        let t = if t > a && t < b { t } else { 0.5 * (a + b) };
+        if t <= a || t >= b {
+            break;
+        }
+        let ft = f(t);
+        if ft < 0.0 {
+            (a, fa) = (t, ft);
+            if side == -1 {
+                fb /= 2.0;
+            }
+            side = -1;
+        } else {
+            (b, fb) = (t, ft);
+            if side == 1 {
+                fa /= 2.0;
+            }
+            side = 1;
+        }
+    }
+    if fa == 0.0 || -fa <= fb { a } else { b }
+}
+
+/// The categories other than the binding one, whose weights are t and 1 - t (ADR 0313).
+fn others(bind: usize) -> (usize, usize) {
+    match bind {
+        0 => (1, 2),
+        1 => (0, 2),
+        _ => (0, 1),
+    }
+}
+
+/// Category weights with the binding one at 0 and the others at t and 1 - t.
+fn weights(bind: usize, t: f64) -> [f64; N_CATEGORIES] {
+    let (o1, o2) = others(bind);
+    let mut w = [0.0; N_CATEGORIES];
+    (w[o1], w[o2]) = (t, 1.0 - t);
+    w
 }
 
 /// Why a country's inversion fails.
@@ -291,10 +398,11 @@ impl Country<'_> {
             .collect()
     }
 
-    /// sB of a pop at split t, and its factor of lambda.
-    fn at(&self, f: &Fixed, t: f64) -> ([f64; N_CATEGORIES], f64) {
+    /// sB of a pop at split t of the categories other than the binding `bind`, and its factor of
+    /// lambda.
+    fn at(&self, f: &Fixed, bind: usize, t: f64) -> ([f64; N_CATEGORIES], f64) {
         let p = self.p;
-        let weight = [0.0, t, 1.0 - t];
+        let weight = weights(bind, t);
         let mut term = [0.0; N_CATEGORIES];
         let mut mass = 0.0;
         for j in 0..N_CATEGORIES {
@@ -308,45 +416,94 @@ impl Country<'_> {
         (term.map(|v| v / total), f.x * b.powf(p.eps - p.gamma))
     }
 
-    /// lambda and every pop's category shares at split t.
-    fn categories(&self, fixed: &[Fixed], t: f64) -> (f64, Vec<[f64; N_CATEGORIES]>) {
-        let at: Vec<_> = fixed.iter().map(|f| self.at(f, t)).collect();
+    /// lambda, from the binding category's aggregate (its omega 0), and every pop's category
+    /// shares at split t.
+    fn categories(&self, fixed: &[Fixed], bind: usize, t: f64) -> (f64, Vec<[f64; N_CATEGORIES]>) {
+        let at: Vec<_> = fixed.iter().map(|f| self.at(f, bind, t)).collect();
         let spend = |i: usize| self.pops.spend[self.members[i]];
         let total: f64 = (0..fixed.len()).map(spend).sum();
-        let food: f64 = (0..fixed.len())
-            .map(|i| spend(i) * at[i].1 * fixed[i].s_d[0])
+        let bound: f64 = (0..fixed.len())
+            .map(|i| spend(i) * at[i].1 * fixed[i].s_d[bind])
             .sum();
-        let lambda = if self.cat[0] > 0.0 {
-            self.cat[0] * total / food
-        } else {
-            0.0
+        let raw = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            at.iter()
+                .zip(fixed)
+                .map(|((s_b, factor), f)| {
+                    std::array::from_fn(|j| s_b[j] + lambda * factor * (f.s_d[j] - s_b[j]))
+                })
+                .collect()
         };
-        let shares = at
-            .iter()
-            .zip(fixed)
-            .map(|((s_b, factor), f)| {
-                std::array::from_fn(|j| s_b[j] + lambda * factor * (f.s_d[j] - s_b[j]))
-            })
-            .collect();
-        (lambda, shares)
+        if self.cat[bind] <= 0.0 {
+            return (0.0, raw(0.0));
+        }
+        let closed = self.cat[bind] * total / bound;
+        let unclamped = raw(closed);
+        if unclamped.iter().all(|r| r.iter().all(|&s| s >= 0.0)) {
+            return (closed, unclamped);
+        }
+        // ADR 0316: negative shares set to 0 and the rest rescaled, as `shares` spends them;
+        // lambda then meets the binding aggregate by a bracketed secant
+        let clamped = |lambda: f64| -> Vec<[f64; N_CATEGORIES]> {
+            raw(lambda)
+                .into_iter()
+                .map(|r| {
+                    let r = r.map(|s| s.max(0.0));
+                    let sum: f64 = r.iter().sum();
+                    r.map(|s| s / sum)
+                })
+                .collect()
+        };
+        let short = |lambda: f64| -> f64 {
+            let shares = clamped(lambda);
+            (0..fixed.len())
+                .map(|i| spend(i) * shares[i][bind])
+                .sum::<f64>()
+                - self.cat[bind] * total
+        };
+        let mut hi = closed;
+        for _ in 0..MAX_DOUBLINGS {
+            if short(hi) >= 0.0 {
+                break;
+            }
+            hi *= 2.0;
+        }
+        let lambda = hi * illinois(|u| short(hi * u));
+        (lambda, clamped(lambda))
     }
 
-    /// The miss of the M aggregate at split t.
-    fn miss(&self, fixed: &[Fixed], t: f64) -> f64 {
-        let (_, shares) = self.categories(fixed, t);
+    /// The miss of the aggregate of the first category other than `bind` at split t.
+    fn miss(&self, fixed: &[Fixed], bind: usize, t: f64) -> f64 {
+        let first = others(bind).0;
+        let (_, shares) = self.categories(fixed, bind, t);
         let spend = |i: usize| self.pops.spend[self.members[i]];
         let total: f64 = (0..fixed.len()).map(spend).sum();
         (0..fixed.len())
-            .map(|i| spend(i) * shares[i][1])
+            .map(|i| spend(i) * shares[i][first])
             .sum::<f64>()
-            - self.cat[1] * total
+            - self.cat[first] * total
     }
 
-    /// The split t in [0, 1] at which the M aggregate is met: a bracketed secant (Illinois) to
-    /// the last bit, an error after [`MAX_SECANT_STEPS`] steps.
-    fn split(&self, fixed: &[Fixed]) -> Result<f64, Failure> {
+    /// The binding category and the split t in [0, 1] that meets the other aggregates: A binds
+    /// where omega_A = 0 fits, else M where the M aggregate is above Omega_M even at omega_M = 0,
+    /// else S (ADR 0313).
+    fn split(&self, fixed: &[Fixed]) -> Result<(usize, f64), Failure> {
+        let (fa, fb) = (self.miss(fixed, 0, 0.0), self.miss(fixed, 0, 1.0));
+        let bind = if fa > 0.0 {
+            1
+        } else if fb < 0.0 {
+            2
+        } else {
+            0
+        };
+        Ok((bind, self.root(fixed, bind)?))
+    }
+
+    /// The split t in [0, 1] at which the aggregate of the first category other than `bind` is
+    /// met: a bracketed secant (Illinois) to the last bit, an error after [`MAX_SECANT_STEPS`]
+    /// steps.
+    fn root(&self, fixed: &[Fixed], bind: usize) -> Result<f64, Failure> {
         let (mut a, mut b) = (0.0, 1.0);
-        let (mut fa, mut fb) = (self.miss(fixed, a), self.miss(fixed, b));
+        let (mut fa, mut fb) = (self.miss(fixed, bind, a), self.miss(fixed, bind, b));
         if fa == 0.0 {
             return Ok(a);
         }
@@ -363,7 +520,7 @@ impl Country<'_> {
             if t <= a || t >= b {
                 return Ok(if -fa <= fb { a } else { b });
             }
-            let ft = self.miss(fixed, t);
+            let ft = self.miss(fixed, bind, t);
             if ft == 0.0 {
                 return Ok(t);
             }
@@ -384,8 +541,9 @@ impl Country<'_> {
         Err(SplitUnsettled)
     }
 
-    /// (lambda, t, alpha) at which every aggregate good share is Omega.
-    fn solve(&self) -> Result<(f64, f64, Vec<f64>), Failure> {
+    /// (lambda, the category weights, alpha) at which every aggregate good share is Omega.
+    #[allow(clippy::type_complexity)]
+    fn solve(&self) -> Result<(f64, [f64; N_CATEGORIES], Vec<f64>), Failure> {
         let n_g = self.om.len();
         let mut alpha: Vec<f64> = (0..n_g)
             .map(|g| {
@@ -401,8 +559,8 @@ impl Country<'_> {
         let mut stalled = 0;
         for _ in 0..MAX_ROUNDS {
             let fixed = self.fixed(&alpha);
-            let t = self.split(&fixed)?;
-            let (lambda, shares) = self.categories(&fixed, t);
+            let (bind, t) = self.split(&fixed)?;
+            let (lambda, shares) = self.categories(&fixed, bind, t);
             if !(lambda.is_finite() && lambda >= 0.0) {
                 return Err(Negative);
             }
@@ -418,7 +576,7 @@ impl Country<'_> {
                 .map(|g| (model[g] / total / self.om[g] - 1.0).abs())
                 .fold(0.0f64, f64::max);
             if miss <= SHARE_TOL || (miss <= 1e-12 && stalled >= 20) {
-                return Ok((lambda, t, alpha));
+                return Ok((lambda, weights(bind, t), alpha));
             }
             if miss < best {
                 (best, stalled) = (miss, 0);
@@ -471,6 +629,36 @@ fn aggregate(weight: &Mat, index: &Mat, sigma: f64) -> (Vec<f64>, Mat) {
 /// and the rest rescaled; goods without a weight or at an infinite price get 0.
 #[allow(clippy::too_many_arguments)]
 pub fn shares(
+    w: &Weights,
+    country: &[usize],
+    price: &Mat,
+    income: &[f64],
+    sigma: &[f64],
+    category: &[usize],
+    sigma_demand: f64,
+    p: &Pigl,
+) -> Mat {
+    if w.gov.rows == 0 {
+        return pigl_shares(w, country, price, income, sigma, category, sigma_demand, p);
+    }
+    let h = w.household_share();
+    let budget: Vec<f64> = income.iter().zip(country).map(|(m, &c)| h[c] * m).collect();
+    let mut out = pigl_shares(w, country, price, &budget, sigma, category, sigma_demand, p);
+    for (r, &c) in country.iter().enumerate() {
+        let (gov, inv) = (
+            fixed_shares(w.gov.row(c), price.row(r)),
+            fixed_shares(w.inv.row(c), price.row(r)),
+        );
+        for (g, v) in out.row_mut(r).iter_mut().enumerate() {
+            *v = h[c] * *v + gov[g] + inv[g];
+        }
+    }
+    out
+}
+
+/// The PIGL shares of households' spending, at income per person `income`.
+#[allow(clippy::too_many_arguments)]
+fn pigl_shares(
     w: &Weights,
     country: &[usize],
     price: &Mat,
