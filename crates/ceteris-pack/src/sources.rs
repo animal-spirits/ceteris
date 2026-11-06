@@ -6,6 +6,11 @@
 //! pack may read only sources whose licence allows commercial use on a confident reading. No
 //! profile reads an excluded source. Files that only tests read (`validation.toml`) are not pack
 //! sources; each must name a source with `use = "validation"`.
+//!
+//! Held-out register (RFC 0314): a validation source may carry `holdout = "H"` (independent of
+//! every calibration source) or `"R"` (report-only, shares an upstream with one). A held-out
+//! source may not be in `fetch.toml`; its `validation.toml` files name `read_by`, the only Rust
+//! files that may mention the file name; an H source that is read needs an entry in `prereg.toml`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -161,6 +166,16 @@ fn source_problems(source: &Table, ids: &BTreeSet<&str>) -> Vec<String> {
     if !USES.contains(&usage) {
         found.push(format!("{sid}: unknown use '{usage}'"));
     }
+    if let Some(class) = source.get("holdout") {
+        if usage != "validation" {
+            found.push(format!(
+                "{sid}: holdout is set but use is '{usage}', not validation"
+            ));
+        }
+        if !matches!(class.as_str(), Some("H" | "R")) {
+            found.push(format!("{sid}: holdout must be 'H' or 'R'"));
+        }
+    }
     if usage == "rejected" && policy != "exclude" {
         found.push(format!("{sid}: rejected sources must have policy exclude"));
     }
@@ -227,6 +242,133 @@ pub fn pack_sources(root: &Path) -> Result<BTreeSet<String>, String> {
         used.insert("geoboundaries".into());
     }
     Ok(used)
+}
+
+/// Rust files under `dir`, skipping build output.
+fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        if path.is_dir() {
+            if path.file_name().is_some_and(|n| n != "target") {
+                rust_files(&path, out);
+            }
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+}
+
+fn strings(table: &Table, key: &str) -> Vec<String> {
+    table
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The held-out register rules (RFC 0314): none in the pack build, files opened only by their
+/// `read_by` paths, a pre-registration for every H source that is read, and an H source that
+/// moves to calibration names its replacement.
+fn holdout_problems(root: &Path, by_id: &BTreeMap<&str, &Table>) -> Result<Vec<String>, String> {
+    let config = root.join(CONFIG_DIR);
+    let class = |id: &str| by_id.get(id).and_then(|s| text(s, "holdout"));
+    let mut errors = Vec::new();
+
+    for sid in pack_sources(root)? {
+        if class(&sid).is_some() {
+            errors.push(format!("{sid}: held out but read by the pack build"));
+        }
+    }
+    for (id, source) in by_id {
+        if flag(source, "was_holdout")
+            && class(text(source, "replaces_holdout").unwrap_or("")) != Some("H")
+        {
+            errors.push(format!(
+                "{id}: was held out; replaces_holdout must name an H source"
+            ));
+        }
+    }
+
+    let prereg_path = config.join("prereg.toml");
+    let prereg = if prereg_path.exists() {
+        read_table(&prereg_path)?
+    } else {
+        Table::new()
+    };
+    let entries: Vec<&Table> = prereg
+        .get("entry")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_table)
+        .collect();
+    for entry in &entries {
+        let sid = shown(text(entry, "source"));
+        if class(sid) != Some("H") {
+            errors.push(format!(
+                "{sid}: prereg.toml entry for a source that is not H"
+            ));
+        }
+        for field in ["metric", "tolerance", "target_sha256"] {
+            if text(entry, field).is_none_or(str::is_empty) {
+                errors.push(format!("{sid}: prereg.toml entry lacks '{field}'"));
+            }
+        }
+    }
+
+    let validation = read_table(&config.join("validation.toml"))?;
+    let files: Vec<&Table> = validation
+        .get("file")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_table)
+        .collect();
+    let mut sources = Vec::new();
+    rust_files(&root.join("crates"), &mut sources);
+    let sources: Vec<(String, String)> = sources
+        .iter()
+        .filter_map(|p| {
+            let rel = p
+                .strip_prefix(root)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .replace('\\', "/");
+            Some((rel, fs::read_to_string(p).ok()?))
+        })
+        .collect();
+    for file in files {
+        let (Some(sid), Some(name)) = (text(file, "source"), text(file, "name")) else {
+            continue;
+        };
+        let Some(kind) = class(sid) else { continue };
+        let read_by = strings(file, "read_by");
+        if read_by.is_empty() {
+            errors.push(format!("{sid}: {name} is held out and needs read_by"));
+        }
+        for (rel, code) in &sources {
+            if code.contains(name) && !read_by.contains(rel) {
+                errors.push(format!(
+                    "{sid}: {rel} opens held-out {name} but is not in read_by"
+                ));
+            }
+        }
+        let scored = kind == "H" && !read_by.is_empty();
+        let sha = text(file, "sha256").unwrap_or_default();
+        let registered = entries
+            .iter()
+            .any(|e| text(e, "source") == Some(sid) && text(e, "target_sha256") == Some(sha));
+        if scored && !registered {
+            errors.push(format!(
+                "{sid}: {name} is read but prereg.toml has no entry with its sha256"
+            ));
+        }
+    }
+    Ok(errors)
 }
 
 /// Files outside the pack must belong to validation-only sources, so the file list cannot hide a
@@ -315,6 +457,7 @@ pub fn check(root: &Path, profile: Option<Profile>) -> Result<Report, String> {
         .filter_map(|s| text(s, "id").map(|id| (id, *s)))
         .collect();
     errors.extend(validation_problems(root, &by_id)?);
+    errors.extend(holdout_problems(root, &by_id)?);
     if let Some(profile) = profile {
         for sid in pack_sources(root)? {
             match by_id.get(sid.as_str()) {
