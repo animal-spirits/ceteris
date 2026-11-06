@@ -1,0 +1,15 @@
+[package]
+name = "ceteris-run"
+description = "Scenario files, run hashes and the branch tree of the counterfactual workbench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+blake3 = "1.8.7"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"

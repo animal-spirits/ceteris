@@ -502,6 +502,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceteris-run"
+version = "0.0.1"
+dependencies = [
+ "blake3",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "ceteris-trade"
 version = "0.0.1"
 dependencies = [
