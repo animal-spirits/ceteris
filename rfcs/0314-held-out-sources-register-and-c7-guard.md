@@ -110,7 +110,7 @@ data fetched):
 | Source | Finding | Status |
 | --- | --- | --- |
 | Eora | worldmrio.com/licensing.jsp: "free for academic use at degree-granting academic institutions. All other users must license the data." Redistribution, publication not addressed; cite Lenzen et al. 2012, 2013. | Dropped: academic login was asked to pay (D5) |
-| IEA balances | Product page sells the data ("Purchase licence"); no free tier or CC BY-NC-SA 4.0 IGO found; licence page did not load. | Unverified; the "free tier" in the protocol is unconfirmed |
+| IEA balances | Product page sells the data ("Purchase licence"); no free tier or CC BY-NC-SA 4.0 IGO found; licence page did not load. | Free data is CC BY-NC-SA 4.0 IGO per the 2026-10-27 licence check (project memory; not re-read for this RFC). Scoring only; never in the paid build |
 | LIS | LISSY "exclusively for non-commercial purposes", registered researchers only, remote execution; Key Figures open to the public, no licence named; citation required. Publication of aggregates not on the page; terms page did not load. | Likely usable for aggregate scores; unverified |
 | ACLED | Content Usage Terms bar competing or substitute datasets, services to third parties, attributing analysis to ACLED, and ML/LLM use "subject to strict limitations"; they require stating how data were manipulated. EULA and attribution policy not read. | Unverified; scoring a non-ML simulator looks compatible |
 | Gennaioli et al. | No licence statement found; the dataset site blocks automated reads. | Unverified; treat as no licence stated, so closed only |
@@ -139,5 +139,5 @@ Filled in when accepted, in the same PR as the rows:
 - `crates/ceteris-pack/config/sources.toml` and `validation.toml`: entries and `read_by` for the
   first-tier sources, added by the implementation tasks, not by this RFC.
 
-Decision: A, Antonio, 2026-11-06. Eora is dropped (Antonio, 2026-11-06: no eligible licence; an academic login was asked to pay); EXIOBASE 3.9 becomes the IO held-out source, its licence still to be read under A.
+Decision: A, Antonio, 2026-11-06. Eora is dropped (Antonio, 2026-11-06: no eligible licence; an academic login was asked to pay); EXIOBASE 3.9 becomes the IO held-out source, the 2026-10-27 licence check lists it as non-commercial (project memory), which is acceptable for a scoring-only source and excludes it from the paid build.
 Row: none yet, taken when accepted.
