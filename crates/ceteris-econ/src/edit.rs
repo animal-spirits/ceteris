@@ -40,13 +40,8 @@ impl std::error::Error for EditError {}
 /// Applies the edits due at `tick` in (source, sequence) order, sequence being the position
 /// in `edits`; edits for other ticks are skipped. Returns the number applied.
 pub fn apply_due(w: &mut EconWorld, edits: &[Edit], tick: u32) -> Result<usize, EditError> {
-    let mut due: Vec<(usize, &Edit)> = edits
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| e.tick == tick)
-        .collect();
-    due.sort_by_key(|(seq, e)| (e.source, *seq));
-    for (_, e) in &due {
+    let due = ceteris_run::due(edits, tick);
+    for e in &due {
         apply_edit(w, e)?;
     }
     Ok(due.len())
@@ -152,7 +147,9 @@ fn indices<const N: usize>(target: &str, head: &str) -> Result<[usize; N], EditE
 mod tests {
     use std::sync::Arc;
 
-    use ceteris_run::EditSource;
+    use ceteris_core::rng::Seed;
+    use ceteris_run::store::ChunkStore;
+    use ceteris_run::{Branch, EditSource, ReplaySel, Scenario, Workbench};
     use ceteris_trade::TradeParams;
 
     use super::*;
@@ -251,5 +248,69 @@ mod tests {
             apply_edit(&mut w, &far),
             Err(EditError::OutOfRange(_))
         ));
+    }
+
+    fn apply(w: &mut EconWorld, e: &Edit) -> Result<(), String> {
+        apply_edit(w, e).map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn null_intervention_reproduces_parent_on_the_p2_fixture() {
+        let branch = |id: &str, parent: Option<(&str, u32)>, edits| Branch {
+            id: id.to_string(),
+            parent: parent.map(|(p, _)| p.to_string()),
+            fork_tick: parent.map(|(_, t)| t),
+            edits,
+        };
+        let scenario = Scenario {
+            pack_hash: "fixture".into(),
+            engine: "test+1".into(),
+            replay: ReplaySel::Off,
+            seeds: vec![1],
+            params: Default::default(),
+            branches: vec![
+                branch(
+                    "base",
+                    None,
+                    vec![edit(
+                        4,
+                        EditSource::User,
+                        EditKind::Policy,
+                        "tariff.0.1.0",
+                        0.2,
+                    )],
+                ),
+                branch("null", Some(("base", 12)), vec![]),
+                branch(
+                    "slow_wages",
+                    Some(("base", 12)),
+                    vec![edit(
+                        13,
+                        EditSource::User,
+                        EditKind::Param,
+                        "econ.kappa_w",
+                        0.01,
+                    )],
+                ),
+            ],
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let store = ChunkStore::open(dir.path().join("cache"), "test+1").unwrap();
+        let mut wb = Workbench::new(
+            scenario,
+            Seed(1),
+            |_| {
+                EconWorld::sim(
+                    Arc::new(small_world()),
+                    EconParams::default(),
+                    TradeParams::default(),
+                )
+            },
+            apply,
+            store,
+        );
+        let parent = wb.at("base", 18).unwrap().state_hash();
+        assert_eq!(wb.at("null", 18).unwrap().state_hash(), parent);
+        assert_ne!(wb.at("slow_wages", 18).unwrap().state_hash(), parent);
     }
 }

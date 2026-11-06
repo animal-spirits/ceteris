@@ -426,6 +426,7 @@ dependencies = [
  "mimalloc",
  "proptest",
  "rayon",
+ "tempfile",
 ]
 
 [[package]]
