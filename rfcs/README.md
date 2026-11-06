@@ -304,10 +304,12 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0284 | [Ensemble lanes move from pre-P3 into P3 (amends ADR 0207)](0284-ensemble-lanes-in-p3.md) | accepted | ADR 0288 |
 | 0285 | [Interventions replay on seek, and parameters are snapshot state](0285-interventions-and-parameters-as-snapshot-state.md) | accepted | ADR 0291 to 0293 |
 | 0286 | [Storage-on frictionless V1 misses: cause recorded, fix deferred to P5](0286-storage-on-frictionless-misses-deferred.md) | deferred | none |
-| 0287 | [Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)](0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | accepted | ADR 0295 to 0300 |
+| 0287 | [Tick speed programme: bit-identical speed-ups first, then narrow exceptions](0287-tick-speed-programme.md) | accepted | ADR 0294 to 0298 |
 | 0301 | [Three final demanders in P2: who buys, inventory change, shares, balance, composition and the accelerator (accepts and amends ADR 0099)](0301-three-final-demanders-in-p2.md) | accepted | ADR 0301 to 0306 |
 | 0302 | [Sector labour shares, wealth-weighted and foreign dividends: sources, bounds, ranks and routing (accepts and amends ADR 0104)](0302-sector-labour-shares-and-wealth-weighted-dividends.md) | accepted | ADR 0307 to 0310 |
 | 0303 | [Wealth-bracket shares from the income Gini, WID as a check only (amends ADR 0308)](0303-open-wealth-shares-from-the-income-gini.md) | accepted | ADR 0311, 0312 |
 | 0304 | [The largest income-effect weight the household shares allow (amends ADR 0094)](0304-largest-income-effect-weight-the-shares-allow.md) | accepted | ADR 0313 |
+| 0305 | [New work defaults to 1.x, not 1.0 (amends ADR 0207)](0305-new-work-defaults-to-1x.md) | accepted | ADR 0314 |
 | 0306 | [Transfers as the current account's share of national income (amends ADR 0100)](0306-transfers-as-a-share-of-national-income.md) | accepted | ADR 0315 |
 | 0307 | [Invert PIGL on the shares the run spends, clamps included (amends ADR 0094)](0307-invert-pigl-on-the-clamped-shares.md) | accepted | ADR 0316 |
+| 0308 | [Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)](0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | accepted | ADR 0318 to 0321, 0299, 0300 |

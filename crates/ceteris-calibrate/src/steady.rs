@@ -10,7 +10,7 @@
 //! s_c Y (ADR 0100; Y world income) in proportion to income and spend income + D_c. V and VA stay
 //! at the data (ADR 0100 removes ADR 0089's rescale r_g): world spending net of tariffs meets
 //! world sales value V / (1 + delta s) of every good through stage 4's targets, each country's
-//! traded final demand rescaled biproportionally ([`crate::balance`], ADR 0295) with its traded
+//! traded final demand rescaled biproportionally ([`crate::balance`], ADR 0318) with its traded
 //! total kept. Rebates depend on sourcing, local output on income and income on local output, so
 //! passes of stages 1, 2 and 4 repeat until rebates, buyer prices and the PIGL weights settle
 //! ([`PASS_TOL`]).
@@ -217,7 +217,7 @@ impl Info {
 pub struct Steady {
     /// (C,)
     pub u_star: Vec<f64>,
-    /// (G,) beta_g of the final demand balance (ADR 0295), 1 for local goods and goods without
+    /// (G,) beta_g of the final demand balance (ADR 0318), 1 for local goods and goods without
     /// final demand: the residual of ADR 0089's r_g.
     pub column_factor: Vec<f64>,
     /// (P, G) posted: origin markets of traded goods, 1 for local goods, 0 elsewhere.
@@ -1351,7 +1351,7 @@ pub fn calibrate_from(
         let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
         let rebate_new = bincount(c, duty_bill, n_c);
         // stage 4's targets: each country's traded final demand at its data shares, balanced so
-        // that every good's world net spending meets its sales (ADR 0295)
+        // that every good's world net spending meets its sales (ADR 0318)
         let absorbed = bincount(&kc, hh.spending.iter().copied(), n_c);
         let seed = Mat::from_fn(n_c, n_g, |k, g| {
             if traded[g] {

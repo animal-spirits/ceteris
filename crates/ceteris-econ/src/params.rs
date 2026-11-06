@@ -42,7 +42,7 @@ pub enum Technology {
     FixedLeontief,
 }
 
-/// S22: the trade-imbalance transfers D_c of ADR 0100 (as amended by ADRs 0295 to 0300), paid at
+/// S22: the trade-imbalance transfers D_c of ADR 0100 (as amended by ADRs 0299, 0300 and 0318 to 0321), paid at
 /// E4 from one world transfer account (`specs/econ/SPEC.md`, Transfers).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transfers {

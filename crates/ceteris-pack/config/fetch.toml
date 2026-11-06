@@ -337,7 +337,7 @@ bytes = 95109
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.PCAP.PP.CD?downloadformat=csv"
 
 # Current account balance, BoP, current USD, 2000 to 2024: the trade-imbalance transfers (ADR 0100
-# as amended by ADRs 0296 and 0300).
+# as amended by ADRs 0319 and 0300).
 [[file]]
 source = "wdi"
 name = "wdi_BN.CAB.XOKA.CD.zip"

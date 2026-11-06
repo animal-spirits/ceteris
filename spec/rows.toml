@@ -1442,7 +1442,7 @@ topic = "[World price index, real GDP check series and donor use-table balance, 
 sections = "12.2, 16.1"
 
 [[entry]]
-rows = "0294"
+rows = "0317"
 topic = "[Price level of domestic absorption, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
 sections = "16, 16.1"
 
@@ -1452,13 +1452,13 @@ topic = "[Real GDP check on benchmark economies and current WDI price level, ame
 sections = "16, 16.1, 17"
 
 [[entry]]
-rows = "0295 to 0298"
-topic = "[Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+rows = "0318 to 0321"
+topic = "[Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
 sections = "9.5, 16, 17"
 
 [[entry]]
 rows = "0299, 0300"
-topic = "[Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0287-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+topic = "[Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
 sections = "9.5, 15, 16"
 
 [[entry]]
@@ -1490,3 +1490,33 @@ sections = "9.5"
 rows = "0316"
 topic = "[Invert PIGL on the shares the run spends, a negative category share at 0, amending ADR 0094](../rfcs/0307-invert-pigl-on-the-clamped-shares.md)"
 sections = "8.6"
+
+[[entry]]
+rows = "0294"
+topic = "[Speed work goes bit-identical first, gated by a 24-tick hash and journal identity](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0295"
+topic = "[Unchecked indexing is the only unsafe, in hot modules, with a safe twin compared in CI](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0296"
+topic = "[Profile-guided release and bench builds with a fixed CPU baseline](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0297"
+topic = "[mimalloc as global allocator where measured](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0298"
+topic = "[Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0314"
+topic = "[New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md)"
+sections = "21"

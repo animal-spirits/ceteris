@@ -1,5 +1,5 @@
 //! Stage 4's spending targets balanced against each good's world sales (ADR 0100 as amended by
-//! ADR 0295, RFC 0287 D1; `specs/econ/SPEC.md`, Calibration, Stage 1): a biproportional (RAS,
+//! ADR 0318, RFC 0308 D1; `specs/econ/SPEC.md`, Calibration, Stage 1): a biproportional (RAS,
 //! Stone 1961) rescale of every country's traded final demand, F'_cg = a_c b_g F_cg, that keeps
 //! each country's traded total and gives each good's world net spending sum_c nu_cg F'_cg the
 //! same ratio mu to its target C_g.

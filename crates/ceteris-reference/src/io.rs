@@ -615,7 +615,7 @@ impl Inputs {
     }
 
     /// The final demand split over its demanders (ADR 0099) with each country and good's final
-    /// demand scaled by `factor` (C, G) (stage 1's balance, ADR 0295; 1 at the data):
+    /// demand scaled by `factor` (C, G) (stage 1's balance, ADR 0318; 1 at the data):
     /// households' part of the scaled shares (C, G), and government's and investment's spending
     /// shares, their scaled parts over the country's scaled total (no rows without the split).
     pub fn final_demand_split(&self, factor: &Mat) -> (Mat, Mat, Mat) {
