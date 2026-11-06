@@ -313,3 +313,6 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0306 | [Transfers as the current account's share of national income (amends ADR 0100)](0306-transfers-as-a-share-of-national-income.md) | accepted | ADR 0315 |
 | 0307 | [Invert PIGL on the shares the run spends, clamps included (amends ADR 0094)](0307-invert-pigl-on-the-clamped-shares.md) | accepted | ADR 0316 |
 | 0308 | [Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)](0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | accepted | ADR 0318 to 0321, 0299, 0300 |
+| 0309 | [Ensemble spread at P3 comes from register priors](0309-ensemble-spread-from-register-priors.md) | accepted | ADR 0322 |
+| 0310 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate (amends ADR 0207)](0310-p3-ships-gate-views-lab-ui-after.md) | accepted | ADR 0323 |
+| 0311 | [Accept the late-game flatness gate, per-good budget lines and bounded state tables (accepts ADRs 0234 to 0236)](0311-accept-flatness-budget-and-bounds-adrs.md) | accepted | ADR 0234, ADR 0235, ADR 0236 |

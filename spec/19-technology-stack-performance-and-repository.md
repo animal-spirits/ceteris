@@ -35,7 +35,7 @@ Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of
 | Accounting assertions | Full ledger check | 5 ms |
 | Headroom |  | to 160 ms |
 
-During wars the daily sub-tick adds about 30 cheap steps per month, budgeted separately. All timings are estimates; P0 and P2 benchmarks replace them with measurements. Ensembles run headless across the desktop's cores; with desktop-only hardware, calibration depends on emulators and modular calibration to stay within one machine's compute.
+During wars the daily sub-tick adds about 30 cheap steps per month, budgeted separately. All timings are estimates; P0 and P2 benchmarks replace them with measurements. The ceiling stays 160 ms; from P3 each goods-indexed line is restated as a fixed cost plus a cost per good fitted to measurements, with its value at 45 goods (ADR 0235). Ensembles run headless across the desktop's cores; with desktop-only hardware, calibration depends on emulators and modular calibration to stay within one machine's compute.
 
 ### 19.3 Repository layout
 
@@ -76,6 +76,10 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Ledger balances in fixed-point `i64`; prices and quantities in `f64`; kernel values in `f32` where the spec allows.
 - Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0096). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
 - Ensemble members are lanes, the innermost array dimension (ADR 0024); interactive play runs one lane.
+
+**State tables**
+
+- Every state table is fixed-size for the run or names a bound and the rule that keeps it (a cap, an aggregation or an archive); its module SPEC states the bound and its expected size at 2150. Rows no system reads any more move to an archive table outside the tick's working set, read by panels and never by a system. Aggregation and archiving run at quarter boundaries in stable ID order (ADR 0236).
 
 **Tick execution**
 

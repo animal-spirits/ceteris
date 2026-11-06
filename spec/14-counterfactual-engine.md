@@ -1,6 +1,6 @@
 ## 14. Counterfactual Engine: Ex Ante and Ex Post Interventions
 
-Every experiment is a branch: a parent run plus an ordered list of timed edits, replayed under the same random streams across an ensemble of seeds, so the reported effect of an intervention is a paired distribution rather than an anecdote.
+Every experiment is a branch: a parent run plus an ordered list of timed edits, replayed under the same random streams across an ensemble of seeds (members differ by their draws of the uncertain parameters from the register priors, shared with the baseline; ADR 0322), so the reported effect of an intervention is a paired distribution rather than an anecdote.
 
 ### 14.1 Objects
 
