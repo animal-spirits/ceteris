@@ -27,8 +27,8 @@ named error). The app's P3 views are in `specs/app/SPEC.md`. Crate: `ceteris-run
 | Commitment | scenario | scheduled edit, offset, completion hazard (zero by default) | ticks, rate | scenario file; empty at P3 |
 | Run | branch x seed | run hash | n/a | derived |
 | Ensemble member | branch x k | seed k, tick-0 parameter draws as logged edits | n/a | register priors (0322) |
-| Chunk | store | zstd Arrow IPC, at most 65,536 rows, keyed by BLAKE3 | n/a | snapshots |
-| Manifest | snapshot | (table, chunk hash) list, tick, state hash | n/a | snapshots |
+| Chunk | store | zstd piece of the canonical bytes, 64 KiB cuts, keyed by BLAKE3 of the raw bytes | n/a | snapshots |
+| Manifest | snapshot | chunk hashes list, tick, state hash | n/a | snapshots |
 | History tier | branch | monthly or annual series, declared outcomes | per series | run |
 
 Files (ADR 0211): pack (immutable), scenario file (the save, plain text, the stable public
@@ -51,10 +51,10 @@ edits in the log (14.2).
 
 ## Store and retention
 
-A snapshot is a manifest of (table, chunk hash). Chunks are shared across branches and lanes;
-an edit rewrites only the chunks of tables it touches and the tables downstream. State hashes stay
-over the canonical bytes of ADR 0002: Arrow is the storage format only, so no golden re-blesses
-when snapshots move to chunks. `restore` decodes chunks to the canonical state and checks the
+A snapshot is a manifest of chunk hashes. Chunks are shared across branches and lanes;
+an edit rewrites only the chunks its changed bytes fall in (ADR 0326). State hashes stay over
+the canonical bytes of ADR 0002: chunks are a storage format only, so no golden re-blesses when
+snapshots move to chunks. `restore` decodes chunks to the canonical state and checks the
 state hash. A chunk written by another engine version is a `DecodeError` ("cache from another
 version"); stored results open read-only and "re-simulate" runs the scenario as a labelled sibling
 branch (0211).
