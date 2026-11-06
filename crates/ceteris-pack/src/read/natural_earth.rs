@@ -139,6 +139,23 @@ pub fn read_codes(admin0: &Path) -> Result<(IsoCodes, BTreeMap<String, i64>), St
     Ok((iso, m49))
 }
 
+/// ISO_A3_EH by ISO_A2_EH of admin-0, for sources keyed by alpha-2 codes (WID); codes of -99
+/// left out.
+pub fn iso3_by_iso2(admin0: &Path) -> Result<BTreeMap<String, String>, String> {
+    let dbf = Dbf::from_zip(admin0)?;
+    let mut out = BTreeMap::new();
+    for [a2, a3] in dbf
+        .select(["ISO_A2_EH", "ISO_A3_EH"])
+        .map_err(|e| err(admin0, e))?
+    {
+        let (a2, a3) = (a2.unwrap_or(""), a3.unwrap_or(""));
+        if a2 != "-99" && a3 != "-99" && !a2.is_empty() {
+            out.entry(a2.to_owned()).or_insert_with(|| a3.to_owned());
+        }
+    }
+    Ok(out)
+}
+
 /// ISO_A3_EH by each ADMIN, NAME and NAME_LONG of admin-0, the first country to use a name keeping it.
 pub fn iso_by_name(admin0: &Path) -> Result<BTreeMap<String, String>, String> {
     let dbf = Dbf::from_zip(admin0)?;

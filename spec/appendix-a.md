@@ -291,6 +291,18 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0291 | [Seek replays timed interventions; an edit after a seek back drops the later timeline](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0292 | [Snapshots name their network by its content digest](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
 | 0293 | [A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md) | 14.3 |
+| 0282, 0283 | [Price level source and market rates, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1 |
+| 0284 to 0286 | [World price index, real GDP check series and donor use-table balance, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 12.2, 16.1 |
+| 0317 | [Price level of domestic absorption, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1 |
+| 0289, 0290 | [Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md) | 16, 16.1, 17 |
+| 0318 to 0321 | [Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 16, 17 |
+| 0299, 0300 | [Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md) | 9.5, 15, 16 |
+| 0301 to 0306 | [Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md) | 8.6, 9.6 |
+| 0307 to 0310 | [Sector labour shares from WIOD SEA clipped and rescaled to PWT, dividends by WID wealth ranked on base income in one pass, foreign-owned shares from OECD AAMNE 2000, foreign dividends as income through a world dividend account, accepting ADR 0104](../rfcs/0302-sector-labour-shares-and-wealth-weighted-dividends.md) | 6.1, 7.2, 9.1, 16 |
+| 0311, 0312 | [Wealth-bracket shares from the income Gini by a variance-additive lognormal fitted to the US DFA, WID as a research check only, amending ADR 0308](../rfcs/0303-open-wealth-shares-from-the-income-gini.md) | 9.1, 17 |
+| 0313 | [The largest income-effect weight the household shares allow: omega_A = 0 where it fits, else the binding category's omega 0, amending ADR 0094](../rfcs/0304-largest-income-effect-weight-the-shares-allow.md) | 8.6 |
+| 0315 | [Transfers as the current account's share of national income, the world discrepancy spread by income, amending ADR 0100](../rfcs/0306-transfers-as-a-share-of-national-income.md) | 9.5 |
+| 0316 | [Invert PIGL on the shares the run spends, a negative category share at 0, amending ADR 0094](../rfcs/0307-invert-pigl-on-the-clamped-shares.md) | 8.6 |
 | 0294 | [Speed work goes bit-identical first, gated by a 24-tick hash and journal identity](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0295 | [Unchecked indexing is the only unsafe, in hot modules, with a safe twin compared in CI](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0296 | [Profile-guided release and bench builds with a fixed CPU baseline](../rfcs/0287-tick-speed-programme.md) | 19.4 |

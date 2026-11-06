@@ -189,6 +189,130 @@ fn one_pop_inversion_equals_old_at_prices_one() {
     assert_eq!(joint.sigma, sigma);
 }
 
+/// ADR 0313: where omega_A = 0 would leave M or S negative (low services; Ghana's manufactures;
+/// food above theta_A), z = min_c Omega_c / theta_c, the binding category's omega 0 and omega_A
+/// positive; the joint inversion of one pop at prices 1 is the same closed form and meets the
+/// shares.
+#[test]
+fn inversion_outside_omega_a_zero_binds_another_category() {
+    let inp = inputs();
+    let omega = Mat {
+        rows: 3,
+        cols: 10,
+        data: vec![
+            0.30, 0.0, 0.0, 0.30, 0.3, 0.0, 0.0, 0.0, 0.0, 0.1, //
+            0.23, 0.006, 0.0, 0.21, 0.006, 0.008, 0.0013, 0.003, 0.0001, 0.535, //
+            0.40, 0.0, 0.0, 0.30, 0.1, 0.0, 0.0, 0.0, 0.0, 0.2,
+        ],
+    };
+    let (spend, sigma, country) = (vec![2.0; 3], vec![0.7; 3], vec![0, 1, 2]);
+    let old = demand::invert(&omega, &spend, &sigma, &inp.category, &inp.pigl).unwrap();
+    for (r, c) in [(0, 2), (1, 1), (2, 2)] {
+        assert_eq!(old.omega[(r, c)], 0.0);
+        assert!(old.omega[(r, 0)] > 0.0);
+    }
+    let ones = Mat::filled(3, 10, 1.0);
+    let pops = demand::Pops {
+        country: &country,
+        price: &ones,
+        income: &spend,
+        spend: &spend,
+    };
+    let joint = demand::invert_pops(
+        &omega,
+        &pops,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    )
+    .unwrap();
+    for (what, a, b) in [
+        ("scale", &joint.scale, &old.scale),
+        ("omega", &joint.omega.data, &old.omega.data),
+    ] {
+        for (x, y) in a.iter().zip(b) {
+            assert!(
+                (x - y).abs() <= 1e-12 * y.abs().max(1.0),
+                "{what}: {x} vs {y}"
+            );
+        }
+    }
+    let share = demand::shares(
+        &joint,
+        &country,
+        &ones,
+        &spend,
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    );
+    for r in 0..3 {
+        let total: f64 = omega.row(r).iter().sum();
+        for g in 0..10 {
+            let want = omega[(r, g)] / total;
+            assert!((share[(r, g)] - want).abs() <= 1e-12, "row {r} good {g}");
+        }
+    }
+}
+
+/// ADR 0316: a pop far below its country's base has negative raw category shares, which
+/// `demand::shares` sets to 0; the inversion meets the country's shares on the clamped shares.
+#[test]
+fn inversion_meets_the_shares_with_clamped_pops() {
+    let inp = inputs();
+    let omega = Mat {
+        rows: 1,
+        cols: 10,
+        data: vec![0.25, 0.0, 0.0, 0.25, 0.01, 0.01, 0.0, 0.0, 0.0, 0.48],
+    };
+    let base = 2.0;
+    let factor = [0.02, 1.0, 4.0];
+    let income: Vec<f64> = factor.iter().map(|f| base * f).collect();
+    let spend: Vec<f64> = income.iter().map(|m| 10.0 * m).collect();
+    let country = vec![0; 3];
+    let price = Mat::from_fn(3, 10, |_, g| if g < 7 { 1.0 } else { 0.3 });
+    let sigma = vec![0.7];
+    let w = demand::invert_pops(
+        &omega,
+        &demand::Pops {
+            country: &country,
+            price: &price,
+            income: &income,
+            spend: &spend,
+        },
+        &sigma,
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    )
+    .unwrap();
+    let share = demand::shares(
+        &w,
+        &country,
+        &price,
+        &income,
+        &[0.7; 3],
+        &inp.category,
+        inp.sigma_demand,
+        &inp.pigl,
+    );
+    assert_eq!((7..10).map(|g| share[(0, g)]).sum::<f64>(), 0.0);
+    let total: f64 = omega.row(0).iter().sum();
+    let mut agg = [0.0; 10];
+    for k in 0..3 {
+        for (g, a) in agg.iter_mut().enumerate() {
+            *a += share[(k, g)] * spend[k];
+        }
+    }
+    let spent: f64 = agg.iter().sum();
+    for g in (0..10).filter(|&g| omega[(0, g)] > 0.0) {
+        let miss = agg[g] / spent / (omega[(0, g)] / total) - 1.0;
+        assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
+    }
+}
+
 /// ADR 0094: the within-pop dispersion and the population-weighted variance of the pops' log
 /// base income per person add up to the national s^2 = (2 erfinv G)^2, or s_w = 0 where the
 /// between-pop variance alone exceeds it.
@@ -562,4 +686,45 @@ fn cells_outside_region_is_empty_on_the_fixture() {
         .unwrap();
     gains.kappa[pushed] = 2.5 / gains.j[pushed];
     assert_eq!(uniqueness::cells_outside_region(&inp, &gains), vec![pushed]);
+}
+
+/// ADRs 0100, 0315: each pop spends its income plus its share of its country's transfer D_c =
+/// (rho_c - rho_bar) Y_c in proportion to its income, rho_bar the income-weighted mean ratio;
+/// the transfers add up to zero, and at the data state a receiving country buys more traded
+/// goods, a paying one less.
+#[test]
+fn reference_spends_the_transfers() {
+    use ceteris_reference::model::{self, Model};
+    let income = [3.0, 1.0, 2.0, 4.0];
+    let country = [0, 0, 1, 1];
+    let spent = model::with_transfers(&income, &country, &[0.1, -0.1]);
+    // incomes 4 and 6: rho_bar = (0.4 - 0.6) / 10 = -0.02, so country 0 receives 0.12 of its
+    // income (0.48) and country 1 pays 0.08 of its own (0.48)
+    let want = [3.36, 1.12, 1.84, 3.68];
+    assert!(
+        spent.iter().zip(&want).all(|(s, w)| close(*s, *w, 1e-15)),
+        "{spent:?}"
+    );
+    assert_eq!(
+        model::with_transfers(&income, &country, &[0.0, 0.0]),
+        income
+    );
+
+    let balanced = inputs();
+    let mut with = balanced.clone();
+    with.transfer = vec![0.02, -0.012, -0.013, 0.005];
+    let (a, b) = (Model::new(&balanced).unwrap(), Model::new(&with).unwrap());
+    let x = a.data_state();
+    let (ea, eb) = (
+        model::evaluate(&x, &a, &balanced.ent_a),
+        model::evaluate(&x, &b, &with.ent_a),
+    );
+    let traded = |e: &model::Evaluation, c: usize| -> f64 {
+        (0..balanced.n_provinces())
+            .filter(|&p| balanced.province_country[p] == c)
+            .map(|p| e.spend.row(p).iter().sum::<f64>())
+            .sum()
+    };
+    assert!(traded(&eb, 0) > traded(&ea, 0));
+    assert!(traded(&eb, 1) < traded(&ea, 1));
 }
