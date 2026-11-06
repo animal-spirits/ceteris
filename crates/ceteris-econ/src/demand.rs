@@ -119,10 +119,58 @@ fn aggregate(
     )
 }
 
-/// Category budget shares of a pop before the clamp, eq. (22) of Alder, Boppart and Mueller
-/// (2022) for a pop with lognormal income:
-/// s_c = sB_c + lambda (Dt / B)^gamma (sD_c - sB_c) (m / B)^-eps exp(-eps (1 - eps) s^2 / 2),
-/// with sB and sD the category shares of B(P) and Dtilde(P).
+/// The parts of [`raw_shares`] that depend on the category indexes alone, shared by every
+/// pop that faces them: the aggregates Dtilde(P) and B(P) with their category shares, and
+/// `scale (Dt / B)^gamma`. `b` is `None` where no category of B(P) is reachable.
+struct CategoryAt {
+    s_d: [f64; N_CATEGORIES],
+    b: Option<(f64, [f64; N_CATEGORIES], f64)>,
+}
+
+impl CategoryAt {
+    fn new(w: &PiglWeights, index: &[f64; N_CATEGORIES], p: &EconParams) -> Self {
+        let q = &p.pigl;
+        let (dt, s_d) = aggregate(&q.theta, index, q.phi);
+        if !(0..N_CATEGORIES).any(|c| w.omega[c] > 0.0 && index[c].is_finite()) {
+            return Self { s_d, b: None };
+        }
+        let (b, s_b) = aggregate(&w.omega, index, q.sigma_b);
+        let head = w.scale * libm::pow(dt / b, q.gamma);
+        Self {
+            s_d,
+            b: Some((b, s_b, head)),
+        }
+    }
+
+    /// Category budget shares of a pop before the clamp, eq. (22) of Alder, Boppart and
+    /// Mueller (2022) for a pop with lognormal income:
+    /// s_c = sB_c + lambda (Dt / B)^gamma (sD_c - sB_c) (m / B)^-eps exp(-eps (1 - eps) s^2 / 2),
+    /// with sB and sD the category shares of B(P) and Dtilde(P).
+    fn raw(
+        &self,
+        index: &[f64; N_CATEGORIES],
+        income: f64,
+        sigma_income: f64,
+        p: &EconParams,
+    ) -> [f64; N_CATEGORIES] {
+        let Some((b, s_b, head)) = self.b else {
+            // no reachable category in B(P): the income-effect bundle is all there is
+            return self.s_d;
+        };
+        let eps = p.pigl.eps;
+        let k = head
+            * libm::pow(income / b, -eps)
+            * libm::exp(-eps * (1.0 - eps) * sigma_income * sigma_income / 2.0);
+        let mut out = [0.0; N_CATEGORIES];
+        for c in (0..N_CATEGORIES).filter(|&c| index[c].is_finite()) {
+            out[c] = s_b[c] + k * (self.s_d[c] - s_b[c]);
+        }
+        out
+    }
+}
+
+/// Category budget shares of a pop before the clamp ([`CategoryAt::raw`]).
+#[cfg(test)]
 fn raw_shares(
     w: &PiglWeights,
     index: &[f64; N_CATEGORIES],
@@ -130,23 +178,67 @@ fn raw_shares(
     sigma_income: f64,
     p: &EconParams,
 ) -> [f64; N_CATEGORIES] {
-    let q = &p.pigl;
-    let (dt, s_d) = aggregate(&q.theta, index, q.phi);
-    if !(0..N_CATEGORIES).any(|c| w.omega[c] > 0.0 && index[c].is_finite()) {
-        // no reachable category in B(P): the income-effect bundle is all there is
-        return s_d;
+    CategoryAt::new(w, index, p).raw(index, income, sigma_income, p)
+}
+
+/// Everything of a pop's PIGL demand that depends on its country's weights and the prices it
+/// faces alone, so that the pops of one province compute it once ([`PiglAt::shares`]).
+pub struct PiglAt {
+    index: [f64; N_CATEGORIES],
+    within: Vec<f64>,
+    categories: CategoryAt,
+}
+
+impl PiglAt {
+    pub fn new(w: &PiglWeights, price: &[f64], p: &EconParams) -> Self {
+        let (index, within) = category_prices(w, price, p.sigma_demand);
+        let categories = CategoryAt::new(w, &index, p);
+        Self {
+            index,
+            within,
+            categories,
+        }
     }
-    let (b, s_b) = aggregate(&w.omega, index, q.sigma_b);
-    let eps = q.eps;
-    let k = w.scale
-        * libm::pow(dt / b, q.gamma)
-        * libm::pow(income / b, -eps)
-        * libm::exp(-eps * (1.0 - eps) * sigma_income * sigma_income / 2.0);
-    let mut out = [0.0; N_CATEGORIES];
-    for c in (0..N_CATEGORIES).filter(|&c| index[c].is_finite()) {
-        out[c] = s_b[c] + k * (s_d[c] - s_b[c]);
+
+    /// [`pigl_shares`] at these prices.
+    pub fn shares(
+        &self,
+        w: &PiglWeights,
+        income: f64,
+        sigma_income: f64,
+        p: &EconParams,
+        out: &mut [f64],
+    ) {
+        let raw = self
+            .categories
+            .raw(&self.index, income, sigma_income, p)
+            .map(|s| s.max(0.0));
+        let total: f64 = raw.iter().sum();
+        for (g, o) in out.iter_mut().enumerate() {
+            *o = raw[usize::from(w.category[g])] / total * self.within[g];
+        }
     }
-    out
+
+    /// [`pigl`] at these prices.
+    pub fn demand(
+        &self,
+        w: &PiglWeights,
+        price: &[f64],
+        money: f64,
+        sigma_income: f64,
+        p: &EconParams,
+        out: &mut [f64],
+    ) {
+        out.fill(0.0);
+        if money <= 0.0 {
+            return;
+        }
+        let mut share = vec![0.0; out.len()];
+        self.shares(w, money, sigma_income, p, &mut share);
+        for g in (0..out.len()).filter(|&g| share[g] > 0.0) {
+            out[g] = share[g] * money / price[g];
+        }
+    }
 }
 
 /// Budget shares by good of a pop with mean income `income` per person and log income
@@ -161,12 +253,7 @@ pub fn pigl_shares(
     p: &EconParams,
     out: &mut [f64],
 ) {
-    let (index, within) = category_prices(w, price, p.sigma_demand);
-    let raw = raw_shares(w, &index, income, sigma_income, p).map(|s| s.max(0.0));
-    let total: f64 = raw.iter().sum();
-    for (g, o) in out.iter_mut().enumerate() {
-        *o = raw[usize::from(w.category[g])] / total * within[g];
-    }
+    PiglAt::new(w, price, p).shares(w, income, sigma_income, p, out);
 }
 
 /// Quantities bought per person by a pop whose mean spending per person is `money`: the
@@ -180,15 +267,7 @@ pub fn pigl(
     p: &EconParams,
     out: &mut [f64],
 ) {
-    out.fill(0.0);
-    if money <= 0.0 {
-        return;
-    }
-    let mut share = vec![0.0; out.len()];
-    pigl_shares(w, price, money, sigma_income, p, &mut share);
-    for g in (0..out.len()).filter(|&g| share[g] > 0.0) {
-        out[g] = share[g] * money / price[g];
-    }
+    PiglAt::new(w, price, p).demand(w, price, money, sigma_income, p, out);
 }
 
 /// The weights that reproduce the final demand shares `omega` (normalized) at prices 1 and

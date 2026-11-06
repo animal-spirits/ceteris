@@ -28,6 +28,7 @@ use ceteris_trade::pipeline::Push;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
 
+use crate::demand::PiglAt;
 use crate::inputs::{EconInputs, TRANSFER_YEARS};
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local;
@@ -571,14 +572,20 @@ pub fn demand(w: &mut EconWorld) {
     let sc = &mut w.scratch;
     let (ledger, params, index) = (&w.ledger, &w.params, &w.price_index);
     let row = |i: usize| &index[i * ng..(i + 1) * ng];
+    // the price-only part of PIGL once per province, for all its pops
+    let at: Vec<PiglAt> = (0..inp.n_provinces())
+        .into_par_iter()
+        .map(|i| lay.pigl_at(inp, params, i, row(i)))
+        .collect();
     sc.pop_demand
         .par_chunks_mut(ng)
         .zip(sc.pop_spend.par_chunks_mut(ng))
         .enumerate()
         .for_each(|(k, (x, spend))| {
-            let prices = row(inp.pops.province[k] as usize);
+            let i = inp.pops.province[k] as usize;
+            let prices = row(i);
             let money = to_numeraire(ledger.money(acc.pop[k]));
-            lay.pop_demand(inp, params, k, prices, money, x);
+            lay.pop_demand_at(inp, params, k, &at[i], prices, money, x);
             for g in 0..ng {
                 spend[g] = if g < nt && x[g] > 0.0 {
                     x[g] * prices[g]
