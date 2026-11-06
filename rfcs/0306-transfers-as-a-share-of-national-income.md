@@ -7,7 +7,7 @@ Research: none (diagnosis of the C6 pack gate, below)
 
 ## Summary
 
-ADR 0100, as amended by ADRs 0296, 0298 and 0300, pays each country D_c = s_c Y, Y world income,
+ADR 0100, as amended by ADRs 0319, 0321 and 0300, pays each country D_c = s_c Y, Y world income,
 with s_c minus the country's current account less its GDP share of the world discrepancy over
 world GDP. The transfer so scales with the country's GDP in the data, not with its income in the
 model. Where the model's national income is far below GDP, D_c can exceed it. On the C6 pack
@@ -31,7 +31,7 @@ Options:
 - 1. As a share of national income: rho_c = -CA_c / GDP_c (0 where either is missing), D_c =
   (rho_c - rho_bar) Y_c, Y_c the country's income of the previous tick and rho_bar = sum_c rho_c
   Y_c / sum_c Y_c, so the transfers net to zero every tick (the discrepancy spread pro rata to
-  income, as ADR 0298 spreads it to GDP). Spending is (1 + rho_c - rho_bar) Y_c, positive while
+  income, as ADR 0321 spreads it to GDP). Spending is (1 + rho_c - rho_bar) Y_c, positive while
   the current account stays below national income. The path (ADR 0300) takes each year's CA and
   GDP.
 - 2. Floor absorption at zero: cap D_c >= -Y_c and spread the excess over the other surplus

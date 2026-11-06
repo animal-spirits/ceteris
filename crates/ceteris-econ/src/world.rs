@@ -13,7 +13,7 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
-use ceteris_trade::source::{INTERMEDIATE, dispatch, source};
+use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
@@ -941,9 +941,12 @@ fn gamma_columns(gamma: &Rows<f64>, goods: &Goods) -> Vec<Vec<f64>> {
 /// destination, weighted by the units arriving); a local good's posted price, lead 0.
 /// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
 /// same good at the same prices on it again, and `source` then reuses the origin access.
-/// Traded goods run in parallel, each on its own `sourced` and `columns` entry.
+/// Traded goods run in parallel, each on its own `sourced` and `columns` entry. Without
+/// `full`, the unit dispatch computes only the arrivals ([`arrivals`]), all that the index and
+/// the lead read; with it, every output of `dispatch`.
 #[allow(clippy::too_many_arguments)]
 fn delivered_prices(
+    full: bool,
     kernel: &Kernel,
     price: &[f64],
     active: &[bool],
@@ -970,7 +973,11 @@ fn delivered_prices(
         .for_each(|(g, (unit, col))| {
             col.gather(price, active, g, ng);
             source(kernel, g, &col.price, &col.active, &gamma[g], &spend, unit);
-            dispatch(kernel, g, &col.price, &fill, unit);
+            if full {
+                dispatch(kernel, g, &col.price, &fill, unit);
+            } else {
+                arrivals(kernel, g, unit);
+            }
             col.index.clone_from(&unit.buyer_price);
             col.lead.clear();
             for d in 0..np {
@@ -1018,6 +1025,7 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64
     let mut columns = vec![Columns::default(); n_traded];
     let ones = vec![vec![1.0; np]; n_traded];
     delivered_prices(
+        true,
         &kernel,
         &price,
         &active,
@@ -1378,6 +1386,7 @@ impl EconWorld {
     pub fn refresh_price_index(&mut self) {
         let sc = &mut self.scratch;
         delivered_prices(
+            false,
             &self.kernel,
             &self.markets.price,
             &self.markets.active,
@@ -2028,7 +2037,8 @@ impl State for EconWorld {
                     0.0
                 }
             };
-            let rounding = r.shipped_rounding[o]
+            // nothing was dispatched before a world's first T2b, so nothing was rounded
+            let rounding = r.shipped_rounding.get(o).copied().unwrap_or(0.0)
                 + f[0] * r.orders_rounding[o][0]
                 + f[1] * r.orders_rounding[o][1]
                 + below(f[0]) * m.demand_int[cell]

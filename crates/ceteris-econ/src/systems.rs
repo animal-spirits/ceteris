@@ -930,13 +930,14 @@ pub fn dispatch(w: &mut EconWorld) {
             }
         }
 
-        // the buyers' payments, then the legs
-        w.ledger.post(&legs.entries, &mut w.scratch.post);
         w.scratch.dispatch_made[g] = made;
         w.scratch.dispatch_due[g] = r.selected - r.lost;
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    // every good's buyers' payments, then its legs; nothing above reads money
+    let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
+    w.ledger.post_all(&blocks, &mut w.scratch.post);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();
@@ -1151,7 +1152,7 @@ pub fn transfer_share(inp: &EconInputs, mode: Transfers, c: usize, tick: u32) ->
     }
 }
 
-/// E4 transfers (ADR 0100 as amended by ADRs 0295 to 0300 and 0315): each country's D_c =
+/// E4 transfers (ADR 0100 as amended by ADRs 0299, 0300, 0315 and 0318 to 0321): each country's D_c =
 /// (rho_c - rho_bar) Y_c, Y_c its pops' income of the previous tick (`EconWorld::income`; the
 /// tick's own where the world has none, at the first tick of a data-state start) and rho_bar =
 /// sum_c rho_c Y_c / Y, Y = sum_c Y_c, so the transfers net to zero. With s_c = D_c / Y, each

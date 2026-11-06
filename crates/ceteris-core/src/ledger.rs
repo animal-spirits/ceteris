@@ -30,6 +30,16 @@ pub const GOODS_TOLERANCE: f64 = 1e-9;
 /// Entries per parallel chunk of [`Ledger::post`].
 const POST_CHUNK: usize = 1 << 17;
 
+/// Accounts per parallel task when [`Ledger::post`] applies its sums.
+const ACCOUNT_CHUNK: usize = 1 << 12;
+
+/// `balance + delta` for an account of the given kind, panicking past its range.
+fn moved(balance: i128, wide: bool, delta: i128) -> i128 {
+    let next = balance.checked_add(delta).expect("ledger overflow");
+    assert!(wide || i64::try_from(next).is_ok(), "ledger overflow");
+    next
+}
+
 /// Working space of [`Ledger::post`], kept by the caller between calls: one sum per account
 /// for each chunk of entries, zero between calls. `dirty` marks a call that did not finish
 /// (an overflow panic), whose sums the next call clears first.
@@ -124,12 +134,7 @@ impl Ledger {
 
     /// `balance + delta` for account index `i`, panicking past its kind's range.
     fn moved(&self, i: usize, delta: i128) -> i128 {
-        let next = self.money[i].checked_add(delta).expect("ledger overflow");
-        assert!(
-            self.wide[i] || i64::try_from(next).is_ok(),
-            "ledger overflow"
-        );
-        next
+        moved(self.money[i], self.wide[i], delta)
     }
 
     pub fn goods(&self, a: AccountId, good: usize) -> f64 {
@@ -166,7 +171,14 @@ impl Ledger {
     /// the balance rather than at the step that would cross the bound. `scratch` keeps the
     /// chunks' sums between calls.
     pub fn post(&mut self, entries: &[Entry], scratch: &mut PostScratch) {
-        let (n, chunks) = (self.money.len(), entries.len().div_ceil(POST_CHUNK));
+        self.post_all(&[entries], scratch);
+    }
+
+    /// [`Ledger::post`] of the blocks in turn, in one pass: the same balances and journal,
+    /// with each block cut into chunks of its own.
+    pub fn post_all(&mut self, blocks: &[&[Entry]], scratch: &mut PostScratch) {
+        let all: Vec<&[Entry]> = blocks.iter().flat_map(|b| b.chunks(POST_CHUNK)).collect();
+        let (n, chunks) = (self.money.len(), all.len());
         if scratch.dirty {
             scratch.deltas.iter_mut().for_each(|d| d.fill(0));
         }
@@ -178,25 +190,42 @@ impl Ledger {
         deltas.iter_mut().for_each(|d| d.resize(n, 0));
         let open = &self.open;
         scratch.dirty = true;
-        entries
-            .par_chunks(POST_CHUNK)
+        all.par_iter()
             .zip(deltas.par_iter_mut())
             .for_each(|(chunk, delta)| {
-                for e in chunk {
+                for e in *chunk {
                     debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
                     let (f, t) = (e.from.0 as usize, e.to.0 as usize);
                     delta[f] -= i128::from(e.amount);
                     delta[t] += i128::from(e.amount);
                 }
             });
-        for delta in deltas {
-            for (i, d) in delta.iter_mut().enumerate() {
-                self.money[i] = self.moved(i, *d);
-                *d = 0;
-            }
-        }
+        // each account adds its chunk sums in chunk order, so it sees the same partial sums
+        // as a serial pass; accounts are independent, so they run in parallel
+        let (deltas, wide) = (&*deltas, &self.wide);
+        self.money
+            .par_chunks_mut(ACCOUNT_CHUNK)
+            .zip(wide.par_chunks(ACCOUNT_CHUNK))
+            .enumerate()
+            .for_each(|(k, (money, wide))| {
+                let lo = k * ACCOUNT_CHUNK;
+                for (j, (m, &wide)) in money.iter_mut().zip(wide).enumerate() {
+                    for delta in deltas {
+                        let d = delta[lo + j];
+                        if d != 0 {
+                            *m = moved(*m, wide, d);
+                        }
+                    }
+                }
+            });
+        scratch.deltas[..chunks]
+            .par_iter_mut()
+            .for_each(|d| d.fill(0));
         scratch.dirty = false;
-        self.journal.extend_from_slice(entries);
+        // an indexed parallel extend writes in place, in order
+        for block in blocks {
+            self.journal.par_extend(block.par_iter().copied());
+        }
     }
 
     pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
@@ -382,6 +411,44 @@ mod tests {
             assert_eq!(a, b);
         }
         assert!(scratch.deltas.iter().flatten().all(|&d| d == 0));
+    }
+
+    #[test]
+    fn post_all_is_post_of_each_block_in_turn() {
+        // more accounts than one apply task takes, and blocks across chunk boundaries
+        let n = 3 * ACCOUNT_CHUNK + 5;
+        let (mut a, mut b) = (Ledger::new(1), Ledger::new(1));
+        let ids: Vec<AccountId> = (0..n)
+            .map(|i| (a.open_as(i % 9 == 0), b.open_as(i % 9 == 0)).0)
+            .collect();
+        let mut x = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let blocks: Vec<Vec<Entry>> = [POST_CHUNK + 3, 0, POST_CHUNK / 2, 2 * POST_CHUNK]
+            .iter()
+            .map(|&len| {
+                (0..len)
+                    .map(|_| Entry {
+                        flow: Flow(2),
+                        from: ids[next() as usize % n],
+                        to: ids[next() as usize % n],
+                        amount: (next() % 2_000_001) as i64 - 1_000_000,
+                    })
+                    .collect()
+            })
+            .collect();
+        let (mut sa, mut sb) = (PostScratch::default(), PostScratch::default());
+        for block in &blocks {
+            a.post(block, &mut sa);
+        }
+        let refs: Vec<&[Entry]> = blocks.iter().map(|b| &b[..]).collect();
+        b.post_all(&refs, &mut sb);
+        assert_eq!(a, b);
+        assert!(sb.deltas.iter().flatten().all(|&d| d == 0));
     }
 
     #[test]
