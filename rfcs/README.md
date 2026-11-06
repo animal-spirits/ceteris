@@ -109,21 +109,21 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0089 | [Data-state steady-state calibration and natural-rate unemployment](0089-data-state-steady-state-calibration.md) | accepted | ADR 0089 |
 | 0090 | [Split price rule and inventory gain](0090-split-price-rule-and-inventory-gain.md) | proposed | ADR 0090 |
 | 0091 | [Competitive storage in P2 with per-market price expectations](0091-competitive-storage-in-p2.md) | proposed | ADR 0091 |
-| 0092 | [Trade frictions consistent with theta](0092-trade-frictions-consistent-with-theta.md) | proposed | ADR 0092 |
-| 0093 | [Numerical robustness of the P2 core](0093-numerical-robustness-of-the-p2-core.md) | proposed | ADR 0093 |
-| 0094 | [PIGL aggregation across pops](0094-pigl-aggregation-across-pops.md) | proposed | ADR 0094 |
+| 0092 | [Trade frictions consistent with theta](0092-trade-frictions-consistent-with-theta.md) | accepted (RFC 0312) | ADR 0092 |
+| 0093 | [Numerical robustness of the P2 core](0093-numerical-robustness-of-the-p2-core.md) | accepted (RFC 0312) | ADR 0093 |
+| 0094 | [PIGL aggregation across pops](0094-pigl-aggregation-across-pops.md) | accepted (RFC 0312) | ADR 0094 |
 | 0095 | [Consistency amendments to proposed design ADRs](0095-consistency-amendments-to-design-adrs.md) | proposed | ADR 0095 |
 | 0096 | [Forward-mode derivatives in the Rust core](0096-forward-mode-derivatives.md) | proposed | ADR 0096 |
 | 0097 | [Determinism lints and the post-gate dispatch speed plan](0097-determinism-lints-and-dispatch-speed-plan.md) | accepted | ADR 0097 |
-| 0098 | [Price levels and source corrections at calibration](0098-calibration-price-levels-and-source-corrections.md) | proposed | ADR 0098 |
+| 0098 | [Price levels and source corrections at calibration](0098-calibration-price-levels-and-source-corrections.md) | accepted (RFC 0312) | ADR 0098 |
 | 0099 | [Split final demand and a fixed saving rate in P2](0099-final-demand-split-and-saving-rate.md) | proposed | ADR 0099 |
-| 0100 | [Trade imbalances as exogenous transfers until finance](0100-trade-imbalances-as-transfers.md) | proposed | ADR 0100 |
-| 0101 | [Harmonic aggregation of trade elasticities](0101-harmonic-aggregation-of-trade-elasticities.md) | proposed | ADR 0101 |
+| 0100 | [Trade imbalances as exogenous transfers until finance](0100-trade-imbalances-as-transfers.md) | accepted (RFC 0312) | ADR 0100 |
+| 0101 | [Harmonic aggregation of trade elasticities](0101-harmonic-aggregation-of-trade-elasticities.md) | accepted (RFC 0312) | ADR 0101 |
 | 0102 | [Bilateral, transit and internal trade frictions](0102-bilateral-and-internal-trade-frictions.md) | proposed | ADR 0102 |
-| 0103 | [Initial drift: 2000 is not a rest point](0103-initial-drift-off-steady-state.md) | proposed | ADR 0103 |
+| 0103 | [Initial drift: 2000 is not a rest point](0103-initial-drift-off-steady-state.md) | accepted (RFC 0312) | ADR 0103 |
 | 0104 | [Sector labour shares and the distribution of capital income](0104-sector-factor-shares-and-capital-income.md) | proposed | ADR 0104 |
 | 0105 | [Skill groups and sector switching costs](0105-skill-groups-and-sector-switching-costs.md) | proposed | ADR 0105 |
-| 0106 | [Price clip on the gap only, and money width](0106-price-clip-and-money-width.md) | proposed | ADR 0106 |
+| 0106 | [Price clip on the gap only, and money width](0106-price-clip-and-money-width.md) | accepted (RFC 0312) | ADR 0106 |
 | 0107 | [Holdout protocol, Monte Carlo error and parameter lanes](0107-holdout-protocol-and-monte-carlo-error.md) | proposed | ADR 0107 |
 | 0108 | [Estimation windows per module and long-run lanes](0108-estimation-windows-and-long-run-lanes.md) | proposed | ADR 0108 |
 | 0109 | [International migration under admission caps](0109-international-migration-under-admission-caps.md) | proposed | ADR 0109 |
@@ -264,7 +264,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0244 | [Map borders from the id buffer, labels in Slint](0244-map-borders-from-ids-and-slint-labels.md) | accepted | ADR 0244 |
 | 0245 | [Control labels, irregular shares and how advances relabel cells](0245-control-labels-irregular-shares-and-advance-relabel.md) | accepted | ADR 0245 |
 | 0246 | [Rear security: computed demand and key-node orders](0246-rear-security-demand-and-key-node-orders.md) | accepted | ADR 0246 |
-| 0247 | [Bulk freight rate per theta class](0247-bulk-freight-rate-per-theta-class.md) | proposed | ADR 0247 |
+| 0247 | [Bulk freight rate per theta class](0247-bulk-freight-rate-per-theta-class.md) | accepted (RFC 0312) | ADR 0247 |
 | 0248 | [Re-estimate of the 1.0 plan after ADRs 0208 to 0247](0248-1.0-re-estimate-after-0207.md) | accepted | ADR 0248 |
 | 0249 | [Partial WDI sector shares and oil and gas from rents](0249-wdi-partial-shares-and-oil-gas-rents.md) | accepted | ADR 0249 |
 | 0250 | [Globe-only map, Equal Earth for print](0250-globe-only-map-equal-earth-for-print.md) | accepted | ADR 0250 |
@@ -273,7 +273,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0253 | [Royal houses, claimants and emergent restorations](0253-royal-houses-claimants-and-restorations.md) | accepted | ADR 0253 |
 | 0254 | [Organic conflict onset: crisis hazard, actors decide](0254-organic-conflict-onset.md) | accepted | ADR 0254 |
 | 0255 | [Relief globe](0255-relief-globe.md) | accepted | ADR 0255 |
-| 0256 | [World technology for crude oil and gas set by rents](0256-world-technology-for-oil-and-gas-from-rents.md) | proposed | ADR 0256 |
+| 0256 | [World technology for crude oil and gas set by rents](0256-world-technology-for-oil-and-gas-from-rents.md) | accepted (RFC 0312) | ADR 0256 |
 | 0257 | [Literature-fidelity tiers and a benchmark rerun at every phase gate](0257-literature-fidelity-tiers-and-phase-gate-benchmark.md) | accepted | ADR 0257 |
 | 0258 | [Indicator registry, display transforms and the headline set](0258-indicator-registry-and-display-transforms.md) | accepted | ADR 0258 |
 | 0259 | [Difficulty settings for seat play](0259-difficulty-settings-for-seat-play.md) | accepted | ADR 0259 |
@@ -283,8 +283,8 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0263 | [Price gain capped at a share of each market's stability limit](0263-price-gain-capped-per-market.md) | accepted | ADR 0263 |
 | 0264 | [H2 distance a reported diagnostic, theta per class gated with the model's kernel](0264-h2-distance-diagnostic-kernel-controlled-theta.md) | proposed | ADR 0264 |
 | 0265 | [The ACR criterion with input-output linkages](0265-acr-criterion-with-input-output-linkages.md) | proposed | ADR 0265 |
-| 0266 | [Labour capped at what inputs allow](0266-labour-capped-at-what-inputs-allow.md) | proposed | ADR 0266 |
-| 0267 | [Price gain capped per coupled block of commodity markets](0267-price-gain-capped-per-coupled-block.md) | proposed | ADR 0267 |
+| 0266 | [Labour capped at what inputs allow](0266-labour-capped-at-what-inputs-allow.md) | accepted (RFC 0312) | ADR 0266 |
+| 0267 | [Price gain capped per coupled block of commodity markets](0267-price-gain-capped-per-coupled-block.md) | accepted (RFC 0312) | ADR 0267 |
 | 0268 | [The ACR criterion graded per province](0268-acr-graded-per-province.md) | accepted | ADR 0268 |
 | 0269 | [P04 mode cost ratios borrowed from freight rates](0269-p04-mode-cost-ratios-borrowed.md) | accepted | ADR 0269 |
 | 0270 | [Extraction column for crude oil and gas set by rents](0270-extraction-column-for-rent-economies.md) | accepted | ADR 0270 |
@@ -293,12 +293,12 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0273 | [Mining support services are a local good](0273-mining-support-services-local.md) | accepted | ADR 0273 |
 | 0274 | [Up to seven theta classes](0274-up-to-seven-theta-classes.md) | accepted | ADR 0274 |
 | 0275 | [Manufacturing province spread from plant and census seeds, fitted by RAS](0275-manufacturing-spread-by-seeds-and-ras.md) | accepted | ADR 0275 |
-| 0276 | [Border friction per good in theta class 3](0276-border-friction-per-good-in-class-3.md) | proposed | ADR 0276 |
+| 0276 | [Border friction per good in theta class 3](0276-border-friction-per-good-in-class-3.md) | accepted (RFC 0312) | ADR 0276 |
 | 0277 | [Air freight rate from 2000 mode shares](0277-air-freight-rate-from-mode-shares.md) | accepted | ADR 0277 |
 | 0278 | [Energy scope for 1.0: grid zones, plant capacity, state energy cells, frozen energy policy, gas markets](0278-energy-scope-for-1.0.md) | accepted | ADR 0278 |
 | 0279 | [Leg paths minimise the full iceberg cost per good](0279-least-iceberg-paths-per-good.md) | accepted | ADR 0279 |
-| 0280 | [Storage order by partial adjustment toward a target stock](0280-storage-order-by-partial-adjustment.md) | proposed | ADR 0280 |
-| 0281 | [Rents-to-VA factor from extraction value added](0281-rents-to-value-added-from-extraction.md) | proposed | ADR 0281 |
+| 0280 | [Storage order by partial adjustment toward a target stock](0280-storage-order-by-partial-adjustment.md) | accepted (RFC 0312) | ADR 0280 |
+| 0281 | [Rents-to-VA factor from extraction value added](0281-rents-to-value-added-from-extraction.md) | accepted (RFC 0312) | ADR 0281 |
 | 0282 | [Price level source, market rates and donor table targets (amends ADR 0098)](0282-price-level-source-market-rates-and-donor-table-targets.md) | proposed | ADR 0282 to 0286, 0289, 0290, 0294 |
 | 0283 | [Manufacturing census seeds: nearest year for Eurostat gaps, Statistics Finland for Finland](0283-manufacturing-seeds-nearest-year-and-finland.md) | accepted | ADR 0287 |
 | 0284 | [Ensemble lanes move from pre-P3 into P3 (amends ADR 0207)](0284-ensemble-lanes-in-p3.md) | accepted | ADR 0288 |
@@ -316,3 +316,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0309 | [Ensemble spread at P3 comes from register priors](0309-ensemble-spread-from-register-priors.md) | accepted | ADR 0322 |
 | 0310 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate (amends ADR 0207)](0310-p3-ships-gate-views-lab-ui-after.md) | accepted | ADR 0323 |
 | 0311 | [Accept the late-game flatness gate, per-good budget lines and bounded state tables (accepts ADRs 0234 to 0236)](0311-accept-flatness-budget-and-bounds-adrs.md) | accepted | ADR 0234, ADR 0235, ADR 0236 |
+| 0312 | [Accept the built pre-P3 ADRs that still read proposed](0312-accept-built-pre-p3-adrs.md) | accepted | none new |
