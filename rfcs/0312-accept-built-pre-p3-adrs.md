@@ -1,6 +1,6 @@
 # RFC 0312. Accept the pre-P3 ADRs that are built but still read proposed
 
-Status: proposed
+Status: accepted
 Date: 2026-11-06
 Design sections: none
 Release: 1.0, pre-P3
@@ -49,7 +49,7 @@ Options:
 Recommendation: A, because they are built, tested and gated by merged C6 and C7, and a proposed
 status on built work misleads every reader of the index.
 
-Decision: pending, Antonio.
+Decision: A, Antonio, 2026-11-06.
 Row: none new; ADRs 0092, 0093, 0094, 0098, 0100, 0101, 0103, 0106, 0247, 0256, 0266, 0267, 0276, 0280 and 0281 keep their rows
 
 ## Spec changes
