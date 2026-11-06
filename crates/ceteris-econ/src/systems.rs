@@ -173,6 +173,7 @@ fn largest(values: impl Iterator<Item = f64>) -> Option<usize> {
 /// T1: goods due this tick move from the transit accounts to their buyers: pops consume
 /// them on arrival, enterprises add them to their input stocks.
 pub fn deliver(w: &mut EconWorld) {
+    w.start_refresh();
     let lay = &*w.layout;
     let acc = &lay.accounts;
     let n_buyers = w.pipeline.n_buyers();
