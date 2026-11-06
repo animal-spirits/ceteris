@@ -317,3 +317,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0310 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate (amends ADR 0207)](0310-p3-ships-gate-views-lab-ui-after.md) | accepted | ADR 0323 |
 | 0311 | [Accept the late-game flatness gate, per-good budget lines and bounded state tables (accepts ADRs 0234 to 0236)](0311-accept-flatness-budget-and-bounds-adrs.md) | accepted | ADR 0234, ADR 0235, ADR 0236 |
 | 0312 | [Accept the built pre-P3 ADRs that still read proposed](0312-accept-built-pre-p3-adrs.md) | accepted | none new |
+| 0313 | [Re-rate the 1.0 plan at the pre-P3 gate (amends ADR 0248)](0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | proposed | ADR 0324, ADR 0325 |

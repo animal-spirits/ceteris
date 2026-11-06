@@ -1530,3 +1530,13 @@ sections = "14, 21"
 rows = "0323"
 topic = "[P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md)"
 sections = "21"
+
+[[entry]]
+rows = "0324"
+topic = "[Re-rate of the 1.0 plan at the pre-P3 gate, amending ADR 0248](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md)"
+sections = "21"
+
+[[entry]]
+rows = "0325"
+topic = "[Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md)"
+sections = "19.2"

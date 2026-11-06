@@ -311,4 +311,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0314 | [New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md) | 21 |
 | 0322 | [Ensemble spread at P3 comes from register priors](../rfcs/0309-ensemble-spread-from-register-priors.md) | 14, 21 |
 | 0323 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md) | 21 |
+| 0324 | [Re-rate of the 1.0 plan at the pre-P3 gate, amending ADR 0248](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 21 |
+| 0325 | [Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 19.2 |
 <!-- rows:end -->
