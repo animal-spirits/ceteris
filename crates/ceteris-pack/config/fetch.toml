@@ -130,6 +130,30 @@ sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
 bytes = 5839841
 url = "https://dataverse.nl/api/access/datafile/554105"
 
+# Sector labour shares and wealth shares (ADRs 0307, 0308), recorded owner-side 2026-11-03 (the
+# cloud network blocks both hosts). WID replaces its bulk file in place: a new release is a re-pin.
+[[file]]
+source = "wiod-sea"
+name = "WIOD_SEA_Nov16.xlsx"
+sha256 = "8cf5ed3d1b7d7ddae93037cc5e1c1d0a2721b9a7679dcc076b85ac5220c576ce"
+bytes = 5536437
+url = "https://dataverse.nl/api/access/datafile/199095"
+
+# Foreign-owned shares and their parents (ADR 0309).
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-xvem.csv"
+sha256 = "4e80473b9f6918bfc45b2326f5a4a178399610fedd15f073ffb65d2c283d8dc0"
+bytes = 13054238
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-xvem.csv"
+
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-bilateral-output.csv"
+sha256 = "4aea799162e631d568b7c5fbb73d16592e5b375645c0384daba85f4f6e125f3c"
+bytes = 44041316
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-bilateral-output.csv"
+
 [[file]]
 source = "wdi"
 name = "wdi_SI.POV.GINI.zip"
@@ -303,6 +327,39 @@ sha256 = "e77b29f91026cee0df109141c15be90a6e268915f64255f5551293772cea1f60"
 bytes = 72497
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.NGAS.RT.ZS?downloadformat=csv"
 
+# GDP per person at PPP, current international dollars: with GDP and population, the WDI price level
+# (ADR 0098 as amended by ADR 0289); and the official exchange rate (ADR 0098).
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.PCAP.PP.CD.zip"
+sha256 = "c7f9101196b72ca1a93b367a93f4b92ab70434685f8036e946268f3eab486822"
+bytes = 95109
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.PCAP.PP.CD?downloadformat=csv"
+
+# Current account balance, BoP, current USD, 2000 to 2024: the trade-imbalance transfers (ADR 0100
+# as amended by ADRs 0319 and 0300).
+[[file]]
+source = "wdi"
+name = "wdi_BN.CAB.XOKA.CD.zip"
+sha256 = "f9542418071ee4092be0707e53c7e67513a3efc64670caea5c15bc5fc2af6c3f"
+bytes = 80724
+url = "https://api.worldbank.org/v2/en/indicator/BN.CAB.XOKA.CD?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_PA.NUS.FCRF.zip"
+sha256 = "1d1be3c600d944debe490c71b0a81028cef87ee6a273c17c38233dfd8e6b9b2a"
+bytes = 68682
+url = "https://api.worldbank.org/v2/en/indicator/PA.NUS.FCRF?downloadformat=csv"
+
+# National population where WDI has none, such as Western Sahara (ADR 0098).
+[[file]]
+source = "un-wpp"
+name = "WPP2024_TotalPopulationBySex.csv.gz"
+sha256 = "66b84489fd7875b62de9b40d960b803b8c8439367c98deab89c2f770970925b9"
+bytes = 16980593
+url = "https://population.un.org/wpp/assets/Excel%20Files/1_Indicator%20(Standard)/CSV_FILES/WPP2024_TotalPopulationBySex.csv.gz"
+
 # GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
 [[file]]
 source = "adb-kidb"
@@ -412,3 +469,4128 @@ name = "DTA 1.0 - Horizontal Content (v2).xlsx"
 sha256 = "7c7a5b1e47233749290ffb54ce8546ef7d23094cf05b2f59291566b8bd4b7ede"
 bytes = 11141676
 url = "https://datacatalogfiles.worldbank.org/ddh-published/0065624/2/DR0093615/DTA%201.0%20-%20Horizontal%20Content%20(v2).xlsx"
+
+# Province seeds for the ICIO-level goods (ADRs 0271, 0275). All optional until the P4 build reads them.
+[[file]]
+source = "census-cbp"
+name = "cbp00st.zip"
+optional = true
+sha256 = "eff25a7b30129c79b3607c8cbf53bf154ddcac54205da0fb1e02913ec61224db"
+bytes = 2557981
+url = "https://www2.census.gov/programs-surveys/cbp/datasets/2000/cbp00st.zip"
+
+[[file]]
+source = "census-cbp"
+name = "1997_NAICS_to_2002_NAICS.xls"
+optional = true
+sha256 = "c9940c1236a033026acc2c05f0bd75e6ae6d8b716ac6e3f8d3453488d1e74a10"
+bytes = 1282560
+url = "https://www.census.gov/naics/concordances/1997_NAICS_to_2002_NAICS.xls"
+
+[[file]]
+source = "census-cbp"
+name = "2002_NAICS_to_ISIC_3.1.xls"
+optional = true
+sha256 = "c305314f332863f9ff93115d5034e6fd29371a04544c387ec1f7b2fe73f1f3d9"
+bytes = 425984
+url = "https://www.census.gov/naics/concordances/2002_NAICS_to_ISIC_3.1.xls"
+
+[[file]]
+source = "usgs-smelters"
+name = "usgs_of03-075_smelters.zip"
+optional = true
+sha256 = "3544e832adec9991e844d755610a63f83562834fbb8211632c974157f8b4caf4"
+bytes = 23011
+url = "https://pubs.usgs.gov/of/2003/of03-075/smelters.zip"
+
+[[file]]
+source = "usgs-smelters"
+name = "usgs_alplants1.pdf"
+optional = true
+sha256 = "5bab6f33a336b3c502e39fd8f94d919e16d759c7965c8e5a9bd7a3809783332b"
+bytes = 629065
+url = "https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/mineral-pubs/aluminum/alplants1.pdf"
+
+[[file]]
+source = "usgs-smelters"
+name = "usgs_alplants2.pdf"
+optional = true
+sha256 = "327777938877d613b748d27288701be228a6bad5a45fbda8ded32f52e6a4b7a2"
+bytes = 41527
+url = "https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/mineral-pubs/aluminum/alplants2.pdf"
+
+[[file]]
+source = "eurostat-sbs-regional"
+name = "eurostat_sbs_r_nuts03.tsv.gz"
+optional = true
+sha256 = "9df6be2133ae76306e9242918cf27ea8ddc5cb35a9661d5524c6508b603a7cf3"
+bytes = 4238783
+url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/sbs_r_nuts03?format=TSV&compressed=true"
+
+# Overpass at a fixed attic date returns the same bytes on every call (checked twice).
+[[file]]
+source = "osm"
+name = "osm_industrial_refinery_2026-10-01.csv"
+optional = true
+sha256 = "e073025a389d032f0e2fc23160a87f6aa97dd7fe59e6e7e40c309aed97ff43b6"
+bytes = 44196
+url = "https://overpass-api.de/api/interpreter?data=%5Bout%3Acsv%28%3A%3Atype%2C%3A%3Aid%2C%3A%3Alat%2C%3A%3Alon%2Cname%2Coperator%2C%22capacity%22%2Cstart_date%3Btrue%3B%22%2C%22%29%5D%5Btimeout%3A600%5D%5Bdate%3A%222026-10-01T00%3A00%3A00Z%22%5D%3Bnwr%5B%22industrial%22%3D%22refinery%22%5D%3Bout%20center%20qt%3B"
+
+# The SFI downloads sit behind a request form (steel) and Dryad (cement, plant CSVs zipped); METI rejects scripted requests.
+[[file]]
+source = "sfi-geoasset"
+name = "SFI-Global-Steel-Database-July-2021.xlsx"
+optional = true
+manual = true
+url = "https://sustainablefinance.ox.ac.uk/research/spatial-finance/geoasset-databases/iron-and-steel/"
+
+[[file]]
+source = "sfi-geoasset"
+name = "doi_10_5061_dryad_6t1g1jx4f__v20231004.zip"
+optional = true
+manual = true
+sha256 = "6079ffd5d79004901dfb76e413dd68e07f139633048da8aa63aab1b58dc26e86"
+bytes = 3167054
+url = "https://datadryad.org/dataset/doi:10.5061/dryad.6t1g1jx4f"
+
+[[file]]
+source = "meti-census-manufactures"
+name = "sa-200.xls"
+optional = true
+manual = true
+sha256 = "4494f0446c9c63caecee8149309e88f95471d07e3232943311cca1774d639dfd"
+bytes = 921088
+url = "https://www.meti.go.jp/statistics/tyo/kougyo/library/library_1/xls/sa-200.xls"
+
+# Hansen treecover2000 (GFC-2025-v1.13), 504 10-degree tiles, 56 GB: the A02 forestry proxy (ADR 0275).
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_000E.tif"
+optional = true
+sha256 = "81edc958984882f1609706cf4159ba711a14ad0c4535155ffff159c06a56b618"
+bytes = 20547448
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_010E.tif"
+optional = true
+sha256 = "4dc2e9a30ba3fd579be19793206e7955eb025051f553f22c17303e85b0a2dc7b"
+bytes = 647065350
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_010W.tif"
+optional = true
+sha256 = "effec961c35fcdb26ae04fb83f09eea44d16d2fb1b8961ebce61894255bcd964"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_020E.tif"
+optional = true
+sha256 = "3a4515b3cc330dd0948c69cc50413fcd2b86f33008e88382090bd82111fc33aa"
+bytes = 619461776
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_020W.tif"
+optional = true
+sha256 = "dacc3edc6df6b5f24fdf0b415d253845c3beb55622e5c58876255ac866d66320"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_030E.tif"
+optional = true
+sha256 = "c5162bd57c9279361196237215fce0bc1005b01cdaaccd1631e7915b99e8b8f7"
+bytes = 618005638
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_030W.tif"
+optional = true
+sha256 = "dc41cb33db535bbf499be1e6b2c24c97df4d892e40752fbb5dbd629d8307b4da"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_040E.tif"
+optional = true
+sha256 = "70725bf4e2aa5c25db71d3be4c5cb307ffb33fc8c210b4270a598b9b6450b411"
+bytes = 39095845
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_040W.tif"
+optional = true
+sha256 = "52a9f99ae1ba2ed11ae486acb2642cc10f8cb6bed09c2a4b623666f36e8f1446"
+bytes = 162844176
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_050E.tif"
+optional = true
+sha256 = "4526cc97f7740ce0027deefdc3c8fe3e42ef2b84713dde78d2d2ab6d2513508a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_050W.tif"
+optional = true
+sha256 = "47008855a2b57236c3275ebd6610a7c29375bdc9ff0607efccd22e7a97755017"
+bytes = 709253204
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_060E.tif"
+optional = true
+sha256 = "7d3a65cf3c116a544bbc45c4c0d5231f6c31f7124210d3c30a78e5abc00dca89"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_060W.tif"
+optional = true
+sha256 = "b05704a93fb75cd8b6aafe9b9795b04e2dfd8ee3a3a356777f77e82ac02c4a1f"
+bytes = 375658868
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_070E.tif"
+optional = true
+sha256 = "aa635084571e94859a2f9e1bfd0a911a59c8c7610d455239a9772983aeaf9a01"
+bytes = 13325639
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_070W.tif"
+optional = true
+sha256 = "472a1e6510a8362ad78c7895a9c3d14977247f9813e3095d60d2e19be2f7a2de"
+bytes = 204963567
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_080E.tif"
+optional = true
+sha256 = "c5c5154120f1eb84ec0bddf8d47e0f1e0f9ad56b26db523ab0c3647319c59939"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_080W.tif"
+optional = true
+sha256 = "374e5f8a76db3ece922f4601dbacc3f2942581fe551cc5e3fd1aa2f6f6f3defa"
+bytes = 375924861
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_090E.tif"
+optional = true
+sha256 = "6d8eae078f4df9d886b5b850d1d6df50deee0f8e84826f1e7f2c7548cb9807f2"
+bytes = 17421146
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_090W.tif"
+optional = true
+sha256 = "425a0e444cbf5c41f15e77e265748f1d3b9fbc178ba6cbb74fd7ef3b36969831"
+bytes = 38297718
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_100E.tif"
+optional = true
+sha256 = "513e7116a37ae3f8b51b11839625b17519730a8dd7b6df9347f4305cb5821d69"
+bytes = 281247373
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_100W.tif"
+optional = true
+sha256 = "1e2bf27f3796a366f49b7750831515c4de74f13efbcc345e5a01d05807bfd48c"
+bytes = 15806617
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_110E.tif"
+optional = true
+sha256 = "617f8bae729b117ea62a97a526a9ee8d93c4e9637d389b537441db6e49b6de95"
+bytes = 319865459
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_110W.tif"
+optional = true
+sha256 = "eb071ded265f20ea017438482d8d5a87b8479d7aa595db9842e2294c5823aa0a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_120E.tif"
+optional = true
+sha256 = "cdb82761a0d87b7bb745ced298821783fa6a4c3c94b6c3bb8d8ba4f7f79334f8"
+bytes = 152940088
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_120W.tif"
+optional = true
+sha256 = "12790f8569e85dd2bd7431668dbc74e75f1a6853e7a15a4972a12d5c185aa207"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_130E.tif"
+optional = true
+sha256 = "a61da3fe5adf0400bc195b7d5e9de7d5a500e503bcb5033b550ef221e1a9e9bf"
+bytes = 198309078
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_130W.tif"
+optional = true
+sha256 = "78a958451ad27cb28c1ec0957d92920750beb9132c08224b58b816a736a4e389"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_140E.tif"
+optional = true
+sha256 = "e686252d0e5559af55c7db218da0041b37827a56e70ae1925312e738b04cb0f4"
+bytes = 302905669
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_140W.tif"
+optional = true
+sha256 = "82293d2c00a3af2f48a3905f6e1947480e7454b15871a224bf10f4ecaac57133"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_150E.tif"
+optional = true
+sha256 = "de5d5b16072859f074627ffa91a1f41d99af5d732e98b8020e8cc9534da1137e"
+bytes = 48221561
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_150W.tif"
+optional = true
+sha256 = "6179058bd792f4ee032ca613f557ce3f42d6b4c4295e9f36d90bde9d1e551a87"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_160E.tif"
+optional = true
+sha256 = "80d9214a48291ff0c7f15e97bc26cb94bdd1812973cb69371bef0da8bdfc5a79"
+bytes = 18437672
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_160W.tif"
+optional = true
+sha256 = "0eca977e9fef2abb3f83c7722b36e57e7ce8f5f4799bd96e9fc36715ffa7d2d7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_170E.tif"
+optional = true
+sha256 = "0650315ab1a9b945da5062a3a735f319040f994b307184d49b23e3e8cbb58b68"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_170W.tif"
+optional = true
+sha256 = "083498fcef6b125cf9d3f82ee7db000a53875c1ff90879e389b4396376fed3dd"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_00N_180W.tif"
+optional = true
+sha256 = "f376b9ebc67029057a362b0582a5b1563653f7223022d27dfe571ff414f189ea"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_00N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_000E.tif"
+optional = true
+sha256 = "5403b0af4fae9feb3f1a487ca6b13ce30c6fc373bcabe55fbdecc9831316e85b"
+bytes = 305781153
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_010E.tif"
+optional = true
+sha256 = "25f2c86c067c959a948628317a8d4a78363c6dfc436f2b40f945cd4da78ae20a"
+bytes = 630282266
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_010W.tif"
+optional = true
+sha256 = "1250feeca0cd71e7c19eac6ca6e7c5109bafe2d1682e84f767c7f87765db931b"
+bytes = 390143175
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_020E.tif"
+optional = true
+sha256 = "566966c5548b7dd5e4fb901a490a9902ac7c6f549789239864a8daedf556b4f4"
+bytes = 590971392
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_020W.tif"
+optional = true
+sha256 = "fc60ff647674eae7dcee2c71b9b4f55ea3c2189f158a52533ab02ea2c75378e2"
+bytes = 106775734
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_030E.tif"
+optional = true
+sha256 = "debb502f8d24e2df0f9f697068b21515988550a86a6be41fde78a066bdc9fa2e"
+bytes = 553234238
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_030W.tif"
+optional = true
+sha256 = "2b3d253882c30349135c47b0e819189b0ad5a706c2d84137186506c49890ba2b"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_040E.tif"
+optional = true
+sha256 = "ef4d881644c05041e2c43f057784e40ac8de64a8ec66ced251f60872345e53f2"
+bytes = 105835909
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_040W.tif"
+optional = true
+sha256 = "fa5fbb8080d66bdaac43936486eb85050903badde62b129053e238d0f5a8ed6f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_050E.tif"
+optional = true
+sha256 = "8a0df3d29e84a5c34a48ca1844cbfe39a198416235fe7016a4b95848a47663f4"
+bytes = 13320502
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_050W.tif"
+optional = true
+sha256 = "056e7a0508f198dce5deff189d4474ebcf75bf7702530da6eae36bd7e1e3a3de"
+bytes = 14981694
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_060E.tif"
+optional = true
+sha256 = "15a94d97efbd6bde20be9fe90c51f7194733f6988d9813eb6523a5e1061ef05b"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_060W.tif"
+optional = true
+sha256 = "4e2cb340313492a0622cd3fd2549132fd830e87308311e08e2d1e9194a1aea8d"
+bytes = 251502876
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_070E.tif"
+optional = true
+sha256 = "dae0780148920a76ae9d9608be3bc63dbbd6ce36c417fe18b818d67fc73bb529"
+bytes = 39994094
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_070W.tif"
+optional = true
+sha256 = "1c207ceb48f1f57cba17a39a442de8e465676fd08b7844463a079a4fe902ae9a"
+bytes = 434738503
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_080E.tif"
+optional = true
+sha256 = "28dca31f9d545e9b8b0d0bfd9e27eae6110bbd3c9c518890b78eda813a7f9ba4"
+bytes = 64754171
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_080W.tif"
+optional = true
+sha256 = "b561ef3e4e1b199c367df68cf8c130ebf12403178d6b6392859fe438ce52cf2d"
+bytes = 557645292
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_090E.tif"
+optional = true
+sha256 = "56cdc0cda4ccb07ad1513593b4bd13b0dc8577ab1510c986c98fc89aaa807366"
+bytes = 150575735
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_090W.tif"
+optional = true
+sha256 = "0689a9ffe52bdc08bedffdfecec179de9f5ef52e6d0f08dda27670c740cb3d87"
+bytes = 67125536
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_100E.tif"
+optional = true
+sha256 = "48646e738bb4e20bc05a8acb46e2f97b1d372866ea765c94d4bc5e4a49eb733c"
+bytes = 199956397
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_100W.tif"
+optional = true
+sha256 = "f6d945cd96d92e4a73658e226c8305d033991216c804ca6118297fc68e405a53"
+bytes = 13479285
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_110E.tif"
+optional = true
+sha256 = "c4299e7af54b3429e17e9fe4b638b4cf4afe315128d6dda720b826c7d3b6d923"
+bytes = 276154773
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_110W.tif"
+optional = true
+sha256 = "e02ccbf49e5450797b986e2a131b4dcbaf5e5f9132fc1799ecb3cf9a5f5813c0"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_120E.tif"
+optional = true
+sha256 = "e091531c59f9d0d591722355d9eb46231fa3f8b0f74690f0d86f17fe031e2e8b"
+bytes = 147879056
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_120W.tif"
+optional = true
+sha256 = "103cff85e0152e8ddfe94dc6de780a3bccdacfa49c892681ba8c3baf127c0348"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_130E.tif"
+optional = true
+sha256 = "dddb16d3aa0967117d9f0dad5f6abfe4160b96ac771c1eeadde466c807d312c7"
+bytes = 14020890
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_130W.tif"
+optional = true
+sha256 = "0d793de3bbc42fb7edb2d4bc1f694da026f4ca56b5138a908f8f5049ccac9661"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_140E.tif"
+optional = true
+sha256 = "43a748a549001d75cfb23a1ad45471e9074bdb19dfcd1033fafe4cca37fb8ad5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_140W.tif"
+optional = true
+sha256 = "dd3dc33438ffd82fe4a3bddf2600f4c1c02d3fbf286c7250b4392efabea674f7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_150E.tif"
+optional = true
+sha256 = "ae8c26b351b17c819878377184e47f655ec51a3f672fc84b2076534394d86478"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_150W.tif"
+optional = true
+sha256 = "effc84de1eff5ed1322fe55052ae402c2058b398bebeed9e44907e6a0c3cd464"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_160E.tif"
+optional = true
+sha256 = "e5990f22b07ad622dbb9f7dc0ece0ee4f43ead22dff65ef7ec79cefcccc830e5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_160W.tif"
+optional = true
+sha256 = "05131b6218c92c0369820b778f8bc5640a0854a99831e165eee7c37595ad10b6"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_170E.tif"
+optional = true
+sha256 = "5c3e678ed8e80d95de26610e36db85e863fcc93ac0d933be20bbbd2053c22272"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_170W.tif"
+optional = true
+sha256 = "446f1a1508421a1f958c449a937e5d01e071a82539d47ac9f3392d874bd9d313"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10N_180W.tif"
+optional = true
+sha256 = "d0fe6acff6a823da298a3c2b29bfc94fe97d4f764ff3840490b5f1577c7a3603"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_000E.tif"
+optional = true
+sha256 = "b26767bca0e659f3822263d98e8a1d7bb294066043d1d752809e6e9a1c02b8c6"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_010E.tif"
+optional = true
+sha256 = "8fdbacad18ebe34556086ccb80c8dc7f6198aea9c1fd5d2245d6127db25cd239"
+bytes = 396403272
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_010W.tif"
+optional = true
+sha256 = "7c93189dd77a2ccca7d03043fa98b419d5a670142493561ef9c2871d0b47ae67"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_020E.tif"
+optional = true
+sha256 = "d3606e340c181b551b98f2f73c30d1383d83293c0442eb025bebb0d97fc38b0a"
+bytes = 644699457
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_020W.tif"
+optional = true
+sha256 = "c2b2148ca79b3a302ee3355e63322ec5faf8152e2bd5fa9d2e1f450698df63dd"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_030E.tif"
+optional = true
+sha256 = "b892a48c54f6bcd37d7d14e7b30666fa478a41c9f91c5b824c81dc8359764d78"
+bytes = 693993136
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_030W.tif"
+optional = true
+sha256 = "259e712a3f9b255f25d1c94f94bad3a41f29deca1ac1788cef37ad9397a9fbad"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_040E.tif"
+optional = true
+sha256 = "0e4f445856403332e4f769244ae82185c42ff48bb075c2b3efb8f6eca725ec49"
+bytes = 287953212
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_040W.tif"
+optional = true
+sha256 = "365bdfc0a4785ae4b76c6b289dd170582e34bd3d24f512aae47fa6659ac300d1"
+bytes = 114359221
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_050E.tif"
+optional = true
+sha256 = "779a29e21cdef5dec608b0afff2e2fa9abd3f19393e279c5d4b6853e0c7d39f9"
+bytes = 19548824
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_050W.tif"
+optional = true
+sha256 = "fccec24f39b324c4ac5d2ee5fcc5e0f43e6db34157ed20629ef4f3a9e8aed678"
+bytes = 737961183
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_060E.tif"
+optional = true
+sha256 = "d0d9086a2e0e2304727204337ca09ed1a77626364ca79277cbc598e06c839395"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_060W.tif"
+optional = true
+sha256 = "c4bf5787d500e355b758c58df539a428b5570996b6596de39de00e58a11809ae"
+bytes = 646401515
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_070E.tif"
+optional = true
+sha256 = "9a9361ecb8cef915cd8f101cd86b8e6234888e8e285a1a87a5023e2d8510451c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_070W.tif"
+optional = true
+sha256 = "58784e5f0128c2671a4a7639fb9c447c59c47791d4e88c203a0fce23681e45ad"
+bytes = 479586770
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_080E.tif"
+optional = true
+sha256 = "4612c5bf43bed0c74e21e192e304fbcfb2c3dc4185b2a9321a5eb7ca362bc931"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_080W.tif"
+optional = true
+sha256 = "f3c8f376a374dc1ddf440adec9d4ed2ccc839281513ee59456de3dd79ea07e13"
+bytes = 108711944
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_090E.tif"
+optional = true
+sha256 = "4a36394372407ea33f1e3fb8dea8787bb6bc77b53293cc70a911b233b18b5f6f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_090W.tif"
+optional = true
+sha256 = "cf064ce72fbcbbda6168d4e654c63adb5f3c35f0142fc07756dde4fb2e9d2b50"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_100E.tif"
+optional = true
+sha256 = "ece32303318792aa1f58921b8dd08b5ca20d1e1a5fca16c5e2abd63d1ce89064"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_100W.tif"
+optional = true
+sha256 = "309afc51a6153f4855e666f0dd7e8fdd69156f3d326e858c506e833fd172ac53"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_110E.tif"
+optional = true
+sha256 = "737606be50b028cd824c149c206518367146fc6152205ee0ddeb3516c9a18191"
+bytes = 13349663
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_110W.tif"
+optional = true
+sha256 = "354234554fbdedbab34245e69f028584aa4adde559c6c8a8369fa660d00187ff"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_120E.tif"
+optional = true
+sha256 = "f6c5b0241f0acc183a91f62f33550d5f5b430ed421c31950f741defaf905e493"
+bytes = 49593796
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_120W.tif"
+optional = true
+sha256 = "cfe37f20a80d7a2c63fcd60e27ed570f9027be830b424e0c0da56078ee50bae7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_130E.tif"
+optional = true
+sha256 = "097b29c996e6c86baabf6e1f833c78bfaf7660d311b4ed845ad033cc4c982cf5"
+bytes = 129326679
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_130W.tif"
+optional = true
+sha256 = "be11115404e00945344522fb30a8e49a95bf22a9138172ead60c0c4eab77b33e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_140E.tif"
+optional = true
+sha256 = "a3aac8b78b7c5a0dc65ba43bf9203e7b446371dc755f3aad4d04b09fbe36a353"
+bytes = 144383321
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_140W.tif"
+optional = true
+sha256 = "26f81735f7038da7a2bf1106628904da06c7b47ac0655a58765b298973f9b2d2"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_150E.tif"
+optional = true
+sha256 = "96285eb25a645efe5ba09d544e4e2d1555910aa8e2f355786734c03996ebccd4"
+bytes = 17255182
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_150W.tif"
+optional = true
+sha256 = "911f4800afdd746d8b3e7d2ea8eceef1d36eb018fe2d71f59d1f07b29395c0fc"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_160E.tif"
+optional = true
+sha256 = "36607edccd649dbb379c5bb9152de840707eeabcdcb17d2bd0abbecc10e16c58"
+bytes = 26494885
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_160W.tif"
+optional = true
+sha256 = "e35365c7f1dbb75cd674b32760dd3ff2536e417b568bf13b6fbed0338a4fecf1"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_170E.tif"
+optional = true
+sha256 = "48c72f07ca1f8bc0cd740e202d5bc0d004f88472a1811e8808b2f4ef02e0c466"
+bytes = 27322150
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_170W.tif"
+optional = true
+sha256 = "0741aca4f5bad7f6737a385ae6800270c4fc95ecc940d5a1ea28a0c0f9f3b990"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_10S_180W.tif"
+optional = true
+sha256 = "0709f7c72f2e1389119b99d39c246cf93d7b755d50f60af0c2db2d6a1bcb9ee3"
+bytes = 13937910
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_10S_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_000E.tif"
+optional = true
+sha256 = "fc3365c0a9cae613174e5a6040336650d745bd84e415525d317acc5e1af6f72e"
+bytes = 106969124
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_010E.tif"
+optional = true
+sha256 = "ad41621ddbed856a44ad1f3dc62786436cdb421bbd2011c3ddd2edea46d7851e"
+bytes = 92471157
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_010W.tif"
+optional = true
+sha256 = "fc8eef019842e2784960be8e99399a75f6cafae860487a35234c806ad6fb8056"
+bytes = 148460972
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_020E.tif"
+optional = true
+sha256 = "e7cb5c20fde87ea9cff94886a8ee16cc69f9901950d188381bf5780914e8a5f4"
+bytes = 72443781
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_020W.tif"
+optional = true
+sha256 = "d645034213ad8e166ae248e0ec8a25544e11dd274d33a0021211c1be8a7ea9bd"
+bytes = 168733329
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_030E.tif"
+optional = true
+sha256 = "004a01b376a4afd7e6a10686898d3431f246d12c6e5fd85ffc716c590d044552"
+bytes = 151520303
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_030W.tif"
+optional = true
+sha256 = "03c2072b513bc44c140966b05c2c4052dab236e29cc491b600bd9beff6fe4c03"
+bytes = 13788018
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_040E.tif"
+optional = true
+sha256 = "8eca54d850cdd5c7719939cbf66a6c0d8da93a41007be36b1098a8c2a7957429"
+bytes = 19972742
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_040W.tif"
+optional = true
+sha256 = "cb7d1295e29763391394616c38db1b1213447c5661688b6fe8031ec13a18213c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_050E.tif"
+optional = true
+sha256 = "1a46594352e815dfaf28715b3941fd8b7dc898b479b0425b6810cab0c3aa64ed"
+bytes = 14008061
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_050W.tif"
+optional = true
+sha256 = "4dbe735466876e4cd45ceaf54851603fabf022de7b63e5a60a13fb2888a61916"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_060E.tif"
+optional = true
+sha256 = "d1cfa6c18a847f243e6724544611f71bbaeba5774f1134a966b03b63bce36035"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_060W.tif"
+optional = true
+sha256 = "96f391163b71c6be457df545e2911e68bde0da2531c79daf2544b518744f9f99"
+bytes = 13451367
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_070E.tif"
+optional = true
+sha256 = "f5794be5db12c9dbf281c8e9781e65de31aaa2ba2d8f1daec026e32a4f9f00f4"
+bytes = 146712076
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_070W.tif"
+optional = true
+sha256 = "d3640ca0158530d944f95fd641b457d9aa2574ce7a6ac1f1e59dd178ccef1076"
+bytes = 84804557
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_080E.tif"
+optional = true
+sha256 = "3ee5bf841749352329e70f68e1d63b2c5a50a882352a108405b56ac1d78bd7a2"
+bytes = 88083262
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_080W.tif"
+optional = true
+sha256 = "7ab33fe8511df30b0de4f37e3299dca8985f5547ba67e921fb9a557c7537e7b7"
+bytes = 119150611
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_090E.tif"
+optional = true
+sha256 = "f0b68539e1e8f2329c55a3dcfda60195e4ff8851878f09c55c33c655f40ddf51"
+bytes = 284074984
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_090W.tif"
+optional = true
+sha256 = "1623f946625735ad8f2c50eef897734a06ac12b0eb7117585952a8a8a4c5b9b5"
+bytes = 328967823
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_100E.tif"
+optional = true
+sha256 = "2d5fb0182a2d58bcaeaacef294d51a0d5938f365a92225b64cd05f5bac441b2b"
+bytes = 518834343
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_100W.tif"
+optional = true
+sha256 = "aa456da8c02ef9c84b19793a27eabc7c8f609fbf3721a6b6808289206a16a094"
+bytes = 343929911
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_110E.tif"
+optional = true
+sha256 = "ef28a250fad9f1074a0aeff41178f47c3d6424acf2ac20075beef385d5d610a6"
+bytes = 29677476
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_110W.tif"
+optional = true
+sha256 = "ebeaa30f2f29a94e16127b38cb93d27c6e654af1ab9a9cb7d14ecb8e830d7cee"
+bytes = 118295577
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_120E.tif"
+optional = true
+sha256 = "16a1897c13f78c3fc76ff5d7cbd540dbe51ac30712d72543d43831dd91419e06"
+bytes = 142708179
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_120W.tif"
+optional = true
+sha256 = "6beb2e808237ff6c6e90081bc9454b7769ada5aefb11cc113e2a8d486e25f705"
+bytes = 13477286
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_130E.tif"
+optional = true
+sha256 = "64d7f0564d9d159043fccb38b8c6d312162a99fc0ddd17ae095dff2f460468aa"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_130W.tif"
+optional = true
+sha256 = "a54c630ced06c39ca0319670fd4db550d048c06509826db31044939852b6f575"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_140E.tif"
+optional = true
+sha256 = "7b1f5ee52d0e9c3c78daaab36db3d85d7ef1f71ada254e994c10ded827fdc42a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_140W.tif"
+optional = true
+sha256 = "15646d929d87656b57027123c0ad3044a2b480033cc2a6aefde38df4d5446b9a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_150E.tif"
+optional = true
+sha256 = "2ac6786f23e20655025218240b9c1ebb55e5940ca433180cc31632d747c4a046"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_150W.tif"
+optional = true
+sha256 = "8701a6a81102018cb4b8f78830147f7ef25197a99cf3e7d512b95aad87842780"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_160E.tif"
+optional = true
+sha256 = "74db9b45e12ca2dbdc830b99a676622146c6ade0c334dc24725b4691bec5d263"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_160W.tif"
+optional = true
+sha256 = "d508a560a392ccd74b08b9c80d5b9c1ae825e684809fb7d51c84866f6c778cf1"
+bytes = 19083860
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_170E.tif"
+optional = true
+sha256 = "7cdae198020c64cbd772f2305f622a43f1d2447dce5af5733c6fb2b3f0ee33d7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_170W.tif"
+optional = true
+sha256 = "74dcc6cb31ea90259e51e09f6553d6b9d00f309b72b01ac26873a02f5942ddab"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20N_180W.tif"
+optional = true
+sha256 = "b491a5be74b28888d02f01b745a396059950bbc951d7e3c85385ffb9296d6ba8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_000E.tif"
+optional = true
+sha256 = "e9cc8a223c6ea166e3cdd7871fcb6a95c1dbba5474d71a9db4c2a3f9d2269942"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_010E.tif"
+optional = true
+sha256 = "34f2bfa598e13a11da41499d9622e1bf088d6c64cc23b0b328f9c8808873c823"
+bytes = 24992705
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_010W.tif"
+optional = true
+sha256 = "f8458ada72f1c30589768916ea632043c36368164d06ccccaad4338e52801fa4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_020E.tif"
+optional = true
+sha256 = "a53059f5cdbc66f86f671b131ab62633d422e424c45c8e706fed34912af7d05e"
+bytes = 208210521
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_020W.tif"
+optional = true
+sha256 = "507d6199630a31bc2603a7e160be6881bc6fdec5680103380f8b5b18cef9f4a3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_030E.tif"
+optional = true
+sha256 = "9e133b695a065375d6e767cf1f6fc32e54fb08e65bd490cc7b032d95794ecb1d"
+bytes = 276792650
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_030W.tif"
+optional = true
+sha256 = "444db3119c575a4f98ca509663aab69fe020f114ab0281d4ee4a9cf62aec12b8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_040E.tif"
+optional = true
+sha256 = "fb6ff634c2ae69790e26d4131dbf94165f6caa8b28a6d9c0c5cb22c5a9a0f5b4"
+bytes = 172147931
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_040W.tif"
+optional = true
+sha256 = "dc0d0c3dcdd99b8f6a310e6d74ee2a58180ba43c4bc88dffe042322f6924a263"
+bytes = 13320408
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_050E.tif"
+optional = true
+sha256 = "c3a2658c868af193de55c0c07791d0baaa1765b585ec1af02cba148060ca84af"
+bytes = 18223309
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_050W.tif"
+optional = true
+sha256 = "1588d9e92a61be16f4e39cf71e5f6af4a0bd8793426ecc84909258e51cc1567f"
+bytes = 288771473
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_060E.tif"
+optional = true
+sha256 = "219b35c3fb1fde18a464875b0882ab803524e33fea94945f90bf9a9b676b8c47"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_060W.tif"
+optional = true
+sha256 = "a26b3f9da4c6215fdd69bc3c4de72282c402493b7b594cb28a465c6fe9a15c63"
+bytes = 649392028
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_070E.tif"
+optional = true
+sha256 = "0167d2c111f1c4489c179530f6fee5b6724be5f7ef08b493dcae1e8146f24521"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_070W.tif"
+optional = true
+sha256 = "ec798ba6c5ebde94b42aad371c0d62f2078f9d48bc055d9d08f0b9bbdbc387db"
+bytes = 364636942
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_080E.tif"
+optional = true
+sha256 = "cec340356e55a603bdaf3d2f7434c8a72d5285a97367d91d9687d8fd68c541d8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_080W.tif"
+optional = true
+sha256 = "b7b224970a13ffed3b3a268d112ca706c6b5efffabf3c9ce3f94a1a4340b0902"
+bytes = 13342744
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_090E.tif"
+optional = true
+sha256 = "901764b0a8b7788e93bfe69c63db9fafc0dfd1f27dda3eadb70c523f051431c6"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_090W.tif"
+optional = true
+sha256 = "412f585cf92dfc2a0951a83d1bb243d722bf0decf26f32717d9e255c7e616c61"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_100E.tif"
+optional = true
+sha256 = "e91c590a459f40231d2127f0496ea420ed225174f6884b4b9482288bb3055f3f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_100W.tif"
+optional = true
+sha256 = "2f5604c06e4aa3957247f6add27e31065816ae6eb78606a0fb47bc2efe26f768"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_110E.tif"
+optional = true
+sha256 = "1bd3225fe0f84f782d1a0eb9702e31e00b9447e053fd09bd072c7da61aaf33e1"
+bytes = 26670851
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_110W.tif"
+optional = true
+sha256 = "1ea5a61bcf01c772ba5bc47bde27f2291e8cc3087e5e069b4d270b51e6503867"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_120E.tif"
+optional = true
+sha256 = "8633bd12216fdec51c5a7ed198e6626cd19ee8da7c092e94d15c91b0e2de9531"
+bytes = 16324320
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_120W.tif"
+optional = true
+sha256 = "92dc74fc260209ea07b14ef7bf5d9d4ea010a87f1273fa77297fadb3aaa588f5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_130E.tif"
+optional = true
+sha256 = "d23d574d42878da1d76f1f146e85a1793d8779e651ab87e02ef5cff88eb4ad74"
+bytes = 15671172
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_130W.tif"
+optional = true
+sha256 = "2b5f527e14091c85d3be1db4934c281ab9331a1dec3e973fc7d2bf5c344558ea"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_140E.tif"
+optional = true
+sha256 = "564ed41a49fe888ccc8d31a23fbae2c9960575be069a0513163d80d2daeeb716"
+bytes = 99262078
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_140W.tif"
+optional = true
+sha256 = "960d282e7830a22a7a69497f80f9d8f7eedd442e4ec73dbc1c5d050353914b31"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_150E.tif"
+optional = true
+sha256 = "8f504537e6e9d1ec811c9ec43c33be58a199fc96aeb7b5d7ca5ee05e48ca02aa"
+bytes = 97106847
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_150W.tif"
+optional = true
+sha256 = "22b09bbb6da67669fda0d51f64d581b020d9cc2b3f34d58be6a7bebcc25ab826"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_160E.tif"
+optional = true
+sha256 = "861d266c5b7a47087fc95cf7f2bb836876603146295188e5751a924ed5af6f53"
+bytes = 31451912
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_160W.tif"
+optional = true
+sha256 = "f8c914c4b6e395d6c4c8e090daf79d978b17473c8fce033bb11867716fd4a03a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_170E.tif"
+optional = true
+sha256 = "3bfe928df96f1742caa276f906115e62e91633f5effd9f11bb607d61efc53af2"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_170W.tif"
+optional = true
+sha256 = "564f7417d5e0e3386c2592d51f5c1a76408cb8d8d65a72e7b7c5f04a1ee59484"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_20S_180W.tif"
+optional = true
+sha256 = "6b16bbb07895cf649abc8e7b4bc0602542d6339f255b2819e7a5522912b0ef3f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_20S_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_000E.tif"
+optional = true
+sha256 = "4cb63acd79be18a464a80b33e14c57270b301d0c5798b229563baad3efe1eea5"
+bytes = 13323785
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_010E.tif"
+optional = true
+sha256 = "56d32df9820d3bbfb2c18e41b0e6b00f4ff202bbfc86f5d39e9fcb63d3a078c9"
+bytes = 13327652
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_010W.tif"
+optional = true
+sha256 = "d9f3dfe6f7d14c84db4ec6cb245867bd5fa3336a4d720b23fda32f505e2c64aa"
+bytes = 13346211
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_020E.tif"
+optional = true
+sha256 = "d53ab04b22437360ae3cb34850af48f563c976287f5f9998a1b10b610202a23a"
+bytes = 13359631
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_020W.tif"
+optional = true
+sha256 = "e5f92c77d07de87ec29f6fa2922080911134b4ac0ba9f23f78bfa236f8c1d0e6"
+bytes = 16222440
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_030E.tif"
+optional = true
+sha256 = "0cf70fe4d054080e2c93f527a0460715cdc257b2390d10fd6167dc69bcdfc917"
+bytes = 18172782
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_030W.tif"
+optional = true
+sha256 = "95f61f6f3d93f02e328f8f812651ef22639a715e309ed031751e0efc9fada679"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_040E.tif"
+optional = true
+sha256 = "50e2fb76af0fbe2f4652b1cb2ed277634b0f3c596c8088c02970fe570c21e5af"
+bytes = 13410647
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_040W.tif"
+optional = true
+sha256 = "ba401ac4bef77941adc548a37628746223543e177de30d015f176a8a2a3ce45b"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_050E.tif"
+optional = true
+sha256 = "79ead113cc895f02e40acf0450bbe762ad58ed2763c99641617d527f5aee8e72"
+bytes = 13549846
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_050W.tif"
+optional = true
+sha256 = "fc65e515511f2b3a6635be75f0da4dc6280a7fb39c6f74ed2f03182c038d410a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_060E.tif"
+optional = true
+sha256 = "3907fab2284afc4d845f35e6a1023f6b0ef4d4800ca909971b46e1367ac51522"
+bytes = 13757786
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_060W.tif"
+optional = true
+sha256 = "698109c324f6ad11252075692e7727fcdfea2c7ce83e6fac0cc11b71fbda9dad"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_070E.tif"
+optional = true
+sha256 = "1f43fb622a902c2f9e2fc33ee40791c94048de602ffd3369729e5f5136bd8b9f"
+bytes = 78800967
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_070W.tif"
+optional = true
+sha256 = "0ecbbce9d1d870dc6d040e1a95e5b14ae69788702ca480897f7327a50e39480d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_080E.tif"
+optional = true
+sha256 = "50e326961fc8ad7bd757a4bac6a4640ae50b200798078650d1eda29139bf39da"
+bytes = 242699971
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_080W.tif"
+optional = true
+sha256 = "b768d7837329ce4e2b0092a391c5d30c741b33ed7f34bf48da323cdb75b018f8"
+bytes = 59126677
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_090E.tif"
+optional = true
+sha256 = "e53312e97c6db0a76b9d207868a0673de39417475c7994876d7d407bbbf54dd9"
+bytes = 685184395
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_090W.tif"
+optional = true
+sha256 = "7cc153402cf22d1b871c342927e2e65d99fa2520b979536e290889e73f2a477c"
+bytes = 158806717
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_100E.tif"
+optional = true
+sha256 = "f2162fbbb0391952a4e6a0ec5882fc2c771d2fb2b6a74444bd4f887445de2fe0"
+bytes = 835876452
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_100W.tif"
+optional = true
+sha256 = "27f515ae346204f09340a8bb3f93fd9b04b894e90967825217aff508d590ecc7"
+bytes = 190012309
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_110E.tif"
+optional = true
+sha256 = "384993b695ef980da6768027abc4919a43325bafa911aedc53e7b13bea1a32ee"
+bytes = 657832660
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_110W.tif"
+optional = true
+sha256 = "58822b4563ebb52273dd9bb3bd315d0e65fbc65179e4963665fbac059db0d685"
+bytes = 342907644
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_120E.tif"
+optional = true
+sha256 = "275eb9edb3d0b13ac5583b2e30e0f11bb8d48879da77a6dac5d2b592fccee67a"
+bytes = 80087688
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_120W.tif"
+optional = true
+sha256 = "291ff33a4d401c9a61081788d3ccd8463ed58fb3a527ae889e207bed274c4e3a"
+bytes = 16094554
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_130E.tif"
+optional = true
+sha256 = "4ae2ecd437ccba72e4be96b8a1c80e0bd63fd3e9bac0a2ee8dcfd8cc63eea575"
+bytes = 13324399
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_130W.tif"
+optional = true
+sha256 = "43cf33e6387e7f71d8738d60bcc267c4dac7a350719ab2687a1fe36405dcc398"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_140E.tif"
+optional = true
+sha256 = "3f9ba1f0961f4165de39ce6fb5d8852d609becccd5d335ff5028ad25a1d2ee67"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_140W.tif"
+optional = true
+sha256 = "7e3e1da4c9b7febdaafdcea258a8111cdd07e2baf7d8ead45773a3b616470989"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_150E.tif"
+optional = true
+sha256 = "bf0e60c16eb25db66ba586397093c8702e2ea95e21f3ecc61de5924850abac4f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_150W.tif"
+optional = true
+sha256 = "4e1715fe80b3b016c982b0ce0da7c51125901833e11631f928909c91e8c950cf"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_160E.tif"
+optional = true
+sha256 = "f356ae0be9394abbd32e41a99eb0eb8d11139e6aed13d9d9bcaf41889976023f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_160W.tif"
+optional = true
+sha256 = "e75a687c5bbc600fc16e126956660ac285dc40b90dd01d7978ca0cfd2fcbfb6c"
+bytes = 18774581
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_170E.tif"
+optional = true
+sha256 = "577e14a943e050c61fca99300ff8424abf95408d90e0574244f4c2d513f1ed02"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_170W.tif"
+optional = true
+sha256 = "8afbb1b0e21ecbea2990568efc041eb86713a4b86016d2879b9e1961e5e82a49"
+bytes = 13432293
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30N_180W.tif"
+optional = true
+sha256 = "63a3077fe74e937804aa97e85569050c086a7c406683702541f57030d2ab768d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_000E.tif"
+optional = true
+sha256 = "3c5013f9d6dc2bec07418e2b4a67f8124c31b788db56e1a320cc95ef7f3496ea"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_010E.tif"
+optional = true
+sha256 = "0ed7663dc912895ec75afeb68e66d668d5c6acbe978f4f35b5473ed66bedf2bf"
+bytes = 30459382
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_010W.tif"
+optional = true
+sha256 = "7042bbabe5e9cb1d4415cae2fc66a2b0c0581af435817d0340b7d418832a535a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_020E.tif"
+optional = true
+sha256 = "81d45cd8f225f68b97546dfd7c1c8b644d0e1cc87231943e0474b06b1743b4dc"
+bytes = 101450516
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_020W.tif"
+optional = true
+sha256 = "4a81d0793d40a35d21fa0750ed95bebedb49107f5e935d9b903d1ed09d56a123"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_030E.tif"
+optional = true
+sha256 = "61439be563dcb74f4871b9cbe28ffa643ba07e1a344f980eccb4f00f11ca76cf"
+bytes = 20301597
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_030W.tif"
+optional = true
+sha256 = "fef50419de7a5d7e5ff5c38aef6fb2a6ac4eafd083c12e1f2754a68b089c6358"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_040E.tif"
+optional = true
+sha256 = "f20b1709cb8e97cee9d7c2f7e719b5ba4bd72cfe8e66ad3e6545f05a1066cc17"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_040W.tif"
+optional = true
+sha256 = "d14468ee901cd8b1aed8bb6ae961688ab25d1b3c995c3037b7f0bea59e1ddad3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_050E.tif"
+optional = true
+sha256 = "336c8ca9741ef1c28ff6531a7cd8c4514320788543d6158e4d17e0392929a696"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_050W.tif"
+optional = true
+sha256 = "b02f859565f70c3ed0bf3c16b4976be589c5f0deb0ff279e42b6ac1493468bbf"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_060E.tif"
+optional = true
+sha256 = "4a8caf4a76037a8a74e9b4891bce3790b48bdf69466aa66fbd40995c8d4c4e92"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_060W.tif"
+optional = true
+sha256 = "ee0335b20782e31d968b34c895208b2f79533fc784a1ff2b0f1c239c7d426a2c"
+bytes = 125953304
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_070E.tif"
+optional = true
+sha256 = "0fdd7e71b7f8fc4e71b5ebad8e713ede32717b886ea53178b910f19c3321a64c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_070W.tif"
+optional = true
+sha256 = "ff35411081a14ba8e845fb844632afdb3967d105503940718926579e6f942f47"
+bytes = 61025181
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_080E.tif"
+optional = true
+sha256 = "d35ee1665a778eb67c94b2dfcffef74a9872332923e06b6021d894cb251e9af2"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_080W.tif"
+optional = true
+sha256 = "07e8d0e08aa4a117407987928cbdfc9a7d88f4a14b61531447eb55dd4a5ce934"
+bytes = 119148850
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_090E.tif"
+optional = true
+sha256 = "64a5023a946b5b2735e6b61ddfaee104ff282592973e69cf72dfd8979b42373e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_090W.tif"
+optional = true
+sha256 = "219d215bdf3c1b455af89924f7deabfae65c2d88aeadaa1d8b2047ec1172b32d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_100E.tif"
+optional = true
+sha256 = "402c85df46122a8ecf1bb3fb5ee385103ca3d1c8fedaf77d971bc2057642201f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_100W.tif"
+optional = true
+sha256 = "969f06b895975baf299a8e1d32151986a9ef3617c8cde062f11522ad8694a66a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_110E.tif"
+optional = true
+sha256 = "f81cf87f365806b9c07dadf628b51b08d76e0761f56eee70c428e5ceb1664418"
+bytes = 72910230
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_110W.tif"
+optional = true
+sha256 = "1ddbe8082daa77c0cea83d0a9bb71064fb95dd76356348359b9a02dc8d636a32"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_120E.tif"
+optional = true
+sha256 = "74475d3465c4affa60f94f0aebca38938df9a1079eb2d59021ac98c652d33824"
+bytes = 75447947
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_120W.tif"
+optional = true
+sha256 = "15b8d5bfca6e01f12d0768f072cbd5e54485578e175bf408e18c4b367adf90e7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_130E.tif"
+optional = true
+sha256 = "23982cee6d32a301d1d065fcd3c8a5f2237f0dca4d6246e8dd7af21ee580cb7c"
+bytes = 36463394
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_130W.tif"
+optional = true
+sha256 = "38ce6be3545801c200c46c4d4a744f260f462fa5e40c11230d565abcbb36e0ef"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_140E.tif"
+optional = true
+sha256 = "c15c0b97ac14e5bee9fbde1cc5f79e1ae2233002b5d2cb9a6a23a30f797e485a"
+bytes = 164774223
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_140W.tif"
+optional = true
+sha256 = "2937e69ba3a32f516b080ee39a245db97e8d93aebfe03b7b012d6a63c04f9e4c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_150E.tif"
+optional = true
+sha256 = "5f4c2695c5c9da0ad8796466a061ad8480bccfc5905849ae45e4bf494d0327b0"
+bytes = 71575233
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_150W.tif"
+optional = true
+sha256 = "060fec1357dd3caa0411e1664ae8a3cb34b7aadab29e9c31f194739d0f2739f4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_160E.tif"
+optional = true
+sha256 = "565bcd74e48c629fbede721502c25a6b1e712cdacce134350071c5910928edc7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_160W.tif"
+optional = true
+sha256 = "d2111f3c5c6173bf1291d7c72dd8edbcd0fe8da5705b6cfe685aa303d7c7729c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_170E.tif"
+optional = true
+sha256 = "e8dd097713f792e320682d3186a834722e4aed13411dca63afadb6d9a27dddf1"
+bytes = 51777257
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_170W.tif"
+optional = true
+sha256 = "eb775aae282b415cabf987bbe0987587d6a5d5c4e242f5d8447839aba546cd3c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_30S_180W.tif"
+optional = true
+sha256 = "acce24651f0f6060bdcd7c9003c67704d0dedacd74cc591d08dc1804a22ea89b"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_30S_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_000E.tif"
+optional = true
+sha256 = "5691943cf056a5ba5b897873e87855d550d481534698a0fd83de1d47acdcf18e"
+bytes = 53411081
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_010E.tif"
+optional = true
+sha256 = "845ab7ae9219286a8b396d129e6a9e92cfe5e3e6f510f31f9e0a9b178cb19fe6"
+bytes = 36170404
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_010W.tif"
+optional = true
+sha256 = "26c23a48ac009da401d0dd94af65352c2aaaf357fe26cf7cb7cefee73fad7dc6"
+bytes = 127008965
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_020E.tif"
+optional = true
+sha256 = "70e3beef2922704b7f18b0d65c8ff3140151606b0cff3c63e9b80cfd18e5c7c4"
+bytes = 119669743
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_020W.tif"
+optional = true
+sha256 = "e99f52fb23769eca3034d3dca2dacd23ae1f259a41570a6565318073953493a4"
+bytes = 13662358
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_030E.tif"
+optional = true
+sha256 = "64e794cd8b02b2f87dd781db2ea603145429b6d1a640e514920ac3e46eb03cb4"
+bytes = 78548531
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_030W.tif"
+optional = true
+sha256 = "a2abbbd111cc55ab5ec901ffb572355e3a64d6737e36788679eb33131c3823f7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_040E.tif"
+optional = true
+sha256 = "2e4f0290254683c8504a9969e16b1dd95402cf66f3043a5c99bf6da7162c8647"
+bytes = 40442953
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_040W.tif"
+optional = true
+sha256 = "e2a1f83a02dadf16aba22dce855d2d7b80c1ec806ea4575492e5bbae07e65b43"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_050E.tif"
+optional = true
+sha256 = "a5eba464e8c927984eee96104daca846a631a9ed372db56ff8eff3d20305fabc"
+bytes = 33432540
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_050W.tif"
+optional = true
+sha256 = "3f2fb77b9c41652fc3e10b18c69e3f9614a8da315fa075bedc20dddc03bf4ea8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_060E.tif"
+optional = true
+sha256 = "ba60ac3bd9bd58af0adc1428a2f6c09acdfa27bfa816c456da7c5e2b1c68982c"
+bytes = 23064802
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_060W.tif"
+optional = true
+sha256 = "88f016e5e7b7fa5d1207bbd3a92aaf853e76dd44ee2b8d50eab80fd01e7ec74d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_070E.tif"
+optional = true
+sha256 = "ed06bef3e8ad719dafda879d5e3cd6e3b7e7a4f4b0ee20e8ab5c1ad80fee7e18"
+bytes = 111759561
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_070W.tif"
+optional = true
+sha256 = "9159f4490cd86c761d69dc8aeba868d882e08aa0282fee0618b61499591dca3e"
+bytes = 13345685
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_080E.tif"
+optional = true
+sha256 = "3d09993699944e3d0996149f94414ab7ee61241b60a71d86388a835d0d62e929"
+bytes = 14070205
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_080W.tif"
+optional = true
+sha256 = "866731eb126541dca6f226123fadbf2d3a132dce9485242f914d2ed0648a9ae4"
+bytes = 191808104
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_090E.tif"
+optional = true
+sha256 = "a2cb9d6ed7f504f072c47ef02b1f305f6b9f47cbc03ee56dd1e13fceea2c1fec"
+bytes = 33901372
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_090W.tif"
+optional = true
+sha256 = "64597c10672dee0b93000d0603404089102ce1599855d59bd9efc7a8a84bcbf0"
+bytes = 616691868
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_100E.tif"
+optional = true
+sha256 = "61b7fa58e7aaac659c3ad289504699df38e4133657d1d1e53155dab959727a58"
+bytes = 338907870
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_100W.tif"
+optional = true
+sha256 = "175d610498eb16ff0e498fd3a20711eb9d7df9bcc7ef4b38b9eb9fbe90736ef0"
+bytes = 461677050
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_110E.tif"
+optional = true
+sha256 = "45863ebc87bb043d2e310a6408baba67c38220b5ac5dd2ff9aa82da01b108e19"
+bytes = 309467044
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_110W.tif"
+optional = true
+sha256 = "3aafb055345f8f9622888b348b98177f0e086a2e4ed4cb46b28f516ea7e3f1b7"
+bytes = 187933595
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_120E.tif"
+optional = true
+sha256 = "d11c566d363be72d5a947991189a7fc459a4dd3a51f2294a4bea09dce3ba2090"
+bytes = 137945560
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_120W.tif"
+optional = true
+sha256 = "5581bad2c95e91f85fab59c59817ac000271f614529786afcd7fae24543d3fbc"
+bytes = 162409459
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_130E.tif"
+optional = true
+sha256 = "cd38e07ec4f4afa42bf2dc72e5d679776767fee1c814fa2cadc5dff65aa434f6"
+bytes = 185047590
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_130W.tif"
+optional = true
+sha256 = "feec20905887826083e284dc363d16b2412bca968b705056afd601895ef079f0"
+bytes = 98136096
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_140E.tif"
+optional = true
+sha256 = "1a10ac6697b6e6ccbcffb74b1cf59296f4b0d6cae4cae5bbcf2bbb33e1ba7993"
+bytes = 57392896
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_140W.tif"
+optional = true
+sha256 = "cca5e42c999a0eddc65c748d8e8f48e804aff289ca27bcc46ba7c7bec07b8349"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_150E.tif"
+optional = true
+sha256 = "4361346df8f9e03660b6e52e6fe30116d4acb23087e6a22e442fbf536b7bf184"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_150W.tif"
+optional = true
+sha256 = "cdfd4750526b36e9a64a2156c5f5666c646cef396bd9e68712e77f0b8e5ae12e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_160E.tif"
+optional = true
+sha256 = "9f4d17f39e2716a484e58c4e15fd733924cc640845f1192879fcd141aba8f4b8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_160W.tif"
+optional = true
+sha256 = "bd3566348d8822ca66e7c8015a1f8bee20aa5552db8388699d320ea5be4b83cf"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_170E.tif"
+optional = true
+sha256 = "8d62e4fdcb1b195db06512bf1daa77820377b0679060d2dbffb1a41d6bbf7974"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_170W.tif"
+optional = true
+sha256 = "9fc3cd412fa4ee81c105ad30b0d5fee454dd92ccd6f13015eccd2520bfa444e1"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40N_180W.tif"
+optional = true
+sha256 = "5cc01a463071f83c1195c0dbecf1a5185af739e5d621319c3087e805346ae965"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_000E.tif"
+optional = true
+sha256 = "60acc08b57f19d4f84719377643ab40a3d9ae775ce230ed6cce9caeed1e983b4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_010E.tif"
+optional = true
+sha256 = "95276e297ac2e20c71aea6f0f90b6ba8d6874e77d05c9f494d35bf7d51dd0186"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_010W.tif"
+optional = true
+sha256 = "d183948a8ac7f667e8452e36cca91075c6f718d3c487d469f4a61d7f7b377f2a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_020E.tif"
+optional = true
+sha256 = "b0e0814d9727ad817564d20aab70a9cddc0b19dc04ddfa8467d4dd0375791b2d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_020W.tif"
+optional = true
+sha256 = "b051b8da86823d92ee10972d5d4e3196ae8896dad3a29ed51fbb53cd4106b01d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_030E.tif"
+optional = true
+sha256 = "8ac9a56a94f2c05882772841b8cd6592116ab713845d2ac813d4b75bb6600bba"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_030W.tif"
+optional = true
+sha256 = "d3f9439cc99da94900f3c1519ba480847e77dff124e236c678c4e1af2340166c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_040E.tif"
+optional = true
+sha256 = "af58e66dc0a0c5781078fbb848549bc6c3909d5a81e48ce641af89f76d1d0f11"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_040W.tif"
+optional = true
+sha256 = "82e1b2087c9c171a972caea8facccb7b6404ad331a1b2e6782581a3c7e50aec7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_050E.tif"
+optional = true
+sha256 = "b429109cff5bc4eb28b79623dbca79443a99bcafe7a596d3b84635fa7add633f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_050W.tif"
+optional = true
+sha256 = "683fb8ba4c867e95286fef3ba2ae36cdac185cf1b30c12eea4e9ca3aadd8d4fd"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_060E.tif"
+optional = true
+sha256 = "e06fc8861f8078a7dd11f12c173829db20e47aea0623924fda76cfe6e75f323e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_060W.tif"
+optional = true
+sha256 = "ae18785396b394a23f5dd1f7760faef675fadd455b291ededf73df5203650714"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_070E.tif"
+optional = true
+sha256 = "f5410482f2bbb6442aa585a25c05edf8000917a7ce6fa6eed5de5a95f8564df7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_070W.tif"
+optional = true
+sha256 = "81a41e641dc3b848dbb2109170d1e3805bb6b7b5c98a14edbeb998706cb7985f"
+bytes = 14720430
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_080E.tif"
+optional = true
+sha256 = "7ab4595567f22ea874419994b61e47375ec30e5404fdd128cb52afe0f25ce3e8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_080W.tif"
+optional = true
+sha256 = "df31c1aef6416b8a45df62b38846348cf40a50250ff3458d3f3642a6af17f6c4"
+bytes = 165197571
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_090E.tif"
+optional = true
+sha256 = "c58d820f4af60e4cb170f5cfe099e4d9c6b297f9c24554f8e11d41857dec462e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_090W.tif"
+optional = true
+sha256 = "6efda65e7ab453c7951e9d37616b78dcbaee3232b4a831d381e3eb9f1738770a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_100E.tif"
+optional = true
+sha256 = "1d1a134687c98e8dc13c162b964954a5c7607bd21157ec8b4529de5eb8b28109"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_100W.tif"
+optional = true
+sha256 = "fd94f802425e8904f8d32332e2d4b94fc1f457d8dd4123baeec9893c1b1ed5e3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_110E.tif"
+optional = true
+sha256 = "01d457f5f220257ff465ed18ea5dfa42ba0630fb6c1651f0080e453ffa00d8a8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_110W.tif"
+optional = true
+sha256 = "3cb95904a4a934f49829d282afaf32723d6407c146e0f21ee5e762d2651f8c75"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_120E.tif"
+optional = true
+sha256 = "e9528938fa7f2b0f6b3495f1bbe4c9859988db6c31384375fc045871185f9eb4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_120W.tif"
+optional = true
+sha256 = "7cfcb94a06616a556d751a4dccb9593ef4adb1491e8f8eba584fca1094ecf57f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_130E.tif"
+optional = true
+sha256 = "d67f2d1dcf2fb472edc58a1240a722956737eae4c97713c42183fcb9edacc0f9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_130W.tif"
+optional = true
+sha256 = "958fd8ff76ac41b5f77ed1780692a3069ccac65d2c96fb230f8ee66ffbfe99b9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_140E.tif"
+optional = true
+sha256 = "1575bfedbfb6fd8edb38f264135303619cec125d50f2fcb313b5f7ecf4768088"
+bytes = 50794723
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_140W.tif"
+optional = true
+sha256 = "bbf2e53e536a072e82db9f89c8d1b081677c254f49a3895cac03c8cf8d4b0444"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_150E.tif"
+optional = true
+sha256 = "12382be04de4d32cb2227e97da7c92e375554f7490b51668c1fc72b62371490e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_150W.tif"
+optional = true
+sha256 = "2b803deace125cf06780e920e3c039d6a305129f71b380fcc0492ebd69401ca5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_160E.tif"
+optional = true
+sha256 = "079de3f2c75880e030da0c96b2ea95482b1a796e51e3e8816f4c8d8751067d32"
+bytes = 33665878
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_160W.tif"
+optional = true
+sha256 = "7eb734adb2a7b6c13ef05e85e6ccc8cf18f357df59ea3254e06056128610688f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_170E.tif"
+optional = true
+sha256 = "8c817e93cd2b285cbcdebbe58a61cb3a8a18eb8ac33bdf95e0c5de282c988890"
+bytes = 47300416
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_170W.tif"
+optional = true
+sha256 = "aa581b2ea4dda916d70aaa7485ed2f3e8927a22596fc96d23f4b3fd3f9270321"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_40S_180W.tif"
+optional = true
+sha256 = "d42266c2d88836eda4efd077f576b72c39958acfef5e538a839f5bf00e8b0527"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_40S_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_000E.tif"
+optional = true
+sha256 = "57f87881974e2bdbd81b1a2f6f4cdc33eef8c303960c9bc4f860df0a19315020"
+bytes = 374428822
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_010E.tif"
+optional = true
+sha256 = "4bb7310dc2ea941c5be7c73a08c9325d36a03984d7933b12cc3b4bed0c60d9a1"
+bytes = 402885051
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_010W.tif"
+optional = true
+sha256 = "d03b27d74aa7d5597b84efea9839ba3fc22144c0d7691e78a199bb78a2c669d6"
+bytes = 218786592
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_020E.tif"
+optional = true
+sha256 = "8c3e73f13967e168120e3baa7ed7d9223684f798d393933fe6e7b429d89f5fbd"
+bytes = 406010213
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_020W.tif"
+optional = true
+sha256 = "009763b5e5ddf1f54dcc7308d18bddeac363182a6780d67a732041f9d4d8a2bb"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_030E.tif"
+optional = true
+sha256 = "c3377a580b69afd0b91ef76b99eea2ee1cd60d03a673c8d07b0a97ac4d6c0610"
+bytes = 191021421
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_030W.tif"
+optional = true
+sha256 = "a0d702c90f9ef1219bba817b70c67663db2f24149fd9dc8818e63b8b8ab6cbea"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_040E.tif"
+optional = true
+sha256 = "4ec3eecf701396f8a6b5ab46dd9d79f61bb5fe1284ad70a74e79440ec6229995"
+bytes = 187235781
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_040W.tif"
+optional = true
+sha256 = "a97fbc65fa14b397abfbb6ac829356c431653a4edfb5004ee31a768175e3c0f9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_050E.tif"
+optional = true
+sha256 = "a3ddcb50b42295dcd682f5677e57855e7ef934cd70ffea331117cf26da3cb522"
+bytes = 18410408
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_050W.tif"
+optional = true
+sha256 = "15322d3266cd4f59c95f12f14ec94e514713aa17dda89c2455595e05df1de169"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_060E.tif"
+optional = true
+sha256 = "29b808e900ace7532757fa1b0c052f0c7fdecea6183194e17f508211c94fa355"
+bytes = 20204903
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_060W.tif"
+optional = true
+sha256 = "9ee66ee95c869e0a3ff1effc80b8f87f0d7513a8617ec9a5feeb9c7c489f4a80"
+bytes = 118820217
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_070E.tif"
+optional = true
+sha256 = "3e21628c59950b886973e659bf31ca4d8aec4a7e4eec54372c2ecaede66f3506"
+bytes = 57882011
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_070W.tif"
+optional = true
+sha256 = "6147111bb63a456b105188c9a463545598d4c8a5d73b4cf513ce78e7c26900bc"
+bytes = 283979320
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_080E.tif"
+optional = true
+sha256 = "573cc3b2bfe9a6a25421782f7d38edc3c75279b34edc6c5a32d1dcbbdc4b4a86"
+bytes = 85363354
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_080W.tif"
+optional = true
+sha256 = "a6d3820b79dc011e043e0d12b43a3a04cbe374727452d355c9b0bb08c272bfa1"
+bytes = 622488429
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_090E.tif"
+optional = true
+sha256 = "f593742ac282667d06992e9cf06790c734283a7ad5ebcb2a8414f3e6f0ca4ff7"
+bytes = 28451264
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_090W.tif"
+optional = true
+sha256 = "13383ed4f67281b9ce0480ee3b3a99ee629e2565def4f9d7b48125ad8a40dcc1"
+bytes = 438457923
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_100E.tif"
+optional = true
+sha256 = "ae588dbc293b701c46898bf9be44a28037cd9fcfbc2b6f9c7a42e351563126fa"
+bytes = 84393163
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_100W.tif"
+optional = true
+sha256 = "4feaa5e1f676ea475cf189dfdffd2b8e3d537513bb20904f080ec6726ebb338a"
+bytes = 340179249
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_110E.tif"
+optional = true
+sha256 = "15f8842d46cde988bccbfaac4d472ed2e4f06d5db9f1c3aa284ba936bd3dda3a"
+bytes = 77187697
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_110W.tif"
+optional = true
+sha256 = "cdbfb23681ece5b0e31ae453aae2173b26e500030a9f5e1549aa4615f337c662"
+bytes = 125474762
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_120E.tif"
+optional = true
+sha256 = "2ab0f33a53a1f8b2608359216f61688675962422b81f85d8e38058947c182f25"
+bytes = 392988645
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_120W.tif"
+optional = true
+sha256 = "c5898dd59e0f2334d6214929b7ac149e962b2d7a02313d5a995b39e3688b9d8d"
+bytes = 426162727
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_130E.tif"
+optional = true
+sha256 = "09e6512b968293ec2702c1abfdd68130e913520861701f25857dd397cb9509bb"
+bytes = 411598941
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_130W.tif"
+optional = true
+sha256 = "bb232eddb3340e11fe38fd2797eabf3fd7f0ace0194101caaa35241428231f10"
+bytes = 314597555
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_140E.tif"
+optional = true
+sha256 = "032060762d1043b458aed37ebbe9bab6e1b36f6a183c5b1f0d4f01435ac59c7b"
+bytes = 137964456
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_140W.tif"
+optional = true
+sha256 = "22dd5ff1d17822742201ceffc2172133c8c0370b2ef37c3c8588a2bb44ad2d6f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_150E.tif"
+optional = true
+sha256 = "bfaf525a78cf4cdf69832d61bb5ba3a80d2d4f67ae828d4d6b03035fefe07ecd"
+bytes = 15850550
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_150W.tif"
+optional = true
+sha256 = "4c372dfaedb90880893f2a5541198c7849470f9e6c4d00efeb15bdeaa95fe09c"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_160E.tif"
+optional = true
+sha256 = "7f1201ccbef47ea7d18ffac4a571d1c49260ec840c3d35b72f3d3ef2b34f371e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_160W.tif"
+optional = true
+sha256 = "bc748f0737d0e5926e98d1d0b70e3b6d7930596d145c931f9b3a125dc7e2acf6"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_170E.tif"
+optional = true
+sha256 = "a8bf18670fe5056d4a1ae343538808e5bbf218257cee8b1cd9dfc3f330e3dfaf"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_170W.tif"
+optional = true
+sha256 = "f4812be12145de2e07985124ddb940448145ccc0efe3cd0fa603c11a5f00a3f7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50N_180W.tif"
+optional = true
+sha256 = "eb64c78f63d48a9509e3bc69538db7f1c574b59dc6403d905979bf95dd66be41"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_000E.tif"
+optional = true
+sha256 = "8d136a18e8c4a89f455b1a62e8eb1436bca813d734c119d6ce8aff9379479112"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_010E.tif"
+optional = true
+sha256 = "af193d28781b237998fad1eb3b53757cced80673f1e25431866b94d3c837e296"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_010W.tif"
+optional = true
+sha256 = "2d26b09ea1d90afab850e7981a4c48066b0994f6925acc875085ed28e21d6b6a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_020E.tif"
+optional = true
+sha256 = "3ce3bbdf935a822721c5c832c2960f01d5f58bad94a8ad81a311870545337b7a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_020W.tif"
+optional = true
+sha256 = "47cc2d72cfe4ac94b7b2a63b37030e846cb2080b030525a5ca8349166cf16836"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_030E.tif"
+optional = true
+sha256 = "d73fbfa94b21f43f7c52f9bb37b55d7a4515669df693520f1b0d27f15d093792"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_030W.tif"
+optional = true
+sha256 = "e1fe9dc5b0dff9b197fbe0953a6ae734c5440ae5a6d8783ad01103b404e2664e"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_040E.tif"
+optional = true
+sha256 = "c8e9e1dcaa997fd68d208056425718b84150735e06a52ed278d956528bfbbaf9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_040W.tif"
+optional = true
+sha256 = "0e4da3c76dac7b183e2e071e7ce8db32e586fec6c2aab925ed635f36223261f7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_050E.tif"
+optional = true
+sha256 = "16cb167f260e6fcd949b781bb2caa0f4db7f8860ca19e664adad3c5c9293dd75"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_050W.tif"
+optional = true
+sha256 = "7c917b1218a0ede4386a960ddf4af4d16886f050a67058829fb2c21c017706f8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_060E.tif"
+optional = true
+sha256 = "52ae5f317e1c00e4fe7c8f230037fc0f224faad07a959ba42aaef4f4891c5ced"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_060W.tif"
+optional = true
+sha256 = "5f40b199636cbb3bbab837c3846a6345106681a63e9f926a1fe455b726207f91"
+bytes = 13370281
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_070E.tif"
+optional = true
+sha256 = "13a51effd888590832967d1fbbf1be424daff6a59235a2c923d32561791fad32"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_070W.tif"
+optional = true
+sha256 = "dd2f5f7e932d68d40dd12a45926dd3484d2b3d2d82e8bbdc518e06e36bcdcfbb"
+bytes = 38775001
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_080E.tif"
+optional = true
+sha256 = "47baaa23e073611cab5376ff859737e75c39af62e5cb8f8e8c8baa6ba651a51d"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_080W.tif"
+optional = true
+sha256 = "c47fd2bfb83bfce3324c61b6332599830813fcfb27cbd9702858839b4af1a9d4"
+bytes = 63120105
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_090E.tif"
+optional = true
+sha256 = "d913e8944b7d999e3a0dfe9b7c8b4a2185b9b240dde98a51330b38efc0fe50a6"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_090W.tif"
+optional = true
+sha256 = "e5a447952374b84627032bd39f86df120ba0b68a4fa712d675d606e93b5f90c3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_100E.tif"
+optional = true
+sha256 = "154d297e695b824d1cecddf1061b81de748bc361cf44797ee134a9dbdd1de9c4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_100W.tif"
+optional = true
+sha256 = "b82925a82a8eface204cfdd0f6e8b543d70b5b666fc121a5ab79411c889d9b94"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_110E.tif"
+optional = true
+sha256 = "d8ea7bb01a2671af4bcb2f30e548cc8b32b9427a74587bbf2d8e6f571d856fd8"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_110W.tif"
+optional = true
+sha256 = "25ba705b2bbbf76070fb18c2576cf7ba75b04b0de359a76130e65140bdcf73a7"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_120E.tif"
+optional = true
+sha256 = "ef8e12ee6e2d7a6c7d21d798b7f47cbf86fc17a1413540dce55b9b2a3ac71827"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_120W.tif"
+optional = true
+sha256 = "01cc3a8781dec8a3bebc9aa5b8af7fb9a0647136bafcc7c2421b3156b65acabe"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_130E.tif"
+optional = true
+sha256 = "c3b4baa3aa91e904cdfafdc166ae7f67ec01781d6cda063204985a2094a7f69a"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_130W.tif"
+optional = true
+sha256 = "33f572348c104c75d3cda86aa3af36b037d72a353242fa709c3b0cd112d77268"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_140E.tif"
+optional = true
+sha256 = "60caa0581504611ce8f9626dea377fab16eb69410c428eaf1bb6eef27d4bdeca"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_140W.tif"
+optional = true
+sha256 = "890f476b10e1c70537ddca742b5948a630b672094243fd73f95e38a230d8d5c3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_150E.tif"
+optional = true
+sha256 = "318938b7819b481b33a0430d11435bc58fa82b5e50f94ccee0308eb3797e6622"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_150W.tif"
+optional = true
+sha256 = "4e77c4d14c78a76c6ef4925a9368e0a3f29c12151a26e478b096acde559db72b"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_160E.tif"
+optional = true
+sha256 = "5be9ef8a7f659e2a200f1acbfda83d8cde3a5aa060ebd036d8beb6efc3646547"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_160W.tif"
+optional = true
+sha256 = "c7b91243f6d37f7c30ef0ae96bbf4a0f752227bbcfbf3f42fae2ed23efd267a3"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_170E.tif"
+optional = true
+sha256 = "8e2863b79132f10f52e2dc79fef48c1e3d893ffea411ba3a4143f361abe75565"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_170W.tif"
+optional = true
+sha256 = "a46d5813f4d55b3d13cc1877c9d6e5747e69d3f505f99d7ce840e42518fa9394"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_50S_180W.tif"
+optional = true
+sha256 = "ae059cba3ec1c6acaee6761a72232e8efa0abcc450a2d3101d15e472a88d47bb"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_50S_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_000E.tif"
+optional = true
+sha256 = "3a92b3c03b54a241574b32d6db53d7507cd53d3ddd381402fa3f93e9042a9f9f"
+bytes = 162143636
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_010E.tif"
+optional = true
+sha256 = "ea2c73bff27c5dcc9d8104ef3a4f479c9ffaf449542084f8f410ad4de44b8c6d"
+bytes = 338093733
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_010W.tif"
+optional = true
+sha256 = "f517028eb71c6908206519a2922b8ee06de372d82a923f4a12e293c719547dfb"
+bytes = 127052673
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_020E.tif"
+optional = true
+sha256 = "705c9bf84828271601fdc53a5c04904673334ce8ea9bb817d3273fc79d3707ca"
+bytes = 416341309
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_020W.tif"
+optional = true
+sha256 = "262c47d55a23e93dc2d6111de7d060a95274f1aeb1490a6b70229e2647c7688b"
+bytes = 13556839
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_030E.tif"
+optional = true
+sha256 = "99e1b18d5060a7a98f29a411e00b6ceb7c8e329b1095bc03c9957ec83bdf3eb7"
+bytes = 452073716
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_030W.tif"
+optional = true
+sha256 = "3fca4071437cc87b8380f01e32bd27cbd3b5981ad6bbfc6b4812091504bd98cc"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_040E.tif"
+optional = true
+sha256 = "cd2721c9c30bb1ac6181c5e1de154865f12d3f4c69138c615a1232bf7a198373"
+bytes = 381186934
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_040W.tif"
+optional = true
+sha256 = "11b343d15a4124da708be03979875d2982e68736cf60763dc524e29c2c860df9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_050E.tif"
+optional = true
+sha256 = "c89b3dd52a9679e494941291aa69c880fea209560d52611d3b9811661cb4014d"
+bytes = 361350165
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_050W.tif"
+optional = true
+sha256 = "64eb336bcafe8ec87f165e29d1265d5906428168d2f37c566dd5be82bc90cb74"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_060E.tif"
+optional = true
+sha256 = "b1febaec82d232db4cf374695b3075220628e6c0477e390c85dc731fe0a7fda9"
+bytes = 348925737
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_060W.tif"
+optional = true
+sha256 = "f48b1674ffa54e31a7fa32f16a8d6800ff941b416d499b9ad29680e68df9937a"
+bytes = 118242095
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_070E.tif"
+optional = true
+sha256 = "13677dc5900070769fd757e086a8b430c1337aee1f9fadb650071de1cad1772d"
+bytes = 342218999
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_070W.tif"
+optional = true
+sha256 = "ec49e1432d849b219e7d27d0d2af8c7c46d745573b32f73f67f90d13813e5342"
+bytes = 493740719
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_080E.tif"
+optional = true
+sha256 = "21f8fd679af0593990863c1267d93cd894377e3f37b26952baa79696d4a38081"
+bytes = 562661719
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_080W.tif"
+optional = true
+sha256 = "11fc1319cf6b1a57e7a5c4cffaee86212f0026d815a422b5a53e94a2fd996e1f"
+bytes = 527849712
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_090E.tif"
+optional = true
+sha256 = "3d362cff920d5d16cf40d37afba4569c11cf116d99260e97acaa440151f1e28f"
+bytes = 575730238
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_090W.tif"
+optional = true
+sha256 = "26fb2abae364a8d2c7131bb7f6e82b9741d06f2bbc7b36b55e748d22bd56859c"
+bytes = 377075244
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_100E.tif"
+optional = true
+sha256 = "6730f11b25059fdd76152208748ff9f1883bd1189f540bb57eb4b2ff21d6e0b0"
+bytes = 656420075
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_100W.tif"
+optional = true
+sha256 = "4419b7e4ccdcebd8342b3eaeb52d27af26be2f3643b8e541d3740ee07cd659be"
+bytes = 586429673
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_110E.tif"
+optional = true
+sha256 = "00d4986289b31e22a057a033666e1e57343807cf9056a61a66feaa24bd9ec5f2"
+bytes = 670656194
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_110W.tif"
+optional = true
+sha256 = "1ba9af496b168dd8670a456cf60306e60a60793961cc8a3623205f8e5ccbb2dc"
+bytes = 532099393
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_120E.tif"
+optional = true
+sha256 = "d9453f05af69bbf361761821a3240852cc79caa94a20c635f6084dd857ec0100"
+bytes = 823852607
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_120W.tif"
+optional = true
+sha256 = "bdb9d343c71c28db3ec2965ac3b64a2138d73868d3005ca10fb5a8c447bb1efa"
+bytes = 608389768
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_130E.tif"
+optional = true
+sha256 = "b2762e83a5518bf91282b9cf6ba1d7945241299784ad198575dc2c7d13ea7595"
+bytes = 735673243
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_130W.tif"
+optional = true
+sha256 = "11b8a501dc77c1df1501b012ef7db54103d2b4960082902e84a7024c94f95164"
+bytes = 618594913
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_140E.tif"
+optional = true
+sha256 = "23be46e44d7a89dfab0d0f77ea44b629527c02098711c1c6c30e010e5cc7fbfe"
+bytes = 136537482
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_140W.tif"
+optional = true
+sha256 = "9e96a785814b29f1c11cb73629e28bfb5a62f0c401c1555cba4c0b2253418309"
+bytes = 172991135
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_150E.tif"
+optional = true
+sha256 = "816eb50a2855baa40b2ca97f05702a5a6fd5a1f09e8eb429613017be36653302"
+bytes = 185083052
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_150W.tif"
+optional = true
+sha256 = "4a33a608392716d0425cadb9b3adf210bacecec84055754eca28925c75e03db4"
+bytes = 15490658
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_160E.tif"
+optional = true
+sha256 = "8e297a445d9ce5835be05e10f963c35d7d4c74379d89384f3d7472f138c7560c"
+bytes = 106642545
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_160W.tif"
+optional = true
+sha256 = "8324374203826261f41580f657f09c957190e5ae3f0d630c01a25d1499a69d3c"
+bytes = 73467802
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_170E.tif"
+optional = true
+sha256 = "a6695efb8a2855ac99bcd3b152ceae494412eed4d0536f8204612e9afb3f77d1"
+bytes = 13326976
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_170W.tif"
+optional = true
+sha256 = "48f2fd1535b90b983257c3f46d600c3e57b449acbe771e447ae830296e5552fd"
+bytes = 25359147
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_60N_180W.tif"
+optional = true
+sha256 = "762a2ff1db772b58f47410e564f677bbcbc959e57e5884fae51b4087b1841aba"
+bytes = 14221521
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_60N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_000E.tif"
+optional = true
+sha256 = "4dc230c04878f87ce68f06a25e8f290600b360d604320b6c6a1510dac004521c"
+bytes = 72448315
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_010E.tif"
+optional = true
+sha256 = "1175119c844335fa0398b0fc9972a9aca8f8fcd9ff0846d6518a1c3373c7a47e"
+bytes = 352937172
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_010W.tif"
+optional = true
+sha256 = "c44828b47c3083029688ac6feac24d7b3e665e815b78823ca4b85bb17d35f608"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_020E.tif"
+optional = true
+sha256 = "9bd0bfcbd917092c6a743d386e223bc12072ebe320c314ffd981d3f15652d8da"
+bytes = 461578241
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_020W.tif"
+optional = true
+sha256 = "13d252029ef8a1bc46e78932f8d700f30ef049e1fba8fc0484323362ef8b8293"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_030E.tif"
+optional = true
+sha256 = "3376900c34a4ab6c3358c39d82448a4cef41ad1bbec20f33b1469f4cbec2b723"
+bytes = 392428473
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_030W.tif"
+optional = true
+sha256 = "70f62fb4e8b26b6ecd6ef661996365c5b5f641b6996c6a7c30ee33952fe0c68f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_040E.tif"
+optional = true
+sha256 = "d60a38c22035fddd582267cd2a59a3acbb3399f62f8aa83ffb43a2d821b3cfb5"
+bytes = 353928666
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_040W.tif"
+optional = true
+sha256 = "b4e09952b9e601bf74e6c3cb3ca6f2d6a9ad534e1d7e7a032017c18d62c4f723"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_050E.tif"
+optional = true
+sha256 = "5ac279fb5dcec6c3adb675a01a0c4cf75b7d1a5c6dde1ee3add7e3525c788690"
+bytes = 437412252
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_050W.tif"
+optional = true
+sha256 = "81c4a8a5c555d54aa0cebf0533de08cdc64b5ba28fdb774d5822836e65b97111"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_060E.tif"
+optional = true
+sha256 = "0b7cbf9aebd5e56404d63fad92c66c831980db033332555ed3eab16ab99982ca"
+bytes = 447119951
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_060W.tif"
+optional = true
+sha256 = "bd105bc08448ec7aee2f627bce8f5fd3cc49086b79a1d0a72964c7a2722c37e4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_070E.tif"
+optional = true
+sha256 = "d4b5331f2702375554e417c4924f026bc48d79cb22a1cd39156a9d8e3c21974e"
+bytes = 391341866
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_070W.tif"
+optional = true
+sha256 = "a2fb8f85835fa08750526fb007c0bef9c9bbc60288d4f357d398a92e8630c800"
+bytes = 13354193
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_080E.tif"
+optional = true
+sha256 = "d21f21d86211f8e1bc95deae5959f6b3a971c3949e1f240c94110d8907284a98"
+bytes = 548584956
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_080W.tif"
+optional = true
+sha256 = "ae1018d7c7786bf8231af0662fb2416e4ce36c44541dce5d6d021d70270dba86"
+bytes = 19054309
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_090E.tif"
+optional = true
+sha256 = "590324517b68094263e7fa0ad0eafcb6e49860b518b1434cda069b0733975cc7"
+bytes = 525612165
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_090W.tif"
+optional = true
+sha256 = "73e0aed983a877fbca2f20349c59603e64810f0fd1a8cfe92f7010375e251346"
+bytes = 13872240
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_100E.tif"
+optional = true
+sha256 = "5a3d17a05d3578ef516c49cc1763b4419ee94af2ed188ad62d77248fe314c52e"
+bytes = 555231769
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_100W.tif"
+optional = true
+sha256 = "1b4396b4aad9d690e69ee9aee1cff2ed3bc9649c75341f0d6af0f8bb3fd538e9"
+bytes = 48383239
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_110E.tif"
+optional = true
+sha256 = "523bbd3d6050516e533c50fd06ee2f2d69c64a21a76cc2d7d18e62c7b945ad4f"
+bytes = 573771226
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_110W.tif"
+optional = true
+sha256 = "503148211a33a134ba53deb69853561e2e1f60deb78f1c102ac32fc42615508c"
+bytes = 148510777
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_120E.tif"
+optional = true
+sha256 = "21c289a15e1d990416be61bca2ab6cd92836977bd5f322fda05224fa0de995b7"
+bytes = 601638032
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_120W.tif"
+optional = true
+sha256 = "5d9b5e58bfdb4cf537f910f507dc771f086b92809dc88a1300c1ba96a3407afe"
+bytes = 289756022
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_130E.tif"
+optional = true
+sha256 = "d55dcc03db8bc94c0e622c03dcd14b275d281169444df9ce3b1f1e420b8b54fe"
+bytes = 482502224
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_130W.tif"
+optional = true
+sha256 = "1ef940285a94cd087448ffbbbd66bf0e368542e4993de09f3d086f15729a7cee"
+bytes = 418564859
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_140E.tif"
+optional = true
+sha256 = "c4057245f7259455830359854088c94a060dde384cb60af9c1dd98887a295236"
+bytes = 412486035
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_140W.tif"
+optional = true
+sha256 = "f85e50d9f808221d48376a61202c3075b3e9dad59a5721faf1e0f768a6a89acc"
+bytes = 455473350
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_150E.tif"
+optional = true
+sha256 = "62ba8485f03c9e63d51df473c4097057c431eafa3ad7d0195aece597e8801de8"
+bytes = 428318901
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_150W.tif"
+optional = true
+sha256 = "6226181a94febf42ec1240ebc707a681d2568e3e39d6c0b3fec06663c21a7cae"
+bytes = 387190015
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_160E.tif"
+optional = true
+sha256 = "5e248de8d22d0b2d16a065e68e63f1fc5f4eb2c8997ed19c81296070b3de40a7"
+bytes = 235777985
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_160W.tif"
+optional = true
+sha256 = "86ac9374361aea4c0ef68ab4b4de504dd646dcf8b7bad4863fa403d3e9024d84"
+bytes = 435142086
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_170E.tif"
+optional = true
+sha256 = "1c5b16a85e6550a9d339f203ea6ed3f9ca7ec0065884c03cb8ee4c7507f0cb31"
+bytes = 97232551
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_170W.tif"
+optional = true
+sha256 = "90d40859c6b6950dde74446c6126dc227b6f9de682c05789038b55c6ec1a734d"
+bytes = 82200888
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_70N_180W.tif"
+optional = true
+sha256 = "649948b43fdafaaa7188e8842a83422a32d05d10ef3e63ec26dff3641395b266"
+bytes = 16477142
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_70N_180W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_000E.tif"
+optional = true
+sha256 = "d823268e91d5ec21a78f51e8e98259e1d73345c774358c08be02175573e98e75"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_000E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_010E.tif"
+optional = true
+sha256 = "d7e7855145175b6f90f45d135e228ef665edfd84901cc244f4c3887f9d0f57f0"
+bytes = 13800800
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_010E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_010W.tif"
+optional = true
+sha256 = "390f3e6067b63f298474a3da804eb0a60d4a23783c066d37dd6a32df8874bc70"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_010W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_020E.tif"
+optional = true
+sha256 = "aca69cb0e48b2c2786fdb5f46abdbf936b09d920dc946366d3de0d67f37c6325"
+bytes = 20638830
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_020E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_020W.tif"
+optional = true
+sha256 = "eefeab45312602fb15604e2a9901555141c5ded5903242e81c96f7f5b20d63d9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_020W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_030E.tif"
+optional = true
+sha256 = "42be2496f8e01a718eaa5fc3e07ccc9ae1de2f092e299efa1458a8f16291e461"
+bytes = 13492061
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_030E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_030W.tif"
+optional = true
+sha256 = "2402db9322b1b6cbef8ed25c733b9b600e6bdcab1b5233bbdbc48f21ad2beeb5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_030W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_040E.tif"
+optional = true
+sha256 = "1ed9e101e7d968bacd2383ab19e30d52b0bbc6ade28721c227a009d04dae5163"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_040E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_040W.tif"
+optional = true
+sha256 = "31e21ac3a428da65f82d2600348ec0e8ed47196ffe5f9670e18733b45a90953f"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_040W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_050E.tif"
+optional = true
+sha256 = "08859566f59dd3b1c7efb11524003d02a438a620e75c4b37de73602312e6aecf"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_050E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_050W.tif"
+optional = true
+sha256 = "793c59e1093bc1c12474eab8141df60566d682621793960d40a5e21777441fd5"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_050W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_060E.tif"
+optional = true
+sha256 = "5913d5b52a1757f117e0f3f8f9743dfbd6f5f6f9baa8514fb8cd6e5fdbdc32b4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_060E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_060W.tif"
+optional = true
+sha256 = "139195509bd08ae6e63357eba39b8290d79716088e394f953216012750f20fab"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_060W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_070E.tif"
+optional = true
+sha256 = "55a77045d84c39439186f4bcc0dbc5d9da1a8e45f94ceb154e5c34d0205a935c"
+bytes = 13522937
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_070E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_070W.tif"
+optional = true
+sha256 = "a9d40325a47e29a08e07ff593906ea510631b3d6f27e5dd4a50da0d957f292e0"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_070W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_080E.tif"
+optional = true
+sha256 = "0d84b8dc7b827dbe87142196250167cf4af5778ea37872903a1570b8ab0c891c"
+bytes = 21366915
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_080E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_080W.tif"
+optional = true
+sha256 = "c1cca4b1e44efeec83dac905f6aa178246590051648a31055388a5e5be721887"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_080W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_090E.tif"
+optional = true
+sha256 = "cc6eea7dfabe3b85f5704f011c5237f8349e981d23fb56f108615e70fc3560c0"
+bytes = 48101163
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_090E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_090W.tif"
+optional = true
+sha256 = "b55054b1ddec8ce72084848263639067b40331c049da51322e1d1021aa51f2c9"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_090W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_100E.tif"
+optional = true
+sha256 = "024fcaa709e5baceb54534515c880a8a4040843bc8cb9e1a4a7d0ed323869f90"
+bytes = 36135781
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_100E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_100W.tif"
+optional = true
+sha256 = "f2cfdae2373c706a6cb23924f7dad4a572c4aac600f1a289aa2d674394d86e57"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_100W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_110E.tif"
+optional = true
+sha256 = "56f22c76ad2c533f962caa268c49c33572f1d8096c3f3d5a02f94d3c522eda95"
+bytes = 42236056
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_110E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_110W.tif"
+optional = true
+sha256 = "b68d595982d4a5fe0379b469c90074d3a0249d7037440c6e58e61ee477f506bd"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_110W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_120E.tif"
+optional = true
+sha256 = "ff1764c05e172dfa72a0a18b995f272834bf97e8ff041511d1c7dfdf704bb785"
+bytes = 38146691
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_120E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_120W.tif"
+optional = true
+sha256 = "549a9e71227f65d7c0a61a0268f8d7b9af71eaa4bf21ecfbcb889cc8fa8ea6df"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_120W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_130E.tif"
+optional = true
+sha256 = "729870d817e800cc5dd44aa78fa0c5f0949a6ef4f202108ae2f8e71381c872d8"
+bytes = 27211179
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_130E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_130W.tif"
+optional = true
+sha256 = "00358a7c0dfb83b9d7fd3e7dcfd3fc9a06623a50901f85ca7cc5fe1bd45b7453"
+bytes = 13321823
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_130W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_140E.tif"
+optional = true
+sha256 = "e143c28ce2c5e54d63beb1e03dc5dab3f2526afbea98b5900a5ea6a2ba8fff05"
+bytes = 21418368
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_140E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_140W.tif"
+optional = true
+sha256 = "889832d504ef67f5bafafba4ba491979254f44ed67ea91604a69db5e36ad65ad"
+bytes = 13320726
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_140W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_150E.tif"
+optional = true
+sha256 = "72c0c66e2b3fb5b8d2a7126847667e93a6314302f6c062153e86a460cef75a3c"
+bytes = 14832972
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_150E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_150W.tif"
+optional = true
+sha256 = "5bf09d496666a3687317dfb215c8749d206a84fb1d9f84aa1f4dffd9b0cb18f0"
+bytes = 13329151
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_150W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_160E.tif"
+optional = true
+sha256 = "3c724120cd92ae1e6a05ec308f11e71c67e2c7a63e75a819488197dd3768f355"
+bytes = 13320419
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_160E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_160W.tif"
+optional = true
+sha256 = "47e03f2d97e66328d8b251eb78e659348a3ebf04c6897cd06787d34028357bc3"
+bytes = 13460899
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_160W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_170E.tif"
+optional = true
+sha256 = "6b18850a379e3da06be5fa2f0f102b266b9a8809ea262c98e44d4865b57c4a1f"
+bytes = 13335310
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_170E.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_170W.tif"
+optional = true
+sha256 = "06df50e8c2915ec172cc1df0ca6e61283de21b59f6985294a5e1aa0271ae18bb"
+bytes = 13325479
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_170W.tif"
+
+[[file]]
+source = "hansen-gfc"
+name = "hansen/Hansen_GFC-2025-v1.13_treecover2000_80N_180W.tif"
+optional = true
+sha256 = "374aa13f260e5c058485728d9c731a5041a0029db7a8a19f4f2051d8bd72e6a4"
+bytes = 13320378
+url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_180W.tif"

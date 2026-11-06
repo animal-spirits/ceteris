@@ -718,6 +718,7 @@ fn eu27(pack: &Path, base: &Outcome, w: &[f64]) -> f64 {
 }
 
 #[test]
+#[ignore = "pack-gated solver run; nightly job"]
 fn japan_loses_from_costlier_borders() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
@@ -735,6 +736,7 @@ fn japan_loses_from_costlier_borders() {
 }
 
 #[test]
+#[ignore = "pack-gated solver run; nightly job"]
 fn eu_loses_from_soft_brexit() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
@@ -748,6 +750,120 @@ fn eu_loses_from_soft_brexit() {
     );
     assert!(eu <= 0.0, "EU27 welfare {eu}");
     assert!(gbr < 0.0, "GBR welfare {gbr}");
+}
+
+/// ICIO countries with |ACR| above 1e-4 and finite welfare and ACR, as (welfare, ACR) pairs.
+fn graded(icio: &[bool], w: &[f64], a: &[f64]) -> Vec<(f64, f64)> {
+    (0..w.len())
+        .filter(|&c| icio[c] && w[c].is_finite() && a[c].is_finite() && a[c].abs() > 1e-4)
+        .map(|c| (w[c], a[c]))
+        .collect()
+}
+
+/// Countries of the wrong sign, the model / ACR ratio at quantiles p10, p50 and p90, and the
+/// correlation of `pairs`.
+fn acr_stats(pairs: &[(f64, f64)]) -> (usize, [f64; 3], f64) {
+    let wrong = pairs.iter().filter(|(w, a)| w * a <= 0.0).count();
+    let mut ratio: Vec<f64> = pairs.iter().map(|(w, a)| w / a).collect();
+    ratio.sort_by(f64::total_cmp);
+    let at = |q: f64| ratio[((ratio.len() - 1) as f64 * q).round() as usize];
+    let n = pairs.len() as f64;
+    let (mw, ma) = (
+        pairs.iter().map(|p| p.0).sum::<f64>() / n,
+        pairs.iter().map(|p| p.1).sum::<f64>() / n,
+    );
+    let cov: f64 = pairs.iter().map(|(w, a)| (w - mw) * (a - ma)).sum();
+    let (vw, va): (f64, f64) = (
+        pairs.iter().map(|(w, _)| (w - mw).powi(2)).sum(),
+        pairs.iter().map(|(_, a)| (a - ma).powi(2)).sum(),
+    );
+    (wrong, [at(0.1), at(0.5), at(0.9)], cov / (vw * va).sqrt())
+}
+
+/// The model's theta per good, the theta classes of the traded goods grouped, and the ICIO
+/// foreign-share target of each group.
+fn openness_groups(pack: &Path) -> (Vec<Vec<usize>>, Vec<f64>, Vec<bool>) {
+    let world = benchmark::world(pack, &[]).unwrap();
+    let class: Vec<usize> = world
+        .trade()
+        .theta_class
+        .iter()
+        .map(|&c| usize::from(c))
+        .collect();
+    let n_traded = (0..N_GOODS).filter(|&g| TRADED[g]).count();
+    let groups = border::class_groups(&class[..n_traded]);
+    let (target, icio) = border::target_shares(pack, &groups).unwrap();
+    (groups, target, icio)
+}
+
+/// ADR 0207 criterion 1, frozen for C7 (specs/pre-p3/PLAN.md, ADR 0257): per theta class and for
+/// all traded goods together, the model's absorption-weighted foreign share 1 - lambda is within
+/// [1/1.5, 1.5] times ICIO 2000's. The class targets are what nu is fitted to (ADR 0092); the
+/// all-goods one is not fitted and is the free check.
+#[test]
+fn openness_within_1_5_of_icio() {
+    let Some(pack) = pack() else { return };
+    let base = base(&pack);
+    let (groups, target, _) = openness_groups(&pack);
+    let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+    let (world_target, _) = border::target_shares(&pack, std::slice::from_ref(&traded)).unwrap();
+    let mut rows: Vec<(String, f64, f64)> = groups
+        .iter()
+        .zip(&target)
+        .map(|(goods, &t)| {
+            (
+                format!("class group {goods:?}"),
+                benchmark::foreign_share(base, goods),
+                t,
+            )
+        })
+        .collect();
+    rows.push((
+        "all traded goods".into(),
+        benchmark::foreign_share(base, &traded),
+        world_target[0],
+    ));
+    let mut misses = Vec::new();
+    for (name, model, icio) in &rows {
+        let r = model / icio;
+        eprintln!("openness {name}: model {model:.4}, ICIO {icio:.4}, ratio {r:.3}");
+        if !(1.0 / 1.5..=1.5).contains(&r) {
+            misses.push(name.clone());
+        }
+    }
+    assert!(
+        misses.is_empty(),
+        "openness outside [1/1.5, 1.5] of ICIO: {misses:?}"
+    );
+}
+
+/// ADR 0207 criterion 2 as ADR 0268 grades it (frozen for C7): under every crossing tau x 1.1,
+/// the model's province-weighted welfare against the province-graded input-output ACR over the
+/// ICIO countries with |ACR| above 1e-4: every sign agrees, the median ratio is in [0.8, 1.25]
+/// and the correlation is at least 0.9.
+#[test]
+fn acr_formula_holds_under_costlier_borders() {
+    let Some(pack) = pack() else { return };
+    let base = base(&pack);
+    let (_, _, icio) = openness_groups(&pack);
+    let world = benchmark::world(&pack, &[]).unwrap();
+    let theta: [f64; N_GOODS] = std::array::from_fn(|g| world.kernel().theta(g));
+    let io = &world.inputs().countries.io;
+    let shocked = run(&pack, "border-1.1.shocks").unwrap();
+    let pairs = graded(
+        &icio,
+        &benchmark::welfare_province(base, &shocked),
+        &benchmark::acr_io_province(base, &shocked, &theta, io),
+    );
+    let (wrong, [p10, median, p90], corr) = acr_stats(&pairs);
+    eprintln!(
+        "ACR x1.1 province: {} countries, {wrong} of the wrong sign, median {median:.3} \
+         (p10 {p10:.3}, p90 {p90:.3}), correlation {corr:.3}",
+        pairs.len()
+    );
+    assert_eq!(wrong, 0, "countries of the wrong sign");
+    assert!((0.8..=1.25).contains(&median), "median {median}");
+    assert!(corr >= 0.9, "correlation {corr}");
 }
 
 /// ADR 0207's three criteria and the hard Brexit case on the pack, printed for the record (C7
@@ -807,25 +923,8 @@ fn benchmark_cases_are_reported() {
         let nan = (0..w.len())
             .filter(|&c| icio[c] && (a[c].is_nan() || w[c].is_nan()))
             .count();
-        let pairs: Vec<(f64, f64)> = (0..w.len())
-            .filter(|&c| icio[c] && w[c].is_finite() && a[c].is_finite() && a[c].abs() > 1e-4)
-            .map(|c| (w[c], a[c]))
-            .collect();
-        let wrong = pairs.iter().filter(|(w, a)| w * a <= 0.0).count();
-        let mut ratio: Vec<f64> = pairs.iter().map(|(w, a)| w / a).collect();
-        ratio.sort_by(f64::total_cmp);
-        let at = |q: f64| ratio[((ratio.len() - 1) as f64 * q).round() as usize];
-        let n = pairs.len() as f64;
-        let (mw, ma) = (
-            pairs.iter().map(|p| p.0).sum::<f64>() / n,
-            pairs.iter().map(|p| p.1).sum::<f64>() / n,
-        );
-        let cov: f64 = pairs.iter().map(|(w, a)| (w - mw) * (a - ma)).sum();
-        let (vw, va): (f64, f64) = (
-            pairs.iter().map(|(w, _)| (w - mw).powi(2)).sum(),
-            pairs.iter().map(|(_, a)| (a - ma).powi(2)).sum(),
-        );
-        let (median, corr) = (at(0.5), cov / (vw * va).sqrt());
+        let pairs = graded(&icio, w, &a);
+        let (wrong, [p10, median, p90], corr) = acr_stats(&pairs);
         if name == "province" {
             // ADR 0268's criterion, asserted by C7 at B8 on a settled baseline, reported here
             eprintln!(
@@ -841,8 +940,8 @@ fn benchmark_cases_are_reported() {
              wrong sign, model/ACR median {:.3}, p10 {:.3}, p90 {:.3}, correlation {:.3}",
             pairs.len(),
             median,
-            at(0.1),
-            at(0.9),
+            p10,
+            p90,
             corr,
         );
     }
@@ -881,4 +980,42 @@ fn benchmark_cases_are_reported() {
         ),
         Ok(Err(e)) => eprintln!("border x10: {e}"),
     }
+}
+
+/// The US-China 2018 tariff case (`us-china-2018.shocks`) on the pack, printed for the record:
+/// the literature reads near-complete pass-through of the tariffs to US buyer prices (Amiti,
+/// Redding and Weinstein 2019; Fajgelbaum et al. 2020) and a US welfare loss of about 0.04% of
+/// GDP. Pass-through is proxied by 1 + d ln q_CHN / d ln (1 + t), q_CHN the Chinese
+/// population-weighted buyer price of the traded goods the tariff covers: the Chinese price is
+/// the origin price of the goods the US buys, up to China's own tariff-free local price index.
+#[test]
+#[ignore = "report only; about 2 minutes on the pack in release"]
+fn us_china_2018_is_reported() {
+    let Some(pack) = pack() else { return };
+    let base = base(&pack);
+    let shocked = run(&pack, "us-china-2018.shocks").unwrap();
+    let w = benchmark::welfare(base, &shocked);
+    let (usa, chn) = (country(&pack, "USA"), country(&pack, "CHN"));
+    let traded: Vec<usize> = (0..N_GOODS).filter(|&g| TRADED[g]).collect();
+    let mean_dlnq = |c: usize| {
+        let (mut num, mut den) = (0.0, 0.0);
+        for &g in &traded {
+            let (a, b) = (base.buyer_price[c][g], shocked.buyer_price[c][g]);
+            let wt = base.absorption[c][g];
+            if a > 0.0 && b > 0.0 && wt > 0.0 {
+                num += wt * (b / a).ln();
+                den += wt;
+            }
+        }
+        num / den
+    };
+    let (d_chn, d_usa) = (mean_dlnq(chn), mean_dlnq(usa));
+    eprintln!(
+        "US-China 2018: USA welfare {:e}, CHN welfare {:e}; traded buyer price d ln q USA {d_usa:e}, \
+         CHN {d_chn:e}; pass-through proxy {:.3}; max |dlnp| {:e}",
+        w[usa],
+        w[chn],
+        1.0 + d_chn / 1.061_f64.ln(),
+        shocked.max_dlnp_last
+    );
 }

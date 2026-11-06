@@ -6,15 +6,17 @@ use std::sync::Arc;
 use ceteris_core::ledger::AccountId;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
-use ceteris_econ::fixture::{ISLAND_USER, UNREACHABLE, small_world, unreachable_island};
-use ceteris_econ::inputs::EconInputs;
+use ceteris_econ::fixture::{
+    ISLAND_USER, UNREACHABLE, small_world, unbalanced_world, unreachable_island,
+};
+use ceteris_econ::inputs::{EconInputs, TRANSFER_YEARS};
 use ceteris_econ::local::{self, Province};
-use ceteris_econ::params::Technology;
+use ceteris_econ::params::{Technology, Transfers};
 use ceteris_econ::production::{labour_for_value_added, marginal_value_added, rho, value_added};
 use ceteris_econ::systems::{self, SEED};
 use ceteris_econ::world::{
-    DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, WRITE_OFF, active_cells,
-    static_digest, to_minor, to_numeraire,
+    DIVIDEND, FOREIGN_DIVIDEND, MINOR_PER_UNIT, MINT, PURCHASE, TARIFF, TRADE, TRANSFER, WRITE_OFF,
+    active_cells, base_income, pop_base_income, static_digest, to_minor, to_numeraire,
 };
 use ceteris_econ::{EconParams, EconWorld};
 use ceteris_trade::goods::p2::{N as N_GOODS, STORABLE, TRADED as N_TRADED};
@@ -687,7 +689,7 @@ fn up_to_dispatch(w: &mut EconWorld) {
 fn from_dispatch(w: &mut EconWorld, tick: u32) {
     systems::dispatch(w);
     systems::reprice(w);
-    systems::distribute(w);
+    systems::distribute(w, tick);
     w.end_tick(tick).unwrap();
 }
 
@@ -946,7 +948,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
             );
 
             systems::reprice(&mut w);
-            systems::distribute(&mut w);
+            systems::distribute(&mut w, 0);
             w.end_tick(tick).unwrap();
         }
     }
@@ -983,7 +985,7 @@ fn national_profit_pool_conserves_money_exactly() {
             }
             let held: Vec<i64> = acc.enterprise.iter().map(|&a| w.ledger.money(a)).collect();
             let start = w.ledger.journal().len();
-            systems::distribute(&mut w);
+            systems::distribute(&mut w, 0);
             let pop_of = |a| acc.pop.iter().position(|&p| p == a);
             let mut dividend = vec![0i64; inp.n_pops()];
             for e in &w.ledger.journal()[start..] {
@@ -1061,7 +1063,7 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
     w.ledger
         .transfer(MINT, acc.enterprise[e], acc.mint, profit + loss);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(w.ledger.money(acc.enterprise[e]), -loss, "the loss stays");
     let enterprise_account = acc.enterprise[e].0 as usize;
     assert!(dividends(&w, start, Some(enterprise_account)).is_empty());
@@ -1077,7 +1079,7 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
     systems::reprice(&mut w);
     let balance = w.ledger.money(acc.enterprise[e]);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     let paid: i64 = dividends(&w, start, Some(enterprise_account)).iter().sum();
     assert_eq!(
         paid,
@@ -1113,7 +1115,12 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
 ///   notional output (ADR 0266).
 #[test]
 fn frictionless_unemployment_is_the_natural_rate() {
-    let mut sim = sim_of(world(EconParams::frictionless()));
+    // the fixture before ADR 0299's balance, whose data state rations labour in these provinces
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(unbalanced_world()),
+        EconParams::frictionless(),
+        TradeParams::default(),
+    ));
     let mut rationed = Vec::new();
     for tick in 0..24 {
         let mut probe = sim.world().clone();
@@ -1138,7 +1145,7 @@ fn frictionless_unemployment_is_the_natural_rate() {
             (0..inp.n_enterprises())
                 .map(|e| {
                     let ent = &inp.enterprises;
-                    let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
+                    let s_l = inp.ent_s_l(e);
                     let va = lay.a_va[e] * systems::input_output(&probe, e);
                     labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
                 })
@@ -1162,14 +1169,20 @@ fn frictionless_unemployment_is_the_natural_rate() {
                 );
                 rationed.push((tick, i));
                 let ent = &inp.enterprises;
-                let s_l = inp.countries.s_l[inp.country_of(i)];
                 let r = rho(w.params().sigma_fl);
                 let top = lay
                     .enterprises(i)
                     .filter(|&e| p_va[e] > 0.0 && caps[e] > 0.0)
                     .map(|e| {
                         p_va[e]
-                            * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, caps[e])
+                            * marginal_value_added(
+                                ent.a[e],
+                                ent.va0[e],
+                                ent.l0[e],
+                                inp.ent_s_l(e),
+                                r,
+                                caps[e],
+                            )
                     })
                     .reduce(f64::min);
                 let (before, after) = (probe.wage[i], w.wage[i]);
@@ -1200,12 +1213,11 @@ fn frictionless_unemployment_is_the_natural_rate() {
 fn capacity(w: &EconWorld, e: usize) -> f64 {
     let (inp, lay) = (w.inputs(), w.layout());
     let ent = &inp.enterprises;
-    let c = inp.country_of(ent.province[e] as usize);
     let va = value_added(
         ent.a[e],
         ent.va0[e],
         ent.l0[e],
-        inp.countries.s_l[c],
+        inp.ent_s_l(e),
         rho(w.params().sigma_fl),
         w.employment[e],
     );
@@ -1216,8 +1228,7 @@ fn capacity(w: &EconWorld, e: usize) -> f64 {
 fn output_at(w: &EconWorld, e: usize, l: f64) -> f64 {
     let (inp, lay) = (w.inputs(), w.layout());
     let ent = &inp.enterprises;
-    let c = inp.country_of(ent.province[e] as usize);
-    let s_l = inp.countries.s_l[c];
+    let s_l = inp.ent_s_l(e);
     value_added(
         ent.a[e],
         ent.va0[e],
@@ -1531,8 +1542,10 @@ const SERVICES: usize = 9;
 const LOCAL: [usize; 3] = [7, 8, 9];
 
 /// The fixture with input coefficients `(k, g, a_kg)` set in every country, one vintage.
+/// The fixture before ADR 0299's balance with `coefficients` set in every country: the
+/// same-tick chain's scenarios were built on its data state.
 fn fixture_with(coefficients: &[(usize, usize, f64)]) -> EconInputs {
-    let mut inputs = small_world();
+    let mut inputs = unbalanced_world();
     for io in &mut inputs.countries.io {
         for &(k, g, a) in coefficients {
             io[k * N_GOODS + g] = a;
@@ -1693,7 +1706,11 @@ fn local_chain_respects_intermediate_priority() {
     assert!((cut.scratch.drawn[cell] - supply).abs() <= 1e-12 * supply);
     assert!(to_households(&cut) <= 1e-12 * supply);
 
-    let mut sim = sim_of(world(EconParams::default()));
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(unbalanced_world()),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
     let mut short = 0;
     for _ in 0..36 {
         sim.step().unwrap();
@@ -3005,7 +3022,7 @@ fn exact_fill_equals_converged_iteration() {
         (CONSTRUCTION, SERVICES, 0.2),
     ];
     let (mut bound, mut compared_bound) = (0, 0);
-    for (inputs, ticks) in [(small_world(), 60), (fixture_with(&cycles), 120)] {
+    for (inputs, ticks) in [(unbalanced_world(), 60), (fixture_with(&cycles), 120)] {
         let mut sim = EconWorld::sim(
             Arc::new(inputs),
             EconParams::default(),
@@ -3225,7 +3242,7 @@ fn write_off_takes_the_excess_beyond_the_cap_from_the_pops() {
     let excess = 12_345;
     set_balance(&mut w, account, -cap - excess);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(w.ledger.money(account), -cap, "only the excess goes");
     assert_eq!(written(&w, start, account), excess);
     let levied: i64 = lay.country_pops[c]
@@ -3257,7 +3274,7 @@ fn write_off_spares_losses_within_the_cap() {
     let cap = lay.ent_loss_cap[0];
     set_balance(&mut w, acc.enterprise[0], -cap);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert!(
         w.ledger.journal()[start..]
             .iter()
@@ -3295,7 +3312,7 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
     set_balance(&mut w, a1, -cap1 - x1);
     set_balance(&mut w, a2, -cap2 - x2);
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(written(&w, start, a1) + written(&w, start, a2), room);
     assert!(
         (written(&w, start, a1) - 3 * room / 4).abs() <= 1,
@@ -3331,7 +3348,7 @@ fn write_off_takes_what_the_pops_hold_and_carries_the_rest() {
         set_balance(&mut w, acc.pop[k], 10 * room);
     }
     let start = w.ledger.journal().len();
-    systems::distribute(&mut w);
+    systems::distribute(&mut w, 0);
     assert_eq!(
         written(&w, start, a1) + written(&w, start, a2),
         x1 + x2 - room
@@ -3426,4 +3443,783 @@ fn write_off_runs_are_thread_independent() {
     let ((one, fired), (four, _)) = (run(1), run(4));
     assert!(fired > 0, "no write-off fired");
     assert_eq!(one, four);
+}
+
+/// The country whose price level the ADR 0098 tests lift, and its level.
+const LIFTED: (usize, f64) = (0, 1.3);
+
+/// The fixture with country `LIFTED.0` at price level `LIFTED.1` (ADR 0098), the rest at 1.
+fn lifted_world() -> EconInputs {
+    let mut inputs = small_world();
+    let mut levels = vec![1.0; inputs.n_countries()];
+    levels[LIFTED.0] = LIFTED.1;
+    inputs.set_price_levels(levels, &TradeParams::default());
+    inputs.set_base_point(&EconParams::default().edu_eff);
+    inputs.validate();
+    inputs
+}
+
+fn close(got: f64, want: f64, what: &str) {
+    assert!(
+        (got - want).abs() <= 1e-12 * want.abs().max(1.0),
+        "{what}: {got} against {want}"
+    );
+}
+
+/// Nominal value added of enterprise `e` at the base prices of `inp`: p_VA A VA0, p_VA = (p_o -
+/// sum_k coef_k q_k) / a_VA.
+fn base_nominal_va(inp: &EconInputs, e: usize) -> f64 {
+    let q = &inp.provinces.base_price[inp.enterprises.province[e] as usize];
+    let coef = &inp.enterprises.coef[e];
+    let cost: f64 = (0..N_GOODS)
+        .filter(|&k| coef[k] > 0.0)
+        .map(|k| coef[k] * q[k])
+        .sum();
+    let p_va = (inp.base_output_price(e) - cost) / inp.enterprises.a_va[e];
+    p_va * inp.enterprises.a[e] * inp.enterprises.va0[e]
+}
+
+/// ADR 0098, Tests: a price level p_c = 1.3 in one country moves only that country's local
+/// prices at t = 0 (base and market prices by p_c, local units by 1 / p_c, its local producers'
+/// input coefficients by p_c), and keeps values, shares and the national accounts: every
+/// enterprise's nominal VA, output value, a_VA and input cost shares, its input stocks' value,
+/// w0, L0, every pop's money, households' value shares at the data state's prices, and VA and
+/// household spending by country and good.
+#[test]
+fn price_level_values_unchanged() {
+    let (base, lifted) = (small_world(), lifted_world());
+    let (c, level) = LIFTED;
+    assert_eq!(base.provinces.w0, lifted.provinces.w0);
+    assert_eq!(base.enterprises.l0, lifted.enterprises.l0);
+    assert_eq!(base.enterprises.va0, lifted.enterprises.va0);
+    assert_eq!(base.provinces.gamma, lifted.provinces.gamma);
+    let in_c = |inp: &EconInputs, i: usize| inp.country_of(i) == c;
+    let mut moved = 0;
+    for i in 0..base.n_provinces() {
+        for (g, &traded) in TRADED.iter().enumerate() {
+            let (b, l) = (
+                base.provinces.base_price[i][g],
+                lifted.provinces.base_price[i][g],
+            );
+            if !traded && in_c(&base, i) {
+                assert_eq!((b, l), (1.0, level), "province {i} good {g}");
+                moved += 1;
+            } else {
+                assert_eq!(b.to_bits(), l.to_bits(), "province {i} good {g}");
+            }
+        }
+    }
+    assert!(moved > 0);
+    let nc = base.n_countries();
+    let (mut va_base, mut va_lifted) = (vec![0.0; nc * N_GOODS], vec![0.0; nc * N_GOODS]);
+    for e in 0..base.n_enterprises() {
+        let i = base.enterprises.province[e] as usize;
+        let g = usize::from(base.enterprises.good[e]);
+        let local_in_c = !TRADED[g] && in_c(&base, i);
+        let p_o = lifted.base_output_price(e);
+        assert_eq!(p_o, if local_in_c { level } else { 1.0 });
+        let (a, la) = (base.enterprises.a[e], lifted.enterprises.a[e]);
+        assert_eq!(la, a / p_o, "enterprise {e}: A");
+        close(lifted.enterprises.a_va[e], base.enterprises.a_va[e], "a_VA");
+        let value = |inp: &EconInputs| {
+            inp.base_output_price(e) * inp.enterprises.a[e] * inp.enterprises.va0[e]
+                / inp.enterprises.a_va[e]
+        };
+        close(value(&lifted), value(&base), "output value");
+        let (vb, vl) = (base_nominal_va(&base, e), base_nominal_va(&lifted, e));
+        close(vl, vb, "nominal VA");
+        close(vb, base.enterprises.va0[e], "nominal VA at p_c = 1");
+        va_base[base.country_of(i) * N_GOODS + g] += vb;
+        va_lifted[base.country_of(i) * N_GOODS + g] += vl;
+        let (qb, ql) = (
+            &base.provinces.base_price[i],
+            &lifted.provinces.base_price[i],
+        );
+        for k in 0..N_GOODS {
+            let (cb, cl) = (base.enterprises.coef[e][k], lifted.enterprises.coef[e][k]);
+            if cb == 0.0 {
+                assert_eq!(cl, 0.0);
+                continue;
+            }
+            close(cl * ql[k] / p_o, cb * qb[k], "input cost share");
+            // in units: local inputs of the lifted country are bought in units p_c times
+            // dearer, and its local producers' units are p_c times larger
+            let units = p_o * qb[k] / ql[k];
+            close(cl, cb * units, "input coefficient");
+        }
+    }
+    for (x, y) in va_lifted.iter().zip(&va_base) {
+        close(*x, *y, "VA by country and good");
+    }
+    assert_ne!(lifted.digest(), base.digest());
+
+    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let wb = EconWorld::new(Arc::new(base), params.clone(), trade.clone());
+    let wl = EconWorld::new(Arc::new(lifted), params.clone(), trade);
+    let (inp, lb, ll) = (wb.inputs(), wb.layout(), wl.layout());
+    for (cell, (&b, &l)) in wb.markets.price.iter().zip(&wl.markets.price).enumerate() {
+        let (i, g) = (cell / N_GOODS, cell % N_GOODS);
+        if !TRADED[g] && in_c(inp, i) {
+            assert_eq!((b, l), (1.0, level), "cell {cell}");
+        } else {
+            assert_eq!(b.to_bits(), l.to_bits(), "cell {cell}");
+        }
+    }
+    for k in 0..inp.n_pops() {
+        assert_eq!(
+            wb.ledger.money(lb.accounts.pop[k]),
+            wl.ledger.money(ll.accounts.pop[k]),
+            "pop {k}: money"
+        );
+    }
+    for e in 0..inp.n_enterprises() {
+        let i = inp.enterprises.province[e] as usize;
+        for k in 0..N_GOODS {
+            let value = |w: &EconWorld, lay: &ceteris_econ::world::Layout| {
+                w.ledger.goods(lay.accounts.enterprise[e], k)
+                    * w.inputs().provinces.base_price[i][k]
+            };
+            close(value(&wl, ll), value(&wb, lb), "input stock value");
+        }
+    }
+    // households at the data state's prices and their base income: value spending by good
+    let income = ceteris_econ::world::pop_base_income(inp, &params);
+    let (mut fd_base, mut fd_lifted) = (vec![0.0; nc * N_GOODS], vec![0.0; nc * N_GOODS]);
+    let mut units = vec![0.0; N_GOODS];
+    for (k, &money) in income.iter().enumerate() {
+        let i = inp.pops.province[k] as usize;
+        let country = inp.country_of(i);
+        for (w, lay, fd) in [(&wb, lb, &mut fd_base), (&wl, ll, &mut fd_lifted)] {
+            let price: Vec<f64> = (0..N_GOODS)
+                .map(|g| w.inputs().data_state_price(i, g))
+                .collect();
+            ceteris_econ::demand::pigl(
+                &lay.pigl[country],
+                &price,
+                money,
+                lay.sigma_income[country],
+                &params,
+                &mut units,
+            );
+            for g in 0..N_GOODS {
+                fd[country * N_GOODS + g] += inp.pops.population[k] * units[g] * price[g];
+            }
+        }
+    }
+    for (x, y) in fd_lifted.iter().zip(&fd_base) {
+        close(*x, *y, "household spending by country and good");
+    }
+}
+
+/// ADR 0098: p_c = 1 everywhere is the fixture, bit for bit.
+#[test]
+fn price_level_one_is_the_data_state() {
+    let base = small_world();
+    let mut ones = small_world();
+    ones.set_price_levels(vec![1.0; ones.n_countries()], &TradeParams::default());
+    ones.set_base_point(&EconParams::default().edu_eff);
+    assert_eq!(ones.digest(), base.digest());
+}
+
+/// The fixture with transfer ratios (ADRs 0100, 0315): two paying and two receiving countries,
+/// and an observed path that grows by a tenth of the 2000 ratio a year.
+fn with_transfers() -> EconInputs {
+    let mut inp = small_world();
+    let share = vec![0.02, -0.012, -0.013, 0.005];
+    inp.countries.transfer_path = Rows::from_rows(
+        TRANSFER_YEARS,
+        share.iter().map(|s| {
+            (0..TRANSFER_YEARS)
+                .map(|y| s * (1.0 + 0.1 * y as f64))
+                .collect::<Vec<_>>()
+        }),
+    );
+    inp.countries.transfer = share;
+    inp
+}
+
+fn with_mode(transfers: Transfers) -> EconParams {
+    EconParams {
+        transfers,
+        ..EconParams::default()
+    }
+}
+
+/// Each pop's net transfer of the tick from the journal, summed by country.
+fn country_transfers(w: &EconWorld) -> Vec<i64> {
+    let inp = w.inputs();
+    let mut out = vec![0i64; inp.n_countries()];
+    let country = |a: AccountId| {
+        ((a.0 as usize) < inp.n_pops())
+            .then(|| inp.country_of(inp.pops.province[a.0 as usize] as usize))
+    };
+    for entry in w.ledger.journal().iter().filter(|e| e.flow == TRANSFER) {
+        if let Some(c) = country(entry.to) {
+            out[c] += entry.amount;
+        }
+        if let Some(c) = country(entry.from) {
+            out[c] -= entry.amount;
+        }
+    }
+    out
+}
+
+/// ADRs 0100, 0315: the world transfer account ends every tick at zero (`end_tick` checks it
+/// too), every paying country gives exactly round(|D_c|) minor units, D_c = (rho_c - rho_bar)
+/// Y_c with Y_c its pops' income of last tick (this tick's at the first tick of the data state)
+/// and rho_bar their income-weighted mean, and the receivers get the payers' total in proportion
+/// to their D_c, each within one minor unit per country; under both settings that pay, over 120
+/// ticks.
+#[test]
+fn transfers_net_to_zero_every_tick() {
+    let inputs = Arc::new(with_transfers());
+    for mode in [Transfers::FixedShares, Transfers::ObservedPath] {
+        let w = EconWorld::new(Arc::clone(&inputs), with_mode(mode), TradeParams::default());
+        let account = w
+            .layout()
+            .accounts
+            .transfer
+            .expect("the transfer account is open");
+        let mut sim = sim_of(w);
+        let nc = inputs.n_countries();
+        let national = |income: &[f64]| -> Vec<f64> {
+            let mut out = vec![Vec::new(); nc];
+            for (k, &m) in income.iter().enumerate() {
+                out[inputs.country_of(inputs.pops.province[k] as usize)].push(m);
+            }
+            out.iter()
+                .map(|v| ceteris_core::reduce::fixed_sum(v))
+                .collect::<Vec<_>>()
+        };
+        for tick in 0..120u32 {
+            let before = sim.world().income.clone();
+            sim.step().unwrap();
+            let w = sim.world();
+            assert_eq!(w.ledger.money_wide(account), 0, "{mode:?} tick {tick}");
+            let y = if ceteris_core::reduce::fixed_sum(&before) > 0.0 {
+                national(&before)
+            } else {
+                national(&w.income)
+            };
+            let world = ceteris_core::reduce::fixed_sum(&y);
+            let rho: Vec<f64> = (0..nc)
+                .map(|c| systems::transfer_share(&inputs, mode, c, tick))
+                .collect();
+            let weighted: Vec<f64> = (0..nc).map(|c| rho[c] * y[c]).collect();
+            let rho_bar = ceteris_core::reduce::fixed_sum(&weighted) / world;
+            let got = country_transfers(w);
+            assert_eq!(got.iter().sum::<i64>(), 0, "{mode:?} tick {tick}");
+            for (c, &net) in got.iter().enumerate() {
+                let s = (rho[c] - rho_bar) * y[c] / world;
+                if s < 0.0 {
+                    assert_eq!(
+                        net,
+                        -to_minor(-s * world),
+                        "{mode:?} tick {tick} country {c}"
+                    );
+                } else {
+                    let want = s * world * MINOR_PER_UNIT;
+                    assert!(
+                        (net as f64 - want).abs() <= nc as f64,
+                        "{mode:?} tick {tick} country {c}: {net} against {want}"
+                    );
+                }
+            }
+            assert!(got[0] > 0 && got[1] < 0, "{mode:?} tick {tick}: {got:?}");
+        }
+    }
+}
+
+/// The encoding of everything a snapshot carries after its header (ledger, markets, pipeline
+/// and the dynamic columns): the state that the inputs' digest and the parameters leave out.
+fn dynamic_state(w: &EconWorld) -> Vec<u8> {
+    use ceteris_core::snapshot::{Encode, Encoder};
+    let mut e = Encoder::default();
+    w.ledger.encode(&mut e);
+    w.markets.encode(&mut e);
+    w.pipeline.encode(&mut e);
+    for column in [
+        &w.wage,
+        &w.employment,
+        &w.employed,
+        &w.income,
+        &w.output,
+        &w.sales,
+        &w.profit,
+        &w.price_index,
+    ] {
+        e.f64s(column);
+    }
+    e.f64s(&[w.expected_inflation, w.price_level]);
+    e.into_bytes()
+}
+
+/// ADR 0100, "with transfers off, results equal a balanced-trade run": on inputs without
+/// transfer shares the three S22 settings run bit for bit alike, state hashes included; on inputs
+/// with shares, Off opens no transfer account and the run's state is the balanced run's every
+/// tick (the hashes differ only by the inputs digest that names the shares).
+#[test]
+fn off_switch_reproduces_balanced_trade() {
+    let modes = [
+        Transfers::Off,
+        Transfers::FixedShares,
+        Transfers::ObservedPath,
+    ];
+    let mut sims = modes.map(|m| sim_of(world(with_mode(m))));
+    assert!(
+        sims.iter()
+            .all(|s| s.world().layout().accounts.transfer.is_none())
+    );
+    let digest = sims[0].world().digest();
+    assert!(sims.iter().all(|s| s.world().digest() == digest));
+    for tick in 0..120 {
+        for s in &mut sims {
+            s.step().unwrap();
+        }
+        let hash = sims[0].state_hash();
+        assert!(sims.iter().all(|s| s.state_hash() == hash), "tick {tick}");
+    }
+
+    let off = EconWorld::new(
+        Arc::new(with_transfers()),
+        with_mode(Transfers::Off),
+        TradeParams::default(),
+    );
+    assert!(off.layout().accounts.transfer.is_none());
+    let (mut off, mut balanced) = (sim_of(off), sim_of(world(with_mode(Transfers::Off))));
+    for tick in 0..120 {
+        off.step().unwrap();
+        balanced.step().unwrap();
+        assert_eq!(
+            dynamic_state(off.world()),
+            dynamic_state(balanced.world()),
+            "tick {tick}"
+        );
+    }
+}
+
+/// The observed path (ADR 0100, lab profile): the share of the tick's year from 2000 to 2024,
+/// then the 2024 share halving every 120 months.
+#[test]
+fn observed_path_fades_after_2024() {
+    let inp = with_transfers();
+    let path = &inp.countries.transfer_path[0];
+    let at = |tick| systems::transfer_share(&inp, Transfers::ObservedPath, 0, tick);
+    assert_eq!(at(0), path[0]);
+    assert_eq!(at(11), path[0]);
+    assert_eq!(at(12), path[1]);
+    assert_eq!(at(299), path[24]);
+    assert!((at(300) / path[24] - libm::exp2(-1.0 / 120.0)).abs() < 1e-15);
+    assert!((at(419) / path[24] - 0.5).abs() < 1e-15);
+    assert_eq!(
+        systems::transfer_share(&inp, Transfers::FixedShares, 0, 500),
+        0.02
+    );
+    assert_eq!(systems::transfer_share(&inp, Transfers::Off, 0, 0), 0.0);
+}
+
+/// The fixture with ADR 0099's three demanders: government buys 15% of every good's final
+/// demand, investment half of goods 5 and 6 (machinery and heavy industry) and 5% of the rest.
+fn with_three_demanders() -> EconInputs {
+    let mut inp = small_world();
+    let c = &mut inp.countries;
+    let ng = c.omega.width();
+    let part = |f: &dyn Fn(usize) -> f64| {
+        Rows::from_rows(
+            ng,
+            c.omega
+                .iter()
+                .map(|o| (0..ng).map(|g| f(g) * o[g]).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+        )
+    };
+    let (gov, inv) = (
+        part(&|_| 0.15),
+        part(&|g| if g == 5 || g == 6 { 0.5 } else { 0.05 }),
+    );
+    (c.gov, c.inv) = (gov, inv);
+    inp
+}
+
+/// ADRs 0099, 0301: at the data state's prices and the pops' base incomes, households
+/// by PIGL and government and investment at their fixed shares buy each country's final demand
+/// shares, and each pop spends what it holds.
+#[test]
+fn three_demanders_spend_the_final_demand_shares_at_the_data_state() {
+    let inputs = Arc::new(with_three_demanders());
+    let w = EconWorld::new(
+        Arc::clone(&inputs),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let (lay, params) = (w.layout(), EconParams::default());
+    let income = pop_base_income(&inputs, &params);
+    let ng = inputs.n_goods();
+    let mut spent = vec![vec![0.0; ng]; inputs.n_countries()];
+    let mut x = vec![0.0; ng];
+    for (k, &m) in income.iter().enumerate() {
+        let i = inputs.pops.province[k] as usize;
+        let price: Vec<f64> = (0..ng).map(|g| inputs.data_state_price(i, g)).collect();
+        let money = inputs.pops.population[k] * m;
+        lay.pop_demand(&inputs, &params, k, &price, money, &mut x);
+        let total: f64 = (0..ng).map(|g| x[g] * price[g]).sum();
+        assert!((total / money - 1.0).abs() <= 1e-12, "pop {k}");
+        for g in 0..ng {
+            spent[inputs.country_of(i)][g] += x[g] * price[g];
+        }
+    }
+    for (c, s) in spent.iter().enumerate() {
+        let (omega, total) = (&inputs.countries.omega[c], s.iter().sum::<f64>());
+        let want: f64 = omega.iter().sum();
+        for g in 0..ng {
+            assert!(
+                (s[g] / total - omega[g] / want).abs() <= 1e-10,
+                "country {c} good {g}"
+            );
+        }
+    }
+}
+
+/// The three demanders spend each pop's money in full and mint nothing: the money stock is
+/// unchanged over 120 ticks, and the ledger's invariants hold every tick.
+#[test]
+fn money_stock_unchanged_by_three_demanders() {
+    let w = EconWorld::new(
+        Arc::new(with_three_demanders()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let mint = w.layout().accounts.mint;
+    let issued = w.ledger.money_wide(mint);
+    let mut sim = sim_of(w);
+    for tick in 0..120 {
+        sim.step().unwrap();
+        assert_eq!(sim.world().ledger.money_wide(mint), issued, "tick {tick}");
+    }
+    assert!(
+        sim.world()
+            .markets
+            .price
+            .iter()
+            .all(|p| p.is_finite() && *p > 0.0)
+    );
+}
+
+/// Without the split, the fixture's digest and state are what they were (households buy all
+/// final demand), and with it the digest moves.
+#[test]
+fn households_only_keeps_the_fixture() {
+    let base = world(EconParams::default());
+    let split = EconWorld::new(
+        Arc::new(with_three_demanders()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    assert!(base.layout().pigl.iter().all(|w| w.gov.is_empty()));
+    assert!(
+        base.layout()
+            .pigl
+            .iter()
+            .all(|w| w.household_share() == 1.0)
+    );
+    assert_ne!(base.digest(), split.digest());
+}
+
+/// Sector labour shares (ADR 0104): with every good at the national share the base point is the
+/// fixture's bit for bit; otherwise w0 clears the province's wage bill sum_g s_L,g VA0 at the
+/// natural rate, L0 = s_L,g VA0 / w0, and the profit pool minted at tick 0 is sum (1 - s_L,g) VA0.
+#[test]
+fn sector_labour_shares_set_the_base_point() {
+    let base = small_world();
+    let edu = EconParams::default().edu_eff;
+    let (nc, ng) = (base.n_countries(), base.n_goods());
+    let mut same = base.clone();
+    same.countries.s_l_good = Rows::from_flat(
+        (0..nc)
+            .flat_map(|c| vec![base.countries.s_l[c]; ng])
+            .collect(),
+        ng,
+    );
+    same.set_base_point(&edu);
+    assert_eq!(same.provinces.w0, base.provinces.w0);
+    assert_eq!(same.enterprises.l0, base.enterprises.l0);
+
+    let mut inp = base.clone();
+    inp.countries.s_l_good = Rows::from_flat(
+        (0..nc * ng)
+            .map(|x| 0.2 + 0.6 * (x % ng) as f64 / ng as f64)
+            .collect(),
+        ng,
+    );
+    inp.set_base_point(&edu);
+    inp.validate();
+    let supply = inp.labour_supply(&edu);
+    for (i, &supply) in supply.iter().enumerate() {
+        let ents: Vec<usize> = (0..inp.n_enterprises())
+            .filter(|&e| inp.enterprises.province[e] as usize == i)
+            .collect();
+        let bill: f64 = ents
+            .iter()
+            .map(|&e| inp.ent_s_l(e) * inp.enterprises.va0[e])
+            .sum();
+        let u = inp.countries.u_star[inp.country_of(i)];
+        let w0 = inp.provinces.w0[i];
+        assert!((w0 * (1.0 - u) * supply / bill - 1.0).abs() < 1e-12);
+        for &e in &ents {
+            let want = inp.ent_s_l(e) * inp.enterprises.va0[e] / w0;
+            assert!((inp.enterprises.l0[e] / want - 1.0).abs() < 1e-12);
+        }
+    }
+    let w = EconWorld::new(
+        Arc::new(inp.clone()),
+        EconParams::default(),
+        TradeParams::default(),
+    );
+    let lay = w.layout();
+    for (c, pops) in lay.country_pops.iter().enumerate() {
+        let pool: f64 = (0..inp.n_enterprises())
+            .filter(|&e| inp.country_of(inp.enterprises.province[e] as usize) == c)
+            .map(|e| (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e])
+            .sum();
+        let minted: f64 = pops
+            .iter()
+            .map(|&k| to_numeraire(w.ledger.money(lay.accounts.pop[k as usize])))
+            .sum();
+        assert!(
+            (minted / pool - 1.0).abs() < 1e-9,
+            "country {c}: {minted} vs {pool}"
+        );
+    }
+    assert_ne!(
+        w.digest(),
+        world(EconParams::default()).digest(),
+        "the shares enter the digest"
+    );
+}
+
+/// The fixture with wealth shares (ADR 0104): bottom 50% 5%, middle 40% 35%, top 10% 60%.
+fn with_wealth() -> EconInputs {
+    let mut inp = small_world();
+    let nc = inp.n_countries();
+    inp.countries.wealth = Rows::from_flat((0..nc).flat_map(|_| [0.05, 0.35, 0.6]).collect(), 3);
+    inp.set_dividend_shares(&EconParams::default());
+    inp.validate();
+    inp
+}
+
+/// ADR 0308: a pop's dividend share is the integral of the wealth density over its
+/// lognormal income, ranked in its country's mixture of the pops' lognormals at the base incomes
+/// with dividends per person: against a trapezoid over 200,001 points of log income (1e-4
+/// relative, its step error at the two bracket edges), the shares of each country summing to 1
+/// (1e-12), every pop with people above 0.
+#[test]
+fn dividend_shares_integrate_wealth_over_income() {
+    let inp = with_wealth();
+    let params = EconParams::default();
+    let per_person = small_world();
+    let income = pop_base_income(&per_person, &params);
+    let w = EconWorld::new(Arc::new(inp.clone()), params, TradeParams::default());
+    let lay = w.layout();
+    let brackets = ceteris_econ::wealth::BRACKETS;
+    for (c, pops) in lay.country_pops.iter().enumerate() {
+        let ks: Vec<usize> = pops.iter().map(|&k| k as usize).collect();
+        let people: Vec<(f64, f64)> = ks
+            .iter()
+            .map(|&k| (inp.pops.population[k], income[k]))
+            .collect();
+        let s = ceteris_econ::demand::within_sigma(inp.countries.gini[c], &people);
+        assert!(s > 0.0);
+        let total: f64 = ks.iter().map(|&k| inp.pops.dividend[k]).sum();
+        assert!((total - 1.0).abs() < 1e-12, "country {c}: {total}");
+        let n_c: f64 = people.iter().map(|p| p.0).sum();
+        let mu: Vec<f64> = people.iter().map(|&(_, m)| m.ln() - 0.5 * s * s).collect();
+        let cdf = |z: f64| 0.5 * libm::erfc(-z / std::f64::consts::SQRT_2);
+        let lo = mu.iter().copied().fold(f64::INFINITY, f64::min) - 10.0 * s;
+        let hi = mu.iter().copied().fold(f64::NEG_INFINITY, f64::max) + 10.0 * s;
+        let n = 200_000;
+        let h = (hi - lo) / n as f64;
+        let mut got = vec![0.0; ks.len()];
+        for j in 0..=n {
+            let t = lo + h * j as f64;
+            let f: f64 = people
+                .iter()
+                .zip(&mu)
+                .map(|(&(nk, _), &m)| nk * cdf((t - m) / s))
+                .sum::<f64>()
+                / n_c;
+            let b = if f < brackets[0] {
+                0
+            } else if f < brackets[0] + brackets[1] {
+                1
+            } else {
+                2
+            };
+            let density = inp.countries.wealth[c][b] / (brackets[b] * n_c);
+            let weight = if j == 0 || j == n { 0.5 * h } else { h };
+            for (x, (&(nk, _), &m)) in got.iter_mut().zip(people.iter().zip(&mu)) {
+                let z = (t - m) / s;
+                *x += weight * density * nk * (-0.5 * z * z).exp()
+                    / (s * (2.0 * std::f64::consts::PI).sqrt());
+            }
+        }
+        for (j, &k) in ks.iter().enumerate() {
+            let d = inp.pops.dividend[k];
+            assert!(d > 0.0, "pop {k}");
+            assert!(
+                (got[j] / d - 1.0).abs() < 1e-4,
+                "pop {k}: {d} vs {}",
+                got[j]
+            );
+            assert_eq!(lay.dividend[k], d);
+        }
+    }
+}
+
+/// ADR 0104: the tick-0 mint and every tick's pool are paid by dividend share; the rebate stays
+/// per person, money is conserved, and the shares enter the digest.
+#[test]
+fn wealth_dividends_pay_the_pool_by_share() {
+    let inp = with_wealth();
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(inp.clone()),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
+    {
+        let w = sim.world();
+        let lay = w.layout();
+        for pops in &lay.country_pops {
+            let minted: Vec<f64> = pops
+                .iter()
+                .map(|&k| to_numeraire(w.ledger.money(lay.accounts.pop[k as usize])))
+                .collect();
+            let all: f64 = minted.iter().sum();
+            for (&k, m) in pops.iter().zip(&minted) {
+                let d = inp.pops.dividend[k as usize];
+                assert!((m / all - d).abs() < 1e-9, "pop {k}: {} vs {d}", m / all);
+            }
+        }
+    }
+    let mint = sim.world().layout().accounts.mint;
+    let issued = sim.world().ledger.money_wide(mint);
+    for tick in 0..12 {
+        sim.step().unwrap();
+        assert_eq!(sim.world().ledger.money_wide(mint), issued, "tick {tick}");
+    }
+    assert_ne!(sim.world().digest(), world(EconParams::default()).digest());
+}
+
+/// The fixture with foreign owners (ADR 0310): goods 1 to 6 of country 0 are 30% owned by
+/// country 1, those of every other country 10% by country 0.
+fn with_foreign() -> EconInputs {
+    let mut inp = small_world();
+    let nc = inp.n_countries();
+    let f = |c: usize, g: usize| match (c, (1..=6).contains(&g)) {
+        (_, false) => 0.0,
+        (0, true) => 0.3,
+        _ => 0.1,
+    };
+    let owner = |h: usize| if h == 0 { 1 } else { 0 };
+    inp.countries.foreign = Rows::from_flat(
+        (0..nc)
+            .flat_map(|c| (0..N_GOODS).map(move |g| f(c, g)))
+            .collect(),
+        N_GOODS,
+    );
+    inp.countries.owners = Rows::from_flat(
+        (0..nc)
+            .flat_map(|h| (0..nc).map(move |o| if o == owner(h) { 1.0 } else { 0.0 }))
+            .collect(),
+        nc,
+    );
+    inp.validate();
+    inp
+}
+
+/// ADRs 0309, 0310: each positive payout of goods 1 to 6 sends round(f x payout) to the world
+/// dividend account (within one minor unit), which pays each host's total to its owner's pool
+/// in the same tick and ends at zero, as do the pools; money is conserved over 24 ticks, the
+/// shares enter the digest, and the base point counts foreign profits in the owners' income.
+#[test]
+fn foreign_dividends_net_to_zero_worldwide() {
+    let inp = with_foreign();
+    let nc = inp.n_countries();
+    let mut sim = sim_of(EconWorld::new(
+        Arc::new(inp.clone()),
+        EconParams::default(),
+        TradeParams::default(),
+    ));
+    let acc = sim.world().layout().accounts.clone();
+    let account = acc.foreign.expect("the world dividend account is open");
+    assert!(
+        world(EconParams::default())
+            .layout()
+            .accounts
+            .foreign
+            .is_none()
+    );
+    let issued = sim.world().ledger.money_wide(acc.mint);
+    let n_ent = inp.n_enterprises();
+    let host = |e: usize| inp.country_of(inp.enterprises.province[e] as usize);
+    let mut paid_abroad = 0i64;
+    for tick in 0..24 {
+        sim.step().unwrap();
+        let w = sim.world();
+        let (mut sent, mut received) = (vec![0i64; nc], vec![0i64; nc]);
+        let mut domestic = vec![0i64; n_ent];
+        let mut foreign = vec![0i64; n_ent];
+        for entry in w.ledger.journal() {
+            let ent = (entry.from.0 as usize)
+                .checked_sub(acc.enterprise[0].0 as usize)
+                .filter(|&e| e < n_ent);
+            match (entry.flow, ent) {
+                (FOREIGN_DIVIDEND, Some(e)) => {
+                    assert_eq!(entry.to, account, "tick {tick}");
+                    foreign[e] += entry.amount;
+                    sent[host(e)] += entry.amount;
+                }
+                (FOREIGN_DIVIDEND, None) => {
+                    assert_eq!(entry.from, account);
+                    let o = acc.dividend.iter().position(|&d| d == entry.to).unwrap();
+                    received[o] += entry.amount;
+                }
+                (DIVIDEND, Some(e)) => domestic[e] += entry.amount,
+                _ => {}
+            }
+        }
+        for e in 0..n_ent {
+            let total = domestic[e] + foreign[e];
+            let f = inp.ent_foreign(e);
+            assert!(
+                (foreign[e] as f64 - f * total as f64).abs() <= 0.5 + 1e-9,
+                "tick {tick} enterprise {e}: {} of {total} at f {f}",
+                foreign[e]
+            );
+        }
+        // country 0 owns every other host's foreign part, country 1 country 0's
+        assert_eq!(received[1], sent[0], "tick {tick}");
+        assert_eq!(received[0], sent[1..].iter().sum::<i64>(), "tick {tick}");
+        assert!(received[2..].iter().all(|&x| x == 0));
+        assert_eq!(w.ledger.money_wide(account), 0);
+        for &pool in &acc.dividend {
+            assert_eq!(w.ledger.money_wide(pool), 0, "tick {tick}");
+        }
+        assert_eq!(w.ledger.money_wide(acc.mint), issued, "tick {tick}");
+        paid_abroad += sent.iter().sum::<i64>();
+    }
+    assert!(paid_abroad > 0);
+    assert_ne!(sim.world().digest(), world(EconParams::default()).digest());
+    let (base, plain) = (
+        base_income(&inp, &EconParams::default()),
+        base_income(&small_world(), &EconParams::default()),
+    );
+    let by_country = |income: &[f64], c: usize| -> f64 {
+        (0..inp.n_provinces())
+            .filter(|&i| inp.country_of(i) == c)
+            .map(|i| income[i])
+            .sum()
+    };
+    let (world_base, world_plain): (f64, f64) = (base.iter().sum(), plain.iter().sum());
+    assert!((world_base / world_plain - 1.0).abs() < 1e-12);
+    assert!(by_country(&base, 1) > by_country(&plain, 1));
 }

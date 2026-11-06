@@ -11,6 +11,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, UInt8Type, UInt32Type};
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
+use ceteris_calibrate::json::Json;
 use ceteris_calibrate::steady::{
     self, COVER, CalibrationError, Limits, PASS_TOL, SINKHORN_TOL, SLOTS, Steady,
 };
@@ -225,15 +226,17 @@ fn inversion_at_given_prices_reproduces_the_shares() {
 }
 
 /// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its
-/// province's buyer prices and its income, are each country's final demand shares Omega. A
-/// country with no pops (on the pack, ICIO territories without an economy province, such as the
-/// Ashmore and Cartier Islands) has no spending to share.
+/// province's buyer prices and its spending (income and transfer, ADR 0100), are each country's
+/// final demand shares Omega for local goods, and for traded goods the shares stage 1 balanced
+/// (ADR 0318), which keep each country's traded total. A country with no pops (on the pack, ICIO
+/// territories without an economy province, such as the Ashmore and Cartier Islands) has no
+/// spending to share.
 #[test]
 fn aggregate_data_state_shares_match_omega() {
     for w in worlds() {
         let (inp, s) = (&w.inp, &w.s);
         let price = s.consumer.select_rows(&inp.pop_province);
-        let got = aggregate_shares(inp, &s.weights, &price, &s.pop_income);
+        let got = aggregate_shares(inp, &s.weights, &price, &s.pop_spending());
         let want = omega_shares(inp);
         let with_pops: Vec<usize> = (0..inp.n_countries())
             .filter(|c| inp.pop_country().contains(c))
@@ -241,7 +244,16 @@ fn aggregate_data_state_shares_match_omega() {
         let rows = |m: &Mat| -> Vec<f64> {
             with_pops
                 .iter()
-                .flat_map(|&c| (0..inp.n_goods()).map(move |g| m[(c, g)]))
+                .flat_map(|&c| {
+                    let traded: f64 = (0..inp.n_goods())
+                        .filter(|&g| inp.traded[g])
+                        .map(|g| m[(c, g)])
+                        .sum();
+                    (0..inp.n_goods())
+                        .filter(|&g| !inp.traded[g])
+                        .map(move |g| m[(c, g)])
+                        .chain(std::iter::once(traded))
+                })
                 .collect()
         };
         allclose(w.name, &rows(&got), &rows(&want), 0.0, 1e-12);
@@ -282,7 +294,7 @@ fn calibration_unique_from_eight_starts() {
         let what = format!("seed {seed}");
         allclose(&what, &s.price.data, &base.price.data, 1e-9, 0.0);
         allclose(&what, &s.consumer.data, &base.consumer.data, 1e-9, 0.0);
-        allclose(&what, &s.r, &base.r, 1e-9, 0.0);
+        allclose(&what, &s.column_factor, &base.column_factor, 1e-9, 0.0);
         allclose(
             &what,
             &s.output,
@@ -497,7 +509,7 @@ fn sinkhorn_is_unique_up_to_scale() {
         for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
             // the stage 2 target is the sales value, V / (1 + delta s) (ADR 0091)
             v[(p, g)] += if inp.traded[g] {
-                s.value[e] / s.r[g] / (1.0 + s.spoilage[g])
+                s.value[e] / (1.0 + s.spoilage[g])
             } else {
                 0.0
             };
@@ -545,9 +557,10 @@ fn sinkhorn_is_unique_up_to_scale() {
             );
         }
         allclose(w.name, &one.r, &other.r, 1e-12, 0.0);
+        // stage 4's targets balance every good (ADR 0318): the scaling rescales no sales
         let traded: Vec<usize> = (0..n_g).filter(|&g| inp.traded[g]).collect();
         let pick = |r: &[f64]| traded.iter().map(|&g| r[g]).collect::<Vec<_>>();
-        allclose(w.name, &pick(&one.r), &pick(&s.r), 1e-12, 0.0);
+        allclose(w.name, &pick(&one.r), &vec![1.0; traded.len()], 1e-12, 0.0);
     }
 }
 
@@ -566,7 +579,7 @@ fn sinkhorn_pins_the_level_of_the_weights() {
     let mut v = Mat::zeros(n_p, n_g);
     for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
         if inp.traded[g] {
-            v[(p, g)] += s.value[e] / s.r[g] / (1.0 + s.spoilage[g]);
+            v[(p, g)] += s.value[e] / (1.0 + s.spoilage[g]);
         }
     }
     let origin = |p: usize, g: usize| inp.active[p][g] && inp.traded[g];
@@ -625,10 +638,16 @@ fn closed_forms_zero_the_reference_residual() {
         let reference = steady::reference_inputs(inp, s);
         let x = steady::reference_point(inp, s);
         let m = Model::new(&reference).unwrap();
+        // the calibration pins the traded goods' index to 1, local goods at p_c (ADR 0098); the
+        // reference the world index over every good: the same point in its units
+        let shift = model::evaluate(&x, &m, &reference.ent_a).index.ln();
+        let x: Vec<f64> = x.iter().map(|v| v - shift).collect();
         let residual = max_abs(&model::residual(&x, &m));
         assert!(residual <= 1e-10, "{}: residual {residual}", w.name);
         let e = model::evaluate(&x, &m, &reference.ent_a);
-        allclose(w.name, &e.value_added, &s.va0, 1e-10, 0.0);
+        // value added back in the calibration's units
+        let va: Vec<f64> = e.value_added.iter().map(|v| v * shift.exp()).collect();
+        allclose(w.name, &va, &s.va0, 1e-10, 0.0);
         allclose(w.name, &e.employment, &s.l0, 1e-10, 0.0);
         allclose(w.name, &e.output, &s.output, 1e-10, 0.0);
         let target = inp.ent_va_target.as_ref().unwrap();
@@ -636,10 +655,8 @@ fn closed_forms_zero_the_reference_residual() {
             .filter(|&e| inp.traded[inp.ent_good[e]])
             .collect();
         let va0: Vec<f64> = traded.iter().map(|&e| s.va0[e]).collect();
-        let want: Vec<f64> = traded
-            .iter()
-            .map(|&e| s.r[inp.ent_good[e]] * target[e])
-            .collect();
+        // output and value added stay at the data (ADR 0100, no r_g)
+        let want: Vec<f64> = traded.iter().map(|&e| target[e]).collect();
         allclose(w.name, &va0, &want, 1e-13, 0.0);
         assert!(s.a.iter().all(|a| a.is_finite() && *a > 0.0), "{}", w.name);
         assert!(s.a_va.iter().all(|a| *a > 0.0), "{}", w.name);
@@ -715,8 +732,8 @@ fn steady_state_unchanged_by_selection() {
     }
 }
 
-/// Local goods at p = 1: output solves each province's Leontief system against household and
-/// intermediate local demand.
+/// Local goods: output (units, at the province's p_c, ADR 0098) solves each province's Leontief
+/// system against household spending at p_c and intermediate local demand.
 #[test]
 fn local_output_is_nonnegative_and_clears_locally() {
     for w in worlds() {
@@ -738,7 +755,7 @@ fn local_output_is_nonnegative_and_clears_locally() {
         for p in 0..n_p {
             for g in (0..n_g).filter(|&g| !inp.traded[g]) {
                 got.push(out[(p, g)]);
-                want.push(s.spend_hh[(p, g)] + used[(p, g)]);
+                want.push(s.spend_hh[(p, g)] / s.consumer[(p, g)] + used[(p, g)]);
             }
         }
         allclose(w.name, &got, &want, 1e-12, 0.0);
@@ -770,7 +787,12 @@ fn every_province_produces_and_pays_a_wage() {
 }
 
 /// The fixture with competitive storage on at the approved values (ADR 0091), as an export of
-/// those parameters would carry them, calibrated once.
+/// those parameters would carry them, calibrated once. Storage takes delta s of each stored
+/// good's output to replace spoilage, so its sales are no longer balanced (ADR 0299 balanced the
+/// fixture with storage off): stage 4's targets balance every good with final demand (ADR
+/// 0318), and the VA of crude oil, which has none, is rescaled by the scaling's r_g until its
+/// sales meet its intermediate use (its intermediate demand does not depend on its own VA, so
+/// one rescale settles it to rounding).
 fn fixture_with_storage() -> &'static (Inputs, Steady) {
     static WORLD: OnceLock<(Inputs, Steady)> = OnceLock::new();
     WORLD.get_or_init(|| {
@@ -783,7 +805,24 @@ fn fixture_with_storage() -> &'static (Inputs, Steady) {
             convenience: on.convenience.to_vec(),
             gain: on.storage_gain,
         };
-        let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        let no_final_demand: Vec<bool> = (0..inp.n_goods())
+            .map(|g| inp.traded[g] && (0..inp.n_countries()).all(|c| inp.omega[(c, g)] == 0.0))
+            .collect();
+        let mut s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        for _ in 0..3 {
+            let r = s.info.balance_residual.clone();
+            if (0..inp.n_goods()).all(|g| !no_final_demand[g] || r[g].abs() <= 1e-13) {
+                break;
+            }
+            for e in 0..inp.ent_good.len() {
+                let g = inp.ent_good[e];
+                if no_final_demand[g] {
+                    inp.ent_va0[e] *= 1.0 + r[g];
+                    inp.ent_va_target.as_mut().unwrap()[e] *= 1.0 + r[g];
+                }
+            }
+            s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+        }
         (inp, s)
     })
 }
@@ -862,8 +901,14 @@ fn stage5_holds(name: &str, inp: &Inputs, s: &Steady) {
         let money: Vec<f64> = (0..s.pop_income.len())
             .map(|k| s.pop_income[k] - s.pop_wage[k])
             .collect();
+        let money: Vec<f64> = money
+            .iter()
+            .zip(&s.pop_transfer)
+            .map(|(m, t)| m + t)
+            .collect();
         allclose(name, &s.pop_money(), &money, 1e-15, 0.0);
-        allclose(name, &s.pop_spend.row_sums(), &s.pop_income, 1e-12, 0.0);
+        // pops spend their income and transfer (ADR 0100)
+        allclose(name, &s.pop_spend.row_sums(), &s.pop_spending(), 1e-12, 0.0);
     }
 }
 
@@ -941,7 +986,8 @@ fn calibration_tables_have_the_documented_layout() {
     let meta: serde_json::Value =
         serde_json::from_str(&ent.schema().metadata()["calibration"]).unwrap();
     assert_eq!(meta["format"], steady::FORMAT);
-    assert_eq!(meta["r"].as_array().unwrap().len(), n_g);
+    assert_eq!(meta["column_factor"].as_array().unwrap().len(), n_g);
+    assert!(meta.get("r").is_none());
 
     let cells = read(tmp.path(), "econ_calib_cells.arrow");
     assert_eq!(cells.num_rows(), inp.n_provinces() * n_g);
@@ -1378,6 +1424,7 @@ fn nu_fit_is_monotone_and_bracketed() {
 /// them: the fixture has none that matter, and E holds there to the finite difference's
 /// precision (1.4e-10 relative); on the pack the gap is reported.
 #[test]
+#[ignore = "multi-hour; nightly slow job"]
 fn own_price_elasticity_matches_finite_difference() {
     const H: f64 = 1e-6;
     for w in worlds() {
@@ -1482,6 +1529,7 @@ fn traded_cell_with_no_buyer_has_the_study_elasticity() {
 /// fixture has none that matter, and the entries hold there to the finite difference's
 /// precision; on the pack the gap is reported.
 #[test]
+#[ignore = "multi-hour; nightly slow job"]
 fn cross_price_elasticity_matches_finite_difference() {
     const H: f64 = 1e-6;
     let trade = ceteris_trade::TradeParams::default();
@@ -1830,4 +1878,126 @@ fn supply_elasticity_is_the_enterprise_maximum() {
             }
         }
     }
+}
+
+/// ADR 0100: calibration has no rescale r_g; the summary reports what replaced it, the column
+/// factors of the final demand balance (the residual of the old r_g, ADR 0318), the scaling's
+/// r_g - 1 and the balance's mu - 1, both 0 at the fixed point. On the fixture, balanced by ADR
+/// 0299, the column factors are 1 to the passes' tolerance.
+#[test]
+fn r_g_removed_and_residual_reported() {
+    for w in worlds() {
+        let (inp, s) = (&w.inp, &w.s);
+        let n_g = inp.n_goods();
+        let summary = s.info.json();
+        let key = |k: &str| summary.iter().find(|(name, _)| name == k).map(|(_, v)| v);
+        assert!(key("r").is_none(), "{}: the summary still has r", w.name);
+        let floats = |k: &str| -> Vec<f64> {
+            match key(k) {
+                Some(Json::List(v)) => v
+                    .iter()
+                    .map(|x| match x {
+                        Json::Float(f) => *f,
+                        other => panic!("{k}: {other:?}"),
+                    })
+                    .collect(),
+                other => panic!("{}: {k} is {other:?}", w.name),
+            }
+        };
+        let (factor, residual) = (floats("column_factor"), floats("balance_residual"));
+        assert_eq!((factor.len(), residual.len()), (n_g, n_g), "{}", w.name);
+        assert_eq!(
+            s.info.pass_history.last().map(|p| &p.column_factor),
+            Some(&s.info.column_factor),
+            "{}: the last pass's factors are the settled ones",
+            w.name
+        );
+        assert!(
+            s.info
+                .pass_history
+                .iter()
+                .all(|p| p.column_factor.len() == n_g),
+            "{}: every pass records its factors",
+            w.name
+        );
+        for g in 0..n_g {
+            eprintln!(
+                "{}: good {g} column factor {:.6} residual {:.3e}",
+                w.name, factor[g], residual[g]
+            );
+            assert!(
+                residual[g].abs() <= 1e-12,
+                "{}: good {g} r_g - 1 {}",
+                w.name,
+                residual[g]
+            );
+        }
+        assert!(
+            s.info.balance_mu.abs() <= 1e-12,
+            "{}: mu - 1 {}",
+            w.name,
+            s.info.balance_mu
+        );
+        if w.name == "fixture" {
+            for (g, f) in factor.iter().enumerate() {
+                assert!(
+                    (f - 1.0).abs() <= 1e-9,
+                    "fixture good {g}: column factor {f}"
+                );
+            }
+        }
+    }
+}
+
+/// The fixture with ADR 0099's three demanders: government buys 15% of every good's final
+/// demand, investment half of goods 5 and 6 and 5% of the rest (as the econ crate's
+/// `with_three_demanders`).
+fn fixture_with_three_demanders() -> Inputs {
+    let mut inp = io::load(fixture()).unwrap();
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    inp.gov = Mat::from_fn(n_c, n_g, |c, g| 0.15 * inp.omega[(c, g)]);
+    inp.inv = Mat::from_fn(n_c, n_g, |c, g| {
+        (if g == 5 || g == 6 { 0.5 } else { 0.05 }) * inp.omega[(c, g)]
+    });
+    inp
+}
+
+/// ADRs 0099, 0304: stage 4 inverts PIGL on the households' part of final demand at
+/// their share of spending; government and investment keep the balanced shares. In the
+/// calibrated state the households' PIGL spending alone is what the three demanders buy less
+/// government's and investment's shares (1e-12); the fixture is balanced at the data to about
+/// 1e-7 (ADR 0299), so the shares and the aggregate are the data's to 1e-6.
+#[test]
+fn pigl_inverted_on_hfce_only() {
+    let inp = fixture_with_three_demanders();
+    let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    let w = &s.weights;
+    let (n_c, n_g) = (inp.n_countries(), inp.n_goods());
+    let (_, gov, inv) = inp.final_demand_split(&Mat::filled(n_c, n_g, 1.0));
+    allclose("gov", &w.gov.data, &gov.data, 1e-6, 0.0);
+    allclose("inv", &w.inv.data, &inv.data, 1e-6, 0.0);
+    let price = s.consumer.select_rows(&inp.pop_province);
+    let spend = s.pop_spending();
+    let all = aggregate_shares(&inp, w, &price, &spend);
+    allclose(
+        "all demanders",
+        &all.data,
+        &omega_shares(&inp).data,
+        1e-6,
+        0.0,
+    );
+
+    let h = w.household_share();
+    let country = inp.pop_country();
+    let budget: Vec<f64> = (0..spend.len()).map(|k| h[country[k]] * spend[k]).collect();
+    let pigl_only = demand::Weights {
+        gov: Mat::zeros(0, n_g),
+        inv: Mat::zeros(0, n_g),
+        ..w.clone()
+    };
+    let got = aggregate_shares(&inp, &pigl_only, &price, &budget);
+    let want = Mat::from_fn(n_c, n_g, |c, g| {
+        (all[(c, g)] - w.gov[(c, g)] - w.inv[(c, g)]) / h[c]
+    });
+    allclose("households", &got.data, &want.data, 0.0, 1e-12);
 }

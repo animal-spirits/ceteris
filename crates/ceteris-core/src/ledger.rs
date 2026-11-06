@@ -27,8 +27,59 @@ pub struct Entry {
 
 pub const GOODS_TOLERANCE: f64 = 1e-9;
 
+/// One good's holdings of every account and its tallies, taken out of a [`Ledger`] by
+/// [`Ledger::take_columns`]: the ledger's goods operations on that good, with the same
+/// arithmetic in the same order.
+#[derive(Clone, Debug, Default)]
+pub struct GoodColumn {
+    good: usize,
+    goods: Vec<f64>,
+    created: f64,
+    destroyed: f64,
+}
+
+impl GoodColumn {
+    pub fn good(&self) -> usize {
+        self.good
+    }
+
+    pub fn goods(&self, a: AccountId) -> f64 {
+        self.goods[a.0 as usize]
+    }
+
+    pub fn ship(&mut self, from: AccountId, to: AccountId, qty: f64) {
+        self.goods[from.0 as usize] -= qty;
+        self.goods[to.0 as usize] += qty;
+    }
+
+    pub fn create(&mut self, a: AccountId, qty: f64) {
+        self.goods[a.0 as usize] += qty;
+        self.created += qty;
+    }
+
+    pub fn destroy(&mut self, a: AccountId, qty: f64) {
+        self.goods[a.0 as usize] -= qty;
+        self.destroyed += qty;
+    }
+}
+
 /// Entries per parallel chunk of [`Ledger::post`].
 const POST_CHUNK: usize = 1 << 17;
+
+/// Accounts per parallel task when [`Ledger::post`] applies its sums.
+const ACCOUNT_CHUNK: usize = 1 << 12;
+
+/// Whether `flow` is in the tracked set `mask` ([`Ledger::track`]).
+fn tracks(mask: u64, flow: Flow) -> bool {
+    flow.0 < 64 && mask >> flow.0 & 1 == 1
+}
+
+/// `balance + delta` for an account of the given kind, panicking past its range.
+fn moved(balance: i128, wide: bool, delta: i128) -> i128 {
+    let next = balance.checked_add(delta).expect("ledger overflow");
+    assert!(wide || i64::try_from(next).is_ok(), "ledger overflow");
+    next
+}
 
 /// Working space of [`Ledger::post`], kept by the caller between calls: one sum per account
 /// for each chunk of entries, zero between calls. `dirty` marks a call that did not finish
@@ -37,6 +88,8 @@ const POST_CHUNK: usize = 1 << 17;
 pub struct PostScratch {
     deltas: Vec<Vec<i128>>,
     dirty: bool,
+    /// Per chunk, its entries of tallied flows.
+    tallied: Vec<Vec<Entry>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,6 +101,9 @@ pub struct Ledger {
     goods: Vec<f64>,
     open: Vec<bool>,
     journal: Vec<Entry>,
+    /// Flows whose net amount per account this tick is kept in `tally` ([`Ledger::track`]).
+    tracked: u64,
+    tally: Vec<i64>,
     created: Vec<f64>,
     destroyed: Vec<f64>,
     opening: Vec<f64>,
@@ -62,6 +118,8 @@ impl Ledger {
             goods: Vec::new(),
             open: Vec::new(),
             journal: Vec::new(),
+            tracked: 0,
+            tally: Vec::new(),
             created: vec![0.0; n_goods],
             destroyed: vec![0.0; n_goods],
             opening: vec![0.0; n_goods],
@@ -81,6 +139,7 @@ impl Ledger {
     fn open_as(&mut self, wide: bool) -> AccountId {
         let id = AccountId(u32::try_from(self.money.len()).expect("account space exhausted"));
         self.money.push(0);
+        self.tally.push(0);
         self.wide.push(wide);
         self.goods.extend(std::iter::repeat_n(0.0, self.n_goods));
         self.open.push(true);
@@ -124,12 +183,7 @@ impl Ledger {
 
     /// `balance + delta` for account index `i`, panicking past its kind's range.
     fn moved(&self, i: usize, delta: i128) -> i128 {
-        let next = self.money[i].checked_add(delta).expect("ledger overflow");
-        assert!(
-            self.wide[i] || i64::try_from(next).is_ok(),
-            "ledger overflow"
-        );
-        next
+        moved(self.money[i], self.wide[i], delta)
     }
 
     pub fn goods(&self, a: AccountId, good: usize) -> f64 {
@@ -158,6 +212,26 @@ impl Ledger {
             to,
             amount,
         });
+        if tracks(self.tracked, flow) {
+            self.tally[t] += amount;
+            self.tally[f] -= amount;
+        }
+    }
+
+    /// Keeps, from the next [`Ledger::begin_tick`] on, each account's net amount this tick over
+    /// the entries of `flows`: the sum the journal gives, without reading it
+    /// ([`Ledger::tally`]).
+    /// Flow ids below 64 only.
+    pub fn track(&mut self, flows: &[Flow]) {
+        self.tracked = flows.iter().fold(0, |mask, f| {
+            assert!(f.0 < 64, "tracked flow {} is 64 or more", f.0);
+            mask | 1 << f.0
+        });
+    }
+
+    /// Account `a`'s credits less debits this tick in the tracked flows.
+    pub fn tally(&self, a: AccountId) -> i64 {
+        self.tally[a.0 as usize]
     }
 
     /// [`Ledger::transfer`] of each entry in turn: the same balances and journal. Each
@@ -166,37 +240,73 @@ impl Ledger {
     /// the balance rather than at the step that would cross the bound. `scratch` keeps the
     /// chunks' sums between calls.
     pub fn post(&mut self, entries: &[Entry], scratch: &mut PostScratch) {
-        let (n, chunks) = (self.money.len(), entries.len().div_ceil(POST_CHUNK));
+        self.post_all(&[entries], scratch);
+    }
+
+    /// [`Ledger::post`] of the blocks in turn, in one pass: the same balances and journal,
+    /// with each block cut into chunks of its own.
+    pub fn post_all(&mut self, blocks: &[&[Entry]], scratch: &mut PostScratch) {
+        let all: Vec<&[Entry]> = blocks.iter().flat_map(|b| b.chunks(POST_CHUNK)).collect();
+        let (n, chunks) = (self.money.len(), all.len());
         if scratch.dirty {
             scratch.deltas.iter_mut().for_each(|d| d.fill(0));
         }
         if scratch.deltas.len() < chunks {
             scratch.deltas.resize_with(chunks, Vec::new);
         }
+        if scratch.tallied.len() < chunks {
+            scratch.tallied.resize_with(chunks, Vec::new);
+        }
         let deltas = &mut scratch.deltas[..chunks];
         // every delta is zero between calls, so this only sizes them
         deltas.iter_mut().for_each(|d| d.resize(n, 0));
-        let open = &self.open;
+        let (open, tracked) = (&self.open, self.tracked);
         scratch.dirty = true;
-        entries
-            .par_chunks(POST_CHUNK)
+        all.par_iter()
             .zip(deltas.par_iter_mut())
-            .for_each(|(chunk, delta)| {
-                for e in chunk {
+            .zip(scratch.tallied[..chunks].par_iter_mut())
+            .for_each(|((chunk, delta), tallied)| {
+                tallied.clear();
+                for e in *chunk {
                     debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
                     let (f, t) = (e.from.0 as usize, e.to.0 as usize);
                     delta[f] -= i128::from(e.amount);
                     delta[t] += i128::from(e.amount);
+                    if tracks(tracked, e.flow) {
+                        tallied.push(*e);
+                    }
                 }
             });
-        for delta in deltas {
-            for (i, d) in delta.iter_mut().enumerate() {
-                self.money[i] = self.moved(i, *d);
-                *d = 0;
-            }
+        for e in scratch.tallied[..chunks].iter().flatten() {
+            self.tally[e.to.0 as usize] += e.amount;
+            self.tally[e.from.0 as usize] -= e.amount;
         }
+        // each account adds its chunk sums in chunk order, so it sees the same partial sums
+        // as a serial pass; accounts are independent, so they run in parallel
+        let (deltas, wide) = (&*deltas, &self.wide);
+        self.money
+            .par_chunks_mut(ACCOUNT_CHUNK)
+            .zip(wide.par_chunks(ACCOUNT_CHUNK))
+            .enumerate()
+            .for_each(|(k, (money, wide))| {
+                let lo = k * ACCOUNT_CHUNK;
+                for (j, (m, &wide)) in money.iter_mut().zip(wide).enumerate() {
+                    for delta in deltas {
+                        let d = delta[lo + j];
+                        if d != 0 {
+                            *m = moved(*m, wide, d);
+                        }
+                    }
+                }
+            });
+        scratch.deltas[..chunks]
+            .par_iter_mut()
+            .for_each(|d| d.fill(0));
         scratch.dirty = false;
-        self.journal.extend_from_slice(entries);
+        // an indexed parallel extend writes in place, in order
+        for block in blocks {
+            self.journal.par_extend(block.par_iter().copied());
+        }
     }
 
     pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
@@ -212,6 +322,47 @@ impl Ledger {
     pub fn destroy(&mut self, a: AccountId, good: usize, qty: f64) {
         *self.slot(a, good) -= qty;
         self.destroyed[good] += qty;
+    }
+
+    /// Copies goods `goods` out into `cols`, one column per good, so that each good's moves can
+    /// run on their own ([`GoodColumn`]); `cols` keeps its buffers between calls. Until
+    /// [`Ledger::put_columns`] the ledger holds stale quantities of those goods.
+    pub fn take_columns(&self, goods: std::ops::Range<usize>, cols: &mut Vec<GoodColumn>) {
+        assert!(
+            goods.end <= self.n_goods,
+            "goods {goods:?} of {}",
+            self.n_goods
+        );
+        cols.resize_with(goods.len(), GoodColumn::default);
+        cols.par_iter_mut().enumerate().for_each(|(i, c)| {
+            let g = goods.start + i;
+            c.good = g;
+            c.created = self.created[g];
+            c.destroyed = self.destroyed[g];
+            c.goods.clear();
+            c.goods
+                .extend(self.goods.chunks_exact(self.n_goods).map(|h| h[g]));
+        });
+    }
+
+    /// Writes back the columns of [`Ledger::take_columns`].
+    pub fn put_columns(&mut self, cols: &[GoodColumn]) {
+        for c in cols {
+            self.created[c.good] = c.created;
+            self.destroyed[c.good] = c.destroyed;
+        }
+        let ng = self.n_goods;
+        self.goods
+            .par_chunks_mut(ACCOUNT_CHUNK * ng)
+            .enumerate()
+            .for_each(|(k, chunk)| {
+                let lo = k * ACCOUNT_CHUNK;
+                for (j, h) in chunk.chunks_exact_mut(ng).enumerate() {
+                    for c in cols {
+                        h[c.good] = c.goods[lo + j];
+                    }
+                }
+            });
     }
 
     /// Quantity of `good` destroyed this tick (the tally the goods identity checks).
@@ -240,6 +391,7 @@ impl Ledger {
 
     pub fn begin_tick(&mut self) {
         self.journal.clear();
+        self.tally.fill(0);
         self.created.fill(0.0);
         self.destroyed.fill(0.0);
         self.opening = self.good_totals();
@@ -323,6 +475,7 @@ impl Decode for Ledger {
         ledger.goods = d.f64s()?;
         ledger.open = d.bools()?;
         let n = ledger.money.len();
+        ledger.tally = vec![0; n];
         if ledger.open.len() != n || ledger.goods.len() != n * ledger.n_goods {
             return Err(DecodeError("ledger column lengths disagree".into()));
         }
@@ -334,6 +487,65 @@ impl Decode for Ledger {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn tally_is_the_journal_sum_of_tracked_flows() {
+        let mut l = Ledger::new(1);
+        let ids: Vec<AccountId> = (0..4).map(|_| l.open()).collect();
+        l.track(&[Flow(1), Flow(3)]);
+        l.begin_tick();
+        let entry = |flow, f: usize, t: usize, amount| Entry {
+            flow: Flow(flow),
+            from: ids[f],
+            to: ids[t],
+            amount,
+        };
+        l.transfer(Flow(1), ids[0], ids[1], 9);
+        l.transfer(Flow(2), ids[1], ids[2], 4);
+        let block = [entry(3, 2, 0, 5), entry(2, 0, 3, 8), entry(1, 3, 1, -2)];
+        l.post_all(&[&block, &block[..1]], &mut PostScratch::default());
+        for &a in &ids {
+            let want: i64 = l
+                .journal()
+                .iter()
+                .filter(|e| [Flow(1), Flow(3)].contains(&e.flow))
+                .map(|e| i64::from(e.to == a) * e.amount - i64::from(e.from == a) * e.amount)
+                .sum();
+            assert_eq!(l.tally(a), want, "account {a:?}");
+        }
+        l.begin_tick();
+        assert!(ids.iter().all(|&a| l.tally(a) == 0));
+    }
+
+    #[test]
+    fn columns_are_goods_operations_in_turn() {
+        let (mut a, mut b) = (Ledger::new(3), Ledger::new(3));
+        let ids: Vec<AccountId> = (0..4).map(|_| (a.open(), b.open()).0).collect();
+        for l in [&mut a, &mut b] {
+            l.begin_tick();
+            l.create(ids[0], 1, 2.5);
+            l.create(ids[2], 0, 0.75);
+        }
+        let ops = [(0, 1, 0.3), (1, 3, 0.1), (2, 2, 0.0), (3, 0, 1e-17)];
+        for &(f, t, q) in &ops {
+            for g in 0..2 {
+                a.ship(ids[f], ids[t], g, q);
+                a.destroy(ids[t], g, q / 3.0);
+                a.create(ids[f], g, q * 0.7);
+            }
+        }
+        let mut cols = Vec::new();
+        b.take_columns(0..2, &mut cols);
+        for c in &mut cols {
+            for &(f, t, q) in &ops {
+                c.ship(ids[f], ids[t], q);
+                c.destroy(ids[t], q / 3.0);
+                c.create(ids[f], q * 0.7);
+            }
+        }
+        b.put_columns(&cols);
+        assert_eq!(a, b);
+    }
 
     #[test]
     fn post_is_transfer_in_turn() {
@@ -382,6 +594,44 @@ mod tests {
             assert_eq!(a, b);
         }
         assert!(scratch.deltas.iter().flatten().all(|&d| d == 0));
+    }
+
+    #[test]
+    fn post_all_is_post_of_each_block_in_turn() {
+        // more accounts than one apply task takes, and blocks across chunk boundaries
+        let n = 3 * ACCOUNT_CHUNK + 5;
+        let (mut a, mut b) = (Ledger::new(1), Ledger::new(1));
+        let ids: Vec<AccountId> = (0..n)
+            .map(|i| (a.open_as(i % 9 == 0), b.open_as(i % 9 == 0)).0)
+            .collect();
+        let mut x = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let blocks: Vec<Vec<Entry>> = [POST_CHUNK + 3, 0, POST_CHUNK / 2, 2 * POST_CHUNK]
+            .iter()
+            .map(|&len| {
+                (0..len)
+                    .map(|_| Entry {
+                        flow: Flow(2),
+                        from: ids[next() as usize % n],
+                        to: ids[next() as usize % n],
+                        amount: (next() % 2_000_001) as i64 - 1_000_000,
+                    })
+                    .collect()
+            })
+            .collect();
+        let (mut sa, mut sb) = (PostScratch::default(), PostScratch::default());
+        for block in &blocks {
+            a.post(block, &mut sa);
+        }
+        let refs: Vec<&[Entry]> = blocks.iter().map(|b| &b[..]).collect();
+        b.post_all(&refs, &mut sb);
+        assert_eq!(a, b);
+        assert!(sb.deltas.iter().flatten().all(|&d| d == 0));
     }
 
     #[test]

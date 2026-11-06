@@ -21,7 +21,7 @@ An alternative worth noting: the Julia ecosystem now hosts a data-driven macro A
 
 ### 19.2 Performance budget (single run, 8-core desktop)
 
-Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of unified memory. Target 6 to 12 ticks per second (0.5 to 1 simulated year per second), about 80 to 160 ms per tick. Memory target: under 6 GB for one interactive run so ensembles can run alongside.
+Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of unified memory. Target 6 to 12 ticks per second (0.5 to 1 simulated year per second), about 80 to 160 ms per tick. Memory target: under 6 GB for one interactive run so ensembles can run alongside. On the 10-goods P2 pack the sim-loop tick measured about 34 ms on a loaded Mac after the speed stack, against its 35 ms budget; the 160 ms ceiling stands (ADR 0325).
 
 | System | Work per tick | Budget |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of
 | Accounting assertions | Full ledger check | 5 ms |
 | Headroom |  | to 160 ms |
 
-During wars the daily sub-tick adds about 30 cheap steps per month, budgeted separately. All timings are estimates; P0 and P2 benchmarks replace them with measurements. Ensembles run headless across the desktop's cores; with desktop-only hardware, calibration depends on emulators and modular calibration to stay within one machine's compute.
+During wars the daily sub-tick adds about 30 cheap steps per month, budgeted separately. All timings are estimates; P0 and P2 benchmarks replace them with measurements. The ceiling stays 160 ms; from P3 each goods-indexed line is restated as a fixed cost plus a cost per good fitted to measurements, with its value at 45 goods (ADR 0235). Ensembles run headless across the desktop's cores; with desktop-only hardware, calibration depends on emulators and modular calibration to stay within one machine's compute.
 
 ### 19.3 Repository layout
 
@@ -77,10 +77,15 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0096). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
 - Ensemble members are lanes, the innermost array dimension (ADR 0024); interactive play runs one lane.
 
+**State tables**
+
+- Every state table is fixed-size for the run or names a bound and the rule that keeps it (a cap, an aggregation or an archive); its module SPEC states the bound and its expected size at 2150. Rows no system reads any more move to an archive table outside the tick's working set, read by panels and never by a system. Aggregation and archiving run at quarter boundaries in stable ID order (ADR 0236).
+
 **Tick execution**
 
 - Double-buffered state: each system reads tick t and writes t+1; no locks in hot paths.
 - Zero allocation in hot loops: preallocated scratch per thread (rayon `map_init`), arenas for transient objects.
+- A speed change that claims no output change shows the state hash and the ledger journal identical over 24 full-pack ticks at 1 thread and at all threads, on the Mac and on Linux x86, and reports the criterion tick and a per-system sim-loop timing (ADR 0294). Ledger money sums are integers, exact in any order, so posting may sum by account bucket in any partition; only an overflow check needs an order (ADR 0294).
 - Shipments in a timing wheel (ring buffer indexed by arrival tick): O(1) insert and delivery, no heap.
 - Multi-rate scheduling; war sub-ticks only while a war is active; rare events by sampled next-event times, not per-tick coin flips.
 - Closed-form PIGL demand (8.6) and a single kernel product for trade (8.3): goods markets have no within-tick iterative solver. Asset-market clearing (9.9) is the only within-tick iteration.
@@ -102,14 +107,21 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - `exp` and `ln` in logit and migration choices use fixed-coefficient polynomial approximations implemented once in SIMD; utilities that change by small additive amounts update multiplicatively.
 - Pops are already partitioned by labour status, so status-dependent logic runs as separate branch-free loops per partition.
 - FMA is used explicitly and always (`mul_add`), never left to the compiler, so results match across machines.
+- `unsafe` is forbidden except unchecked indexing (`get_unchecked`, `get_unchecked_mut`) in a crate's `hot` module, after safe restructuring was tried: each block has a `SAFETY:` comment and a `debug_assert!` of its bound, a safe twin behind a cargo feature is compared bit for bit in CI, and the PR shows at least 2% of the tick (ADR 0295).
 
 **Parallelism**
 
 - M-series chips mix performance and efficiency cores, so equal static chunks leave fast cores idle. Split work into many small chunks with fixed boundaries independent of thread count, let rayon work-steal, write results to fixed slots, and reduce in fixed order: scheduling varies, results do not.
 - Country-local systems (fiscal, politics, labour) run one task per country, sorted largest first for load balance.
 - Systems with disjoint read and write sets run concurrently, from a static dependency graph built from declared read/write sets.
+- Scatter accumulators whose fixed order blocks a decomposition (first the T2b dispatch accumulators) sum through an in-house exact accumulator (pure Rust, no FMA, one rounding at the end), so any order of adds gives the same correctly rounded sum; adopting it moves goldens once (ADR 0298).
 - Snapshots, metrics and UI extraction run on a background thread from the frozen buffer, overlapping the next tick.
 - macOS cannot pin threads to cores; use quality-of-service classes instead: user-interactive for the interactive run, background for ensemble processes, so the UI stays smooth during batch work.
+
+**Build**
+
+- Release and bench builds are profile-guided (a 24-tick full-pack training run) with a fixed CPU baseline per platform (`apple-m1` on macOS arm64, none elsewhere), never `native`; the state hash is checked identical against a plain build and across architectures (ADR 0296). `cargo test` uses plain builds.
+- The `ceteris` binary and the benches use mimalloc as global allocator once a sim-loop measurement shows at least 1 ms per tick (ADR 0297).
 
 **Ensembles and calibration**
 
