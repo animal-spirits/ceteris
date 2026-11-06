@@ -1,5 +1,5 @@
 //! Transfer ratios of the trade imbalances (specs/econ/SPEC.md, Transfers; ADR 0100 as amended
-//! by ADRs 0296, 0298, 0300 and 0315): minus each pack country's current account over its own
+//! by ADRs 0319, 0321, 0300 and 0315): minus each pack country's current account over its own
 //! GDP; the model scales it by national income and spreads the world discrepancy by income.
 
 use std::collections::BTreeMap;
@@ -26,7 +26,7 @@ pub struct Transfers {
     pub ca_2000: Vec<f64>,
     pub missing: Vec<bool>,
     /// The fixed-share mode's rho_c: the 2000 current account over the pack's `gdp` (ADRs
-    /// 0298, 0315).
+    /// 0321, 0315).
     pub share: Vec<f64>,
     /// rho_c of each year FIRST to LAST, over the country's GDP that year (ADRs 0300, 0315);
     /// `path[year - FIRST][country]`.
@@ -47,7 +47,7 @@ pub fn of_country(
     (!found.is_empty()).then(|| pairwise_sum(&found))
 }
 
-/// rho_c = -CA_c / GDP_c (ADR 0315): 0 where the current account is missing (ADR 0296) or the
+/// rho_c = -CA_c / GDP_c (ADR 0315): 0 where the current account is missing (ADR 0319) or the
 /// GDP is missing or not positive. The model spreads the world discrepancy.
 pub fn shares(ca: &[Option<f64>], gdp: &[Option<f64>]) -> Vec<f64> {
     ca.iter()
@@ -140,7 +140,7 @@ pub fn report(t: &Transfers, codes: &[String], gdp: &[f64]) -> String {
 mod tests {
     use super::*;
 
-    /// ADR 0315: rho_c = -CA_c / GDP_c, 0 where the current account (ADR 0296) or the GDP is
+    /// ADR 0315: rho_c = -CA_c / GDP_c, 0 where the current account (ADR 0319) or the GDP is
     /// missing.
     #[test]
     fn transfer_ratios_are_minus_the_current_account_over_gdp() {

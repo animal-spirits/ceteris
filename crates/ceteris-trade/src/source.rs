@@ -688,6 +688,101 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     }
 }
 
+/// [`dispatch`] at full fill (every origin ships all its orders) reduced to what it writes in
+/// `out.arrive`, which this leaves exactly as that dispatch would: the same products summed in
+/// the same order. The other outputs of `dispatch` are left as they were. For the delivered
+/// prices and lead times of the unit spending, which read only the arrivals.
+pub fn arrivals(k: &Kernel, g: usize, out: &mut Sourced) {
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    assert_eq!(
+        out.scratch.good,
+        Some(g),
+        "arrivals must follow source for good {g}"
+    );
+    let gk = k.good(g);
+    let Sourced {
+        arrive, scratch: s, ..
+    } = out;
+    arrive.iter_mut().for_each(|a| zeroed2(a, np));
+    let (w, reach, reach_abroad, inv_q) = (&s.weight, &s.reach, &s.reach_abroad, &s.inv_q);
+    let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &s.access.carry);
+    for c in 0..2 {
+        if reach.iter().chain(reach_abroad).all(|r| r[c] == 0.0) {
+            continue;
+        }
+        zeroed(&mut s.y, ng);
+        for d in (0..np).filter(|&d| reach_abroad[d][c] > 0.0) {
+            for e in gk.access.row(d) {
+                s.y[e.col as usize] += e.k * reach_abroad[d][c];
+            }
+        }
+        s.inv_y.clear();
+        s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
+        zeroed(&mut s.z, ng);
+        for a in 0..ng {
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let mut gross = 0.0;
+            for e in gk.crossings.row(a) {
+                gross += e.k * carry_a[usize::from(gc[e.col as usize])] * s.y[e.col as usize];
+            }
+            s.z[a] = gross;
+        }
+
+        zeroed(&mut s.gross_a, ng);
+        for o in (0..np).filter(|&o| w[o] != 0.0) {
+            let m = times_two_to(w[o], s.up);
+            let x = m * reach[o][c];
+            if x > 0.0 {
+                arrive[0][o][c] += x * inv_q[o];
+            }
+            for e in gk.domestic.row(o) {
+                let d = e.col as usize;
+                let x = m * e.k * reach[d][c];
+                if x != 0.0 {
+                    arrive[1][d][c] += x * inv_q[d];
+                }
+            }
+            for e in gk.access.row(o) {
+                let a = e.col as usize;
+                let x = m * e.k * s.z[a];
+                if x != 0.0 {
+                    s.gross_a[a] += x;
+                }
+            }
+        }
+
+        s.at_b.clear();
+        s.at_b.resize(ng, Inflow::default());
+        for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
+            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let inv_z = 1.0 / s.z[a];
+            for e in gk.crossings.row(a) {
+                let b = e.col as usize;
+                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                if weight == 0.0 {
+                    continue;
+                }
+                let gross = s.gross_a[a] * over(weight, inv_z, s.z[a]);
+                s.at_b[b].value[usize::from(e.lag)] += gross;
+            }
+        }
+
+        for d in (0..np).filter(|&d| reach_abroad[d][c] > 0.0) {
+            for e in gk.access.row(d) {
+                let b = e.col as usize;
+                let weight = e.k * reach_abroad[d][c];
+                if weight == 0.0 {
+                    continue;
+                }
+                let share = over(weight, s.inv_y[b], s.y[b]);
+                for (lag, &value) in s.at_b[b].value.iter().enumerate() {
+                    arrive[1 + lag][d][c] += value * share * inv_q[d];
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1055,6 +1150,36 @@ mod tests {
         let mut out = Sourced::new();
         let (price, spend) = (vec![1.0; np], vec![[1.0, 1.0]; np]);
         source(&k, 0, &price, &vec![true; np], &gamma, &spend, &mut out);
+    }
+
+    #[test]
+    fn arrivals_are_the_arrivals_of_a_full_dispatch() {
+        for seed in 0..8 {
+            let (net, wedges) = random_world(seed);
+            let k = kernel(&net, &wedges);
+            let np = net.n_provinces();
+            let mut r = rng(seed + 100);
+            let price = draw(&mut r, np, 0.5, 2.0);
+            let active: Vec<bool> = (0..np).map(|o| o % 5 != 2).collect();
+            // one class without spending, as in the unit spending of the price refresh
+            let spend: Vec<[f64; 2]> = (0..np)
+                .map(|_| [r.next() * 10.0, if seed % 2 == 0 { 0.0 } else { r.next() }])
+                .collect();
+            for g in Goods::p2().traded_goods() {
+                let full = run(&k, g, &price, &active, &spend, &vec![[1.0; 2]; np]);
+                let mut out = Sourced::new();
+                source(&k, g, &price, &active, &gammas(np), &spend, &mut out);
+                arrivals(&k, g, &mut out);
+                let bits = |a: &[Vec<[f64; 2]>]| -> Vec<u64> {
+                    a.iter().flatten().flatten().map(|x| x.to_bits()).collect()
+                };
+                assert_eq!(
+                    bits(&full.arrive),
+                    bits(&out.arrive),
+                    "seed {seed} good {g}"
+                );
+            }
+        }
     }
 
     #[test]

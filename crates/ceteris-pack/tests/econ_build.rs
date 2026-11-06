@@ -235,7 +235,7 @@ fn missing_manual_icio_stops_the_build() {
     assert!(!cache.path().join(ICIO).exists());
 }
 
-/// ADRs 0282, 0294 and 0289: p_c from PWT pl_da over the US's for 181 pack countries, the level
+/// ADRs 0282, 0317 and 0289: p_c from PWT pl_da over the US's for 181 pack countries, the level
 /// WDI's GDP at PPP implies for 21, the donor for 40; Somalia's PWT level (1.04) gives way to
 /// WDI's (0.827), and economies WDI has no GDP at PPP for (New Caledonia, Kosovo) take the
 /// donor's.

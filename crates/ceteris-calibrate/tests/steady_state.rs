@@ -228,7 +228,7 @@ fn inversion_at_given_prices_reproduces_the_shares() {
 /// ADR 0094: in the calibrated data state the pops' spending-weighted shares, each pop at its
 /// province's buyer prices and its spending (income and transfer, ADR 0100), are each country's
 /// final demand shares Omega for local goods, and for traded goods the shares stage 1 balanced
-/// (ADR 0295), which keep each country's traded total. A country with no pops (on the pack, ICIO
+/// (ADR 0318), which keep each country's traded total. A country with no pops (on the pack, ICIO
 /// territories without an economy province, such as the Ashmore and Cartier Islands) has no
 /// spending to share.
 #[test]
@@ -557,7 +557,7 @@ fn sinkhorn_is_unique_up_to_scale() {
             );
         }
         allclose(w.name, &one.r, &other.r, 1e-12, 0.0);
-        // stage 4's targets balance every good (ADR 0295): the scaling rescales no sales
+        // stage 4's targets balance every good (ADR 0318): the scaling rescales no sales
         let traded: Vec<usize> = (0..n_g).filter(|&g| inp.traded[g]).collect();
         let pick = |r: &[f64]| traded.iter().map(|&g| r[g]).collect::<Vec<_>>();
         allclose(w.name, &pick(&one.r), &vec![1.0; traded.len()], 1e-12, 0.0);
@@ -790,7 +790,7 @@ fn every_province_produces_and_pays_a_wage() {
 /// those parameters would carry them, calibrated once. Storage takes delta s of each stored
 /// good's output to replace spoilage, so its sales are no longer balanced (ADR 0299 balanced the
 /// fixture with storage off): stage 4's targets balance every good with final demand (ADR
-/// 0295), and the VA of crude oil, which has none, is rescaled by the scaling's r_g until its
+/// 0318), and the VA of crude oil, which has none, is rescaled by the scaling's r_g until its
 /// sales meet its intermediate use (its intermediate demand does not depend on its own VA, so
 /// one rescale settles it to rounding).
 fn fixture_with_storage() -> &'static (Inputs, Steady) {
@@ -1879,7 +1879,7 @@ fn supply_elasticity_is_the_enterprise_maximum() {
 }
 
 /// ADR 0100: calibration has no rescale r_g; the summary reports what replaced it, the column
-/// factors of the final demand balance (the residual of the old r_g, ADR 0295), the scaling's
+/// factors of the final demand balance (the residual of the old r_g, ADR 0318), the scaling's
 /// r_g - 1 and the balance's mu - 1, both 0 at the fixed point. On the fixture, balanced by ADR
 /// 0299, the column factors are 1 to the passes' tolerance.
 #[test]

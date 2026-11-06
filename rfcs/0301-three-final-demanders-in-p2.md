@@ -14,7 +14,7 @@ Building it (pre-P3 Task C3) leaves six choices open. ADR 0099 puts the governme
 investment demanders in country accounts, but buyers in the core sit in provinces (D1). It says
 inventory change "stays dropped, as now", but the pack's shares include it (D2). It writes g_c
 and s_c as shares of GDP, while the transfers of ADR 0100 make absorption differ from income
-(D3). RFC 0287 D1 balances each country's final demand against world sales, and ADR 0099 holds
+(D3). RFC 0308 D1 balances each country's final demand against world sales, and ADR 0099 holds
 government and investment fixed in those targets (D4). "Fixed composition" can be fixed nominal
 shares or a fixed basket (D5). The accelerator's smoothed income has no rule (D6). This RFC
 accepts ADR 0099 with these answers (ADRs 0301 to 0306).
@@ -69,7 +69,7 @@ Options:
 
 - A. Shares of final demand (absorption, income + D_c): h_c, g_c, s_c from the three ICIO
   columns, summing to 1; every pop spends its money (income and transfer) at these shares, so
-  the transfer D_c is spent by the three demanders, as RFC 0287 D3 foresaw.
+  the transfer D_c is spent by the three demanders, as RFC 0308 D3 foresaw.
 - B. Shares of GDP as ADR 0099 writes; households spend 1 - g_c - s_c of income and all of D_c.
 
 Recommendation: A, because it is the data's own split of final demand and needs no
@@ -78,7 +78,7 @@ household-only rule for the transfer.
 Decision: A, Antonio, 2026-11-03.
 Row: ADR 0303
 
-### D4. Which final demand does the balance of RFC 0287 D1 (ADR 0295) rescale?
+### D4. Which final demand does the balance of RFC 0308 D1 (ADR 0318) rescale?
 
 Found: on the installed pack the balance's column factors run from 0.48 to 3.24 (data state)
 and 1.27 to 3.17 (pass 1). Machinery and vehicles are bought mostly by investment.
