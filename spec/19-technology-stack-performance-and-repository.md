@@ -81,6 +81,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 
 - Double-buffered state: each system reads tick t and writes t+1; no locks in hot paths.
 - Zero allocation in hot loops: preallocated scratch per thread (rayon `map_init`), arenas for transient objects.
+- A speed change that claims no output change shows the state hash and the ledger journal identical over 24 full-pack ticks at 1 thread and at all threads, on the Mac and on Linux x86, and reports the criterion tick and a per-system sim-loop timing (ADR 0294). Ledger money sums are integers, exact in any order, so posting may sum by account bucket in any partition; only an overflow check needs an order (ADR 0294).
 - Shipments in a timing wheel (ring buffer indexed by arrival tick): O(1) insert and delivery, no heap.
 - Multi-rate scheduling; war sub-ticks only while a war is active; rare events by sampled next-event times, not per-tick coin flips.
 - Closed-form PIGL demand (8.6) and a single kernel product for trade (8.3): goods markets have no within-tick iterative solver. Asset-market clearing (9.9) is the only within-tick iteration.
@@ -102,14 +103,21 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - `exp` and `ln` in logit and migration choices use fixed-coefficient polynomial approximations implemented once in SIMD; utilities that change by small additive amounts update multiplicatively.
 - Pops are already partitioned by labour status, so status-dependent logic runs as separate branch-free loops per partition.
 - FMA is used explicitly and always (`mul_add`), never left to the compiler, so results match across machines.
+- `unsafe` is forbidden except unchecked indexing (`get_unchecked`, `get_unchecked_mut`) in a crate's `hot` module, after safe restructuring was tried: each block has a `SAFETY:` comment and a `debug_assert!` of its bound, a safe twin behind a cargo feature is compared bit for bit in CI, and the PR shows at least 2% of the tick (ADR 0295).
 
 **Parallelism**
 
 - M-series chips mix performance and efficiency cores, so equal static chunks leave fast cores idle. Split work into many small chunks with fixed boundaries independent of thread count, let rayon work-steal, write results to fixed slots, and reduce in fixed order: scheduling varies, results do not.
 - Country-local systems (fiscal, politics, labour) run one task per country, sorted largest first for load balance.
 - Systems with disjoint read and write sets run concurrently, from a static dependency graph built from declared read/write sets.
+- Scatter accumulators whose fixed order blocks a decomposition (first the T2b dispatch accumulators) sum through an in-house exact accumulator (pure Rust, no FMA, one rounding at the end), so any order of adds gives the same correctly rounded sum; adopting it moves goldens once (ADR 0298).
 - Snapshots, metrics and UI extraction run on a background thread from the frozen buffer, overlapping the next tick.
 - macOS cannot pin threads to cores; use quality-of-service classes instead: user-interactive for the interactive run, background for ensemble processes, so the UI stays smooth during batch work.
+
+**Build**
+
+- Release and bench builds are profile-guided (a 24-tick full-pack training run) with a fixed CPU baseline per platform (`apple-m1` on macOS arm64, none elsewhere), never `native`; the state hash is checked identical against a plain build and across architectures (ADR 0296). `cargo test` uses plain builds.
+- The `ceteris` binary and the benches use mimalloc as global allocator once a sim-loop measurement shows at least 1 ms per tick (ADR 0297).
 
 **Ensembles and calibration**
 

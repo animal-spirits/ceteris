@@ -1,32 +1,36 @@
 # Ceteris Paribus
 
-A deterministic, forkable, agent-based world simulator starting on
-1 January 2000. The design is in [spec/](spec/README.md), a snapshot of the
-living design document.
+A deterministic, forkable, agent-based world simulator starting on 1 January 2000 and
+running open-ended. The economic core is a province-level production-and-trade model; the
+app is a native desktop map. Any state variable or parameter can be edited before a run
+or at any tick. The design is in [spec/](spec/README.md); decisions are rows in
+[spec/rows.toml](spec/rows.toml) with proposals in [rfcs/](rfcs/README.md).
 
 ## Status
 
-Phase P1 (World and map) of eleven is complete; there is no economics yet.
+Pre-P3. P0 (foundations), P1 (world and map), P2 (economic core) and the native app shell
+are done; the pre-P3 audit is in progress, with the C6 recalibration and the C7 benchmark
+rerun still to pass before P3. The order of phases is in Section 21 of the design.
 
-- P0 gate: a 10-province toy world runs 1,200 ticks with identical state hashes across
-  runs, across 1 and 8 threads, and after restore-and-replay from any snapshot.
-- P1 gate: 4,796 provinces at 2000 borders render at 60 fps; clicking a province shows
-  its attributes; the freight-cost mode colours every province by least cost per tonne
-  from a chosen origin over road, rail, sea and air.
-- County layer (ADR 0009): 53,084 counties from geoBoundaries, nested in provinces and
-  drawn from zoom 4; oversized provinces are split along county borders.
-- Map (ADRs 0010, 0088, 0250): a native desktop app (winit, Slint panels, a wgpu globe
-  drawn into a texture) colours provinces from a per-feature texture and runs the economy
-  on a sim thread.
+- Rust only: the data pipeline, reference model and calibration are crates driven by the
+  `ceteris` CLI (ADR 0113). No Python or web code remains.
+- App (ADRs 0011, 0088): `app/` is Slint panels over a wgpu globe, running the economy on a
+  sim thread. Tauri and the web map are gone.
+- World: 4,796 provinces at 2000 borders and 53,084 counties, built into a pack from pinned
+  sources; each user fetches the source data themselves.
+- Determinism: golden hashes across runs, thread counts and snapshot replay.
+- CI: GitHub Actions on a self-hosted macOS runner. A nightly full-pack gate runs there
+  ([docs/pack-runner.md](docs/pack-runner.md)). Pack-dependent goldens move with each
+  pack rebuild and re-bless.
 
-The data licence audit is in `crates/ceteris-pack/config/sources.toml` (ADR 0005).
+Source licences are in `crates/ceteris-pack/config/sources.toml` (ADRs 0005, 0050).
 
 ## Layout
 
 ```
-spec/           the design, one file per section; rows.toml registry
-specs/          module specs and plans (DESIGN.md is a frozen stub)
-rfcs/           proposals (RFCs, incl. the former ADRs 0001-0281) and their decisions
+spec/           the design, one file per section; rows.toml decision registry
+specs/          module specs (SPEC.md) and plans (PLAN.md); DESIGN.md is a frozen stub
+rfcs/           proposals and their decisions, incl. the former ADRs 0001-0281
 docs/research/  research index
 tools/rows/     registry check (cargo run -p ceteris-rows -- check)
 crates/
@@ -46,6 +50,7 @@ crates/
   ceteris-cli/  the `ceteris` binary: export, run, pack, reference, calibrate
 app/            native desktop app (Slint, wgpu), its own cargo workspace
 tests/golden/   stored hashes of golden scenarios
+scripts/        clippy bans check, nightly pack gate
 ```
 
 Further crates arrive in the phases that need them (Section 19.3).
@@ -85,12 +90,17 @@ Golden hashes change only deliberately: `CETERIS_BLESS=1 cargo test --test golde
 `CETERIS_BLESS=1 cargo test -p ceteris-pack --test build --test econ_build` for the pack's
 digests, then explain why in the commit.
 
-The rules for contributors and coding agents are in Section 21.2 of the design: spec
-first, tests before implementation, one system per task, golden runs, no silent
-tuning, decisions recorded as ADRs, performance gates.
+The rules for contributors and coding agents are in [CLAUDE.md](CLAUDE.md) and Section 21.2
+of the design: spec first, tests before implementation, one system per task, golden runs,
+no silent tuning, decisions recorded as RFCs and rows, performance gates. Rust is pinned in
+`rust-toolchain.toml`; checks are `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `scripts/check_clippy_bans.sh` and `cargo test --workspace`,
+and the same in `app/`.
 
 ## Licence
 
-Closed source for now (ADR 0005): some data sources permit no redistribution, and the
-project opens once they are replaced or cleared. The intended licence on opening is MIT
-or Apache-2.0 for code; bundled data keeps its source licence.
+Open source and non-commercial (owner ruling 28 October 2026, superseding the closed-source
+fallback of ADR 0005). Code is dual-licensed MIT or Apache-2.0
+([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)). Data is never bundled
+when its source bars redistribution; each user's pipeline downloads it under the source's
+own licence.

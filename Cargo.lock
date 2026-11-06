@@ -467,6 +467,7 @@ dependencies = [
  "h3o",
  "icu_casemap",
  "icu_normalizer",
+ "libm",
  "proptest",
  "reqwest",
  "rstar",
