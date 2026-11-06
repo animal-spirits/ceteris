@@ -5,6 +5,9 @@
 //!
 //! cargo run --release -p ceteris-econ --example identity -- [--ticks N] [--threads T] [--timing]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::sync::Arc;
 
 use ceteris_core::snapshot::{Encoder, hex, state_hash};

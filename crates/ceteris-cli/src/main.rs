@@ -67,6 +67,10 @@
 //! (default `data/raw/air-shares-2000`), printing the readers' notes and each outer step. It
 //! exits 1 when the fit stops.
 
+/// mimalloc as global allocator (ADR 0297): allocation never touches results.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
