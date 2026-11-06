@@ -185,6 +185,8 @@ pub struct Pass {
     pub change: f64,
     pub sweeps: usize,
     pub sinkhorn_residual: f64,
+    /// (G,) beta_g of this pass's final demand balance ([`Steady::column_factor`] at the last).
+    pub column_factor: Vec<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -1424,9 +1426,16 @@ pub fn calibrate_from(
             change,
             sweeps: scaling.sweeps,
             sinkhorn_residual: scaling.residual,
+            column_factor: ras.column_factor.clone(),
         });
+        let (lo, hi) = ras
+            .column_factor
+            .iter()
+            .fold((f64::INFINITY, 0.0f64), |(lo, hi), &f| {
+                (lo.min(f), hi.max(f))
+            });
         progress(&format!(
-            "pass {passes}: change {}, sinkhorn {} sweeps, residual {}",
+            "pass {passes}: change {}, sinkhorn {} sweeps, residual {}, ras factors {lo:.3} to {hi:.3}",
             sci(change),
             scaling.sweeps,
             sci(scaling.residual)
