@@ -23,6 +23,7 @@ use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
+use ceteris_core::timing::{self, NONE};
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
 
@@ -448,7 +449,10 @@ pub fn produce(w: &mut EconWorld) {
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
     let mut parts = Vec::new();
-    local::chain_all(w);
+    {
+        let _span = timing::span("e2.local_chain", NONE);
+        local::chain_all(w);
+    }
     for i in 0..inp.n_provinces() {
         let pops = lay.pops(i);
         let effective: Vec<f64> = pops
@@ -862,6 +866,7 @@ pub fn dispatch(w: &mut EconWorld) {
         pop: &sc.pop_spend,
         class: &sc.class_spend,
     };
+    let goods_span = timing::span("t2b.goods", NONE);
     (
         &mut sc.sourced,
         &mut sc.columns,
@@ -871,22 +876,31 @@ pub fn dispatch(w: &mut EconWorld) {
         .into_par_iter()
         .enumerate()
         .for_each(|(g, (r, col, legs, flows))| {
+            let gi = g as u32;
+            let _good = timing::span("t2b.good", gi);
             col.gather(&markets.price, &markets.active, g, ng);
             col.fill.clear();
             col.fill.extend((0..np).map(|o| fill[o * ng + g]));
-            dispatch_good(kernel, g, &col.price, &col.fill, r);
+            {
+                let _span = timing::span("t2b.kernel", gi);
+                dispatch_good(kernel, g, &col.price, &col.fill, r);
+            }
             let r = &*r;
             rayon::join(
                 || {
+                    let _span = timing::span("t2b.record", gi);
                     let (pc, gc) = (&net.province_country, &net.gateway_country);
                     flows.record(kernel, pc, gc, g, &col.price, r);
                 },
                 || {
+                    let _span = timing::span("t2b.legs", gi);
                     buyer_orders(lay, spending, g, r, legs);
                     trade_legs(inp, acc, kernel, g, r, legs);
                 },
             );
         });
+    drop(goods_span);
+    let moves_span = timing::span("t2b.moves", NONE);
     let sourced = std::mem::take(&mut w.scratch.sourced);
     let payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
@@ -935,9 +949,14 @@ pub fn dispatch(w: &mut EconWorld) {
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    drop(moves_span);
     // every good's buyers' payments, then its legs; nothing above reads money
     let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
-    w.ledger.post_all(&blocks, &mut w.scratch.post);
+    {
+        let _span = timing::span("t2b.post", NONE);
+        w.ledger.post_all(&blocks, &mut w.scratch.post);
+    }
+    let _transit = timing::span("t2b.transit", NONE);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
     let in_flight = w.pipeline.in_flight_all();

@@ -15,7 +15,8 @@
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
-//!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR
+//!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
+//!     [--timing] --out DIR
 //! ```
 //!
 //! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
@@ -29,7 +30,9 @@
 //! prints the factors' range. `--no-drift` turns the initial drift off (S23, ADR 0103), as the
 //! P2 gate runs. `--history` also writes the per-tick series of
 //! `ceteris_econ::history`, every N ticks (default 1), as Arrow with zstd compression or, with
-//! `--history-format csv`, as CSV.
+//! `--history-format csv`, as CSV. `--timing` records wall-time spans (`ceteris_core::timing`:
+//! the tick, each system, the T2b phases and each good's T2b task) into `timing.csv` and prints
+//! each span's median per tick; the run's state is the same as without it (ADR 0294).
 //!
 //! `reference solve` solves the GE reference of a `ceteris export` directory and writes it with
 //! the column layout of the run export (`prices`, `wages`, `enterprises`, `flows`, `home`) plus
@@ -64,7 +67,8 @@
 //! (default `data/raw/air-shares-2000`), printing the readers' notes and each outer step. It
 //! exits 1 when the fit stops.
 
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -73,6 +77,7 @@ use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
 use ceteris_calibrate::{border, gravity};
 use ceteris_core::sim::Sim;
+use ceteris_core::timing;
 use ceteris_econ::equilibrium::Equilibrium;
 use ceteris_econ::export::{write_inputs, write_run};
 use ceteris_econ::fixture::small_world;
@@ -104,7 +109,8 @@ const USAGE: &str = "usage:
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
-    [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]] --out DIR";
+    [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
+    [--timing] --out DIR";
 
 /// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
 const PERTURBATION: f64 = 0.1;
@@ -147,6 +153,7 @@ struct Args {
     history: bool,
     history_every: Option<u32>,
     history_format: Option<Format>,
+    timing: bool,
 }
 
 fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -155,6 +162,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let (mut equilibrium, mut no_drift) = (None, false);
     let (mut data_state, mut perturb) = (false, None);
     let (mut history, mut history_every, mut history_format) = (false, None, None);
+    let mut timing = false;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fixture" => source = Some(Source::Fixture),
@@ -174,6 +182,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
                 perturb = Some(n.parse().map_err(|_| format!("bad seed '{n}'"))?);
             }
             "--history" => history = true,
+            "--timing" => timing = true,
             "--history-every" => {
                 let n = args.next().ok_or("--history-every needs a count")?;
                 match n.parse::<u32>() {
@@ -208,6 +217,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         history,
         history_every,
         history_format,
+        timing,
     })
 }
 
@@ -221,10 +231,11 @@ fn export(args: &Args) -> Result<(), String> {
         || args.history
         || args.history_every.is_some()
         || args.history_format.is_some()
+        || args.timing
     {
         return Err(
             "--ticks, --frictionless, --no-drift, --from-equilibrium, --data-state, --perturb, --history, \
-             --history-every and --history-format belong to run"
+             --history-every, --history-format and --timing belong to run"
                 .into(),
         );
     }
@@ -288,16 +299,71 @@ fn run(args: &Args) -> Result<(), String> {
         );
     }
     let mut sim = Sim::new(world, schedule(), SEED);
+    if args.timing {
+        timing::enable();
+    }
     if args.history {
         let history = run_recorded(&mut sim, ticks, args.history_every.unwrap_or(1))
             .map_err(|v| v.to_string())?;
         write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
-        return history
+        history
             .write(&args.out, args.history_format.unwrap_or(Format::Arrow))
-            .map_err(|e| e.to_string());
+            .map_err(|e| e.to_string())?;
+    } else {
+        sim.run_until(ticks).map_err(|v| v.to_string())?;
+        write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
     }
-    sim.run_until(ticks).map_err(|v| v.to_string())?;
-    write_run(&args.out, sim.world()).map_err(|e| e.to_string())
+    if args.timing {
+        write_timing(&args.out, &timing::take()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// `timing.csv`, one row per span, and each span's median per tick in ms on stdout: spans of
+/// one name in one tick add up, except `t2b.good`, which is the tick's slowest good.
+fn write_timing(out: &Path, spans: &[timing::Span]) -> std::io::Result<()> {
+    let mut csv = String::from("tick,name,good,thread,start_ns,end_ns\n");
+    let mut per_tick: BTreeMap<(&str, u32), f64> = BTreeMap::new();
+    for s in spans {
+        let field = |v: u32| {
+            if v == timing::NONE {
+                String::new()
+            } else {
+                v.to_string()
+            }
+        };
+        csv += &format!(
+            "{},{},{},{},{},{}\n",
+            s.tick,
+            s.name,
+            field(s.good),
+            field(s.thread),
+            s.start,
+            s.end
+        );
+        let ms = (s.end - s.start) as f64 / 1e6;
+        let slot = per_tick.entry((s.name, s.tick)).or_default();
+        *slot = if s.name == "t2b.good" {
+            slot.max(ms)
+        } else {
+            *slot + ms
+        };
+    }
+    std::fs::create_dir_all(out)?;
+    std::fs::write(out.join("timing.csv"), csv)?;
+    let mut by_name: BTreeMap<&str, Vec<f64>> = BTreeMap::new();
+    for ((name, _), ms) in per_tick {
+        by_name.entry(name).or_default().push(ms);
+    }
+    for (name, mut ms) in by_name {
+        ms.sort_by(f64::total_cmp);
+        println!(
+            "{name:18} median {:8.3} ms over {} ticks",
+            ms[ms.len() / 2],
+            ms.len()
+        );
+    }
+    Ok(())
 }
 
 /// `pack check-sources [--profile research|release]`: exit 1 when the manifest has problems.
