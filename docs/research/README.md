@@ -106,6 +106,7 @@ Studies kept in the project's shared folder (not in the repository), by path the
 - research/equipment-designers-2026-10-28.html
 - research/f32-recheck-2026-10-29.md
 - research/financial-markets-2026-10-28.html
+- research/held-out-validation-sources-2026-11-04.md
 - research/hohmann-2026-10-29.html
 - research/identity-change-2026-10-28.html
 - research/initial-conditions-only-2026-10-29.html
