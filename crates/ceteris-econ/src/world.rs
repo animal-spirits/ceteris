@@ -1991,11 +1991,19 @@ fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeErr
 }
 
 impl Encode for EconWorld {
-    /// The inputs' digest without the network, the network's digest and both parameter sets,
-    /// then the dynamic state.
+    /// The inputs' digest without the network, the network's digest, the applied tariffs
+    /// (edits change them mid-run) and both parameter sets, then the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         encode_hash(e, &self.base_digest);
         encode_hash(e, &self.network_digest);
+        let tariff: Vec<u32> = self
+            .inputs
+            .wedges
+            .tariff
+            .iter()
+            .map(|t| t.to_bits())
+            .collect();
+        e.u32s(&tariff);
         encode_params(
             e,
             &self.params,
@@ -2271,6 +2279,8 @@ impl State for EconWorld {
             return Err(DecodeError("snapshot belongs to other inputs".into()));
         }
         let network = decode_hash(d)?;
+        let tariff: Vec<f32> = d.u32s()?.into_iter().map(f32::from_bits).collect();
+        expect_len("tariffs", tariff.len(), self.inputs.wedges.tariff.len())?;
         let params = decode_params(
             d,
             (self.inputs.one_vintage(), self.params.technology),
@@ -2353,10 +2363,17 @@ impl State for EconWorld {
             profit,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
-        if network != self.network_digest || params != self.params || trade != self.trade {
-            let inputs = if network == self.network_digest {
-                Arc::clone(&self.inputs)
-            } else {
+        let same_tariff = tariff
+            .iter()
+            .zip(&self.inputs.wedges.tariff)
+            .all(|(a, b)| a.to_bits() == b.to_bits());
+        if network != self.network_digest
+            || !same_tariff
+            || params != self.params
+            || trade != self.trade
+        {
+            let mut inputs = (*self.inputs).clone();
+            if network != self.network_digest {
                 let (_, net) = self
                     .networks
                     .iter()
@@ -2364,10 +2381,10 @@ impl State for EconWorld {
                     .ok_or_else(|| {
                         DecodeError("snapshot names a network this run has not had".into())
                     })?;
-                let mut inputs = (*self.inputs).clone();
                 inputs.network = (**net).clone();
-                Arc::new(inputs)
-            };
+            }
+            inputs.wedges.tariff = tariff;
+            let inputs = Arc::new(inputs);
             restored.configure(inputs, network, params, trade);
         }
         Ok(restored)
