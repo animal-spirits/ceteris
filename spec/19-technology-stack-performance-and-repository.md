@@ -21,7 +21,7 @@ An alternative worth noting: the Julia ecosystem now hosts a data-driven macro A
 
 ### 19.2 Performance budget (single run, 8-core desktop)
 
-Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of unified memory. Target 6 to 12 ticks per second (0.5 to 1 simulated year per second), about 80 to 160 ms per tick. Memory target: under 6 GB for one interactive run so ensembles can run alongside.
+Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of unified memory. Target 6 to 12 ticks per second (0.5 to 1 simulated year per second), about 80 to 160 ms per tick. Memory target: under 6 GB for one interactive run so ensembles can run alongside. On the 10-goods P2 pack the sim-loop tick measured about 34 ms on a loaded Mac after the speed stack, against its 35 ms budget; the 160 ms ceiling stands (ADR 0325).
 
 | System | Work per tick | Budget |
 | --- | --- | --- |
