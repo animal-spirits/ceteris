@@ -1424,6 +1424,7 @@ fn nu_fit_is_monotone_and_bracketed() {
 /// them: the fixture has none that matter, and E holds there to the finite difference's
 /// precision (1.4e-10 relative); on the pack the gap is reported.
 #[test]
+#[ignore = "multi-hour; nightly slow job"]
 fn own_price_elasticity_matches_finite_difference() {
     const H: f64 = 1e-6;
     for w in worlds() {
@@ -1528,6 +1529,7 @@ fn traded_cell_with_no_buyer_has_the_study_elasticity() {
 /// fixture has none that matter, and the entries hold there to the finite difference's
 /// precision; on the pack the gap is reported.
 #[test]
+#[ignore = "multi-hour; nightly slow job"]
 fn cross_price_elasticity_matches_finite_difference() {
     const H: f64 = 1e-6;
     let trade = ceteris_trade::TradeParams::default();
