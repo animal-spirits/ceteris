@@ -149,7 +149,7 @@ agriculture, industry or services missing, the known shares keep their goods and
 do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
 rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas
-extraction VA (B06, B09 output less their inputs, without refining; ADR 0281, proposed) to rents,
+extraction VA (B06, B09 output less their inputs, without refining; ADR 0281) to rents,
 out of its group (all of industry where industry less manufacturing is too small) and at most the
 largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
@@ -1053,7 +1053,7 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
 3. Before the stages, `ceteris calibrate --pack` fits the border friction nu of each friction
    group (P05, ADRs 0092, 0276; `ceteris_calibrate::border`): a group is a theta class, except
    class 3, each of whose goods (crude oil, gas and refined fuels; coal and other mining) is a
-   group of its own (ADR 0276, proposed: one class value set by crude oil took mining below its
+   group of its own (ADR 0276: one class value set by crude oil took mining below its
    own share and the calibration failed). It is fitted so that the cross-border share of the
    group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
