@@ -313,4 +313,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0323 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md) | 21 |
 | 0324 | [Re-rate of the 1.0 plan at the pre-P3 gate, amending ADR 0248](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 21 |
 | 0325 | [Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 19.2 |
+| 0326 | [Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](../rfcs/0315-snapshot-chunks-are-zstd-canonical-bytes.md) | 14.3 |
 <!-- rows:end -->

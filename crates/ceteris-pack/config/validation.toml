@@ -15,6 +15,7 @@ url = "https://www.wto.org/english/res_e/reser_e/AdvancedGuideFiles.zip"
 [[file]]
 source = "wdi-ppp"
 name = "wdi_NY.GDP.MKTP.PP.CD.zip"
+read_by = ["crates/ceteris-pack/tests/econ_build.rs"]
 sha256 = "061eaf7fff24d6cc2d380b3559245abb62e25f032acbc765f20ce2d3ceb1fc4c"
 bytes = 95235
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.PP.CD?downloadformat=csv"
@@ -23,6 +24,7 @@ url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.PP.CD?downloadforma
 [[file]]
 source = "wid"
 name = "wid_all_data.zip"
+read_by = ["crates/ceteris-pack/tests/econ_build.rs"]
 sha256 = "68766d928869de7cf3b85ead83a55152061feb8037f444a21597927f0c9f8f70"
 bytes = 886891414
 url = "https://wid.world/bulk_download/wid_all_data.zip"
