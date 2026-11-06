@@ -5,6 +5,7 @@ use crate::invariant::Violation;
 use crate::rng::Seed;
 use crate::schedule::Schedule;
 use crate::snapshot::{self, DecodeError, Decoder, Encode, Hash, SnapshotStore};
+use crate::timing;
 
 pub const SNAPSHOT_EVERY: u32 = 12;
 
@@ -125,11 +126,20 @@ impl<W: State> Sim<W> {
 
     pub fn step(&mut self) -> Result<(), Violation> {
         let t = self.tick;
-        self.world.begin_tick();
+        timing::set_tick(t);
+        let _tick = timing::span("tick", timing::NONE);
+        {
+            let _span = timing::span("begin_tick", timing::NONE);
+            self.world.begin_tick();
+        }
         self.schedule.run_tick(&mut self.world, self.seed, t);
-        self.world.end_tick(t)?;
+        {
+            let _span = timing::span("end_tick", timing::NONE);
+            self.world.end_tick(t)?;
+        }
         self.tick = t + 1;
         if self.tick.is_multiple_of(SNAPSHOT_EVERY) {
+            let _span = timing::span("snapshot", timing::NONE);
             self.snapshot();
         }
         self.apply_interventions();

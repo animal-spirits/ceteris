@@ -12,4 +12,5 @@ pub mod rows;
 pub mod schedule;
 pub mod sim;
 pub mod snapshot;
+pub mod timing;
 pub mod toy;
