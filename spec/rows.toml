@@ -1520,3 +1520,13 @@ sections = "19.4"
 rows = "0314"
 topic = "[New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md)"
 sections = "21"
+
+[[entry]]
+rows = "0322"
+topic = "[Ensemble spread at P3 comes from register priors](../rfcs/0309-ensemble-spread-from-register-priors.md)"
+sections = "14, 21"
+
+[[entry]]
+rows = "0323"
+topic = "[P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md)"
+sections = "21"
