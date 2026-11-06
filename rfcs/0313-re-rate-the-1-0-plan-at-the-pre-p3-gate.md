@@ -1,6 +1,6 @@
 # RFC 0313. Re-rate the 1.0 plan at the pre-P3 gate (amends ADR 0248)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-06
 Design sections: 19.2, 21
 Release: 1.0, pre-P3
@@ -88,7 +88,7 @@ Options:
 Recommendation: A, because the scope changes are known and the only soft part, the pace basis,
 is already labelled a report. The B and C hours stay an estimate until the owner overwrites them.
 
-Decision: pending, Antonio.
+Decision: A, Antonio, 2026-11-06 ("Merge 276", recommended option taken).
 Row: ADR 0324
 
 ### D2. Does the tick budget need re-rating?
@@ -109,7 +109,7 @@ Options:
 Recommendation: A, because the budget is met and the timings come from a loaded machine, so
 tightening on them would fit noise.
 
-Decision: pending, Antonio.
+Decision: A, Antonio, 2026-11-06 ("Merge 276", recommended option taken).
 Row: ADR 0325
 
 ## Spec changes
