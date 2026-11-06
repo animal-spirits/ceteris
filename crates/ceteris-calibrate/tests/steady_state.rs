@@ -1904,6 +1904,20 @@ fn r_g_removed_and_residual_reported() {
         };
         let (factor, residual) = (floats("column_factor"), floats("balance_residual"));
         assert_eq!((factor.len(), residual.len()), (n_g, n_g), "{}", w.name);
+        assert_eq!(
+            s.info.pass_history.last().map(|p| &p.column_factor),
+            Some(&s.info.column_factor),
+            "{}: the last pass's factors are the settled ones",
+            w.name
+        );
+        assert!(
+            s.info
+                .pass_history
+                .iter()
+                .all(|p| p.column_factor.len() == n_g),
+            "{}: every pass records its factors",
+            w.name
+        );
         for g in 0..n_g {
             eprintln!(
                 "{}: good {g} column factor {:.6} residual {:.3e}",
