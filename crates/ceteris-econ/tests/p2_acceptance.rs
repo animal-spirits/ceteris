@@ -766,6 +766,7 @@ impl Census {
 /// every active price, every wage and the world price index finite and positive after each
 /// tick. Prints the census of negative money, negative dividend pools and stockouts.
 #[test]
+#[ignore = "about 2 minutes on the pack; nightly job"]
 fn hundred_years_without_violation() {
     let Some(inputs) = calibrated_pack() else {
         return;
