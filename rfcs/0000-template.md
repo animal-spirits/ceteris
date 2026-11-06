@@ -3,6 +3,7 @@
 Status: draft | proposed | accepted | rejected | deferred
 Date: YYYY-MM-DD
 Design sections: <spec sections this changes, e.g. 8.2, 17.1>
+Release: <1.0 and its phase, or 1.x (ADR 0314)>
 Research: <links to the studies, each listed in docs/research/README.md>
 
 ## Summary
