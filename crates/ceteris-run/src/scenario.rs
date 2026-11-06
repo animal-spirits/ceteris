@@ -43,7 +43,7 @@ impl fmt::Display for ScenarioError {
 
 impl std::error::Error for ScenarioError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EditSource {
     User,

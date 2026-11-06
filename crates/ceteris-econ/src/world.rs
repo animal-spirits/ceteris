@@ -1624,6 +1624,19 @@ impl EconWorld {
         );
     }
 
+    /// Replaces the applied tariffs between ticks, an ex-post policy edit: the kernel is
+    /// rebuilt as in [`EconWorld::set_network`] and the digest follows.
+    pub fn set_wedges(&mut self, wedges: ceteris_trade::network::Wedges) {
+        let mut inputs = (*self.inputs).clone();
+        inputs.wedges = wedges;
+        self.configure(
+            Arc::new(inputs),
+            self.network_digest,
+            self.params.clone(),
+            self.trade.clone(),
+        );
+    }
+
     /// Replaces the economic parameters between ticks, an ex-post intervention: the layout
     /// is rebuilt under them and the dynamic state stands. A structural change (see
     /// [`structural_digest`]) moves a calibrated world off its steady state, the PIGL
