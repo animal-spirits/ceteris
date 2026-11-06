@@ -13,7 +13,7 @@
 - `tests/golden/p2-pack.txt` re-blessed for the C6 calibration tables (scratch pack; the owner's
   installed pack is unchanged).
 
-### BEHAVIOUR: trade imbalances as transfers, r_g removed (ADR 0100, RFC 0287 D1 to D6)
+### BEHAVIOUR: trade imbalances as transfers, r_g removed (ADR 0100, RFC 0308 D1 to D6)
 
 - Each country receives D_c = s_c Y each tick from one world transfer account (Y last tick's
   world income), paid to its pops by income after the rebates; the account nets to zero every
@@ -23,11 +23,11 @@
   snapshot only where some share is nonzero.
 - Pack: `econ_countries` gains `ca_2000`, `ca_missing`, `transfer` and `transfer_2000` to
   `transfer_2024` from WDI BN.CAB.XOKA.CD (pinned); missing current accounts at 0, the world
-  discrepancy spread pro rata to GDP (ADRs 0296, 0298, 0300). A pack without them loads with no
+  discrepancy spread pro rata to GDP (ADRs 0319, 0321, 0300). A pack without them loads with no
   transfers, so the installed pack does not move until the C6 rebuild.
 - Calibration: no r_g. V and VA stay at the data; each pass balances every country's traded
-  final demand biproportionally (`balance::balance`, ADR 0295) and stage 4 inverts PIGL on the
-  balanced shares at income + D_c (ADR 0297). The summary and the tables' metadata report
+  final demand biproportionally (`balance::balance`, ADR 0318) and stage 4 inverts PIGL on the
+  balanced shares at income + D_c (ADR 0320). The summary and the tables' metadata report
   `column_factor` (the residual of the old r_g), `balance_residual` (the scaling's r_g - 1) and
   `balance_mu`; `r` is gone. The export writes `countries.transfer` only where transfers are on.
 - Fixture (ADR 0299): its traded VA is scaled by the r_g its calibration solved before
@@ -100,7 +100,7 @@
   `price_level_source`). No fixture golden moves; the installed pack is unchanged until
   reinstall.
 
-### Price level of domestic absorption (ADR 0294, RFC 0282 D7; C1e, built, not installed)
+### Price level of domestic absorption (ADR 0317, RFC 0282 D7; C1e, built, not installed)
 
 - RFC 0282 D7, Antonio, 2026-11-01: PWT 11 pl_da (domestic absorption, C + I + G) over the US's
   replaces pl_gdpo as p_c's primary source. The first answer, pl_gdpe, was void: PWT 11 has no

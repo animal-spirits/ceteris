@@ -1,4 +1,4 @@
-# RFC 0287. Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)
+# RFC 0308. Trade imbalances: balanced final demand, current-account shares and the observed path (amends ADR 0100)
 
 Status: accepted
 Date: 2026-11-03
@@ -42,7 +42,7 @@ country's traded total, and the factors show where the data's final demand and i
 disagree.
 
 Decision: A, Antonio, 2026-11-03.
-Row: ADR 0295
+Row: ADR 0318
 
 ### D2. What happens to missing current accounts and to the world discrepancy?
 
@@ -62,7 +62,7 @@ Recommendation: B, because it leaves no country's position to a residual and nee
 year's data.
 
 Decision: B, Antonio, 2026-11-03. It replaces ADR 0100's residual rule.
-Row: ADR 0296
+Row: ADR 0319
 
 ### D3. Who spends D_c before the government and investment demanders of ADR 0099?
 
@@ -75,7 +75,7 @@ Recommendation: A, because the imbalance enters the model now and moves to the t
 demanders with ADR 0099 without changing its source.
 
 Decision: A, Antonio, 2026-11-03.
-Row: ADR 0297
+Row: ADR 0320
 
 ### D4. Which world GDP divides the current accounts?
 
@@ -88,7 +88,7 @@ Recommendation: A, because the shares then sum over the economies the model has,
 uses.
 
 Decision: A, Antonio, 2026-11-03.
-Row: ADR 0298
+Row: ADR 0321
 
 ### D5. How does the fixture, which has no current accounts, meet D1?
 
@@ -127,7 +127,7 @@ Row: ADR 0300
 ## Spec changes
 
 - 9.5: P2 to P4 carry the observed imbalances as exogenous transfers through one world account
-  (ADRs 0100, 0295 to 0300).
+  (ADRs 0100, 0299, 0300, 0318 to 0321).
 - 15.4: scores of runs on the observed path are conditional forecasts (ADR 0100).
-- 16: WDI BN.CAB.XOKA.CD, current accounts 2000 to 2024 (ADRs 0100, 0296, 0300).
+- 16: WDI BN.CAB.XOKA.CD, current accounts 2000 to 2024 (ADRs 0100, 0319, 0300).
 - 17.2: S22, the transfer switch (ADR 0100).

@@ -7,7 +7,7 @@ use crate::steady::{Info, Steady};
 
 impl Info {
     /// The summary's entries: the final demand balance's column factors and residuals (ADR
-    /// 0295; no r_g since ADR 0100), the passes and their history, the Sinkhorn sweeps and
+    /// 0318; no r_g since ADR 0100), the passes and their history, the Sinkhorn sweeps and
     /// residual, the weight spread per good and the time.
     pub fn json(&self) -> Vec<(String, Json)> {
         let floats = |v: &[f64]| Json::List(v.iter().map(|&x| Json::Float(x)).collect());

@@ -142,5 +142,5 @@ Row: ADR 0310
   `owner_c`) rather than a separate `econ_foreign.arrow`, as the labour and wealth shares are.
   Foreign dividends run through E4, the base point, the steady state, export, GE reference and
   calibration's steady state; the stability blocks still take each pool as wholly domestic.
-- The installed pack needs a rebuild (C6): w0, the profit pools, A and the balance of RFC 0287 D1
+- The installed pack needs a rebuild (C6): w0, the profit pools, A and the balance of RFC 0308 D1
   all move.
