@@ -313,4 +313,22 @@ mod tests {
         assert_eq!(wb.at("null", 18).unwrap().state_hash(), parent);
         assert_ne!(wb.at("slow_wages", 18).unwrap().state_hash(), parent);
     }
+
+    #[test]
+    fn tariff_edit_survives_snapshot_restore() {
+        use ceteris_core::snapshot::{canonical, decode_canonical_with};
+
+        let mut edited = world();
+        let before = canonical(0, &edited);
+        let e = edit(0, EditSource::User, EditKind::Policy, "tariff.0.1.0", 0.25);
+        apply_edit(&mut edited, &e).unwrap();
+        let bytes = canonical(0, &edited);
+        assert_ne!(bytes, before, "the state hash sees tariffs");
+        let fresh = world();
+        let (_, restored) =
+            decode_canonical_with(&bytes, |d| ceteris_core::sim::State::restore(&fresh, d))
+                .unwrap();
+        assert_eq!(restored.inputs().wedges.rate(0, 1, 0), 0.25);
+        assert_eq!(restored.digest(), edited.digest());
+    }
 }
