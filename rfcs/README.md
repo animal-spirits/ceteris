@@ -319,3 +319,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0312 | [Accept the built pre-P3 ADRs that still read proposed](0312-accept-built-pre-p3-adrs.md) | accepted | none new |
 | 0313 | [Re-rate the 1.0 plan at the pre-P3 gate (amends ADR 0248)](0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | accepted | ADR 0324, ADR 0325 |
 | 0314 | [Held-out sources register and the C7 guard](0314-held-out-sources-register-and-c7-guard.md) | proposed | none yet |
+| 0315 | [Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](0315-snapshot-chunks-are-zstd-canonical-bytes.md) | accepted | ADR 0326 |

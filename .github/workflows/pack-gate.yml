@@ -16,7 +16,7 @@ env:
 
 jobs:
   pack:
-    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    runs-on: [self-hosted, macOS, ARM64, pack-gate]
     timeout-minutes: 360
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/../target/pack-gate
@@ -24,10 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Toolchain (pinned by rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
-      - run: scripts/pack-gate.sh "${{ github.workspace }}/../pack-gate-logs"
+      - run: scripts/pack-gate.sh "$GITHUB_WORKSPACE/pack-gate-logs"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pack-gate-logs
-          path: ${{ github.workspace }}/../pack-gate-logs
+          path: pack-gate-logs
           retention-days: 14

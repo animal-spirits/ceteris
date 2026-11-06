@@ -116,8 +116,8 @@ use `SystemId::PARAM_DRAW` keyed by parameter id (ADR 0322). Specified in `specs
 ## Chunk store (P3; Sections 14.3, 19.4)
 
 Snapshots stay the canonical encoding below and the state hash stays over its bytes. P3 adds a
-content-addressed store of zstd Arrow IPC chunks of at most 65,536 rows per table, a snapshot being
-a manifest of (table, chunk hash); `restore` decodes chunks back to the canonical state and checks
+content-addressed store of zstd chunks of the canonical bytes cut at fixed 64 KiB offsets (ADR 0326),
+a snapshot being a manifest of chunk hashes; `restore` decodes chunks back to the canonical state and checks
 the hash. Chunks from another engine version are a `DecodeError`. Layout, retention and bounds are
 in `specs/workbench/SPEC.md`.
 
