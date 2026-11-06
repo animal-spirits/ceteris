@@ -94,8 +94,8 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 
 ### Task B2: Branches, forks and the null intervention (14.1, 14.3)
 
-- [ ] `fork(parent, tick)` loads the nearest earlier snapshot and replays; a child shares the parent's chunks up to the fork.
-- [ ] Failing tests: `null_intervention_reproduces_parent` (in CI, toy world and P2 fixture; full pack in the nightly gate); `fork_at_any_tick_equals_continuous_run`; `child_of_child_replays_from_root`. Implement, commit.
+- [x] `fork(parent, tick)` loads the nearest earlier snapshot and replays; a child shares the parent's chunks up to the fork.
+- [x] Failing tests: `null_intervention_reproduces_parent` (in CI, toy world and P2 fixture; full pack in the nightly gate); `fork_at_any_tick_equals_continuous_run`; `child_of_child_replays_from_root`. Implement, commit.
 
 ### Task B3: Edits by query (0155)
 
