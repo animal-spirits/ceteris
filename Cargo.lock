@@ -419,6 +419,7 @@ dependencies = [
  "arrow-schema",
  "ceteris-core",
  "ceteris-geo",
+ "ceteris-run",
  "ceteris-trade",
  "criterion",
  "libm",

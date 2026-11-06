@@ -153,6 +153,16 @@ impl<W: State> Sim<W> {
         Ok(())
     }
 
+    /// Replaces the world and the tick with a canonical snapshot kept elsewhere (the run
+    /// store). Snapshots and interventions held by this sim are untouched, so use it on a
+    /// scratch sim that replays forward, as the run store's recompute does.
+    pub fn load(&mut self, canonical: &[u8]) -> Result<(), DecodeError> {
+        let (tick, world) = snapshot::decode_canonical_with(canonical, |d| self.world.restore(d))?;
+        self.world = world;
+        self.tick = tick;
+        Ok(())
+    }
+
     /// Moves to any tick: restores the nearest snapshot at or before it and replays, with the
     /// interventions recorded on the way.
     pub fn seek(&mut self, tick: u32) -> Result<(), SimError> {

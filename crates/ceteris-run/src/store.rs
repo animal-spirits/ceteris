@@ -174,6 +174,18 @@ impl ChunkStore {
         &self.dir
     }
 
+    /// Bytes the chunks occupy on disk.
+    pub fn disk_bytes(&self) -> u64 {
+        fs::read_dir(self.dir.join("chunks"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .flat_map(|d| fs::read_dir(d.path()).into_iter().flatten().flatten())
+            .filter_map(|f| f.metadata().ok())
+            .map(|m| m.len())
+            .sum()
+    }
+
     pub fn chunk_count(&self) -> usize {
         fs::read_dir(self.dir.join("chunks"))
             .into_iter()
