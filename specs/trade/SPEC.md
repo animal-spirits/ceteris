@@ -1052,6 +1052,53 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   journal stays one contiguous record. Same alternating rounds: end_tick 3.55 to 3.61 ms before,
   2.67 to 2.69 after; the tick 38.3 to 38.6 before, 37.8 to 38.2 after, within the noise of
   that load.
+  `Pipeline::in_flight_all` (RFC 0287 item 4, 2026-11-04) runs the goods in parallel, each by
+  `Pipeline::in_flight`, the same sum in the same order; its three calls a tick (T1, T2b, E5)
+  stay three, since E5's transit check must read the pipeline itself. Alternating rounds
+  against the serial loop, load 17 to 31: the three calls 2.30 to 2.39 ms a tick before, 1.18
+  to 1.26 after in three of four rounds (2.52 in a noisy one).
+  T1 and T3's local goods by good (RFC 0287 item 6, 2026-11-04): T1 delivers each traded good
+  on its ledger column in parallel (its deliveries in buyer order, then its largest); T3 clears
+  each local good on its column in parallel and posts the purchases with `Ledger::post` in
+  province then good order, the serial loop's journal order. Same alternating rounds, load 6 to
+  8: deliver 1.52 to 1.54 ms before, 1.11 to 1.14 after; clear 1.69 to 1.70 before, 1.36 to
+  1.45 after. E2 produce was tried with its SALE, WAGE and PURCHASE transfers posted as one
+  block: 4.5 ms before, 4.7 after (the per-chunk sums over every account cost more than the
+  serial transfers), so it keeps its transfers; distribute reads balances and is unchanged.
+  Crossing weights (RFC 0287 item 8, 2026-11-04): `dispatch` and `arrivals` keep each
+  crossing's weight `k carry y_b` from the pass that sums z_a to the pass that shares it out
+  (the same product), instead of recomputing it. Same alternating rounds, load 4 to 7: T2b's
+  kernel time summed over goods 42.4 to 42.9 ms before, 39.7 to 40.9 after; its slowest good
+  10.6 to 11.8 before, 10.1 to 10.2 after. Tried and not kept: the z pass parallel over origin
+  gateways inside each good's task (slowest good unchanged, 10.3 to 10.5 ms), and two rows
+  interleaved in the z pass (kernel time 41.9 to 42.7 ms, slower).
+  E3 PIGL once per province (RFC 0287 item 10, 2026-11-04; econ SPEC demand): the part of a
+  pop's PIGL demand that depends only on its country's weights and the buyer prices (category
+  indexes, within-category shares, Dtilde(P), B(P) and `scale (Dt / B)^gamma`, `demand::PiglAt`)
+  is computed once per province and shared by its pops, with the same operations in the same
+  order (`pigl` itself goes through `PiglAt`). Same alternating rounds, load 4 to 8: demand
+  5.91 to 5.96 ms before, 5.59 to 5.71 after (of which the price refresh, 4.2, is unchanged).
+  The `pow` in E1 labour sits in each enterprise's CES target at each trial wage and is not
+  shared; fewer parallel regions was not pursued after items 7 and 9 put allocation and
+  posting below the noise.
+  E3's price refresh overlaps T1 to E2 (RFC 0287 item 11, 2026-11-04; 19.4, systems with
+  disjoint read and write sets run concurrently): it reads only the posted prices, the active
+  markets, the kernel and Gamma, which nothing changes between T1 and E3 (T4 reprices), and
+  writes the buyer price index and lead, which nothing reads before E3 (E1 reads last tick's
+  index). T1 begins it on the thread pool (`EconWorld::start_refresh`) on copies of the prices
+  and active markets, into a new index and lead and the traded goods' sourcing scratch; E3
+  (`refresh_price_index`) waits for it, helping the pool, and takes its result, the same values
+  as computing it there. A refresh begun and not taken (systems run singly) is dropped by the
+  next start; a clone of the world waits for it. Alternating rounds against item 10, load 9 to
+  14: a tick 35.9 to 36.0 ms before, 33.8 to 34.0 after in three of four rounds (one noisy
+  round each); demand 5.9 to 6.1 before, 1.5 after, while deliver (1.3 to 3.0) and labour
+  (1.2 to 1.5) slow as they share the cores with it.
+  mimalloc (ADR 0297, 2026-11-04) is the global allocator of the `ceteris` binary and the
+  `identity` example; allocation never touches results (identity equal to `main` at 1 and 14
+  threads). Alternating rounds against the system allocator: E2's local chain 1.8 to 2.5 ms
+  before, 0.6 to 0.8 after, produce 5.6 to 6.2 before, 4.2 to 4.8 after in every round; the tick
+  lower in 5 of 6 rounds of a loaded run (44 to 48 ms), by 0.9 to 2.3 ms (median about 1.3).
+  The criterion benches keep the system allocator.
 
 ## Open questions
 

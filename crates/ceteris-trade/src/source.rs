@@ -132,6 +132,9 @@ struct Scratch {
     reach: Vec<[f64; 2]>,
     reach_abroad: Vec<[f64; 2]>,
     up: i32,
+    /// Per crossing, its weight `k carry y_b` of the class at hand, from the pass that sums
+    /// `z` to the pass that shares it out.
+    cross_w: Vec<f64>,
     /// Backward pass, per gateway: value sent to destination gateway b, and value net of
     /// tariff arriving back at origin gateway a.
     to_dest_gateway: Vec<[f64; 2]>,
@@ -537,12 +540,15 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
         zeroed(&mut s.z, ng);
         zeroed(&mut s.net_ratio, ng);
+        zeroed(&mut s.cross_w, gk.crossings.entries.len());
         for a in 0..ng {
             let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
             let (mut gross, mut net) = (0.0, 0.0);
-            for e in gk.crossings.row(a) {
+            let lo = gk.crossings.offsets[a] as usize;
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
                 let b = e.col as usize;
                 let x = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                s.cross_w[lo + i] = x;
                 gross += x;
                 net += x * e.inv_duty;
             }
@@ -633,11 +639,10 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
         s.at_b.resize(ng, Inflow::default());
         for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
             let lo = gk.crossings.offsets[a] as usize;
-            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
             let inv_z = 1.0 / s.z[a];
             for (i, e) in gk.crossings.row(a).iter().enumerate() {
                 let b = e.col as usize;
-                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                let weight = s.cross_w[lo + i];
                 if weight == 0.0 {
                     continue;
                 }
@@ -719,11 +724,15 @@ pub fn arrivals(k: &Kernel, g: usize, out: &mut Sourced) {
         s.inv_y.clear();
         s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
         zeroed(&mut s.z, ng);
+        zeroed(&mut s.cross_w, gk.crossings.entries.len());
         for a in 0..ng {
             let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
             let mut gross = 0.0;
-            for e in gk.crossings.row(a) {
-                gross += e.k * carry_a[usize::from(gc[e.col as usize])] * s.y[e.col as usize];
+            let lo = gk.crossings.offsets[a] as usize;
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                let x = e.k * carry_a[usize::from(gc[e.col as usize])] * s.y[e.col as usize];
+                s.cross_w[lo + i] = x;
+                gross += x;
             }
             s.z[a] = gross;
         }
@@ -754,11 +763,11 @@ pub fn arrivals(k: &Kernel, g: usize, out: &mut Sourced) {
         s.at_b.clear();
         s.at_b.resize(ng, Inflow::default());
         for a in (0..ng).filter(|&a| s.gross_a[a] > 0.0) {
-            let carry_a = &carry[usize::from(gc[a]) * nc..][..nc];
+            let lo = gk.crossings.offsets[a] as usize;
             let inv_z = 1.0 / s.z[a];
-            for e in gk.crossings.row(a) {
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
                 let b = e.col as usize;
-                let weight = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                let weight = s.cross_w[lo + i];
                 if weight == 0.0 {
                     continue;
                 }

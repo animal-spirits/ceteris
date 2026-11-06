@@ -124,18 +124,14 @@ impl Pipeline {
             .sum()
     }
 
-    /// [`Pipeline::in_flight`] of every good in one pass, each summed in the same order.
+    /// [`Pipeline::in_flight`] of every good, the goods in parallel, each summed in the same
+    /// order.
     pub fn in_flight_all(&self) -> Vec<f64> {
-        // -0.0 is where `Iterator::sum` starts
-        let mut total = vec![-0.0; self.goods];
-        for s in &self.slots {
-            for row in s.chunks_exact(self.goods) {
-                for (t, &x) in total.iter_mut().zip(row) {
-                    *t += x;
-                }
-            }
-        }
-        total
+        let _span = ceteris_core::timing::span("in_flight_all", ceteris_core::timing::NONE);
+        (0..self.goods)
+            .into_par_iter()
+            .map(|g| self.in_flight(g))
+            .collect()
     }
 }
 
