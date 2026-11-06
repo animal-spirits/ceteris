@@ -1081,6 +1081,18 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   The `pow` in E1 labour sits in each enterprise's CES target at each trial wage and is not
   shared; fewer parallel regions was not pursued after items 7 and 9 put allocation and
   posting below the noise.
+  E3's price refresh overlaps T1 to E2 (RFC 0287 item 11, 2026-11-04; 19.4, systems with
+  disjoint read and write sets run concurrently): it reads only the posted prices, the active
+  markets, the kernel and Gamma, which nothing changes between T1 and E3 (T4 reprices), and
+  writes the buyer price index and lead, which nothing reads before E3 (E1 reads last tick's
+  index). T1 begins it on the thread pool (`EconWorld::start_refresh`) on copies of the prices
+  and active markets, into a new index and lead and the traded goods' sourcing scratch; E3
+  (`refresh_price_index`) waits for it, helping the pool, and takes its result, the same values
+  as computing it there. A refresh begun and not taken (systems run singly) is dropped by the
+  next start; a clone of the world waits for it. Alternating rounds against item 10, load 9 to
+  14: a tick 35.9 to 36.0 ms before, 33.8 to 34.0 after in three of four rounds (one noisy
+  round each); demand 5.9 to 6.1 before, 1.5 after, while deliver (1.3 to 3.0) and labour
+  (1.2 to 1.5) slow as they share the cores with it.
 
 ## Open questions
 

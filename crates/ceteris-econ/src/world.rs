@@ -3,7 +3,7 @@
 //! `specs/trade/SPEC.md`, State components).
 
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
@@ -381,6 +381,8 @@ pub struct Scratch {
     pub payments: Vec<Payments>,
     /// Working space of `Ledger::post` at T2b.
     pub post: PostScratch,
+    /// The price refresh of E3 when [`EconWorld::start_refresh`] began it early.
+    pub refresh: Refresh,
     /// Per traded good, its ledger column while T2b moves its goods; per local good at T3.
     pub stock: Vec<GoodColumn>,
     /// Per local good, its T3 clearing ([`LocalClear`]), and every local purchase in posting
@@ -438,6 +440,7 @@ impl Scratch {
             payments: vec![Payments::default(); n_traded],
             post: PostScratch::default(),
             stock: Vec::new(),
+            refresh: Refresh::default(),
             local: Vec::new(),
             local_entries: Vec::new(),
             lead: vec![0.0; np * ng],
@@ -494,6 +497,59 @@ pub struct Payments {
     /// the per-good tasks, and the goods its selection created.
     pub pushes: Vec<ceteris_trade::pipeline::Push>,
     pub made: f64,
+}
+
+/// What a price refresh reads and writes: the traded goods' sourcing and columns, and the
+/// index and lead it fills.
+#[derive(Clone, Debug)]
+struct RefreshParts {
+    sourced: Vec<Sourced>,
+    columns: Vec<Columns>,
+    index: Vec<f64>,
+    lead: Vec<f64>,
+}
+
+/// A price refresh running on the thread pool (`EconWorld::start_refresh`), its parts handed
+/// back when it finishes; empty when none runs. A clone waits for it and copies its result.
+#[derive(Default)]
+pub struct Refresh(Option<Arc<Mutex<Option<RefreshParts>>>>);
+
+impl Refresh {
+    /// Waits for the refresh, helping the pool meanwhile, and takes its parts.
+    fn wait(slot: &Mutex<Option<RefreshParts>>) -> RefreshParts {
+        loop {
+            if let Some(parts) = slot.lock().expect("refresh lock").take() {
+                return parts;
+            }
+            // a worker thread runs pending jobs here, the refresh among them
+            if rayon::yield_now().is_none() {
+                std::thread::yield_now();
+            }
+        }
+    }
+}
+
+impl Clone for Refresh {
+    fn clone(&self) -> Self {
+        match &self.0 {
+            None => Self(None),
+            Some(slot) => {
+                let parts = Self::wait(slot);
+                *slot.lock().expect("refresh lock") = Some(parts.clone());
+                Self(Some(Arc::new(Mutex::new(Some(parts)))))
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Refresh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "Refresh(running)"
+        } else {
+            "Refresh"
+        })
+    }
 }
 
 /// One local good's T3 clearing: its buyers in the province at hand (account, allocation,
@@ -1466,6 +1522,12 @@ impl EconWorld {
     pub fn refresh_price_index(&mut self) {
         let _span = timing::span("e3.price_refresh", timing::NONE);
         let sc = &mut self.scratch;
+        if let Some(slot) = sc.refresh.0.take() {
+            let parts = Refresh::wait(&slot);
+            (sc.sourced, sc.columns) = (parts.sourced, parts.columns);
+            (self.price_index, sc.lead) = (parts.index, parts.lead);
+            return;
+        }
         delivered_prices(
             false,
             &self.kernel,
@@ -1477,6 +1539,44 @@ impl EconWorld {
             &mut self.price_index,
             &mut sc.lead,
         );
+    }
+
+    /// Begins E3's price refresh on the thread pool, from the posted prices and active markets,
+    /// which nothing changes between T1 and E3 (T4 reprices), so it overlaps T1 to E2;
+    /// [`EconWorld::refresh_price_index`] then takes its result, the same as computing it
+    /// there. It writes a new index and lead: E1 still reads last tick's index.
+    pub fn start_refresh(&mut self) {
+        let sc = &mut self.scratch;
+        // one begun and never taken (systems run singly) is dropped: prices may have moved
+        if let Some(stale) = sc.refresh.0.take() {
+            let parts = Refresh::wait(&stale);
+            (sc.sourced, sc.columns) = (parts.sourced, parts.columns);
+        }
+        let slot = Arc::new(Mutex::new(None));
+        sc.refresh = Refresh(Some(Arc::clone(&slot)));
+        let mut parts = RefreshParts {
+            sourced: std::mem::take(&mut sc.sourced),
+            columns: std::mem::take(&mut sc.columns),
+            index: self.price_index.clone(),
+            lead: sc.lead.clone(),
+        };
+        let (kernel, layout) = (Arc::clone(&self.kernel), Arc::clone(&self.layout));
+        let (price, active) = (self.markets.price.clone(), self.markets.active.clone());
+        rayon::spawn(move || {
+            let _span = timing::span("e3.refresh_early", timing::NONE);
+            delivered_prices(
+                false,
+                &kernel,
+                &price,
+                &active,
+                &layout.gamma,
+                &mut parts.sourced,
+                &mut parts.columns,
+                &mut parts.index,
+                &mut parts.lead,
+            );
+            *slot.lock().expect("refresh lock") = Some(parts);
+        });
     }
 
     /// Sets every crossing's transit lag to `lag` months (`Kernel::set_crossing_lags`), on
