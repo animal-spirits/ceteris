@@ -1065,6 +1065,13 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   1.45 after. E2 produce was tried with its SALE, WAGE and PURCHASE transfers posted as one
   block: 4.5 ms before, 4.7 after (the per-chunk sums over every account cost more than the
   serial transfers), so it keeps its transfers; distribute reads balances and is unchanged.
+  Crossing weights (RFC 0287 item 8, 2026-11-04): `dispatch` and `arrivals` keep each
+  crossing's weight `k carry y_b` from the pass that sums z_a to the pass that shares it out
+  (the same product), instead of recomputing it. Same alternating rounds, load 4 to 7: T2b's
+  kernel time summed over goods 42.4 to 42.9 ms before, 39.7 to 40.9 after; its slowest good
+  10.6 to 11.8 before, 10.1 to 10.2 after. Tried and not kept: the z pass parallel over origin
+  gateways inside each good's task (slowest good unchanged, 10.3 to 10.5 ms), and two rows
+  interleaved in the z pass (kernel time 41.9 to 42.7 ms, slower).
 
 ## Open questions
 
