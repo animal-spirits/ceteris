@@ -37,8 +37,9 @@ use crate::production::{
     value_added,
 };
 use crate::world::{
-    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, Order, PURCHASE, Payments,
-    REBATE, SALE, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
+    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, LocalClear, Order, PURCHASE,
+    Payments, REBATE, SALE, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor,
+    to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -186,38 +187,41 @@ pub fn deliver(w: &mut EconWorld) {
         }
     };
     let n_traded = acc.transit.len();
-    // the first largest delivery of each good, as `largest` finds it
     let ng = in_flight.len();
-    let mut last: Vec<Option<(usize, f64)>> = vec![None; ng];
-    for (b, row) in due.chunks_exact(ng).enumerate() {
-        for (best, &x) in last.iter_mut().zip(&row[..n_traded]) {
-            if x > 0.0 && best.is_none_or(|(_, v)| x > v) {
-                *best = Some((b, x));
+    // each traded good on its own ledger column, in parallel: its deliveries in buyer order,
+    // then its largest, as one good after another
+    w.ledger.take_columns(0..n_traded, &mut w.scratch.stock);
+    w.scratch.stock.par_iter_mut().for_each(|stock| {
+        let g = stock.good();
+        let transit = acc.transit[g];
+        let rows = || due.chunks_exact(ng).enumerate().take(n_buyers);
+        // the first largest delivery, as `largest` finds it
+        let mut last: Option<(usize, f64)> = None;
+        for (b, row) in due.chunks_exact(ng).enumerate() {
+            let x = row[g];
+            if x > 0.0 && last.is_none_or(|(_, v)| x > v) {
+                last = Some((b, x));
             }
         }
-    }
-    let receive = |ledger: &mut Ledger, g: usize, b: usize, x: f64| {
-        ledger.ship(acc.transit[g], account(b), g, x);
-        if b < n_pops {
-            ledger.destroy(account(b), g, x);
-        }
-    };
-    // buyer by buyer; each good's account sees its deliveries in buyer order
-    for (b, row) in due.chunks_exact(ng).enumerate().take(n_buyers) {
-        for g in 0..n_traded {
-            if row[g] > 0.0 && last[g].is_some_and(|(l, _)| l != b) {
-                let x = row[g].min(w.ledger.goods(acc.transit[g], g));
-                receive(&mut w.ledger, g, b, x);
+        let receive = |stock: &mut GoodColumn, b: usize, x: f64| {
+            stock.ship(transit, account(b), x);
+            if b < n_pops {
+                stock.destroy(account(b), x);
+            }
+        };
+        for (b, row) in rows() {
+            if row[g] > 0.0 && last.is_some_and(|(l, _)| l != b) {
+                let x = row[g].min(stock.goods(transit));
+                receive(stock, b, x);
             }
         }
-    }
-    // the largest delivery takes what the account holds beyond the goods still in flight
-    for (g, best) in last.iter().enumerate().take(n_traded) {
-        if let Some((b, _)) = *best {
-            let x = (w.ledger.goods(acc.transit[g], g) - in_flight[g]).max(0.0);
-            receive(&mut w.ledger, g, b, x);
+        // the largest delivery takes what the account holds beyond the goods still in flight
+        if let Some((b, _)) = last {
+            let x = (stock.goods(transit) - in_flight[g]).max(0.0);
+            receive(stock, b, x);
         }
-    }
+    });
+    w.ledger.put_columns(&w.scratch.stock);
 }
 
 /// Value-added price `(p_g - sum_k a_kg P_k) / a_VA` of a sector with input coefficients
@@ -705,62 +709,97 @@ pub fn clear(w: &mut EconWorld) {
     }
     w.markets.clear(w.params.rationing, &mut w.scratch.fill);
     w.markets.clear_local(&mut w.scratch.spoiled);
-    let mut buyers: Vec<(AccountId, f64, bool)> = Vec::new();
-    for i in 0..inp.n_provinces() {
-        let market = acc.market[i];
-        for g in nt..ng {
-            let cell = i * ng + g;
-            let m = &w.markets;
-            if !m.active[cell] {
-                continue;
-            }
-            let keep = w.scratch.spoiled[cell];
-            let price = m.price[cell];
-            let rest = (m.supply[cell] - w.scratch.drawn[cell]).max(0.0);
-            buyers.clear();
-            for k in lay.pops(i) {
-                buyers.push((acc.pop[k], w.scratch.pop_demand[k * ng + g], true));
-            }
-            for e in lay.enterprises(i) {
-                buyers.push((acc.enterprise[e], w.scratch.ent_order[e * ng + g], false));
-            }
-            let total = |households: bool| -> f64 {
-                buyers
-                    .iter()
-                    .filter(|b| b.2 == households)
-                    .map(|b| b.1)
-                    .sum()
-            };
-            let (orders, households) = (total(false), total(true));
-            let [fill_orders, fill_households] = w.params.rationing.fill(rest, orders, households);
-            for b in buyers.iter_mut() {
-                b.1 *= if b.2 { fill_households } else { fill_orders };
-            }
-            if let Some(last) = largest(buyers.iter().map(|b| b.1)) {
-                let n = buyers.len();
-                buyers.swap(last, n - 1);
-                for (j, &(buyer, allocation, consumes)) in buyers.iter().enumerate() {
-                    let q = if j + 1 == n {
-                        // the largest buyer takes the market's balance beyond what stays
-                        (w.ledger.goods(market, g) - keep).max(0.0)
-                    } else {
-                        allocation.min(w.ledger.goods(market, g))
+    // the local goods in parallel, each on its own ledger column: a good's goods moves read and
+    // write only that good, in province order; its purchases are collected per province and
+    // posted in province then good order, as one good after another within each province paid
+    let sc = &mut w.scratch;
+    w.ledger.take_columns(nt..ng, &mut sc.stock);
+    sc.local.resize_with(ng - nt, LocalClear::default);
+    let (m, rationing) = (&w.markets, w.params.rationing);
+    let (spoiled, drawn) = (&sc.spoiled, &sc.drawn);
+    let (pop_demand, ent_order) = (&sc.pop_demand, &sc.ent_order);
+    (&mut sc.stock, &mut sc.local)
+        .into_par_iter()
+        .for_each(|(stock, out)| {
+            let g = stock.good();
+            let LocalClear {
+                buyers,
+                entries,
+                ends,
+            } = out;
+            entries.clear();
+            ends.clear();
+            for i in 0..inp.n_provinces() {
+                let market = acc.market[i];
+                let cell = i * ng + g;
+                if m.active[cell] {
+                    let keep = spoiled[cell];
+                    let price = m.price[cell];
+                    let rest = (m.supply[cell] - drawn[cell]).max(0.0);
+                    buyers.clear();
+                    for k in lay.pops(i) {
+                        buyers.push((acc.pop[k], pop_demand[k * ng + g], true));
+                    }
+                    for e in lay.enterprises(i) {
+                        buyers.push((acc.enterprise[e], ent_order[e * ng + g], false));
+                    }
+                    let total = |households: bool| -> f64 {
+                        buyers
+                            .iter()
+                            .filter(|b| b.2 == households)
+                            .map(|b| b.1)
+                            .sum()
                     };
-                    if q > 0.0 {
-                        w.ledger.ship(market, buyer, g, q);
-                        if consumes {
-                            w.ledger.destroy(buyer, g, q);
+                    let (orders, households) = (total(false), total(true));
+                    let [fill_orders, fill_households] = rationing.fill(rest, orders, households);
+                    for b in buyers.iter_mut() {
+                        b.1 *= if b.2 { fill_households } else { fill_orders };
+                    }
+                    if let Some(last) = largest(buyers.iter().map(|b| b.1)) {
+                        let n = buyers.len();
+                        buyers.swap(last, n - 1);
+                        for (j, &(buyer, allocation, consumes)) in buyers.iter().enumerate() {
+                            let q = if j + 1 == n {
+                                // the largest buyer takes the market's balance beyond what stays
+                                (stock.goods(market) - keep).max(0.0)
+                            } else {
+                                allocation.min(stock.goods(market))
+                            };
+                            if q > 0.0 {
+                                stock.ship(market, buyer, q);
+                                if consumes {
+                                    stock.destroy(buyer, q);
+                                }
+                            }
+                            let amount = to_minor(price * q);
+                            if amount != 0 {
+                                entries.push(Entry {
+                                    flow: PURCHASE,
+                                    from: buyer,
+                                    to: market,
+                                    amount,
+                                });
+                            }
                         }
                     }
-                    pay(&mut w.ledger, PURCHASE, buyer, market, to_minor(price * q));
+                    let rest = stock.goods(market);
+                    if rest > 0.0 {
+                        stock.destroy(market, rest);
+                    }
                 }
+                ends.push(entries.len() as u32);
             }
-            let rest = w.ledger.goods(market, g);
-            if rest > 0.0 {
-                w.ledger.destroy(market, g, rest);
-            }
+        });
+    w.ledger.put_columns(&sc.stock);
+    sc.local_entries.clear();
+    for i in 0..inp.n_provinces() {
+        for l in &sc.local {
+            let lo = if i == 0 { 0 } else { l.ends[i - 1] as usize };
+            sc.local_entries
+                .extend_from_slice(&l.entries[lo..l.ends[i] as usize]);
         }
     }
+    w.ledger.post(&sc.local_entries, &mut sc.post);
 }
 
 /// Spending on traded goods per enterprise, per pop and per destination cell by class
@@ -872,7 +911,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let nt = sc.payments.len();
     {
         let _span = timing::span("t2b.take", NONE);
-        w.ledger.take_columns(nt, &mut sc.stock);
+        w.ledger.take_columns(0..nt, &mut sc.stock);
     }
     let inventory = &markets.inventory;
     let goods_span = timing::span("t2b.goods", NONE);

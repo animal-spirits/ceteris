@@ -1057,6 +1057,14 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   stay three, since E5's transit check must read the pipeline itself. Alternating rounds
   against the serial loop, load 17 to 31: the three calls 2.30 to 2.39 ms a tick before, 1.18
   to 1.26 after in three of four rounds (2.52 in a noisy one).
+  T1 and T3's local goods by good (RFC 0287 item 6, 2026-11-04): T1 delivers each traded good
+  on its ledger column in parallel (its deliveries in buyer order, then its largest); T3 clears
+  each local good on its column in parallel and posts the purchases with `Ledger::post` in
+  province then good order, the serial loop's journal order. Same alternating rounds, load 6 to
+  8: deliver 1.52 to 1.54 ms before, 1.11 to 1.14 after; clear 1.69 to 1.70 before, 1.36 to
+  1.45 after. E2 produce was tried with its SALE, WAGE and PURCHASE transfers posted as one
+  block: 4.5 ms before, 4.7 after (the per-chunk sums over every account cost more than the
+  serial transfers), so it keeps its transfers; distribute reads balances and is unchanged.
 
 ## Open questions
 

@@ -324,13 +324,18 @@ impl Ledger {
         self.destroyed[good] += qty;
     }
 
-    /// Moves goods `0..n` out into `cols`, one column per good, so that each good's moves can
+    /// Copies goods `goods` out into `cols`, one column per good, so that each good's moves can
     /// run on their own ([`GoodColumn`]); `cols` keeps its buffers between calls. Until
     /// [`Ledger::put_columns`] the ledger holds stale quantities of those goods.
-    pub fn take_columns(&self, n: usize, cols: &mut Vec<GoodColumn>) {
-        assert!(n <= self.n_goods, "{n} goods of {}", self.n_goods);
-        cols.resize_with(n, GoodColumn::default);
-        cols.par_iter_mut().enumerate().for_each(|(g, c)| {
+    pub fn take_columns(&self, goods: std::ops::Range<usize>, cols: &mut Vec<GoodColumn>) {
+        assert!(
+            goods.end <= self.n_goods,
+            "goods {goods:?} of {}",
+            self.n_goods
+        );
+        cols.resize_with(goods.len(), GoodColumn::default);
+        cols.par_iter_mut().enumerate().for_each(|(i, c)| {
+            let g = goods.start + i;
             c.good = g;
             c.created = self.created[g];
             c.destroyed = self.destroyed[g];
@@ -530,7 +535,7 @@ mod tests {
             }
         }
         let mut cols = Vec::new();
-        b.take_columns(2, &mut cols);
+        b.take_columns(0..2, &mut cols);
         for c in &mut cols {
             for &(f, t, q) in &ops {
                 c.ship(ids[f], ids[t], q);
