@@ -37,6 +37,8 @@ The owner chose the recommended option of each.
 - **Commitments in force at t0 (0241 D2):** the mechanism (a state table of scheduled edits with a completion hazard) lands in P3 with an empty table; tariff phase-ins and other content are pack work for P9's hindcast. [D2 content moves earlier if P5a needs it]
 - **0143 at P3 is English short names for the 2000 states** from the existing countries table; borders are fixed in 1.x, so names by date have nothing to do until P6. [none]
 
+- **ADRs of the 1.0 path and their P3 task** (issue #251): 0049 C4 and W4; 0087 F2 (observable tables in the schema, no operator); 0116 B4 and C4; 0128 A1; 0137 W3 (chart tokens) and the art direction the views follow; 0143 W7; 0155 W5 (lab-UI track after the gate); 0188 B3 (edits by query), F1 (verbs from the registry), W1 (every action through the registry) and W6 (lab-UI track); 0197 F4 (lab-UI track).
+
 ## Global constraints
 
 Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed_sum`; no `HashMap` reaching state; exact money; goldens change only in a commit whose subject says re-bless and why; `CETERIS_PACK` absolute; Conventional Commits, no em dashes, comments only for counterintuitive logic, no task numbers in code; code PRs need the owner's review. Also:
@@ -212,6 +214,7 @@ W1 to W4 are the views the gate names. W5 and W6 belong to the lab-UI track afte
 - [ ] **W2 Difference map.** Any map mode as branch minus baseline per province, diverging ramp passing the 0221 check, sign-robustness mask hatched; picking shows the paired interval.
 - [ ] **W3 Fan charts.** Any series for a branch and its baseline as quantile bands across members, paired-effect panel beside it; 0137 chart tokens.
 - [ ] **W4 Why panel (0049).** For a selected variable, province and window, the C4 channel shares with intervals, run as a background job.
+- [ ] **W7 State names (0143, P3 part).** The views label countries and states with the English short name of the 2000 state from the countries table; no names by date until P6. Test: every state id in the pack has a non-empty short name.
 - [ ] **W5 Lenses (0155, P3 part).** Route inspector with "close this edge" forking a branch, bottleneck lens, map numbers, peer radar.
 - [ ] **W6 Keyboard (0188, P3 part).** Palette, hints, query bar for edits by query; exports (Ctrl+C TSV, xlsx, GeoPackage, SVG and PNG, `ceteris://` links, 0197).
 
