@@ -388,9 +388,9 @@ mod tests {
         let q = format!("population <= {cut} and country == 0");
         apply_edit(&mut w, &query_edit(0, &q, 9.0)).unwrap();
         let p = &w.inputs().provinces;
-        for i in 0..w.wage.len() {
+        for (i, (&now, &was)) in w.wage.iter().zip(&before).enumerate() {
             let hit = p.population[i] <= cut && p.country[i] == 0;
-            assert_eq!(w.wage[i], if hit { 9.0 } else { before[i] }, "province {i}");
+            assert_eq!(now, if hit { 9.0 } else { was }, "province {i}");
         }
         assert!(w.wage[0] == 9.0);
     }
