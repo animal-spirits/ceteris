@@ -105,6 +105,22 @@ only the clock, so state hashes and the journal are the same with timing on or o
 state hash and journal hash per tick). The QoS class of each worker is not recorded: reading it
 needs an FFI call, which is `unsafe` outside ADR 0295's exception.
 
+## Hazard draws (P3; ADR 0241)
+
+`hazard::draw(seed, tick, hazard, cell)` returns one uniform per (hazard, cell, tick) from the
+Philox stream keyed by `SystemId::HAZARD`, `HazardId` and the cell, whether or not the rate is
+positive; an event fires when the uniform is below the rate. Branches therefore share the events
+of untouched hazards, and a zero-rate hazard leaves every hash unchanged. Member parameter draws
+use `SystemId::PARAM_DRAW` keyed by parameter id (ADR 0322). Specified in `specs/workbench/SPEC.md`.
+
+## Chunk store (P3; Sections 14.3, 19.4)
+
+Snapshots stay the canonical encoding below and the state hash stays over its bytes. P3 adds a
+content-addressed store of zstd Arrow IPC chunks of at most 65,536 rows per table, a snapshot being
+a manifest of (table, chunk hash); `restore` decodes chunks back to the canonical state and checks
+the hash. Chunks from another engine version are a `DecodeError`. Layout, retention and bounds are
+in `specs/workbench/SPEC.md`.
+
 ## Snapshots (Sections 4.1, 14.3)
 
 Canonical encoding: little-endian, `f64` by bit pattern, slices length-prefixed,
@@ -164,4 +180,4 @@ n/a: the core holds no behaviour.
 ## Open questions
 
 - Money scale per currency and overflow headroom (P5).
-- Journal retention beyond one tick, and the on-disk run store (P3).
+- Journal retention beyond one tick (the on-disk run store is specified in `specs/workbench/SPEC.md`).
