@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn the P2 economy as left by pre-P3 into the workbench of DESIGN 14 and 21.1 item 4: branches, the interventions of 14.2, common random numbers, ensembles on lanes, effect estimation, difference maps and fan charts, the `ceteris` CLI with scenario files and Arrow exports, run hashes, the replay loader and calendar-blind runs (ADR 0241), and the performance gates P3 owns (ADRs 0234, 0235, 0236). 1.0 is a pure simulator (ADRs 0239, 0240): nothing here is a seat, score, objective, narration or flavour.
+**Goal:** Turn the P2 economy as left by pre-P3 into the workbench of spec/14 and spec/21 (21.1 item 4): branches, the interventions of 14.2, common random numbers, ensembles on lanes, effect estimation, difference maps and fan charts, the `ceteris` CLI with scenario files and Arrow exports, run hashes, the replay loader and calendar-blind runs (ADR 0241), and the performance gates P3 owns (ADRs 0234, 0235, 0236). 1.0 is a pure simulator (ADRs 0239, 0240): nothing here is a seat, score, objective, narration or flavour.
 
-**Gate (DESIGN 21.1 item 4, ADRs 0234, 0241):**
+**Gate (spec/21 section 21.1 item 4, ADRs 0234, 0241):**
 
 1. A null intervention reproduces the parent bit for bit, at 1, 3 and all threads.
 2. Relabelling the start year (2000 to 2100) of the same pack leaves the golden hash unchanged apart from labels.
 3. A tariff intervention (US +25% on manufactured imports from China at month 24, full pack) yields paired effects whose intervals under CRN are tighter than under independent seeds, on the declared outcomes (US and China manufacturing output, bilateral flow, US manufactured price index).
 4. The 0234 flatness gate: median tick time over years 96 to 100 within 25% of years 1 to 5, decade row counts within each table's 0236 bound.
-5. DESIGN 21.2 done: invariants over 100 years, budgets (19.2 as restated by 0235), the 20% regression gate.
+5. spec/21 section 21.2 done: invariants over 100 years, budgets (19.2 as restated by 0235), the 20% regression gate.
 
 **Starts from:** main after pre-P3 ends (B8 and C6 recalibrated, D1 and D2 snapshots across interventions and parameters as state, the benchmark rerun passed). Lanes are Branch L here (ADR 0288), no longer a pre-P3 item. The native app shell (ADR 0088 stages 1 and 2, `specs/app`) is a separate track; the P3 app tasks (Branch W) start once its exit criteria pass.
 
-**Spec:** new `specs/workbench/SPEC.md` (state, edit vocabulary, store, invariants, bounds), `specs/core/SPEC.md` (hazard draws, chunk store), `specs/econ/SPEC.md` and `specs/trade/SPEC.md` (edit targets, ADR 0027), `specs/app/SPEC.md` (P3 views). DESIGN 14, 19.2, 19.4, 21; ADRs 0002, 0024, 0027, 0049, 0087, 0116, 0128, 0137, 0143, 0155, 0188, 0197, 0207, 0211, 0212, 0234, 0235, 0236, 0241.
+**Spec:** new `specs/workbench/SPEC.md` (state, edit vocabulary, store, invariants, bounds), `specs/core/SPEC.md` (hazard draws, chunk store), `specs/econ/SPEC.md` and `specs/trade/SPEC.md` (edit targets, ADR 0027), `specs/app/SPEC.md` (P3 views). spec/14, 19 (19.2, 19.4) and 21; ADRs 0002, 0024, 0027, 0049, 0087, 0116, 0128, 0137, 0143, 0155, 0188, 0197, 0207, 0211, 0212, 0234, 0235, 0236, 0241.
 
 **Out of P3:** everything ADR 0207 moved to 1.x or 2.0 (0078, 0079, 0118 to 0121, 0124, 0125, 0140, 0141, 0144, 0157, 0159, 0160, 0196); 0242's hazards (P5b, P8; P3 builds only the draw primitive they register with); predictability horizons (14.6) and Sobol (14.7), which need an emulator (P9); writes and lockstep in `ceteris serve` (1.x, ADR 0197); 0128's annual report, engine crate and wasm (after 1.0).
 
@@ -44,8 +44,8 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 - **Edits are the only causal record.** Every change to a run after t0 is an edit with a tick, a source (`user`, `cli`, `api`, `replay`, `commitment`) and a god flag (14.2). Nothing else writes state between ticks.
 - **Calendar-blind.** No system reads a calendar date; month of year, ages and durations are state (0241). The pack loader asserts it.
 - **Bounds.** Every new table states its bound and expected size at 2150 in its SPEC (0236), including the edit log, branch tree and chunk store.
-- **Register.** New parameters take IDs from the next free P number on main (P150 at the time of writing; pre-P3 may take more). P53 and S12 are 0027's.
-- **ADR numbers** are taken from main right before pushing; 0247 is the P3-prerequisite thread's.
+- **Register.** New parameters take codes from `cargo run -p ceteris-rows -- next-code P` (P162 on main at fec3a99), only in the PR that writes them into the spec. P53 and S12 are 0027's.
+- **Decision ids** come from `cargo run -p ceteris-rows -- next N`, only in the PR that writes the RFC's rows into `spec/rows.toml` (`.claude/rules/rfcs.md`); proposals are RFCs in `rfcs/`, not ADR files.
 
 ---
 
@@ -54,7 +54,7 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 ### Task 0.1: Specs and status
 
 - [ ] Write `specs/workbench/SPEC.md` from `specs/TEMPLATE.md`: objects of 14.1 with the file family of 0211; edit vocabulary and ordering (tick, source, sequence); store layout; invariants (null edit, replay equality, edit-log ordering); bounds per table; test plan (this plan's tests). Update `specs/core/SPEC.md` (hazard draws, chunk store) and `specs/app/SPEC.md` (P3 views per Q2).
-- [ ] Mark 0234, 0235 and 0236 accepted (their options were chosen 2026-10-29) and apply their migrations: DESIGN 19.2 gains the disk row (0212) and per-good lines (0235, values after G2), 19.4 the bounds rule (0236), 21.2 item 8 the flatness gate (0234). Apply 0197's DESIGN migration (2.1, 14.8, 21.1 P3 line). Add the ADRs Q1 and Q2 call for.
+- [ ] Mark 0234, 0235 and 0236 accepted (their options were chosen 2026-10-29) and apply their migrations in `spec/19-*.md` and `spec/21-*.md`: 19.2 gains the disk row (0212) and per-good lines (0235, values after G2), 19.4 the bounds rule (0236), 21.2 item 8 the flatness gate (0234). Apply 0197's migration to `spec/` (2.1, 14.8, 21.1 P3 line). Add the ADRs Q1 and Q2 call for.
 - [ ] Commit `docs(workbench): p3 spec and accepted p3 gates`.
 
 ## Branch A: `p3/store` (scenario files, run hashes, chunk store, retention)
@@ -193,7 +193,7 @@ Independent of B to F; can start the day P3 starts.
 - [x] Goods count a pack value: `Goods` read from `econ_goods`, fixed-size goods arrays replaced by vectors and `Rows`; the 10-goods fixture and pack hash unchanged. The pack builder's 10-good aggregation and the P04 gravity estimation stay at P2's goods until the 50-goods pack (ADR 0271).
 
 - [ ] Generator: the 10 real goods' parameters resampled across theta classes, IO coefficients scaled to keep value added, on the full province set; benchmark fixture only, never a calibration input.
-- [ ] Benchmarks at 10, 20 and 45 synthetic goods fit fixed plus per-good cost per goods-indexed system; DESIGN 19.2 restated with formula and value at 45 goods. If 45 goods exceed 160 ms, levers in order: gateway count and crossings (0092), the dispatch plan (0097), only then the ceiling by new ADR.
+- [ ] Benchmarks at 10, 20 and 45 synthetic goods fit fixed plus per-good cost per goods-indexed system; spec/19 section 19.2 restated with formula and value at 45 goods. If 45 goods exceed 160 ms, levers in order: gateway count and crossings (0092), the dispatch plan (0097), only then the ceiling by new ADR.
 - [ ] The synthetic pack runs 100 years without an invariant violation. Commit.
 
 ### Task G3: Bounds on P3's own tables (0236)

@@ -989,7 +989,7 @@ id = "pwt"
 name = "Penn World Table"
 provider = "Groningen Growth and Development Centre"
 version = "11.0 (1950-2023)"
-role = "Capital stocks, productivity levels (7.2, 7.5)"
+role = "Capital stocks, productivity levels (7.2, 7.5); price level of domestic absorption pl_da, the local base price p_c (16.1)"
 licence = "CC-BY-4.0"
 licence_url = "https://www.rug.nl/ggdc/productivity/pwt/"
 attribution = "Feenstra, Inklaar and Timmer (2015), AER"
@@ -1000,6 +1000,41 @@ policy = "bundle"
 reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
+
+[[source]]
+id = "wiod-sea"
+name = "WIOD Socio-Economic Accounts"
+provider = "Groningen Growth and Development Centre"
+version = "2016 release (Nov16), 2000-2014"
+role = "Relative labour shares by sector, 2000 (7.2; ADRs 0307, 0308)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.rug.nl/ggdc/valuechain/wiod/wiod-2016-release"
+attribution = "Timmer, Dietzenbacher, Los, Stehrer and de Vries (2015), Review of International Economics"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0; 43 economies with labour compensation (self-employed included) and value added by industry in 2000"
+checked = 2026-11-03
+confidence = "high"
+
+[[source]]
+id = "oecd-aamne"
+name = "OECD Analytical AMNE database"
+provider = "OECD"
+version = "2026 edition (2000-2023, ICIO 2025 grid, 81 economies, 41 industries)"
+role = "Foreign-owned shares of value added by host and good, and their parent countries, 2000 (8.7, 9.1; ADRs 0309, 0310)"
+licence = "LicenseRef-OECD-Terms"
+licence_url = "https://www.oecd.org/en/about/terms-conditions.html"
+attribution = "OECD (2026), Analytical AMNE database, <URL> (accessed <date>); pass on to sub-licensees"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "OECD data terms as for ICIO; the start year by host, industry and ownership, with gross output by parent, on the ICIO grid"
+checked = 2026-11-03
+confidence = "medium"
+notes = "Dataset page www.oecd.org/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services.html (403 to scripts, read in a browser). The 2026 edition is on the ICIO 2025 grid the pack reads; RFC 0302 named the 2023 edition (2000-2019, 76 economies). Mining is one industry (B05T09), so goods 1 and 2 both take it."
 
 # ---------------------------------------------------------------- macro, money, finance, fiscal
 
@@ -1020,7 +1055,24 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS. ADR 0098 series, CC BY-4.0 in the API metadata on 2026-11-01: PA.NUS.FCRF (its source line names the IMF IFS, but the licence type is the World Bank's); NY.GDP.PCAP.PP.CD, the WDI price level with NY.GDP.MKTP.CD and SP.POP.TOTL (ADR 0289; its source line names the ICP). ADR 0100 series, CC BY-4.0 in the API metadata on 2026-11-03: BN.CAB.XOKA.CD, the current accounts of the trade-imbalance transfers (its source line names the IMF Balance of Payments Statistics, but the licence type is the World Bank's)."
+
+[[source]]
+id = "wdi-ppp"
+name = "World Development Indicators: GDP, PPP (current international $), NY.GDP.MKTP.PP.CD"
+provider = "World Bank (International Comparison Program PPPs)"
+version = "Current release (zip members dated 2026-10-08, downloaded 2026-11-01)"
+role = "ADR 0098 real GDP check (ADRs 0285, 0290): the pack's GDP over p_c against GDP at PPP in 2000"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/public-licenses#cc-by"
+attribution = "The World Bank: World Development Indicators; International Comparison Program"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "API metadata License_Type CC BY-4.0 on 2026-11-01 (source line: ICP PPPs). Read only by a test, never in a pack; kept apart from the wdi source because validation files must name a validation-only source. NY.GDP.PCAP.PP.CD, which the check read before ADR 0290, is a pack input of the wdi source since ADR 0289."
+checked = 2026-11-01
+confidence = "high"
 
 [[source]]
 id = "wb-gem"
@@ -1295,25 +1347,42 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
-notes = "P2 uses the disposable-income Gini (gini_disp) for 2000 where WDI SI.POV.GINI has no value within 1995 to 2005; such rows are flagged imputed. Replaces WIID in that role."
+notes = "P2 uses the disposable-income Gini (gini_disp) nearest 2000 within 1995 to 2005 as the primary Gini (ADR 0098); WDI SI.POV.GINI is the fallback, flagged imputed. Replaces WIID in the fallback role."
 
 [[source]]
 id = "wid"
 name = "World Inequality Database"
 provider = "World Inequality Lab"
 version = "Current"
-role = "Wealth distribution per pop (15.7)"
+role = "Check of the wealth-bracket proxy (ADR 0312): 2000 shares of net personal wealth, bottom 50%, middle 40%, top 10%, listed against the proxy in the C6 gate report of a research pack"
 licence = "LicenseRef-NoLicence"
 licence_url = "https://wid.world/data/"
 attribution = "WID.world and series source papers"
 commercial_use = false
 share_alike = false
-use = "fallback"
+use = "validation"
 policy = "fetch"
-reason = "No licence found; PIP and SWIID cover income, nothing open covers wealth distribution"
+reason = "No licence found; not a pack input since ADR 0312, the pack's wealth shares come from the Gini proxy (ADR 0311)"
 checked = 2026-10-23
 confidence = "low"
 closed_source_only = true
+
+[[source]]
+id = "fed-dfa"
+name = "Distributional Financial Accounts"
+provider = "Board of Governors of the Federal Reserve System"
+version = "2000Q1 net worth shares"
+role = "P161 (ADR 0311): the US top-10% share of net worth in 2000Q1, 0.638, that fixes the wealth proxy's tau; one published number in the code, no file"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://www.federalreserve.gov/releases/z1/dataviz/dfa/"
+attribution = "Board of Governors of the Federal Reserve System, Distributional Financial Accounts"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US government work"
+checked = 2026-11-04
+confidence = "medium"
 
 [[source]]
 id = "wb-gfdd"
@@ -1476,6 +1545,7 @@ policy = "bundle"
 reason = "CC BY 3.0 IGO notice on the data overrides the general un.org terms"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 reads WPP2024_TotalPopulationBySex.csv.gz (CC BY 3.0 IGO in downloads.json, rechecked 2026-11-01) for the 2000 national population of economies WDI does not list, such as Western Sahara (ADR 0098)."
 
 [[source]]
 id = "un-ims"

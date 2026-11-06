@@ -21,3 +21,8 @@ codegen-units = 1
 [profile.bench]
 lto = "fat"
 codegen-units = 1
+
+# Solver tests run the full economy; opt-level 1 cuts their run time about 6x on the pack
+# (measured on block_tick, steady_state, p2_*) at a lower build cost than opt-level 3.
+[profile.test]
+opt-level = 1
