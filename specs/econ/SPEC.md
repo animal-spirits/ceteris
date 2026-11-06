@@ -1316,6 +1316,44 @@ On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) the country 
 | `outcome_aggregates_the_flow_window` | province incomes add to the country's; lambda_p is home over absorption, in [0, 1] |
 | `flows::tests::pairs_account_for_everything_dispatched` | province absorption adds to the country's home purchases and pairs into it, to 1e-12 |
 
+### Pre-P3 benchmark (C7, ADR 0207 gate, ADR 0257)
+
+Run 2026-11-06 on main-plus-audit `ccd9574` and the installed 2000 pack (C6 calibration, ADR 0316),
+baseline settled (largest |d ln p| over the last 50 ticks 1.7e-7), 1,200 ticks per case. Command:
+`CETERIS_PACK=data/packs/2000 cargo test -p ceteris-calibrate --release --test benchmark -- --include-ignored --nocapture --test-threads=1`
+(about 13 minutes). The criteria below are frozen: a change after a run needs an RFC with before
+and after numbers (ADR 0257, PLAN C7); a miss stops work and goes to the owner.
+
+**Criteria (asserted).** All three of the tests below pass.
+
+| Criterion | Test | Result | 28 Oct |
+|---|---|---|---|
+| Openness: foreign share within [1/1.5, 1.5] of ICIO 2000, per theta class group and all traded goods | `openness_within_1_5_of_icio` | ratios 1.050, 1.041, 1.057, 0.948; all traded 0.2177 against 0.2115, ratio 1.029 | about 3 times the data |
+| ACR, province-graded (ADR 0268), crossing tau x 1.1, 80 ICIO countries with \|ACR\| > 1e-4 | `acr_formula_holds_under_costlier_borders` | 0 wrong signs, median 1.225 (p10 0.997, p90 1.547), correlation 0.947 | median 0.66, correlation 0.57 |
+| x10 border shock (reported only since 2026-10-31, a P5 criterion, ADR 0090) | `benchmark_cases_are_reported` | panics in the 1,200-tick run: `payment 1.07e15 does not fit the ledger` (world.rs:74) | stopped at tick 45 |
+
+The ACR median sits 0.025 below the upper band edge; the country forms read `acr_io` median 1.130
+(p10 0.882, p90 1.452), correlation 0.935 and plain `acr` median 2.628, correlation 0.900, all with
+0 wrong signs.
+
+**Reported cases, with the literature beside each and its status.** "Fitted" means the model is
+calibrated to the target, so agreement tests nothing; "free" means nothing was fitted to it.
+
+| Case | Model | Literature | Tag | ADR 0257 tier and status |
+|---|---|---|---|---|
+| Openness by class and all traded goods | above | ICIO 2000 | fitted (class groups, nu, ADR 0092); free (all traded goods) | 2, passes |
+| ACR-IO x1.1 | above | Costinot and Rodriguez-Clare (2014), eq. (28) | free | 1, passes |
+| Japan, border x1.1 | welfare -0.53% | every country loses (ACR) | free | 1 (sign), passes |
+| GBR, soft Brexit | -0.194% (EU27 -0.039%, JPN +0.0006%) | Dhingra et al. (2017): -1.34% total, -0.53% from the NTB part alone | free | 2, miss: about 0.15 of the headline, about 0.37 of the NTB part. Removal phase P4, ADR 0272 (log-distance crossing friction, built with the 50-goods recalibration); services (ADR 0168) in P5a lifts it further |
+| GBR, hard Brexit | -0.511% (EU27 -0.105%, IRL -0.237%) | Dhingra et al.: -2.66% total, -1.44% from NTB plus tariffs | free | 2, miss: about 0.19 of the headline, about 0.36 of the like-for-like part. Removal phase P4, ADR 0272 |
+| H2 distance elasticity | -0.45 (ADR 0264) | Head and Mayer (2014): -0.89 all, -1.14 structural; the SPEC's own gate -1.1 | free | 2, miss traced to an unbuilt mechanism (iceberg legs give about -0.09 theta per class; ADR 0264). Removal phase P4, ADR 0272 |
+| H2 per class | within 2e-8 of theta | Caliendo and Parro (2015) via ADR 0023 | fitted (the model recovers its own theta; a code check, ADR 0264) | 4 (test changed by ADR 0264), passes |
+| US-China 2018, `us-china-2018.shocks` (US +12 points on CHN, CHN +10 on USA, round figures written for this rerun) | USA welfare +0.004%, CHN -0.144%; pass-through proxy 0.95 | Amiti, Redding and Weinstein (2019); Fajgelbaum et al. (2020): near-complete pass-through, US welfare about -0.04% of GDP | free | 2, reported. Pass-through agrees; the US welfare sign does not (28 Oct: -0.04%). Proxy and shock are cruder than the sources: no origin-specific price or sector tariff schedule |
+| x10 border | panic above | none in P2's range | free | reported; P5a (RFC 0286 and the write-off fix, #216) |
+
+Misses of the two tier-2 rows named P4 stay recorded until the P4 gate rerun. No gain, friction or
+criterion was changed to pass.
+
 ## GE reference model (`ceteris-reference`)
 
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every

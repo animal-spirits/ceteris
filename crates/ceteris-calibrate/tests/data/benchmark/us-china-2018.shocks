@@ -1,0 +1,8 @@
+# US-China 2018 tariffs (Amiti, Redding and Weinstein 2019; Fajgelbaum et al. 2020), reported only.
+# The file of the 28 October run is not in the repository; this one is written for the C7 rerun
+# from round figures, not fitted to anything: the US adds 12 points to its tariff on Chinese goods
+# of both tariff groups, China 10 points on US goods, both on the 2000 pack's tariff schedule.
+tariff USA CHN 0 0.12
+tariff USA CHN 1 0.12
+tariff CHN USA 0 0.10
+tariff CHN USA 1 0.10
