@@ -718,6 +718,7 @@ fn eu27(pack: &Path, base: &Outcome, w: &[f64]) -> f64 {
 }
 
 #[test]
+#[ignore = "pack-gated solver run; nightly job"]
 fn japan_loses_from_costlier_borders() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
@@ -735,6 +736,7 @@ fn japan_loses_from_costlier_borders() {
 }
 
 #[test]
+#[ignore = "pack-gated solver run; nightly job"]
 fn eu_loses_from_soft_brexit() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
