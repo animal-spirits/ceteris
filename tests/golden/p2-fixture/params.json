@@ -1,6 +1,6 @@
 {
   "format": "15",
-  "static_digest": "73e78b33fdb24e468a71d3c32f1c6b55a673db00b4605c6a3e157a0636d1f8d4",
+  "static_digest": "71d1a27429ecd39771a16c20f2af4278875552f3150d81f2ccdfc570cea92084",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -36,7 +36,8 @@
     "expectation_gain": "P45",
     "rationing": "S11",
     "technology": "S09",
-    "write_off_months": "P148"
+    "write_off_months": "P148",
+    "transfers": "S22"
   },
   "econ": {
     "sigma_demand": 0.6,
@@ -53,7 +54,8 @@
     "frictionless": false,
     "write_off_months": 3.0,
     "rationing": "priority",
-    "technology": "putty_clay"
+    "technology": "putty_clay",
+    "transfers": "fixed_shares"
   },
   "trade": {
     "theta": [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],

@@ -5,7 +5,9 @@ mod common;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ceteris_pack::read::baci::{baci_by_product, baci_values, read_hs_cpa, trade_by_country};
+use ceteris_pack::read::baci::{
+    Trade, baci_by_product, baci_values, read_hs_cpa, trade_by_country, trade_by_good,
+};
 use ceteris_pack::read::tariffs::{read_cepii, read_dta};
 use ceteris_pack::read::wdi::plausible_rates;
 use common::{V, approx, cached, hs_key as key, write_rows, write_zip};
@@ -123,6 +125,41 @@ fn trade_by_country_sums_exports_and_imports_of_the_economies_a_country_combines
             ("AFG".to_owned(), 5000.0),
             ("TWN".to_owned(), 2000.0),
             ("YUG".to_owned(), 5000.0)
+        ]
+        .into()
+    );
+}
+
+#[test]
+fn trade_by_good_sums_exports_and_imports_by_the_good_of_each_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let codes = "country_code,country_name,country_iso2,country_iso3\n\
+                 4,Afghanistan,AF,AFG\n490,\"Other Asia, nes\",,S19\n688,Serbia,RS,SRB\n891,Serbia and Montenegro,CS,SCG\n499,Montenegro,ME,MNE\n";
+    // 010121 is good 0, 270900 good 1; 999999 has no good, the empty v no value.
+    let rows = [
+        "2000,4,490,10121,2,",
+        "2000,891,4,270900,3,",
+        "2000,499,688,10121,1,",
+        "2000,4,688,999999,7,",
+        "2000,4,688,270900,,",
+    ];
+    let goods: BTreeMap<&str, usize> = [("010121", 0), ("270900", 1)].into();
+    let iso = names(&[("TWN", "TWN"), ("AFG", "AFG")]);
+    let pack: Vec<String> = ["AFG", "TWN", "YUG", "FRA"].map(String::from).into();
+    let got = trade_by_good(&baci(dir.path(), &rows, codes), &goods, &iso, &pack).unwrap();
+    let mut afg = Trade::default();
+    (afg.exports[0], afg.imports[1]) = (2000.0, 3000.0);
+    let mut twn = Trade::default();
+    twn.imports[0] = 2000.0;
+    // Serbia, Serbia and Montenegro and Montenegro are all YUG; its internal flow counts both ways.
+    let mut yug = Trade::default();
+    (yug.exports[0], yug.exports[1], yug.imports[0]) = (1000.0, 3000.0, 1000.0);
+    assert_eq!(
+        got,
+        [
+            ("AFG".to_owned(), afg),
+            ("TWN".to_owned(), twn),
+            ("YUG".to_owned(), yug)
         ]
         .into()
     );

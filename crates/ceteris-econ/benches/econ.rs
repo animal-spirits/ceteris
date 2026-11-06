@@ -37,7 +37,7 @@ const SYSTEMS: [(&str, System); 9] = [
     ("clear", systems::clear),
     ("dispatch", systems::dispatch),
     ("reprice", systems::reprice),
-    ("distribute", systems::distribute),
+    ("distribute", |w| systems::distribute(w, 0)),
 ];
 
 /// The calibrated full pack, or the fixture with a notice.
