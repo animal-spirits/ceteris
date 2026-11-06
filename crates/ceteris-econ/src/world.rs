@@ -8,7 +8,9 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use ceteris_core::invariant::Violation;
-use ceteris_core::ledger::{AccountId, Entry, Flow, GOODS_TOLERANCE, Ledger, PostScratch};
+use ceteris_core::ledger::{
+    AccountId, Entry, Flow, GOODS_TOLERANCE, GoodColumn, Ledger, PostScratch,
+};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
@@ -324,6 +326,8 @@ pub struct Scratch {
     pub payments: Vec<Payments>,
     /// Working space of `Ledger::post` at T2b.
     pub post: PostScratch,
+    /// Per traded good, its ledger column while T2b moves its goods.
+    pub stock: Vec<GoodColumn>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * ng + g]`, refreshed with
@@ -374,6 +378,7 @@ impl Scratch {
             columns: vec![Columns::default(); n_traded],
             payments: vec![Payments::default(); n_traded],
             post: PostScratch::default(),
+            stock: Vec::new(),
             lead: vec![0.0; np * ng],
             flows: FlowWindow::new(nc, np, ng, n_traded),
             dispatch_made: vec![0.0; n_traded],
@@ -424,6 +429,10 @@ pub struct Payments {
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
     pub parts: Vec<i64>,
+    /// T2b's pipeline shipments of the good, (slot, buyer, units) in order, applied after
+    /// the per-good tasks, and the goods its selection created.
+    pub pushes: Vec<ceteris_trade::pipeline::Push>,
+    pub made: f64,
 }
 
 /// One buyer of a traded good at its destination: ledger account, pipeline index, class
