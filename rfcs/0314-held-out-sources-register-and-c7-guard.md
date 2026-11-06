@@ -1,6 +1,6 @@
 # RFC 0314. Held-out sources register and the C7 guard
 
-Status: draft
+Status: proposed
 Date: 2026-11-06
 Design sections: 15.3, 15.7, 16
 Release: 1.0, pre-P3 (register and guard); P9 (scorer, blocking tolerances)
@@ -41,6 +41,9 @@ Options:
 Recommendation: A, because it is one manifest, two classes stated explicitly, and `check-sources`
 already parses both files.
 
+Decision: A, Antonio, 2026-11-06.
+Row: none yet, taken when accepted.
+
 ### D2. What does the guard check, and where?
 
 Options:
@@ -59,6 +62,9 @@ Options:
 Recommendation: A. A grep-level scan is crude but needs no new crate and fails on the mistake that
 matters; C is the right end state and belongs with the P9 scorer.
 
+Decision: A, Antonio, 2026-11-06.
+Row: none yet, taken when accepted.
+
 ### D3. When are tolerances pre-registered, and when do they block?
 
 Options:
@@ -75,6 +81,9 @@ Options:
 Recommendation: A, because the hash and tolerance are cheap to commit now and cannot be added
 honestly after a score exists.
 
+Decision: A, Antonio, 2026-11-06.
+Row: none yet, taken when accepted.
+
 ### D4. Which sources enter the register first, and what is deferred?
 
 Options:
@@ -89,6 +98,9 @@ Options:
 
 Recommendation: B. Eora's terms are the only first-tier risk (D5); the other four score at T0 now.
 
+Decision: B, Antonio, 2026-11-06. Eora is dropped, so the first tier is WID non-US, IEA, Gennaioli, LIS and EXIOBASE.
+Row: none yet, taken when accepted.
+
 ### D5. What clears a source for fetching, and how is Eora handled?
 
 Licence reading from the provider's primary page and a `checked` date are required before a
@@ -97,7 +109,7 @@ data fetched):
 
 | Source | Finding | Status |
 | --- | --- | --- |
-| Eora | worldmrio.com/licensing.jsp: "free for academic use at degree-granting academic institutions. All other users must license the data." Redistribution, publication not addressed; cite Lenzen et al. 2012, 2013. | Not usable unless Antonio has an academic affiliation or buys a licence |
+| Eora | worldmrio.com/licensing.jsp: "free for academic use at degree-granting academic institutions. All other users must license the data." Redistribution, publication not addressed; cite Lenzen et al. 2012, 2013. | Dropped: academic login was asked to pay (D5) |
 | IEA balances | Product page sells the data ("Purchase licence"); no free tier or CC BY-NC-SA 4.0 IGO found; licence page did not load. | Unverified; the "free tier" in the protocol is unconfirmed |
 | LIS | LISSY "exclusively for non-commercial purposes", registered researchers only, remote execution; Key Figures open to the public, no licence named; citation required. Publication of aggregates not on the page; terms page did not load. | Likely usable for aggregate scores; unverified |
 | ACLED | Content Usage Terms bar competing or substitute datasets, services to third parties, attributing analysis to ACLED, and ML/LLM use "subject to strict limitations"; they require stating how data were manipulated. EULA and attribution policy not read. | Unverified; scoring a non-ML simulator looks compatible |
@@ -126,3 +138,6 @@ Filled in when accepted, in the same PR as the rows:
 - `specs/pre-p3/PLAN.md` C7: `holdout_guard_clean` added to the acceptance list.
 - `crates/ceteris-pack/config/sources.toml` and `validation.toml`: entries and `read_by` for the
   first-tier sources, added by the implementation tasks, not by this RFC.
+
+Decision: A, Antonio, 2026-11-06. Eora is dropped (Antonio, 2026-11-06: no eligible licence; an academic login was asked to pay); EXIOBASE 3.9 becomes the IO held-out source, its licence still to be read under A.
+Row: none yet, taken when accepted.
