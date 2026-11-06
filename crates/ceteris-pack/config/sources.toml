@@ -2135,3 +2135,123 @@ checked = 2026-10-25
 confidence = "medium"
 replaces = "wits-concordance"
 notes = "Read via the live file and a 2026-10-17 archive copy of the terms page (live page 403). Every one of the 5,017 HS lines BACI HS92 has in 2000 is in the key (version 0: 5,134 lines); 23 lines are unallocated (_X), none traded in 2000. The key splits divisions where ICIO 2025 does (B05, B06, C24A, C24B, C301, C302_309) and where ISIC Rev 3 sectors break (C254, C262, C268, C304, C325). The 2011 BTDIxE documentation says the earlier keys drew on UNSD correspondences; confirm with stan.contact@oecd.org before an open release if a third-party claim is a concern. The pipeline adapts the key, which section 3 permits: HS 7108 (non-monetary gold; the key puts 710812 in B072) is read as C24B, basic metals, and J58 and J59_60 (printed books, recorded media) as C18, printing and reproduction (goods.read_hs_cpa). Only ten derived weights and seven thetas enter the pack."
+
+# ---------------------------------------------------------------- held-out validation sources (RFC 0314, #174)
+# Licences read on the provider's own pages 2026-11-06. Nothing is fetched; none is in fetch.toml.
+# Verdicts: user-fetch only (each user downloads their own copy), excluded from the paid build.
+
+[[source]]
+id = "iea-balances"
+name = "IEA World Energy Balances, 2000"
+provider = "International Energy Agency"
+version = "Current edition"
+role = "Held-out energy balances by country and product, 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-IEA-NonCC"
+licence_url = "https://www.iea.org/terms/terms-of-use-for-non-cc-material"
+attribution = "Based on IEA data from IEA (year) World Energy Balances"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, excluded from the paid build. Product page lists the data as 'Terms of Use for Non-CC Material'. Terms s.3(a)(i): 'You must not share, or enable others to access, any Non-CC Material unless'; s.3(a)(ii)(A) allows 'Insubstantial Amounts only', 'neither primarily intended for, or directed towards, commercial advantage or revenue generation'; s.3(a)(v) fn.1 bars 'making more than 5 (five) raw data points ... accessible for download'. Attribution s.3(b). The CC BY-NC-SA 4.0 IGO licence for free data in the 2026-10-27 check was not found on the pages read here: unverified"
+checked = 2026-11-06
+confidence = "low"
+closed_source_only = true
+notes = "The balances product page offers 'Purchase licence'; whether a free tier exists for 2000 balances is unverified. Never committed: hashes and scores only."
+
+[[source]]
+id = "gennaioli-regions"
+name = "Growth in Regions: sub-national GDP and human capital database"
+provider = "Gennaioli, La Porta, Lopez-de-Silanes, Shleifer"
+version = "1569 regions (2014 paper database)"
+role = "Held-out regional GDP per capita, circa 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://ideas.repec.org/a/kap/jecgro/v19y2014i3p259-309.html"
+attribution = "Gennaioli, La Porta, Lopez-de-Silanes and Shleifer (2014), Journal of Economic Growth 19(3)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: unverified; treated as no licence stated, so closed only and user-fetch only. The paper record (RePEc) gives no dataset location or terms; the authors' dataset site blocks automated reads and was not read"
+checked = 2026-11-06
+confidence = "low"
+closed_source_only = true
+
+[[source]]
+id = "lis"
+name = "Luxembourg Income Study, income deciles"
+provider = "LIS Cross-National Data Center in Luxembourg"
+version = "Current waves around 2000"
+role = "Held-out income deciles around 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-LIS-Terms"
+licence_url = "https://www.lisdatacenter.org/data-access/lissy/eligibility/"
+attribution = "LIS Database, citation per LIS usage rules (not read)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only (registered researcher runs LISSY), excluded from the paid build. LISSY page: 'Use of the microdata is for scholarly, research or educational purposes only.' and 'Use of the microdata for commercial purposes is never permitted.' Microdata cannot be redistributed; whether aggregate scores may be published, the citation rule and the Key Figures licence are unverified (usage-agreement page returned only the site privacy policy)"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+notes = "LISSY is remote execution for registered researchers; there is no file to fetch, so a script cannot automate it."
+
+[[source]]
+id = "exiobase"
+name = "EXIOBASE 3.9, multi-regional input-output tables"
+provider = "XIO Sustainability Analytics; Vienna University of Economics and Business"
+version = "3.9 and later (Zenodo record shows 3.11.2)"
+role = "Held-out foreign input shares, year 2000 (RFC 0314 tier 1; replaces dropped Eora)"
+licence = "LicenseRef-EXIOBASE-licence"
+licence_url = "https://zenodo.org/records/23039074"
+attribution = "Credit EXIOBASE and cite per Zenodo record"
+commercial_use = false
+share_alike = true
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, excluded from the paid build. Zenodo: 'EXIOBASE v3.9 is released under a customized derivative of the CC-BY-SA-NC license.' Free use limited to universities, non-profit research institutes, environmental/social NGOs and environmental agencies; excludes 'Contracted or commissioned activities' and use 'intended to generate revenue'. Publication of derived results allowed with attribution but 'must not include the original or derived coefficients'. Competing IO databases need written permission. Whether an individual maintainer of a free open-source project is an eligible user is unverified; ask exiobase-support@googlegroups.com before the first fetch"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+
+[[source]]
+id = "acled"
+name = "Armed Conflict Location and Event Data"
+provider = "ACLED"
+version = "Current"
+role = "Held-out conflict events (RFC 0314, licence-only registration)"
+licence = "LicenseRef-ACLED-EULA"
+licence_url = "https://acleddata.com/eula"
+attribution = "ACLED must be 'clearly and prominently acknowledged'; state filters and manipulation (Attribution Policy, acleddata.com/attributionpolicy)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only (each user registers and accepts the EULA), excluded from the paid build. EULA s.1.2: 'Commercial entities may not access or use the Content and/or Platforms without first obtaining a corporate license'; s.3.1 'not permitted to reproduce, republish, redistribute'; s.3.1 external materials 'must be transformative, such that they cannot be reverse engineered to recreate the Licensed Content'; s.7 bars ML training and automated access 'except through ACLED's designated API'. Content Usage Terms bar creating 'any dataset, product, or platform that competes with' ACLED and benchmarking a similar one: a simulator scored against ACLED looks compatible, unconfirmed with ACLED"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+
+[[source]]
+id = "polity5"
+name = "Polity5 political regime characteristics"
+provider = "Center for Systemic Peace"
+version = "Polity5"
+role = "Held-out regime scores (RFC 0314, licence-only registration)"
+licence = "LicenseRef-CSP-AllRightsReserved"
+licence_url = "https://www.systemicpeace.org/inscrdata.html"
+attribution = "Cite Center for Systemic Peace in published work"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, never bundled, excluded from the paid build. 'All resources listed on this page are copyrighted by the Center for Systemic Peace.' 'Reproduction or redistribution of these resources, or substantial portions thereof, is prohibited' without 'prior, written permission'. 'Use of any of these resources in published work must provide proper citation.' Commercial use not mentioned: unverified; the User's Manual was not read"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
