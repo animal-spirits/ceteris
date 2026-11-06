@@ -1540,3 +1540,8 @@ sections = "21"
 rows = "0325"
 topic = "[Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md)"
 sections = "19.2"
+
+[[entry]]
+rows = "0326"
+topic = "[Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](../rfcs/0315-snapshot-chunks-are-zstd-canonical-bytes.md)"
+sections = "14.3"
