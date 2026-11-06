@@ -90,7 +90,7 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 
 **Interfaces:** `Edit { tick, source, god: bool, kind: EditKind }`; `EditKind::{Param, State, Policy, Event, Override, Replay, Switch}` with typed targets; edits apply at the tick boundary in (tick, source, sequence) order; a structural parameter edit rebuilds the kernel (pre-P3 D2); a network edit uses `set_network` (pre-P3 D1). Policy edits (tariffs, wedges) are in-world; state edits are god mode; the log marks the difference.
 
-- [ ] Failing tests: per edit kind with a P2 target, `edit_applies_at_its_tick`; `edits_at_one_tick_apply_in_source_then_sequence_order`; `switch_edit_after_t0_is_rejected` (switches are ex ante); `event_and_override_have_no_targets_yet`. Implement, commit.
+- [x] Failing tests: per edit kind with a P2 target, `edit_applies_at_its_tick`; `edits_at_one_tick_apply_in_source_then_sequence_order`; `switch_edit_after_t0_is_rejected` (switches are ex ante); `event_and_override_have_no_targets_yet`. Implement, commit.
 
 ### Task B2: Branches, forks and the null intervention (14.1, 14.3)
 
