@@ -6,6 +6,13 @@ on:
     paths-ignore: ["rfcs/**", "spec/**", "specs/**", "**/*.md"]
   pull_request:
     paths-ignore: ["rfcs/**", "spec/**", "specs/**", "**/*.md"]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,13 +39,34 @@ jobs:
       - name: Determinism bans still fire (ADR 0097)
         run: scripts/check_clippy_bans.sh
       - run: cargo deny check licenses
-      - run: cargo test --workspace
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: cargo nextest run --workspace --no-fail-fast
+      - run: cargo test --workspace --doc
       - name: Determinism gate in optimized builds
+        if: github.event_name == 'push'
         run: |
           cargo test -p ceteris-core --release --test golden --test p0_acceptance
           cargo test -p ceteris-econ --release --test golden --test p2_acceptance
       # The 20% regression gate needs a dedicated runner (ADR 0004).
-      - run: cargo bench --workspace --no-run
+      - name: Bench build
+        if: github.event_name == 'push'
+        run: cargo bench --workspace --no-run
+
+  slow:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Pack-gated solver tests
+        run: |
+          cargo test -p ceteris-calibrate --test benchmark -- --ignored japan_loses_from_costlier_borders eu_loses_from_soft_brexit
+          cargo test -p ceteris-econ --test p2_acceptance -- --ignored hundred_years_without_violation
 
   app:
     if: github.event_name == 'push'
