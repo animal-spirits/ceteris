@@ -1102,6 +1102,10 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
 
 ## Open questions
 
+- Pre-P3 benchmark (C7, 2026-11-06): the three ADR 0207 cases and the Brexit, distance and
+  US-China records are in the econ SPEC, "Pre-P3 benchmark". H2 distance (-0.45) and Brexit
+  magnitudes are tier-2 misses naming P4 (ADR 0272) as the removal phase.
+
 - Gateway count and selection rule are an agent default (22.2); the rule is in the econ SPEC
   pack section. As built (Task 17, controller ruling): 600 gateways (286 ports, 171 airports,
   143 land crossings; ADR 0251). Each country's land crossing points, the merged endpoints of its
