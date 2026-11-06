@@ -5,9 +5,14 @@
 //! (slot 0) are delivered at once and never enter the pipeline. Within a tick the caller first
 //! drains the due slot with [`Pipeline::pop_due`] (T1) and then pushes new dispatches.
 
+use rayon::prelude::*;
+
 use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 pub const SLOTS: usize = 4;
+
+/// A shipment for [`Pipeline::push_all`]: slot (1 to 4), buyer, units.
+pub type Push = (u8, u32, f64);
 
 /// Arrays are `[buyer * n_goods + g]`, buyers numbered by the caller.
 #[derive(Clone, Debug, PartialEq)]
@@ -53,6 +58,36 @@ impl Pipeline {
             "buyer {buyer} good {g}"
         );
         self.slots[(self.cursor + slot - 1) % SLOTS][buyer * self.goods + g] += units;
+    }
+
+    /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`, good by good in turn:
+    /// the four slots are filled in parallel, each in that order, so every cell sums the same
+    /// terms in the same order.
+    pub fn push_all(&mut self, lists: &[&[Push]]) {
+        let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
+        assert!(lists.len() <= goods, "{} goods of {goods}", lists.len());
+        for (g, list) in lists.iter().enumerate() {
+            for &(slot, buyer, _) in *list {
+                let slot = slot as usize;
+                assert!(
+                    (1..=SLOTS).contains(&slot),
+                    "slot {slot} outside 1 to {SLOTS}"
+                );
+                assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
+            }
+        }
+        self.slots
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(k, cells)| {
+                // the slot number that lands in storage slot k
+                let slot = ((k + SLOTS - cursor) % SLOTS + 1) as u8;
+                for (g, list) in lists.iter().enumerate() {
+                    for &(_, buyer, units) in list.iter().filter(|p| p.0 == slot) {
+                        cells[buyer as usize * goods + g] += units;
+                    }
+                }
+            });
     }
 
     /// Delivers what is due this tick, `[buyer * n_goods + g]`, and advances the pipeline.
@@ -145,6 +180,39 @@ mod tests {
     use super::*;
 
     const N_GOODS: usize = crate::goods::p2::N;
+
+    #[test]
+    fn push_all_is_push_in_turn() {
+        let (mut a, mut b) = (Pipeline::new(5, 3), Pipeline::new(5, 3));
+        let lists: [Vec<(u8, u32, f64)>; 2] = [
+            vec![(1, 0, 0.5), (4, 2, 1e-17), (1, 0, 0.25), (2, 4, 3.0)],
+            vec![(3, 1, 0.1), (1, 0, 0.2), (3, 1, 0.7)],
+        ];
+        for tick in 0..6 {
+            for (g, list) in lists.iter().enumerate() {
+                for &(slot, buyer, units) in list {
+                    a.push(
+                        slot as usize,
+                        buyer as usize,
+                        g,
+                        units * f64::from(tick + 1),
+                    );
+                }
+            }
+            let scaled: Vec<Vec<(u8, u32, f64)>> = lists
+                .iter()
+                .map(|l| {
+                    l.iter()
+                        .map(|&(s, k, u)| (s, k, u * f64::from(tick + 1)))
+                        .collect()
+                })
+                .collect();
+            let refs: Vec<&[Push]> = scaled.iter().map(|l| &l[..]).collect();
+            b.push_all(&refs);
+            assert_eq!(a.pop_due(), b.pop_due());
+            assert_eq!(a, b);
+        }
+    }
     use ceteris_core::snapshot::canonical;
 
     #[test]

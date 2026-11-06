@@ -1038,6 +1038,15 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   (7 goods, 14 threads): its wall time is the slowest good, 11.9 ms, against 71 ms of task
   time, and the serial tail is 6.8 ms; the crossing pass (2.3 to 3.7 ms per good) is the
   largest part of the kernel dispatch.
+  T2b goods moves by good (RFC 0287 item 2, ADR 0294; 2026-11-04): each good's goods moves run
+  at the end of its own per-good task on its ledger column (`Ledger::take_columns`,
+  `GoodColumn`, `Ledger::put_columns`, account chunks in parallel), its pipeline shipments are
+  listed and applied by `Pipeline::push_all` with the four slots in parallel, each in good
+  then list order. Every quantity and tally sums the same terms in the same order, so the
+  `identity` example's state and journal hashes equal `main`'s over 24 full-pack ticks at 1 and
+  14 threads. Sim loop with `--timing`, 60 ticks, three alternating rounds on the M4 Pro (load
+  10 to 22): dispatch 17.4 to 17.5 ms before, 16.2 to 16.4 after; a tick 40.0 before, 38.8 to
+  39.2 after. The serial tail is now the column write-back and `push_all`, 1.2 ms.
 
 ## Open questions
 

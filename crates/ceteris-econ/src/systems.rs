@@ -18,12 +18,13 @@
 
 use rayon::prelude::*;
 
-use ceteris_core::ledger::{AccountId, Entry, Flow, Ledger};
+use ceteris_core::ledger::{AccountId, Entry, Flow, GoodColumn, Ledger};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
 use ceteris_core::timing::{self, NONE};
+use ceteris_trade::pipeline::Push;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
 
@@ -866,16 +867,25 @@ pub fn dispatch(w: &mut EconWorld) {
         pop: &sc.pop_spend,
         class: &sc.class_spend,
     };
+    // each good's goods moves run in its own task, on its own ledger column: they read and
+    // write only that good, in the same order as one good after another
+    let nt = sc.payments.len();
+    {
+        let _span = timing::span("t2b.take", NONE);
+        w.ledger.take_columns(nt, &mut sc.stock);
+    }
+    let inventory = &markets.inventory;
     let goods_span = timing::span("t2b.goods", NONE);
     (
         &mut sc.sourced,
         &mut sc.columns,
         &mut sc.payments,
         sc.flows.current(),
+        &mut sc.stock,
     )
         .into_par_iter()
         .enumerate()
-        .for_each(|(g, (r, col, legs, flows))| {
+        .for_each(|(g, (r, col, legs, flows, stock))| {
             let gi = g as u32;
             let _good = timing::span("t2b.good", gi);
             col.gather(&markets.price, &markets.active, g, ng);
@@ -898,57 +908,28 @@ pub fn dispatch(w: &mut EconWorld) {
                     trade_legs(inp, acc, kernel, g, r, legs);
                 },
             );
+            let _span = timing::span("t2b.moves", gi);
+            goods_moves(acc, np, ng, inventory, legs, stock);
         });
     drop(goods_span);
-    let moves_span = timing::span("t2b.moves", NONE);
+    let moves_span = timing::span("t2b.apply", NONE);
+    {
+        let _span = timing::span("t2b.put", NONE);
+        w.ledger.put_columns(&w.scratch.stock);
+    }
     let sourced = std::mem::take(&mut w.scratch.sourced);
     let payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
-        let transit = acc.transit[g];
-        let mut made = 0.0;
-        let mut first = 0;
         for d in 0..np {
-            let (cell, market) = (d * ng + g, acc.market[d]);
-            w.scratch.dispatched[cell] = r.shipped[d];
-            // buyers at d: home purchases now, shipments into the pipeline
-            let end = legs.order_ends[d] as usize;
-            for o in &legs.orders[first..end] {
-                let shipped = o.home_shipped.min(w.ledger.goods(market, g));
-                if shipped > 0.0 {
-                    w.ledger.ship(market, o.account, g, shipped);
-                    let home = if shipped == o.home_shipped {
-                        o.home
-                    } else {
-                        o.home * (shipped / o.home_shipped)
-                    };
-                    adjust_stock(&mut w.ledger, o.account, g, home - shipped);
-                    made += home - shipped;
-                    if o.household {
-                        // pops hold nothing between purchases, so they consume what they hold:
-                        // `home` itself can differ from it by the rounding of the adjustment
-                        let held = w.ledger.goods(o.account, g);
-                        w.ledger.destroy(o.account, g, held);
-                    }
-                }
-                for (slot, &units) in o.slots.iter().enumerate() {
-                    if units > 0.0 {
-                        w.pipeline.push(slot + 1, o.buyer, g, units);
-                    }
-                }
-            }
-            first = end;
-            // what leaves the origin market beyond its home sales and its carried stock
-            let x = (w.ledger.goods(market, g) - w.markets.inventory[cell]).max(0.0);
-            if x > 0.0 {
-                w.ledger.ship(market, transit, g, x);
-            }
+            w.scratch.dispatched[d * ng + g] = r.shipped[d];
         }
-
-        w.scratch.dispatch_made[g] = made;
+        w.scratch.dispatch_made[g] = legs.made;
         w.scratch.dispatch_due[g] = r.selected - r.lost;
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    let pushes: Vec<&[Push]> = payments.iter().map(|p| &p.pushes[..]).collect();
+    w.pipeline.push_all(&pushes);
     drop(moves_span);
     // every good's buyers' payments, then its legs; nothing above reads money
     let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
@@ -967,6 +948,66 @@ pub fn dispatch(w: &mut EconWorld) {
     }
     w.scratch.sourced = sourced;
     w.scratch.payments = payments;
+}
+
+/// T2b's goods moves of one traded good on its ledger column, buyer by buyer in destination
+/// order: home purchases now (households consume what they hold), shipments queued for the
+/// pipeline in `legs.pushes`, then what leaves each origin market beyond its home sales and
+/// its carried stock into transit. Sets `legs.made`, the goods selection created.
+fn goods_moves(
+    acc: &Accounts,
+    np: usize,
+    ng: usize,
+    inventory: &[f64],
+    legs: &mut Payments,
+    stock: &mut GoodColumn,
+) {
+    let g = stock.good();
+    let transit = acc.transit[g];
+    let mut made = 0.0;
+    let mut first = 0;
+    legs.pushes.clear();
+    for d in 0..np {
+        let market = acc.market[d];
+        // buyers at d: home purchases now, shipments into the pipeline
+        let end = legs.order_ends[d] as usize;
+        for o in &legs.orders[first..end] {
+            let shipped = o.home_shipped.min(stock.goods(market));
+            if shipped > 0.0 {
+                stock.ship(market, o.account, shipped);
+                let home = if shipped == o.home_shipped {
+                    o.home
+                } else {
+                    o.home * (shipped / o.home_shipped)
+                };
+                let change = home - shipped;
+                if change >= 0.0 {
+                    stock.create(o.account, change);
+                } else {
+                    stock.destroy(o.account, -change);
+                }
+                made += change;
+                if o.household {
+                    // pops hold nothing between purchases, so they consume what they hold:
+                    // `home` itself can differ from it by the rounding of the adjustment
+                    let held = stock.goods(o.account);
+                    stock.destroy(o.account, held);
+                }
+            }
+            for (slot, &units) in o.slots.iter().enumerate() {
+                if units > 0.0 {
+                    legs.pushes.push((slot as u8 + 1, o.buyer as u32, units));
+                }
+            }
+        }
+        first = end;
+        // what leaves the origin market beyond its home sales and its carried stock
+        let x = (stock.goods(market) - inventory[d * ng + g]).max(0.0);
+        if x > 0.0 {
+            stock.ship(market, transit, x);
+        }
+    }
+    legs.made = made;
 }
 
 /// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
