@@ -73,6 +73,16 @@ systems (19.4) arrive with the first module that needs them.
 - `ship(from, to, good, qty)` moves goods between accounts.
 - `create(account, good, qty)` and `destroy(account, good, qty)` are the only ways
   goods appear or disappear (production, consumption, spoilage); both are tallied.
+- `take_columns(n, cols)` and `put_columns(cols)` lend goods `0..n` out as one `GoodColumn` per
+  good (holdings of every account and the good's created and destroyed tallies), whose
+  `ship`, `create` and `destroy` are the ledger's own on that good, so per-good moves run in
+  parallel with the same arithmetic in the same order (RFC 0287 item 2; test
+  `columns_are_goods_operations_in_turn`).
+- `track(flows)` (flow ids below 64) makes the ledger keep, per account, the net amount of this
+  tick's entries of those flows as it posts them, from `transfer` and `post_all` alike;
+  `tally(a)` reads it and `begin_tick` zeroes it. It equals the journal's sum over those flows
+  (test `tally_is_the_journal_sum_of_tracked_flows`), so an invariant over it need not scan the
+  journal (RFC 0287 item 3).
 - Money scale (minor units per currency unit) is a P5 decision; P0 uses one numeraire.
 
 ## Deterministic reduction (Section 19.4, parallelism)
