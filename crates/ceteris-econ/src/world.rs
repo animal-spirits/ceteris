@@ -1853,6 +1853,7 @@ fn expect_len(what: &str, got: usize, want: usize) -> Result<(), DecodeError> {
 
 impl State for EconWorld {
     fn begin_tick(&mut self) {
+        self.ledger.track(&[WAGE, DIVIDEND, REBATE]);
         self.ledger.begin_tick();
         self.scratch.income_paid.fill(0);
         self.scratch.flows.advance();
@@ -2061,36 +2062,14 @@ impl State for EconWorld {
             }
         }
 
-        // pops hold the first account IDs
-        let pop_of = |a: AccountId| (a.0 as usize) < inp.n_pops();
-        // one slot per chunk, combined in chunk order
-        let slots: Vec<Vec<i64>> = self
-            .ledger
-            .journal()
-            .par_chunks(1 << 16)
-            .map(|entries| {
-                let mut credited = vec![0i64; inp.n_pops()];
-                for entry in entries {
-                    if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
-                        if pop_of(entry.to) {
-                            credited[entry.to.0 as usize] += entry.amount;
-                        }
-                        if pop_of(entry.from) {
-                            credited[entry.from.0 as usize] -= entry.amount;
-                        }
-                    }
-                }
-                credited
-            })
-            .collect();
-        let mut credited = vec![0i64; inp.n_pops()];
-        for slot in &slots {
-            credited.iter_mut().zip(slot).for_each(|(x, y)| *x += y);
-        }
-        if let Some(k) = (0..inp.n_pops()).find(|&k| credited[k] != sc.income_paid[k]) {
+        // pops hold the first account IDs; the ledger tallies the income flows per account
+        // as it posts them, the sum the journal gives
+        let credited = |k: usize| self.ledger.tally(AccountId(k as u32));
+        if let Some(k) = (0..inp.n_pops()).find(|&k| credited(k) != sc.income_paid[k]) {
             let detail = format!(
                 "pop {k}: journal credits {}, income paid {}",
-                credited[k], sc.income_paid[k]
+                credited(k),
+                sc.income_paid[k]
             );
             return fail("income", detail);
         }
