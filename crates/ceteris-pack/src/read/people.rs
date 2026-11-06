@@ -1,5 +1,5 @@
-//! Population, education, labour and Gini sources: ILOSTAT, WIC, Barro-Lee, SWIID, PWT and the
-//! WDI series of the people module.
+//! Population, education, labour and Gini sources: ILOSTAT, WIC, Barro-Lee, SWIID, PWT, UN WPP
+//! and the WDI series of the people module.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -12,6 +12,8 @@ use super::xlsx::{self, Cell};
 use super::{ByYear, Csv, YEAR, cell, float, int, nearest, open_csv, with_member};
 use crate::numeric::{fsum, pairwise_sum};
 
+/// UN World Population Prospects 2024 total population by sex and year (gzip CSV).
+pub const WPP: &str = "WPP2024_TotalPopulationBySex.csv.gz";
 /// Number of education levels: below secondary, secondary, tertiary.
 pub const N_EDU: usize = 3;
 /// Years whose mean unemployment rate is the natural rate u*.
@@ -225,6 +227,35 @@ pub fn read_swiid(
     )
 }
 
+/// UN WPP total population (gzip CSV): persons in `YEAR`, medium variant, by ISO code (rows
+/// without one are aggregates).
+pub fn read_wpp(path: &Path) -> Result<BTreeMap<String, f64>, String> {
+    let file = std::fs::File::open(path).map_err(|e| super::err(path, e))?;
+    // The file is several gzip members back to back.
+    let mut csv = Csv::new(
+        flate2::read::MultiGzDecoder::new(std::io::BufReader::new(file)),
+        path,
+    )?;
+    let (iso, variant, time, total) = (
+        csv.col("ISO3_code")?,
+        csv.col("Variant")?,
+        csv.col("Time")?,
+        csv.col("PopTotal")?,
+    );
+    let origin = path.display().to_string();
+    let year = YEAR.to_string();
+    let mut out = BTreeMap::new();
+    let mut row = StringRecord::new();
+    while csv.next(&mut row)? {
+        let code = cell(&row, iso);
+        if !code.is_empty() && cell(&row, variant) == "Medium" && cell(&row, time) == year {
+            // WPP counts in thousands.
+            out.insert(code.to_owned(), float(cell(&row, total), &origin)? * 1000.0);
+        }
+    }
+    Ok(out)
+}
+
 /// PWT 11 series by economy and year.
 #[derive(Debug, Default)]
 pub struct Pwt {
@@ -234,9 +265,22 @@ pub struct Pwt {
     pub income: BTreeMap<String, ByYear>,
     /// Population, millions.
     pub population: BTreeMap<String, ByYear>,
+    /// Price level of domestic absorption, C + I + G (pl_da, PPP over the market rate; not 1 for
+    /// the US; RFC 0282 D7).
+    pub price_level: BTreeMap<String, ByYear>,
+    /// How the price level of `YEAR` was made (i_cig: Benchmark, Interpolated, Extrapolated or an
+    /// ICP time-series flag; RFC 0282 D8).
+    pub price_basis: BTreeMap<String, String>,
+    /// The series of the initial drift (ADR 0103), by [`DRIFT_SERIES`] name.
+    pub drift: BTreeMap<&'static str, BTreeMap<String, ByYear>>,
 }
 
-/// PWT 11 Data sheet: labour share, GDP per person and population by year.
+/// PWT 11 series of the initial drift (ADR 0103): TFP at constant national prices, the capital
+/// stock and GDP at constant national prices, the investment share and the depreciation rate.
+pub const DRIFT_SERIES: [&str; 5] = ["rtfpna", "rnna", "rgdpna", "csh_i", "delta"];
+
+/// PWT 11 Data sheet: labour share, GDP per person, population and the price level of domestic
+/// absorption by year, and the price level's basis in `YEAR`.
 pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
     let origin = path.display().to_string();
     let number = |c: &Cell, name: &str| {
@@ -256,6 +300,25 @@ pub fn read_pwt(path: &Path) -> Result<Pwt, String> {
                 .entry(code.clone())
                 .or_default()
                 .insert(year, number(c, "labsh")?);
+        }
+        if let Some(c) = r.get("pl_da") {
+            out.price_level
+                .entry(code.clone())
+                .or_default()
+                .insert(year, number(c, "pl_da")?);
+        }
+        for name in DRIFT_SERIES {
+            if let Some(c) = r.get(name) {
+                out.drift
+                    .entry(name)
+                    .or_default()
+                    .entry(code.clone())
+                    .or_default()
+                    .insert(year, number(c, name)?);
+            }
+        }
+        if let (Some(c), YEAR) = (r.get("i_cig"), year) {
+            out.price_basis.insert(code.clone(), c.to_text());
         }
         if let Some(c) = r.get("pop") {
             let pop = number(c, "pop")?;
@@ -292,8 +355,15 @@ pub struct Observed {
     pub gini_wdi: BTreeMap<String, f64>,
     pub gini_swiid: BTreeMap<String, f64>,
     pub gdp_per_capita: BTreeMap<String, f64>,
+    /// PWT price level of domestic absorption (pl_da) by year, not relative to the US.
+    pub price_level_pwt: BTreeMap<String, ByYear>,
+    /// WDI population in `YEAR`.
     pub population: BTreeMap<String, f64>,
+    /// UN WPP population in `YEAR`, for economies WDI does not list.
+    pub population_wpp: BTreeMap<String, f64>,
     pub region: BTreeMap<String, String>,
+    /// PWT [`DRIFT_SERIES`] and population (`pop`) by year, the drift's inputs (ADR 0103).
+    pub drift_pwt: BTreeMap<&'static str, BTreeMap<String, ByYear>>,
 }
 
 fn scaled(m: BTreeMap<String, f64>, by: f64) -> BTreeMap<String, f64> {
@@ -308,7 +378,7 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
     let (region, table_names) = read_wdi_regions(&gini_zip)?;
     let mut names = iso_by_name(admin0)?;
     names.extend(table_names);
-    let pwt = read_pwt(&cache.join("pwt110.xlsx"))?;
+    let mut pwt = read_pwt(&cache.join("pwt110.xlsx"))?;
     let pop = read_wdi(&cache.join("wdi_SP.POP.TOTL.zip"))?;
     Ok(Observed {
         participation: read_ilostat(
@@ -335,10 +405,17 @@ pub fn load_observed(cache: &Path, admin0: &Path) -> Result<Observed, String> {
         gini_wdi: scaled(nearest(&read_wdi(&gini_zip)?), 100.0),
         gini_swiid: nearest(&read_swiid(&cache.join("swiid9_92.zip"), &names)?),
         gdp_per_capita: nearest(&pwt.income),
+        price_level_pwt: std::mem::take(&mut pwt.price_level),
+        drift_pwt: {
+            let mut d = std::mem::take(&mut pwt.drift);
+            d.insert("pop", pwt.population.clone());
+            d
+        },
         population: pop
             .into_iter()
             .filter_map(|(k, v)| Some((k, *v.get(&YEAR)?)))
             .collect(),
+        population_wpp: read_wpp(&cache.join(WPP))?,
         region,
     })
 }

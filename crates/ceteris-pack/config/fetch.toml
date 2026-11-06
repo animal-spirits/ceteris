@@ -130,6 +130,30 @@ sha256 = "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3"
 bytes = 5839841
 url = "https://dataverse.nl/api/access/datafile/554105"
 
+# Sector labour shares and wealth shares (ADRs 0307, 0308), recorded owner-side 2026-11-03 (the
+# cloud network blocks both hosts). WID replaces its bulk file in place: a new release is a re-pin.
+[[file]]
+source = "wiod-sea"
+name = "WIOD_SEA_Nov16.xlsx"
+sha256 = "8cf5ed3d1b7d7ddae93037cc5e1c1d0a2721b9a7679dcc076b85ac5220c576ce"
+bytes = 5536437
+url = "https://dataverse.nl/api/access/datafile/199095"
+
+# Foreign-owned shares and their parents (ADR 0309).
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-xvem.csv"
+sha256 = "4e80473b9f6918bfc45b2326f5a4a178399610fedd15f073ffb65d2c283d8dc0"
+bytes = 13054238
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-xvem.csv"
+
+[[file]]
+source = "oecd-aamne"
+name = "aamne2026-bilateral-output.csv"
+sha256 = "4aea799162e631d568b7c5fbb73d16592e5b375645c0384daba85f4f6e125f3c"
+bytes = 44041316
+url = "https://www.oecd.org/content/dam/oecd/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services/analytical-amne/2026/aamne-bilateral-output.csv"
+
 [[file]]
 source = "wdi"
 name = "wdi_SI.POV.GINI.zip"
@@ -302,6 +326,39 @@ name = "wdi_NY.GDP.NGAS.RT.ZS.zip"
 sha256 = "e77b29f91026cee0df109141c15be90a6e268915f64255f5551293772cea1f60"
 bytes = 72497
 url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.NGAS.RT.ZS?downloadformat=csv"
+
+# GDP per person at PPP, current international dollars: with GDP and population, the WDI price level
+# (ADR 0098 as amended by ADR 0289); and the official exchange rate (ADR 0098).
+[[file]]
+source = "wdi"
+name = "wdi_NY.GDP.PCAP.PP.CD.zip"
+sha256 = "c7f9101196b72ca1a93b367a93f4b92ab70434685f8036e946268f3eab486822"
+bytes = 95109
+url = "https://api.worldbank.org/v2/en/indicator/NY.GDP.PCAP.PP.CD?downloadformat=csv"
+
+# Current account balance, BoP, current USD, 2000 to 2024: the trade-imbalance transfers (ADR 0100
+# as amended by ADRs 0319 and 0300).
+[[file]]
+source = "wdi"
+name = "wdi_BN.CAB.XOKA.CD.zip"
+sha256 = "f9542418071ee4092be0707e53c7e67513a3efc64670caea5c15bc5fc2af6c3f"
+bytes = 80724
+url = "https://api.worldbank.org/v2/en/indicator/BN.CAB.XOKA.CD?downloadformat=csv"
+
+[[file]]
+source = "wdi"
+name = "wdi_PA.NUS.FCRF.zip"
+sha256 = "1d1be3c600d944debe490c71b0a81028cef87ee6a273c17c38233dfd8e6b9b2a"
+bytes = 68682
+url = "https://api.worldbank.org/v2/en/indicator/PA.NUS.FCRF?downloadformat=csv"
+
+# National population where WDI has none, such as Western Sahara (ADR 0098).
+[[file]]
+source = "un-wpp"
+name = "WPP2024_TotalPopulationBySex.csv.gz"
+sha256 = "66b84489fd7875b62de9b40d960b803b8c8439367c98deab89c2f770970925b9"
+bytes = 16980593
+url = "https://population.un.org/wpp/assets/Excel%20Files/1_Indicator%20(Standard)/CSV_FILES/WPP2024_TotalPopulationBySex.csv.gz"
 
 # GDP per person where WDI has none: Cook Islands from ADB, North Korea from the Maddison Project (2011 international dollars).
 [[file]]

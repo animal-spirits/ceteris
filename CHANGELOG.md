@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+### BEHAVIOUR: largest income-effect weight the household shares allow (ADR 0313, RFC 0304)
+
+- PIGL inversion: z = min_c Omega_c / theta_c, the binding category's omega 0; omega_A = 0
+  wherever it fits, so the fixture and every country that inverted before keep their weights and
+  hashes. On the rebuilt C6 pack six countries bind on M (NGA, ETH, GHA, TCD, MOZ, TZA).
+- Calibration pass cap `MAX_PASSES` 100 to 300 (an iteration cap): the C6 pack settles at pass 187.
+- Reference equilibrium: profits by dividend share, the foreign-owned part of a positive profit
+  to the host's owners (ADRs 0104, 0310), as the simulator and the calibration.
+- `tests/golden/p2-pack.txt` re-blessed for the C6 calibration tables (scratch pack; the owner's
+  installed pack is unchanged).
+
+### BEHAVIOUR: trade imbalances as transfers, r_g removed (ADR 0100, RFC 0308 D1 to D6)
+
+- Each country receives D_c = s_c Y each tick from one world transfer account (Y last tick's
+  world income), paid to its pops by income after the rebates; the account nets to zero every
+  tick (`end_tick`). S22 `EconParams::transfers`: `FixedShares` (default, the 2000 shares),
+  `ObservedPath` (2000 to 2024, 10-year half-life after) or `Off`. Inputs without shares run
+  alike under all three, state hashes included; the switch enters the static digest and the
+  snapshot only where some share is nonzero.
+- Pack: `econ_countries` gains `ca_2000`, `ca_missing`, `transfer` and `transfer_2000` to
+  `transfer_2024` from WDI BN.CAB.XOKA.CD (pinned); missing current accounts at 0, the world
+  discrepancy spread pro rata to GDP (ADRs 0319, 0321, 0300). A pack without them loads with no
+  transfers, so the installed pack does not move until the C6 rebuild.
+- Calibration: no r_g. V and VA stay at the data; each pass balances every country's traded
+  final demand biproportionally (`balance::balance`, ADR 0318) and stage 4 inverts PIGL on the
+  balanced shares at income + D_c (ADR 0320). The summary and the tables' metadata report
+  `column_factor` (the residual of the old r_g), `balance_residual` (the scaling's r_g - 1) and
+  `balance_mu`; `r` is gone. The export writes `countries.transfer` only where transfers are on.
+- Fixture (ADR 0299): its traded VA is scaled by the r_g its calibration solved before
+  (`fixture::BALANCE`), so it is balanced at D_c = 0. Goldens re-blessed: the fixture export
+  (`enterprises`, `provinces`, `pigl_check`, `params.json`, which also gains `transfers`), its
+  calibration and reference, and `tests/golden/p2-econ.txt`. The calibrated state is the one
+  before to rounding (column factors 1 within 1.1e-14, 26 passes against 27; every table
+  within the iterative tolerance) except the PIGL within-pop dispersion (up to 1.27e-2) and
+  scale (8.7e-4): the dispersion is fixed by the data state's between-pop incomes, which the
+  scaled VA moves, and lambda follows it. The data-state reference solution moves with the
+  inputs.
+
 ### BEHAVIOUR: snapshot format 3, interventions replay on seek (RFC 0285)
 
 - Snapshots open with the inputs digest without the network, the network's digest and both
@@ -43,6 +81,76 @@
   provinces with base income weights; the report prints them beside the country forms with
   the per-country gap. The flow window is scratch: no golden hash moves.
 
+### Real GDP check on benchmark economies; current WDI price level (ADRs 0290, 0289, RFC 0282 D8 and D9; C1f, built, not installed)
+
+- RFC 0282 rulings, Antonio, 2026-11-01: D8 A (gate ADR 0098's real GDP check on the 31 ICIO
+  economies whose PWT 2000 price level is a benchmark, at 10%, on totals; report the other 48 with
+  PWT's `i_cig`); D9 A (D1's WDI fallback is current WDI's implied level, GDP over GDP per person
+  at PPP times population, not the WDI Database Archives file of PA.NUS.PPPC.RF).
+- P160: the check's 10%, the measured agreement of two vintages of the same benchmark PPPs.
+- Real GDP check, now against NY.GDP.MKTP.PP.CD (new validation file): 31 of 31 benchmark economies
+  within 10%, 23 within 5%, the UK largest at 1.093; Cyprus 0.967 (0.708 per person). All 79: 35
+  within 5%, median 0.955, slope 0.0523, correlation 0.267.
+- WDI fallback: NY.GDP.PCAP.PP.CD moves from `validation.toml` to `fetch.toml`; PA.NUS.PPPC.RF is
+  dropped. Sources: PWT 181, WDI 21, donor 40 (was 15 and 46); no WDI level is rejected.
+  Afghanistan, Andorra, Greenland, Nauru, East Timor and the US Virgin Islands move from the donor
+  to WDI. 21 levels move, Somalia most (0.095 to 0.827). p_c 0.127 (Tajikistan) to 1.80
+  (Bermuda), GDP-weighted mean 0.912.
+- A scratch `pack build --econ-only` moves `econ_countries` only (`price_level`,
+  `price_level_source`). No fixture golden moves; the installed pack is unchanged until
+  reinstall.
+
+### Price level of domestic absorption (ADR 0317, RFC 0282 D7; C1e, built, not installed)
+
+- RFC 0282 D7, Antonio, 2026-11-01: PWT 11 pl_da (domestic absorption, C + I + G) over the US's
+  replaces pl_gdpo as p_c's primary source. The first answer, pl_gdpe, was void: PWT 11 has no
+  such series.
+- Screen refit: ln p = -2.6571 + 0.2453 ln y over 180 economies (R2 0.611), residual fences
+  -1.198 to 1.188; PWT rejects Somalia only, so Bermuda (1.80) and the Turks and Caicos (1.21)
+  take PWT; WDI's Kosovo (0.149) now falls to the donor. Sources: PWT 181, WDI 15, donor 46. p_c
+  0.095 (Somalia) to 1.80 (Bermuda), GDP-weighted mean 0.911 (was 0.897); 226 of 242 move.
+- Real GDP check: 34 of 79 within 5% (was 32), median 0.950, slope 0.0509, correlation 0.260;
+  pinned, reported, not enforced (the pack's GDP equals WDI's, so the misses are PWT against WDI
+  PPPs).
+- A scratch `pack build --econ-only` moves `econ_countries` only (`price_level`,
+  `price_level_source`, `price_level_imputed`). No fixture golden moves; the installed pack and
+  its golden (`tests/golden/p2-pack.txt`) are unchanged until reinstall.
+
+### Donor use tables balanced to domestic use; the real GDP check (ADRs 0284 to 0286, RFC 0282; C1d, built, not installed)
+
+- RFC 0282 rulings, Antonio, 2026-11-01: D4 A (the run's world price index keeps local goods;
+  no code change, ADR 0284), D5 A (ADR 0098's real GDP check reads NY.GDP.PCAP.PP.CD, ADR 0285),
+  D6 A (RAS of the donor's use table to domestic use, ADR 0286), which supersedes D3.
+- `ceteris_pack::econ::icio::impute` balances the donor's [Z | F] of each imputed economy with its
+  own VA and BACI 2000 trade (`read::baci::trade_by_good`, new) to rows X + M - E, columns X - VA
+  and final demand VA + M - E, 1e-10 in at most 200 passes (`ras::balance` now takes any shape and
+  returns its passes). 87 economies balanced (10 to 56 passes, worst residual 1.0e-10); 48 keep the
+  donor's table for a negative domestic use, 15 for no BACI trade. `econ_countries` gains
+  `io_basis` (`icio`, `ras`, `donor`). The build summary reports the imputed VA against ICIO ROW:
+  1,014,073 against 1,019,231 million USD.
+- The real GDP check is a pack test (`real_gdp_per_person_against_wdi_ppp`, PP.CD pinned in
+  `validation.toml`, source `wdi-ppp`): 32 of 79 ICIO economies within 5%; ADR 0098's 5% does not
+  hold and is not gated.
+- A scratch `pack build --econ-only` moves `econ_countries` and `econ_io` only. No fixture golden
+  moves; the installed pack and its golden (`tests/golden/p2-pack.txt`) are unchanged until
+  reinstall.
+
+### Price levels from PWT, WDI and the donor (ADR 0282, RFC 0282; C1c, built, not installed)
+
+- `econ_countries` `price_level` p_c: PWT 11 pl_gdpo over the US's (179 pack countries), else
+  WDI PA.NUS.PPPC.RF over the US's of the same year (17), else the donor's (46);
+  `price_level_source` (new) names it and `price_level_imputed` is set where it is not PWT's.
+  Values are screened by Tukey's far-out fences on the residuals of the Penn effect fitted on
+  the PWT levels (ln p = -2.7317 + 0.2517 ln y, 179 economies, fences -1.198 to 1.169): rejected
+  PWT Bermuda, Somalia, Turks and Caicos; WDI unit errors such as New Caledonia 0.027 and the US
+  Virgin Islands 0.117. p_c runs 0.095 (Somalia) to 1.42 (Japan).
+- ADR 0098's rescale to 1999-2001 exchange rates is dropped (ADR 0283); values stay at 2000
+  market rates.
+- A scratch `pack build --econ-only` moves `econ_countries` only. No fixture golden moves; the
+  installed pack and its golden (`tests/golden/p2-pack.txt`) are unchanged until reinstall.
+- RAS of donor tables stays unwired: the ruled row targets are negative for 321 rows of 122
+  economies (RFC 0282, D3 and D6).
+
 ### The goods count is a pack value (P3 G2)
 
 - `ceteris_trade::Goods` holds the rows of `econ_goods` (names, traded prefix, storable flags,
@@ -51,6 +159,36 @@
   The compile-time `N_GOODS`, `TRADED`, `STORABLE`, `CATEGORY` and calibrate's `N_TRADED` are
   gone; `goods::p2` keeps P2's values for the fixture, the defaults and tests.
 - No golden moves: the inputs digest adds the goods table only where it differs from P2's.
+
+### Local base price p_c (ADR 0098; C1b, p_c = 1 until the source is ruled)
+
+- `econ_countries` gains `price_level` and `price_level_imputed`, written 1 and true for every
+  country (the source rule waits on the owner); packs without the column load at 1.
+- Econ: `Countries::price_level` and `EconInputs::set_price_levels`. Local goods start at p_c
+  (base price, market price, PIGL inversion prices); local enterprises have A = 1 / p_c and
+  coef = a_kg p_o / q, a_VA = 1 - sum coef q / p_o, so values, cost shares and the base point
+  are the data's. The inputs digest adds p_c only where some country's is not 1.
+- Reference: reads p_c as the base price of local goods (`Inputs::data_state_price`), in the
+  coefficients, a_VA, the PIGL inversion and the solve's start.
+- Calibration: local goods stay at p_c through the passes, stage 3 and the tables; the
+  normalization of each traded good's prices is unchanged (traded goods only); the block gain
+  divides a household's local spending by the value of the cell's output.
+- No golden moves: with p_c = 1 every quantity is bit for bit the one before.
+
+### Pack build: ADR 0098 source corrections (C1; built, not installed)
+
+- Gini: SWIID first (178 countries), WDI fallback (none needed in 2000), else the donor (64);
+  `econ_countries` gains `gini_source`. 197 Ginis move, at most 0.177 (Malawi 0.658 to 0.481;
+  India 0.277 to 0.430).
+- National population from UN WPP 2024 where WDI has none: Western Sahara 811 to 271,943
+  (its VA 1.05 to 352.6 million USD), Taiwan +0.38%, and 12 small territories; Cook Islands
+  province 710 and St Helena province 3504 rise above the working-age floor (provinces with VA
+  4,368 to 4,370).
+- Anguilla and Montserrat take Latin America and Caribbean donors (Mexico, Brazil; were Croatia,
+  Latvia). Venezuela ranks donors by WDI income (`wdi_not_pwt`; donor Peru to Chile).
+- A scratch `pack build --econ-only` moves `econ_countries`, `econ_io`, `econ_provinces` and
+  `econ_pops`; `econ_goods`, `econ_tariffs`, `gateways` and `econ_home_shares` do not. World VA
+  3.216259e7 to 3.216321e7 million USD. The installed pack and the goldens do not move (C6).
 
 ### BEHAVIOUR: the 2000 pack reinstalled with ADR 0281's extraction VA and the Sinkhorn pin (B10)
 
