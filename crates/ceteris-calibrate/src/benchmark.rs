@@ -87,7 +87,11 @@ pub fn world(pack: &Path, shocks: &[Shock]) -> Result<EconWorld, String> {
     let trade = shock::trade_params(&inputs, trade);
     Ok(EconWorld::new(
         Arc::new(inputs),
-        EconParams::frictionless(),
+        // shocks are read against the steady state, which the initial drift leaves (ADR 0103)
+        EconParams {
+            drift: false,
+            ..EconParams::frictionless()
+        },
         trade,
     ))
 }
