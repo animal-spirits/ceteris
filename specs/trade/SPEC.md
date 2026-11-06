@@ -1052,6 +1052,11 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   journal stays one contiguous record. Same alternating rounds: end_tick 3.55 to 3.61 ms before,
   2.67 to 2.69 after; the tick 38.3 to 38.6 before, 37.8 to 38.2 after, within the noise of
   that load.
+  `Pipeline::in_flight_all` (RFC 0287 item 4, 2026-11-04) runs the goods in parallel, each by
+  `Pipeline::in_flight`, the same sum in the same order; its three calls a tick (T1, T2b, E5)
+  stay three, since E5's transit check must read the pipeline itself. Alternating rounds
+  against the serial loop, load 17 to 31: the three calls 2.30 to 2.39 ms a tick before, 1.18
+  to 1.26 after in three of four rounds (2.52 in a noisy one).
 
 ## Open questions
 
