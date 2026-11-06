@@ -109,6 +109,10 @@ pub struct Edit {
     pub kind: EditKind,
     pub target: String,
     pub value: f64,
+    /// Selects the rows of `target`'s table by a stored predicate, re-evaluated at the edit's
+    /// tick (edit by query, ADR 0155); `target` then names a column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -233,6 +237,10 @@ impl Scenario {
                 h.str(e.kind.name());
                 h.str(&e.target);
                 h.f64(e.value);
+                if let Some(q) = &e.query {
+                    h.str("query");
+                    h.str(q);
+                }
             }
         }
         Ok(h.finish())
