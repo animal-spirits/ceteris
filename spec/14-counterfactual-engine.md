@@ -51,5 +51,5 @@ For each variable the engine measures when across-seed dispersion of the baselin
 
 ### 14.8 Scripting API
 
-Everything in the UI is available from scripts through the `ceteris` CLI driven by a scenario file (ADR 0113), for example: create a branch from a baseline at a tick, apply edits, run an ensemble. Runs write their outcome tables as Arrow IPC and Parquet, which Polars, DuckDB or any other language reads for analysis without glue code. A thin Python client that only drives runs and reads Arrow is added only if notebook-driven runs prove necessary, under its own ADR.
+Everything in the UI is available from scripts through the `ceteris` CLI driven by a scenario file (ADR 0113) and, after the P3 gate, through the read-only `ceteris serve` local API (ADRs 0197, 0323), for example: create a branch from a baseline at a tick, apply edits, run an ensemble. Runs write their outcome tables as Arrow IPC and Parquet, which Polars, DuckDB or any other language reads for analysis without glue code. A thin Python client that only drives runs and reads Arrow is added only if notebook-driven runs prove necessary, under its own ADR.
 

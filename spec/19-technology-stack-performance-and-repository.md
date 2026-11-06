@@ -37,6 +37,8 @@ Hardware: MacBook Pro with an M-series Pro chip (about 12 cores) and 18-36 GB of
 
 During wars the daily sub-tick adds about 30 cheap steps per month, budgeted separately. All timings are estimates; P0 and P2 benchmarks replace them with measurements. The ceiling stays 160 ms; from P3 each goods-indexed line is restated as a fixed cost plus a cost per good fitted to measurements, with its value at 45 goods (ADR 0235). Ensembles run headless across the desktop's cores; with desktop-only hardware, calibration depends on emulators and modular calibration to stay within one machine's compute.
 
+Disk (first estimates, replaced by the P3 retention benchmark; ADR 0212): one interactive run to 2150 within 20 GB and an ensemble of 32 within 50 GB, by tiered history retention.
+
 ### 19.3 Repository layout
 
 ```
