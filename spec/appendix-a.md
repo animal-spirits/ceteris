@@ -309,4 +309,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0297 | [mimalloc as global allocator where measured](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0298 | [Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md) | 19.4 |
 | 0314 | [New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md) | 21 |
+| 0322 | [Ensemble spread at P3 comes from register priors](../rfcs/0309-ensemble-spread-from-register-priors.md) | 14, 21 |
+| 0323 | [P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md) | 21 |
 <!-- rows:end -->
