@@ -4,6 +4,7 @@
 //! measures welfare (ADRs 0200, 0207).
 
 pub mod air_share;
+pub mod balance;
 pub mod benchmark;
 pub mod block;
 pub mod border;

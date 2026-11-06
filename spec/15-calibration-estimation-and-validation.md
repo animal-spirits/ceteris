@@ -50,6 +50,8 @@ This follows the data-driven ABM program: Poledna, Miess, Hommes and Rabitsch (2
 
 Forecasts are scored with proper scoring rules (CRPS) and interval coverage: a 90% ensemble band should contain the realized series about 90% of the time. Political and military targets are scored on hazards and frequencies, never specific events. Validation also uses rolling origins: packs built for 2000, 2005, 2010 and 2015 each run forward and are scored on years outside the calibration window, so performance is judged across several starting points rather than one.
 
+Runs on the observed current-account path (ADR 0100, S22) take the 2000 to 2024 imbalances as given, so their scores are conditional forecasts and are labelled so.
+
 ### 15.5 Natural-experiment replication
 
 Each episode runs as a subset of replay (ADR 0241): the model is fed the historical shock and its response is compared with the published empirical estimate:
