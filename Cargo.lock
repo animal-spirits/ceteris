@@ -506,8 +506,11 @@ name = "ceteris-run"
 version = "0.0.1"
 dependencies = [
  "blake3",
+ "ceteris-core",
  "serde",
+ "tempfile",
  "toml",
+ "zstd",
 ]
 
 [[package]]
