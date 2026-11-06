@@ -1015,7 +1015,7 @@ fn us_china_2018_is_reported() {
          CHN {d_chn:e}; pass-through proxy {:.3}; max |dlnp| {:e}",
         w[usa],
         w[chn],
-        1.0 + d_chn / 1.12_f64.ln(),
+        1.0 + d_chn / 1.061_f64.ln(),
         shocked.max_dlnp_last
     );
 }
