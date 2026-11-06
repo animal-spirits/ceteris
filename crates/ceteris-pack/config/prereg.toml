@@ -1,0 +1,11 @@
+# Pre-registration for held-out scores (RFC 0314). An H source that a test reads needs an entry
+# here, committed before its first score: the metric, the tolerance and the sha256 of the target
+# file (the sha256 in validation.toml). Scores are report-only until P9; no tolerance changes
+# after a score is seen.
+
+# C6 wealth proxy check (ADR 0312): WID 2000 top-10% share of net personal wealth, non-US only.
+[[entry]]
+source = "wid"
+metric = "per-country ratio model/data of the top-10% wealth share, non-US countries"
+tolerance = "ratio in [1/1.5, 1.5] for at least 70% of countries; median, p10 and p90 reported; report-only"
+target_sha256 = "68766d928869de7cf3b85ead83a55152061feb8037f444a21597927f0c9f8f70"
