@@ -306,6 +306,7 @@ mod tests {
         let scenario = Scenario {
             pack_hash: "fixture".into(),
             engine: "test+1".into(),
+            start_year: 2000,
             replay: ReplaySel::Off,
             seeds: vec![1],
             params: Default::default(),
@@ -353,6 +354,88 @@ mod tests {
         let parent = wb.at("base", 18).unwrap().state_hash();
         assert_eq!(wb.at("null", 18).unwrap().state_hash(), parent);
         assert_ne!(wb.at("slow_wages", 18).unwrap().state_hash(), parent);
+    }
+
+    const TAPE: &str = "date,family,target,value\n\
+        2000-03,policy,tariff.0.1.0,0.1\n\
+        2000-07,policy,tariff.0.1.0,0.3\n";
+
+    fn replayed(start_year: u32, sel: ReplaySel) -> Scenario {
+        let mut scenario = Scenario {
+            pack_hash: "fixture".into(),
+            engine: "test+1".into(),
+            start_year,
+            replay: sel,
+            seeds: vec![1],
+            params: Default::default(),
+            branches: vec![Branch {
+                id: "base".into(),
+                parent: None,
+                fork_tick: None,
+                edits: vec![],
+            }],
+        };
+        let edits = ceteris_run::replay_edits(sel, 2000, || Ok(TAPE.to_string())).unwrap();
+        scenario.add_replay(&edits);
+        scenario
+    }
+
+    /// The state hash and the base tariff 0 to 1 of the base branch at `tick`.
+    fn state_hash_at(scenario: Scenario, tick: u32) -> (ceteris_core::snapshot::Hash, f32) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ChunkStore::open(dir.path().join("cache"), "test+1").unwrap();
+        let mut wb = Workbench::new(
+            scenario,
+            Seed(1),
+            |_| {
+                EconWorld::sim(
+                    Arc::new(small_world()),
+                    EconParams::default(),
+                    TradeParams::default(),
+                )
+            },
+            apply,
+            store,
+        );
+        let mut sim = wb.at("base", tick).unwrap();
+        let rate = sim.world_mut().inputs().wedges.rate(0, 1, 0);
+        (sim.state_hash(), rate)
+    }
+
+    #[test]
+    fn replay_all_reproduces_tape_lever_paths() {
+        let rate = |tick| state_hash_at(replayed(2000, ReplaySel::All), tick).1;
+        assert_eq!([rate(2), rate(3), rate(6), rate(7)], [0.04, 0.1, 0.1, 0.3]);
+    }
+
+    #[test]
+    fn replay_edits_are_logged_like_user_edits() {
+        let on = replayed(2000, ReplaySel::Policy);
+        let log = &on.branch("base").unwrap().edits;
+        assert_eq!(log.len(), 2);
+        assert!(
+            log.iter()
+                .all(|e| e.source == EditSource::Replay && e.kind == EditKind::Policy)
+        );
+        let off = replayed(2000, ReplaySel::Off);
+        assert_ne!(
+            on.run_hash("base", 1).unwrap(),
+            off.run_hash("base", 1).unwrap()
+        );
+        assert_ne!(state_hash_at(on, 12).0, state_hash_at(off, 12).0);
+    }
+
+    #[test]
+    fn year_relabel_2000_to_2100_keeps_golden_hash() {
+        let (a, b) = (
+            replayed(2000, ReplaySel::Off),
+            replayed(2100, ReplaySel::Off),
+        );
+        assert_eq!(
+            a.run_hash("base", 1).unwrap(),
+            b.run_hash("base", 1).unwrap()
+        );
+        assert_eq!(state_hash_at(a, 24).0, state_hash_at(b, 24).0);
     }
 
     #[test]
@@ -426,6 +509,7 @@ mod tests {
         let scenario = Scenario {
             pack_hash: "fixture".into(),
             engine: "test+1".into(),
+            start_year: 2000,
             replay: ReplaySel::Off,
             seeds: vec![1],
             params: Default::default(),

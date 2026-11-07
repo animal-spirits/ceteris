@@ -130,6 +130,11 @@ pub struct Branch {
 pub struct Scenario {
     pub pack_hash: String,
     pub engine: String,
+    /// Calendar year of tick 0: a label of the scenario and of output only (calendar-blind
+    /// rule, ADR 0241). It is not in the run hash; replay tapes are dated against it when
+    /// loaded, and the edits they yield are.
+    #[serde(default = "default_start_year")]
+    pub start_year: u32,
     #[serde(default)]
     pub replay: ReplaySel,
     pub seeds: Vec<u64>,
@@ -137,6 +142,10 @@ pub struct Scenario {
     pub params: BTreeMap<String, f64>,
     #[serde(default, rename = "branch")]
     pub branches: Vec<Branch>,
+}
+
+fn default_start_year() -> u32 {
+    2000
 }
 
 impl Scenario {

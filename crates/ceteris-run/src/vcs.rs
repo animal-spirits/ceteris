@@ -190,6 +190,7 @@ mod tests {
         Scenario {
             pack_hash: "p".into(),
             engine: "test+1".into(),
+            start_year: 2000,
             replay: ReplaySel::Off,
             seeds: vec![3],
             params: Default::default(),

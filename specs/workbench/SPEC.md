@@ -102,7 +102,7 @@ The start year is a label in the scenario and in output only. No system reads a 
 month of year, ages and durations are state. The pack loader fails on any table keyed by calendar
 date read after t0. The replay loader reads tape tables and emits `Edit { source: replay }` by
 family (`shocks`, `policy`) for switch S07 `off | shocks | policy | all`; at P3 only policy
-(tariffs and wedges) has a target.
+(tariffs and wedges) has a target. The fixture tape is `date,family,target,value` lines (date `YYYY-MM`), turned into ticks against the scenario's `start_year` label at t0; rows before it are dropped, and the label is not in the run hash.
 
 ## Outputs
 
