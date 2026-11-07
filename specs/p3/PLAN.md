@@ -168,9 +168,9 @@ Starts with A; must merge before C1. Requirements as in `specs/pre-p3/PLAN.md` B
 - [ ] `ceteris new | fork | edit | run | ensemble | diff | effects | explain | blame | bisect | rebase | cherry-pick | share | fetch`, each reading and writing the scenario file; names and arguments come from one command registry (0188) that the app and `serve` reuse.
 - [ ] Failing tests: an end-to-end script (new, fork, edit, ensemble, effects) on the fixture writes the expected Arrow tables and a stable run hash. Commit.
 
-### Task F2: Arrow and Parquet outputs
+### Task F2: Arrow IPC outputs
 
-- [ ] Declared outcomes per (branch, member, tick), effects, quantiles, masks and channel shares as Arrow IPC and Parquet; schema listed in the workbench SPEC; reads with Polars and DuckDB in a doc example (no Python in tests).
+- [ ] Declared outcomes per (branch, member, tick), effects, quantiles, masks and channel shares as Arrow IPC only (owner, 2026-11-07: no `parquet` dependency in 1.0); schema listed in the workbench SPEC; reads with Polars and DuckDB in a doc example (no Python in tests).
 - [ ] 0087's observable tables (night lights, NO2, built-up, shipping density, flaring, greenness) in the schema with no operator yet; shipping density from sea-lane flows is the one operator P2 state supports and lands here. Commit.
 
 ### Task F3: Share and fetch (0128)
