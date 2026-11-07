@@ -37,3 +37,7 @@ harness = false
 [[bench]]
 name = "flatness"
 harness = false
+
+[[bench]]
+name = "goods"
+harness = false

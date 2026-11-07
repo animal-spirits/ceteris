@@ -2,7 +2,9 @@
 //! one line of help, for the CLI, `serve` and the app's palette to share. The scenario-file
 //! verbs are functions here; verbs that run worlds are registered and built by later tasks.
 
-use crate::scenario::{Branch, Edit, EditKind, EditSource, Scenario, ScenarioError};
+use crate::scenario::{
+    Branch, Edit, EditKind, EditSource, MAX_EDITS_PER_BRANCH, Scenario, ScenarioError,
+};
 use crate::vcs::{self, Skipped};
 
 pub struct Command {
@@ -152,6 +154,9 @@ pub fn add_edit(s: &Scenario, branch: &str, edit: Edit) -> Result<Scenario, Scen
         .iter_mut()
         .find(|b| b.id == branch)
         .expect("checked above");
+    if b.edits.len() >= MAX_EDITS_PER_BRANCH {
+        return Err(ScenarioError::TooManyEdits(branch.to_string()));
+    }
     b.edits.push(edit);
     Ok(out)
 }
@@ -238,6 +243,7 @@ pub fn diff(s: &Scenario, a: &str, b: &str) -> Result<Vec<String>, ScenarioError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scenario::MAX_BRANCHES;
 
     #[test]
     fn registry_names_are_unique_and_cover_the_verbs() {
@@ -246,6 +252,30 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), 14);
         assert!(REGISTRY.iter().all(|c| c.usage.starts_with(c.name)));
+    }
+
+    #[test]
+    fn edit_refuses_past_the_cap_instead_of_truncating() {
+        let mut s = new_scenario("p", "e", vec![1]);
+        let edit = user_edit(0, EditKind::Param, "p.0", 1.0, None);
+        s.branches[0].edits = vec![edit.clone(); MAX_EDITS_PER_BRANCH];
+        assert_eq!(
+            add_edit(&s, "main", edit),
+            Err(ScenarioError::TooManyEdits("main".to_string()))
+        );
+        assert_eq!(s.branches[0].edits.len(), MAX_EDITS_PER_BRANCH);
+    }
+
+    #[test]
+    fn fork_refuses_past_the_cap() {
+        let mut s = new_scenario("p", "e", vec![1]);
+        for i in 1..MAX_BRANCHES {
+            s = fork(&s, "main", 1, &format!("b{i}")).unwrap();
+        }
+        assert_eq!(
+            fork(&s, "main", 1, "one-too-many"),
+            Err(ScenarioError::TooManyBranches)
+        );
     }
 
     #[test]
