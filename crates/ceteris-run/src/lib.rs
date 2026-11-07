@@ -3,6 +3,7 @@
 
 pub mod branch;
 pub mod commands;
+pub mod effects;
 pub mod query;
 pub mod replay;
 pub mod retention;
