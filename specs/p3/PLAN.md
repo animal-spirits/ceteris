@@ -104,8 +104,8 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 
 ### Task B4: Rebase, cherry-pick and bisect (0116)
 
-- [ ] `ceteris rebase`, `cherry-pick`, `bisect` on branches; bisect probes are ensemble runs cached by (run hash, edit subset). Edits whose target is absent in the new parent are reported and skipped.
-- [ ] Failing tests (0116): `bisect_finds_planted_edit_in_log2_probes` (20 edits, at most ceil(log2 20) + 1 probes); `rebase_onto_own_parent_reproduces`; `cherry_pick_all_onto_parent_reproduces`. Commit. `blame` lands in C4.
+- [x] `ceteris rebase`, `cherry-pick`, `bisect` on branches; bisect probes are ensemble runs cached by (run hash, edit subset). Edits whose target is absent in the new parent are reported and skipped.
+- [x] Failing tests (0116): `bisect_finds_planted_edit_in_log2_probes` (20 edits, at most ceil(log2 20) + 1 probes); `rebase_onto_own_parent_reproduces`; `cherry_pick_all_onto_parent_reproduces`. Commit. `blame` lands in C4.
 
 ## Branch L: `p3/lanes` (ADR 0024, moved from pre-P3 by ADR 0288)
 
