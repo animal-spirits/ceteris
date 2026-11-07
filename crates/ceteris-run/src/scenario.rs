@@ -66,6 +66,8 @@ pub enum EditSource {
     Api,
     Replay,
     Commitment,
+    /// An ensemble member's tick-0 parameter draw (ADR 0322).
+    Draw,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,6 +268,7 @@ impl Scenario {
                     EditSource::Api => "api",
                     EditSource::Replay => "replay",
                     EditSource::Commitment => "commitment",
+                    EditSource::Draw => "draw",
                 });
                 h.u64(u64::from(e.god));
                 h.str(e.kind.name());
