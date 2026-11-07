@@ -187,7 +187,7 @@ Independent of B to F; can start the day P3 starts.
 
 ### Task G1: The flatness benchmark (0234)
 
-- [ ] `benches/flatness`: release build, 100 years, full pack, default scenario; report median tick time over years 1 to 5 and 96 to 100, their ratio, row counts per table per decade, peak resident memory; checked-in report under `tests/perf/`. CI runs 10 years for row counts only.
+- [ ] `benches/flatness`: release build, 100 years, full pack, default scenario; report median tick time over years 1 to 5 and 96 to 100, their ratio (tick time is process CPU time with one rayon thread, since wall time on the shared Mac follows host load, #202; wall medians and the load range are reported too), row counts per table per decade, peak resident memory; checked-in report under `tests/perf/`. CI runs 10 years for row counts only.
 - [ ] Failing test: a synthetic table appending one row per tick in a test build fails the gate. Commit.
 
 ### Task G2: Synthetic 45-goods pack and per-good budget lines (0235)

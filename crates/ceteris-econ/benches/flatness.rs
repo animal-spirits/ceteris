@@ -1,6 +1,8 @@
 //! The flatness benchmark (ADR 0234, task G1): the median tick time of the last five years of a
 //! run against the first five, row counts per state table per decade, and peak resident
-//! memory. Release build, default scenario, the calibrated pack (`CETERIS_PACK`, default
+//! memory. The gate compares process CPU time per year with one rayon thread, since wall time
+//! on a shared host follows its load (#202); wall-time medians and the load range are reported
+//! beside it. Release build, default scenario, the calibrated pack (`CETERIS_PACK`, default
 //! `data/packs/2000`) or the fixture. `FLATNESS_YEARS` sets the length (default 100; CI sets
 //! 10 and reads the row counts only). Writes `tests/perf/flatness.md`.
 
@@ -83,6 +85,10 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(100);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build_global()
+        .expect("one-thread pool");
     let (inputs, source) = inputs();
     let trade = inputs.trade_params();
     // FLATNESS_SPANS=<path>: per-year wall time per span name, as CSV (year,name,ms)
@@ -97,7 +103,9 @@ fn main() {
         year: 0,
         rows: tables(&sim),
     }];
-    let mut cpu0 = if spans_out.is_some() { cpu_ms() } else { 0.0 };
+    let mut cpu_year = Vec::with_capacity(years);
+    let mut loads = Vec::with_capacity(years);
+    let mut cpu0 = cpu_ms();
     for year in 1..=years {
         let wall0 = Instant::now();
         for _ in 0..TICKS_PER_YEAR {
@@ -108,12 +116,14 @@ fn main() {
                 *span_ms.entry((year, sp.name)).or_default() += (sp.end - sp.start) as f64 / 1e6;
             }
         }
+        let cpu1 = cpu_ms();
+        cpu_year.push(cpu1 - cpu0);
+        loads.push(load1());
+        cpu0 = cpu1;
         if spans_out.is_some() {
-            let cpu1 = cpu_ms();
             span_ms.insert((year, "_wall"), wall0.elapsed().as_secs_f64() * 1e3);
-            span_ms.insert((year, "_cpu"), cpu1 - cpu0);
-            span_ms.insert((year, "_load"), load1());
-            cpu0 = cpu1;
+            span_ms.insert((year, "_cpu"), cpu_year[year - 1]);
+            span_ms.insert((year, "_load"), loads[year - 1]);
         }
         if year % 10 == 0 {
             decades.push(Decade {
@@ -133,7 +143,7 @@ fn main() {
 
     let window = 5 * TICKS_PER_YEAR;
     let ratio = if years >= 10 {
-        flatness::ratio(&secs, TICKS_PER_YEAR)
+        flatness::ratio(&cpu_year, 1)
     } else {
         f64::NAN
     };
@@ -144,13 +154,30 @@ fn main() {
     let mut out = String::new();
     writeln!(out, "# Flatness report ({source}, {years} years)\n").unwrap();
     if years >= 10 {
+        let tpy = TICKS_PER_YEAR as f64;
+        writeln!(
+            out,
+            "Median CPU per tick years 1 to 5: {:.2} ms; last five years: {:.2} ms; ratio {ratio:.3} (gate).\n",
+            flatness::median(&cpu_year[..5]) / tpy,
+            flatness::median(&cpu_year[years - 5..]) / tpy
+        )
+        .unwrap();
         let first = flatness::median(&secs[..window]);
         let last = flatness::median(&secs[secs.len() - window..]);
         writeln!(
             out,
-            "Median tick years 1 to 5: {:.2} ms; last five years: {:.2} ms; ratio {ratio:.3}.\n",
+            "Median wall tick years 1 to 5: {:.2} ms; last five years: {:.2} ms; ratio {:.3}.\n",
             first * 1e3,
-            last * 1e3
+            last * 1e3,
+            last / first
+        )
+        .unwrap();
+        let (lo, hi) = loads.iter().fold((f64::INFINITY, 0.0_f64), |(lo, hi), &l| {
+            (lo.min(l), hi.max(l))
+        });
+        writeln!(
+            out,
+            "Host load average during the run: {lo:.1} to {hi:.1}.\n"
         )
         .unwrap();
     }
