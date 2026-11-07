@@ -870,6 +870,23 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
             );
             write(&c::add_edit(&read()?, need("--branch")?, edit).map_err(|e| e.to_string())?)?;
         }
+        "rebase" => {
+            let (s, skipped) =
+                c::rebase(&read()?, need("--branch")?, need("--onto")?, num("--at")?)
+                    .map_err(|e| e.to_string())?;
+            write(&s)?;
+            skipped.iter().for_each(|l| println!("{l}"));
+        }
+        "cherry-pick" => {
+            let picks = need("--edits")?
+                .split(',')
+                .map(|s| s.parse().map_err(|_| "--edits wants indices".to_string()))
+                .collect::<Result<Vec<usize>, _>>()?;
+            let (s, skipped) = c::cherry_pick(&read()?, need("--from")?, need("--onto")?, &picks)
+                .map_err(|e| e.to_string())?;
+            write(&s)?;
+            skipped.iter().for_each(|l| println!("{l}"));
+        }
         "share" => {
             let seed = need("--seed")?
                 .parse()
@@ -895,7 +912,17 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if ["new", "fork", "edit", "diff", "share"].contains(&command.as_str()) {
+    if [
+        "new",
+        "fork",
+        "edit",
+        "diff",
+        "share",
+        "rebase",
+        "cherry-pick",
+    ]
+    .contains(&command.as_str())
+    {
         return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
