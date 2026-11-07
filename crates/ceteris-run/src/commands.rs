@@ -3,7 +3,7 @@
 //! verbs are functions here; verbs that run worlds are registered and built by later tasks.
 
 use crate::scenario::{
-    Branch, Edit, EditKind, EditSource, MAX_BRANCHES, MAX_EDITS_PER_BRANCH, Scenario, ScenarioError,
+    Branch, Edit, EditKind, EditSource, MAX_EDITS_PER_BRANCH, Scenario, ScenarioError,
 };
 use crate::vcs::{self, Skipped};
 
@@ -243,6 +243,7 @@ pub fn diff(s: &Scenario, a: &str, b: &str) -> Result<Vec<String>, ScenarioError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scenario::MAX_BRANCHES;
 
     #[test]
     fn registry_names_are_unique_and_cover_the_verbs() {
