@@ -271,12 +271,9 @@ pub fn source(
     source_weighted(k, g, price, None, active, gamma, spend, out);
 }
 
-/// [`source`] with sticky sourcing (ADR 0027): with `weight_price` the shares of the origins
-/// follow those prices, the smoothed `p~` of the short-run adjustment, while the delivered
-/// price index, the buyer price and the units ordered follow the posted `price`. The price
-/// index then takes a second origin-access pass.
+/// Weights, access, price index, buyer price and reach of one call, reused when the inputs repeat.
 #[allow(clippy::too_many_arguments)]
-pub fn source_weighted(
+fn prepare(
     k: &Kernel,
     g: usize,
     price: &[f64],
@@ -286,14 +283,13 @@ pub fn source_weighted(
     spend: &[[f64; 2]],
     out: &mut Sourced,
 ) {
-    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    let np = k.n_provinces();
     assert_eq!(spend.len(), np, "spend must have one entry per province");
     assert_eq!(gamma.len(), np, "gamma must have one entry per province");
     assert!(
         gamma.iter().all(|g| g.is_finite() && *g > 0.0),
         "gamma must be finite and positive"
     );
-    let gk = k.good(g);
     let s = &mut out.scratch;
     s.good = Some(g);
     let same = |held: &[f64], now: &[f64]| {
@@ -340,8 +336,6 @@ pub fn source_weighted(
         s.active.extend_from_slice(active);
         s.prepared = Some((k.id(), g));
     }
-    let (w, v, u) = (&s.weight, &s.access.v, &s.access.u);
-    let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &s.access.carry);
 
     out.price_index.clone_from(&s.price_index);
     out.buyer_price.clear();
@@ -360,6 +354,29 @@ pub fn source_weighted(
         s.up = reach_exponent(k, spend, &s.access);
         fill_reach(k, spend, &s.access, s.up, &mut s.reach, &mut s.reach_abroad);
     }
+}
+
+/// [`source`] with sticky sourcing (ADR 0027): with `weight_price` the shares of the origins
+/// follow those prices, the smoothed `p~` of the short-run adjustment, while the delivered
+/// price index, the buyer price and the units ordered follow the posted `price`. The price
+/// index then takes a second origin-access pass.
+#[allow(clippy::too_many_arguments)]
+pub fn source_weighted(
+    k: &Kernel,
+    g: usize,
+    price: &[f64],
+    weight_price: Option<&[f64]>,
+    active: &[bool],
+    gamma: &[f64],
+    spend: &[[f64; 2]],
+    out: &mut Sourced,
+) {
+    prepare(k, g, price, weight_price, active, gamma, spend, out);
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    let gk = k.good(g);
+    let s = &mut out.scratch;
+    let (w, v, u) = (&s.weight, &s.access.v, &s.access.u);
+    let (gc, nc, carry) = (k.gateway_country(), k.n_countries(), &s.access.carry);
     let (reach, reach_abroad, up) = (&s.reach, &s.reach_abroad, s.up);
 
     // Orders are accumulated as value net of tariff and turned into units at the end. Both
@@ -455,6 +472,166 @@ pub fn source_weighted(
                 *x = times_two_to(units, up);
             }
         });
+}
+
+/// Inputs of one lane of [`source_lanes`]: what [`source_weighted`] takes besides the kernel
+/// and the good.
+pub struct LaneInput<'a> {
+    pub price: &'a [f64],
+    pub weight_price: Option<&'a [f64]>,
+    pub active: &'a [bool],
+    pub gamma: &'a [f64],
+    pub spend: &'a [[f64; 2]],
+}
+
+/// [`source_weighted`] for `L` lanes that share the kernel (ADR 0024): each lane ends exactly
+/// as its own call leaves it, with the kernel's rows read once for all lanes and the lane as
+/// the innermost loop. A lane's sums keep the order of its scalar call, and a lane skips what
+/// its scalar call skips.
+pub fn source_lanes<const L: usize>(
+    k: &Kernel,
+    g: usize,
+    inputs: [LaneInput; L],
+    outs: &mut [Sourced; L],
+) {
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    for (inp, out) in inputs.iter().zip(outs.iter_mut()) {
+        prepare(
+            k,
+            g,
+            inp.price,
+            inp.weight_price,
+            inp.active,
+            inp.gamma,
+            inp.spend,
+            out,
+        );
+    }
+    let gk = k.good(g);
+    let (gc, nc) = (k.gateway_country(), k.n_countries());
+    let sc: [&Scratch; L] = std::array::from_fn(|l| &outs[l].scratch);
+    let w: [&[f64]; L] = std::array::from_fn(|l| sc[l].weight.as_slice());
+    let v: [&[f64]; L] = std::array::from_fn(|l| sc[l].access.v.as_slice());
+    let u: [&[f64]; L] = std::array::from_fn(|l| sc[l].access.u.as_slice());
+    let carry: [&[f64]; L] = std::array::from_fn(|l| sc[l].access.carry.as_slice());
+    let reach: [&[[f64; 2]]; L] = std::array::from_fn(|l| sc[l].reach.as_slice());
+    let reach_abroad: [&[[f64; 2]]; L] = std::array::from_fn(|l| sc[l].reach_abroad.as_slice());
+    let up: [i32; L] = std::array::from_fn(|l| sc[l].up);
+    let price: [&[f64]; L] = std::array::from_fn(|l| inputs[l].price);
+
+    let mut orders = vec![[[0.0; 2]; L]; np];
+    let mut rounding = vec![[[0.0; 2]; L]; np];
+    // home and domestic routes
+    (orders.par_iter_mut(), rounding.par_iter_mut())
+        .into_par_iter()
+        .enumerate()
+        .with_min_len(ROWS)
+        .filter(|(o, _)| w.iter().any(|w| w[*o] > 0.0))
+        .for_each(|(o, (order, round))| {
+            let live: [bool; L] = std::array::from_fn(|l| w[l][o] > 0.0);
+            let mut x = [[0.0; 2]; L];
+            for l in (0..L).filter(|&l| live[l]) {
+                x[l] = [w[l][o] * reach[l][o][0], w[l][o] * reach[l][o][1]];
+                for c in 0..2 {
+                    round[l][c] += below_normal(x[l][c]);
+                }
+            }
+            for e in gk.domestic.row(o) {
+                for l in (0..L).filter(|&l| live[l]) {
+                    let (kw, r) = (e.k * w[l][o], reach[l][e.col as usize]);
+                    x[l][0] += kw * r[0];
+                    x[l][1] += kw * r[1];
+                    for c in 0..2 {
+                        round[l][c] += below_normal(kw) * r[c] + below_normal(kw * r[c]);
+                    }
+                }
+            }
+            for l in (0..L).filter(|&l| live[l]) {
+                order[l][0] += x[l][0];
+                order[l][1] += x[l][1];
+            }
+        });
+    // destinations to their gateways
+    let mut to_b = vec![[[0.0; 2]; L]; ng];
+    #[allow(clippy::needless_range_loop)] // d indexes every lane
+    for d in 0..np {
+        let on: [[bool; 2]; L] =
+            std::array::from_fn(|l| [reach_abroad[l][d][0] > 0.0, reach_abroad[l][d][1] > 0.0]);
+        if !on.iter().flatten().any(|&x| x) {
+            continue;
+        }
+        for e in gk.access.row(d) {
+            let b = e.col as usize;
+            for l in 0..L {
+                let r = reach_abroad[l][d];
+                for c in (0..2).filter(|&c| on[l][c]) {
+                    to_b[b][l][c] += r[c] * e.k * u[l][b];
+                }
+            }
+        }
+    }
+    // across the border, net of tariff
+    let mut at_a = vec![[[0.0; 2]; L]; ng];
+    at_a.par_iter_mut()
+        .enumerate()
+        .filter(|(a, _)| v.iter().any(|v| v[*a] > 0.0))
+        .for_each(|(a, at)| {
+            for e in gk.crossings.row(a) {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| v[l][a] > 0.0) {
+                    let t = to_b[b][l];
+                    if t == [0.0; 2] {
+                        continue;
+                    }
+                    let carry_a = &carry[l][usize::from(gc[a]) * nc..][..nc];
+                    let share = e.k * carry_a[usize::from(gc[b])] * v[l][a] / u[l][b];
+                    for c in (0..2).filter(|&c| t[c] != 0.0) {
+                        at[l][c] += t[c] * share * e.inv_duty;
+                    }
+                }
+            }
+        });
+    // origin gateways to origins, then value to units
+    (orders.par_iter_mut(), rounding.par_iter_mut())
+        .into_par_iter()
+        .enumerate()
+        .with_min_len(ROWS)
+        .filter(|(o, _)| w.iter().any(|w| w[*o] > 0.0))
+        .for_each(|(o, (order, round))| {
+            let live: [bool; L] = std::array::from_fn(|l| w[l][o] > 0.0);
+            for e in gk.access.row(o) {
+                let a = e.col as usize;
+                for l in (0..L).filter(|&l| live[l]) {
+                    let t = at_a[a][l];
+                    if t == [0.0; 2] {
+                        continue;
+                    }
+                    let kw = e.k * w[l][o];
+                    let factor = kw / v[l][a];
+                    for c in (0..2).filter(|&c| t[c] != 0.0) {
+                        order[l][c] += t[c] * factor;
+                        round[l][c] += (below_normal(kw) / v[l][a] + below_normal(factor)) * t[c]
+                            + below_normal(t[c] * factor);
+                    }
+                }
+            }
+            for l in (0..L).filter(|&l| live[l]) {
+                for (x, r) in order[l].iter_mut().zip(&mut round[l]) {
+                    let units = *x / price[l][o];
+                    *r = times_two_to(*r, up[l]) / price[l][o]
+                        + times_two_to(below_normal(units), up[l]);
+                    *x = times_two_to(units, up[l]);
+                }
+            }
+        });
+    for (l, out) in outs.iter_mut().enumerate() {
+        zeroed2(&mut out.orders, np);
+        zeroed2(&mut out.orders_rounding, np);
+        for o in 0..np {
+            out.orders[o] = orders[o][l];
+            out.orders_rounding[o] = rounding[o][l];
+        }
+    }
 }
 
 /// The smallest subnormal f64, 2^-1074, where `v` is below the normal range (0 included, as a
@@ -1819,6 +1996,69 @@ mod tests {
                         format!("{:?}", vect[l]),
                         "seed {seed} good {g} lane {l}"
                     );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lane_source_equals_scalar_source_per_lane() {
+        for seed in 0..6 {
+            let (net, wedges) = random_world(seed);
+            let k = kernel(&net, &wedges);
+            let np = net.n_provinces();
+            for g in Goods::p2().traded_goods() {
+                let data = |l: u64| {
+                    let mut r = rng(seed * 10 + l + 400);
+                    let price = draw(&mut r, np, 0.5, 2.0);
+                    let sticky = draw(&mut r, np, 0.5, 2.0);
+                    let active: Vec<bool> = (0..np).map(|o| (o + l as usize) % 5 != 2).collect();
+                    let gamma = draw(&mut r, np, 0.8, 1.5);
+                    let spend: Vec<[f64; 2]> = (0..np)
+                        .map(|_| [r.next() * 10.0, if l == 1 { 0.0 } else { r.next() }])
+                        .collect();
+                    (price, sticky, active, gamma, spend)
+                };
+                let lanes: [_; 3] = std::array::from_fn(|l| data(l as u64));
+                let sticky = |l: usize| (l == 2).then(|| lanes[l].1.as_slice());
+                let mut scalar: [Sourced; 3] = Default::default();
+                for l in 0..3 {
+                    let (p, _, a, gm, s) = &lanes[l];
+                    source_weighted(&k, g, p, sticky(l), a, gm, s, &mut scalar[l]);
+                }
+                let mut vect: [Sourced; 3] = Default::default();
+                source_lanes(
+                    &k,
+                    g,
+                    std::array::from_fn(|l| LaneInput {
+                        price: &lanes[l].0,
+                        weight_price: sticky(l),
+                        active: &lanes[l].2,
+                        gamma: &lanes[l].3,
+                        spend: &lanes[l].4,
+                    }),
+                    &mut vect,
+                );
+                let view = |o: &Sourced| {
+                    format!(
+                        "{:?} {:?} {:?} {:?}",
+                        o.orders, o.orders_rounding, o.price_index, o.buyer_price
+                    )
+                };
+                for l in 0..3 {
+                    assert!(scalar[l].orders.iter().any(|x| x[0] > 0.0));
+                    assert_eq!(
+                        view(&scalar[l]),
+                        view(&vect[l]),
+                        "seed {seed} good {g} lane {l}"
+                    );
+                }
+                // dispatch after lane sourcing continues exactly as after scalar sourcing
+                let fill: Vec<[f64; 2]> = vec![[0.7, 0.9]; np];
+                for l in 0..3 {
+                    dispatch(&k, g, &lanes[l].0, &fill, &mut scalar[l]);
+                    dispatch(&k, g, &lanes[l].0, &fill, &mut vect[l]);
+                    assert_eq!(scalar[l].shipped, vect[l].shipped);
                 }
             }
         }
