@@ -6,6 +6,7 @@ pub mod query;
 pub mod retention;
 pub mod scenario;
 pub mod store;
+pub mod vcs;
 
 pub use branch::{RunError, Workbench, due};
 pub use query::{Query, QueryError};

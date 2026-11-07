@@ -156,7 +156,7 @@ impl Scenario {
         toml::to_string(self).expect("scenario serializes")
     }
 
-    fn validate(&self) -> Result<(), ScenarioError> {
+    pub fn validate(&self) -> Result<(), ScenarioError> {
         let mut seen = std::collections::BTreeSet::new();
         for b in &self.branches {
             if !seen.insert(b.id.as_str()) {
