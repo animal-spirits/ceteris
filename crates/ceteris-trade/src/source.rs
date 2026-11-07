@@ -738,6 +738,339 @@ pub fn dispatch(k: &Kernel, g: usize, price: &[f64], fill: &[[f64; 2]], out: &mu
     }
 }
 
+/// [`dispatch`] for `L` lanes that share the kernel (ADR 0024): each lane ends exactly as its
+/// own call leaves it, with the kernel's rows read once for all lanes and the lane as the
+/// innermost loop. A lane's sums keep the order of its scalar call, and a lane skips what its
+/// scalar call skips.
+pub fn dispatch_lanes<const L: usize>(
+    k: &Kernel,
+    g: usize,
+    price: [&[f64]; L],
+    fill: [&[[f64; 2]]; L],
+    outs: &mut [Sourced; L],
+) {
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    let gk = k.good(g);
+    for l in 0..L {
+        assert_eq!(
+            outs[l].scratch.good,
+            Some(g),
+            "dispatch must follow source for good {g}"
+        );
+        assert!(
+            price[l].len() == np && fill[l].len() == np,
+            "dispatch inputs must have one entry per province"
+        );
+        let Sourced {
+            shipped,
+            shipped_rounding,
+            arrive,
+            home,
+            survived,
+            paid,
+            paid_by_class,
+            received,
+            tariff,
+            domestic_value,
+            access_in_value,
+            crossing_value,
+            crossing_units,
+            access_out_value,
+            lost,
+            selected,
+            ..
+        } = &mut outs[l];
+        zeroed(shipped, np);
+        zeroed(shipped_rounding, np);
+        arrive.iter_mut().for_each(|a| zeroed2(a, np));
+        zeroed2(home, np);
+        survived.iter_mut().for_each(|v| zeroed(v, np));
+        zeroed(paid, np);
+        zeroed2(paid_by_class, np);
+        zeroed(received, np);
+        zeroed(tariff, np);
+        zeroed(domestic_value, gk.domestic.entries.len());
+        zeroed(access_in_value, gk.access.entries.len());
+        zeroed(crossing_value, gk.crossings.entries.len());
+        zeroed(crossing_units, gk.crossings.entries.len());
+        zeroed(access_out_value, gk.access.entries.len());
+        *lost = 0.0;
+        *selected = 0.0;
+    }
+
+    let (gc, nc) = (k.gateway_country(), k.n_countries());
+    for c in 0..2 {
+        let live: [bool; L] = std::array::from_fn(|l| {
+            let s = &outs[l].scratch;
+            !s.reach.iter().chain(&s.reach_abroad).all(|r| r[c] == 0.0)
+        });
+        if !live.contains(&true) {
+            continue;
+        }
+        for l in (0..L).filter(|&l| live[l]) {
+            zeroed(&mut outs[l].scratch.y, ng);
+        }
+        for d in 0..np {
+            for e in gk.access.row(d) {
+                for l in (0..L).filter(|&l| live[l]) {
+                    let s = &mut outs[l].scratch;
+                    if s.reach_abroad[d][c] > 0.0 {
+                        s.y[e.col as usize] += e.k * s.reach_abroad[d][c];
+                    }
+                }
+            }
+        }
+        for l in (0..L).filter(|&l| live[l]) {
+            let s = &mut outs[l].scratch;
+            s.inv_y.clear();
+            s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
+            zeroed(&mut s.z, ng);
+            zeroed(&mut s.net_ratio, ng);
+            zeroed(&mut s.cross_w, gk.crossings.entries.len());
+        }
+        for a in 0..ng {
+            let lo = gk.crossings.offsets[a] as usize;
+            let (mut gross, mut net) = ([0.0; L], [0.0; L]);
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| live[l]) {
+                    let s = &mut outs[l].scratch;
+                    let carry_a = &s.access.carry[usize::from(gc[a]) * nc..][..nc];
+                    let x = e.k * carry_a[usize::from(gc[b])] * s.y[b];
+                    s.cross_w[lo + i] = x;
+                    gross[l] += x;
+                    net[l] += x * e.inv_duty;
+                }
+            }
+            for l in (0..L).filter(|&l| live[l]) {
+                let s = &mut outs[l].scratch;
+                s.z[a] = gross[l];
+                if gross[l] > 0.0 {
+                    s.net_ratio[a] = net[l] / gross[l];
+                }
+            }
+        }
+
+        for l in (0..L).filter(|&l| live[l]) {
+            let s = &mut outs[l].scratch;
+            zeroed(&mut s.gross_a, ng);
+            zeroed(&mut s.units_a, ng);
+            zeroed(&mut s.origin_units_a, ng);
+        }
+        for o in 0..np {
+            let on: [bool; L] = std::array::from_fn(|l| {
+                live[l] && fill[l][o][c] != 0.0 && outs[l].scratch.weight[o] != 0.0
+            });
+            if !on.contains(&true) {
+                continue;
+            }
+            let units_of = |inv_p: f64, value: f64, err: f64| {
+                (err + below_normal(value)) * inv_p + below_normal(value * inv_p)
+            };
+            let mut m = [0.0; L];
+            let mut inv_p = [0.0; L];
+            let mut dm = [0.0; L];
+            for l in (0..L).filter(|&l| on[l]) {
+                let s = &outs[l].scratch;
+                let (f, wo) = (fill[l][o][c], s.weight[o]);
+                m[l] = times_two_to(f * wo, s.up);
+                inv_p[l] = 1.0 / price[l][o];
+                dm[l] = times_two_to(below_normal(f * wo), s.up) + below_normal(m[l]);
+            }
+            for l in (0..L).filter(|&l| on[l]) {
+                let Sourced {
+                    shipped,
+                    shipped_rounding,
+                    arrive,
+                    home,
+                    survived,
+                    paid,
+                    paid_by_class,
+                    received,
+                    selected,
+                    scratch: s,
+                    ..
+                } = &mut outs[l];
+                let x = m[l] * s.reach[o][c];
+                shipped_rounding[o] += units_of(inv_p[l], x, dm[l] * s.reach[o][c]);
+                if x > 0.0 {
+                    let units = x * inv_p[l];
+                    let got = x * s.inv_q[o];
+                    arrive[0][o][c] += got;
+                    home[o][c] += units;
+                    survived[0][o] += units;
+                    *selected += got - units;
+                    shipped[o] += units;
+                    paid[o] += x;
+                    paid_by_class[o][c] += x;
+                    received[o] += x;
+                }
+            }
+            let lo = gk.domestic.offsets[o] as usize;
+            for (i, e) in gk.domestic.row(o).iter().enumerate() {
+                let d = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        shipped,
+                        shipped_rounding,
+                        arrive,
+                        survived,
+                        paid,
+                        paid_by_class,
+                        received,
+                        domestic_value,
+                        lost,
+                        selected,
+                        scratch: s,
+                        ..
+                    } = &mut outs[l];
+                    let x = m[l] * e.k * s.reach[d][c];
+                    let mk = (dm[l] * e.k + below_normal(m[l] * e.k)) * s.reach[d][c];
+                    shipped_rounding[o] += units_of(inv_p[l], x, mk);
+                    if x == 0.0 {
+                        continue;
+                    }
+                    let units = x * inv_p[l];
+                    let melted = units * e.inv_tau;
+                    let got = x * s.inv_q[d];
+                    arrive[1][d][c] += got;
+                    survived[1][d] += melted;
+                    *lost += units - melted;
+                    *selected += got - melted;
+                    shipped[o] += units;
+                    domestic_value[lo + i] += x;
+                    paid[d] += x;
+                    paid_by_class[d][c] += x;
+                    received[o] += x;
+                }
+            }
+            let lo = gk.access.offsets[o] as usize;
+            for (i, e) in gk.access.row(o).iter().enumerate() {
+                let a = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        shipped,
+                        shipped_rounding,
+                        received,
+                        access_out_value,
+                        lost,
+                        scratch: s,
+                        ..
+                    } = &mut outs[l];
+                    let x = m[l] * e.k * s.z[a];
+                    let mk = ((dm[l] * e.k + below_normal(m[l] * e.k)) * s.z[a] + below_normal(x))
+                        * s.net_ratio[a];
+                    shipped_rounding[o] += units_of(inv_p[l], x * s.net_ratio[a], mk);
+                    if x == 0.0 {
+                        continue;
+                    }
+                    let net = x * s.net_ratio[a];
+                    let units = net * inv_p[l];
+                    access_out_value[lo + i] += net;
+                    received[o] += net;
+                    shipped[o] += units;
+                    *lost += units - units * e.inv_tau;
+                    let origin_units = x * inv_p[l];
+                    s.gross_a[a] += x;
+                    s.units_a[a] += origin_units * e.inv_tau;
+                    s.origin_units_a[a] += origin_units;
+                }
+            }
+        }
+
+        for l in (0..L).filter(|&l| live[l]) {
+            let s = &mut outs[l].scratch;
+            s.at_b.clear();
+            s.at_b.resize(ng, Inflow::default());
+        }
+        for a in 0..ng {
+            let on: [bool; L] =
+                std::array::from_fn(|l| live[l] && outs[l].scratch.gross_a[a] > 0.0);
+            if !on.contains(&true) {
+                continue;
+            }
+            let lo = gk.crossings.offsets[a] as usize;
+            let inv_z: [f64; L] = std::array::from_fn(|l| 1.0 / outs[l].scratch.z[a]);
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        crossing_value,
+                        crossing_units,
+                        lost,
+                        scratch: s,
+                        ..
+                    } = &mut outs[l];
+                    let weight = s.cross_w[lo + i];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    let share = over(weight, inv_z[l], s.z[a]);
+                    let gross = s.gross_a[a] * share;
+                    let net = gross * e.inv_duty;
+                    let units = s.units_a[a] * share * e.inv_duty;
+                    let got = units * e.inv_loss;
+                    crossing_value[lo + i] += net;
+                    crossing_units[lo + i] += s.origin_units_a[a] * share * e.inv_duty;
+                    *lost += units - got;
+                    let at = &mut s.at_b[b];
+                    at.units[usize::from(e.lag)] += got;
+                    at.value[usize::from(e.lag)] += gross;
+                    at.gross += gross;
+                    at.net += net;
+                }
+            }
+        }
+
+        for d in 0..np {
+            let on: [bool; L] =
+                std::array::from_fn(|l| live[l] && outs[l].scratch.reach_abroad[d][c] > 0.0);
+            if !on.contains(&true) {
+                continue;
+            }
+            let lo = gk.access.offsets[d] as usize;
+            for (i, e) in gk.access.row(d).iter().enumerate() {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        arrive,
+                        survived,
+                        paid,
+                        paid_by_class,
+                        tariff,
+                        access_in_value,
+                        lost,
+                        selected,
+                        scratch: s,
+                        ..
+                    } = &mut outs[l];
+                    let weight = e.k * s.reach_abroad[d][c];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    let share = over(weight, s.inv_y[b], s.y[b]);
+                    let at = &s.at_b[b];
+                    for (lag, (&units, &value)) in at.units.iter().zip(&at.value).enumerate() {
+                        let units = units * share;
+                        let melted = units * e.inv_tau;
+                        let got = value * share * s.inv_q[d];
+                        arrive[1 + lag][d][c] += got;
+                        survived[1 + lag][d] += melted;
+                        *lost += units - melted;
+                        *selected += got - melted;
+                    }
+                    let gross = at.gross * share;
+                    let net = at.net * share;
+                    access_in_value[lo + i] += net;
+                    paid[d] += gross;
+                    paid_by_class[d][c] += gross;
+                    tariff[d] += gross - net;
+                }
+            }
+        }
+    }
+}
+
 /// [`dispatch`] at full fill (every origin ships all its orders) reduced to what it writes in
 /// `out.arrive`, which this leaves exactly as that dispatch would: the same products summed in
 /// the same order. The other outputs of `dispatch` are left as they were. For the delivered
@@ -1435,6 +1768,55 @@ mod tests {
                     assert_eq!(
                         bits(&scalar[l]),
                         bits(&lanes[l]),
+                        "seed {seed} good {g} lane {l}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lane_dispatch_equals_scalar_dispatch_per_lane() {
+        for seed in 0..6 {
+            let (net, wedges) = random_world(seed);
+            let k = kernel(&net, &wedges);
+            let np = net.n_provinces();
+            for g in Goods::p2().traded_goods() {
+                let inputs = |l: u64| {
+                    let mut r = rng(seed * 10 + l + 300);
+                    let price = draw(&mut r, np, 0.5, 2.0);
+                    let active: Vec<bool> = (0..np).map(|o| (o + l as usize) % 5 != 2).collect();
+                    let spend: Vec<[f64; 2]> = (0..np)
+                        .map(|_| [r.next() * 10.0, if l == 1 { 0.0 } else { r.next() }])
+                        .collect();
+                    let fill: Vec<[f64; 2]> = (0..np)
+                        .map(|o| {
+                            let f = |r: &mut Rng| if o % 7 == l as usize { 0.0 } else { r.next() };
+                            [f(&mut r), f(&mut r)]
+                        })
+                        .collect();
+                    let mut out = Sourced::new();
+                    source(&k, g, &price, &active, &gammas(np), &spend, &mut out);
+                    (price, fill, out)
+                };
+                let lanes: [_; 3] = std::array::from_fn(|l| inputs(l as u64));
+                let mut scalar: [Sourced; 3] = std::array::from_fn(|l| lanes[l].2.clone());
+                for l in 0..3 {
+                    dispatch(&k, g, &lanes[l].0, &lanes[l].1, &mut scalar[l]);
+                }
+                let mut vect: [Sourced; 3] = std::array::from_fn(|l| lanes[l].2.clone());
+                dispatch_lanes(
+                    &k,
+                    g,
+                    std::array::from_fn(|l| lanes[l].0.as_slice()),
+                    std::array::from_fn(|l| lanes[l].1.as_slice()),
+                    &mut vect,
+                );
+                for l in 0..3 {
+                    assert!(scalar[l].shipped.iter().any(|&x| x > 0.0));
+                    assert_eq!(
+                        format!("{:?}", scalar[l]),
+                        format!("{:?}", vect[l]),
                         "seed {seed} good {g} lane {l}"
                     );
                 }
