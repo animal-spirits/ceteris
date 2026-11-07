@@ -391,6 +391,7 @@ dependencies = [
  "ceteris-geo",
  "ceteris-pack",
  "ceteris-reference",
+ "ceteris-run",
  "ceteris-trade",
  "mimalloc",
  "serde_json",
