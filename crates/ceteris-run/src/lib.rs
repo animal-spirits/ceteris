@@ -2,6 +2,7 @@
 //! (Sections 14.1, 14.3; ADRs 0128, 0211). See `specs/workbench/SPEC.md`.
 
 pub mod branch;
+pub mod commands;
 pub mod query;
 pub mod replay;
 pub mod retention;
