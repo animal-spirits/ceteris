@@ -8,6 +8,9 @@ use std::fmt;
 
 use ceteris_run::{Edit, EditKind, Query, QueryError};
 
+use ceteris_trade::TradeParams;
+
+use crate::params::EconParams;
 use crate::world::EconWorld;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,10 +84,27 @@ pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
 }
 
 fn set_param(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
+    let mut p = w.params().clone();
+    let mut t = w.trade().clone();
+    set_param_in(&mut p, &mut t, target, v)?;
+    if p != *w.params() {
+        w.set_params(p);
+    }
+    if t != *w.trade() {
+        w.set_trade_params(t);
+    }
+    Ok(())
+}
+
+fn set_param_in(
+    p: &mut EconParams,
+    t: &mut TradeParams,
+    target: &str,
+    v: f64,
+) -> Result<(), EditError> {
     let unknown = || EditError::UnknownTarget(target.to_string());
     match target.split_once('.').ok_or_else(unknown)? {
         ("econ", name) => {
-            let mut p = w.params().clone();
             *match name {
                 "sigma_demand" => &mut p.sigma_demand,
                 "sigma_fl" => &mut p.sigma_fl,
@@ -95,21 +115,34 @@ fn set_param(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
                 "drift_half_life" => &mut p.drift_half_life,
                 _ => return Err(unknown()),
             } = v;
-            w.set_params(p);
         }
         ("trade", name) => {
-            let mut t = w.trade().clone();
             *match name {
                 "theta_scale" => &mut t.theta_scale,
                 "kappa1" => &mut t.kappa1,
                 "gain_share" => &mut t.gain_share,
                 _ => return Err(unknown()),
             } = v;
-            w.set_trade_params(t);
         }
         _ => return Err(unknown()),
     }
     Ok(())
+}
+
+/// The parameters of one ensemble member: `base` with the tick-0 `Param` edits applied. Other
+/// edit kinds are not parameters of the member and are rejected.
+pub fn member_params(
+    base: &(EconParams, TradeParams),
+    edits: &[Edit],
+) -> Result<(EconParams, TradeParams), EditError> {
+    let (mut p, mut t) = base.clone();
+    for e in edits {
+        match e.kind {
+            EditKind::Param => set_param_in(&mut p, &mut t, &e.target, e.value)?,
+            kind => return Err(EditError::NoTarget(kind)),
+        }
+    }
+    Ok((p, t))
 }
 
 /// `tariff.<importer>.<exporter>.<group>`, country indices and the tariff group.

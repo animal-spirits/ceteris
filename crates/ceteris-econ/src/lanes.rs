@@ -71,6 +71,22 @@ impl<const L: usize> EconLanes<L> {
         Self::new(worlds)
     }
 
+    /// Lanes for ensemble members: lane `k` runs `base` with the `Param` edits of `members[k]`
+    /// (their draws, `ceteris_run::ensemble::member_edits`). Lanes keep the shared steady
+    /// state, so only dynamic parameters can be drawn (`structural_digest` is asserted).
+    pub fn from_members(
+        inputs: &std::sync::Arc<crate::inputs::EconInputs>,
+        base: &(crate::params::EconParams, ceteris_trade::TradeParams),
+        members: &[Vec<ceteris_run::Edit>; L],
+    ) -> Result<Self, crate::edit::EditError> {
+        let mut params = Vec::with_capacity(L);
+        for edits in members {
+            params.push(crate::edit::member_params(base, edits)?);
+        }
+        let params: [_; L] = params.try_into().unwrap_or_else(|_| unreachable!());
+        Ok(Self::build(inputs, params))
+    }
+
     /// These lanes with the country-pair flow window of every lane switched off: the export
     /// of trade flows is empty, and each lane holds that much less memory.
     #[must_use]
@@ -395,5 +411,52 @@ mod tests {
             assert_eq!(w.scratch.flows.mean().pair_value.len(), 0);
         }
         assert!(lanes.payments.iter().any(|p| p.entries.capacity() > 0));
+    }
+
+    fn draw_table() -> Vec<ceteris_run::ensemble::ParamPrior> {
+        use ceteris_run::ensemble::{ParamPrior, Prior};
+        vec![
+            ParamPrior {
+                id: 1,
+                target: "econ.kappa_w".into(),
+                prior: Prior::Uniform { lo: 0.05, hi: 0.4 },
+            },
+            ParamPrior {
+                id: 2,
+                target: "trade.kappa1".into(),
+                prior: Prior::LogUniform { lo: 0.05, hi: 0.5 },
+            },
+        ]
+    }
+
+    #[test]
+    fn lane_k_equals_scalar_run_with_seed_k() {
+        use ceteris_core::rng::Seed;
+        let inputs = Arc::new(small_world());
+        let base = (EconParams::default(), TradeParams::default());
+        let members: [_; 3] = std::array::from_fn(|k| {
+            ceteris_run::ensemble::member_edits(Seed(k as u64), &draw_table())
+        });
+        let mut lanes = EconLanes::<3>::from_members(&inputs, &base, &members).unwrap();
+        lanes.run_until(10).unwrap();
+        for k in 0..3 {
+            let (p, t) = crate::edit::member_params(&base, &members[k]).unwrap();
+            let mut scalar = EconWorld::sim(Arc::clone(&inputs), p, t);
+            scalar.run_until(10).unwrap();
+            assert_eq!(lanes.state_hashes()[k], scalar.state_hash(), "member {k}");
+        }
+        assert_ne!(lanes.state_hashes()[0], lanes.state_hashes()[1]);
+    }
+
+    #[test]
+    fn k_identical_seeds_without_draws_give_identical_members() {
+        let inputs = Arc::new(small_world());
+        let base = (EconParams::default(), TradeParams::default());
+        let members: [Vec<ceteris_run::Edit>; 3] = Default::default();
+        let mut lanes = EconLanes::<3>::from_members(&inputs, &base, &members).unwrap();
+        lanes.run_until(8).unwrap();
+        let h = lanes.state_hashes();
+        assert_eq!(h[0], h[1]);
+        assert_eq!(h[1], h[2]);
     }
 }
