@@ -76,6 +76,10 @@ impl EditKind {
         Self::Switch,
     ];
 
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.name() == name)
+    }
+
     fn name(self) -> &'static str {
         match self {
             Self::Param => "param",

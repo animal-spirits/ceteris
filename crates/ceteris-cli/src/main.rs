@@ -815,9 +815,83 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// The scenario-file verbs of the workbench registry (`ceteris_run::commands::REGISTRY`).
+fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
+    use ceteris_run::commands as c;
+    let file = args.first().ok_or("expected a scenario FILE")?;
+    let flag = |name: &str| -> Option<&str> {
+        let at = args.iter().position(|a| a == name)?;
+        args.get(at + 1).map(String::as_str)
+    };
+    let need = |name: &str| flag(name).ok_or(format!("missing {name}"));
+    let num = |name: &str| -> Result<u32, String> {
+        need(name)?
+            .parse()
+            .map_err(|_| format!("{name} wants a tick"))
+    };
+    let read = || -> Result<ceteris_run::Scenario, String> {
+        let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+        ceteris_run::Scenario::parse(&text).map_err(|e| e.to_string())
+    };
+    let write = |s: &ceteris_run::Scenario| {
+        std::fs::write(file, s.to_toml()).map_err(|e| format!("{file}: {e}"))
+    };
+    match verb {
+        "new" => {
+            let seeds = flag("--seeds").unwrap_or("1");
+            let seeds = seeds
+                .split(',')
+                .map(|s| s.parse().map_err(|_| "--seeds wants numbers".to_string()))
+                .collect::<Result<Vec<u64>, _>>()?;
+            write(&c::new_scenario(
+                need("--pack-hash")?,
+                need("--engine")?,
+                seeds,
+            ))?;
+        }
+        "fork" => {
+            let s = c::fork(&read()?, need("--from")?, num("--at")?, need("--id")?)
+                .map_err(|e| e.to_string())?;
+            write(&s)?;
+        }
+        "edit" => {
+            let kind = need("--kind")?;
+            let kind = ceteris_run::EditKind::from_name(kind)
+                .ok_or(format!("unknown edit kind `{kind}`"))?;
+            let value = need("--value")?
+                .parse()
+                .map_err(|_| "--value wants a number".to_string())?;
+            let edit = c::user_edit(
+                num("--at")?,
+                kind,
+                need("--target")?,
+                value,
+                flag("--query").map(String::from),
+            );
+            write(&c::add_edit(&read()?, need("--branch")?, edit).map_err(|e| e.to_string())?)?;
+        }
+        _ => {
+            let (a, b) = (
+                args.get(1).ok_or("expected two branches")?,
+                args.get(2).ok_or("expected two branches")?,
+            );
+            for line in c::diff(&read()?, a, b).map_err(|e| e.to_string())? {
+                println!("{line}");
+            }
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
+    if ["new", "fork", "edit", "diff"].contains(&command.as_str()) {
+        return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
     if ["pack", "reference", "calibrate", "gravity", "air-share"].contains(&command.as_str()) {
         let result = match command.as_str() {
             "pack" => pack(argv),
