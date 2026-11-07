@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use ceteris_run::{Edit, EditKind};
+use ceteris_run::{Edit, EditKind, Query, QueryError};
 
 use crate::world::EconWorld;
 
@@ -17,6 +17,8 @@ pub enum EditError {
     OutOfRange(String),
     SwitchAfterStart { tick: u32 },
     WrongTick { edit: u32, tick: u32 },
+    Query(QueryError),
+    QueryNeedsState,
 }
 
 impl fmt::Display for EditError {
@@ -31,6 +33,8 @@ impl fmt::Display for EditError {
             Self::WrongTick { edit, tick } => {
                 write!(f, "edit: edit for tick {edit} applied at tick {tick}")
             }
+            Self::Query(e) => e.fmt(f),
+            Self::QueryNeedsState => write!(f, "edit: only state edits select by query"),
         }
     }
 }
@@ -50,6 +54,12 @@ pub fn apply_due(w: &mut EconWorld, edits: &[Edit], tick: u32) -> Result<usize, 
 /// Applies one edit at its own tick boundary.
 pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
     let target = e.target.as_str();
+    if let Some(query) = &e.query {
+        return match e.kind {
+            EditKind::State => set_by_query(w, query, target, e.value),
+            _ => Err(EditError::QueryNeedsState),
+        };
+    }
     match e.kind {
         EditKind::Param => set_param(w, target, e.value),
         EditKind::Policy => set_tariff(w, target, e.value),
@@ -115,6 +125,36 @@ fn set_tariff(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> 
     Ok(())
 }
 
+/// The province columns a query can name: the world's own tables at the edit's tick.
+const PROVINCE_COLUMNS: [&str; 4] = ["country", "population", "w0", "wage"];
+
+/// Sets the `wage` column of every province the query matches, evaluated now. Edit by query
+/// (ADR 0155): the stored text is re-evaluated on replay at the edit's tick, so the edit list
+/// stays the only causal record.
+fn set_by_query(w: &mut EconWorld, query: &str, column: &str, v: f64) -> Result<(), EditError> {
+    if column != "wage" {
+        return Err(EditError::UnknownTarget(column.to_string()));
+    }
+    let q = Query::parse(query, &PROVINCE_COLUMNS).map_err(EditError::Query)?;
+    let hits: Vec<usize> = {
+        let provinces = &w.inputs().provinces;
+        (0..w.wage.len())
+            .filter(|&p| {
+                q.matches(&|c| match c {
+                    0 => f64::from(provinces.country[p]),
+                    1 => provinces.population[p],
+                    2 => provinces.w0[p],
+                    _ => w.wage[p],
+                })
+            })
+            .collect()
+    };
+    for p in hits {
+        w.wage[p] = v;
+    }
+    Ok(())
+}
+
 /// `wage.<province>`, god mode.
 fn set_state(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
     let [p] = indices::<1>(target, "wage")?;
@@ -172,6 +212,7 @@ mod tests {
             kind,
             target: target.to_string(),
             value,
+            query: None,
         }
     }
 
@@ -330,5 +371,87 @@ mod tests {
                 .unwrap();
         assert_eq!(restored.inputs().wedges.rate(0, 1, 0), 0.25);
         assert_eq!(restored.digest(), edited.digest());
+    }
+
+    fn query_edit(tick: u32, query: &str, value: f64) -> Edit {
+        Edit {
+            query: Some(query.to_string()),
+            ..edit(tick, EditSource::User, EditKind::State, "wage", value)
+        }
+    }
+
+    #[test]
+    fn edit_by_query_sets_the_matching_provinces_only() {
+        let mut w = world();
+        let before = w.wage.clone();
+        let cut = w.inputs().provinces.population[0];
+        let q = format!("population <= {cut} and country == 0");
+        apply_edit(&mut w, &query_edit(0, &q, 9.0)).unwrap();
+        let p = &w.inputs().provinces;
+        for (i, (&now, &was)) in w.wage.iter().zip(&before).enumerate() {
+            let hit = p.population[i] <= cut && p.country[i] == 0;
+            assert_eq!(now, if hit { 9.0 } else { was }, "province {i}");
+        }
+        assert!(w.wage[0] == 9.0);
+    }
+
+    #[test]
+    fn query_names_unknown_column_error() {
+        let mut w = world();
+        assert!(matches!(
+            apply_edit(&mut w, &query_edit(0, "famine > 0", 1.0)),
+            Err(EditError::Query(QueryError::UnknownColumn(_)))
+        ));
+        let mut policy = query_edit(0, "wage > 0", 1.0);
+        policy.kind = EditKind::Policy;
+        assert_eq!(apply_edit(&mut w, &policy), Err(EditError::QueryNeedsState));
+    }
+
+    #[test]
+    fn edit_by_query_replays_to_same_cells_on_replay() {
+        // The query reads the live wage column, which the run moves before the edit's tick, so
+        // a fork's replay from a snapshot must select the same provinces as a continuous run.
+        let branch = |id: &str, parent: Option<(&str, u32)>, edits| Branch {
+            id: id.to_string(),
+            parent: parent.map(|(p, _)| p.to_string()),
+            fork_tick: parent.map(|(_, t)| t),
+            edits,
+        };
+        let q = {
+            let w = world();
+            let mut wages = w.wage.clone();
+            wages.sort_by(f64::total_cmp);
+            format!("wage > {}", wages[wages.len() / 2])
+        };
+        let scenario = Scenario {
+            pack_hash: "fixture".into(),
+            engine: "test+1".into(),
+            replay: ReplaySel::Off,
+            seeds: vec![1],
+            params: Default::default(),
+            branches: vec![
+                branch("base", None, vec![query_edit(14, &q, 0.5)]),
+                branch("flat", None, vec![query_edit(14, &q, 0.5)]),
+                branch("fork", Some(("base", 12)), vec![query_edit(14, &q, 0.5)]),
+            ],
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let store = ChunkStore::open(dir.path().join("cache"), "test+1").unwrap();
+        let mut wb = Workbench::new(
+            scenario,
+            Seed(1),
+            |_| {
+                EconWorld::sim(
+                    Arc::new(small_world()),
+                    EconParams::default(),
+                    TradeParams::default(),
+                )
+            },
+            apply,
+            store,
+        );
+        wb.at("base", 18).unwrap();
+        let fork = wb.at("fork", 18).unwrap();
+        assert_eq!(fork.state_hash(), wb.at("flat", 18).unwrap().state_hash());
     }
 }
