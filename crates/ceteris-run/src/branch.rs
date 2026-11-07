@@ -173,6 +173,7 @@ mod tests {
             kind: EditKind::State,
             target: format!("price.{province}"),
             value,
+            query: None,
         }
     }
 

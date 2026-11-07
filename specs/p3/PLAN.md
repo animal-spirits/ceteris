@@ -99,8 +99,8 @@ Pre-P3's constraints carry over: determinism at 1, 3 and all threads with `fixed
 
 ### Task B3: Edits by query (0155)
 
-- [ ] A predicate over province columns (`port && food_deficit > 0`) stored with the edit and re-evaluated on replay at the edit's tick, so the edit list stays the only causal record. The predicate grammar is 0188's query language at its smallest (comparisons, and, or, not, column names from the run's tables).
-- [ ] Failing tests: `edit_by_query_replays_to_same_cells_on_replay`; `query_names_unknown_column_error`. Commit.
+- [x] A predicate over province columns (`port && food_deficit > 0`) stored with the edit and re-evaluated on replay at the edit's tick, so the edit list stays the only causal record. The predicate grammar is 0188's query language at its smallest (comparisons, and, or, not, column names from the run's tables).
+- [x] Failing tests: `edit_by_query_replays_to_same_cells_on_replay`; `query_names_unknown_column_error`. Commit.
 
 ### Task B4: Rebase, cherry-pick and bisect (0116)
 
