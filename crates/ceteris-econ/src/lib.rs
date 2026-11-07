@@ -11,6 +11,7 @@ pub mod flows;
 pub mod history;
 pub mod inputs;
 pub mod labour;
+pub mod lanes;
 pub mod local;
 pub mod pack;
 pub mod params;
