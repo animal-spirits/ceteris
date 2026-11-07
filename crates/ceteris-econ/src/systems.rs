@@ -76,6 +76,7 @@ pub fn schedule() -> Schedule<EconWorld> {
     };
     Schedule::new(vec![
         def(201, "deliver", |w, ctx| {
+            w.advance_kernel();
             drift(w, ctx.tick);
             deliver(w)
         }),
