@@ -5,6 +5,7 @@ pub mod attribution;
 pub mod branch;
 pub mod commands;
 pub mod effects;
+pub mod outputs;
 pub mod query;
 pub mod replay;
 pub mod retention;
