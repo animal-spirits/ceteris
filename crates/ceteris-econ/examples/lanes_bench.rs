@@ -38,11 +38,38 @@ fn lane_params(inputs: &EconInputs, l: usize) -> (EconParams, TradeParams) {
     (p, inputs.trade_params())
 }
 
+/// Resident set now, MiB, from `ps` (macOS and Linux).
+fn rss_mib() -> f64 {
+    let pid = std::process::id().to_string();
+    let out = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &pid])
+        .output()
+        .expect("ps runs");
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<f64>()
+        .unwrap_or(f64::NAN)
+        / 1024.0
+}
+
 fn lanes<const L: usize>(inputs: &Arc<EconInputs>, ticks: u32) -> f64 {
+    let before = rss_mib();
     let mut lanes = EconLanes::<L>::build(inputs, std::array::from_fn(|l| lane_params(inputs, l)));
+    let built = rss_mib();
+    let t = Instant::now();
+    lanes.run_until(1).expect("invariants hold");
+    let mut secs = t.elapsed().as_secs_f64();
+    let first = rss_mib();
     let t = Instant::now();
     lanes.run_until(ticks).expect("invariants hold");
-    t.elapsed().as_secs_f64()
+    secs += t.elapsed().as_secs_f64();
+    eprintln!(
+        "rss MiB: before {before:.0}, built {built:.0}, tick 1 {first:.0}, end {:.0}; per lane built {:.0}, after tick 1 {:.0}",
+        rss_mib(),
+        (built - before) / L as f64,
+        (first - built) / L as f64
+    );
+    secs
 }
 
 fn scalar(inputs: &Arc<EconInputs>, n: usize, ticks: u32) -> f64 {
