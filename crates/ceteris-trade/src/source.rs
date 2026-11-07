@@ -837,6 +837,171 @@ pub fn arrivals(k: &Kernel, g: usize, out: &mut Sourced) {
     }
 }
 
+/// [`arrivals`] for `L` lanes that share the kernel: each lane ends exactly as its own call
+/// leaves it, but the kernel's rows are read once for all lanes, with the lane as the innermost
+/// loop (ADR 0024). Every lane's sums run in the order its scalar call uses, and a lane skips
+/// what its scalar call skips.
+pub fn arrivals_lanes<const L: usize>(k: &Kernel, g: usize, outs: &mut [Sourced; L]) {
+    let (np, ng) = (k.n_provinces(), k.n_gateways());
+    for out in outs.iter() {
+        assert_eq!(
+            out.scratch.good,
+            Some(g),
+            "arrivals must follow source for good {g}"
+        );
+    }
+    let gk = k.good(g);
+    for out in outs.iter_mut() {
+        out.arrive.iter_mut().for_each(|a| zeroed2(a, np));
+    }
+    let (gc, nc) = (k.gateway_country(), k.n_countries());
+    for c in 0..2 {
+        let live: [bool; L] = std::array::from_fn(|l| {
+            let s = &outs[l].scratch;
+            !s.reach.iter().chain(&s.reach_abroad).all(|r| r[c] == 0.0)
+        });
+        if !live.contains(&true) {
+            continue;
+        }
+        for l in (0..L).filter(|&l| live[l]) {
+            zeroed(&mut outs[l].scratch.y, ng);
+        }
+        for d in 0..np {
+            for e in gk.access.row(d) {
+                for l in (0..L).filter(|&l| live[l]) {
+                    let s = &mut outs[l].scratch;
+                    if s.reach_abroad[d][c] > 0.0 {
+                        s.y[e.col as usize] += e.k * s.reach_abroad[d][c];
+                    }
+                }
+            }
+        }
+        for l in (0..L).filter(|&l| live[l]) {
+            let s = &mut outs[l].scratch;
+            s.inv_y.clear();
+            s.inv_y.extend(s.y.iter().map(|y| 1.0 / y));
+            zeroed(&mut s.z, ng);
+            zeroed(&mut s.cross_w, gk.crossings.entries.len());
+        }
+        for a in 0..ng {
+            let lo = gk.crossings.offsets[a] as usize;
+            let mut gross = [0.0; L];
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                for l in (0..L).filter(|&l| live[l]) {
+                    let s = &mut outs[l].scratch;
+                    let carry_a = &s.access.carry[usize::from(gc[a]) * nc..][..nc];
+                    let x = e.k * carry_a[usize::from(gc[e.col as usize])] * s.y[e.col as usize];
+                    s.cross_w[lo + i] = x;
+                    gross[l] += x;
+                }
+            }
+            for l in (0..L).filter(|&l| live[l]) {
+                outs[l].scratch.z[a] = gross[l];
+            }
+        }
+
+        for l in (0..L).filter(|&l| live[l]) {
+            zeroed(&mut outs[l].scratch.gross_a, ng);
+        }
+        for o in 0..np {
+            let on: [bool; L] =
+                std::array::from_fn(|l| live[l] && outs[l].scratch.weight[o] != 0.0);
+            if !on.contains(&true) {
+                continue;
+            }
+            let m: [f64; L] = std::array::from_fn(|l| {
+                if on[l] {
+                    times_two_to(outs[l].scratch.weight[o], outs[l].scratch.up)
+                } else {
+                    0.0
+                }
+            });
+            for l in (0..L).filter(|&l| on[l]) {
+                let Sourced {
+                    arrive, scratch: s, ..
+                } = &mut outs[l];
+                let x = m[l] * s.reach[o][c];
+                if x > 0.0 {
+                    arrive[0][o][c] += x * s.inv_q[o];
+                }
+            }
+            for e in gk.domestic.row(o) {
+                let d = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        arrive, scratch: s, ..
+                    } = &mut outs[l];
+                    let x = m[l] * e.k * s.reach[d][c];
+                    if x != 0.0 {
+                        arrive[1][d][c] += x * s.inv_q[d];
+                    }
+                }
+            }
+            for e in gk.access.row(o) {
+                let a = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let s = &mut outs[l].scratch;
+                    let x = m[l] * e.k * s.z[a];
+                    if x != 0.0 {
+                        s.gross_a[a] += x;
+                    }
+                }
+            }
+        }
+
+        for l in (0..L).filter(|&l| live[l]) {
+            let s = &mut outs[l].scratch;
+            s.at_b.clear();
+            s.at_b.resize(ng, Inflow::default());
+        }
+        for a in 0..ng {
+            let on: [bool; L] =
+                std::array::from_fn(|l| live[l] && outs[l].scratch.gross_a[a] > 0.0);
+            if !on.contains(&true) {
+                continue;
+            }
+            let lo = gk.crossings.offsets[a] as usize;
+            let inv_z: [f64; L] = std::array::from_fn(|l| 1.0 / outs[l].scratch.z[a]);
+            for (i, e) in gk.crossings.row(a).iter().enumerate() {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let s = &mut outs[l].scratch;
+                    let weight = s.cross_w[lo + i];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    let gross = s.gross_a[a] * over(weight, inv_z[l], s.z[a]);
+                    s.at_b[b].value[usize::from(e.lag)] += gross;
+                }
+            }
+        }
+
+        for d in 0..np {
+            let on: [bool; L] =
+                std::array::from_fn(|l| live[l] && outs[l].scratch.reach_abroad[d][c] > 0.0);
+            if !on.contains(&true) {
+                continue;
+            }
+            for e in gk.access.row(d) {
+                let b = e.col as usize;
+                for l in (0..L).filter(|&l| on[l]) {
+                    let Sourced {
+                        arrive, scratch: s, ..
+                    } = &mut outs[l];
+                    let weight = e.k * s.reach_abroad[d][c];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    let share = over(weight, s.inv_y[b], s.y[b]);
+                    for (lag, &value) in s.at_b[b].value.iter().enumerate() {
+                        arrive[1 + lag][d][c] += value * share * s.inv_q[d];
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1232,6 +1397,47 @@ mod tests {
                     bits(&out.arrive),
                     "seed {seed} good {g}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn lane_arrivals_equal_scalar_arrivals_per_lane() {
+        for seed in 0..6 {
+            let (net, wedges) = random_world(seed);
+            let k = kernel(&net, &wedges);
+            let np = net.n_provinces();
+            for g in Goods::p2().traded_goods() {
+                let lane = |l: u64| {
+                    let mut r = rng(seed * 10 + l + 200);
+                    let price = draw(&mut r, np, 0.5, 2.0);
+                    let active: Vec<bool> = (0..np).map(|o| (o + l as usize) % 5 != 2).collect();
+                    let spend: Vec<[f64; 2]> = (0..np)
+                        .map(|_| [r.next() * 10.0, if l == 1 { 0.0 } else { r.next() }])
+                        .collect();
+                    let mut out = Sourced::new();
+                    source(&k, g, &price, &active, &gammas(np), &spend, &mut out);
+                    out
+                };
+                let mut lanes: [Sourced; 3] = std::array::from_fn(|l| lane(l as u64));
+                let mut scalar: [Sourced; 3] = std::array::from_fn(|l| lane(l as u64));
+                scalar.iter_mut().for_each(|o| arrivals(&k, g, o));
+                arrivals_lanes(&k, g, &mut lanes);
+                let bits = |a: &Sourced| -> Vec<u64> {
+                    a.arrive
+                        .iter()
+                        .flatten()
+                        .flatten()
+                        .map(|x| x.to_bits())
+                        .collect()
+                };
+                for l in 0..3 {
+                    assert_eq!(
+                        bits(&scalar[l]),
+                        bits(&lanes[l]),
+                        "seed {seed} good {g} lane {l}"
+                    );
+                }
             }
         }
     }
