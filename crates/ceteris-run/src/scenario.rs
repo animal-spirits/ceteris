@@ -15,7 +15,13 @@ pub enum ScenarioError {
     RootWithForkTick(String),
     ChildWithoutForkTick(String),
     UnknownBranch(String),
+    TooManyBranches,
+    TooManyEdits(String),
 }
+
+/// Bounds of the workbench SPEC, Bounds at 2150 (ADR 0236): a cap that errors, never truncates.
+pub const MAX_BRANCHES: usize = 1_024;
+pub const MAX_EDITS_PER_BRANCH: usize = 100_000;
 
 impl fmt::Display for ScenarioError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -37,6 +43,15 @@ impl fmt::Display for ScenarioError {
                 write!(f, "scenario: branch `{b}` has a parent but no fork_tick")
             }
             Self::UnknownBranch(b) => write!(f, "scenario: no branch `{b}`"),
+            Self::TooManyBranches => {
+                write!(f, "scenario: more than {MAX_BRANCHES} branches")
+            }
+            Self::TooManyEdits(b) => {
+                write!(
+                    f,
+                    "scenario: branch `{b}` has more than {MAX_EDITS_PER_BRANCH} edits"
+                )
+            }
         }
     }
 }
@@ -170,8 +185,14 @@ impl Scenario {
     }
 
     pub fn validate(&self) -> Result<(), ScenarioError> {
+        if self.branches.len() > MAX_BRANCHES {
+            return Err(ScenarioError::TooManyBranches);
+        }
         let mut seen = std::collections::BTreeSet::new();
         for b in &self.branches {
+            if b.edits.len() > MAX_EDITS_PER_BRANCH {
+                return Err(ScenarioError::TooManyEdits(b.id.clone()));
+            }
             if !seen.insert(b.id.as_str()) {
                 return Err(ScenarioError::DuplicateBranch(b.id.clone()));
             }
