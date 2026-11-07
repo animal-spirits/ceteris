@@ -4,6 +4,7 @@
 
 pub mod entity;
 pub mod event;
+pub mod flatness;
 pub mod invariant;
 pub mod ledger;
 pub mod reduce;
