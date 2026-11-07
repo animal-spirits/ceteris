@@ -66,6 +66,23 @@ impl<const L: usize> EconLanes<L> {
         self.tick
     }
 
+    /// The world of lane `l` between ticks, for changes the schedule does not make (an edit
+    /// of one lane).
+    pub fn lane_mut(&mut self, l: usize) -> &mut EconWorld {
+        &mut self.worlds[l]
+    }
+
+    /// Canonical snapshot of lane `l`: the same bytes a lone world at this tick writes, so a
+    /// lane restores into a scalar `Sim` (ADR 0024 Consequences).
+    pub fn snapshot(&self, l: usize) -> Vec<u8> {
+        ceteris_core::snapshot::canonical(self.tick, &self.worlds[l])
+    }
+
+    /// One state hash per lane.
+    pub fn state_hashes(&self) -> [ceteris_core::snapshot::Hash; L] {
+        std::array::from_fn(|l| ceteris_core::snapshot::state_hash(&self.snapshot(l)))
+    }
+
     /// One tick of the P2 schedule on every lane; `source` and `dispatch` run the lane kernels, the other
     /// systems run lane by lane.
     pub fn step(&mut self) -> Result<(), Violation> {
@@ -289,5 +306,45 @@ mod tests {
             })
         };
         assert_eq!(run(1), run(4));
+    }
+
+    #[test]
+    fn snapshot_of_lane_k_restores_into_scalar_world() {
+        let inputs = Arc::new(small_world());
+        let mut lanes = EconLanes::<3>::build(&inputs, std::array::from_fn(lane_params));
+        lanes.run_until(8).unwrap();
+        let (p, t) = lane_params(2);
+        let mut scalar = EconWorld::sim(Arc::clone(&inputs), p.clone(), t.clone());
+        scalar.load(&lanes.snapshot(2)).unwrap();
+        assert_eq!(scalar.tick(), 8);
+        assert_eq!(scalar.state_hash(), lanes.state_hashes()[2]);
+        // the restored scalar run continues as the lane does
+        scalar.step().unwrap();
+        lanes.step().unwrap();
+        assert_eq!(scalar.state_hash(), lanes.state_hashes()[2]);
+    }
+
+    #[test]
+    fn crn_pair_in_two_lanes_equals_two_scalar_runs() {
+        // the same parameters in both lanes, one edited at tick 6: a paired run
+        let inputs = Arc::new(small_world());
+        let mut lanes = EconLanes::<2>::build(&inputs, std::array::from_fn(|_| lane_params(0)));
+        let (p, t) = lane_params(0);
+        let mut base = EconWorld::sim(Arc::clone(&inputs), p.clone(), t.clone());
+        let mut edited = EconWorld::sim(Arc::clone(&inputs), p, t);
+        lanes.run_until(6).unwrap();
+        base.run_until(6).unwrap();
+        edited.run_until(6).unwrap();
+        lanes.lane_mut(1).wage[0] *= 1.5;
+        edited.world_mut().wage[0] *= 1.5;
+        for _ in 0..6 {
+            lanes.step().unwrap();
+            base.step().unwrap();
+            edited.step().unwrap();
+        }
+        let h = lanes.state_hashes();
+        assert_eq!(h[0], base.state_hash());
+        assert_eq!(h[1], edited.state_hash());
+        assert_ne!(h[0], h[1]);
     }
 }
