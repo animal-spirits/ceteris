@@ -134,7 +134,9 @@ after the gate (0323).
 ## Bounds at 2150 (ADR 0236)
 
 First estimates at 1,800 ticks; Branch G replaces them with measurements and the flatness report
-checks them. A bound is a cap that errors, never silent truncation.
+checks them. A bound is a cap that errors, never silent truncation. The edit log and branch
+tree caps are `MAX_EDITS_PER_BRANCH` and `MAX_BRANCHES` in `ceteris-run::scenario`, checked by
+`validate`, `add_edit` and `fork` (G3).
 
 | Table | Bound | Rule | Size at 2150 |
 |---|---|---|---|
