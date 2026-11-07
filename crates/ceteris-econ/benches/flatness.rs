@@ -15,7 +15,6 @@ use ceteris_econ::fixture::small_world;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
-use ceteris_trade::TradeParams;
 
 const TICKS_PER_YEAR: usize = 12;
 
@@ -58,11 +57,8 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(100);
     let (inputs, source) = inputs();
-    let mut sim = EconWorld::sim(
-        Arc::new(inputs),
-        EconParams::default(),
-        TradeParams::default(),
-    );
+    let trade = inputs.trade_params();
+    let mut sim = EconWorld::sim(Arc::new(inputs), EconParams::default(), trade);
     let mut secs = Vec::with_capacity(years * TICKS_PER_YEAR);
     let mut decades = vec![Decade {
         year: 0,
