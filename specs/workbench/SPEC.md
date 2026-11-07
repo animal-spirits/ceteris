@@ -107,7 +107,7 @@ family (`shocks`, `policy`) for switch S07 `off | shocks | policy | all`; at P3 
 ## Outputs
 
 Declared outcomes per (branch, member, tick), effects, quantiles, masks and channel shares as
-Arrow IPC and Parquet, schema `workbench/v1` listed in the repository next to the writer and
+Arrow IPC (no Parquet writer in 1.0; Polars and DuckDB read IPC; Parquet may follow 1.0), schema `workbench/v1` listed in the repository next to the writer and
 checked by a schema test. 0087's observable tables (night lights, NO2, built-up, shipping
 density, flaring, greenness) are in the schema; only shipping density from sea-lane flows has an
 operator at P3. Verbs: `ceteris new | fork | edit | run | ensemble | diff | effects | explain |
