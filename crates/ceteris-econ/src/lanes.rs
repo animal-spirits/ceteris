@@ -8,12 +8,19 @@ use ceteris_trade::Sourced;
 use ceteris_trade::source::{LaneInput, dispatch_lanes, source_lanes};
 use rayon::prelude::*;
 
+use crate::flows::FlowWindow;
 use crate::systems;
-use crate::world::EconWorld;
+use crate::world::{EconWorld, Payments};
+use ceteris_core::ledger::PostScratch;
 
 pub struct EconLanes<const L: usize> {
     worlds: [EconWorld; L],
     tick: u32,
+    /// Working buffers of the systems that finish within one call, swapped into each lane in
+    /// turn so that lanes do not each hold their own: the money legs of dispatch and the
+    /// ledger's posting space. A lane's own entries stay empty.
+    payments: Vec<Payments>,
+    post: PostScratch,
 }
 
 impl<const L: usize> EconLanes<L> {
@@ -26,7 +33,13 @@ impl<const L: usize> EconLanes<L> {
                 .all(|w| std::sync::Arc::ptr_eq(&w.inputs, &worlds[0].inputs)),
             "lanes share one inputs allocation"
         );
-        Self { worlds, tick: 0 }
+        let payments = worlds[0].scratch.payments.clone();
+        Self {
+            worlds,
+            tick: 0,
+            payments,
+            post: PostScratch::default(),
+        }
     }
 
     /// Lanes over `inputs` with per-lane parameters. Lanes with equal trade parameters share
@@ -56,6 +69,33 @@ impl<const L: usize> EconLanes<L> {
             EconWorld::with_kernel(std::sync::Arc::clone(inputs), p, trade, kernel)
         });
         Self::new(worlds)
+    }
+
+    /// Lanes for ensemble members: lane `k` runs `base` with the `Param` edits of `members[k]`
+    /// (their draws, `ceteris_run::ensemble::member_edits`). Lanes keep the shared steady
+    /// state, so only dynamic parameters can be drawn (`structural_digest` is asserted).
+    pub fn from_members(
+        inputs: &std::sync::Arc<crate::inputs::EconInputs>,
+        base: &(crate::params::EconParams, ceteris_trade::TradeParams),
+        members: &[Vec<ceteris_run::Edit>; L],
+    ) -> Result<Self, crate::edit::EditError> {
+        let mut params = Vec::with_capacity(L);
+        for edits in members {
+            params.push(crate::edit::member_params(base, edits)?);
+        }
+        let params: [_; L] = params.try_into().unwrap_or_else(|_| unreachable!());
+        Ok(Self::build(inputs, params))
+    }
+
+    /// These lanes with the country-pair flow window of every lane switched off: the export
+    /// of trade flows is empty, and each lane holds that much less memory.
+    #[must_use]
+    pub fn without_flows(mut self) -> Self {
+        for w in &mut self.worlds {
+            let (ng, nt) = (w.inputs.n_goods(), w.scratch.sourced.len());
+            w.scratch.flows = FlowWindow::off(ng, nt);
+        }
+        self
     }
 
     pub fn worlds(&self) -> &[EconWorld; L] {
@@ -100,7 +140,9 @@ impl<const L: usize> EconLanes<L> {
         }
         self.source();
         for w in &mut self.worlds {
+            std::mem::swap(&mut w.scratch.post, &mut self.post);
             systems::clear(w);
+            std::mem::swap(&mut w.scratch.post, &mut self.post);
         }
         self.dispatch();
         for w in &mut self.worlds {
@@ -203,7 +245,11 @@ impl<const L: usize> EconLanes<L> {
             }
         }
         for w in &mut self.worlds {
+            std::mem::swap(&mut w.scratch.post, &mut self.post);
+            std::mem::swap(&mut w.scratch.payments, &mut self.payments);
             systems::dispatch_finish(w);
+            std::mem::swap(&mut w.scratch.post, &mut self.post);
+            std::mem::swap(&mut w.scratch.payments, &mut self.payments);
         }
     }
 }
@@ -346,5 +392,71 @@ mod tests {
         assert_eq!(h[0], base.state_hash());
         assert_eq!(h[1], edited.state_hash());
         assert_ne!(h[0], h[1]);
+    }
+
+    #[test]
+    fn lanes_share_working_buffers_and_run_without_flows() {
+        let inputs = Arc::new(small_world());
+        let mut lanes =
+            EconLanes::<3>::build(&inputs, std::array::from_fn(lane_params)).without_flows();
+        let (p, t) = lane_params(1);
+        let mut scalar = EconWorld::sim(Arc::clone(&inputs), p, t);
+        for _ in 0..6 {
+            lanes.step().unwrap();
+            scalar.step().unwrap();
+        }
+        assert_eq!(lanes.state_hashes()[1], scalar.state_hash());
+        for w in lanes.worlds() {
+            assert!(w.scratch.payments.iter().all(|p| p.entries.capacity() == 0));
+            assert_eq!(w.scratch.flows.mean().pair_value.len(), 0);
+        }
+        assert!(lanes.payments.iter().any(|p| p.entries.capacity() > 0));
+    }
+
+    fn draw_table() -> Vec<ceteris_run::ensemble::ParamPrior> {
+        use ceteris_run::ensemble::{ParamPrior, Prior};
+        vec![
+            ParamPrior {
+                id: 1,
+                target: "econ.kappa_w".into(),
+                prior: Prior::Uniform { lo: 0.05, hi: 0.4 },
+            },
+            ParamPrior {
+                id: 2,
+                target: "trade.kappa1".into(),
+                prior: Prior::LogUniform { lo: 0.05, hi: 0.5 },
+            },
+        ]
+    }
+
+    #[test]
+    fn lane_k_equals_scalar_run_with_seed_k() {
+        use ceteris_core::rng::Seed;
+        let inputs = Arc::new(small_world());
+        let base = (EconParams::default(), TradeParams::default());
+        let members: [_; 3] = std::array::from_fn(|k| {
+            ceteris_run::ensemble::member_edits(Seed(k as u64), &draw_table())
+        });
+        let mut lanes = EconLanes::<3>::from_members(&inputs, &base, &members).unwrap();
+        lanes.run_until(10).unwrap();
+        for (k, edits) in members.iter().enumerate() {
+            let (p, t) = crate::edit::member_params(&base, edits).unwrap();
+            let mut scalar = EconWorld::sim(Arc::clone(&inputs), p, t);
+            scalar.run_until(10).unwrap();
+            assert_eq!(lanes.state_hashes()[k], scalar.state_hash(), "member {k}");
+        }
+        assert_ne!(lanes.state_hashes()[0], lanes.state_hashes()[1]);
+    }
+
+    #[test]
+    fn k_identical_seeds_without_draws_give_identical_members() {
+        let inputs = Arc::new(small_world());
+        let base = (EconParams::default(), TradeParams::default());
+        let members: [Vec<ceteris_run::Edit>; 3] = Default::default();
+        let mut lanes = EconLanes::<3>::from_members(&inputs, &base, &members).unwrap();
+        lanes.run_until(8).unwrap();
+        let h = lanes.state_hashes();
+        assert_eq!(h[0], h[1]);
+        assert_eq!(h[1], h[2]);
     }
 }
