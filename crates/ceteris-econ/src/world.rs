@@ -16,7 +16,7 @@ use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_core::timing;
-use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source};
+use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source_weighted};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
@@ -461,6 +461,8 @@ impl Scratch {
 #[derive(Clone, Debug, Default)]
 pub struct Columns {
     pub price: Vec<f64>,
+    /// The prices of the origin shares under sticky sourcing (S12), empty when instant.
+    pub weight_price: Vec<f64>,
     pub active: Vec<bool>,
     pub spend: Vec<[f64; 2]>,
     pub fill: Vec<[f64; 2]>,
@@ -476,6 +478,13 @@ impl Columns {
         self.price.extend(cells.clone().map(|c| price[c]));
         self.active.clear();
         self.active.extend(cells.map(|c| active[c]));
+    }
+
+    /// The smoothed prices of good `g`, or none for an empty `weight`.
+    pub fn gather_weight(&mut self, weight: &[f64], g: usize, n_goods: usize) {
+        self.weight_price.clear();
+        self.weight_price
+            .extend(weight.iter().skip(g).step_by(n_goods));
     }
 }
 
@@ -595,6 +604,14 @@ pub struct EconWorld {
     pub(crate) kernel: Arc<Kernel>,
     /// The kernel of the network, tariffs and parameters now in force.
     pub(crate) target: Arc<Kernel>,
+    /// Smoothed origin prices of the short-run adjustment (S12, ADR 0027), state: per cell
+    /// `[province * ng + g]` of the traded goods the log `-theta ln p~` with `p~^-theta` the
+    /// blend `(1 - rho) p~^-theta + rho p^-theta` of the posted prices. Empty under instant
+    /// adjustment, and until the first tick.
+    pub(crate) smooth: Vec<f64>,
+    /// `p~` of [`EconWorld::smooth`] as the origin shares read it, with the posted price
+    /// where the two agree; empty when `smooth` is. Derived, not state.
+    pub(crate) weight_price: Vec<f64>,
     pub(crate) params: EconParams,
     pub(crate) trade: TradeParams,
     pub(crate) layout: Arc<Layout>,
@@ -1095,6 +1112,7 @@ fn delivered_prices(
     full: bool,
     kernel: &Kernel,
     price: &[f64],
+    weight_price: &[f64],
     active: &[bool],
     gamma: &[Vec<f64>],
     sourced: &mut [Sourced],
@@ -1118,7 +1136,18 @@ fn delivered_prices(
         .enumerate()
         .for_each(|(g, (unit, col))| {
             col.gather(price, active, g, ng);
-            source(kernel, g, &col.price, &col.active, &gamma[g], &spend, unit);
+            col.gather_weight(weight_price, g, ng);
+            let wp = (!weight_price.is_empty()).then_some(&col.weight_price[..]);
+            source_weighted(
+                kernel,
+                g,
+                &col.price,
+                wp,
+                &col.active,
+                &gamma[g],
+                &spend,
+                unit,
+            );
             if full {
                 dispatch(kernel, g, &col.price, &fill, unit);
             } else {
@@ -1174,6 +1203,7 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64
         true,
         &kernel,
         &price,
+        &[],
         &active,
         &ones,
         &mut sourced,
@@ -1298,6 +1328,8 @@ impl EconWorld {
             inputs,
             kernel,
             target,
+            smooth: Vec::new(),
+            weight_price: Vec::new(),
             params,
             trade,
             layout: Arc::new(layout),
@@ -1544,6 +1576,7 @@ impl EconWorld {
             false,
             &self.kernel,
             &self.markets.price,
+            &self.weight_price,
             &self.markets.active,
             &self.layout.gamma,
             &mut sc.sourced,
@@ -1574,12 +1607,14 @@ impl EconWorld {
         };
         let (kernel, layout) = (Arc::clone(&self.kernel), Arc::clone(&self.layout));
         let (price, active) = (self.markets.price.clone(), self.markets.active.clone());
+        let weight_price = self.weight_price.clone();
         rayon::spawn(move || {
             let _span = timing::span("e3.refresh_early", timing::NONE);
             delivered_prices(
                 false,
                 &kernel,
                 &price,
+                &weight_price,
                 &active,
                 &layout.gamma,
                 &mut parts.sourced,
@@ -1609,13 +1644,69 @@ impl EconWorld {
         }
     }
 
+    /// Blends the posted prices into the smoothed origin prices (P53) and refreshes the prices
+    /// the origin shares read. A class at rho 1, an inactive market and a price within 1e-12
+    /// of its smoothed value read the posted price.
+    fn advance_smoothing(&mut self) {
+        let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        let cells = self.markets.price.len();
+        let fresh = self.smooth.len() != cells;
+        if fresh {
+            self.smooth = vec![0.0; cells];
+        }
+        for cell in 0..cells {
+            let g = cell % ng;
+            let p = self.markets.price[cell];
+            if g >= nt || p <= 0.0 || !self.markets.active[cell] {
+                continue;
+            }
+            let (theta, rho) = (self.kernel.theta(g), self.trade.rho_of(g));
+            let now = -theta * libm::log(p);
+            let held = &mut self.smooth[cell];
+            *held = if fresh || rho >= 1.0 {
+                now
+            } else {
+                let (a, b) = (libm::log(1.0 - rho) + *held, libm::log(rho) + now);
+                let top = a.max(b);
+                top + libm::log(libm::exp(a - top) + libm::exp(b - top))
+            };
+            if (*held - now).abs() < 1e-12 {
+                *held = now;
+            }
+        }
+        self.refresh_weight_prices();
+    }
+
+    /// `p~` of every cell from [`EconWorld::smooth`]; the posted price where it equals the
+    /// current one in logs, for local goods and for inactive markets.
+    fn refresh_weight_prices(&mut self) {
+        let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        self.weight_price.clear();
+        self.weight_price.extend((0..self.smooth.len()).map(|cell| {
+            let g = cell % ng;
+            let p = self.markets.price[cell];
+            if g >= nt || p <= 0.0 || !self.markets.active[cell] {
+                return p;
+            }
+            let theta = self.kernel.theta(g);
+            if self.smooth[cell] == -theta * libm::log(p) {
+                p
+            } else {
+                libm::exp(-self.smooth[cell] / theta)
+            }
+        }));
+    }
+
     /// E0: under partial adjustment (S12), moves the lagged crossings toward the target
     /// kernel by their classes' rates (P53, `Kernel::adjust_toward`). Instant adjustment
     /// has nothing to do.
     pub fn advance_kernel(&mut self) {
         if !self.trade.partial_adjustment() {
+            self.smooth.clear();
+            self.weight_price.clear();
             return;
         }
+        self.advance_smoothing();
         let trade = &self.trade;
         Arc::make_mut(&mut self.kernel).adjust_toward(&self.target, |g| trade.rho_of(g));
     }
@@ -2077,6 +2168,7 @@ impl Encode for EconWorld {
         } else {
             e.f64s(&[]);
         }
+        e.f64s(&self.smooth);
     }
 }
 
@@ -2359,6 +2451,7 @@ impl State for EconWorld {
         let expectation = d.f64s()?;
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
+        let smooth_state = d.f64s()?;
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2390,6 +2483,8 @@ impl State for EconWorld {
             inputs: Arc::clone(&self.inputs),
             kernel: Arc::clone(&self.kernel),
             target: Arc::clone(&self.target),
+            smooth: smooth_state,
+            weight_price: Vec::new(),
             params: self.params.clone(),
             trade: self.trade.clone(),
             layout: Arc::clone(&self.layout),
@@ -2447,7 +2542,12 @@ impl State for EconWorld {
             restored.kernel = Arc::new(kernel);
         } else {
             expect_len("lagged crossings", lagged.len(), 0)?;
+            expect_len("smoothed prices", restored.smooth.len(), 0)?;
             restored.kernel = Arc::clone(&restored.target);
+        }
+        // the shares' prices are rebuilt from the smoothed state at the next tick's start
+        if !restored.smooth.is_empty() {
+            expect_len("smoothed prices", restored.smooth.len(), np * ng)?;
         }
         Ok(restored)
     }
@@ -2889,6 +2989,100 @@ mod tests {
             target,
             "settles on the target exactly"
         );
+    }
+
+    fn price_index_at(k: &Kernel, g: usize, d: usize) -> f64 {
+        let np = k.n_provinces();
+        let mut out = Sourced::new();
+        ceteris_trade::source(
+            k,
+            g,
+            &vec![1.0; np],
+            &vec![true; np],
+            &vec![1.0; np],
+            &vec![[1.0, 0.0]; np],
+            &mut out,
+        );
+        out.price_index[d]
+    }
+
+    /// ADR 0027, the elasticity path: with every border at one tariff the foreign part of a
+    /// destination's access scales with `f = ((1 + t1) / (1 + t0))^-theta` at the target, and
+    /// at tick n by `f^(1 - (1 - rho)^n)`, so the short-run elasticity is rho theta in month
+    /// one and theta in the limit.
+    #[test]
+    fn tariff_elasticity_path_matches_closed_form() {
+        let (rho, g, d) = (0.25, 0, 0);
+        let mut w = slow_world(rho);
+        let flat = |w: &mut EconWorld, t: f32| {
+            let mut wedges = w.inputs().wedges.clone();
+            wedges.tariff.iter_mut().for_each(|x| *x = t);
+            w.set_wedges(wedges);
+        };
+        flat(&mut w, 0.0);
+        for _ in 0..400 {
+            w.advance_kernel();
+        }
+        let theta = w.kernel().theta(g);
+        let phi0 = price_index_at(w.kernel(), g, d).powf(-theta);
+        flat(&mut w, 0.25);
+        let phi_end = price_index_at(&w.target, g, d).powf(-theta);
+        let f = 1.25f64.powf(-theta);
+        // phi = home + abroad f^s: two points fix both parts
+        let abroad = (phi0 - phi_end) / (1.0 - f);
+        let home = phi0 - abroad;
+        assert!(abroad > 0.0 && home > 0.0, "home {home} abroad {abroad}");
+        for n in 1..=8 {
+            w.advance_kernel();
+            let s = 1.0 - (1.0 - rho).powi(n);
+            let want = home + abroad * f.powf(s);
+            let got = price_index_at(w.kernel(), g, d).powf(-theta);
+            assert!((got / want - 1.0).abs() < 1e-9, "tick {n}: {got} vs {want}");
+        }
+    }
+
+    /// Sticky sourcing keeps every invariant while a tariff is phased in, and settles on the
+    /// target's prices.
+    #[test]
+    fn sticky_sourcing_runs_through_a_tariff_edit() {
+        let trade = TradeParams {
+            rho: [0.2; 4],
+            ..TradeParams::default()
+        };
+        let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);
+        sim.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        let mut wedges = sim.world_mut().inputs().wedges.clone();
+        wedges.tariff.iter_mut().for_each(|x| *x = 0.25);
+        sim.world_mut().set_wedges(wedges);
+        sim.run_until(200).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world_mut();
+        assert_eq!(w.kernel().crossing_k(), w.target.crossing_k());
+        assert!(!w.smooth.is_empty());
+    }
+
+    /// The smoothed prices are snapshot state; the prices the shares read follow from them.
+    #[test]
+    fn smoothed_prices_round_trip() {
+        let trade = TradeParams {
+            rho: [0.2; 4],
+            ..TradeParams::default()
+        };
+        let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);
+        sim.run_until(10).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world_mut();
+        assert!(
+            w.weight_price
+                .iter()
+                .zip(&w.markets.price)
+                .any(|(a, b)| a != b)
+        );
+        let (bytes, mut back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.smooth, w.smooth);
+        // the next tick start rebuilds the prices of the shares from the state
+        w.advance_kernel();
+        back.advance_kernel();
+        assert_eq!(back.weight_price, w.weight_price);
     }
 
     /// Lagged crossings are snapshot state.
