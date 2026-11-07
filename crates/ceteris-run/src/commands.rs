@@ -3,6 +3,7 @@
 //! verbs are functions here; verbs that run worlds are registered and built by later tasks.
 
 use crate::scenario::{Branch, Edit, EditKind, EditSource, Scenario, ScenarioError};
+use crate::vcs::{self, Skipped};
 
 pub struct Command {
     pub name: &'static str,
@@ -86,13 +87,13 @@ pub const REGISTRY: &[Command] = &[
         "rebase",
         "rebase FILE --branch B --onto O --at TICK",
         "move a branch to another parent",
-        false,
+        true,
     ),
     cmd(
         "cherry-pick",
         "cherry-pick FILE --from B --onto O --edits 0,1",
         "copy edits between branches",
-        false,
+        true,
     ),
     cmd(
         "share",
@@ -173,20 +174,49 @@ pub fn user_edit(
     }
 }
 
+fn edit_line(e: &Edit) -> String {
+    let q = e
+        .query
+        .as_deref()
+        .map_or(String::new(), |q| format!(" where {q}"));
+    format!("{} {:?} {} = {}{}", e.tick, e.kind, e.target, e.value, q)
+}
+
+fn skipped_lines(skipped: &[Skipped]) -> Vec<String> {
+    skipped
+        .iter()
+        .map(|s| format!("skipped {:?}: {}", s.reason, edit_line(&s.edit)))
+        .collect()
+}
+
+/// Without a world only the fork-tick rule can be checked; absent targets surface at run time.
+pub fn rebase(
+    s: &Scenario,
+    branch: &str,
+    onto: &str,
+    at: u32,
+) -> Result<(Scenario, Vec<String>), ScenarioError> {
+    let (out, skipped) = vcs::rebase(s, branch, onto, at, |_| true)?;
+    Ok((out, skipped_lines(&skipped)))
+}
+
+pub fn cherry_pick(
+    s: &Scenario,
+    from: &str,
+    onto: &str,
+    picks: &[usize],
+) -> Result<(Scenario, Vec<String>), ScenarioError> {
+    let (out, skipped) = vcs::cherry_pick(s, from, picks, onto, |_| true)?;
+    Ok((out, skipped_lines(&skipped)))
+}
+
 /// Edits only in `a` (`-`) or only in `b` (`+`), over the whole lineage with fork ticks.
 pub fn diff(s: &Scenario, a: &str, b: &str) -> Result<Vec<String>, ScenarioError> {
     let flat = |id: &str| -> Result<Vec<String>, ScenarioError> {
         let mut out = Vec::new();
         for br in s.lineage(id)? {
             for e in &br.edits {
-                let q = e
-                    .query
-                    .as_deref()
-                    .map_or(String::new(), |q| format!(" where {q}"));
-                out.push(format!(
-                    "{} {:?} {} = {}{}",
-                    e.tick, e.kind, e.target, e.value, q
-                ));
+                out.push(edit_line(e));
             }
         }
         Ok(out)
