@@ -65,3 +65,45 @@ fn new_fork_edit_diff_write_the_expected_scenario() {
     assert!(!share("nope", "1").0);
     assert!(!ceteris(&["fork", f, "--from", "nope", "--at", "1", "--id", "x"]).0);
 }
+
+#[test]
+fn rebase_and_cherry_pick_rewrite_the_scenario_and_report_skips() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    for args in [
+        vec!["new", f, "--pack-hash", "abc", "--engine", "t+1"],
+        vec!["fork", f, "--from", "main", "--at", "12", "--id", "a"],
+        vec!["fork", f, "--from", "main", "--at", "12", "--id", "b"],
+        vec![
+            "edit", f, "--branch", "a", "--at", "13", "--kind", "policy", "--target", "x",
+            "--value", "1",
+        ],
+        vec![
+            "edit", f, "--branch", "a", "--at", "20", "--kind", "policy", "--target", "y",
+            "--value", "2",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let (ok, out) = ceteris(&[
+        "cherry-pick",
+        f,
+        "--from",
+        "a",
+        "--onto",
+        "b",
+        "--edits",
+        "0,1",
+    ]);
+    assert!(ok);
+    assert!(out.is_empty());
+    let (ok, out) = ceteris(&["rebase", f, "--branch", "a", "--onto", "b", "--at", "15"]);
+    assert!(ok);
+    assert_eq!(out.trim(), "skipped BeforeFork: 13 Policy x = 1");
+    let s = ceteris_run::Scenario::parse(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(s.branch("a").unwrap().parent.as_deref(), Some("b"));
+    assert_eq!(s.branch("a").unwrap().edits.len(), 1);
+    assert_eq!(s.branch("b").unwrap().edits.len(), 2);
+    assert!(!ceteris(&["rebase", f, "--branch", "a", "--onto", "nope", "--at", "1"]).0);
+}
