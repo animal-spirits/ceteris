@@ -31,3 +31,25 @@ jobs:
           name: pack-gate-logs
           path: pack-gate-logs
           retention-days: 14
+
+  # G1 flatness gate (ADR 0234, #202): 100 years on the pack, single-thread CPU-time ratio of
+  # years 96-100 to 1-5 must stay under 1.25. Runs after the pack job so the two do not
+  # compete for the host; not a required check.
+  flatness:
+    needs: pack
+    if: always()
+    runs-on: [self-hosted, macOS, ARM64, pack-gate]
+    timeout-minutes: 120
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/pack-gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo bench -p ceteris-econ --bench flatness
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatness-report
+          path: tests/perf/flatness.md
+          retention-days: 14
