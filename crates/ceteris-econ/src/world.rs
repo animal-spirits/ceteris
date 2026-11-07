@@ -589,7 +589,12 @@ pub struct Order {
 #[derive(Clone, Debug)]
 pub struct EconWorld {
     pub(crate) inputs: Arc<EconInputs>,
+    /// The kernel sourcing and dispatch run on: the target kernel (same `Arc`) under instant
+    /// adjustment, else its crossings lagged behind the target (S12, ADR 0027). Its crossing k
+    /// are dynamic state when lagged.
     pub(crate) kernel: Arc<Kernel>,
+    /// The kernel of the network, tariffs and parameters now in force.
+    pub(crate) target: Arc<Kernel>,
     pub(crate) params: EconParams,
     pub(crate) trade: TradeParams,
     pub(crate) layout: Arc<Layout>,
@@ -683,6 +688,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // refuses values other than the ones the network was built with
         bulk_sea: _,
         bulk_port: _,
+        rho,
         storage_loss,
         storage_cost,
         speculation,
@@ -734,6 +740,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(speculation);
     e.f64s(convenience);
     e.f64(*storage_gain);
+    // instant adjustment is the same dynamics at any class rate
+    if trade.partial_adjustment() {
+        e.f64s(rho);
+    }
     state_hash(&e.into_bytes())
 }
 
@@ -1221,6 +1231,7 @@ impl EconWorld {
             &inp.wedges,
             &trade,
         ));
+        let target = Arc::clone(&kernel);
         let digest = static_digest(inp, &params, &trade);
         let (base_digest, network) = (inp.base_digest(), network_digest(&inp.network));
         let networks = Arc::new(vec![(network, Arc::new(inp.network.clone()))]);
@@ -1286,6 +1297,7 @@ impl EconWorld {
             price_index: vec![0.0; np * ng],
             inputs,
             kernel,
+            target,
             params,
             trade,
             layout: Arc::new(layout),
@@ -1589,7 +1601,23 @@ impl EconWorld {
             empty,
             "crossing lags change only on a world with nothing in flight"
         );
-        Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
+        Arc::make_mut(&mut self.target).set_crossing_lags(lag);
+        if self.trade.partial_adjustment() {
+            Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
+        } else {
+            self.kernel = Arc::clone(&self.target);
+        }
+    }
+
+    /// E0: under partial adjustment (S12), moves the lagged crossings toward the target
+    /// kernel by their classes' rates (P53, `Kernel::adjust_toward`). Instant adjustment
+    /// has nothing to do.
+    pub fn advance_kernel(&mut self) {
+        if !self.trade.partial_adjustment() {
+            return;
+        }
+        let trade = &self.trade;
+        Arc::make_mut(&mut self.kernel).adjust_toward(&self.target, |g| trade.rho_of(g));
     }
 
     /// Replaces the trade network (system T0 of the trade SPEC: the kernel follows the graph
@@ -1676,13 +1704,24 @@ impl EconWorld {
         params: EconParams,
         trade: TradeParams,
     ) {
-        if network != self.network_digest || trade != self.trade {
-            self.kernel = Arc::new(Kernel::build(
+        if network != self.network_digest
+            || trade != self.trade
+            || !Arc::ptr_eq(&inputs, &self.inputs)
+        {
+            let target = Arc::new(Kernel::build(
                 &inputs.network,
                 &inputs.weight,
                 &inputs.wedges,
                 &trade,
             ));
+            // a tariff edit leaves the lagged crossings behind their new target; any other
+            // change starts the kernel at its target
+            if trade.partial_adjustment() && trade == self.trade && self.kernel.same_legs(&target) {
+                Arc::make_mut(&mut self.kernel).adjust_toward(&target, |_| 0.0);
+            } else {
+                self.kernel = Arc::clone(&target);
+            }
+            self.target = target;
         }
         let mut accounts = self.layout.accounts.clone();
         if accounts.transfer.is_none() && transfers_on(&inputs, &params) {
@@ -1901,6 +1940,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
         theta_r,
         bulk_sea,
         bulk_port,
+        rho,
         storage_loss,
         storage_cost,
         speculation,
@@ -1934,6 +1974,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
     }
     e.f64s(bulk_sea);
     e.f64s(bulk_port);
+    e.f64s(rho);
 }
 
 fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeError> {
@@ -1980,6 +2021,7 @@ fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeErr
         theta_r,
         bulk_sea: decode_array(d, "bulk sea rates")?,
         bulk_port: decode_array(d, "bulk port rates")?,
+        rho: decode_array(d, "short-run adjustment rates")?,
         storage_loss,
         storage_cost,
         speculation,
@@ -2029,6 +2071,12 @@ impl Encode for EconWorld {
         }
         e.f64s(&[self.expected_inflation, self.price_level]);
         e.u32s(&self.wage_clip_ticks);
+        // the lagged crossings are state; under instant adjustment there are none
+        if self.trade.partial_adjustment() {
+            e.f64s(&self.kernel.crossing_k());
+        } else {
+            e.f64s(&[]);
+        }
     }
 }
 
@@ -2310,6 +2358,7 @@ impl State for EconWorld {
         ]: [Vec<f64>; 8] = columns.try_into().expect("eight columns");
         let expectation = d.f64s()?;
         let wage_clip_ticks = d.u32s()?;
+        let lagged = d.f64s()?;
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2340,6 +2389,7 @@ impl State for EconWorld {
         let mut restored = EconWorld {
             inputs: Arc::clone(&self.inputs),
             kernel: Arc::clone(&self.kernel),
+            target: Arc::clone(&self.target),
             params: self.params.clone(),
             trade: self.trade.clone(),
             layout: Arc::clone(&self.layout),
@@ -2386,6 +2436,18 @@ impl State for EconWorld {
             inputs.wedges.tariff = tariff;
             let inputs = Arc::new(inputs);
             restored.configure(inputs, network, params, trade);
+        }
+        if restored.trade.partial_adjustment() {
+            let mut kernel = (*restored.target).clone();
+            if !kernel.set_crossing_k(&lagged) {
+                return Err(DecodeError(
+                    "lagged crossings do not fit the kernel of the snapshot".into(),
+                ));
+            }
+            restored.kernel = Arc::new(kernel);
+        } else {
+            expect_len("lagged crossings", lagged.len(), 0)?;
+            restored.kernel = Arc::clone(&restored.target);
         }
         Ok(restored)
     }
@@ -2759,6 +2821,87 @@ mod tests {
         assert_eq!(back.price_level, w.price_level);
         assert_eq!(back.wage_clip_ticks, w.wage_clip_ticks);
         assert_eq!(back.markets.clip_ticks, w.markets.clip_ticks);
+    }
+
+    fn slow_world(rho: f64) -> EconWorld {
+        let trade = TradeParams {
+            rho: [rho; 4],
+            ..TradeParams::default()
+        };
+        EconWorld::new(Arc::new(small_world()), EconParams::default(), trade)
+    }
+
+    fn tariffs_up(w: &mut EconWorld) {
+        let mut wedges = w.inputs().wedges.clone();
+        wedges.tariff.iter_mut().for_each(|t| *t = 0.25);
+        w.set_wedges(wedges);
+    }
+
+    /// ADR 0027: a settled lagged kernel is its target bit for bit, so at any rho the steady
+    /// state and every tick without a policy change equal the instant path's.
+    #[test]
+    fn lagged_kernel_without_a_change_equals_instant() {
+        let mut slow = slow_world(0.1);
+        let mut fast = world();
+        for _ in 0..3 {
+            slow.advance_kernel();
+        }
+        assert_eq!(slow.kernel().crossing_k(), fast.kernel().crossing_k());
+        assert_eq!(slow.kernel().crossing_k(), slow.target.crossing_k());
+        fast.advance_kernel();
+    }
+
+    /// ADR 0027, closed form: after a tariff edit the k of a crossing at tick n is
+    /// `ln K* + (1 - rho)^n (ln K0 - ln K*)`; the other crossing fields follow at once.
+    #[test]
+    fn tariff_edit_moves_crossings_along_the_closed_form() {
+        let rho = 0.2;
+        let mut w = slow_world(rho);
+        let before = w.kernel().crossing_k();
+        tariffs_up(&mut w);
+        assert_eq!(w.kernel().crossing_k(), before, "k lags the edit");
+        let target = w.target.crossing_k();
+        assert!(
+            before.iter().zip(&target).any(|(a, b)| a != b),
+            "the edit moves some k"
+        );
+        let duty = w.target.good(6).crossings.row(6)[0].inv_duty;
+        assert_eq!(w.kernel().good(6).crossings.row(6)[0].inv_duty, duty);
+        for n in 1..=6 {
+            w.advance_kernel();
+            let decay = (1.0 - rho).powi(n);
+            for ((&k, &k0), &kt) in w.kernel().crossing_k().iter().zip(&before).zip(&target) {
+                if k0 > 0.0 && kt > 0.0 {
+                    let want = kt.ln() + decay * (k0.ln() - kt.ln());
+                    assert!(
+                        (k.ln() - want).abs() < 1e-9,
+                        "tick {n}: {} vs {want}",
+                        k.ln()
+                    );
+                }
+            }
+        }
+        for _ in 0..400 {
+            w.advance_kernel();
+        }
+        assert_eq!(
+            w.kernel().crossing_k(),
+            target,
+            "settles on the target exactly"
+        );
+    }
+
+    /// Lagged crossings are snapshot state.
+    #[test]
+    fn lagged_kernel_round_trips() {
+        let mut w = slow_world(0.2);
+        tariffs_up(&mut w);
+        w.advance_kernel();
+        assert_ne!(w.kernel().crossing_k(), w.target.crossing_k());
+        let (bytes, back) = round_trip(&w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.kernel().crossing_k(), w.kernel().crossing_k());
+        assert_eq!(back.target.crossing_k(), w.target.crossing_k());
     }
 
     /// Parameters are snapshot state: a world under other parameters restores a snapshot
