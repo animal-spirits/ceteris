@@ -5,7 +5,7 @@
 use ceteris_core::invariant::Violation;
 use ceteris_core::sim::State;
 use ceteris_trade::Sourced;
-use ceteris_trade::source::{LaneInput, source_lanes};
+use ceteris_trade::source::{LaneInput, dispatch_lanes, source_lanes};
 use rayon::prelude::*;
 
 use crate::systems;
@@ -66,7 +66,7 @@ impl<const L: usize> EconLanes<L> {
         self.tick
     }
 
-    /// One tick of the P2 schedule on every lane; `source` is the lane kernel, the other
+    /// One tick of the P2 schedule on every lane; `source` and `dispatch` run the lane kernels, the other
     /// systems run lane by lane.
     pub fn step(&mut self) -> Result<(), Violation> {
         let t = self.tick;
@@ -84,7 +84,9 @@ impl<const L: usize> EconLanes<L> {
         self.source();
         for w in &mut self.worlds {
             systems::clear(w);
-            systems::dispatch(w);
+        }
+        self.dispatch();
+        for w in &mut self.worlds {
             systems::reprice(w);
             systems::distribute(w, t);
             systems::assert_invariants(w, t);
@@ -103,33 +105,46 @@ impl<const L: usize> EconLanes<L> {
         Ok(())
     }
 
+    /// Runs `kernel` once per good over the lanes' `sourced` columns, which move into one
+    /// array per good for the call and back after.
+    fn per_good(&mut self, kernel: impl Fn(usize, &[EconWorld; L], &mut [Sourced; L]) + Sync) {
+        let ng = self.worlds[0].scratch.sourced.len();
+        let mut by_good: Vec<[Sourced; L]> = (0..ng)
+            .map(|_| std::array::from_fn(|_| Sourced::new()))
+            .collect();
+        for (l, w) in self.worlds.iter_mut().enumerate() {
+            for (g, s) in std::mem::take(&mut w.scratch.sourced)
+                .into_iter()
+                .enumerate()
+            {
+                by_good[g][l] = s;
+            }
+        }
+        let worlds = &self.worlds;
+        by_good
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(g, outs)| kernel(g, worlds, outs));
+        for outs in by_good {
+            for (l, s) in outs.into_iter().enumerate() {
+                self.worlds[l].scratch.sourced.push(s);
+            }
+        }
+    }
+
+    fn shared_kernel(&self) -> bool {
+        let id = self.worlds[0].kernel.id();
+        self.worlds.iter().all(|w| w.kernel.id() == id)
+    }
+
     /// T2 for all lanes: each good's sourcing runs once over the lanes that share its kernel.
     fn source(&mut self) {
         for w in &mut self.worlds {
             systems::source_inputs(w);
         }
-        let kernel = std::sync::Arc::clone(&self.worlds[0].kernel);
-        let shared = self.worlds.iter().all(|w| w.kernel.id() == kernel.id());
-        if !shared {
-            for w in &mut self.worlds {
-                systems::source_kernel(w);
-            }
-        } else {
-            let ng = self.worlds[0].scratch.sourced.len();
-            // goods outermost: move each lane's sourced columns into one array per good
-            let mut by_good: Vec<[Sourced; L]> = (0..ng)
-                .map(|_| std::array::from_fn(|_| Sourced::new()))
-                .collect();
-            for (l, w) in self.worlds.iter_mut().enumerate() {
-                for (g, s) in std::mem::take(&mut w.scratch.sourced)
-                    .into_iter()
-                    .enumerate()
-                {
-                    by_good[g][l] = s;
-                }
-            }
-            let worlds = &self.worlds;
-            by_good.par_iter_mut().enumerate().for_each(|(g, outs)| {
+        if self.shared_kernel() {
+            let kernel = std::sync::Arc::clone(&self.worlds[0].kernel);
+            self.per_good(|g, worlds, outs| {
                 let inputs = std::array::from_fn(|l| {
                     let w = &worlds[l];
                     let col = &w.scratch.columns[g];
@@ -143,14 +158,35 @@ impl<const L: usize> EconLanes<L> {
                 });
                 source_lanes(&kernel, g, inputs, outs);
             });
-            for outs in by_good {
-                for (l, s) in outs.into_iter().enumerate() {
-                    self.worlds[l].scratch.sourced.push(s);
-                }
+        } else {
+            for w in &mut self.worlds {
+                systems::source_kernel(w);
             }
         }
         for w in &mut self.worlds {
             systems::source_commit(w);
+        }
+    }
+
+    /// T2b for all lanes: the dispatch kernel once per good over lanes that share it.
+    fn dispatch(&mut self) {
+        for w in &mut self.worlds {
+            systems::dispatch_gather(w);
+        }
+        if self.shared_kernel() {
+            let kernel = std::sync::Arc::clone(&self.worlds[0].kernel);
+            self.per_good(|g, worlds, outs| {
+                let price = std::array::from_fn(|l| worlds[l].scratch.columns[g].price.as_slice());
+                let fill = std::array::from_fn(|l| worlds[l].scratch.columns[g].fill.as_slice());
+                dispatch_lanes(&kernel, g, price, fill, outs);
+            });
+        } else {
+            for w in &mut self.worlds {
+                systems::dispatch_kernel(w);
+            }
+        }
+        for w in &mut self.worlds {
+            systems::dispatch_finish(w);
         }
     }
 }
@@ -236,5 +272,22 @@ mod tests {
         let mut params: [_; 3] = std::array::from_fn(lane_params);
         params[2].1 = odd;
         assert_lanes_equal_scalar(params, 12);
+    }
+
+    #[test]
+    fn lane_hashes_do_not_depend_on_the_thread_count() {
+        let run = |threads: usize| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                let inputs = Arc::new(small_world());
+                let mut lanes = EconLanes::<3>::build(&inputs, std::array::from_fn(lane_params));
+                lanes.run_until(12).unwrap();
+                lanes.worlds.each_ref().map(|w| hash(12, w))
+            })
+        };
+        assert_eq!(run(1), run(4));
     }
 }

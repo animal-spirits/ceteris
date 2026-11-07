@@ -927,6 +927,39 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
 /// each gateway nets to zero), the tariff to its country's rebate account. Unfilled spending
 /// stays with the buyer. Records the country-pair flows.
 pub fn dispatch(w: &mut EconWorld) {
+    dispatch_gather(w);
+    dispatch_kernel(w);
+    dispatch_finish(w);
+}
+
+/// The per-good columns of the dispatch kernel: posted prices and the fill ratios.
+pub(crate) fn dispatch_gather(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let np = w.kernel.n_provinces();
+    let sc = &mut w.scratch;
+    let (fill, markets) = (&sc.fill, &w.markets);
+    sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
+        col.gather(&markets.price, &markets.active, g, ng);
+        col.fill.clear();
+        col.fill.extend((0..np).map(|o| fill[o * ng + g]));
+    });
+}
+
+/// The dispatch kernel of every traded good, one task per good.
+pub(crate) fn dispatch_kernel(w: &mut EconWorld) {
+    let kernel = &*w.kernel;
+    let sc = &mut w.scratch;
+    sc.sourced
+        .par_iter_mut()
+        .zip(&sc.columns)
+        .enumerate()
+        .for_each(|(g, (r, col))| {
+            let _span = timing::span("t2b.kernel", g as u32);
+            dispatch_good(kernel, g, &col.price, &col.fill, r);
+        });
+}
+
+pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let ng = w.inputs.n_goods();
     let inp = std::sync::Arc::clone(&w.inputs);
     let lay = std::sync::Arc::clone(&w.layout);
@@ -935,7 +968,7 @@ pub fn dispatch(w: &mut EconWorld) {
     let acc = &lay.accounts;
     let np = kernel.n_provinces();
     let sc = &mut w.scratch;
-    let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
+    let (markets, net) = (&w.markets, &inp.network);
     let spending = Spending {
         goods: ng,
         enterprise: &sc.ent_spend,
@@ -963,13 +996,6 @@ pub fn dispatch(w: &mut EconWorld) {
         .for_each(|(g, (r, col, legs, flows, stock))| {
             let gi = g as u32;
             let _good = timing::span("t2b.good", gi);
-            col.gather(&markets.price, &markets.active, g, ng);
-            col.fill.clear();
-            col.fill.extend((0..np).map(|o| fill[o * ng + g]));
-            {
-                let _span = timing::span("t2b.kernel", gi);
-                dispatch_good(kernel, g, &col.price, &col.fill, r);
-            }
             let r = &*r;
             rayon::join(
                 || {
