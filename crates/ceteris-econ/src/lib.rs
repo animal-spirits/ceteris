@@ -15,6 +15,7 @@ pub mod local;
 pub mod pack;
 pub mod params;
 pub mod production;
+pub mod synthetic;
 pub mod systems;
 pub mod wealth;
 pub mod world;
