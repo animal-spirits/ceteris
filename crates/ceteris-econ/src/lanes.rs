@@ -439,8 +439,8 @@ mod tests {
         });
         let mut lanes = EconLanes::<3>::from_members(&inputs, &base, &members).unwrap();
         lanes.run_until(10).unwrap();
-        for k in 0..3 {
-            let (p, t) = crate::edit::member_params(&base, &members[k]).unwrap();
+        for (k, edits) in members.iter().enumerate() {
+            let (p, t) = crate::edit::member_params(&base, edits).unwrap();
             let mut scalar = EconWorld::sim(Arc::clone(&inputs), p, t);
             scalar.run_until(10).unwrap();
             assert_eq!(lanes.state_hashes()[k], scalar.state_hash(), "member {k}");
