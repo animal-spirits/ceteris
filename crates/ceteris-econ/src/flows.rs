@@ -65,6 +65,9 @@ impl GoodFlows {
         r: &Sourced,
     ) {
         let nc = self.n_countries;
+        if nc == 0 {
+            return;
+        }
         let gk = kernel.good(g);
         let pair = |ex: u16, im: u16| usize::from(ex) * nc + usize::from(im);
 
@@ -128,6 +131,12 @@ impl FlowWindow {
             head: WINDOW - 1,
             ticks: 0,
         }
+    }
+
+    /// A window that records nothing and holds no data, for worlds whose flows are never
+    /// exported (ensemble lanes): its means are empty.
+    pub fn off(n_goods: usize, n_traded: usize) -> Self {
+        Self::new(0, 0, n_goods, n_traded)
     }
 
     /// Ticks recorded, at most [`WINDOW`].

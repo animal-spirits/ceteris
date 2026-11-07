@@ -54,7 +54,8 @@ fn rss_mib() -> f64 {
 
 fn lanes<const L: usize>(inputs: &Arc<EconInputs>, ticks: u32) -> f64 {
     let before = rss_mib();
-    let mut lanes = EconLanes::<L>::build(inputs, std::array::from_fn(|l| lane_params(inputs, l)));
+    let mut lanes = EconLanes::<L>::build(inputs, std::array::from_fn(|l| lane_params(inputs, l)))
+        .without_flows();
     let built = rss_mib();
     let t = Instant::now();
     lanes.run_until(1).expect("invariants hold");
