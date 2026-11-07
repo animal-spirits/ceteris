@@ -98,7 +98,7 @@ pub const REGISTRY: &[Command] = &[
         "share",
         "share FILE --branch B --seed S",
         "print the run hash",
-        false,
+        true,
     ),
     cmd(
         "fetch",
@@ -123,6 +123,11 @@ pub fn new_scenario(pack_hash: &str, engine: &str, seeds: Vec<u64>) -> Scenario 
             edits: vec![],
         }],
     }
+}
+
+pub fn share(s: &Scenario, branch: &str, seed: u64) -> Result<String, ScenarioError> {
+    let hash = s.run_hash(branch, seed)?;
+    Ok(hash.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 pub fn fork(s: &Scenario, from: &str, at: u32, id: &str) -> Result<Scenario, ScenarioError> {
