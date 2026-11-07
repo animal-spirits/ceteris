@@ -870,6 +870,15 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
             );
             write(&c::add_edit(&read()?, need("--branch")?, edit).map_err(|e| e.to_string())?)?;
         }
+        "share" => {
+            let seed = need("--seed")?
+                .parse()
+                .map_err(|_| "--seed wants a number".to_string())?;
+            println!(
+                "{}",
+                c::share(&read()?, need("--branch")?, seed).map_err(|e| e.to_string())?
+            );
+        }
         _ => {
             let (a, b) = (
                 args.get(1).ok_or("expected two branches")?,
@@ -886,7 +895,7 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
-    if ["new", "fork", "edit", "diff"].contains(&command.as_str()) {
+    if ["new", "fork", "edit", "diff", "share"].contains(&command.as_str()) {
         return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
