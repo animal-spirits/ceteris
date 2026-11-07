@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use ceteris_core::flatness::{self, Decade};
 use ceteris_core::sim::SNAPSHOT_EVERY;
+use ceteris_core::timing;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
@@ -43,6 +44,32 @@ fn peak_rss_kib() -> Option<u64> {
     line.split_whitespace().nth(1)?.parse().ok()
 }
 
+/// Process CPU time (user plus system) in ms, from `ps`; the bench forbids the unsafe a
+/// `getrusage` call needs.
+fn cpu_ms() -> f64 {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "time=", "-p", &std::process::id().to_string()])
+        .output()
+        .expect("ps runs");
+    let t = String::from_utf8_lossy(&out.stdout);
+    t.trim().split(':').fold(0.0, |acc, part| {
+        acc * 60.0 + part.parse::<f64>().unwrap_or(0.0)
+    }) * 1e3
+}
+
+/// The one-minute load average.
+fn load1() -> f64 {
+    let out = std::process::Command::new("sysctl")
+        .args(["-n", "vm.loadavg"])
+        .output()
+        .expect("sysctl runs");
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .nth(1)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(f64::NAN)
+}
+
 fn tables(sim: &ceteris_core::sim::Sim<EconWorld>) -> Vec<(String, usize)> {
     let w = sim.world();
     vec![
@@ -58,17 +85,35 @@ fn main() {
         .unwrap_or(100);
     let (inputs, source) = inputs();
     let trade = inputs.trade_params();
+    // FLATNESS_SPANS=<path>: per-year wall time per span name, as CSV (year,name,ms)
+    let spans_out = std::env::var_os("FLATNESS_SPANS").map(PathBuf::from);
+    if spans_out.is_some() {
+        timing::enable();
+    }
+    let mut span_ms = std::collections::BTreeMap::<(usize, &'static str), f64>::new();
     let mut sim = EconWorld::sim(Arc::new(inputs), EconParams::default(), trade);
     let mut secs = Vec::with_capacity(years * TICKS_PER_YEAR);
     let mut decades = vec![Decade {
         year: 0,
         rows: tables(&sim),
     }];
+    let mut cpu0 = if spans_out.is_some() { cpu_ms() } else { 0.0 };
     for year in 1..=years {
+        let wall0 = Instant::now();
         for _ in 0..TICKS_PER_YEAR {
             let t = Instant::now();
             sim.step().expect("invariants hold");
             secs.push(t.elapsed().as_secs_f64());
+            for sp in timing::take() {
+                *span_ms.entry((year, sp.name)).or_default() += (sp.end - sp.start) as f64 / 1e6;
+            }
+        }
+        if spans_out.is_some() {
+            let cpu1 = cpu_ms();
+            span_ms.insert((year, "_wall"), wall0.elapsed().as_secs_f64() * 1e3);
+            span_ms.insert((year, "_cpu"), cpu1 - cpu0);
+            span_ms.insert((year, "_load"), load1());
+            cpu0 = cpu1;
         }
         if year % 10 == 0 {
             decades.push(Decade {
@@ -76,6 +121,14 @@ fn main() {
                 rows: tables(&sim),
             });
         }
+    }
+
+    if let Some(path) = &spans_out {
+        let mut csv = String::from("year,name,ms\n");
+        for ((y, n), ms) in &span_ms {
+            writeln!(csv, "{y},{n},{ms:.3}").unwrap();
+        }
+        std::fs::write(path, csv).expect("spans written");
     }
 
     let window = 5 * TICKS_PER_YEAR;
