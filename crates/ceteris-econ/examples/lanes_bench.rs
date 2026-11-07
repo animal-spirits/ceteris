@@ -32,14 +32,14 @@ fn inputs() -> (EconInputs, &'static str) {
 }
 
 /// Lane `l` differs from lane 0 in the wage step only, so all lanes share one kernel.
-fn lane_params(l: usize) -> (EconParams, TradeParams) {
+fn lane_params(inputs: &EconInputs, l: usize) -> (EconParams, TradeParams) {
     let mut p = EconParams::default();
     p.kappa_w *= 1.0 + 0.01 * l as f64;
-    (p, TradeParams::default())
+    (p, inputs.trade_params())
 }
 
 fn lanes<const L: usize>(inputs: &Arc<EconInputs>, ticks: u32) -> f64 {
-    let mut lanes = EconLanes::<L>::build(inputs, std::array::from_fn(lane_params));
+    let mut lanes = EconLanes::<L>::build(inputs, std::array::from_fn(|l| lane_params(inputs, l)));
     let t = Instant::now();
     lanes.run_until(ticks).expect("invariants hold");
     t.elapsed().as_secs_f64()
@@ -48,7 +48,7 @@ fn lanes<const L: usize>(inputs: &Arc<EconInputs>, ticks: u32) -> f64 {
 fn scalar(inputs: &Arc<EconInputs>, n: usize, ticks: u32) -> f64 {
     let mut total = 0.0;
     for l in 0..n {
-        let (p, t) = lane_params(l);
+        let (p, t) = lane_params(inputs, l);
         let mut sim = EconWorld::sim(Arc::clone(inputs), p, t);
         let start = Instant::now();
         sim.run_until(ticks).expect("invariants hold");
