@@ -1250,17 +1250,28 @@ impl EconWorld {
     /// parameters other than the defaults with the calibrated border friction
     /// ([`structural_digest`], [`EconInputs::trade_params`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
+        let kernel = Arc::new(Kernel::build(
+            &inputs.network,
+            &inputs.weight,
+            &inputs.wedges,
+            &trade,
+        ));
+        Self::with_kernel(inputs, params, trade, kernel)
+    }
+
+    /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
+    /// worlds of equal trade parameters share (ADR 0024).
+    pub fn with_kernel(
+        inputs: Arc<EconInputs>,
+        params: EconParams,
+        trade: TradeParams,
+        kernel: Arc<Kernel>,
+    ) -> EconWorld {
         inputs.validate();
         trade.check_storage().unwrap_or_else(|e| panic!("{e}"));
         let inp = &*inputs;
         let (np, nc) = (inp.n_provinces(), inp.n_countries());
         let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
-        let kernel = Arc::new(Kernel::build(
-            &inp.network,
-            &inp.weight,
-            &inp.wedges,
-            &trade,
-        ));
         let target = Arc::clone(&kernel);
         let digest = static_digest(inp, &params, &trade);
         let (base_digest, network) = (inp.base_digest(), network_digest(&inp.network));

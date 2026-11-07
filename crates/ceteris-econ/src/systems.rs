@@ -654,30 +654,21 @@ pub fn demand(w: &mut EconWorld) {
 /// T2: spreads each destination's spending on every traded good over the active origins at
 /// posted prices (`ceteris_trade::source`) and places the orders at the origin markets.
 pub fn source(w: &mut EconWorld) {
-    let ng = w.inputs.n_goods();
-    let (inp, lay, kernel) = (&*w.inputs, &*w.layout, &*w.kernel);
-    let np = inp.n_provinces();
+    source_inputs(w);
+    source_kernel(w);
+    source_commit(w);
+}
+
+/// The sourcing kernel of every traded good, one task per good.
+pub(crate) fn source_kernel(w: &mut EconWorld) {
+    let (lay, kernel) = (&*w.layout, &*w.kernel);
     let sc = &mut w.scratch;
-    let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
-    let (markets, weight_price) = (&w.markets, &w.weight_price);
+    let weight_price = &w.weight_price;
     sc.sourced
         .par_iter_mut()
-        .zip(sc.columns.par_iter_mut())
+        .zip(&sc.columns)
         .enumerate()
         .for_each(|(g, (sourced, col))| {
-            col.spend.clear();
-            col.spend.extend((0..np).map(|d| {
-                let mut s = [0.0; 2];
-                for e in lay.enterprises(d) {
-                    s[INTERMEDIATE] += ent_spend[e * ng + g];
-                }
-                for k in lay.pops(d) {
-                    s[HOUSEHOLD] += pop_spend[k * ng + g];
-                }
-                s
-            }));
-            col.gather(&markets.price, &markets.active, g, ng);
-            col.gather_weight(weight_price, g, ng);
             let wp = (!weight_price.is_empty()).then_some(&col.weight_price[..]);
             source_weighted(
                 kernel,
@@ -690,6 +681,39 @@ pub fn source(w: &mut EconWorld) {
                 sourced,
             );
         });
+}
+
+/// The per-good columns [`source`] reads: spending by class, posted prices, active origins and
+/// the smoothed prices.
+pub(crate) fn source_inputs(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let np = inp.n_provinces();
+    let sc = &mut w.scratch;
+    let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
+    let (markets, weight_price) = (&w.markets, &w.weight_price);
+    sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
+        col.spend.clear();
+        col.spend.extend((0..np).map(|d| {
+            let mut s = [0.0; 2];
+            for e in lay.enterprises(d) {
+                s[INTERMEDIATE] += ent_spend[e * ng + g];
+            }
+            for k in lay.pops(d) {
+                s[HOUSEHOLD] += pop_spend[k * ng + g];
+            }
+            s
+        }));
+        col.gather(&markets.price, &markets.active, g, ng);
+        col.gather_weight(weight_price, g, ng);
+    });
+}
+
+/// Writes the orders of the `sourced` columns into the markets' demand.
+pub(crate) fn source_commit(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let np = w.inputs.n_provinces();
+    let sc = &mut w.scratch;
     for (g, (sourced, col)) in sc.sourced.iter().zip(&sc.columns).enumerate() {
         for o in 0..np {
             let cell = o * ng + g;
