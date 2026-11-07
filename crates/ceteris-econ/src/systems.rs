@@ -26,7 +26,7 @@ use ceteris_core::sim::State;
 use ceteris_core::timing::{self, NONE};
 use ceteris_trade::pipeline::Push;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
+use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source_weighted};
 
 use crate::demand::PiglAt;
 use crate::inputs::{EconInputs, TRANSFER_YEARS};
@@ -659,7 +659,7 @@ pub fn source(w: &mut EconWorld) {
     let np = inp.n_provinces();
     let sc = &mut w.scratch;
     let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
-    let markets = &w.markets;
+    let (markets, weight_price) = (&w.markets, &w.weight_price);
     sc.sourced
         .par_iter_mut()
         .zip(sc.columns.par_iter_mut())
@@ -677,10 +677,13 @@ pub fn source(w: &mut EconWorld) {
                 s
             }));
             col.gather(&markets.price, &markets.active, g, ng);
-            source_good(
+            col.gather_weight(weight_price, g, ng);
+            let wp = (!weight_price.is_empty()).then_some(&col.weight_price[..]);
+            source_weighted(
                 kernel,
                 g,
                 &col.price,
+                wp,
                 &col.active,
                 &lay.gamma[g],
                 &col.spend,

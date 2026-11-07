@@ -116,6 +116,8 @@ struct Scratch {
     /// last computed for: they depend on nothing else, so a repeat call reuses them.
     prepared: Option<(u64, usize)>,
     price: Vec<f64>,
+    /// The prices the shares were last computed for, `price` unless sourcing is sticky.
+    weight_price: Vec<f64>,
     active: Vec<bool>,
     price_index: Vec<f64>,
     /// `1 / q_d`, 0 where `q_d` is infinite.
@@ -125,6 +127,11 @@ struct Scratch {
     shift: Vec<f64>,
     weight: Vec<f64>,
     access: Access,
+    /// The same at the posted prices, for the price index under sticky sourcing.
+    ln_w2: Vec<f64>,
+    shift2: Vec<f64>,
+    weight2: Vec<f64>,
+    access2: Access,
     /// Spending per unit of access by class, `E_d / Phi_d`, in the scale of d's home part
     /// (home and domestic routes) and of its abroad part (through its gateways); 0 where the
     /// part is absent. Both hold `2^-up` of these values: `up` is 0 unless some `E_d / Phi_d`
@@ -261,6 +268,24 @@ pub fn source(
     spend: &[[f64; 2]],
     out: &mut Sourced,
 ) {
+    source_weighted(k, g, price, None, active, gamma, spend, out);
+}
+
+/// [`source`] with sticky sourcing (ADR 0027): with `weight_price` the shares of the origins
+/// follow those prices, the smoothed `p~` of the short-run adjustment, while the delivered
+/// price index, the buyer price and the units ordered follow the posted `price`. The price
+/// index then takes a second origin-access pass.
+#[allow(clippy::too_many_arguments)]
+pub fn source_weighted(
+    k: &Kernel,
+    g: usize,
+    price: &[f64],
+    weight_price: Option<&[f64]>,
+    active: &[bool],
+    gamma: &[f64],
+    spend: &[[f64; 2]],
+    out: &mut Sourced,
+) {
     let (np, ng) = (k.n_provinces(), k.n_gateways());
     assert_eq!(spend.len(), np, "spend must have one entry per province");
     assert_eq!(gamma.len(), np, "gamma must have one entry per province");
@@ -271,26 +296,46 @@ pub fn source(
     let gk = k.good(g);
     let s = &mut out.scratch;
     s.good = Some(g);
-    let same_prices = s.price.len() == price.len()
-        && s.price
-            .iter()
-            .zip(price)
-            .all(|(a, b)| a.to_bits() == b.to_bits());
-    if s.prepared != Some((k.id(), g)) || s.active != active || !same_prices {
-        let p_min = origin_weights(k, g, price, active, &mut s.ln_w, &mut s.shift);
+    let same = |held: &[f64], now: &[f64]| {
+        held.len() == now.len()
+            && held
+                .iter()
+                .zip(now)
+                .all(|(a, b)| a.to_bits() == b.to_bits())
+    };
+    let wp = weight_price.unwrap_or(price);
+    if s.prepared != Some((k.id(), g))
+        || s.active != active
+        || !same(&s.price, price)
+        || !same(&s.weight_price, wp)
+    {
+        let p_min = origin_weights(k, g, wp, active, &mut s.ln_w, &mut s.shift);
         s.weight.clear();
         s.weight.extend(s.ln_w.iter().map(|&x| libm::exp(x)));
         k.origin_access_into(g, &s.weight, &s.shift, &mut s.access);
-        let acc = &s.access;
+        let mut index_p_min = p_min;
+        if weight_price.is_some() {
+            index_p_min = origin_weights(k, g, price, active, &mut s.ln_w2, &mut s.shift2);
+            s.weight2.clear();
+            s.weight2.extend(s.ln_w2.iter().map(|&x| libm::exp(x)));
+            k.origin_access_into(g, &s.weight2, &s.shift2, &mut s.access2);
+        }
+        let acc = if weight_price.is_some() {
+            &s.access2
+        } else {
+            &s.access
+        };
         s.price_index.clear();
         s.price_index.extend(
             k.province_country()
                 .iter()
                 .enumerate()
-                .map(|(d, &c)| price_index(p_min, acc.ln_phi(d, usize::from(c)), k.theta(g))),
+                .map(|(d, &c)| price_index(index_p_min, acc.ln_phi(d, usize::from(c)), k.theta(g))),
         );
         s.price.clear();
         s.price.extend_from_slice(price);
+        s.weight_price.clear();
+        s.weight_price.extend_from_slice(wp);
         s.active.clear();
         s.active.extend_from_slice(active);
         s.prepared = Some((k.id(), g));
