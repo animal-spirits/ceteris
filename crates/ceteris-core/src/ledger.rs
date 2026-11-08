@@ -508,6 +508,7 @@ impl Ledger {
         self.tally.fill(0);
         self.created.fill(0.0);
         self.destroyed.fill(0.0);
+        let _span = crate::timing::span("begin.totals", crate::timing::NONE);
         self.opening = self.good_totals();
     }
 
@@ -530,7 +531,10 @@ impl Ledger {
                 format!("balances sum to {net}"),
             ));
         }
-        if let Some(i) = self.goods.iter().position(|&q| q.is_nan() || q < 0.0) {
+        let span = crate::timing::span("end.ledger.sign", crate::timing::NONE);
+        let bad = self.goods.iter().position(|&q| q.is_nan() || q < 0.0);
+        drop(span);
+        if let Some(i) = bad {
             let account = i / self.n_goods;
             let detail = format!(
                 "account {account} good {} holds {}",
@@ -539,7 +543,9 @@ impl Ledger {
             );
             return Err(Violation::new(tick, "goods sign", detail));
         }
+        let span = crate::timing::span("end.ledger.totals", crate::timing::NONE);
         let closing = self.good_totals();
+        drop(span);
         for (g, &close) in closing.iter().enumerate() {
             let (open, made, gone) = (self.opening[g], self.created[g], self.destroyed[g]);
             let gap = close - (open + made - gone);

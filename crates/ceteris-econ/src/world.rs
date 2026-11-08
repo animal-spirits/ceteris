@@ -2246,7 +2246,10 @@ impl State for EconWorld {
     /// (ADR 0100, exact).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
         let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        let span = timing::span("end.ledger", timing::NONE);
         self.ledger.check(tick)?;
+        drop(span);
+        let span = timing::span("end.columns", timing::NONE);
         let (inp, lay) = (&*self.inputs, &*self.layout);
         let fail = |invariant, detail| Err(Violation::new(tick, invariant, detail));
 
@@ -2290,6 +2293,8 @@ impl State for EconWorld {
             }
         }
 
+        drop(span);
+        let span = timing::span("end.bounds", timing::NONE);
         let bad = |x: &f64| !(x.is_finite() && *x > 0.0);
         if let Some(cell) = self.markets.price.iter().position(bad) {
             let detail = format!("cell {cell} price {}", self.markets.price[cell]);
@@ -2302,6 +2307,8 @@ impl State for EconWorld {
             );
         }
 
+        drop(span);
+        let span = timing::span("end.inventory", timing::NONE);
         for (i, &account) in lay.accounts.market.iter().enumerate() {
             for g in 0..ng {
                 let cell = i * ng + g;
@@ -2318,6 +2325,8 @@ impl State for EconWorld {
                 }
             }
         }
+        drop(span);
+        let span = timing::span("end.transit", timing::NONE);
         let in_flight = self.pipeline.in_flight_cached();
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
             let (flight, held) = (in_flight[g], self.ledger.goods(account, g));
@@ -2348,6 +2357,8 @@ impl State for EconWorld {
                 );
             }
         }
+        drop(span);
+        let span = timing::span("end.gateway", timing::NONE);
         if let Some(a) = lay
             .accounts
             .gateway
@@ -2379,6 +2390,8 @@ impl State for EconWorld {
             return fail("foreign dividends", detail);
         }
 
+        drop(span);
+        let span = timing::span("end.leontief", timing::NONE);
         let sc = &self.scratch;
         for e in 0..inp.n_enterprises() {
             let province = inp.enterprises.province[e] as usize;
@@ -2400,6 +2413,8 @@ impl State for EconWorld {
             }
         }
 
+        drop(span);
+        let span = timing::span("end.dispatch", timing::NONE);
         let traded: Vec<usize> = (0..nt).collect();
         let m = &self.markets;
         for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&m.sales).enumerate() {
@@ -2433,6 +2448,8 @@ impl State for EconWorld {
 
         // pops hold the first account IDs; the ledger tallies the income flows per account
         // as it posts them, the sum the journal gives
+        drop(span);
+        let _span = timing::span("end.income", timing::NONE);
         let credited = |k: usize| self.ledger.tally(AccountId(k as u32));
         if let Some(k) = (0..inp.n_pops()).find(|&k| credited(k) != sc.income_paid[k]) {
             let detail = format!(
