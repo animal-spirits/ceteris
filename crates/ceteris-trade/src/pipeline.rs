@@ -21,8 +21,19 @@ const RANGES: usize = 16;
 pub type Push = (u8, u32, f64);
 
 /// Arrays are `[buyer * n_goods + g]`, buyers numbered by the caller.
+/// The per-good in-flight sums of the current contents; never part of equality.
+#[derive(Clone, Debug, Default)]
+struct FlightCache(std::sync::OnceLock<Vec<f64>>);
+
+impl PartialEq for FlightCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pipeline {
+    flight: FlightCache,
     buyers: usize,
     goods: usize,
     /// Storage slot that the next `pop_due` delivers.
@@ -36,6 +47,7 @@ impl Pipeline {
     pub fn new(n_buyers: usize, n_goods: usize) -> Self {
         let n = n_buyers * n_goods;
         Self {
+            flight: FlightCache::default(),
             buyers: n_buyers,
             goods: n_goods,
             cursor: 0,
@@ -63,6 +75,7 @@ impl Pipeline {
             buyer < self.buyers && g < self.goods,
             "buyer {buyer} good {g}"
         );
+        self.flight = FlightCache::default();
         self.slots[(self.cursor + slot - 1) % SLOTS][buyer * self.goods + g] += units;
     }
 
@@ -71,6 +84,7 @@ impl Pipeline {
     /// buckets; then one task per bucket column fills its cells, adding the goods in order, so
     /// every cell sums the same terms in the same order however many ranges or threads there are.
     pub fn push_all(&mut self, lists: &[&[Push]]) {
+        self.flight = FlightCache::default();
         let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
         assert!(lists.len() <= goods, "{} goods of {goods}", lists.len());
         if buyers == 0 {
@@ -135,6 +149,7 @@ impl Pipeline {
     pub fn pop_due(&mut self) -> &[f64] {
         // the delivered slot is swapped out for the zeroed previous delivery, so a slot-4 push
         // right after lands in a clean slot
+        self.flight = FlightCache::default();
         self.due.fill(0.0);
         std::mem::swap(&mut self.due, &mut self.slots[self.cursor]);
         self.cursor = (self.cursor + 1) % SLOTS;
@@ -167,6 +182,16 @@ impl Pipeline {
     /// [`Pipeline::in_flight`] of every good, each summed in the same order: one row-major pass
     /// per block of goods that share a cache line, the blocks in parallel.
     pub fn in_flight_all(&self) -> Vec<f64> {
+        self.in_flight_cached().to_vec()
+    }
+
+    /// [`Pipeline::in_flight_all`] kept until the next push or pop, so a later caller on
+    /// unchanged contents reuses the scan with the same bits.
+    pub fn in_flight_cached(&self) -> &[f64] {
+        self.flight.0.get_or_init(|| self.scan_in_flight())
+    }
+
+    fn scan_in_flight(&self) -> Vec<f64> {
         const BLOCK: usize = 8;
         let _span = ceteris_core::timing::span("in_flight_all", ceteris_core::timing::NONE);
         let goods = self.goods;
@@ -224,6 +249,7 @@ impl Pipeline {
             }
         }
         Ok(Self {
+            flight: FlightCache::default(),
             buyers,
             goods: n_goods,
             cursor,
