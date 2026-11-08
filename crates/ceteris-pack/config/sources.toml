@@ -824,7 +824,7 @@ policy = "exclude"
 reason = "Free to download but the page states no terms of use; covers US-China only, so too few treated pairs for the class projections"
 checked = 2026-11-07
 confidence = "medium"
-notes = "P53's fit (ceteris calibrate rho) takes its 2018-19 tariffs from unctad-trains, fetch-only and closed source only, until an open bilateral source is licensed. Only the fitted rho by class enters a release; whether a value fitted on non-commercial data may ship in the paid build is Antonio's call."
+notes = "P53 (ADR 0027): the paid build keeps the prior half-life (12 to 48 months) and does not ship a rho fitted on non-commercial tariffs. ceteris calibrate rho takes its 2018-19 tariffs from unctad-trains, fetch-only and closed source only, so its output is research-only. Checked 2026-11-08: teti-gtd states no licence and no licensing contact (teti@ifo.de is for errors and HS6 microdata access), and CEPII MAcMap-HS6 is non-commercial, so neither opens the paid build. Reopen if an open bilateral tariff source is licensed."
 
 [[source]]
 id = "dose"
