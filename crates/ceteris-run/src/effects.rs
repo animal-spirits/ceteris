@@ -82,9 +82,59 @@ pub fn sign_robust(diffs: &[f64], threshold: f64) -> bool {
     agree as f64 / diffs.len() as f64 >= threshold
 }
 
+/// Share of members whose difference has the mean's sign (zero when the mean is zero).
+pub fn sign_share(diffs: &[f64]) -> f64 {
+    let m = mean(diffs);
+    if m == 0.0 {
+        return 0.0;
+    }
+    let agree = diffs
+        .iter()
+        .filter(|d| **d != 0.0 && d.signum() == m.signum())
+        .count();
+    agree as f64 / diffs.len() as f64
+}
+
+/// One row of the `effects` table: the paired effect of one outcome.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Effect {
+    pub interval: Interval,
+    pub p05: f64,
+    pub p50: f64,
+    pub p95: f64,
+    pub sign_share: f64,
+}
+
+pub const BOOTSTRAP_REPS: u32 = 1000;
+pub const BOOTSTRAP_LEVEL: f64 = 0.9;
+
+/// The paired effect of `branch` against `baseline` (member by member), with the bootstrap
+/// keyed by `seed`.
+pub fn effect(branch: &[f64], baseline: &[f64], seed: Seed) -> Effect {
+    let d = paired(branch, baseline);
+    Effect {
+        interval: bootstrap_mean(&d, seed, BOOTSTRAP_REPS, BOOTSTRAP_LEVEL),
+        p05: quantile(&d, 0.05),
+        p50: quantile(&d, 0.5),
+        p95: quantile(&d, 0.95),
+        sign_share: sign_share(&d),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn effect_row_agrees_with_its_parts() {
+        let base = [1.0, 2.0, 3.0, 4.0];
+        let branch = [2.0, 3.0, 4.0, 3.0];
+        let e = effect(&branch, &base, Seed(3));
+        assert_eq!(e.interval.mean, 0.5);
+        assert_eq!(e.p50, 1.0);
+        assert_eq!(e.sign_share, 0.75);
+        assert_eq!(e, effect(&branch, &base, Seed(3)));
+    }
 
     #[test]
     fn paired_effect_of_null_edit_is_exactly_zero() {
