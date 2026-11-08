@@ -39,8 +39,8 @@ use crate::production::{
 };
 use crate::world::{
     Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, LocalClear, Order, PURCHASE,
-    Payments, REBATE, SALE, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock, to_minor,
-    to_numeraire,
+    Payments, REBATE, SALE, SPEND_BLOCK, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock,
+    to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -842,11 +842,31 @@ pub fn clear(w: &mut EconWorld) {
 /// (`Scratch::ent_spend`, `pop_spend`, `class_spend`).
 #[derive(Clone, Copy)]
 struct Spending<'a> {
-    /// Goods per row of `enterprise`, `pop` and `class`.
+    /// Goods per row of `class` and per block of `enterprise` and `pop`.
     goods: usize,
+    /// `Scratch::ent_spend_t` and `pop_spend_t`, blocked good-major.
     enterprise: &'a [f64],
     pop: &'a [f64],
     class: &'a [[f64; 2]],
+}
+
+/// Index of buyer `i`'s spending on good `g` in a blocked good-major array.
+fn blocked(i: usize, g: usize, goods: usize) -> usize {
+    (i / SPEND_BLOCK) * SPEND_BLOCK * goods + g * SPEND_BLOCK + i % SPEND_BLOCK
+}
+
+/// Regroups `rows` (`[buyer * goods + g]`) into `out` by blocks of `SPEND_BLOCK` buyers, good
+/// major inside a block; each block is one task, reading its rows once.
+fn transpose_spend(rows: &[f64], goods: usize, out: &mut [f64]) {
+    out.par_chunks_mut(SPEND_BLOCK * goods)
+        .zip(rows.par_chunks(SPEND_BLOCK * goods))
+        .for_each(|(block, rows)| {
+            for (i, row) in rows.chunks_exact(goods).enumerate() {
+                for (g, &x) in row.iter().enumerate() {
+                    block[g * SPEND_BLOCK + i] = x;
+                }
+            }
+        });
 }
 
 /// Buyers of good `g` in province `d` with positive spending, enterprises then pops.
@@ -855,7 +875,7 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
     let n_pops = acc.pop.len();
     out.clear();
     for e in lay.enterprises(d) {
-        let spend = spend.enterprise[e * spend.goods + g];
+        let spend = spend.enterprise[blocked(e, g, spend.goods)];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.enterprise[e],
@@ -866,7 +886,7 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
         }
     }
     for k in lay.pops(d) {
-        let spend = spend.pop[k * spend.goods + g];
+        let spend = spend.pop[blocked(k, g, spend.goods)];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.pop[k],
@@ -952,6 +972,8 @@ pub(crate) fn dispatch_gather(w: &mut EconWorld) {
     let ng = w.inputs.n_goods();
     let np = w.kernel.n_provinces();
     let sc = &mut w.scratch;
+    transpose_spend(&sc.pop_spend, ng, &mut sc.pop_spend_t);
+    transpose_spend(&sc.ent_spend, ng, &mut sc.ent_spend_t);
     let (fill, markets) = (&sc.fill, &w.markets);
     sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
         col.gather(&markets.price, &markets.active, g, ng);
@@ -987,8 +1009,8 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let (markets, net) = (&w.markets, &inp.network);
     let spending = Spending {
         goods: ng,
-        enterprise: &sc.ent_spend,
-        pop: &sc.pop_spend,
+        enterprise: &sc.ent_spend_t,
+        pop: &sc.pop_spend_t,
         class: &sc.class_spend,
     };
     // each good's goods moves run in its own task, on its own ledger column: they read and
@@ -1013,18 +1035,47 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
             let gi = g as u32;
             let _good = timing::span("t2b.good", gi);
             let r = &*r;
-            rayon::join(
-                || {
-                    let _span = timing::span("t2b.record", gi);
-                    let (pc, gc) = (&net.province_country, &net.gateway_country);
-                    flows.record(kernel, pc, gc, g, &col.price, r);
-                },
-                || {
+            let record = || {
+                let _span = timing::span("t2b.record", gi);
+                let (pc, gc) = (&net.province_country, &net.gateway_country);
+                flows.record(kernel, pc, gc, g, &col.price, r);
+            };
+            if detail {
+                // the buyers' entries come before the legs' in one list
+                rayon::join(record, || {
                     let _span = timing::span("t2b.legs", gi);
                     buyer_orders(lay, spending, g, r, legs, detail);
                     trade_legs(inp, acc, kernel, g, r, legs, (detail, g == 0));
-                },
-            );
+                });
+            } else {
+                // netted: the buyers' and the legs' amounts are separate vectors, so the legs
+                // run on their own `Payments` holding those vectors meanwhile
+                let mut apart = Payments {
+                    edge_amt: std::mem::take(&mut legs.edge_amt),
+                    topo: std::mem::take(&mut legs.topo),
+                    at_gateway: std::mem::take(&mut legs.at_gateway),
+                    from_gateway: std::mem::take(&mut legs.from_gateway),
+                    parts: std::mem::take(&mut legs.parts),
+                    ..Payments::default()
+                };
+                rayon::join(record, || {
+                    rayon::join(
+                        || {
+                            let _span = timing::span("t2b.buyers", gi);
+                            buyer_orders(lay, spending, g, r, legs, detail);
+                        },
+                        || {
+                            let _span = timing::span("t2b.legs", gi);
+                            trade_legs(inp, acc, kernel, g, r, &mut apart, (detail, g == 0));
+                        },
+                    )
+                });
+                legs.edge_amt = apart.edge_amt;
+                legs.topo = apart.topo;
+                legs.at_gateway = apart.at_gateway;
+                legs.from_gateway = apart.from_gateway;
+                legs.parts = apart.parts;
+            }
             let _span = timing::span("t2b.moves", gi);
             goods_moves(acc, np, ng, inventory, legs, stock);
         });

@@ -28,6 +28,9 @@ use crate::inputs::{EconInputs, network_digest};
 use crate::params::{EconParams, Pigl, Technology, Transfers};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
+/// Buyers per block of the good-major spending arrays (`Scratch::pop_spend_t`).
+pub(crate) const SPEND_BLOCK: usize = 512;
+
 pub const MINOR_PER_UNIT: f64 = 1e4;
 
 /// Relative slack of the labour bounds (spec Invariants, Labour).
@@ -361,6 +364,11 @@ pub struct Scratch {
     /// by good (0 for local goods).
     pub pop_spend: Vec<f64>,
     pub ent_spend: Vec<f64>,
+    /// `pop_spend` and `ent_spend` regrouped by blocks of `SPEND_BLOCK` buyers, good-major
+    /// inside a block (`[block][good][buyer % SPEND_BLOCK]`), so one good's buyers read
+    /// sequentially in T2b; filled by `dispatch_gather`.
+    pub pop_spend_t: Vec<f64>,
+    pub ent_spend_t: Vec<f64>,
     /// Spending by class `[intermediate, household]` per destination cell, the sums of
     /// `ent_spend` and `pop_spend` over the province in ID order, given to `source` at T2.
     pub class_spend: Vec<[f64; 2]>,
@@ -437,6 +445,8 @@ impl Scratch {
             ent_order: vec![0.0; n_ent * ng],
             pop_spend: vec![0.0; n_pops * ng],
             ent_spend: vec![0.0; n_ent * ng],
+            pop_spend_t: vec![0.0; n_pops.div_ceil(SPEND_BLOCK) * SPEND_BLOCK * ng],
+            ent_spend_t: vec![0.0; n_ent.div_ceil(SPEND_BLOCK) * SPEND_BLOCK * ng],
             class_spend: vec![[0.0; 2]; np * ng],
             income_paid: vec![0; n_pops],
             fill: vec![[1.0; 2]; np * ng],
