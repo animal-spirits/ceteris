@@ -15,6 +15,7 @@ pub mod gravity;
 pub mod json;
 pub mod pyfmt;
 pub mod rho;
+pub mod rho_panel;
 pub mod shock;
 pub mod stability;
 pub mod steady;

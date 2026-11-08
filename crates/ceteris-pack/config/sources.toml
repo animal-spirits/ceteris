@@ -809,6 +809,24 @@ checked = 2026-10-23
 confidence = "high"
 
 [[source]]
+id = "piie-trade-war"
+name = "US-China trade war tariffs, underlying data"
+provider = "Peterson Institute for International Economics (Bown)"
+version = "Chart data file, 2018 onward"
+role = "Bilateral tariff changes of the 2018-19 trade war (P53 rho fit, ADR 0027)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://www.piie.com/research/piie-charts/us-china-trade-war-tariffs-date-chart"
+attribution = "Bown (PIIE)"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Free to download but the page states no terms of use; covers US-China only, so too few treated pairs for the class projections"
+checked = 2026-11-07
+confidence = "medium"
+notes = "P53 (ADR 0027): the paid build keeps the prior half-life (12 to 48 months) and does not ship a rho fitted on non-commercial tariffs. ceteris calibrate rho takes its 2018-19 tariffs from unctad-trains, fetch-only and closed source only, so its output is research-only. Checked 2026-11-08: teti-gtd states no licence and no licensing contact (teti@ifo.de is for errors and HS6 microdata access), and CEPII MAcMap-HS6 is non-commercial, so neither opens the paid build. Reopen if an open bilateral tariff source is licensed."
+
+[[source]]
 id = "dose"
 name = "DOSE sub-national economic output"
 provider = "PIK / MCC (Wenz et al. 2023)"
