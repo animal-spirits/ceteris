@@ -11,7 +11,7 @@ echo "load: $(uptime)"
 for n in 1 8 16 32; do
   for mode in scalar lanes; do
     [[ $mode == scalar && $n == 1 ]] && continue
-    "${tm[@]}" "$bin" "$mode" "$n" "$ticks" 2>&1 | grep -E 'run_ticks_per_sec|maximum resident|Maximum resident' | tr '\n' ' '
+    "${tm[@]}" "$bin" "$mode" "$n" "$ticks" 2>&1 | grep -E 'run_ticks_per_sec|stage ms|maximum resident|Maximum resident' | tr '\n' ' '
     echo
   done
 done

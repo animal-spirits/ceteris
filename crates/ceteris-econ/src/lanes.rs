@@ -21,6 +21,29 @@ pub struct EconLanes<const L: usize> {
     /// ledger's posting space. A lane's own entries stay empty.
     payments: Vec<Payments>,
     post: PostScratch,
+    stage_secs: [f64; 8],
+}
+
+/// Adds the time since its creation to one stage slot.
+struct Lap<'a> {
+    secs: &'a mut [f64; 8],
+    start: std::time::Instant,
+}
+
+impl<'a> Lap<'a> {
+    fn new(secs: &'a mut [f64; 8]) -> Self {
+        Self {
+            secs,
+            start: std::time::Instant::now(),
+        }
+    }
+
+    /// Closes the slot `i` and starts the next lap.
+    fn next(&mut self, i: usize) {
+        let now = std::time::Instant::now();
+        self.secs[i] += (now - self.start).as_secs_f64();
+        self.start = now;
+    }
 }
 
 impl<const L: usize> EconLanes<L> {
@@ -39,6 +62,7 @@ impl<const L: usize> EconLanes<L> {
             tick: 0,
             payments,
             post: PostScratch::default(),
+            stage_secs: [0.0; 8],
         }
     }
 
@@ -127,9 +151,11 @@ impl<const L: usize> EconLanes<L> {
     /// systems run lane by lane.
     pub fn step(&mut self) -> Result<(), Violation> {
         let t = self.tick;
+        let mut lap = Lap::new(&mut self.stage_secs);
         for w in &mut self.worlds {
             w.begin_tick();
         }
+        lap.next(0);
         for w in &mut self.worlds {
             w.advance_kernel();
             systems::drift(w, t);
@@ -138,13 +164,19 @@ impl<const L: usize> EconLanes<L> {
             systems::produce(w);
             systems::demand(w);
         }
+        lap.next(1);
+        let start = std::time::Instant::now();
         self.source();
+        self.stage_secs[2] += start.elapsed().as_secs_f64();
+        let mut lap = Lap::new(&mut self.stage_secs);
         for w in &mut self.worlds {
             std::mem::swap(&mut w.scratch.post, &mut self.post);
             systems::clear(w);
             std::mem::swap(&mut w.scratch.post, &mut self.post);
         }
+        lap.next(3);
         self.dispatch();
+        let mut lap = Lap::new(&mut self.stage_secs);
         for w in &mut self.worlds {
             systems::reprice(w);
             systems::distribute(w, t);
@@ -153,8 +185,16 @@ impl<const L: usize> EconLanes<L> {
         for w in &self.worlds {
             w.end_tick(t)?;
         }
+        lap.next(7);
         self.tick = t + 1;
         Ok(())
+    }
+
+    /// Seconds spent so far in each stage of `step`, in order: begin, per-lane systems
+    /// (advance to demand), source, clear, dispatch gather, dispatch kernel, dispatch finish,
+    /// reprice to end.
+    pub fn stage_secs(&self) -> [f64; 8] {
+        self.stage_secs
     }
 
     pub fn run_until(&mut self, tick: u32) -> Result<(), Violation> {
@@ -229,9 +269,12 @@ impl<const L: usize> EconLanes<L> {
 
     /// T2b for all lanes: the dispatch kernel once per good over lanes that share it.
     fn dispatch(&mut self) {
+        let start = std::time::Instant::now();
         for w in &mut self.worlds {
             systems::dispatch_gather(w);
         }
+        self.stage_secs[4] += start.elapsed().as_secs_f64();
+        let start = std::time::Instant::now();
         if self.shared_kernel() {
             let kernel = std::sync::Arc::clone(&self.worlds[0].kernel);
             self.per_good(|g, worlds, outs| {
@@ -244,6 +287,8 @@ impl<const L: usize> EconLanes<L> {
                 systems::dispatch_kernel(w);
             }
         }
+        self.stage_secs[5] += start.elapsed().as_secs_f64();
+        let start = std::time::Instant::now();
         for w in &mut self.worlds {
             std::mem::swap(&mut w.scratch.post, &mut self.post);
             std::mem::swap(&mut w.scratch.payments, &mut self.payments);
@@ -251,6 +296,7 @@ impl<const L: usize> EconLanes<L> {
             std::mem::swap(&mut w.scratch.post, &mut self.post);
             std::mem::swap(&mut w.scratch.payments, &mut self.payments);
         }
+        self.stage_secs[6] += start.elapsed().as_secs_f64();
     }
 }
 
