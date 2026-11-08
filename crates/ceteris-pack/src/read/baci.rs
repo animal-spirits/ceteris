@@ -200,11 +200,20 @@ pub struct Flow {
 }
 
 /// Calls `f` with every 2000 flow in file order and with None at the end of each batch.
-pub fn for_each_flow(baci: &Path, mut f: impl FnMut(Option<Flow>)) -> Result<(), String> {
+pub fn for_each_flow(baci: &Path, f: impl FnMut(Option<Flow>)) -> Result<(), String> {
+    for_each_flow_in(baci, BACI_2000, f)
+}
+
+/// [`for_each_flow`] for the member whose name ends in `suffix` (`Y2018_V202601.csv`).
+pub fn for_each_flow_in(
+    baci: &Path,
+    suffix: &str,
+    mut f: impl FnMut(Option<Flow>),
+) -> Result<(), String> {
     let origin = baci.display().to_string();
     with_member(
         baci,
-        |n| n.ends_with(BACI_2000),
+        |n| n.ends_with(suffix),
         |member| {
             batches(member, baci, &["i", "j", "k", "v"], |row| {
                 let Some((r, c)) = row else {
