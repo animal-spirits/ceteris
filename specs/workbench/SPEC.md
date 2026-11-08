@@ -145,7 +145,7 @@ tree caps are `MAX_EDITS_PER_BRANCH` and `MAX_BRANCHES` in `ceteris-run::scenari
 | Member draws | K x uncertain parameters, fixed per ensemble | tick-0 edits, none later | 32 x about 40 = 1,280 edits |
 | Commitments | 4,096 scheduled rows | rows leave the table when executed or cancelled | at most 1 MB; empty at P3 |
 | History, live branch | 300 monthly + 125 annual rows per series | tier rule above | per series, constant after year 25 |
-| Chunk store | 20 GB per run, 50 GB per ensemble of 32 | retention tiers; thin snapshots first | measured in A3 |
+| Chunk store | 20 GB per run, 50 GB per ensemble of 32 | retention tiers; thin snapshots first | measured: 1.59 GB live run to 2150, 13.0 GB ensemble of 32 to 2050 (2026-11-07) |
 | Bootstrap and effect tables | one row per (outcome, window), not per tick | recomputed on demand | negligible |
 
 ## Equilibrium nesting
