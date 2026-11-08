@@ -11,6 +11,7 @@
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
+//! ceteris calibrate rho --panel FILE [--base Y] [--shock Y]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
@@ -110,6 +111,7 @@ const USAGE: &str = "usage:
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
+  ceteris calibrate rho --panel FILE [--base YEAR] [--shock YEAR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
@@ -589,6 +591,41 @@ fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `calibrate rho --panel FILE [--base YEAR] [--shock YEAR]`: P53 from local projections of a
+/// class, pair, year, flow, tariff panel (ADR 0027).
+fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    use ceteris_calibrate::rho::{Design, estimate, parse_panel, report};
+    let (mut panel, mut design) = (
+        None,
+        Design {
+            base: 2017,
+            shock: 2019,
+        },
+    );
+    while let Some(a) = args.next() {
+        let mut year = |name: &str| {
+            args.next()
+                .and_then(|v| v.parse::<i32>().ok())
+                .ok_or(format!("{name} needs a year"))
+        };
+        match a.as_str() {
+            "--panel" => panel = args.next().map(PathBuf::from),
+            "--base" => design.base = year("--base")?,
+            "--shock" => design.shock = year("--shock")?,
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let panel = panel.ok_or("--panel needs a file")?;
+    let text = std::fs::read_to_string(&panel).map_err(|e| format!("{}: {e}", panel.display()))?;
+    let (fits, skipped) = estimate(&parse_panel(&text)?, design);
+    print!("{}", report(&fits, &skipped));
+    Ok(if fits.is_empty() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 /// `gravity [--pack DIR] [--write] [--out FILE]`: exit 1 when a stop rule fires.
 fn gravity(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let root = sources::workspace_root();
@@ -698,6 +735,10 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if args.peek().map(String::as_str) == Some("stability") {
         args.next();
         return stability(args);
+    }
+    if args.peek().map(String::as_str) == Some("rho") {
+        args.next();
+        return rho(args);
     }
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
     while let Some(a) = args.next() {
