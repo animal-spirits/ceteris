@@ -77,6 +77,8 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Entities sorted by province (CSR-style offsets), so per-province work is a contiguous slice; re-sort only at quarter boundaries when entities are created or removed.
 - Sparse relations (trade partners, transport edges, financial claims by holder and issuer) in compressed-row form; 45x45 input-output blocks stay dense.
 - Goods are the innermost dimension of every goods-indexed array, padded to a multiple of 4 (f32) or 2 (f64), aligned to 128 bytes (the M-series cache line).
+- Ledger goods holdings are account-major (an account's goods side by side); accounts are opened by kind and each kind in province order, so a province's accounts are contiguous ranges (ADR 0328).
+- Goods that share a kernel (theta class and kappa group, in good order) are stored for batched kernels in goods-innermost blocks of B = 4 or 8 goods, `[row][B]`, padded and aligned; ensemble lanes sit outside the block, `[row][lane][B]`. Each good keeps its scalar summation order (ADR 0330).
 - Ledger balances in fixed-point `i64`; prices and quantities in `f64`; kernel values in `f32` where the spec allows.
 - Economic kernels are generic over a Real trait implemented by f64 and by forward-mode dual numbers (ADR 0096). Release builds instantiate f64 only, so derivatives cost nothing outside calibration.
 - Ensemble members are lanes, the innermost array dimension (ADR 0024); interactive play runs one lane.
@@ -90,6 +92,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Double-buffered state: each system reads tick t and writes t+1; no locks in hot paths.
 - Zero allocation in hot loops: preallocated scratch per thread (rayon `map_init`), arenas for transient objects.
 - A speed change that claims no output change shows the state hash and the ledger journal identical over 24 full-pack ticks at 1 thread and at all threads, on the Mac and on Linux x86, and reports the criterion tick and a per-system sim-loop timing (ADR 0294). Ledger money sums are integers, exact in any order, so posting may sum by account bucket in any partition; only an overflow check needs an order (ADR 0294).
+- Long single-good reductions named here (dispatch and arrivals row sums of unblocked goods, kernel row normalisers, and any loop a stage shows at 2% of the tick or more) sum in four interleaved accumulators: element j goes to accumulator j mod 4, each taken in index order, combined as (a0 + a1) + (a2 + a3). Fixed k, never the machine's width; scalar code emulates it exactly. Adopting it is one golden move with its evidence stated in RFC 0317 (ADR 0327).
 - Shipments in a timing wheel (ring buffer indexed by arrival tick): O(1) insert and delivery, no heap.
 - Multi-rate scheduling; war sub-ticks only while a war is active; rare events by sampled next-event times, not per-tick coin flips.
 - Closed-form PIGL demand (8.6) and a single kernel product for trade (8.3): goods markets have no within-tick iterative solver. Asset-market clearing (9.9) is the only within-tick iteration.
@@ -116,6 +119,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 **Parallelism**
 
 - M-series chips mix performance and efficiency cores, so equal static chunks leave fast cores idle. Split work into many small chunks with fixed boundaries independent of thread count, let rayon work-steal, write results to fixed slots, and reduce in fixed order: scheduling varies, results do not.
+- Per-province systems receive disjoint mutable slices of the ledger (the province's pops, enterprises and market) and a journal block each; blocks are appended in province order. Float tallies that cross provinces (goods created and destroyed per good) sum per province and add in province order (ADR 0328, ADR 0329).
 - Country-local systems (fiscal, politics, labour) run one task per country, sorted largest first for load balance.
 - Systems with disjoint read and write sets run concurrently, from a static dependency graph built from declared read/write sets.
 - Scatter accumulators whose fixed order blocks a decomposition (first the T2b dispatch accumulators) sum through an in-house exact accumulator (pure Rust, no FMA, one rounding at the end), so any order of adds gives the same correctly rounded sum; adopting it moves goldens once (ADR 0298).
