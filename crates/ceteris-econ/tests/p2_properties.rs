@@ -34,8 +34,36 @@ const TRADED: [bool; N_GOODS] = {
     t
 };
 
+/// A world journaling every leg, which the tests that count or scan legs read.
 fn world(params: EconParams) -> EconWorld {
-    EconWorld::new(Arc::new(small_world()), params, TradeParams::default())
+    let mut w = EconWorld::new(Arc::new(small_world()), params, TradeParams::default());
+    w.scratch.detail = true;
+    w
+}
+
+/// RFC 0316: the netted T2b journal is the per-leg journal summed per (flow, from, to), and
+/// the state is the same.
+#[test]
+fn netted_journal_is_the_detail_journal_summed() {
+    use std::collections::BTreeMap;
+    let net = |sim: &Sim<EconWorld>| {
+        let mut m: BTreeMap<(u16, u32, u32), i64> = BTreeMap::new();
+        for e in sim.world().ledger.journal() {
+            *m.entry((e.flow.0, e.from.0, e.to.0)).or_default() += e.amount;
+        }
+        m.retain(|_, v| *v != 0);
+        m
+    };
+    let mut detail = sim_of(world(EconParams::default()));
+    let mut netted = sim_of(world(EconParams::default()));
+    netted.world_mut().scratch.detail = false;
+    for tick in 0..6 {
+        detail.step().unwrap();
+        netted.step().unwrap();
+        assert_eq!(detail.state_hash(), netted.state_hash(), "tick {tick}");
+        assert_eq!(net(&detail), net(&netted), "tick {tick}: journal");
+        assert!(netted.world().ledger.journal().len() <= detail.world().ledger.journal().len());
+    }
 }
 
 fn sim_of(world: EconWorld) -> Sim<EconWorld> {
@@ -911,7 +939,7 @@ fn buyers_pay_origin_price_at_dispatch_in_minor_units() {
             let market = |a| acc.market.iter().position(|&m| m == a);
             let mut got = vec![0i64; want.len()];
             let (mut passed, mut tariff, mut received) = (0i64, 0i64, 0i64);
-            for e in &w.ledger.journal()[start..] {
+            for e in w.ledger.journal().since(start) {
                 if e.flow == PURCHASE {
                     got[buyer(e.from).expect("buyers pay")] += e.amount;
                     assert!(market(e.to).is_some(), "buyers pay their market");
@@ -988,7 +1016,7 @@ fn national_profit_pool_conserves_money_exactly() {
             systems::distribute(&mut w, 0);
             let pop_of = |a| acc.pop.iter().position(|&p| p == a);
             let mut dividend = vec![0i64; inp.n_pops()];
-            for e in &w.ledger.journal()[start..] {
+            for e in w.ledger.journal().since(start) {
                 if e.flow == DIVIDEND
                     && let Some(k) = pop_of(e.to)
                 {
@@ -1041,8 +1069,9 @@ fn limited_liability_keeps_losses_and_repays_them_first() {
     let acc = &lay.accounts;
     // DIVIDEND entries from account `from`, or else to pops
     let dividends = |w: &EconWorld, start: usize, from: Option<usize>| -> Vec<i64> {
-        w.ledger.journal()[start..]
-            .iter()
+        w.ledger
+            .journal()
+            .since(start)
             .filter(|x| x.flow == DIVIDEND)
             .filter(|x| from.map_or(acc.pop.contains(&x.to), |a| x.from.0 as usize == a))
             .map(|x| x.amount)
@@ -3219,8 +3248,9 @@ fn set_balance(w: &mut EconWorld, account: AccountId, target: i64) {
 
 /// Sum of WRITE_OFF entries from `start` on into (positive) or out of (negative) `account`.
 fn written(w: &EconWorld, start: usize, account: AccountId) -> i64 {
-    w.ledger.journal()[start..]
-        .iter()
+    w.ledger
+        .journal()
+        .since(start)
         .filter(|x| x.flow == WRITE_OFF)
         .map(|x| i64::from(x.to == account) * x.amount - i64::from(x.from == account) * x.amount)
         .sum()
@@ -3275,11 +3305,7 @@ fn write_off_spares_losses_within_the_cap() {
     set_balance(&mut w, acc.enterprise[0], -cap);
     let start = w.ledger.journal().len();
     systems::distribute(&mut w, 0);
-    assert!(
-        w.ledger.journal()[start..]
-            .iter()
-            .all(|x| x.flow != WRITE_OFF)
-    );
+    assert!(w.ledger.journal().since(start).all(|x| x.flow != WRITE_OFF));
     assert_eq!(w.ledger.money(acc.enterprise[0]), -cap);
     w.end_tick(0).unwrap();
 }
