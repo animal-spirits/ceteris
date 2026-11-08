@@ -60,7 +60,7 @@ pub fn log_trend(series: &ByYear) -> Option<(f64, f64)> {
     let points: Vec<(f64, f64)> = (FIRST..=LAST)
         .map(|y| {
             let v = *series.get(&y)?;
-            (v > 0.0).then(|| (y as f64, v.ln()))
+            (v > 0.0).then(|| (y as f64, libm::log(v)))
         })
         .collect::<Option<_>>()?;
     let n = points.len() as f64;
@@ -100,7 +100,7 @@ pub fn capital_gap(pwt: &BTreeMap<&str, BTreeMap<String, ByYear>>, e: &str) -> O
     let delta = mean_over_window(get("delta")?)?;
     let ky = get("rnna")?.get(&LAST)? / gdp.get(&LAST).filter(|y| **y > 0.0)?;
     let rate = n + g + delta;
-    (rate > 0.0 && s > 0.0 && ky > 0.0).then(|| (s / rate / ky).ln())
+    (rate > 0.0 && s > 0.0 && ky > 0.0).then(|| libm::log(s / rate / ky))
 }
 
 /// Shrunk relative TFP trends by economy: `trend` the raw (slope, se^2), `weight` 2000 GDP,
@@ -268,6 +268,7 @@ pub fn report(d: &[Drift], codes: &[String]) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

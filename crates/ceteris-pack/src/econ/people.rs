@@ -135,7 +135,10 @@ pub fn donor<T>(
         None => Vec::new(),
     };
     let pool = if near.is_empty() { pool } else { near };
-    let logs: Vec<f64> = pool.iter().map(|k| obs.gdp_per_capita[*k].ln()).collect();
+    let logs: Vec<f64> = pool
+        .iter()
+        .map(|k| libm::log(obs.gdp_per_capita[*k]))
+        .collect();
     let target = match log_income {
         Some(x) => x,
         None => median(logs.clone()).ok_or("no donor candidates")?,
@@ -196,7 +199,7 @@ impl Country<'_> {
         for s in series.iter().rev() {
             merged.extend(s.iter().map(|(k, v)| (k.clone(), *v)));
         }
-        let income = self.lookup(&self.obs.gdp_per_capita).map(f64::ln);
+        let income = self.lookup(&self.obs.gdp_per_capita).map(libm::log);
         let d = donor(self.region(), income, &merged, self.obs, &self.parts)?;
         Ok((merged[&d], series.len()))
     }

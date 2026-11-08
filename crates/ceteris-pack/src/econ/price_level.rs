@@ -109,8 +109,8 @@ fn far_out(mut x: Vec<f64>) -> Result<(f64, f64), String> {
 
 /// The plausible range of a price level: the `FAR_OUT` fences of the logs of `levels`, as levels.
 pub fn fences(levels: impl IntoIterator<Item = f64>) -> Result<(f64, f64), String> {
-    let (lo, hi) = far_out(levels.into_iter().map(f64::ln).collect())?;
-    Ok((lo.exp(), hi.exp()))
+    let (lo, hi) = far_out(levels.into_iter().map(libm::log).collect())?;
+    Ok((libm::exp(lo), libm::exp(hi)))
 }
 
 /// The outlier screen of the price levels: the Penn effect (price levels rise with income) fitted
@@ -139,7 +139,7 @@ impl Screen {
         let (x, y): (Vec<f64>, Vec<f64>) = pwt
             .iter()
             .filter(|(_, p)| (levels.0..=levels.1).contains(*p))
-            .filter_map(|(c, p)| Some((income.get(c)?.ln(), p.ln())))
+            .filter_map(|(c, p)| Some((libm::log(*income.get(c)?), libm::log(*p))))
             .unzip();
         let n = x.len() as f64;
         let (mx, my) = (pairwise_sum(&x) / n, pairwise_sum(&y) / n);
@@ -178,7 +178,7 @@ impl Screen {
     pub fn keeps(&self, level: f64, income: Option<f64>) -> bool {
         match income {
             Some(y) => {
-                let r = level.ln() - self.intercept - self.slope * y.ln();
+                let r = libm::log(level) - self.intercept - self.slope * libm::log(y);
                 (self.residuals.0..=self.residuals.1).contains(&r)
             }
             None => (self.levels.0..=self.levels.1).contains(&level),
@@ -280,6 +280,7 @@ pub fn report(levels: &[Level], screen: &Screen) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

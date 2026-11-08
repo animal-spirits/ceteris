@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! The goods mapping, BACI weights and the theta classes, on hand-made inputs and, when the
 //! cache is present, on the 2000 sources.
 

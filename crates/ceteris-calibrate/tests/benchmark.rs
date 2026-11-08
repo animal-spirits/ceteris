@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! The benchmark harness (ADR 0200, ADR 0207): shocks reach the kernel as written, welfare and
 //! ACR are exact on the two-country toy and, with `CETERIS_PACK` set to a calibrated pack,
 //! ADR 0200's benchmark cases (Japan under costlier borders, the EU under Brexit) have the

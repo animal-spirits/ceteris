@@ -171,6 +171,7 @@ impl CategoryAt {
 
 /// Category budget shares of a pop before the clamp ([`CategoryAt::raw`]).
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 fn raw_shares(
     w: &PiglWeights,
     index: &[f64; N_CATEGORIES],
@@ -621,6 +622,7 @@ fn illinois(f: impl Fn(f64) -> f64) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::fixture::small_world;

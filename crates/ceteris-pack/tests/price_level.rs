@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! Price level p_c of each pack country (ADR 0098 as amended by ADRs 0282 and 0317): PWT 11 pl_da
 //! over the US's, else the level WDI's GDP at PPP implies over the US's (ADR 0289), else the
 //! donor's, each screened by Tukey's far-out fences on the residuals of the Penn effect fitted on

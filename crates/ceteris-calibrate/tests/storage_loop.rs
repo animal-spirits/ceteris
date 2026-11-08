@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! ADR 0091: the storage loop's linearized region (trade SPEC, Storage loop), the 4 x 4 map of
 //! `ceteris_calibrate::stability::storage_matrix`, against the toy market of agriculture run
 //! through `Markets::store`, `clear` and `reprice`.
