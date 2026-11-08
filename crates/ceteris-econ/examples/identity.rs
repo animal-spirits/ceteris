@@ -3,7 +3,7 @@
 //! that tick's ledger journal. A speed change that claims no output change prints the same
 //! lines as `main` at 1 thread and at all threads; `--timing` must not change them either.
 //!
-//! cargo run --release -p ceteris-econ --example identity -- [--ticks N] [--threads T] [--timing]
+//! cargo run --release -p ceteris-econ --example identity -- [--ticks N] [--threads T] [--goods N] [--timing]
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -12,18 +12,20 @@ use std::sync::Arc;
 
 use ceteris_core::snapshot::{Encoder, hex, state_hash};
 use ceteris_core::timing;
+use ceteris_econ::synthetic::with_goods;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::{Pack, default_dir};
 
 fn main() {
-    let (mut ticks, mut threads, mut timed) = (24u32, 0usize, false);
+    let (mut ticks, mut threads, mut goods, mut timed) = (24u32, 0usize, 0usize, false);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut value = || args.next().and_then(|v| v.parse().ok()).expect("a number");
         match a.as_str() {
             "--ticks" => ticks = value() as u32,
             "--threads" => threads = value(),
+            "--goods" => goods = value(),
             "--timing" => timed = true,
             other => panic!("unknown argument '{other}'"),
         }
@@ -40,7 +42,13 @@ fn main() {
         .expect("thread pool");
     pool.install(|| {
         let trade = inputs.trade_params();
-        let mut sim = EconWorld::sim(Arc::clone(&inputs), EconParams::default(), trade);
+        let (inputs, trade) = if goods > 0 {
+            let (i, t) = with_goods(&inputs, &trade, goods);
+            (Arc::new(i), t)
+        } else {
+            (Arc::clone(&inputs), trade)
+        };
+        let mut sim = EconWorld::sim(inputs, EconParams::default(), trade);
         sim.world_mut().scratch.detail = true;
         for _ in 0..ticks {
             sim.step().unwrap_or_else(|v| panic!("{v}"));
@@ -60,4 +68,19 @@ fn main() {
             );
         }
     });
+    if timed {
+        // per name and tick the summed span time; per-good spans add up to CPU, not wall, time
+        let mut sums = std::collections::BTreeMap::<(&str, u32), u64>::new();
+        for sp in timing::take() {
+            *sums.entry((sp.name, sp.tick)).or_default() += sp.end - sp.start;
+        }
+        let mut names = std::collections::BTreeMap::<&str, Vec<u64>>::new();
+        for ((name, _), ns) in sums {
+            names.entry(name).or_default().push(ns);
+        }
+        for (name, mut v) in names {
+            v.sort_unstable();
+            eprintln!("{name:<18} median {:>8.3} ms", v[v.len() / 2] as f64 / 1e6);
+        }
+    }
 }
