@@ -63,6 +63,99 @@ impl GoodColumn {
     }
 }
 
+/// One run of accounts of a [`ProvinceLedger`].
+struct Part<'a> {
+    base: usize,
+    money: &'a mut [i128],
+    wide: &'a [bool],
+    goods: &'a mut [f64],
+    tally: &'a mut [i64],
+}
+
+/// A province's accounts of the ledger, taken by [`Ledger::province_slices`] so that provinces
+/// run in parallel. The operations are the ledger's, with the same arithmetic; naming an
+/// account outside the province's runs panics.
+pub struct ProvinceLedger<'a> {
+    n_goods: usize,
+    tracked: u64,
+    parts: [Part<'a>; 3],
+    journal: Vec<Entry>,
+    created: Vec<f64>,
+    destroyed: Vec<f64>,
+}
+
+/// What a province's task leaves for [`Ledger::put_province_slices`].
+pub struct ProvinceTotals {
+    journal: Vec<Entry>,
+    created: Vec<f64>,
+    destroyed: Vec<f64>,
+}
+
+impl<'a> ProvinceLedger<'a> {
+    fn locate(&self, a: AccountId) -> (usize, usize) {
+        let i = a.0 as usize;
+        self.parts
+            .iter()
+            .position(|p| i >= p.base && i - p.base < p.money.len())
+            .map(|r| (r, i - self.parts[r].base))
+            .unwrap_or_else(|| panic!("account {a:?} is outside the province"))
+    }
+
+    pub fn goods(&self, a: AccountId, good: usize) -> f64 {
+        let (r, o) = self.locate(a);
+        self.parts[r].goods[o * self.n_goods + good]
+    }
+
+    fn slot(&mut self, a: AccountId, good: usize) -> &mut f64 {
+        let (r, o) = self.locate(a);
+        &mut self.parts[r].goods[o * self.n_goods + good]
+    }
+
+    pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
+        *self.slot(from, good) -= qty;
+        *self.slot(to, good) += qty;
+    }
+
+    pub fn create(&mut self, a: AccountId, good: usize, qty: f64) {
+        *self.slot(a, good) += qty;
+        self.created[good] += qty;
+    }
+
+    pub fn destroy(&mut self, a: AccountId, good: usize, qty: f64) {
+        *self.slot(a, good) -= qty;
+        self.destroyed[good] += qty;
+    }
+
+    pub fn transfer(&mut self, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
+        let (fr, fo) = self.locate(from);
+        let (tr, to_o) = self.locate(to);
+        let amount_wide = i128::from(amount);
+        let p = &mut self.parts[fr];
+        p.money[fo] = moved(p.money[fo], p.wide[fo], -amount_wide);
+        let p = &mut self.parts[tr];
+        p.money[to_o] = moved(p.money[to_o], p.wide[to_o], amount_wide);
+        self.journal.push(Entry {
+            flow,
+            from,
+            to,
+            amount,
+        });
+        if tracks(self.tracked, flow) {
+            self.parts[tr].tally[to_o] += amount;
+            self.parts[fr].tally[fo] -= amount;
+        }
+    }
+
+    /// Ends the slices' borrow of the ledger, keeping the journal block and the partials.
+    pub fn finish(self) -> ProvinceTotals {
+        ProvinceTotals {
+            journal: self.journal,
+            created: self.created,
+            destroyed: self.destroyed,
+        }
+    }
+}
+
 /// Entries per parallel chunk of [`Ledger::post`].
 const POST_CHUNK: usize = 1 << 17;
 
@@ -438,6 +531,90 @@ impl Ledger {
         self.destroyed[good] += qty;
     }
 
+    /// Splits the ledger into one [`ProvinceLedger`] per entry of `ranges`, each holding three
+    /// runs of accounts (RFC 0317 D3): mutable money, goods and tally slices, and a journal
+    /// block of its own. The runs of all provinces must be disjoint; they may come in any
+    /// order. The slices end with [`Ledger::put_province_slices`].
+    pub fn province_slices(
+        &mut self,
+        ranges: &[[std::ops::Range<usize>; 3]],
+    ) -> Vec<ProvinceLedger<'_>> {
+        let ng = self.n_goods;
+        let mut order: Vec<(usize, usize)> = (0..ranges.len())
+            .flat_map(|p| (0..3).map(move |r| (p, r)))
+            .filter(|&(p, r)| !ranges[p][r].is_empty())
+            .collect();
+        order.sort_by_key(|&(p, r)| ranges[p][r].start);
+        let mut parts: Vec<[Option<Part<'_>>; 3]> =
+            (0..ranges.len()).map(|_| [None, None, None]).collect();
+        let (mut money, mut goods, mut tally) = (
+            &mut self.money[..],
+            &mut self.goods[..],
+            &mut self.tally[..],
+        );
+        let mut at = 0;
+        for (p, r) in order {
+            let run = &ranges[p][r];
+            assert!(run.start >= at, "overlapping province account runs");
+            let (skip, len) = (run.start - at, run.len());
+            let (_, rest) = std::mem::take(&mut money).split_at_mut(skip);
+            let (m, rest) = rest.split_at_mut(len);
+            money = rest;
+            let (_, rest) = std::mem::take(&mut tally).split_at_mut(skip);
+            let (t, rest) = rest.split_at_mut(len);
+            tally = rest;
+            let (_, rest) = std::mem::take(&mut goods).split_at_mut(skip * ng);
+            let (g, rest) = rest.split_at_mut(len * ng);
+            goods = rest;
+            at = run.end;
+            parts[p][r] = Some(Part {
+                base: run.start,
+                money: m,
+                wide: &self.wide[run.clone()],
+                goods: g,
+                tally: t,
+            });
+        }
+        parts
+            .into_iter()
+            .map(|[a, b, c]| ProvinceLedger {
+                n_goods: ng,
+                tracked: self.tracked,
+                parts: [a, b, c].map(|x| {
+                    x.unwrap_or(Part {
+                        base: 0,
+                        money: &mut [],
+                        wide: &[],
+                        goods: &mut [],
+                        tally: &mut [],
+                    })
+                }),
+                journal: self.journal.buffer(),
+                created: vec![0.0; ng],
+                destroyed: vec![0.0; ng],
+            })
+            .collect()
+    }
+
+    /// Ends [`Ledger::province_slices`]: appends the provinces' journal blocks in the order
+    /// given, the serial journal entry for entry, and adds their created and destroyed
+    /// partials in that order (RFC 0317 D3 B).
+    pub fn put_province_slices(&mut self, done: Vec<ProvinceTotals>) {
+        for d in done {
+            if d.journal.is_empty() {
+                self.journal.pool.push(d.journal);
+            } else {
+                self.journal.seal(d.journal);
+            }
+            for (t, p) in self.created.iter_mut().zip(&d.created) {
+                *t += p;
+            }
+            for (t, p) in self.destroyed.iter_mut().zip(&d.destroyed) {
+                *t += p;
+            }
+        }
+    }
+
     /// Copies goods `goods` out into `cols`, one column per good, so that each good's moves can
     /// run on their own ([`GoodColumn`]); `cols` keeps its buffers between calls. Until
     /// [`Ledger::put_columns`] the ledger holds stale quantities of those goods.
@@ -659,6 +836,58 @@ mod tests {
         }
         b.put_columns(&cols);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn province_slices_are_the_provinces_in_turn() {
+        let (mut a, mut b) = (Ledger::new(2), Ledger::new(2));
+        let ids: Vec<AccountId> = (0..6).map(|_| (a.open(), b.open()).0).collect();
+        let flow = Flow(1);
+        for l in [&mut a, &mut b] {
+            l.begin_tick();
+            l.track(&[flow]);
+            l.transfer(Flow(0), ids[0], ids[1], 7);
+        }
+        // province p: pop p, enterprise 2 + p, market 4 + p; quantities are dyadic, so the
+        // partial sums equal the running ones
+        let runs: Vec<[std::ops::Range<usize>; 3]> = (0..2)
+            .map(|p| [p..p + 1, 2 + p..3 + p, 4 + p..5 + p])
+            .collect();
+        // (from, to, good, quantity) goods moves, then (from, to, amount) payments
+        let work = |p: usize| {
+            let (pop, ent, mkt) = (p, 2 + p, 4 + p);
+            (
+                vec![(ent, mkt, 0, 0.5 * (p + 1) as f64), (mkt, ent, 1, 0.25)],
+                vec![(mkt, ent, 10 + p as i64), (ent, pop, 3)],
+            )
+        };
+        for p in 0..2 {
+            let (goods, pays) = work(p);
+            for (f, t, g, q) in goods {
+                a.create(ids[f], g, q);
+                a.ship(ids[f], ids[t], g, q);
+                a.destroy(ids[t], g, q / 2.0);
+            }
+            for (f, t, x) in pays {
+                a.transfer(flow, ids[f], ids[t], x);
+            }
+        }
+        let mut slices = b.province_slices(&runs);
+        for (p, s) in slices.iter_mut().enumerate() {
+            let (goods, pays) = work(p);
+            for (f, t, g, q) in goods {
+                s.create(ids[f], g, q);
+                s.ship(ids[f], ids[t], g, q);
+                s.destroy(ids[t], g, q / 2.0);
+            }
+            for (f, t, x) in pays {
+                s.transfer(flow, ids[f], ids[t], x);
+            }
+        }
+        let done = slices.into_iter().map(ProvinceLedger::finish).collect();
+        b.put_province_slices(done);
+        assert_eq!(a, b);
+        assert_eq!(a.journal().len(), 5);
     }
 
     #[test]
