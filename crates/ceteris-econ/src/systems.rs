@@ -18,7 +18,9 @@
 
 use rayon::prelude::*;
 
-use ceteris_core::ledger::{AccountId, Entry, Flow, GoodColumn, Ledger};
+use ceteris_core::ledger::{
+    AccountId, Entry, Flow, GoodColumn, Ledger, ProvinceAccounts, ProvinceDone, ProvinceLedger,
+};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
@@ -437,6 +439,36 @@ pub fn labour(w: &mut EconWorld) {
     }
 }
 
+/// One province's share of what E2 writes: its ledger accounts and its runs of the per-cell,
+/// per-enterprise and per-pop arrays.
+struct ProvinceJob<'a> {
+    ledger: ProvinceLedger<'a>,
+    supply: &'a mut [f64],
+    drawn: &'a mut [f64],
+    input_before: &'a mut [f64],
+    input_used: &'a mut [f64],
+    output: &'a mut [f64],
+    sales: &'a mut [f64],
+    income_paid: &'a mut [i64],
+}
+
+/// `v` cut into consecutive runs of the given lengths.
+fn runs<T>(mut v: &mut [T], lens: impl Iterator<Item = usize>) -> std::vec::IntoIter<&mut [T]> {
+    lens.map(|n| {
+        let (head, tail) = std::mem::take(&mut v).split_at_mut(n);
+        v = tail;
+        head
+    })
+    .collect::<Vec<_>>()
+    .into_iter()
+}
+
+fn pay_in(ledger: &mut ProvinceLedger, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
+    if amount != 0 {
+        ledger.transfer(flow, from, to, amount);
+    }
+}
+
 /// E2: Leontief output from employment, traded input stocks and the same-tick chain of local
 /// goods ([`local::chain`], per province). Output is sold to the province's market (the origin
 /// market of a traded good) at its current price and becomes the market's supply Q; traded
@@ -456,69 +488,117 @@ pub fn produce(w: &mut EconWorld) {
 
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
-    let mut parts = Vec::new();
     {
         let _span = timing::span("e2.local_chain", NONE);
         local::chain_all(w);
     }
-    for i in 0..inp.n_provinces() {
-        let pops = lay.pops(i);
-        let effective: Vec<f64> = pops
-            .clone()
-            .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
-            .collect();
-        for e in lay.enterprises(i) {
-            let (g, y) = (usize::from(inp.enterprises.good[e]), w.scratch.produced[e]);
-            let (account, cell) = (acc.enterprise[e], i * ng + g);
-            for k in 0..nt {
-                let a = lay.coef[e][k];
-                let before = w.ledger.goods(account, k);
-                if a > 0.0 {
-                    w.ledger.destroy(account, k, (a * y).min(before));
+    let _span = timing::span("e2.provinces", NONE);
+    let np = inp.n_provinces();
+    let (pop0, ent0) = (
+        acc.pop.first().map_or(0, |a| a.0),
+        acc.enterprise.first().map_or(0, |a| a.0),
+    );
+    let shifted = |r: std::ops::Range<usize>, base: u32| base + r.start as u32..base + r.end as u32;
+    let accounts: Vec<ProvinceAccounts> = (0..np)
+        .map(|i| ProvinceAccounts {
+            pops: shifted(lay.pops(i), pop0),
+            enterprises: shifted(lay.enterprises(i), ent0),
+            market: acc.market[i],
+        })
+        .collect();
+    let sc = &mut w.scratch;
+    let (price, wage, employment, employed) =
+        (&w.markets.price, &w.wage, &w.employment, &w.employed);
+    let (produced, from_output) = (&sc.produced, &sc.from_output);
+    let (n_pops, n_ents) = (
+        |i: usize| lay.pops(i).len(),
+        |i: usize| lay.enterprises(i).len(),
+    );
+    let mut ledgers = w.ledger.province_slices(&accounts).into_iter();
+    let mut supply = runs(&mut w.markets.supply, (0..np).map(|_| ng));
+    let mut drawn = runs(&mut sc.drawn, (0..np).map(|_| ng));
+    let mut input_before = runs(&mut sc.input_before, (0..np).map(|i| n_ents(i) * ng));
+    let mut input_used = runs(&mut sc.input_used, (0..np).map(|i| n_ents(i) * ng));
+    let mut output = runs(&mut w.output, (0..np).map(n_ents));
+    let mut sales = runs(&mut w.sales, (0..np).map(n_ents));
+    let mut income_paid = runs(&mut sc.income_paid, (0..np).map(n_pops));
+    let jobs: Vec<ProvinceJob<'_>> = (0..np)
+        .map(|_| ProvinceJob {
+            ledger: ledgers.next().expect("province ledger"),
+            supply: supply.next().expect("supply"),
+            drawn: drawn.next().expect("drawn"),
+            input_before: input_before.next().expect("input_before"),
+            input_used: input_used.next().expect("input_used"),
+            output: output.next().expect("output"),
+            sales: sales.next().expect("sales"),
+            income_paid: income_paid.next().expect("income_paid"),
+        })
+        .collect();
+    let done: Vec<ProvinceDone> = jobs
+        .into_par_iter()
+        .enumerate()
+        .map(|(i, mut p)| {
+            let (pops, ents) = (lay.pops(i), lay.enterprises(i));
+            let mut parts = Vec::new();
+            let effective: Vec<f64> = pops
+                .clone()
+                .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * employed[k])
+                .collect();
+            for e in ents.clone() {
+                let (g, y) = (usize::from(inp.enterprises.good[e]), produced[e]);
+                let (account, le) = (acc.enterprise[e], e - ents.start);
+                for k in 0..nt {
+                    let a = lay.coef[e][k];
+                    let before = p.ledger.goods(account, k);
+                    if a > 0.0 {
+                        p.ledger.destroy(account, k, (a * y).min(before));
+                    }
+                    p.input_before[le * ng + k] = before;
+                    p.input_used[le * ng + k] = before - p.ledger.goods(account, k);
                 }
-                w.scratch.input_before[e * ng + k] = before;
-                w.scratch.input_used[e * ng + k] = before - w.ledger.goods(account, k);
-            }
-            w.output[e] = y;
-            if y > 0.0 {
-                w.ledger.create(account, g, y);
-                w.ledger.ship(account, acc.market[i], g, y);
-            }
-            let sale = w.markets.price[cell] * y;
-            w.sales[e] = sale;
-            pay(&mut w.ledger, SALE, acc.market[i], account, to_minor(sale));
-            w.markets.supply[cell] += y;
+                p.output[le] = y;
+                if y > 0.0 {
+                    p.ledger.create(account, g, y);
+                    p.ledger.ship(account, acc.market[i], g, y);
+                }
+                let sale = price[i * ng + g] * y;
+                p.sales[le] = sale;
+                pay_in(&mut p.ledger, SALE, acc.market[i], account, to_minor(sale));
+                p.supply[g] += y;
 
-            let bill = to_minor(w.wage[i] * w.employment[e]);
-            split(bill, effective.iter().copied(), &mut parts);
-            for (k, &part) in pops.clone().zip(parts.iter()) {
-                pay(&mut w.ledger, WAGE, account, acc.pop[k], part);
-                w.scratch.income_paid[k] += part;
-            }
-        }
-        // local inputs: this tick's output at the market first, the stock second
-        for e in lay.enterprises(i) {
-            let account = acc.enterprise[e];
-            for k in nt..ng {
-                let (at, cell) = (e * ng + k, i * ng + k);
-                let need = lay.coef[e][k] * w.scratch.produced[e];
-                let stock = w.ledger.goods(account, k);
-                let take = w.scratch.from_output[at].min(w.ledger.goods(acc.market[i], k));
-                if take > 0.0 {
-                    w.ledger.ship(acc.market[i], account, k, take);
-                    let value = to_minor(w.markets.price[cell] * take);
-                    pay(&mut w.ledger, PURCHASE, account, acc.market[i], value);
-                    w.scratch.drawn[cell] += take;
+                let bill = to_minor(wage[i] * employment[e]);
+                split(bill, effective.iter().copied(), &mut parts);
+                for (k, &part) in pops.clone().zip(parts.iter()) {
+                    pay_in(&mut p.ledger, WAGE, account, acc.pop[k], part);
+                    p.income_paid[k - pops.start] += part;
                 }
-                let used = take + (need - take).clamp(0.0, stock);
-                if used > 0.0 {
-                    w.ledger.destroy(account, k, used);
-                }
-                w.scratch.input_before[at] = stock + take;
-                w.scratch.input_used[at] = used;
             }
-        }
-    }
+            // local inputs: this tick's output at the market first, the stock second
+            for e in ents.clone() {
+                let (account, le) = (acc.enterprise[e], e - ents.start);
+                for k in nt..ng {
+                    let at = le * ng + k;
+                    let need = lay.coef[e][k] * produced[e];
+                    let stock = p.ledger.goods(account, k);
+                    let take = from_output[e * ng + k].min(p.ledger.goods(acc.market[i], k));
+                    if take > 0.0 {
+                        p.ledger.ship(acc.market[i], account, k, take);
+                        let value = to_minor(price[i * ng + k] * take);
+                        pay_in(&mut p.ledger, PURCHASE, account, acc.market[i], value);
+                        p.drawn[k] += take;
+                    }
+                    let used = take + (need - take).clamp(0.0, stock);
+                    if used > 0.0 {
+                        p.ledger.destroy(account, k, used);
+                    }
+                    p.input_before[at] = stock + take;
+                    p.input_used[at] = used;
+                }
+            }
+            p.ledger.finish()
+        })
+        .collect();
+    w.ledger.put_province_slices(done);
 }
 
 /// E2's first step: each enterprise's output capped by capacity and its traded input stocks,
@@ -1714,6 +1794,147 @@ mod tests {
     use super::*;
     #[allow(unused_imports)]
     use ceteris_trade::goods::p2::{N as N_GOODS, TRADED as N_TRADED};
+
+    /// E2 as it ran before it went parallel over provinces (RFC 0317 S1): the oracle.
+    fn produce_serial(w: &mut EconWorld) {
+        let (ng, nt) = (w.inputs.n_goods(), w.inputs.goods.traded);
+        cap_output(w);
+        let (inp, lay) = (
+            std::sync::Arc::clone(&w.inputs),
+            std::sync::Arc::clone(&w.layout),
+        );
+        let (inp, lay) = (&*inp, &*lay);
+        let acc = &lay.accounts;
+        let edu_eff = w.params.edu_eff;
+        w.markets.supply.fill(0.0);
+        w.scratch.drawn.fill(0.0);
+        let mut parts = Vec::new();
+        local::chain_all(w);
+        for i in 0..inp.n_provinces() {
+            let pops = lay.pops(i);
+            let effective: Vec<f64> = pops
+                .clone()
+                .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
+                .collect();
+            for e in lay.enterprises(i) {
+                let (g, y) = (usize::from(inp.enterprises.good[e]), w.scratch.produced[e]);
+                let (account, cell) = (acc.enterprise[e], i * ng + g);
+                for k in 0..nt {
+                    let a = lay.coef[e][k];
+                    let before = w.ledger.goods(account, k);
+                    if a > 0.0 {
+                        w.ledger.destroy(account, k, (a * y).min(before));
+                    }
+                    w.scratch.input_before[e * ng + k] = before;
+                    w.scratch.input_used[e * ng + k] = before - w.ledger.goods(account, k);
+                }
+                w.output[e] = y;
+                if y > 0.0 {
+                    w.ledger.create(account, g, y);
+                    w.ledger.ship(account, acc.market[i], g, y);
+                }
+                let sale = w.markets.price[cell] * y;
+                w.sales[e] = sale;
+                pay(&mut w.ledger, SALE, acc.market[i], account, to_minor(sale));
+                w.markets.supply[cell] += y;
+                let bill = to_minor(w.wage[i] * w.employment[e]);
+                split(bill, effective.iter().copied(), &mut parts);
+                for (k, &part) in pops.clone().zip(parts.iter()) {
+                    pay(&mut w.ledger, WAGE, account, acc.pop[k], part);
+                    w.scratch.income_paid[k] += part;
+                }
+            }
+            for e in lay.enterprises(i) {
+                let account = acc.enterprise[e];
+                for k in nt..ng {
+                    let (at, cell) = (e * ng + k, i * ng + k);
+                    let need = lay.coef[e][k] * w.scratch.produced[e];
+                    let stock = w.ledger.goods(account, k);
+                    let take = w.scratch.from_output[at].min(w.ledger.goods(acc.market[i], k));
+                    if take > 0.0 {
+                        w.ledger.ship(acc.market[i], account, k, take);
+                        let value = to_minor(w.markets.price[cell] * take);
+                        pay(&mut w.ledger, PURCHASE, account, acc.market[i], value);
+                        w.scratch.drawn[cell] += take;
+                    }
+                    let used = take + (need - take).clamp(0.0, stock);
+                    if used > 0.0 {
+                        w.ledger.destroy(account, k, used);
+                    }
+                    w.scratch.input_before[at] = stock + take;
+                    w.scratch.input_used[at] = used;
+                }
+            }
+        }
+    }
+
+    /// RFC 0317 S1: E2 one task per province gives the serial E2's state, journal entry for
+    /// entry, scratch and tallies bit for bit; only the created and destroyed sums differ in
+    /// the last bits (ADR 0329) and stay far inside the goods identity's tolerance.
+    #[test]
+    fn produce_per_province_matches_the_serial_oracle() {
+        use crate::fixture::small_world;
+        use crate::params::EconParams;
+        use ceteris_core::sim::Sim;
+        use ceteris_core::snapshot::canonical;
+        use ceteris_trade::TradeParams;
+
+        let w = EconWorld::new(
+            std::sync::Arc::new(small_world()),
+            EconParams::default(),
+            TradeParams::default(),
+        );
+        let mut sim = Sim::new(w, schedule(), SEED);
+        for round in 0..4 {
+            let (mut a, mut b) = (sim.world().clone(), sim.world().clone());
+            a.ledger.begin_tick();
+            b.ledger.begin_tick();
+            labour(&mut a);
+            labour(&mut b);
+            produce(&mut a);
+            produce_serial(&mut b);
+            assert!(
+                a.ledger.journal().iter().eq(b.ledger.journal().iter()),
+                "round {round}: journal"
+            );
+            assert!(
+                !a.ledger.journal().is_empty(),
+                "round {round}: nothing posted"
+            );
+            for x in 0..a.ledger.n_accounts() {
+                let id = AccountId(x as u32);
+                assert_eq!(a.ledger.money_wide(id), b.ledger.money_wide(id));
+                assert_eq!(a.ledger.tally(id), b.ledger.tally(id));
+                for g in 0..a.inputs.n_goods() {
+                    assert_eq!(
+                        a.ledger.goods(id, g).to_bits(),
+                        b.ledger.goods(id, g).to_bits(),
+                        "round {round}: account {x} good {g}"
+                    );
+                }
+            }
+            assert_eq!(a.markets.supply, b.markets.supply);
+            assert_eq!(a.output, b.output);
+            assert_eq!(a.sales, b.sales);
+            assert_eq!(a.scratch.drawn, b.scratch.drawn);
+            assert_eq!(a.scratch.input_before, b.scratch.input_before);
+            assert_eq!(a.scratch.input_used, b.scratch.input_used);
+            assert_eq!(a.scratch.income_paid, b.scratch.income_paid);
+            for g in 0..a.inputs.n_goods() {
+                let (x, y) = (a.ledger.destroyed(g), b.ledger.destroyed(g));
+                assert!(
+                    (x - y).abs() <= 1e-12 * x.abs().max(1.0),
+                    "round {round}: destroyed {g}: {x} vs {y}"
+                );
+            }
+            a.ledger.check(0).expect("goods identity holds");
+            assert!(
+                canonical(0, &a) == canonical(0, &b),
+                "round {round}: snapshot"
+            );
+            sim.step().unwrap();
+        }
+    }
 
     #[test]
     fn largest_remainder_is_exact_and_bounded_by_the_weights() {
