@@ -61,8 +61,8 @@ echo "load start: $(load)"
 l0=$(load)
 out=$(mktemp)
 t0=$(date +%s.%N)
-# user+sys of the whole bench process tree; one rayon thread so CPU time tracks wall time
-export RAYON_NUM_THREADS=1
+# user+sys of the whole bench process tree; one rayon thread unless RAYON_NUM_THREADS is set, so CPU time tracks wall time
+export RAYON_NUM_THREADS=${RAYON_NUM_THREADS:-1}
 TIMEFORMAT='%U %S'
 { time cargo bench -p "$crate" --bench "$bench" -- --noplot "$@" 2>&1 | tee "$out"; } 2>"$out.time" || { echo "bench failed; no history row"; exit 1; }
 t1=$(date +%s.%N)
@@ -71,13 +71,13 @@ cpu=$(tail -n 1 "$out.time" | awk '{printf "%.2f", $1 + $2}')
 wall=$(echo "$t1 - $t0" | bc | awk '{printf "%.2f", $1}')
 echo "load end: $l1; process CPU ${cpu}s (user+sys, cargo bench tree), wall ${wall}s"
 
-[[ -f $hist ]] || echo "utc,commit,dirty,host,os,load_start,load_end,crate,bench,id,median_ms,total_cpu_s,total_wall_s" >"$hist"
+[[ -f $hist ]] || echo "utc,commit,dirty,host,os,load_start,load_end,crate,bench,id,median_ms,total_cpu_s,total_wall_s,threads" >"$hist"
 commit=$(git rev-parse --short HEAD)
 dirty=$(git diff --quiet HEAD -- . ':!tests/perf/history.csv' && echo 0 || echo 1)
 host=$(hostname -s)
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # criterion: "id   time:   [lo mid hi]", id possibly on the preceding line
-awk -v pre="$now,$commit,$dirty,$host,$(uname -s),$l0,$l1,$crate,$bench" -v tail="$cpu,$wall" '
+awk -v pre="$now,$commit,$dirty,$host,$(uname -s),$l0,$l1,$crate,$bench" -v tail="$cpu,$wall,$RAYON_NUM_THREADS" '
   function ms(v, u) { return v * (u == "ns" ? 1e-6 : u == "µs" || u == "us" ? 1e-3 : u == "s" ? 1e3 : 1) }
   /^[^ ].*[^ ]$/ && !/time:/ && !/^(Benchmarking|Found|Gnuplot|change|Performance|No change|Change)/ { prev = $0 }
   /time: *\[/ {
