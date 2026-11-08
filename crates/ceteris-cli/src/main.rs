@@ -11,7 +11,7 @@
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
-//! ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--write-panel FILE])
+//! ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
 //!     [--base Y] [--shock Y]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
@@ -112,7 +112,7 @@ const USAGE: &str = "usage:
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
-  ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--write-panel FILE])
+  ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
     [--base YEAR] [--shock YEAR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
@@ -593,7 +593,7 @@ fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--write-panel FILE])
+/// `calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
 /// [--base YEAR] [--shock YEAR]`: P53 from local projections of a class, pair, year, flow, tariff
 /// panel (ADR 0027), read from a file or extracted from BACI and an exporter, importer, year,
 /// class, tariff file.
@@ -602,7 +602,7 @@ fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     use ceteris_calibrate::rho_panel::{Tariffs, extract, hs_classes, years};
     let (mut panel, mut baci, mut hs_key, mut tariffs, mut write_panel) =
         (None, None, None, None, None);
-    let mut gtd_war = None;
+    let (mut gtd_war, mut lines) = (None, None::<String>);
     let mut design = Design {
         base: 2017,
         shock: 2019,
@@ -619,6 +619,7 @@ fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             "--hs-key" => hs_key = args.next().map(PathBuf::from),
             "--tariffs" => tariffs = args.next().map(PathBuf::from),
             "--gtd-war" => gtd_war = args.next().map(PathBuf::from),
+            "--lines" => lines = args.next(),
             "--write-panel" => write_panel = args.next().map(PathBuf::from),
             "--base" => design.base = year("--base")?,
             "--shock" => design.shock = year("--shock")?,
@@ -633,10 +634,10 @@ fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let (classes, years) = (hs_classes(&b, &k)?, years(design, 2024));
             let tariffs = match (&tariffs, &gtd_war) {
                 (Some(t), _) => Tariffs::parse(&read(t)?)?,
-                (_, Some(w)) => Tariffs::from_gtd_war(w, &classes, &years)?,
+                (_, Some(w)) => Tariffs::from_gtd_war(w, &classes, &years, lines.is_some())?,
                 _ => unreachable!(),
             };
-            let rows = extract(&b, &classes, &tariffs, &years)?;
+            let rows = extract(&b, &classes, &tariffs, &years, lines.as_deref())?;
             if let Some(out) = write_panel {
                 let mut text = String::from("class,pair,year,flow,tariff\n");
                 for r in &rows {
