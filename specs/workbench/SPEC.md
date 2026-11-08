@@ -71,13 +71,33 @@ measurement misses, snapshot intervals widen before the tiers change.
 
 ## Ensembles and common random numbers
 
-Ensemble member k draws the uncertain parameters (theta by class, rho, nu, the price-rule gains)
-from their register priors with streams keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id),
-applied as tick-0 parameter edits from the calibrated steady state, so the draw is in the log
-(ADR 0322). A branch and its baseline with the same k share the draw (CRN, 14.4). Without draws,
-K seeds give K identical members because the P2 tick draws no random numbers. Members run in lane
-blocks of `L` (ADR 0024, plan Branch L); lane l of an `L = 8` run equals the `L = 1` run with
-lane l's parameters and seed. The 100-year invariant run also uses the undrawn baseline.
+Ensemble member k draws the uncertain dynamic parameters from their register priors with streams
+keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id), applied as tick-0 parameter edits from the
+calibrated steady state, so the draw is in the log (ADR 0322). A branch and its baseline with the
+same k share the draw (CRN, 14.4). Without draws, K seeds give K identical members because the P2
+tick draws no random numbers. Structural parameters (theta scale P150, border friction nu) are not
+drawn at 1.0: they change the steady state (`structural_digest`), and a calibration run per member
+is too slow today (owner, 2026-11-07); they join once calibration is fast.
+
+Drawn at 1.0 (ids key the streams and are never reused):
+
+| Stream id | Register | Edit target | Prior |
+|---|---|---|---|
+| 1 | P03a price adjustment speed | `trade.kappa1` | log-uniform 0.05 to 0.5 per month |
+| 2 | P03d stability margin share | `trade.gain_share` | uniform 0 to 1 |
+| 3 | P39 wage adjustment speed | `econ.kappa_w` | uniform 0.05 to 0.5 per month |
+| 4 | P41 employment adjustment speed | `econ.eta` | uniform 0.1 to 1 per month |
+
+P45 and P53 join when they have edit targets.
+
+Members run as lone worlds, one after another, each with the full thread pool (owner, 2026-11-08).
+Lane blocks (ADR 0024, `EconLanes`) stay as a tested API with lane l of an `L = 8` run equal to
+the `L = 1` run with lane l's parameters, but they are not the runner: on the Mac (idle, 40 ticks,
+2000 pack) lanes ran at 0.6 to 0.7 of scalar throughput for L = 8, 16 and 32 and held about 350 MiB
+per lane (11.8 GiB at L = 32 against a flat 1.4 GiB for scalar). Only the lane dispatch kernel
+scales badly (7.4 ms per run-tick at L = 1, 29 to 34 ms at L = 8 and 16); the kernel is 7.4 of
+36 ms, so a perfect lane kernel gains at most about 20%. No interleaved layout is proposed. The
+100-year invariant run also uses the undrawn baseline.
 
 Hazards (ADR 0241): `draw(seed, tick, hazard, cell)` returns one uniform per (hazard, cell, tick)
 whether or not the rate is positive; an event fires when the uniform is below the rate, so
@@ -188,5 +208,5 @@ The display threshold for the sign mask is a view setting.
 ## Open questions
 
 - Whether the 20 GB and 50 GB disk budgets hold; A3 measures.
-- Lane width `L` (8 to 32): Branch L's benchmark.
+- Lane width `L`: not needed; ensembles run scalar members (Branch L's benchmark).
 - Hash over Arrow instead of canonical bytes, if the owner wants it (one re-bless).
