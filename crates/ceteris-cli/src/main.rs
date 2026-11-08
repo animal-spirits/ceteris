@@ -11,7 +11,8 @@
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
-//! ceteris calibrate rho --panel FILE [--base Y] [--shock Y]
+//! ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+//!     [--base Y] [--shock Y]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
@@ -111,7 +112,8 @@ const USAGE: &str = "usage:
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
-  ceteris calibrate rho --panel FILE [--base YEAR] [--shock YEAR]
+  ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+    [--base YEAR] [--shock YEAR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
@@ -591,17 +593,19 @@ fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate rho --panel FILE [--base YEAR] [--shock YEAR]`: P53 from local projections of a
-/// class, pair, year, flow, tariff panel (ADR 0027).
+/// `calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+/// [--base YEAR] [--shock YEAR]`: P53 from local projections of a class, pair, year, flow, tariff
+/// panel (ADR 0027), read from a file or extracted from BACI and an exporter, importer, year,
+/// class, tariff file.
 fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     use ceteris_calibrate::rho::{Design, estimate, parse_panel, report};
-    let (mut panel, mut design) = (
-        None,
-        Design {
-            base: 2017,
-            shock: 2019,
-        },
-    );
+    use ceteris_calibrate::rho_panel::{Tariffs, extract, hs_classes, years};
+    let (mut panel, mut baci, mut hs_key, mut tariffs, mut write_panel) =
+        (None, None, None, None, None);
+    let mut design = Design {
+        base: 2017,
+        shock: 2019,
+    };
     while let Some(a) = args.next() {
         let mut year = |name: &str| {
             args.next()
@@ -610,14 +614,41 @@ fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         };
         match a.as_str() {
             "--panel" => panel = args.next().map(PathBuf::from),
+            "--baci" => baci = args.next().map(PathBuf::from),
+            "--hs-key" => hs_key = args.next().map(PathBuf::from),
+            "--tariffs" => tariffs = args.next().map(PathBuf::from),
+            "--write-panel" => write_panel = args.next().map(PathBuf::from),
             "--base" => design.base = year("--base")?,
             "--shock" => design.shock = year("--shock")?,
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
-    let panel = panel.ok_or("--panel needs a file")?;
-    let text = std::fs::read_to_string(&panel).map_err(|e| format!("{}: {e}", panel.display()))?;
-    let (fits, skipped) = estimate(&parse_panel(&text)?, design);
+    let read =
+        |p: &PathBuf| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let rows = match (panel, baci, hs_key, tariffs) {
+        (Some(p), None, None, None) => parse_panel(&read(&p)?)?,
+        (None, Some(b), Some(k), Some(t)) => {
+            let rows = extract(
+                &b,
+                &hs_classes(&b, &k)?,
+                &Tariffs::parse(&read(&t)?)?,
+                &years(design, 2024),
+            )?;
+            if let Some(out) = write_panel {
+                let mut text = String::from("class,pair,year,flow,tariff\n");
+                for r in &rows {
+                    text += &format!(
+                        "{},{},{},{},{}\n",
+                        r.class, r.pair, r.year, r.flow, r.tariff
+                    );
+                }
+                std::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+            }
+            rows
+        }
+        _ => return Err("give --panel, or --baci, --hs-key and --tariffs together".into()),
+    };
+    let (fits, skipped) = estimate(&rows, design);
     print!("{}", report(&fits, &skipped));
     Ok(if fits.is_empty() {
         ExitCode::FAILURE
