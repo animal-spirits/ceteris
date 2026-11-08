@@ -34,8 +34,36 @@ const TRADED: [bool; N_GOODS] = {
     t
 };
 
+/// A world journaling every leg, which the tests that count or scan legs read.
 fn world(params: EconParams) -> EconWorld {
-    EconWorld::new(Arc::new(small_world()), params, TradeParams::default())
+    let mut w = EconWorld::new(Arc::new(small_world()), params, TradeParams::default());
+    w.scratch.detail = true;
+    w
+}
+
+/// RFC 0316: the netted T2b journal is the per-leg journal summed per (flow, from, to), and
+/// the state is the same.
+#[test]
+fn netted_journal_is_the_detail_journal_summed() {
+    use std::collections::BTreeMap;
+    let net = |sim: &Sim<EconWorld>| {
+        let mut m: BTreeMap<(u16, u32, u32), i64> = BTreeMap::new();
+        for e in sim.world().ledger.journal() {
+            *m.entry((e.flow.0, e.from.0, e.to.0)).or_default() += e.amount;
+        }
+        m.retain(|_, v| *v != 0);
+        m
+    };
+    let mut detail = sim_of(world(EconParams::default()));
+    let mut netted = sim_of(world(EconParams::default()));
+    netted.world_mut().scratch.detail = false;
+    for tick in 0..6 {
+        detail.step().unwrap();
+        netted.step().unwrap();
+        assert_eq!(detail.state_hash(), netted.state_hash(), "tick {tick}");
+        assert_eq!(net(&detail), net(&netted), "tick {tick}: journal");
+        assert!(netted.world().ledger.journal().len() <= detail.world().ledger.journal().len());
+    }
 }
 
 fn sim_of(world: EconWorld) -> Sim<EconWorld> {
