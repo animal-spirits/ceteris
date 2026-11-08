@@ -11,8 +11,12 @@ use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 pub const SLOTS: usize = 4;
 
-/// A shipment for [`Pipeline::push_all`]: slot (1 to 4), buyer, units.
-pub type Push = (u8, u32, f64);
+/// A shipment for [`Pipeline::push_all`]: buyer, units.
+pub type Push = (u32, f64);
+
+/// One good's shipments for [`Pipeline::push_all`], in order, by slot: `[s]` is due in s + 1
+/// ticks.
+pub type Pushes = [Vec<Push>; SLOTS];
 
 /// Arrays are `[buyer * n_goods + g]`, buyers numbered by the caller.
 #[derive(Clone, Debug, PartialEq)]
@@ -63,16 +67,11 @@ impl Pipeline {
     /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`, good by good in turn:
     /// the four slots are filled in parallel, each in that order, so every cell sums the same
     /// terms in the same order.
-    pub fn push_all(&mut self, lists: &[&[Push]]) {
+    pub fn push_all(&mut self, lists: &[&Pushes]) {
         let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
         assert!(lists.len() <= goods, "{} goods of {goods}", lists.len());
         for (g, list) in lists.iter().enumerate() {
-            for &(slot, buyer, _) in *list {
-                let slot = slot as usize;
-                assert!(
-                    (1..=SLOTS).contains(&slot),
-                    "slot {slot} outside 1 to {SLOTS}"
-                );
+            for &(buyer, _) in list.iter().flatten() {
                 assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
             }
         }
@@ -80,10 +79,10 @@ impl Pipeline {
             .par_iter_mut()
             .enumerate()
             .for_each(|(k, cells)| {
-                // the slot number that lands in storage slot k
-                let slot = ((k + SLOTS - cursor) % SLOTS + 1) as u8;
+                // the pushes due in 1 + (k - cursor) ticks land in storage slot k
+                let slot = (k + SLOTS - cursor) % SLOTS;
                 for (g, list) in lists.iter().enumerate() {
-                    for &(_, buyer, units) in list.iter().filter(|p| p.0 == slot) {
+                    for &(buyer, units) in &list[slot] {
                         cells[buyer as usize * goods + g] += units;
                     }
                 }
@@ -193,6 +192,13 @@ mod tests {
             vec![(1, 0, 0.5), (4, 2, 1e-17), (1, 0, 0.25), (2, 4, 3.0)],
             vec![(3, 1, 0.1), (1, 0, 0.2), (3, 1, 0.7)],
         ];
+        let by_slot = |l: &[(u8, u32, f64)], scale: f64| -> Pushes {
+            let mut out = Pushes::default();
+            for &(s, k, u) in l {
+                out[s as usize - 1].push((k, u * scale));
+            }
+            out
+        };
         for tick in 0..6 {
             for (g, list) in lists.iter().enumerate() {
                 for &(slot, buyer, units) in list {
@@ -204,15 +210,11 @@ mod tests {
                     );
                 }
             }
-            let scaled: Vec<Vec<(u8, u32, f64)>> = lists
+            let scaled: Vec<Pushes> = lists
                 .iter()
-                .map(|l| {
-                    l.iter()
-                        .map(|&(s, k, u)| (s, k, u * f64::from(tick + 1)))
-                        .collect()
-                })
+                .map(|l| by_slot(l, f64::from(tick + 1)))
                 .collect();
-            let refs: Vec<&[Push]> = scaled.iter().map(|l| &l[..]).collect();
+            let refs: Vec<&Pushes> = scaled.iter().collect();
             b.push_all(&refs);
             assert_eq!(a.pop_due(), b.pop_due());
             assert_eq!(a, b);

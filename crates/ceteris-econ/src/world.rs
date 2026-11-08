@@ -519,9 +519,9 @@ pub struct Payments {
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
     pub parts: Vec<i64>,
-    /// T2b's pipeline shipments of the good, (slot, buyer, units) in order, applied after
+    /// T2b's pipeline shipments of the good, (buyer, units) in order per slot, applied after
     /// the per-good tasks, and the goods its selection created.
-    pub pushes: Vec<ceteris_trade::pipeline::Push>,
+    pub pushes: ceteris_trade::pipeline::Pushes,
     pub made: f64,
 }
 

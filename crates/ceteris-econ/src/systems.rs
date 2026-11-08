@@ -24,7 +24,7 @@ use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
 use ceteris_core::timing::{self, NONE};
-use ceteris_trade::pipeline::Push;
+use ceteris_trade::pipeline::Pushes;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
 use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source_weighted};
 
@@ -1045,7 +1045,7 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
-    let pushes: Vec<&[Push]> = payments.iter().map(|p| &p.pushes[..]).collect();
+    let pushes: Vec<&Pushes> = payments.iter().map(|p| &p.pushes).collect();
     w.pipeline.push_all(&pushes);
     drop(moves_span);
     // every good's buyers' payments, then its legs; nothing above reads money
@@ -1170,7 +1170,7 @@ fn goods_moves(
     let transit = acc.transit[g];
     let mut made = 0.0;
     let mut first = 0;
-    legs.pushes.clear();
+    legs.pushes.iter_mut().for_each(Vec::clear);
     for d in 0..np {
         let market = acc.market[d];
         // buyers at d: home purchases now, shipments into the pipeline
@@ -1200,7 +1200,7 @@ fn goods_moves(
             }
             for (slot, &units) in o.slots.iter().enumerate() {
                 if units > 0.0 {
-                    legs.pushes.push((slot as u8 + 1, o.buyer as u32, units));
+                    legs.pushes[slot].push((o.buyer as u32, units));
                 }
             }
         }
