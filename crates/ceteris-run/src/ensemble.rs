@@ -45,6 +45,21 @@ pub struct ParamPrior {
     pub prior: Prior,
 }
 
+/// The dynamic parameters drawn at present (`specs/workbench/SPEC.md`, stream ids 1 to 4).
+pub fn register_priors() -> Vec<ParamPrior> {
+    let p = |id, target: &str, prior| ParamPrior {
+        id,
+        target: target.into(),
+        prior,
+    };
+    vec![
+        p(1, "trade.kappa1", Prior::LogUniform { lo: 0.05, hi: 0.5 }),
+        p(2, "trade.gain_share", Prior::Uniform { lo: 0.0, hi: 1.0 }),
+        p(3, "econ.kappa_w", Prior::Uniform { lo: 0.05, hi: 0.5 }),
+        p(4, "econ.eta", Prior::Uniform { lo: 0.1, hi: 1.0 }),
+    ]
+}
+
 /// Member `k`'s draw of `priors` as tick-0 edits, in table order.
 pub fn member_edits(seed: Seed, priors: &[ParamPrior]) -> Vec<Edit> {
     priors
