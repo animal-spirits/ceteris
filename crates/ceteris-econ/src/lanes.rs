@@ -453,10 +453,15 @@ mod tests {
         }
         assert_eq!(lanes.state_hashes()[1], scalar.state_hash());
         for w in lanes.worlds() {
-            assert!(w.scratch.payments.iter().all(|p| p.entries.capacity() == 0));
+            assert!(
+                w.scratch
+                    .payments
+                    .iter()
+                    .all(|p| p.edge_amt.capacity() == 0)
+            );
             assert_eq!(w.scratch.flows.mean().pair_value.len(), 0);
         }
-        assert!(lanes.payments.iter().any(|p| p.entries.capacity() > 0));
+        assert!(lanes.payments.iter().any(|p| p.edge_amt.capacity() > 0));
     }
 
     fn draw_table() -> Vec<ceteris_run::ensemble::ParamPrior> {

@@ -381,6 +381,13 @@ pub struct Scratch {
     pub payments: Vec<Payments>,
     /// Working space of `Ledger::post` at T2b.
     pub post: PostScratch,
+    /// Whether T2b journals every leg (detail) or one netted entry per buyer and network leg
+    /// (RFC 0316). Balances and hashes are the same.
+    pub detail: bool,
+    /// T2b's netted entries, and the sums over goods they come from.
+    pub netted: Vec<Entry>,
+    pub buyer_tot: Vec<i64>,
+    pub edge_tot: Vec<i64>,
     /// The price refresh of E3 when [`EconWorld::start_refresh`] began it early.
     pub refresh: Refresh,
     /// Per traded good, its ledger column while T2b moves its goods; per local good at T3.
@@ -439,6 +446,10 @@ impl Scratch {
             columns: vec![Columns::default(); n_traded],
             payments: vec![Payments::default(); n_traded],
             post: PostScratch::default(),
+            detail: false,
+            netted: Vec::new(),
+            buyer_tot: Vec::new(),
+            edge_tot: Vec::new(),
             stock: Vec::new(),
             refresh: Refresh::default(),
             local: Vec::new(),
@@ -498,6 +509,12 @@ pub struct Payments {
     pub orders: Vec<Order>,
     pub order_ends: Vec<u32>,
     pub entries: Vec<Entry>,
+    /// Netted mode: the good's rounded payment per buyer index (pops, then enterprises) and per
+    /// network leg in the fixed leg order, zero where none; `topo` names the legs of the first
+    /// good ([`Payments::entries`] holds the same amounts one by one in detail mode).
+    pub buyer_amt: Vec<i64>,
+    pub edge_amt: Vec<i64>,
+    pub topo: Vec<(Flow, AccountId, AccountId)>,
     pub buyers: Vec<Buyer>,
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
