@@ -2318,7 +2318,7 @@ impl State for EconWorld {
                 }
             }
         }
-        let in_flight = self.pipeline.in_flight_all();
+        let in_flight = self.pipeline.in_flight_cached();
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
             let (flight, held) = (in_flight[g], self.ledger.goods(account, g));
             // the account is filled with differences of market holdings, so it carries their
