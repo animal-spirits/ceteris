@@ -124,14 +124,23 @@ impl Pipeline {
             .sum()
     }
 
-    /// [`Pipeline::in_flight`] of every good, the goods in parallel, each summed in the same
-    /// order.
+    /// [`Pipeline::in_flight`] of every good, each summed in the same order: one row-major pass
+    /// per block of goods that share a cache line, the blocks in parallel.
     pub fn in_flight_all(&self) -> Vec<f64> {
+        const BLOCK: usize = 8;
         let _span = ceteris_core::timing::span("in_flight_all", ceteris_core::timing::NONE);
-        (0..self.goods)
-            .into_par_iter()
-            .map(|g| self.in_flight(g))
-            .collect()
+        let goods = self.goods;
+        // -0.0, the start of `f64::sum`, so that a good with nothing in flight matches it too
+        let mut out = vec![-0.0; goods];
+        out.par_chunks_mut(BLOCK).enumerate().for_each(|(k, acc)| {
+            let lo = k * BLOCK;
+            for row in self.slots.iter().flat_map(|s| s.chunks_exact(goods)) {
+                for (a, &q) in acc.iter_mut().zip(&row[lo..]) {
+                    *a += q;
+                }
+            }
+        });
+        out
     }
 }
 
