@@ -962,8 +962,14 @@ fn buyer_orders(
 /// each gateway nets to zero), the tariff to its country's rebate account. Unfilled spending
 /// stays with the buyer. Records the country-pair flows.
 pub fn dispatch(w: &mut EconWorld) {
-    dispatch_gather(w);
-    dispatch_kernel(w);
+    {
+        let _span = timing::span("t2b.gather_all", NONE);
+        dispatch_gather(w);
+    }
+    {
+        let _span = timing::span("t2b.kernel_all", NONE);
+        dispatch_kernel(w);
+    }
     dispatch_finish(w);
 }
 

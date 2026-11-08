@@ -174,9 +174,22 @@ impl Pipeline {
         let mut out = vec![-0.0; goods];
         out.par_chunks_mut(BLOCK).enumerate().for_each(|(k, acc)| {
             let lo = k * BLOCK;
-            for row in self.slots.iter().flat_map(|s| s.chunks_exact(goods)) {
-                for (a, &q) in acc.iter_mut().zip(&row[lo..]) {
-                    *a += q;
+            let rows = || self.slots.iter().flat_map(|s| s.chunks_exact(goods));
+            if let Ok(acc) = <&mut [f64; BLOCK]>::try_from(&mut *acc) {
+                // a full block keeps its lanes in registers across the rows
+                let mut lanes = *acc;
+                for row in rows() {
+                    let q: &[f64; BLOCK] = row[lo..lo + BLOCK].try_into().expect("full block");
+                    for (a, &q) in lanes.iter_mut().zip(q) {
+                        *a += q;
+                    }
+                }
+                *acc = lanes;
+            } else {
+                for row in rows() {
+                    for (a, &q) in acc.iter_mut().zip(&row[lo..]) {
+                        *a += q;
+                    }
                 }
             }
         });
