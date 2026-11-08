@@ -70,6 +70,17 @@ fn lanes<const L: usize>(inputs: &Arc<EconInputs>, ticks: u32) -> f64 {
         (built - before) / L as f64,
         (first - built) / L as f64
     );
+    let s = lanes.stage_secs();
+    let per = |x: f64| 1000.0 * x / (L as f64 * f64::from(ticks));
+    eprintln!(
+        "stage ms per run-tick: begin {:.2} systems {:.2} source {:.2} clear {:.2} dispatch {:.2} reprice+end {:.2}",
+        per(s[0]),
+        per(s[1]),
+        per(s[2]),
+        per(s[3]),
+        per(s[4]),
+        per(s[5])
+    );
     secs
 }
 
