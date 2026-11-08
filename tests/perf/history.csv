@@ -1,1 +1,2 @@
 utc,commit,dirty,host,os,load_start,load_end,crate,bench,id,median_ms,total_cpu_s,total_wall_s
+2026-11-08T13:40:32Z,bbfcefb,0,mbp,Darwin,13.06,6.68,ceteris-econ,goods,"goods_pack/dispatch/45",486.790000,80.21,78.33
