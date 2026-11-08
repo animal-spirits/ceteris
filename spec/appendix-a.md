@@ -314,4 +314,8 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0324 | [Re-rate of the 1.0 plan at the pre-P3 gate, amending ADR 0248](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 21 |
 | 0325 | [Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md) | 19.2 |
 | 0326 | [Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](../rfcs/0315-snapshot-chunks-are-zstd-canonical-bytes.md) | 14.3 |
+| 0327 | [Long single-good reductions sum in four fixed interleaved accumulators, one golden move](../rfcs/0317-summation-order-and-goods-layout.md) | 19.4 |
+| 0328 | [Ledger goods stay account-major; per-province systems take disjoint account slices](../rfcs/0317-summation-order-and-goods-layout.md) | 4.6, 19.4 |
+| 0329 | [Cross-province float tallies sum by province partials in province order](../rfcs/0317-summation-order-and-goods-layout.md) | 19.4 |
+| 0330 | [Goods sharing a kernel are stored in goods-innermost blocks for batched dispatch](../rfcs/0317-summation-order-and-goods-layout.md) | 8.3, 19.4 |
 <!-- rows:end -->

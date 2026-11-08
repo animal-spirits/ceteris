@@ -1,6 +1,6 @@
 # RFC 0317. Canonical summation order, province slices of the ledger and goods-innermost dispatch blocks
 
-Status: proposed
+Status: accepted
 Date: 2026-11-08
 Design sections: 4.6, 8.3, 19.2, 19.4
 Release: 1.0, P3
@@ -72,8 +72,8 @@ Recommendation: B, because it is the only option that both removes the dependent
 for goods that cannot be blocked and keeps one result on every target; it is the order the
 real 45 to 50 goods pack needs, where few goods share a kernel.
 
-Decision: pending.
-Row: pending
+Decision: B, Antonio, 2026-11-08.
+Row: ADR 0327
 
 ### D2. How does the ledger lay out goods holdings?
 
@@ -93,8 +93,8 @@ accounts, and leaves the snapshot bytes as they are. The transposes are measured
 if they exceed 5 ms a tick, block columns (`take_columns` filling B goods side by side,
 for D4) are the next step, not a layout change.
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-08.
+Row: ADR 0328
 
 ### D3. How does province-parallel produce sum the per-good created and destroyed tallies?
 
@@ -115,8 +115,8 @@ Recommendation: B, because the tallies are a check, not state; the fixed provinc
 them reproducible, and the identity check's tolerance is many orders above the difference.
 Stage S1 asserts both claims (no hash change, gap well inside tolerance) in a test.
 
-Decision: pending.
-Row: pending
+Decision: B, Antonio, 2026-11-08.
+Row: ADR 0329
 
 ### D4. How does batched dispatch lay out goods?
 
@@ -137,8 +137,8 @@ Options:
 Recommendation: A, because it is the layout 19.4 already prescribes, it is the condition under
 which SpMM wins, and it is bit-identical where goods share a kernel.
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-08.
+Row: ADR 0330
 
 ## Province slices of the ledger (D3 detail)
 
