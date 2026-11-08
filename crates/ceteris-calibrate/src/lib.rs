@@ -14,6 +14,7 @@ pub mod elasticity;
 pub mod gravity;
 pub mod json;
 pub mod pyfmt;
+pub mod rho;
 pub mod shock;
 pub mod stability;
 pub mod steady;
