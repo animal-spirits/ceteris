@@ -491,7 +491,7 @@ pub fn produce(w: &mut EconWorld) {
 
             let bill = to_minor(w.wage[i] * w.employment[e]);
             split(bill, effective.iter().copied(), &mut parts);
-            for (k, &part) in pops.clone().zip(&parts) {
+            for (k, &part) in pops.clone().zip(parts.iter()) {
                 pay(&mut w.ledger, WAGE, account, acc.pop[k], part);
                 w.scratch.income_paid[k] += part;
             }
@@ -881,11 +881,22 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
 /// Each buyer's share of good `g`'s dispatch `r` at its destination, in province and buyer
 /// order: what it may take home now, what it gets in each pipeline slot, and its payment to
 /// the destination market, a ledger entry (left out when zero, as `pay` leaves it).
-fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Payments) {
+fn buyer_orders(
+    lay: &Layout,
+    spend: Spending,
+    g: usize,
+    r: &Sourced,
+    p: &mut Payments,
+    detail: bool,
+) {
     let acc = &lay.accounts;
     p.orders.clear();
     p.order_ends.clear();
     p.entries.clear();
+    p.buyer_amt.clear();
+    if !detail {
+        p.buyer_amt.resize(acc.pop.len() + acc.enterprise.len(), 0);
+    }
     for d in 0..acc.market.len() {
         let (cell, market) = (d * spend.goods + g, acc.market[d]);
         buyers_of(lay, spend, d, g, &mut p.buyers);
@@ -901,13 +912,17 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
                 slots,
             });
             let amount = to_minor(r.paid_by_class[d][b.class] * share);
-            if amount != 0 {
-                p.entries.push(Entry {
-                    flow: PURCHASE,
-                    from: b.account,
-                    to: market,
-                    amount,
-                });
+            if detail {
+                if amount != 0 {
+                    p.entries.push(Entry {
+                        flow: PURCHASE,
+                        from: b.account,
+                        to: market,
+                        amount,
+                    });
+                }
+            } else {
+                p.buyer_amt[b.index] = amount;
             }
         }
         p.order_ends.push(p.orders.len() as u32);
@@ -967,6 +982,7 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
     let np = kernel.n_provinces();
+    let detail = w.scratch.detail;
     let sc = &mut w.scratch;
     let (markets, net) = (&w.markets, &inp.network);
     let spending = Spending {
@@ -1005,8 +1021,8 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
                 },
                 || {
                     let _span = timing::span("t2b.legs", gi);
-                    buyer_orders(lay, spending, g, r, legs);
-                    trade_legs(inp, acc, kernel, g, r, legs);
+                    buyer_orders(lay, spending, g, r, legs, detail);
+                    trade_legs(inp, acc, kernel, g, r, legs, (detail, g == 0));
                 },
             );
             let _span = timing::span("t2b.moves", gi);
@@ -1033,10 +1049,23 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     w.pipeline.push_all(&pushes);
     drop(moves_span);
     // every good's buyers' payments, then its legs; nothing above reads money
-    let mut blocks: Vec<&mut Vec<Entry>> = payments.iter_mut().map(|p| &mut p.entries).collect();
     {
         let _span = timing::span("t2b.post", NONE);
-        w.ledger.post_blocks(&mut blocks, &mut w.scratch.post);
+        if detail {
+            let mut blocks: Vec<&mut Vec<Entry>> =
+                payments.iter_mut().map(|p| &mut p.entries).collect();
+            w.ledger.post_blocks(&mut blocks, &mut w.scratch.post);
+        } else {
+            let sc = &mut w.scratch;
+            net_legs(
+                lay,
+                &payments,
+                &mut sc.buyer_tot,
+                &mut sc.edge_tot,
+                &mut sc.netted,
+            );
+            w.ledger.post_blocks(&mut [&mut sc.netted], &mut sc.post);
+        }
     }
     let _transit = timing::span("t2b.transit", NONE);
     // each transit account is brought to the goods now in flight: the losses melt what it
@@ -1049,6 +1078,80 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     }
     w.scratch.sourced = sourced;
     w.scratch.payments = payments;
+}
+
+/// Chunk of buyers or legs summed over goods in one task by [`net_legs`].
+const NET_CHUNK: usize = 1 << 12;
+
+/// `out[j] = sum over goods of column(good)[lo + j]` for the chunk starting at `lo`; the sum of
+/// a leg's rounded amounts is asserted to fit `i64`.
+fn sum_columns(out: &mut [i64], lo: usize, columns: &[&[i64]]) {
+    out.fill(0);
+    for col in columns {
+        for (t, &x) in out.iter_mut().zip(&col[lo..]) {
+            *t = t.checked_add(x).expect("netted leg overflows i64");
+        }
+    }
+}
+
+/// Netted T2b journal (RFC 0316): the goods' rounded payments summed per buyer and per network
+/// leg, as one entry each with a non-zero total, purchases in buyer order (province by province,
+/// enterprises then pops) and then trade and tariff legs in the network's leg order. Sums of
+/// rounded amounts, so every balance equals the per-leg posting's.
+fn net_legs(
+    lay: &Layout,
+    payments: &[Payments],
+    buyer_tot: &mut Vec<i64>,
+    edge_tot: &mut Vec<i64>,
+    out: &mut Vec<Entry>,
+) {
+    out.clear();
+    let Some(first) = payments.first() else {
+        return;
+    };
+    let acc = &lay.accounts;
+    let n_pops = acc.pop.len();
+    let buyers: Vec<&[i64]> = payments.iter().map(|p| &p.buyer_amt[..]).collect();
+    buyer_tot.resize(buyers[0].len(), 0);
+    buyer_tot
+        .par_chunks_mut(NET_CHUNK)
+        .enumerate()
+        .for_each(|(k, t)| sum_columns(t, k * NET_CHUNK, &buyers));
+    for d in 0..acc.market.len() {
+        let market = acc.market[d];
+        let ents = lay.enterprises(d).map(|e| (acc.enterprise[e], n_pops + e));
+        let pops = lay.pops(d).map(|k| (acc.pop[k], k));
+        for (account, i) in ents.chain(pops) {
+            if buyer_tot[i] != 0 {
+                out.push(Entry {
+                    flow: PURCHASE,
+                    from: account,
+                    to: market,
+                    amount: buyer_tot[i],
+                });
+            }
+        }
+    }
+    let edges: Vec<&[i64]> = payments.iter().map(|p| &p.edge_amt[..]).collect();
+    assert!(
+        edges.iter().all(|e| e.len() == first.topo.len()),
+        "goods differ in network legs"
+    );
+    edge_tot.resize(first.topo.len(), 0);
+    edge_tot
+        .par_chunks_mut(NET_CHUNK)
+        .enumerate()
+        .for_each(|(k, t)| sum_columns(t, k * NET_CHUNK, &edges));
+    for (&(flow, from, to), &amount) in first.topo.iter().zip(edge_tot.iter()) {
+        if amount != 0 {
+            out.push(Entry {
+                flow,
+                from,
+                to,
+                amount,
+            });
+        }
+    }
 }
 
 /// T2b's goods moves of one traded good on its ledger column, buyer by buyer in destination
@@ -1115,7 +1218,9 @@ fn goods_moves(
 /// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations
 /// pay origins and their gateways, each gateway splits what it takes in over the legs that
 /// fed it ([`split`]), so it pays out exactly that, and destinations pay tariffs to their
-/// country's rebate account. Zero amounts are left out, as `pay` leaves them.
+/// country's rebate account. In detail mode zero amounts are left out, as `pay` leaves them;
+/// otherwise every leg's amount goes to `edge_amt` in the order the network fixes, the same
+/// for every good, and `topo` (when `topo` is set) names the legs.
 fn trade_legs(
     inp: &EconInputs,
     acc: &Accounts,
@@ -1123,18 +1228,28 @@ fn trade_legs(
     g: usize,
     r: &Sourced,
     p: &mut Payments,
+    (detail, topo): (bool, bool),
 ) {
     let (np, ng) = (kernel.n_provinces(), kernel.n_gateways());
     let gk = kernel.good(g);
-    let entries = &mut p.entries;
+    let (entries, edge_amt, legs_of) = (&mut p.entries, &mut p.edge_amt, &mut p.topo);
+    edge_amt.clear();
+    legs_of.clear();
     let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
-        if amount != 0 {
-            entries.push(Entry {
-                flow,
-                from,
-                to,
-                amount,
-            });
+        if detail {
+            if amount != 0 {
+                entries.push(Entry {
+                    flow,
+                    from,
+                    to,
+                    amount,
+                });
+            }
+        } else {
+            edge_amt.push(amount);
+            if topo {
+                legs_of.push((flow, from, to));
+            }
         }
     };
     for o in 0..np {
@@ -1160,7 +1275,7 @@ fn trade_legs(
         let legs = kernel.crossings_by_target().column(b);
         let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
         split(p.at_gateway[b], weights, &mut p.parts);
-        for (&(a, _), &part) in legs.iter().zip(&p.parts) {
+        for (&(a, _), &part) in legs.iter().zip(p.parts.iter()) {
             leg(TRADE, acc.gateway[b], acc.gateway[a as usize], part);
             p.from_gateway[a as usize] += part;
         }
@@ -1169,7 +1284,7 @@ fn trade_legs(
         let legs = kernel.access_by_gateway().column(a);
         let weights = legs.iter().map(|&(_, j)| r.access_out_value[j as usize]);
         split(p.from_gateway[a], weights, &mut p.parts);
-        for (&(o, _), &part) in legs.iter().zip(&p.parts) {
+        for (&(o, _), &part) in legs.iter().zip(p.parts.iter()) {
             leg(TRADE, acc.gateway[a], acc.market[o as usize], part);
         }
     }
@@ -1270,7 +1385,7 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
                 }
             });
             split(w.ledger.money_wide(payer), weights, &mut parts);
-            for (&k, &part) in pops.iter().zip(&parts) {
+            for (&k, &part) in pops.iter().zip(parts.iter()) {
                 pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
                 w.scratch.income_paid[k as usize] += part;
             }
@@ -1384,7 +1499,7 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
         }
         let amount = to_minor(-share[c] * world);
         split(amount, pops.iter().map(|&k| income(k)), &mut parts);
-        for (&k, &part) in pops.iter().zip(&parts) {
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
             pay(&mut w.ledger, TRANSFER, acc.pop[k as usize], account, part);
         }
         paid += i128::from(amount);
@@ -1397,7 +1512,7 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
     for (&c, &amount) in receivers.iter().zip(&amounts) {
         let pops = &lay.country_pops[c];
         split(amount, pops.iter().map(|&k| income(k)), &mut parts);
-        for (&k, &part) in pops.iter().zip(&parts) {
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
             pay(&mut w.ledger, TRANSFER, account, acc.pop[k as usize], part);
         }
     }
@@ -1439,13 +1554,13 @@ pub fn write_off(w: &mut EconWorld) {
             continue;
         }
         largest_remainder(total, &weights, &mut parts);
-        for (&k, &part) in pops.iter().zip(&parts) {
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
             pay(&mut w.ledger, WRITE_OFF, acc.pop[k as usize], pool, part);
         }
         weights.clear();
         weights.extend(holders.iter().map(|&(_, x)| x));
         largest_remainder(total, &weights, &mut parts);
-        for (&(account, _), &part) in holders.iter().zip(&parts) {
+        for (&(account, _), &part) in holders.iter().zip(parts.iter()) {
             pay(&mut w.ledger, WRITE_OFF, pool, account, part);
         }
     }
