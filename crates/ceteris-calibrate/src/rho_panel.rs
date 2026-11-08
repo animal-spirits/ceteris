@@ -7,6 +7,7 @@
 //! every year, that is no change, which is the control group of the projection.
 
 use std::collections::BTreeMap;
+use std::io::BufRead;
 use std::path::Path;
 
 use ceteris_pack::econ::goods::{TRADED, hs_goods};
@@ -83,14 +84,128 @@ impl Tariffs {
     }
 }
 
+/// Days since 1970-01-01 of a civil date.
+fn days(y: i32, m: u32, d: u32) -> i64 {
+    let y = i64::from(y) - i64::from(m <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (i64::from(m) + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
+    era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468
+}
+
+impl Tariffs {
+    /// Reads the Global Tariff Database trade-war extension (Teti, HS6 bilateral file): one row
+    /// per importer, exporter and HS6 line with the applied rate in percent on each date a rate
+    /// changed (`t_YYYYMMDD`) and the 2017 baseline `v2017`. The tariff of a class and year is
+    /// the mean over its lines of the line's time-weighted rate within the year; years before
+    /// 2018 take the 2017 baseline. Lines outside `classes` are left out, and the file's HS2017
+    /// codes are matched to BACI's HS92 codes as they stand. With `lines` the tariff is kept per
+    /// HS6 line, keyed by its code.
+    pub fn from_gtd_war(
+        path: &Path,
+        classes: &BTreeMap<i64, String>,
+        years: &[i32],
+        lines: bool,
+    ) -> Result<Self, String> {
+        let origin = path.display();
+        let mut rows = std::io::BufReader::new(
+            std::fs::File::open(path).map_err(|e| format!("{origin}: {e}"))?,
+        )
+        .lines();
+        let header = rows
+            .next()
+            .ok_or(format!("{origin}: empty"))?
+            .map_err(|e| e.to_string())?;
+        let cols: Vec<&str> = header.split(',').collect();
+        let find = |n: &str| {
+            cols.iter()
+                .position(|c| *c == n)
+                .ok_or(format!("{origin}: no column {n}"))
+        };
+        let (imp, exp, hs, base) = (
+            find("importer")?,
+            find("exporter")?,
+            find("hs6")?,
+            find("v2017")?,
+        );
+        let steps: Vec<(usize, i64)> = cols
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| {
+                let d = c.strip_prefix("t_")?;
+                let (y, m, dd) = (d.get(0..4)?, d.get(4..6)?, d.get(6..8)?);
+                Some((i, days(y.parse().ok()?, m.parse().ok()?, dd.parse().ok()?)))
+            })
+            .collect();
+        // weight of each step column within each year: days it is in force over days in the year
+        let weights: Vec<Vec<(usize, f64)>> = years
+            .iter()
+            .map(|&y| {
+                let (a, b) = (days(y, 1, 1), days(y + 1, 1, 1));
+                steps
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(k, &(col, start))| {
+                        let end = steps.get(k + 1).map_or(i64::MAX, |s| s.1);
+                        let overlap = (end.min(b) - start.max(a)).max(0);
+                        (overlap > 0).then(|| (col, overlap as f64 / (b - a) as f64))
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut acc: BTreeMap<(String, String, i32, String), (f64, u32)> = BTreeMap::new();
+        for (n, line) in rows.enumerate() {
+            let line = line.map_err(|e| e.to_string())?;
+            let f: Vec<&str> = line.split(',').collect();
+            let bad = || format!("{origin}: line {}", n + 2);
+            let Some(code) = f.get(hs).and_then(|h| h.parse::<i64>().ok()) else {
+                continue;
+            };
+            let Some(class) = classes.get(&code) else {
+                continue;
+            };
+            let key = if lines {
+                code.to_string()
+            } else {
+                class.clone()
+            };
+            let cell = |i: usize| f.get(i).and_then(|v| v.parse::<f64>().ok());
+            let (e, m) = (f.get(exp).ok_or_else(bad)?, f.get(imp).ok_or_else(bad)?);
+            for (&year, w) in years.iter().zip(&weights) {
+                let rate = if year < 2018 {
+                    cell(base)
+                } else {
+                    w.iter()
+                        .map(|&(c, wt)| cell(c).map(|v| v * wt))
+                        .sum::<Option<f64>>()
+                };
+                let Some(rate) = rate else { continue };
+                let slot = acc
+                    .entry((e.to_string(), m.to_string(), year, key.clone()))
+                    .or_insert((0.0, 0));
+                slot.0 += rate / 100.0;
+                slot.1 += 1;
+            }
+        }
+        Ok(Tariffs(
+            acc.into_iter()
+                .map(|(k, (s, n))| (k, s / f64::from(n)))
+                .collect(),
+        ))
+    }
+}
+
 /// The panel: BACI value (thousand USD) summed over the lines of each class, by ordered pair
 /// `EXP>IMP` and year, with the tariff of that pair and class. Rows come in class, pair, year
-/// order.
+/// order. With `lines` set to a country, the unit is the pair and HS6 line (`EXP>IMP>HS6`) and
+/// only flows into or out of that country are kept, so lines it left alone are the controls.
 pub fn extract(
     baci: &Path,
     classes: &BTreeMap<i64, String>,
     tariffs: &Tariffs,
     years: &[i32],
+    lines: Option<&str>,
 ) -> Result<Vec<Row>, String> {
     let iso = country_codes(baci)?;
     let mut sums: BTreeMap<(String, String, i32), f64> = BTreeMap::new();
@@ -102,18 +217,31 @@ pub fn extract(
             else {
                 return;
             };
-            if fl.v.is_finite() {
-                *sums
-                    .entry((class.clone(), format!("{e}>{m}"), year))
-                    .or_insert(0.0) += fl.v;
+            if !fl.v.is_finite() || lines.is_some_and(|c| e != c && m != c) {
+                return;
             }
+            let pair = if lines.is_some() {
+                format!("{e}>{m}>{}", fl.k)
+            } else {
+                format!("{e}>{m}")
+            };
+            *sums.entry((class.clone(), pair, year)).or_insert(0.0) += fl.v;
         })?;
     }
     Ok(sums
         .into_iter()
         .map(|((class, pair, year), flow)| {
-            let (e, m) = pair.split_once('>').unwrap_or_default();
-            let tariff = tariffs.get(e, m, year, &class);
+            let mut parts = pair.split('>');
+            let (e, m) = (
+                parts.next().unwrap_or_default(),
+                parts.next().unwrap_or_default(),
+            );
+            let key = if lines.is_some() {
+                parts.next().unwrap_or_default()
+            } else {
+                &class
+            };
+            let tariff = tariffs.get(e, m, year, key);
             Row {
                 class,
                 pair,
@@ -202,6 +330,7 @@ mod tests {
             &classes(),
             &Tariffs::parse(&tariffs).unwrap(),
             &[2018, 2019],
+            None,
         )
         .unwrap();
         assert_eq!(rows.len(), 2 * 5 * 2);
@@ -227,6 +356,7 @@ mod tests {
             &classes(),
             &Tariffs::parse(&tariffs).unwrap(),
             &years(DESIGN, 2024),
+            None,
         )
         .unwrap();
         let (fits, skipped) = estimate(&rows, DESIGN);
@@ -235,6 +365,26 @@ mod tests {
             assert!((f.half_life_months - 24.0).abs() <= 3.0, "{f:?}");
             assert!((f.theta - 4.0).abs() < 0.5, "{f:?}");
         }
+    }
+
+    #[test]
+    fn gtd_war_averages_lines_and_weights_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("war.csv");
+        std::fs::write(
+            &path,
+            "importer,exporter,hs6,t_20180101,t_20180701,v2017\n\
+             USA,CHN,100000,0,10,0\n\
+             USA,CHN,200000,20,20,0\n\
+             USA,CHN,999999,50,50,0\n",
+        )
+        .unwrap();
+        let t = Tariffs::from_gtd_war(&path, &classes(), &[2017, 2018, 2019], false).unwrap();
+        assert_eq!(t.get("CHN", "USA", 2017, "a"), 0.0);
+        // 181 of 365 days at 0, the rest at 10 percent
+        assert!((t.get("CHN", "USA", 2018, "a") - 0.1 * 184.0 / 365.0).abs() < 1e-9);
+        assert!((t.get("CHN", "USA", 2019, "a") - 0.1).abs() < 1e-9);
+        assert!((t.get("CHN", "USA", 2019, "b") - 0.2).abs() < 1e-9);
     }
 
     #[test]
