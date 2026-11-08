@@ -11,6 +11,12 @@ use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 pub const SLOTS: usize = 4;
 
+/// One good's shipments sorted by bucket: bucket offsets, then (buyer, units).
+type Bucketed = (Vec<usize>, Vec<(u32, f64)>);
+
+/// Target number of buyer ranges per slot in [`Pipeline::push_all`].
+const RANGES: usize = 16;
+
 /// A shipment for [`Pipeline::push_all`]: slot (1 to 4), buyer, units.
 pub type Push = (u8, u32, f64);
 
@@ -60,34 +66,68 @@ impl Pipeline {
         self.slots[(self.cursor + slot - 1) % SLOTS][buyer * self.goods + g] += units;
     }
 
-    /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`, good by good in turn:
-    /// the four slots are filled in parallel, each in that order, so every cell sums the same
-    /// terms in the same order.
+    /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`, good by good in turn.
+    /// Each good's list is first sorted, stably and in parallel, into (slot, buyer range)
+    /// buckets; then one task per bucket column fills its cells, adding the goods in order, so
+    /// every cell sums the same terms in the same order however many ranges or threads there are.
     pub fn push_all(&mut self, lists: &[&[Push]]) {
         let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
         assert!(lists.len() <= goods, "{} goods of {goods}", lists.len());
-        for (g, list) in lists.iter().enumerate() {
-            for &(slot, buyer, _) in *list {
-                let slot = slot as usize;
-                assert!(
-                    (1..=SLOTS).contains(&slot),
-                    "slot {slot} outside 1 to {SLOTS}"
-                );
-                assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
-            }
+        if buyers == 0 {
+            assert!(lists.iter().all(|l| l.is_empty()), "no buyers");
+            return;
         }
-        self.slots
-            .par_iter_mut()
+        let range = buyers.div_ceil(RANGES);
+        let ranges = buyers.div_ceil(range);
+        let keys = SLOTS * ranges;
+        // key = storage slot * ranges + buyer range
+        let key = |slot: u8, buyer: u32| {
+            let slot = slot as usize;
+            (((cursor + slot - 1) % SLOTS) * ranges) + buyer as usize / range
+        };
+        let sorted: Vec<Bucketed> = lists
+            .par_iter()
             .enumerate()
-            .for_each(|(k, cells)| {
-                // the slot number that lands in storage slot k
-                let slot = ((k + SLOTS - cursor) % SLOTS + 1) as u8;
-                for (g, list) in lists.iter().enumerate() {
-                    for &(_, buyer, units) in list.iter().filter(|p| p.0 == slot) {
-                        cells[buyer as usize * goods + g] += units;
-                    }
+            .map(|(g, list)| {
+                let mut offs = vec![0usize; keys + 1];
+                for &(slot, buyer, _) in *list {
+                    assert!(
+                        (1..=SLOTS).contains(&(slot as usize)),
+                        "slot {slot} outside 1 to {SLOTS}"
+                    );
+                    assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
+                    offs[key(slot, buyer) + 1] += 1;
                 }
-            });
+                for k in 0..keys {
+                    offs[k + 1] += offs[k];
+                }
+                let mut next = offs.clone();
+                let mut out = vec![(0, 0.0); list.len()];
+                for &(slot, buyer, units) in *list {
+                    let k = key(slot, buyer);
+                    out[next[k]] = (buyer, units);
+                    next[k] += 1;
+                }
+                (offs, out)
+            })
+            .collect();
+        let mut tasks: Vec<(usize, &mut [f64])> = Vec::with_capacity(keys);
+        for (k, cells) in self.slots.iter_mut().enumerate() {
+            tasks.extend(
+                cells
+                    .chunks_mut(range * goods)
+                    .enumerate()
+                    .map(|(r, c)| (k * ranges + r, c)),
+            );
+        }
+        tasks.into_par_iter().for_each(|(key, cells)| {
+            let base = key % ranges * range;
+            for (g, (offs, out)) in sorted.iter().enumerate() {
+                for &(buyer, units) in &out[offs[key]..offs[key + 1]] {
+                    cells[(buyer as usize - base) * goods + g] += units;
+                }
+            }
+        });
     }
 
     /// Delivers what is due this tick, `[buyer * n_goods + g]`, and advances the pipeline.
