@@ -463,70 +463,178 @@ pub fn produce(w: &mut EconWorld) {
 
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
-    let mut parts = Vec::new();
     {
         let _span = timing::span("e2.local_chain", NONE);
         local::chain_all(w);
     }
     let _span = timing::span("e2.provinces", NONE);
-    for i in 0..inp.n_provinces() {
-        let pops = lay.pops(i);
-        let effective: Vec<f64> = pops
+    let np = inp.n_provinces();
+    let ranges: Vec<[std::ops::Range<usize>; 3]> = (0..np)
+        .map(|i| {
+            [
+                account_run(&acc.pop, lay.pops(i)),
+                account_run(&acc.enterprise, lay.enterprises(i)),
+                account_run(&acc.market, i..i + 1),
+            ]
+        })
+        .collect();
+    // every province's tables are contiguous runs, so each task owns its own slices
+    let sc = &mut w.scratch;
+    let from_output = &sc.from_output;
+    let produced = &sc.produced;
+    let setup = timing::span("e2.setup", NONE);
+    let mut tasks: Vec<ProduceTask<'_>> = {
+        let ents = (0..np).map(|i| lay.enterprises(i));
+        let pops = (0..np).map(|i| lay.pops(i));
+        let mut ledgers = w.ledger.province_slices(&ranges).into_iter();
+        let mut before =
+            split_runs(&mut sc.input_before, ents.clone().map(|r| r.len() * ng)).into_iter();
+        let mut used =
+            split_runs(&mut sc.input_used, ents.clone().map(|r| r.len() * ng)).into_iter();
+        let mut output = split_runs(&mut w.output, ents.clone().map(|r| r.len())).into_iter();
+        let mut sales = split_runs(&mut w.sales, ents.clone().map(|r| r.len())).into_iter();
+        let mut paid = split_runs(&mut sc.income_paid, pops.clone().map(|r| r.len())).into_iter();
+        let mut drawn = split_runs(&mut sc.drawn, (0..np).map(|_| ng)).into_iter();
+        let mut supply = split_runs(&mut w.markets.supply, (0..np).map(|_| ng)).into_iter();
+        (0..np)
+            .map(|i| ProduceTask {
+                i,
+                pops: lay.pops(i),
+                ents: lay.enterprises(i),
+                ledger: ledgers.next().expect("one ledger per province"),
+                input_before: before.next().expect("one slice per province"),
+                input_used: used.next().expect("one slice per province"),
+                output: output.next().expect("one slice per province"),
+                sales: sales.next().expect("one slice per province"),
+                income_paid: paid.next().expect("one slice per province"),
+                drawn: drawn.next().expect("one slice per province"),
+                supply: supply.next().expect("one slice per province"),
+            })
+            .collect()
+    };
+    let (price, wage, employment, employed) =
+        (&w.markets.price, &w.wage, &w.employment, &w.employed);
+    drop(setup);
+    let run = timing::span("e2.run", NONE);
+    tasks.par_iter_mut().for_each(|t| {
+        let i = t.i;
+        let effective: Vec<f64> = t
+            .pops
             .clone()
-            .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
+            .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * employed[k])
             .collect();
-        for e in lay.enterprises(i) {
-            let (g, y) = (usize::from(inp.enterprises.good[e]), w.scratch.produced[e]);
+        let mut parts = Vec::new();
+        for e in t.ents.clone() {
+            let (g, y) = (usize::from(inp.enterprises.good[e]), produced[e]);
             let (account, cell) = (acc.enterprise[e], i * ng + g);
+            let (le, lk) = (e - t.ents.start, t.pops.start);
             for k in 0..nt {
                 let a = lay.coef[e][k];
-                let before = w.ledger.goods(account, k);
+                let before = t.ledger.goods(account, k);
                 if a > 0.0 {
-                    w.ledger.destroy(account, k, (a * y).min(before));
+                    t.ledger.destroy(account, k, (a * y).min(before));
                 }
-                w.scratch.input_before[e * ng + k] = before;
-                w.scratch.input_used[e * ng + k] = before - w.ledger.goods(account, k);
+                t.input_before[le * ng + k] = before;
+                t.input_used[le * ng + k] = before - t.ledger.goods(account, k);
             }
-            w.output[e] = y;
+            t.output[le] = y;
             if y > 0.0 {
-                w.ledger.create(account, g, y);
-                w.ledger.ship(account, acc.market[i], g, y);
+                t.ledger.create(account, g, y);
+                t.ledger.ship(account, acc.market[i], g, y);
             }
-            let sale = w.markets.price[cell] * y;
-            w.sales[e] = sale;
-            pay(&mut w.ledger, SALE, acc.market[i], account, to_minor(sale));
-            w.markets.supply[cell] += y;
+            let sale = price[cell] * y;
+            t.sales[le] = sale;
+            pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
+            t.supply[g] += y;
 
-            let bill = to_minor(w.wage[i] * w.employment[e]);
+            let bill = to_minor(wage[i] * employment[e]);
             split(bill, effective.iter().copied(), &mut parts);
-            for (k, &part) in pops.clone().zip(parts.iter()) {
-                pay(&mut w.ledger, WAGE, account, acc.pop[k], part);
-                w.scratch.income_paid[k] += part;
+            for (k, &part) in t.pops.clone().zip(parts.iter()) {
+                pay_in(&mut t.ledger, WAGE, account, acc.pop[k], part);
+                t.income_paid[k - lk] += part;
             }
         }
         // local inputs: this tick's output at the market first, the stock second
-        for e in lay.enterprises(i) {
+        for e in t.ents.clone() {
             let account = acc.enterprise[e];
+            let le = e - t.ents.start;
             for k in nt..ng {
                 let (at, cell) = (e * ng + k, i * ng + k);
-                let need = lay.coef[e][k] * w.scratch.produced[e];
-                let stock = w.ledger.goods(account, k);
-                let take = w.scratch.from_output[at].min(w.ledger.goods(acc.market[i], k));
+                let need = lay.coef[e][k] * produced[e];
+                let stock = t.ledger.goods(account, k);
+                let take = from_output[at].min(t.ledger.goods(acc.market[i], k));
                 if take > 0.0 {
-                    w.ledger.ship(acc.market[i], account, k, take);
-                    let value = to_minor(w.markets.price[cell] * take);
-                    pay(&mut w.ledger, PURCHASE, account, acc.market[i], value);
-                    w.scratch.drawn[cell] += take;
+                    t.ledger.ship(acc.market[i], account, k, take);
+                    let value = to_minor(price[cell] * take);
+                    pay_in(&mut t.ledger, PURCHASE, account, acc.market[i], value);
+                    t.drawn[k] += take;
                 }
                 let used = take + (need - take).clamp(0.0, stock);
                 if used > 0.0 {
-                    w.ledger.destroy(account, k, used);
+                    t.ledger.destroy(account, k, used);
                 }
-                w.scratch.input_before[at] = stock + take;
-                w.scratch.input_used[at] = used;
+                t.input_before[le * ng + k] = stock + take;
+                t.input_used[le * ng + k] = used;
             }
         }
+    });
+    drop(run);
+    let _put = timing::span("e2.put", NONE);
+    let done = tasks.into_iter().map(|t| t.ledger.finish()).collect();
+    w.ledger.put_province_slices(done);
+}
+
+/// One province's slices of E2's tables and its accounts.
+struct ProduceTask<'a> {
+    i: usize,
+    pops: std::ops::Range<usize>,
+    ents: std::ops::Range<usize>,
+    ledger: ceteris_core::ledger::ProvinceLedger<'a>,
+    input_before: &'a mut [f64],
+    input_used: &'a mut [f64],
+    output: &'a mut [f64],
+    sales: &'a mut [f64],
+    income_paid: &'a mut [i64],
+    drawn: &'a mut [f64],
+    supply: &'a mut [f64],
+}
+
+fn pay_in(
+    ledger: &mut ceteris_core::ledger::ProvinceLedger<'_>,
+    flow: Flow,
+    from: AccountId,
+    to: AccountId,
+    amount: i64,
+) {
+    if amount != 0 {
+        ledger.transfer(flow, from, to, amount);
     }
+}
+
+/// The account ids of `accounts[range]` as one run of the ledger's account space.
+fn account_run(accounts: &[AccountId], range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+    let ids = &accounts[range];
+    let Some(first) = ids.first() else {
+        return 0..0;
+    };
+    let start = first.0 as usize;
+    assert!(
+        ids.iter()
+            .enumerate()
+            .all(|(j, a)| a.0 as usize == start + j),
+        "province accounts are not one run"
+    );
+    start..start + ids.len()
+}
+
+/// `slice` cut into consecutive pieces of the given lengths.
+fn split_runs<T>(mut slice: &mut [T], lens: impl Iterator<Item = usize>) -> Vec<&mut [T]> {
+    lens.map(|n| {
+        let (head, rest) = std::mem::take(&mut slice).split_at_mut(n);
+        slice = rest;
+        head
+    })
+    .collect()
 }
 
 /// E2's first step: each enterprise's output capped by capacity and its traded input stocks,
