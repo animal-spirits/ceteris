@@ -713,7 +713,7 @@ pub fn eia_oil_gas(
             if !(a.offshore && inside) {
                 continue;
             }
-            let cos = a.lat.to_radians().cos();
+            let cos = libm::cos(a.lat.to_radians());
             let mut best = (f64::INFINITY, 0);
             for (k, &i) in idx.iter().enumerate() {
                 let (dy, dx) = (geo.lat[i] - a.lat, (geo.lon[i] - a.lon) * cos);

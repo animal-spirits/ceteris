@@ -1708,6 +1708,7 @@ pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::cap_cuts;
 

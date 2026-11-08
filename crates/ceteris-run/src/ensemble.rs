@@ -31,7 +31,9 @@ impl Prior {
     pub fn quantile(self, u: f64) -> f64 {
         match self {
             Self::Uniform { lo, hi } => lo + u * (hi - lo),
-            Self::LogUniform { lo, hi } => (lo.ln() + u * (hi.ln() - lo.ln())).exp(),
+            Self::LogUniform { lo, hi } => {
+                libm::exp(libm::log(lo) + u * (libm::log(hi) - libm::log(lo)))
+            }
         }
     }
 }

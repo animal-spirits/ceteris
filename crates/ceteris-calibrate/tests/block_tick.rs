@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! ADR 0267: the block map is the linearized tick. On the calibrated fixture with its gains
 //! raised until a country's block is unstable, a small price perturbation of that country run
 //! through `EconWorld` grows at the block's spectral radius, in the default mode and

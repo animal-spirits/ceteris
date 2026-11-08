@@ -31,7 +31,7 @@ pub const MAX_EDGE: f64 = 0.004;
 pub fn mercator(lon: f64, lat: f64) -> [f64; 2] {
     let lat = lat.clamp(-MAX_LAT, MAX_LAT);
     let x = (lon + 180.0) / 360.0;
-    let y = 0.5 - (PI / 4.0 + lat.to_radians() / 2.0).tan().ln() / (2.0 * PI);
+    let y = 0.5 - libm::log(libm::tan(PI / 4.0 + lat.to_radians() / 2.0)) / (2.0 * PI);
     [x, y]
 }
 
