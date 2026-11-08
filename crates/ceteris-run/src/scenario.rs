@@ -236,6 +236,20 @@ impl Scenario {
         Ok(chain)
     }
 
+    /// The edit log a run of `branch` applies: each ancestor's edits before the next branch's
+    /// fork tick, then the branch's own, in lineage order.
+    pub fn edits_of(&self, branch: &str) -> Result<Vec<Edit>, ScenarioError> {
+        let lineage = self.lineage(branch)?;
+        let mut out = Vec::new();
+        for (i, b) in lineage.iter().enumerate() {
+            let until = lineage
+                .get(i + 1)
+                .map_or(u32::MAX, |c| c.fork_tick.unwrap_or(0));
+            out.extend(b.edits.iter().filter(|e| e.tick < until).cloned());
+        }
+        Ok(out)
+    }
+
     /// Hash of everything that determines the run: pack, engine, parameters, replay choice,
     /// the seed, and the edits of the branch and its ancestors with their fork ticks. Comments,
     /// key order and unrelated branches do not enter it.
@@ -353,6 +367,21 @@ value = 0.25
 
     fn scenario() -> Scenario {
         Scenario::parse(TEXT).unwrap()
+    }
+
+    #[test]
+    fn edits_of_stops_ancestors_at_the_fork_tick() {
+        let mut s = scenario();
+        let mut early = s.branches[1].edits[0].clone();
+        early.tick = 10;
+        let mut late = early.clone();
+        late.tick = 30;
+        s.branches[0].edits = vec![early.clone(), late];
+        let log = s.edits_of("tariff").unwrap();
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[0], early);
+        assert_eq!(log[1].tick, 24);
+        assert_eq!(s.edits_of("base").unwrap().len(), 2);
     }
 
     fn hash(s: &Scenario) -> Hash {

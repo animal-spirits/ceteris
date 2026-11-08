@@ -57,15 +57,15 @@ pub const REGISTRY: &[Command] = &[
     cmd("run", "run FILE --branch B --seed S", "run a branch", false),
     cmd(
         "ensemble",
-        "ensemble FILE --branch B",
-        "run a branch over its seeds",
-        false,
+        "ensemble FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR",
+        "run a branch over its seeds with drawn parameters",
+        true,
     ),
     cmd(
         "effects",
-        "effects FILE --branch B --baseline A",
-        "paired effects of a branch",
-        false,
+        "effects FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR",
+        "paired effects of a branch against its baseline",
+        true,
     ),
     cmd(
         "explain",
