@@ -1545,3 +1545,23 @@ sections = "19.2"
 rows = "0326"
 topic = "[Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](../rfcs/0315-snapshot-chunks-are-zstd-canonical-bytes.md)"
 sections = "14.3"
+
+[[entry]]
+rows = "0327"
+topic = "[Long single-good reductions sum in four fixed interleaved accumulators, one golden move](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0328"
+topic = "[Ledger goods stay account-major; per-province systems take disjoint account slices](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "4.6, 19.4"
+
+[[entry]]
+rows = "0329"
+topic = "[Cross-province float tallies sum by province partials in province order](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0330"
+topic = "[Goods sharing a kernel are stored in goods-innermost blocks for batched dispatch](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "8.3, 19.4"
