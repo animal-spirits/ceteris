@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! The econ build on the real pack and cache: the pack's tables hold together, the build is
 //! reproducible, its stats are those of the Python build, and a missing optional source falls
 //! back as the Python build does without being downloaded.

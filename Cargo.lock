@@ -514,6 +514,7 @@ dependencies = [
  "arrow-schema",
  "blake3",
  "ceteris-core",
+ "libm",
  "serde",
  "tempfile",
  "toml",

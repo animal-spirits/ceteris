@@ -1513,6 +1513,7 @@ pub fn arrivals_lanes<const L: usize>(k: &Kernel, g: usize, outs: &mut [Sourced;
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::goods::Goods;

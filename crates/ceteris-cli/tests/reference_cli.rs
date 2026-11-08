@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! `ceteris reference solve`, and the reference's routing against the kernel the Rust core
 //! exports, on the fixture and on the pack.
 

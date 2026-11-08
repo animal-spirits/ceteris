@@ -124,7 +124,9 @@ pub fn pooled(
             .filter_map(|(code, rs)| {
                 let x = rs[g]?;
                 let d = match (income, sea_income.get(code)) {
-                    (Some(a), Some(&b)) if a > 0.0 && b > 0.0 => (a.ln() - b.ln()).abs(),
+                    (Some(a), Some(&b)) if a > 0.0 && b > 0.0 => {
+                        (libm::log(a) - libm::log(b)).abs()
+                    }
                     (Some(_), _) => return None,
                     (None, _) => 0.0,
                 };

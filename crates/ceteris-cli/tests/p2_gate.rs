@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! P2 gate on the full pack (`specs/econ/SPEC.md`, P2 gate): V1 after the uniqueness check, H2 per
 //! theta class (ADRs 0018, 0023, 0092 and 0264) and the H2 distance elasticity, a reported
 //! diagnostic since ADR 0264.

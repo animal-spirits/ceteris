@@ -237,7 +237,7 @@ impl Sample {
     }
 
     fn ln_tariff(&self) -> Vec<f64> {
-        self.tariff.iter().map(|t| t.ln_1p()).collect()
+        self.tariff.iter().map(|t| libm::log1p(*t)).collect()
     }
 }
 
@@ -273,7 +273,10 @@ pub fn theta_by_class(s: &Sample, classes: &[&[usize]]) -> Result<Vec<Theta>, St
             let sub = s.rows(&mask);
             let fit = sub.fit(&vec![
                 ("ln_tariff".into(), sub.ln_tariff()),
-                ("ln_tau".into(), sub.tau.iter().map(|t| t.ln()).collect()),
+                (
+                    "ln_tau".into(),
+                    sub.tau.iter().map(|t| libm::log(*t)).collect(),
+                ),
             ])?;
             Ok(Theta {
                 goods: goods.to_vec(),
@@ -364,7 +367,7 @@ pub fn border_friction(
         .collect();
     let (ln_tariff, ln_tau) = (
         s.ln_tariff(),
-        s.tau.iter().map(|t| t.ln()).collect::<Vec<_>>(),
+        s.tau.iter().map(|t| libm::log(*t)).collect::<Vec<_>>(),
     );
     let mut reg: Columns = Vec::new();
     for (c, m) in member.iter().enumerate() {
@@ -396,16 +399,16 @@ pub fn border_friction(
         let mut g = vec![0.0; fit.names.len()];
         g[ib[c]] = 1.0 / beta[c];
         g[it[c]] = -b[c] / (beta[c] * beta[c]);
-        nu_c.push(ln_nu[c].exp_m1());
-        se_c.push(ln_nu[c].exp() * quadratic(&g, &fit).sqrt());
+        nu_c.push(libm::expm1(ln_nu[c]));
+        se_c.push(libm::exp(ln_nu[c]) * quadratic(&g, &fit).sqrt());
         for (a, x) in grad.iter_mut().zip(&g) {
             *a += w[c] * x;
         }
     }
     let pooled = dot(&w, &ln_nu);
     Ok(Border {
-        nu: pooled.exp_m1(),
-        se: pooled.exp() * quadratic(&grad, &fit).sqrt(),
+        nu: libm::expm1(pooled),
+        se: libm::exp(pooled) * quadratic(&grad, &fit).sqrt(),
         nu_by_class: nu_c,
         se_by_class: se_c,
         theta_by_class: beta.iter().map(|x| -x).collect(),
@@ -485,7 +488,7 @@ pub fn mode_tau(s: &Sample, r: &[f64; 3], p: &Transport) -> Vec<f64> {
 /// Per class, ln(1 + tariff) and ln tau at the factors `t`: the regressors of the profile fit.
 fn profile_regressors(s: &Sample, member: &[Vec<bool>], t: &[f64]) -> Columns {
     let ln_tariff = s.ln_tariff();
-    let ln_t: Vec<f64> = t.iter().map(|t| t.ln()).collect();
+    let ln_t: Vec<f64> = t.iter().map(|t| libm::log(*t)).collect();
     let mut reg = Vec::new();
     for (c, m) in member.iter().enumerate() {
         reg.push((format!("ln_tariff_{c}"), masked(&ln_tariff, m)));

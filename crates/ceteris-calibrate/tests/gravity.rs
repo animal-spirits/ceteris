@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! Direct estimation of trade costs (ADR 0022): the PPML estimator reproduces Yotov et al.
 //! (2016) on their sample, and each estimator recovers known values on synthetic gravity.
 

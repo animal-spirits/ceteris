@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! Measurement harness of MIGRATION Task 6 (expected inflation, ADR 0019): V1 from the data
 //! state and the growth factor per tick of a small deviation from the fixture's GE
 //! equilibrium for a list of P45 gains at given kappa1 and kappa2 (the trade SPEC's P03a, P03b

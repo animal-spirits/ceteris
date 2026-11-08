@@ -596,7 +596,7 @@ pub fn impute(
         };
         let name = donor(
             region.as_deref(),
-            level.map(f64::ln),
+            level.map(libm::log),
             &eligible,
             ranking,
             &ps,

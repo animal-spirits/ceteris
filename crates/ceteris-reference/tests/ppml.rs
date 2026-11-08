@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // independent oracle: deliberately uses std, never feeds a hash
 //! PPML on synthetic gravity: the dummy-variable fit and the absorbed fixed effects recover known
 //! elasticities, keep zero flows, drop separated rows and agree with each other.
 

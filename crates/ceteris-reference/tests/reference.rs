@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // independent oracle: deliberately uses std, never feeds a hash
 use std::fs::File;
 use std::path::PathBuf;
 

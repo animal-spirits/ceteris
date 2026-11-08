@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed
 //! ADR 0089: the calibrated data state is the steady state, on the fixture and, with
 //! `CETERIS_PACK_EXPORT` set (a `ceteris export --pack` directory of the pack in `CETERIS_PACK`,
 //! default `data/packs/2000`), on the full pack.
