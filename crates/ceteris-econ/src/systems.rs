@@ -193,7 +193,10 @@ pub fn deliver(w: &mut EconWorld) {
     let ng = in_flight.len();
     // each traded good on its own ledger column, in parallel: its deliveries in buyer order,
     // then its largest, as one good after another
-    w.ledger.take_columns(0..n_traded, &mut w.scratch.stock);
+    {
+        let _span = timing::span("deliver.take", NONE);
+        w.ledger.take_columns(0..n_traded, &mut w.scratch.stock);
+    }
     w.scratch.stock.par_iter_mut().for_each(|stock| {
         let g = stock.good();
         let transit = acc.transit[g];
@@ -224,6 +227,7 @@ pub fn deliver(w: &mut EconWorld) {
             receive(stock, b, x);
         }
     });
+    let _span = timing::span("deliver.put", NONE);
     w.ledger.put_columns(&w.scratch.stock);
 }
 
@@ -445,7 +449,10 @@ pub fn labour(w: &mut EconWorld) {
 /// stock. Wages are paid to the pops of the province by effective employed labour.
 pub fn produce(w: &mut EconWorld) {
     let (ng, nt) = (w.inputs.n_goods(), w.inputs.goods.traded);
-    cap_output(w);
+    {
+        let _span = timing::span("e2.cap", NONE);
+        cap_output(w);
+    }
     let (inp, lay) = (
         std::sync::Arc::clone(&w.inputs),
         std::sync::Arc::clone(&w.layout),
@@ -461,6 +468,7 @@ pub fn produce(w: &mut EconWorld) {
         let _span = timing::span("e2.local_chain", NONE);
         local::chain_all(w);
     }
+    let _span = timing::span("e2.provinces", NONE);
     for i in 0..inp.n_provinces() {
         let pops = lay.pops(i);
         let effective: Vec<f64> = pops
@@ -749,7 +757,10 @@ pub fn clear(w: &mut EconWorld) {
     // write only that good, in province order; its purchases are collected per province and
     // posted in province then good order, as one good after another within each province paid
     let sc = &mut w.scratch;
-    w.ledger.take_columns(nt..ng, &mut sc.stock);
+    {
+        let _span = timing::span("clear.take", NONE);
+        w.ledger.take_columns(nt..ng, &mut sc.stock);
+    }
     sc.local.resize_with(ng - nt, LocalClear::default);
     let (m, rationing) = (&w.markets, w.params.rationing);
     let (spoiled, drawn) = (&sc.spoiled, &sc.drawn);
@@ -826,7 +837,10 @@ pub fn clear(w: &mut EconWorld) {
                 ends.push(entries.len() as u32);
             }
         });
-    w.ledger.put_columns(&sc.stock);
+    {
+        let _span = timing::span("clear.put", NONE);
+        w.ledger.put_columns(&sc.stock);
+    }
     sc.local_entries.clear();
     for i in 0..inp.n_provinces() {
         for l in &sc.local {
