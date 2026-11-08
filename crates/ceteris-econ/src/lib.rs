@@ -4,6 +4,7 @@
 pub mod calibration;
 pub mod demand;
 pub mod edit;
+pub mod ensemble;
 pub mod equilibrium;
 pub mod export;
 pub mod fixture;
