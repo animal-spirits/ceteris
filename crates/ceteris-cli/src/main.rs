@@ -11,7 +11,8 @@
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
-//! ceteris calibrate rho --panel FILE [--base Y] [--shock Y]
+//! ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+//!     [--base Y] [--shock Y]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
 //! ceteris export --fixture|--pack DIR --out DIR
@@ -81,6 +82,7 @@ use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
 use ceteris_calibrate::{border, gravity};
+use ceteris_core::rng::Seed;
 use ceteris_core::sim::Sim;
 use ceteris_core::timing;
 use ceteris_econ::equilibrium::Equilibrium;
@@ -110,10 +112,13 @@ const USAGE: &str = "usage:
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
-  ceteris calibrate rho --panel FILE [--base YEAR] [--shock YEAR]
+  ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+    [--base YEAR] [--shock YEAR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
   ceteris export --fixture|--pack DIR --out DIR
+  ceteris ensemble FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR
+  ceteris effects FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
     [--timing] --out DIR";
@@ -588,17 +593,19 @@ fn stability(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate rho --panel FILE [--base YEAR] [--shock YEAR]`: P53 from local projections of a
-/// class, pair, year, flow, tariff panel (ADR 0027).
+/// `calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV [--write-panel FILE])
+/// [--base YEAR] [--shock YEAR]`: P53 from local projections of a class, pair, year, flow, tariff
+/// panel (ADR 0027), read from a file or extracted from BACI and an exporter, importer, year,
+/// class, tariff file.
 fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     use ceteris_calibrate::rho::{Design, estimate, parse_panel, report};
-    let (mut panel, mut design) = (
-        None,
-        Design {
-            base: 2017,
-            shock: 2019,
-        },
-    );
+    use ceteris_calibrate::rho_panel::{Tariffs, extract, hs_classes, years};
+    let (mut panel, mut baci, mut hs_key, mut tariffs, mut write_panel) =
+        (None, None, None, None, None);
+    let mut design = Design {
+        base: 2017,
+        shock: 2019,
+    };
     while let Some(a) = args.next() {
         let mut year = |name: &str| {
             args.next()
@@ -607,14 +614,41 @@ fn rho(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         };
         match a.as_str() {
             "--panel" => panel = args.next().map(PathBuf::from),
+            "--baci" => baci = args.next().map(PathBuf::from),
+            "--hs-key" => hs_key = args.next().map(PathBuf::from),
+            "--tariffs" => tariffs = args.next().map(PathBuf::from),
+            "--write-panel" => write_panel = args.next().map(PathBuf::from),
             "--base" => design.base = year("--base")?,
             "--shock" => design.shock = year("--shock")?,
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
-    let panel = panel.ok_or("--panel needs a file")?;
-    let text = std::fs::read_to_string(&panel).map_err(|e| format!("{}: {e}", panel.display()))?;
-    let (fits, skipped) = estimate(&parse_panel(&text)?, design);
+    let read =
+        |p: &PathBuf| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let rows = match (panel, baci, hs_key, tariffs) {
+        (Some(p), None, None, None) => parse_panel(&read(&p)?)?,
+        (None, Some(b), Some(k), Some(t)) => {
+            let rows = extract(
+                &b,
+                &hs_classes(&b, &k)?,
+                &Tariffs::parse(&read(&t)?)?,
+                &years(design, 2024),
+            )?;
+            if let Some(out) = write_panel {
+                let mut text = String::from("class,pair,year,flow,tariff\n");
+                for r in &rows {
+                    text += &format!(
+                        "{},{},{},{},{}\n",
+                        r.class, r.pair, r.year, r.flow, r.tariff
+                    );
+                }
+                std::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+            }
+            rows
+        }
+        _ => return Err("give --panel, or --baci, --hs-key and --tariffs together".into()),
+    };
+    let (fits, skipped) = estimate(&rows, design);
     print!("{}", report(&fits, &skipped));
     Ok(if fits.is_empty() {
         ExitCode::FAILURE
@@ -950,6 +984,157 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `ensemble` and `effects`: run a branch (and its baseline) over the scenario's seeds, with
+/// the register priors drawn per member, and write the `outcomes` and `effects` tables.
+fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
+    use ceteris_econ::ensemble::{outcomes, run_pair};
+    use ceteris_run::effects::effect;
+    use ceteris_run::ensemble::register_priors;
+    use ceteris_run::outputs::{Column, batch, ipc};
+
+    let file = args.first().ok_or("expected a scenario FILE")?;
+    let flag = |name: &str| -> Option<&str> {
+        let at = args.iter().position(|a| a == name)?;
+        args.get(at + 1).map(String::as_str)
+    };
+    let need = |name: &str| flag(name).ok_or(format!("missing {name}"));
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenario = ceteris_run::Scenario::parse(&text).map_err(|e| e.to_string())?;
+    let branch = need("--branch")?;
+    let baseline = match flag("--baseline") {
+        Some(b) => Some(b.to_string()),
+        None if verb == "effects" => scenario
+            .branch(branch)
+            .map_err(|e| e.to_string())?
+            .parent
+            .clone(),
+        None => None,
+    };
+    let baseline = match (verb, baseline) {
+        ("effects", None) => {
+            return Err("effects needs --baseline (the branch has no parent)".into());
+        }
+        (_, b) => b,
+    };
+    let ticks: u32 = need("--ticks")?
+        .parse()
+        .map_err(|_| "--ticks wants a count".to_string())?;
+    let source = match (flag("--pack"), args.iter().any(|a| a == "--fixture")) {
+        (Some(dir), false) => Source::Pack(PathBuf::from(dir)),
+        (None, true) => Source::Fixture,
+        _ => return Err("choose an input with --fixture or --pack DIR".into()),
+    };
+    let out = PathBuf::from(need("--out")?);
+
+    let inputs = source.load(true)?;
+    let base = (EconParams::default(), inputs.trade_params());
+    let inputs = Arc::new(inputs);
+    let branch_log = scenario.edits_of(branch).map_err(|e| e.to_string())?;
+    let baseline_log = match &baseline {
+        Some(b) => scenario.edits_of(b).map_err(|e| e.to_string())?,
+        None => Vec::new(),
+    };
+    let priors = register_priors();
+    let pair = run_pair(
+        &inputs,
+        &base,
+        &priors,
+        (&baseline_log, &branch_log),
+        &scenario.seeds,
+        ticks,
+        outcomes,
+    )
+    .map_err(|e| format!("{e:?}"))?;
+
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let (mut who, mut member, mut name, mut value) = (vec![], vec![], vec![], vec![]);
+    let mut members = vec![(branch.to_string(), &pair.branch)];
+    if let Some(b) = &baseline {
+        members.push((b.clone(), &pair.baseline));
+    }
+    for (id, ms) in &members {
+        for (k, m) in ms.iter().enumerate() {
+            for (o, v) in &m.outcome {
+                who.push(id.clone());
+                member.push(k as u32);
+                name.push((*o).to_string());
+                value.push(*v);
+            }
+        }
+    }
+    let rows = who.len();
+    let table = batch(
+        "outcomes",
+        vec![
+            Column::Text(who),
+            Column::Tick(member),
+            Column::Tick(vec![ticks; rows]),
+            Column::Text(name),
+            Column::Real(value),
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    let write = |name: &str, bytes: Vec<u8>| {
+        let path = out.join(name);
+        std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    write("outcomes.arrow", ipc(&table).map_err(|e| e.to_string())?)?;
+
+    let Some(baseline) = baseline else {
+        return Ok(ExitCode::SUCCESS);
+    };
+    let n_out = pair.branch[0].outcome.len();
+    let cols: [Vec<f64>; 7] = Default::default();
+    let [
+        mut mean,
+        mut lo,
+        mut hi,
+        mut p05,
+        mut p50,
+        mut p95,
+        mut sign,
+    ] = cols;
+    let mut names = vec![];
+    for i in 0..n_out {
+        let pick = |ms: &[ceteris_econ::ensemble::Member<Vec<(&'static str, f64)>>]| {
+            ms.iter().map(|m| m.outcome[i].1).collect::<Vec<f64>>()
+        };
+        let e = effect(&pick(&pair.branch), &pick(&pair.baseline), Seed(1));
+        let label = pair.branch[0].outcome[i].0;
+        println!(
+            "{label}: {:+.6e} [{:+.6e}, {:+.6e}] sign share {:.2}",
+            e.interval.mean, e.interval.lo, e.interval.hi, e.sign_share
+        );
+        names.push(label.to_string());
+        mean.push(e.interval.mean);
+        lo.push(e.interval.lo);
+        hi.push(e.interval.hi);
+        p05.push(e.p05);
+        p50.push(e.p50);
+        p95.push(e.p95);
+        sign.push(e.sign_share);
+    }
+    let table = batch(
+        "effects",
+        vec![
+            Column::Text(vec![branch.to_string(); n_out]),
+            Column::Text(vec![baseline; n_out]),
+            Column::Text(names),
+            Column::Tick(vec![ticks; n_out]),
+            Column::Real(mean),
+            Column::Real(lo),
+            Column::Real(hi),
+            Column::Real(p05),
+            Column::Real(p50),
+            Column::Real(p95),
+            Column::Real(sign),
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    write("effects.arrow", ipc(&table).map_err(|e| e.to_string())?)?;
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
@@ -965,6 +1150,12 @@ fn main() -> ExitCode {
     .contains(&command.as_str())
     {
         return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if ["ensemble", "effects"].contains(&command.as_str()) {
+        return ensemble_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
