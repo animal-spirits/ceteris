@@ -66,6 +66,11 @@ impl GoodColumn {
 /// Entries per parallel chunk of [`Ledger::post`].
 const POST_CHUNK: usize = 1 << 17;
 
+/// Lanes of [`Ledger::post`]: chunk `i` sums into lane `i % POST_LANES`, a lane taking its
+/// chunks in order. Fixed, not per thread, so an overflow is caught at the same lane addition
+/// at any thread count.
+const POST_LANES: usize = 32;
+
 /// Accounts per parallel task when [`Ledger::post`] applies its sums.
 const ACCOUNT_CHUNK: usize = 1 << 12;
 
@@ -82,14 +87,98 @@ fn moved(balance: i128, wide: bool, delta: i128) -> i128 {
 }
 
 /// Working space of [`Ledger::post`], kept by the caller between calls: one sum per account
-/// for each chunk of entries, zero between calls. `dirty` marks a call that did not finish
-/// (an overflow panic), whose sums the next call clears first.
+/// for each lane, zero between calls. `dirty` marks a call that did not finish (an overflow
+/// panic), whose sums the next call clears first.
 #[derive(Clone, Debug, Default)]
 pub struct PostScratch {
     deltas: Vec<Vec<i128>>,
     dirty: bool,
-    /// Per chunk, its entries of tallied flows.
+    /// Per lane, its entries of tallied flows.
     tallied: Vec<Vec<Entry>>,
+}
+
+/// The entries of a tick as the blocks they were posted in, in posting order. Posted blocks
+/// are kept, not copied; `pool` holds emptied buffers for the next tick.
+#[derive(Clone, Debug, Default)]
+struct Journal {
+    blocks: Vec<Vec<Entry>>,
+    pool: Vec<Vec<Entry>>,
+    /// Whether the last block takes single transfers.
+    open_tail: bool,
+}
+
+impl Journal {
+    fn buffer(&mut self) -> Vec<Entry> {
+        self.pool.pop().unwrap_or_default()
+    }
+
+    fn push(&mut self, e: Entry) {
+        if !self.open_tail {
+            let b = self.buffer();
+            self.blocks.push(b);
+            self.open_tail = true;
+        }
+        self.blocks.last_mut().expect("tail block").push(e);
+    }
+
+    fn seal(&mut self, block: Vec<Entry>) {
+        self.blocks.push(block);
+        self.open_tail = false;
+    }
+
+    fn clear(&mut self) {
+        for mut b in self.blocks.drain(..) {
+            b.clear();
+            self.pool.push(b);
+        }
+        self.open_tail = false;
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Entry> + Clone {
+        self.blocks.iter().flatten()
+    }
+
+    fn len(&self) -> usize {
+        self.blocks.iter().map(Vec::len).sum()
+    }
+}
+
+impl PartialEq for Journal {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+/// A tick's journal, read in posting order ([`Ledger::journal`]).
+#[derive(Clone, Copy)]
+pub struct JournalView<'a>(&'a Journal);
+
+impl<'a> JournalView<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = &'a Entry> + Clone {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The entries from position `start` on.
+    pub fn since(&self, start: usize) -> impl Iterator<Item = &'a Entry> + Clone {
+        self.0.iter().skip(start)
+    }
+}
+
+impl<'a> IntoIterator for JournalView<'a> {
+    type Item = &'a Entry;
+    type IntoIter = std::iter::Flatten<std::slice::Iter<'a, Vec<Entry>>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.blocks.iter().flatten()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -100,7 +189,7 @@ pub struct Ledger {
     wide: Vec<bool>,
     goods: Vec<f64>,
     open: Vec<bool>,
-    journal: Vec<Entry>,
+    journal: Journal,
     /// Flows whose net amount per account this tick is kept in `tally` ([`Ledger::track`]).
     tracked: u64,
     tally: Vec<i64>,
@@ -117,7 +206,7 @@ impl Ledger {
             wide: Vec::new(),
             goods: Vec::new(),
             open: Vec::new(),
-            journal: Vec::new(),
+            journal: Journal::default(),
             tracked: 0,
             tally: Vec::new(),
             created: vec![0.0; n_goods],
@@ -246,43 +335,72 @@ impl Ledger {
     /// [`Ledger::post`] of the blocks in turn, in one pass: the same balances and journal,
     /// with each block cut into chunks of its own.
     pub fn post_all(&mut self, blocks: &[&[Entry]], scratch: &mut PostScratch) {
+        self.apply(blocks, scratch);
+        for block in blocks {
+            let mut kept = self.journal.buffer();
+            // an indexed parallel extend writes in place, in order
+            kept.par_extend(block.par_iter().copied());
+            self.journal.seal(kept);
+        }
+    }
+
+    /// [`Ledger::post_all`] without copying the journal: each block is swapped for an empty
+    /// buffer of the ledger's pool and kept as it is until [`Ledger::begin_tick`] empties it
+    /// into the pool again.
+    pub fn post_blocks(&mut self, blocks: &mut [&mut Vec<Entry>], scratch: &mut PostScratch) {
+        let refs: Vec<&[Entry]> = blocks.iter().map(|b| &b[..]).collect();
+        self.apply(&refs, scratch);
+        for block in blocks {
+            let kept = std::mem::replace(&mut **block, self.journal.buffer());
+            self.journal.seal(kept);
+        }
+    }
+
+    /// Moves the money of `blocks`: each account by the integer sum of its entries, summed in
+    /// `i128` over `POST_LANES` lanes in parallel and added in lane order.
+    fn apply(&mut self, blocks: &[&[Entry]], scratch: &mut PostScratch) {
         let all: Vec<&[Entry]> = blocks.iter().flat_map(|b| b.chunks(POST_CHUNK)).collect();
-        let (n, chunks) = (self.money.len(), all.len());
+        let n = self.money.len();
+        let lanes = POST_LANES.min(all.len());
         if scratch.dirty {
             scratch.deltas.iter_mut().for_each(|d| d.fill(0));
         }
-        if scratch.deltas.len() < chunks {
-            scratch.deltas.resize_with(chunks, Vec::new);
+        if scratch.deltas.len() < lanes {
+            scratch.deltas.resize_with(lanes, Vec::new);
         }
-        if scratch.tallied.len() < chunks {
-            scratch.tallied.resize_with(chunks, Vec::new);
+        if scratch.tallied.len() < lanes {
+            scratch.tallied.resize_with(lanes, Vec::new);
         }
-        let deltas = &mut scratch.deltas[..chunks];
+        let deltas = &mut scratch.deltas[..lanes];
         // every delta is zero between calls, so this only sizes them
         deltas.iter_mut().for_each(|d| d.resize(n, 0));
         let (open, tracked) = (&self.open, self.tracked);
         scratch.dirty = true;
-        all.par_iter()
-            .zip(deltas.par_iter_mut())
-            .zip(scratch.tallied[..chunks].par_iter_mut())
-            .for_each(|((chunk, delta), tallied)| {
+        let all = &all;
+        deltas
+            .par_iter_mut()
+            .zip(scratch.tallied[..lanes].par_iter_mut())
+            .enumerate()
+            .for_each(|(lane, (delta, tallied))| {
                 tallied.clear();
-                for e in *chunk {
-                    debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
-                    let (f, t) = (e.from.0 as usize, e.to.0 as usize);
-                    delta[f] -= i128::from(e.amount);
-                    delta[t] += i128::from(e.amount);
-                    if tracks(tracked, e.flow) {
-                        tallied.push(*e);
+                for chunk in all.iter().skip(lane).step_by(POST_LANES) {
+                    for e in *chunk {
+                        debug_assert!(open[e.from.0 as usize] && open[e.to.0 as usize]);
+                        let (f, t) = (e.from.0 as usize, e.to.0 as usize);
+                        delta[f] -= i128::from(e.amount);
+                        delta[t] += i128::from(e.amount);
+                        if tracks(tracked, e.flow) {
+                            tallied.push(*e);
+                        }
                     }
                 }
             });
-        for e in scratch.tallied[..chunks].iter().flatten() {
+        for e in scratch.tallied[..lanes].iter().flatten() {
             self.tally[e.to.0 as usize] += e.amount;
             self.tally[e.from.0 as usize] -= e.amount;
         }
-        // each account adds its chunk sums in chunk order, so it sees the same partial sums
-        // as a serial pass; accounts are independent, so they run in parallel
+        // each account adds its lane sums in lane order; accounts are independent, so they
+        // run in parallel
         let (deltas, wide) = (&*deltas, &self.wide);
         self.money
             .par_chunks_mut(ACCOUNT_CHUNK)
@@ -299,14 +417,10 @@ impl Ledger {
                     }
                 }
             });
-        scratch.deltas[..chunks]
+        scratch.deltas[..lanes]
             .par_iter_mut()
             .for_each(|d| d.fill(0));
         scratch.dirty = false;
-        // an indexed parallel extend writes in place, in order
-        for block in blocks {
-            self.journal.par_extend(block.par_iter().copied());
-        }
     }
 
     pub fn ship(&mut self, from: AccountId, to: AccountId, good: usize, qty: f64) {
@@ -370,8 +484,8 @@ impl Ledger {
         self.destroyed[good]
     }
 
-    pub fn journal(&self) -> &[Entry] {
-        &self.journal
+    pub fn journal(&self) -> JournalView<'_> {
+        JournalView(&self.journal)
     }
 
     /// Every good's total over the accounts, each column summed by `fixed_sum`.

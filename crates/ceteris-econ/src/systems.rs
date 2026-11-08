@@ -1019,7 +1019,7 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
         w.ledger.put_columns(&w.scratch.stock);
     }
     let sourced = std::mem::take(&mut w.scratch.sourced);
-    let payments = std::mem::take(&mut w.scratch.payments);
+    let mut payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
         for d in 0..np {
             w.scratch.dispatched[d * ng + g] = r.shipped[d];
@@ -1033,10 +1033,10 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     w.pipeline.push_all(&pushes);
     drop(moves_span);
     // every good's buyers' payments, then its legs; nothing above reads money
-    let blocks: Vec<&[Entry]> = payments.iter().map(|p| &p.entries[..]).collect();
+    let mut blocks: Vec<&mut Vec<Entry>> = payments.iter_mut().map(|p| &mut p.entries).collect();
     {
         let _span = timing::span("t2b.post", NONE);
-        w.ledger.post_all(&blocks, &mut w.scratch.post);
+        w.ledger.post_blocks(&mut blocks, &mut w.scratch.post);
     }
     let _transit = timing::span("t2b.transit", NONE);
     // each transit account is brought to the goods now in flight: the losses melt what it
