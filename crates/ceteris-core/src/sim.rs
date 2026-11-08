@@ -120,8 +120,11 @@ impl<W: State> Sim<W> {
     }
 
     fn snapshot(&mut self) {
-        self.store
-            .insert(self.tick, &snapshot::canonical(self.tick, &self.world));
+        let bytes = {
+            let _span = timing::span("snap.encode", timing::NONE);
+            snapshot::canonical(self.tick, &self.world)
+        };
+        self.store.insert(self.tick, &bytes);
     }
 
     pub fn step(&mut self) -> Result<(), Violation> {
