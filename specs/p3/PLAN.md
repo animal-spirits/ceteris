@@ -115,7 +115,7 @@ Starts with A; must merge before C1. Requirements as in `specs/pre-p3/PLAN.md` B
 
 ### Task C1: Ensembles on lanes with member draws (0024, Q1)
 
-**Interfaces:** `Ensemble { branch, k }` runs in lane blocks of `L` (8 to 32, set by Branch L's benchmark); member k draws its uncertain parameters from their register priors with streams keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id), applied as tick-0 parameter edits from the calibrated steady state (pre-P3 D2's path), so the draw is in the log. Members of a branch and its baseline with the same k share draws. The set of drawn parameters and their priors is a table in the workbench SPEC.
+**Interfaces:** `Ensemble { branch, k }` runs its members as lone worlds one after another (owner, 2026-11-08: Branch L's benchmark found lanes at 0.6 to 0.7 of scalar throughput and about 350 MiB per lane; `EconLanes` stays as a tested API); member k draws its uncertain parameters from their register priors with streams keyed by (seed k, `SystemId::PARAM_DRAW`, parameter id), applied as tick-0 parameter edits from the calibrated steady state (pre-P3 D2's path), so the draw is in the log. Members of a branch and its baseline with the same k share draws. The set of drawn parameters and their priors is a table in the workbench SPEC.
 
 - [ ] Failing tests: `lane_k_equals_scalar_run_with_seed_k` at every snapshot; `crn_pair_in_two_lanes_equals_two_scalar_runs`; `member_draws_are_shared_by_branch_and_baseline`; `k_identical_seeds_without_draws_give_identical_members` (documents why Q1 matters). Implement, commit.
 
@@ -257,7 +257,7 @@ Owner-weeks of attention with agents coding, anchored like ADR 0207's: Branch 0 
 
 ## Risks
 
-- **Branch L slips.** C1 needs lanes; without them C1 runs members as processes (slower, same hashes) and the lane benchmark moves to C.
+- **Branch L result.** C1 runs members as lone worlds; the lane benchmark (`scripts/lanes_bench.sh`) and the stage profile are the record.
 - **CI minutes.** The cross-platform job (H) and nightly full-pack gates run on the self-hosted runner where possible; Linux-hosted jobs stay on path filters.
 - **Member draws move the baseline off its steady state.** Each member starts its transition at tick 0; outcomes are reported as paired differences, so the level drift cancels, but the 100-year invariant run must use the undrawn baseline too.
 - **Chunk store size.** If A3's measurement misses 0212's budgets, snapshot intervals widen before retention tiers change.
