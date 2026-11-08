@@ -18,4 +18,7 @@ pub use network::{
 };
 pub use params::{N_CLASSES, TradeParams};
 pub use pipeline::Pipeline;
-pub use source::{LaneInput, Sourced, arrivals, dispatch, source, source_lanes, source_weighted};
+pub use source::{
+    Block, LaneInput, Sourced, arrivals, dispatch, dispatch_block, source, source_lanes,
+    source_weighted,
+};

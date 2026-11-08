@@ -36,6 +36,9 @@ pub const HOUSEHOLD: usize = 1;
 /// slots 2 to 4 crossings with lag 1 to 3.
 pub const ARRIVAL_SLOTS: usize = 5;
 
+mod block;
+pub use block::{Block, dispatch_block};
+
 /// Outputs of [`source`] and then [`dispatch`], for one good. Every field is overwritten by
 /// each call and sized on the first, so a `Sourced` reused across goods and ticks does not
 /// allocate. `dispatch` reads the sourcing state left by the `source` call before it.
@@ -1999,6 +2002,92 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn block_dispatch_equals_scalar_dispatch_per_good() {
+        fn run<const B: usize>() {
+            for seed in 0..6 {
+                let (net, wedges) = random_world(seed);
+                let k = kernel(&net, &wedges);
+                let np = net.n_provinces();
+                for g in Goods::p2().traded_goods() {
+                    let inputs = |l: u64| {
+                        let mut r = rng(seed * 100 + l + 500);
+                        let price = draw(&mut r, np, 0.5, 2.0);
+                        let active: Vec<bool> =
+                            (0..np).map(|o| (o + l as usize) % 5 != 2).collect();
+                        let spend: Vec<[f64; 2]> = (0..np)
+                            .map(|_| [r.next() * 10.0, if l % 3 == 1 { 0.0 } else { r.next() }])
+                            .collect();
+                        let fill: Vec<[f64; 2]> = (0..np)
+                            .map(|o| {
+                                let f = |r: &mut Rng| {
+                                    if o % 7 == l as usize % 7 {
+                                        0.0
+                                    } else {
+                                        r.next()
+                                    }
+                                };
+                                [f(&mut r), f(&mut r)]
+                            })
+                            .collect();
+                        let mut out = Sourced::new();
+                        source(&k, g, &price, &active, &gammas(np), &spend, &mut out);
+                        (price, fill, out)
+                    };
+                    let goods: [_; B] = std::array::from_fn(|l| inputs(l as u64));
+                    let mut scalar: [Sourced; B] = std::array::from_fn(|l| goods[l].2.clone());
+                    for l in 0..B {
+                        dispatch(&k, g, &goods[l].0, &goods[l].1, &mut scalar[l]);
+                    }
+                    let mut blk: [Sourced; B] = std::array::from_fn(|l| goods[l].2.clone());
+                    dispatch_block(
+                        &k,
+                        g,
+                        std::array::from_fn(|l| goods[l].0.as_slice()),
+                        std::array::from_fn(|l| goods[l].1.as_slice()),
+                        &mut blk,
+                    );
+                    // outputs only: the scratch a scalar call leaves is overwritten by the next
+                    let view = |o: &Sourced| {
+                        format!(
+                            "{:?}{:?}",
+                            (
+                                &o.shipped,
+                                &o.shipped_rounding,
+                                &o.arrive,
+                                &o.home,
+                                &o.survived,
+                                &o.paid,
+                                &o.paid_by_class,
+                                &o.received,
+                            ),
+                            (
+                                &o.tariff,
+                                &o.domestic_value,
+                                &o.access_in_value,
+                                &o.crossing_value,
+                                &o.crossing_units,
+                                &o.access_out_value,
+                                o.lost,
+                                o.selected,
+                            )
+                        )
+                    };
+                    for l in 0..B {
+                        assert!(scalar[l].shipped.iter().any(|&x| x > 0.0) || l % 3 == 1);
+                        assert_eq!(
+                            view(&scalar[l]),
+                            view(&blk[l]),
+                            "B {B} seed {seed} good {g} lane {l}"
+                        );
+                    }
+                }
+            }
+        }
+        run::<4>();
+        run::<8>();
     }
 
     #[test]
