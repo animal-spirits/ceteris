@@ -71,7 +71,7 @@ const PARTICIPATION: f64 = 0.47;
 type Point = (f64, f64);
 
 fn leg(from: usize, to: usize, a: Point, b: Point, cost_per_tkm: f64) -> Leg {
-    let km = (a.0 - b.0).hypot(a.1 - b.1);
+    let km = libm::hypot(a.0 - b.0, a.1 - b.1);
     Leg {
         from: from as u32,
         to: to as u32,

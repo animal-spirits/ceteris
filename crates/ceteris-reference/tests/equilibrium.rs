@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // independent oracle: deliberately uses std, never feeds a hash
 //! The reference model and its solve on the fixture export and on closed-form worlds.
 
 use std::fs::File;

@@ -16,7 +16,9 @@ or optimizer.
   rayon `sum`/`reduce`/`fold` and friends are banned by `clippy.toml`.
 - No `HashMap`/`HashSet`: use `BTreeMap`/`BTreeSet` or a `Vec` indexed by id.
 - No fast-math, no `algebraic_*`, no implicit FMA; use `mul_add` only where the spec says so.
-  Transcendentals go through the pure-Rust libm the core already uses.
+  Transcendentals go through the pure-Rust libm the core already uses; `clippy.toml` bans the
+  std ones (tests, the reference oracle and offline `ceteris-calibrate` allow them). Portable
+  golden gate: `scripts/check_golden.sh`.
 - Iterate entities in stable-id order; break ties by id.
 - Iterative solves must not warm-start from state that a snapshot does not carry (ADR 0097).
 - Hot loops: no allocation, structure-of-arrays, `u32` indices.

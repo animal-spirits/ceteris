@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! Properties of the P2 tick pipeline on the small-world fixture (`specs/econ/SPEC.md`,
 //! Invariants and Test plan).
 
