@@ -48,6 +48,20 @@ fn main() {
         } else {
             (Arc::clone(&inputs), trade)
         };
+        if timed {
+            // goods sharing theta and kappa share a kernel (DESIGN 8.3)
+            let legs = inputs.network.good_legs.as_ref();
+            let classes: std::collections::BTreeSet<(u64, Option<u64>)> = trade
+                .goods
+                .traded_goods()
+                .map(|g| (trade.theta[g].to_bits(), legs.map(|l| l.kappa[g].to_bits())))
+                .collect();
+            eprintln!(
+                "kernel classes     {} of {} traded goods",
+                classes.len(),
+                trade.goods.traded
+            );
+        }
         let mut sim = EconWorld::sim(inputs, EconParams::default(), trade);
         sim.world_mut().scratch.detail = true;
         for _ in 0..ticks {
