@@ -83,18 +83,24 @@ fn main() {
         }
     });
     if timed {
-        // per name and tick the summed span time; per-good spans add up to CPU, not wall, time
-        let mut sums = std::collections::BTreeMap::<(&str, u32), u64>::new();
+        // per name and tick: summed span time (CPU) and the wall extent, first start to last end
+        let mut sums = std::collections::BTreeMap::<(&str, u32), (u64, u64, u64)>::new();
         for sp in timing::take() {
-            *sums.entry((sp.name, sp.tick)).or_default() += sp.end - sp.start;
+            let e = sums.entry((sp.name, sp.tick)).or_insert((0, u64::MAX, 0));
+            *e = (e.0 + sp.end - sp.start, e.1.min(sp.start), e.2.max(sp.end));
         }
-        let mut names = std::collections::BTreeMap::<&str, Vec<u64>>::new();
-        for ((name, _), ns) in sums {
-            names.entry(name).or_default().push(ns);
+        let mut names = std::collections::BTreeMap::<&str, Vec<(u64, u64)>>::new();
+        for ((name, _), (cpu, lo, hi)) in sums {
+            names.entry(name).or_default().push((cpu, hi - lo));
         }
-        for (name, mut v) in names {
-            v.sort_unstable();
-            eprintln!("{name:<18} median {:>8.3} ms", v[v.len() / 2] as f64 / 1e6);
+        for (name, v) in names {
+            let median = |mut v: Vec<u64>| {
+                v.sort_unstable();
+                v[v.len() / 2] as f64 / 1e6
+            };
+            let wall = median(v.iter().map(|x| x.1).collect());
+            let cpu = median(v.iter().map(|x| x.0).collect());
+            eprintln!("{name:<18} wall {wall:>8.3} ms  cpu {cpu:>8.3} ms");
         }
     }
 }
