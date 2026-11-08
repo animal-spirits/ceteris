@@ -41,6 +41,7 @@ fn main() {
     pool.install(|| {
         let trade = inputs.trade_params();
         let mut sim = EconWorld::sim(Arc::clone(&inputs), EconParams::default(), trade);
+        sim.world_mut().scratch.detail = true;
         for _ in 0..ticks {
             sim.step().unwrap_or_else(|v| panic!("{v}"));
             let mut e = Encoder::default();
