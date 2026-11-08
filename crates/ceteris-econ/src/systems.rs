@@ -1127,7 +1127,7 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let _transit = timing::span("t2b.transit", NONE);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
-    let in_flight = w.pipeline.in_flight_all();
+    let in_flight = w.pipeline.in_flight_cached();
     for (g, &transit) in acc.transit.iter().enumerate() {
         let change = in_flight[g] - w.ledger.goods(transit, g);
         adjust_stock(&mut w.ledger, transit, g, change);
