@@ -91,6 +91,14 @@ fn main() {
         .expect("one-thread pool");
     let (inputs, source) = inputs();
     let trade = inputs.trade_params();
+    // FLATNESS_GOODS=<n>: the synthetic n-goods world (ADR 0235) instead of the pack's goods
+    let (inputs, trade) = match std::env::var("FLATNESS_GOODS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        Some(n) => ceteris_econ::synthetic::with_goods(&inputs, &trade, n),
+        None => (inputs, trade),
+    };
     // FLATNESS_SPANS=<path>: per-year wall time per span name, as CSV (year,name,ms)
     let spans_out = std::env::var_os("FLATNESS_SPANS").map(PathBuf::from);
     if spans_out.is_some() {
