@@ -1,6 +1,6 @@
 # RFC 0316. T2b posts netted legs; posting stops copying and zeroing per-chunk vectors
 
-Status: draft
+Status: proposed
 Date: 2026-11-08
 Design sections: 4.6, 19.2, 19.4
 Release: 1.0, P3
@@ -60,7 +60,7 @@ resident; B removes the entries instead of moving them faster, and P5's flow mat
 (`specs/p5/PLAN.md`) need only net flows per account pair, which they can accumulate during
 posting.
 
-Decision: pending.
+Decision: B, Antonio, 2026-11-08.
 Row: pending
 
 ## Risks
