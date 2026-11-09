@@ -1,6 +1,6 @@
 # RFC 0335. Accept the P4 population ADRs and fix the P4 gate tolerances
 
-Status: proposed
+Status: accepted
 Date: 2026-11-09
 Design sections: 6.1 to 6.3, 6.5, 15.4
 Release: 1.0, P4
@@ -32,7 +32,7 @@ Recommendation: A, because each is scoped to P4 by `specs/p4/PLAN.md`, the post-
 already fenced out (issue #258), and Branch F plus A1 can start the day this is accepted.
 
 Decision: A, Antonio, 2026-11-09 (decision card).
-Row: ADRs 0031, 0032, 0033, 0074, 0105, 0109, 0167, filled in once accepted.
+Row: none new; ADRs 0031, 0032, 0033, 0074, 0105, 0109 and 0167 keep their rows and read accepted (RFC 0335) in the index.
 
 ### D2. Tolerances for gate item 1 (UN 2000-2010)
 
@@ -50,7 +50,7 @@ results, and 2000-2010 is in the calibration window, so the check is a fit check
 forecast.
 
 Decision: A, Antonio, 2026-11-09 (decision card).
-Row: P4 gate row, filled in once accepted.
+Row: ADR 0335 (spec/21 section 21.1, P4 gate).
 
 ### D3. Cause shares in the paid build (O3)
 
@@ -63,12 +63,14 @@ Options:
 Recommendation: A, as the plan's default; B can follow #231 without code change.
 
 Decision: B, Antonio, 2026-11-09 (decision card; recommendation was A).
-Row: none new.
+Row: none new. Release pack: World Bank CC BY 4.0 cause groups where they exist, else the all-cause Brass level; `specs/pop/SPEC.md` Open questions and ADR 0033's data line follow this.
 
 ## Spec changes
 
 - `specs/pop/SPEC.md` new (this PR).
-- On acceptance: status lines of the seven ADRs and `rfcs/README.md` show `accepted (RFC 0335)`;
-  codes from `next-code P` replace the provisional ones in `specs/pop/SPEC.md`; `spec/17` gains
-  the entries; `spec/rows.toml` entries for D1 and D2; `specs/p4/PLAN.md` open points O1 and O3
-  closed.
+- `rfcs/README.md`: the seven ADRs show `accepted (RFC 0335)`; ADR files are not rewritten.
+- Register codes P162 to P170 in `spec/17` replace the codes written in the ADRs: P60 is P162,
+  P61 P163, P62 P164, P63 P165, P65 P166, P126 P167, P127 P168; ADR 0167's labour loss is P169
+  and ADR 0109's irregular share z is P170.
+- `spec/21` section 21.1 item 5 carries the D2 tolerances; `spec/rows.toml` entry for ADR 0335.
+- `specs/pop/SPEC.md` and `specs/p4/PLAN.md`: codes replaced, O1 and O3 closed.
