@@ -4,6 +4,7 @@
 pub mod attribution;
 pub mod branch;
 pub mod commands;
+pub mod commitments;
 pub mod effects;
 pub mod ensemble;
 pub mod outputs;
