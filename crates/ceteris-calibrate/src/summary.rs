@@ -6,7 +6,8 @@ use crate::json::Json;
 use crate::steady::{Info, Steady};
 
 impl Info {
-    /// The summary's entries: r, the passes and their history, the Sinkhorn sweeps and
+    /// The summary's entries: the final demand balance's column factors and residuals (ADR
+    /// 0318; no r_g since ADR 0100), the passes and their history, the Sinkhorn sweeps and
     /// residual, the weight spread per good and the time.
     pub fn json(&self) -> Vec<(String, Json)> {
         let floats = |v: &[f64]| Json::List(v.iter().map(|&x| Json::Float(x)).collect());
@@ -19,6 +20,7 @@ impl Info {
                     ("change", Json::Float(p.change)),
                     ("sweeps", Json::Int(p.sweeps as i64)),
                     ("sinkhorn_residual", Json::Float(p.sinkhorn_residual)),
+                    ("column_factor", floats(&p.column_factor)),
                 ])
             })
             .collect();
@@ -33,7 +35,9 @@ impl Info {
             .map(|w| w.map_or(Json::Null, Json::Float))
             .collect();
         vec![
-            ("r".into(), floats(&self.r)),
+            ("column_factor".into(), floats(&self.column_factor)),
+            ("balance_residual".into(), floats(&self.balance_residual)),
+            ("balance_mu".into(), Json::Float(self.balance_mu)),
             ("passes".into(), Json::Int(self.passes as i64)),
             ("pass_history".into(), Json::List(history)),
             ("sinkhorn_sweeps".into(), Json::List(sweeps)),
@@ -73,7 +77,7 @@ fn percentile(x: &[f64], q: f64) -> f64 {
     }
 }
 
-/// Full-pack report numbers: r, passes, Sinkhorn, local VA's national gap to ICIO, ln A, and the
+/// Full-pack report numbers: column factors, passes, Sinkhorn, local VA's national gap to ICIO, ln A, and the
 /// countries whose between-pop income spread already exceeds the national Gini's (within-pop
 /// dispersion s_w = 0, ADR 0094).
 pub fn summary(inp: &Inputs, s: &Steady) -> Json {

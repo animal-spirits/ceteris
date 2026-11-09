@@ -10,7 +10,7 @@ The product is a laboratory first and a game second: a living world map where th
 | God mode (ex ante) | Edits initial state or parameters, then runs an ensemble | What if China never joins the WTO, or the trade elasticity were 8 instead of 5? |
 | God mode (ex post) | Pauses at tick t, edits anything, forks a branch | What if Lehman is rescued in September 2008, given everything up to then? |
 | Steward (2.0, ADR 0239) | Controls one state's policy levers; AI runs the rest | Can Brazil raise its growth rate with a different tariff and infrastructure policy? |
-| Batch / scripted | The `ceteris` CLI runs experiment grids headless from scenario files | Distribution of 2030 outcomes across 64 seeds under three tariff regimes |
+| Batch / scripted | The `ceteris` CLI runs experiment grids headless from scenario files or reads results through the local API | Distribution of 2030 outcomes across 64 seeds under three tariff regimes |
 
 ### 2.2 Era choice
 

@@ -69,10 +69,23 @@ systems (19.4) arrive with the first module that needs them.
 - `transfer(flow, from, to, amount)` moves an `i64` amount between two accounts of either
   kind with checked arithmetic; a narrow balance leaving the `i64` range, or a wide one the
   `i128` range, halts the run (`ledger overflow`). Every transfer is journaled with its
-  `Flow` tag for later sector flow matrices.
+  `Flow` tag for later sector flow matrices. The journal of a tick is the sequence of posted
+  blocks. T2b's PURCHASE, TRADE and TARIFF entries are per-(flow, from, to) totals; the
+  world's `detail` flag (off in production, on in the `identity` example and in tests that
+  count legs) posts one entry per leg instead, with the same balances and state hash (ADR 0331).
 - `ship(from, to, good, qty)` moves goods between accounts.
 - `create(account, good, qty)` and `destroy(account, good, qty)` are the only ways
   goods appear or disappear (production, consumption, spoilage); both are tallied.
+- `take_columns(n, cols)` and `put_columns(cols)` lend goods `0..n` out as one `GoodColumn` per
+  good (holdings of every account and the good's created and destroyed tallies), whose
+  `ship`, `create` and `destroy` are the ledger's own on that good, so per-good moves run in
+  parallel with the same arithmetic in the same order (RFC 0287 item 2; test
+  `columns_are_goods_operations_in_turn`).
+- `track(flows)` (flow ids below 64) makes the ledger keep, per account, the net amount of this
+  tick's entries of those flows as it posts them, from `transfer` and `post_all` alike;
+  `tally(a)` reads it and `begin_tick` zeroes it. It equals the journal's sum over those flows
+  (test `tally_is_the_journal_sum_of_tracked_flows`), so an invariant over it need not scan the
+  journal (RFC 0287 item 3).
 - Money scale (minor units per currency unit) is a P5 decision; P0 uses one numeraire.
 
 ## Deterministic reduction (Section 19.4, parallelism)
@@ -80,6 +93,36 @@ systems (19.4) arrive with the first module that needs them.
 `fixed_sum(xs)` splits `xs` into chunks of 1,024 (independent of thread count), sums
 each chunk with a pairwise tree, then combines chunk sums with a pairwise tree. The
 tree shape depends only on `xs.len()`, so 1 and 8 threads give identical bits.
+
+## Timing spans (Section 19.4; ADR 0294)
+
+`timing` records wall-time spans for the sim-loop harness: `enable()` turns it on for the
+process, `span(name, good)` returns a guard that records (tick, name, good, rayon worker,
+start, end) when it drops, and `take()` returns and clears the spans. While it is off a span is
+one relaxed atomic load. `Sim::step` spans the tick, `begin_tick`, `end_tick` and the snapshot;
+`Schedule::run_tick` spans each system by name; econ adds the T2b phases (`t2b.goods`,
+`t2b.moves`, `t2b.post`, `t2b.transit`), each good's T2b task and its parts (`t2b.good`,
+`t2b.kernel`, `t2b.record`, `t2b.legs`), `e2.local_chain` and `e3.price_refresh`. Spans read
+only the clock, so state hashes and the journal are the same with timing on or off
+(checked by `cargo run --release -p ceteris-econ --example identity`, which prints the
+state hash and journal hash per tick). The QoS class of each worker is not recorded: reading it
+needs an FFI call, which is `unsafe` outside ADR 0295's exception.
+
+## Hazard draws (P3; ADR 0241)
+
+`hazard::draw(seed, tick, hazard, cell)` returns one uniform per (hazard, cell, tick) from the
+Philox stream keyed by `SystemId::HAZARD`, `HazardId` and the cell, whether or not the rate is
+positive; an event fires when the uniform is below the rate. Branches therefore share the events
+of untouched hazards, and a zero-rate hazard leaves every hash unchanged. Member parameter draws
+use `SystemId::PARAM_DRAW` keyed by parameter id (ADR 0322). Specified in `specs/workbench/SPEC.md`.
+
+## Chunk store (P3; Sections 14.3, 19.4)
+
+Snapshots stay the canonical encoding below and the state hash stays over its bytes. P3 adds a
+content-addressed store of zstd chunks of the canonical bytes cut at fixed 64 KiB offsets (ADR 0326),
+a snapshot being a manifest of chunk hashes; `restore` decodes chunks back to the canonical state and checks
+the hash. Chunks from another engine version are a `DecodeError`. Layout, retention and bounds are
+in `specs/workbench/SPEC.md`.
 
 ## Snapshots (Sections 4.1, 14.3)
 
@@ -140,4 +183,4 @@ n/a: the core holds no behaviour.
 ## Open questions
 
 - Money scale per currency and overflow headroom (P5).
-- Journal retention beyond one tick, and the on-disk run store (P3).
+- Journal retention beyond one tick (the on-disk run store is specified in `specs/workbench/SPEC.md`).

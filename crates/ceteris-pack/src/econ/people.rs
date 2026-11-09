@@ -1,15 +1,19 @@
 //! 2000 population, education, labour and Gini (specs/econ/SPEC.md, Pack additions; ADR 0014).
 //!
-//! Provinces get WorldPop 2000 summed through the H3 cells, scaled to the WDI national totals.
+//! Provinces get WorldPop 2000 summed through the H3 cells, scaled to the WDI national totals
+//! (UN WPP's where WDI has none).
 //! Countries get education shares (WIC, else Barro-Lee), participation, unemployment and the
 //! natural rate u* (ILOSTAT; ADR 0089), the working-age share (WDI), the labour share (PWT) and
-//! the Gini (WDI, else SWIID). A country with no value from any source takes the value of its
-//! nearest donor (same World Bank region, closest log GDP per capita) and is flagged imputed.
+//! the Gini (SWIID, else WDI; ADR 0098). A country with no value from any source takes the value
+//! of its nearest donor (same World Bank region, closest log GDP per capita) and is flagged
+//! imputed.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, BooleanArray, Float64Array, RecordBatch, UInt8Array, UInt32Array};
+use arrow_array::{
+    ArrayRef, BooleanArray, Float64Array, RecordBatch, StringArray, UInt8Array, UInt32Array,
+};
 
 use crate::numeric::{median, pairwise_sum, py_sum};
 use crate::read::people::{N_EDU, Observed, parts};
@@ -19,9 +23,19 @@ use crate::table;
 /// Where a country's Gini comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GiniSource {
-    Wdi,
     Swiid,
+    Wdi,
     Donor,
+}
+
+impl GiniSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GiniSource::Swiid => "swiid",
+            GiniSource::Wdi => "wdi",
+            GiniSource::Donor => "donor",
+        }
+    }
 }
 
 /// One country's 2000 labour inputs; each `*_imputed` flag is set when the value is a donor's or
@@ -121,7 +135,10 @@ pub fn donor<T>(
         None => Vec::new(),
     };
     let pool = if near.is_empty() { pool } else { near };
-    let logs: Vec<f64> = pool.iter().map(|k| obs.gdp_per_capita[*k].ln()).collect();
+    let logs: Vec<f64> = pool
+        .iter()
+        .map(|k| libm::log(obs.gdp_per_capita[*k]))
+        .collect();
     let target = match log_income {
         Some(x) => x,
         None => median(logs.clone()).ok_or("no donor candidates")?,
@@ -182,7 +199,7 @@ impl Country<'_> {
         for s in series.iter().rev() {
             merged.extend(s.iter().map(|(k, v)| (k.clone(), *v)));
         }
-        let income = self.lookup(&self.obs.gdp_per_capita).map(f64::ln);
+        let income = self.lookup(&self.obs.gdp_per_capita).map(libm::log);
         let d = donor(self.region(), income, &merged, self.obs, &self.parts)?;
         Ok((merged[&d], series.len()))
     }
@@ -192,7 +209,7 @@ impl Country<'_> {
 /// the country.
 ///
 /// A country the sources split (`PARTS`) takes the population-weighted mean of its parts.
-/// Education comes from WIC, else Barro-Lee. The Gini comes from WDI, else SWIID (flagged
+/// Education comes from WIC, else Barro-Lee. The Gini comes from SWIID, else WDI (flagged
 /// imputed), else a donor (flagged imputed).
 pub fn country_labour(
     countries: &[(String, String)],
@@ -212,7 +229,7 @@ pub fn country_labour(
         let (working_age, w_i) = c.value(&[&obs.working_age])?;
         let (labour_share, l_i) = c.value(&[&obs.labour_share])?;
         let (edu, e_i) = c.value::<[f64; N_EDU]>(&[&obs.edu_wic, &obs.edu_barro_lee])?;
-        let (gini, g_i) = c.value(&[&obs.gini_wdi, &obs.gini_swiid])?;
+        let (gini, g_i) = c.value(&[&obs.gini_swiid, &obs.gini_wdi])?;
         let edu_total = pairwise_sum(&edu);
         out.insert(
             code.clone(),
@@ -224,7 +241,7 @@ pub fn country_labour(
                 labour_share,
                 working_age_share: working_age,
                 gini,
-                gini_source: [GiniSource::Wdi, GiniSource::Swiid, GiniSource::Donor][g_i],
+                gini_source: [GiniSource::Swiid, GiniSource::Wdi, GiniSource::Donor][g_i],
                 participation_imputed: p_i == 1,
                 unemployment_imputed: u_i == 1,
                 u_star_imputed: s_i == 1,
@@ -288,21 +305,36 @@ pub fn country_columns(
         ("edu_imputed", flag(|r| r.edu_imputed)),
         ("gini_imputed", flag(|r| r.gini_imputed)),
     ]);
+    out.push((
+        "gini_source",
+        Arc::new(StringArray::from_iter_values(
+            rows.iter().map(|r| r.gini_source.as_str()),
+        )),
+    ));
     Ok(out.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
 }
 
 /// WDI population in 2000 (UN World Population Prospects) of each pack country, summing split
-/// economies; countries without a positive total are left out.
+/// economies, else the UN WPP total (WDI leaves out Western Sahara); countries without a positive
+/// total in either are left out.
 pub fn national_population(codes: &[String], obs: &Observed, iso: &Names) -> BTreeMap<String, f64> {
+    let total = |series: &BTreeMap<String, f64>, c: &str| {
+        py_sum(
+            parts(c, iso)
+                .iter()
+                .map(|p| series.get(p).copied().unwrap_or(0.0)),
+        )
+    };
     codes
         .iter()
         .filter_map(|c| {
-            let total = py_sum(
-                parts(c, iso)
-                    .iter()
-                    .map(|p| obs.population.get(p).copied().unwrap_or(0.0)),
-            );
-            (total > 0.0).then(|| (c.clone(), total))
+            let wdi = total(&obs.population, c);
+            let t = if wdi > 0.0 {
+                wdi
+            } else {
+                total(&obs.population_wpp, c)
+            };
+            (t > 0.0).then(|| (c.clone(), t))
         })
         .collect()
 }

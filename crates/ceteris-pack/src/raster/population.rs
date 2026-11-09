@@ -248,7 +248,7 @@ impl CellOwner {
                     continue;
                 }
                 let p = LatLng::from(near);
-                let d = (p.lat() - lat).powf(2.0) + (p.lng() - lng).powf(2.0);
+                let d = libm::pow(p.lat() - lat, 2.0) + libm::pow(p.lng() - lng, 2.0);
                 if best.is_none_or(|(bd, bc)| d < bd || (d == bd && c < bc)) {
                     best = Some((d, c));
                 }

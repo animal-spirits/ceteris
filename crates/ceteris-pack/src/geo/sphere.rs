@@ -17,10 +17,10 @@ pub fn haversine_km(lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
         lon2.to_radians(),
         lat2.to_radians(),
     );
-    let s = ((lat2 - lat1) / 2.0).sin();
-    let t = ((lon2 - lon1) / 2.0).sin();
-    let a = s * s + lat1.cos() * lat2.cos() * (t * t);
-    2.0 * R_KM * a.min(1.0).sqrt().asin()
+    let s = libm::sin((lat2 - lat1) / 2.0);
+    let t = libm::sin((lon2 - lon1) / 2.0);
+    let a = s * s + libm::cos(lat1) * libm::cos(lat2) * (t * t);
+    2.0 * R_KM * libm::asin(a.min(1.0).sqrt())
 }
 
 /// Signed area of a closed ring: Chamberlain and Duquette (2007), the spherical-excess
@@ -32,7 +32,7 @@ fn ring_area(ring: &LineString) -> f64 {
         .map(|w| {
             let (a, b) = (w[0], w[1]);
             (b.x.to_radians() - a.x.to_radians())
-                * (2.0 + a.y.to_radians().sin() + b.y.to_radians().sin())
+                * (2.0 + libm::sin(a.y.to_radians()) + libm::sin(b.y.to_radians()))
         })
         .collect();
     pairwise_sum(&terms) * (R_KM * R_KM) / 2.0
@@ -159,7 +159,7 @@ pub fn interior_point(poly: &Polygon) -> Coord {
 }
 
 pub fn cos_lat(lat: f64) -> f64 {
-    lat.to_radians().cos().max(0.05)
+    libm::cos(lat.to_radians()).max(0.05)
 }
 
 #[cfg(test)]

@@ -278,6 +278,19 @@ pub fn eps_by_good(fixture: &Path) -> Result<BTreeMap<usize, (f64, f64)>, String
         .into_iter()
         .zip(countries.f64("s_l")?)
         .collect();
+    // the labour share of each good (ADR 0104), in country row order, where exported
+    let s_l_good = if countries.has("s_l_0") {
+        Some(
+            (0..)
+                .map_while(|g| {
+                    let col = format!("s_l_{g}");
+                    countries.has(&col).then(|| countries.f64(&col))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+    } else {
+        None
+    };
     let country: BTreeMap<usize, usize> = prov
         .usize("province")?
         .into_iter()
@@ -297,9 +310,12 @@ pub fn eps_by_good(fixture: &Path) -> Result<BTreeMap<usize, (f64, f64)>, String
         let c = *country
             .get(&p)
             .ok_or_else(|| format!("enterprise in unknown province {p}"))?;
-        let s = *s_l
-            .get(&c)
-            .ok_or_else(|| format!("province in unknown country {c}"))?;
+        let s = match &s_l_good {
+            Some(cols) => cols[g][c],
+            None => *s_l
+                .get(&c)
+                .ok_or_else(|| format!("province in unknown country {c}"))?,
+        };
         let a = inputs.get(&(c, g)).copied().unwrap_or(0.0);
         let e = s * sigma_fl / ((1.0 - s) * (1.0 - a));
         let range = eps.entry(g).or_insert((e, e));

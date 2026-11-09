@@ -459,8 +459,9 @@ fn pop_derivatives(m: &Model, s: &Steady) -> (Mat, Mat, Mat) {
     let sigma_c = inp.within_sigma();
     let sigma: Vec<f64> = kc.iter().map(|&c| sigma_c[c]).collect();
     let price = s.consumer.select_rows(&inp.pop_province);
+    // each pop spends its income and its transfer (ADR 0100)
     let per_person: Vec<f64> = s
-        .pop_income
+        .pop_spending()
         .iter()
         .zip(&inp.pop_population)
         .map(|(&i, &n)| if n > 0.0 { i / n } else { 0.0 })
@@ -800,11 +801,7 @@ pub fn blocks(
     }
     // Households: each province's pops, their spending at each place and its derivatives.
     let (pop_spend, money, cross) = pop_derivatives(m, s);
-    let kc = inp.pop_country();
-    let mut people = vec![0.0; n_c];
-    for (k, &c) in kc.iter().enumerate() {
-        people[c] += inp.pop_population[k];
-    }
+    let dividend_share = inp.dividend_shares();
     let mut pops_of: Vec<Vec<usize>> = vec![Vec::new(); n_p];
     for (k, &p) in inp.pop_province.iter().enumerate() {
         pops_of[p].push(k);
@@ -826,19 +823,21 @@ pub fn blocks(
         for g in 0..n_g {
             let Some(at) = place[g] else { continue };
             let d = g * n_p + p;
+            // local goods: the value of the cell's output, so that spending over it is the
+            // households' share of its units at p_c (ADR 0098)
             let norm = if inp.traded[g] {
                 src.phi[d]
             } else {
-                s.supply[(p, g)]
+                s.price[(p, g)] * s.supply[(p, g)]
             };
             let (mut wage, mut pool, mut spend) = (0.0, 0.0, 0.0);
             let mut prices = vec![0.0; n_g];
             for &k in &pops_of[p] {
-                let (sk, income) = (pop_spend[(k, g)], s.pop_income[k]);
+                let (sk, income) = (pop_spend[(k, g)], s.pop_income[k] + s.pop_transfer[k]);
                 if sk <= 0.0 || income <= 0.0 {
                     continue;
                 }
-                let dividend = inp.pop_population[k] / people[ci] * pool0[ci];
+                let dividend = dividend_share[k] * pool0[ci];
                 wage += sk * money[(k, g)] * s.pop_wage[k] / income;
                 pool += sk * money[(k, g)] * dividend / income;
                 spend += sk;
