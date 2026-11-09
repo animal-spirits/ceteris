@@ -75,9 +75,9 @@ pub const REGISTRY: &[Command] = &[
     ),
     cmd(
         "blame",
-        "blame FILE --branch B",
-        "attribute an effect to edits",
-        false,
+        "blame FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR",
+        "rank a branch's edits beyond its baseline by leave-one-out effect",
+        true,
     ),
     cmd(
         "bisect",

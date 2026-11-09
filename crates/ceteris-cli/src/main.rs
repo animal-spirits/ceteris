@@ -1035,7 +1035,11 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
         (None, true) => Source::Fixture,
         _ => return Err("choose an input with --fixture or --pack DIR".into()),
     };
-    let out = PathBuf::from(need("--out")?);
+    let out = if verb == "blame" {
+        PathBuf::new()
+    } else {
+        PathBuf::from(need("--out")?)
+    };
 
     let inputs = source.load(true)?;
     let base = (EconParams::default(), inputs.trade_params());
@@ -1046,6 +1050,14 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
         None => Vec::new(),
     };
     let priors = register_priors();
+    if verb == "blame" {
+        let own: Vec<_> = branch_log
+            .iter()
+            .filter(|e| !baseline_log.contains(e))
+            .cloned()
+            .collect();
+        return blame(&inputs, &base, &priors, &own, &scenario.seeds, ticks);
+    }
     if verb == "explain" {
         return explain(
             &inputs,
@@ -1158,6 +1170,42 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `blame`: the edits of a branch beyond its baseline ranked by their leave-one-out effect,
+/// averaged over the seeds, per outcome.
+fn blame(
+    inputs: &Arc<ceteris_econ::inputs::EconInputs>,
+    base: &(EconParams, ceteris_trade::TradeParams),
+    priors: &[ceteris_run::ensemble::ParamPrior],
+    edits: &[ceteris_run::Edit],
+    seeds: &[u64],
+    ticks: u32,
+) -> Result<ExitCode, String> {
+    use ceteris_econ::ensemble::{OUTCOME_NAMES, edit_effects, outcomes};
+    use ceteris_run::attribution::blame;
+
+    let all = |w: &ceteris_econ::world::EconWorld| -> Vec<f64> {
+        outcomes(w).into_iter().map(|(_, v)| v).collect()
+    };
+    let per_seed = seeds
+        .iter()
+        .map(|&k| edit_effects(inputs, base, priors, edits, k, ticks, all))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("{e:?}"))?;
+    for (o, name) in OUTCOME_NAMES.iter().enumerate() {
+        let mean: Vec<f64> = (0..edits.len())
+            .map(|i| per_seed.iter().map(|m| m[i][o]).sum::<f64>() / per_seed.len() as f64)
+            .collect();
+        for i in blame(&mean) {
+            let e = &edits[i];
+            println!(
+                "{name} {:+.6e} edit {i}: {} {:?} {} = {}",
+                mean[i], e.tick, e.kind, e.target, e.value
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `explain`: the Shapley split of the paired effect over the shut-able channels (prices,
 /// wages), per member, with bootstrap intervals over members, written as `channel_shares`.
 #[allow(clippy::too_many_arguments)]
@@ -1247,7 +1295,7 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         });
     }
-    if ["ensemble", "effects", "explain"].contains(&command.as_str()) {
+    if ["ensemble", "effects", "explain", "blame"].contains(&command.as_str()) {
         return ensemble_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
