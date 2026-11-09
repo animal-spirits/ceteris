@@ -325,3 +325,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0318 | [Accept ADR 0212 and the built parts of ADRs 0211 and 0128 as built](0318-accept-history-retention-and-run-files-as-built.md) | accepted | none new |
 | 0319 | [Good-major pipeline slots and parallel tick checks for the 45-goods budget](0319-good-major-pipeline-and-parallel-tick-checks.md) | accepted | ADR 0332, ADR 0333, ADR 0334 |
 | 0332 | [Status of ADR 0108 (estimation windows and long-run lanes)](0332-status-of-adr-0108-estimation-windows.md) | accepted | none new |
+| 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | draft | none yet |
