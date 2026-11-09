@@ -80,13 +80,19 @@ pub fn schedule() -> Schedule<EconWorld> {
             drift(w, ctx.tick);
             deliver(w)
         }),
-        def(202, "labour", |w, _| labour(w)),
+        def(202, "labour", |w, ctx| {
+            labour(w);
+            crate::channels::after_labour(w, ctx.tick)
+        }),
         def(203, "produce", |w, _| produce(w)),
         def(204, "demand", |w, _| demand(w)),
         def(205, "source", |w, _| source(w)),
         def(206, "clear", |w, _| clear(w)),
         def(207, "dispatch", |w, _| dispatch(w)),
-        def(208, "reprice", |w, _| reprice(w)),
+        def(208, "reprice", |w, ctx| {
+            reprice(w);
+            crate::channels::after_reprice(w, ctx.tick)
+        }),
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])

@@ -2,6 +2,7 @@
 //! the trade layer. See `specs/econ/SPEC.md`.
 
 pub mod calibration;
+pub mod channels;
 pub mod demand;
 pub mod edit;
 pub mod ensemble;
