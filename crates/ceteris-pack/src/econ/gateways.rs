@@ -76,10 +76,10 @@ pub fn great_circle_km(lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
         lon2.to_radians(),
         lat2.to_radians(),
     );
-    let s = ((lat2 - lat1) / 2.0).sin();
-    let t = ((lon2 - lon1) / 2.0).sin();
-    let h = s * s + lat1.cos() * lat2.cos() * (t * t);
-    2.0 * EARTH_KM * h.min(1.0).sqrt().asin()
+    let s = libm::sin((lat2 - lat1) / 2.0);
+    let t = libm::sin((lon2 - lon1) / 2.0);
+    let h = s * s + libm::cos(lat1) * libm::cos(lat2) * (t * t);
+    2.0 * EARTH_KM * libm::asin(h.min(1.0).sqrt())
 }
 
 /// Country code of each graph node through its province (`country` by province index); "" for

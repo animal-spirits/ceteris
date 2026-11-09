@@ -61,6 +61,7 @@ impl<W> Schedule<W> {
 
     pub fn run_tick(&self, world: &mut W, seed: Seed, tick: u32) {
         for s in self.systems.iter().filter(|s| s.cadence.due(tick)) {
+            let _span = crate::timing::span(s.name, crate::timing::NONE);
             (s.run)(
                 world,
                 &Ctx {

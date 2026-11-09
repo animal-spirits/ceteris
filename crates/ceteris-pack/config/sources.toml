@@ -619,6 +619,7 @@ attribution = "Per the EM-DAT Attribution and Citation Policy"
 commercial_use = false
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "fetch"
 reason = "No redistribution, no derivative databases, non-commercial. No open source covers flood and multi-hazard impacts."
 checked = 2026-10-23
@@ -638,6 +639,7 @@ attribution = "Tellman et al. (2021), Nature"
 commercial_use = false
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "fetch"
 reason = "Non-commercial; no open flood-event source found"
 checked = 2026-10-23
@@ -807,6 +809,24 @@ checked = 2026-10-23
 confidence = "high"
 
 [[source]]
+id = "piie-trade-war"
+name = "US-China trade war tariffs, underlying data"
+provider = "Peterson Institute for International Economics (Bown)"
+version = "Chart data file, 2018 onward"
+role = "Bilateral tariff changes of the 2018-19 trade war (P53 rho fit, ADR 0027)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://www.piie.com/research/piie-charts/us-china-trade-war-tariffs-date-chart"
+attribution = "Bown (PIIE)"
+commercial_use = false
+share_alike = false
+use = "rejected"
+policy = "exclude"
+reason = "Free to download but the page states no terms of use; covers US-China only, so too few treated pairs for the class projections"
+checked = 2026-11-07
+confidence = "medium"
+notes = "P53 (ADR 0027): the paid build keeps the prior half-life (12 to 48 months) and does not ship a rho fitted on non-commercial tariffs. ceteris calibrate rho takes its 2018-19 tariffs from unctad-trains, fetch-only and closed source only, so its output is research-only. Checked 2026-11-08: teti-gtd states no licence and no licensing contact (teti@ifo.de is for errors and HS6 microdata access), and CEPII MAcMap-HS6 is non-commercial, so neither opens the paid build. Reopen if an open bilateral tariff source is licensed."
+
+[[source]]
 id = "dose"
 name = "DOSE sub-national economic output"
 provider = "PIK / MCC (Wenz et al. 2023)"
@@ -904,7 +924,7 @@ version = "1995-2007, NUTS 2006"
 role = "Wages and employment by NUTS 2 region and NACE division: province seeds for manufacturing goods (ADR 0275)"
 licence = "CC-BY-4.0"
 licence_url = "https://ec.europa.eu/eurostat/help/copyright-notice"
-attribution = "Eurostat, sbs_r_nuts03 (accessed <date>)"
+attribution = "Eurostat, sbs_r_nuts03 (accessed 2026-10-31)"
 commercial_use = true
 share_alike = false
 use = "primary"
@@ -915,10 +935,28 @@ confidence = "high"
 notes = "Indicators: local units, wages and salaries, persons employed, investment; no VA. 2000 is present, coverage by country and division not yet checked. NACE Rev 1.1 divisions equal ISIC Rev 3.1 divisions. Non-EU country data in Eurostat is non-commercial; this table has none."
 
 [[source]]
+id = "statfin-12bd"
+name = "Statistics Finland table 12bd, income and production by area (B1GPH, 2000)"
+provider = "Statistics Finland"
+version = "StatFin altp/12bd, 2000-2024*, area classification 2025"
+role = "Gross value added at basic prices by maakunta and industry, 2000: Finland manufacturing province seeds (RFC 0283, ADR 0287)"
+licence = "CC-BY-4.0"
+licence_url = "https://stat.fi/en/about-us/get-to-know-statistics-finland/legislation/terms-of-use"
+attribution = "Source: Statistics Finland, table 12bd (accessed 2026-11-09)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Statistics Finland terms of use: open data under CC BY 4.0 for texts, tables and statistical graphs, source named"
+checked = 2026-11-09
+confidence = "high"
+notes = "Terms page read 2026-11-09. The API serves data by POST only, so the fetch entry is manual: query the table with all areas, all industries, B1GPH, S1, 2000, CP, response format csv (query kept in fetch.toml). Two POSTs returned identical bytes. Merged industry groups (19-22, 24-25, 26-27, 29-30) are split by the Eurostat 2005 shares per RFC 0283."
+
+[[source]]
 id = "hansen-gfc"
 name = "Global Forest Change (Hansen et al. 2013), treecover2000"
 provider = "University of Maryland, Google, USGS, NASA"
-version = "v1.7 or later, treecover2000 layer"
+version = "GFC-2025-v1.13, treecover2000 layer"
 role = "Tree cover in 2000: province proxy for A02 forestry (ADR 0275)"
 licence = "CC-BY-4.0"
 licence_url = "https://earthenginepartners.appspot.com/science-2013-global-forest/download_v1.7.html"
@@ -989,7 +1027,7 @@ id = "pwt"
 name = "Penn World Table"
 provider = "Groningen Growth and Development Centre"
 version = "11.0 (1950-2023)"
-role = "Capital stocks, productivity levels (7.2, 7.5)"
+role = "Capital stocks, productivity levels (7.2, 7.5); price level of domestic absorption pl_da, the local base price p_c (16.1)"
 licence = "CC-BY-4.0"
 licence_url = "https://www.rug.nl/ggdc/productivity/pwt/"
 attribution = "Feenstra, Inklaar and Timmer (2015), AER"
@@ -1000,6 +1038,41 @@ policy = "bundle"
 reason = "CC BY 4.0"
 checked = 2026-10-23
 confidence = "high"
+
+[[source]]
+id = "wiod-sea"
+name = "WIOD Socio-Economic Accounts"
+provider = "Groningen Growth and Development Centre"
+version = "2016 release (Nov16), 2000-2014"
+role = "Relative labour shares by sector, 2000 (7.2; ADRs 0307, 0308)"
+licence = "CC-BY-4.0"
+licence_url = "https://www.rug.nl/ggdc/valuechain/wiod/wiod-2016-release"
+attribution = "Timmer, Dietzenbacher, Los, Stehrer and de Vries (2015), Review of International Economics"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "CC BY 4.0; 43 economies with labour compensation (self-employed included) and value added by industry in 2000"
+checked = 2026-11-03
+confidence = "high"
+
+[[source]]
+id = "oecd-aamne"
+name = "OECD Analytical AMNE database"
+provider = "OECD"
+version = "2026 edition (2000-2023, ICIO 2025 grid, 81 economies, 41 industries)"
+role = "Foreign-owned shares of value added by host and good, and their parent countries, 2000 (8.7, 9.1; ADRs 0309, 0310)"
+licence = "LicenseRef-OECD-Terms"
+licence_url = "https://www.oecd.org/en/about/terms-conditions.html"
+attribution = "OECD (2026), Analytical AMNE database, <URL> (accessed <date>); pass on to sub-licensees"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "OECD data terms as for ICIO; the start year by host, industry and ownership, with gross output by parent, on the ICIO grid"
+checked = 2026-11-03
+confidence = "medium"
+notes = "Dataset page www.oecd.org/en/data/datasets/global-value-chain-data-across-trade-multinationals-and-services.html (403 to scripts, read in a browser). The 2026 edition is on the ICIO 2025 grid the pack reads; RFC 0302 named the 2023 edition (2000-2019, 76 economies). Mining is one industry (B05T09), so goods 1 and 2 both take it."
 
 # ---------------------------------------------------------------- macro, money, finance, fiscal
 
@@ -1020,7 +1093,25 @@ reason = "CC BY 4.0 per series; replaces IMF series"
 checked = 2026-10-23
 confidence = "high"
 replaces = "imf-data"
-notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS."
+notes = "Bundle only an allowlist of series whose API metadata carries License_Type CC BY-4.0 and no third-party restriction. P2 people series, all CC BY-4.0 in the API metadata on 2026-10-24: SI.POV.GINI, SP.POP.TOTL, SP.POP.1564.TO.ZS. P2 tariff series, CC BY-4.0 in the API metadata on 2026-10-24 (their source line names WITS, TRAINS and the WTO IDB, but the licence type is the World Bank's): TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS. ADR 0098 series, CC BY-4.0 in the API metadata on 2026-11-01: PA.NUS.FCRF (its source line names the IMF IFS, but the licence type is the World Bank's); NY.GDP.PCAP.PP.CD, the WDI price level with NY.GDP.MKTP.CD and SP.POP.TOTL (ADR 0289; its source line names the ICP). ADR 0100 series, CC BY-4.0 in the API metadata on 2026-11-03: BN.CAB.XOKA.CD, the current accounts of the trade-imbalance transfers (its source line names the IMF Balance of Payments Statistics, but the licence type is the World Bank's)."
+
+[[source]]
+id = "wdi-ppp"
+name = "World Development Indicators: GDP, PPP (current international $), NY.GDP.MKTP.PP.CD"
+provider = "World Bank (International Comparison Program PPPs)"
+version = "Current release (zip members dated 2026-10-08, downloaded 2026-11-01)"
+role = "ADR 0098 real GDP check (ADRs 0285, 0290): the pack's GDP over p_c against GDP at PPP in 2000"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/public-licenses#cc-by"
+attribution = "The World Bank: World Development Indicators; International Comparison Program"
+commercial_use = true
+share_alike = false
+use = "validation"
+holdout = "R"
+policy = "fetch"
+reason = "API metadata License_Type CC BY-4.0 on 2026-11-01 (source line: ICP PPPs). Read only by a test, never in a pack; kept apart from the wdi source because validation files must name a validation-only source. NY.GDP.PCAP.PP.CD, which the check read before ADR 0290, is a pack input of the wdi source since ADR 0289."
+checked = 2026-11-01
+confidence = "high"
 
 [[source]]
 id = "wb-gem"
@@ -1295,25 +1386,43 @@ policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
 confidence = "high"
-notes = "P2 uses the disposable-income Gini (gini_disp) for 2000 where WDI SI.POV.GINI has no value within 1995 to 2005; such rows are flagged imputed. Replaces WIID in that role."
+notes = "P2 uses the disposable-income Gini (gini_disp) nearest 2000 within 1995 to 2005 as the primary Gini (ADR 0098); WDI SI.POV.GINI is the fallback, flagged imputed. Replaces WIID in the fallback role."
 
 [[source]]
 id = "wid"
 name = "World Inequality Database"
 provider = "World Inequality Lab"
 version = "Current"
-role = "Wealth distribution per pop (15.7)"
+role = "Check of the wealth-bracket proxy (ADR 0312): 2000 shares of net personal wealth, bottom 50%, middle 40%, top 10%, listed against the proxy in the C6 gate report of a research pack"
 licence = "LicenseRef-NoLicence"
 licence_url = "https://wid.world/data/"
 attribution = "WID.world and series source papers"
 commercial_use = false
 share_alike = false
-use = "fallback"
+use = "validation"
+holdout = "H"
 policy = "fetch"
-reason = "No licence found; PIP and SWIID cover income, nothing open covers wealth distribution"
+reason = "No licence found; not a pack input since ADR 0312, the pack's wealth shares come from the Gini proxy (ADR 0311)"
 checked = 2026-10-23
 confidence = "low"
 closed_source_only = true
+
+[[source]]
+id = "fed-dfa"
+name = "Distributional Financial Accounts"
+provider = "Board of Governors of the Federal Reserve System"
+version = "2000Q1 net worth shares"
+role = "P161 (ADR 0311): the US top-10% share of net worth in 2000Q1, 0.638, that fixes the wealth proxy's tau; one published number in the code, no file"
+licence = "LicenseRef-PublicDomain"
+licence_url = "https://www.federalreserve.gov/releases/z1/dataviz/dfa/"
+attribution = "Board of Governors of the Federal Reserve System, Distributional Financial Accounts"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle"
+reason = "US government work"
+checked = 2026-11-04
+confidence = "medium"
 
 [[source]]
 id = "wb-gfdd"
@@ -1327,6 +1436,7 @@ attribution = "World Bank, Global Financial Development Database"
 commercial_use = true
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "bundle"
 reason = "CC BY 4.0 (upstream is Laeven-Valencia 2018)"
 checked = 2026-10-23
@@ -1344,6 +1454,7 @@ attribution = "ESRB, European Financial Crises Database"
 commercial_use = true
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "bundle"
 reason = "Free use with attribution, including commercial"
 checked = 2026-10-23
@@ -1434,6 +1545,7 @@ attribution = "FAO Food Price Index"
 commercial_use = true
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "fetch"
 reason = "May not be one of FAO's CC BY 4.0 Annex 1 databases; licence reading is weak"
 checked = 2026-10-23
@@ -1476,6 +1588,7 @@ policy = "bundle"
 reason = "CC BY 3.0 IGO notice on the data overrides the general un.org terms"
 checked = 2026-10-23
 confidence = "high"
+notes = "P2 reads WPP2024_TotalPopulationBySex.csv.gz (CC BY 3.0 IGO in downloads.json, rechecked 2026-11-01) for the 2000 national population of economies WDI does not list, such as Western Sahara (ADR 0098)."
 
 [[source]]
 id = "un-ims"
@@ -1831,6 +1944,7 @@ attribution = "Boix, Miller and Rosato (2013), Comparative Political Studies (re
 commercial_use = true
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
@@ -1848,6 +1962,7 @@ attribution = "Lundquist (2026), Harvard Dataverse (requested)"
 commercial_use = true
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "bundle"
 reason = "CC0"
 checked = 2026-10-23
@@ -1884,6 +1999,7 @@ attribution = "VIEWS project and model paper"
 commercial_use = false
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "fetch"
 reason = "No data licence; no open third-party forecast. In-house baselines on UCDP are the open benchmark."
 checked = 2026-10-23
@@ -1974,6 +2090,7 @@ attribution = "Singer, Bremer and Stuckey (1972); dataset-specific citations"
 commercial_use = false
 share_alike = false
 use = "validation"
+holdout = "H"
 policy = "fetch"
 reason = "Non-commercial, dissemination needs permission. Religion moved to cia-factbook, spending to gmsd; capability comparison and post-2003 alliances have no open source."
 checked = 2026-10-23
@@ -2054,3 +2171,123 @@ checked = 2026-10-25
 confidence = "medium"
 replaces = "wits-concordance"
 notes = "Read via the live file and a 2026-10-17 archive copy of the terms page (live page 403). Every one of the 5,017 HS lines BACI HS92 has in 2000 is in the key (version 0: 5,134 lines); 23 lines are unallocated (_X), none traded in 2000. The key splits divisions where ICIO 2025 does (B05, B06, C24A, C24B, C301, C302_309) and where ISIC Rev 3 sectors break (C254, C262, C268, C304, C325). The 2011 BTDIxE documentation says the earlier keys drew on UNSD correspondences; confirm with stan.contact@oecd.org before an open release if a third-party claim is a concern. The pipeline adapts the key, which section 3 permits: HS 7108 (non-monetary gold; the key puts 710812 in B072) is read as C24B, basic metals, and J58 and J59_60 (printed books, recorded media) as C18, printing and reproduction (goods.read_hs_cpa). Only ten derived weights and seven thetas enter the pack."
+
+# ---------------------------------------------------------------- held-out validation sources (RFC 0314, #174)
+# Licences read on the provider's own pages 2026-11-06. Nothing is fetched; none is in fetch.toml.
+# Verdicts: user-fetch only (each user downloads their own copy), excluded from the paid build.
+
+[[source]]
+id = "iea-balances"
+name = "IEA World Energy Balances, 2000"
+provider = "International Energy Agency"
+version = "Current edition"
+role = "Held-out energy balances by country and product, 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-IEA-NonCC"
+licence_url = "https://www.iea.org/terms/terms-of-use-for-non-cc-material"
+attribution = "Based on IEA data from IEA (year) World Energy Balances"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, excluded from the paid build. Product page lists the data as 'Terms of Use for Non-CC Material'. Terms s.3(a)(i): 'You must not share, or enable others to access, any Non-CC Material unless'; s.3(a)(ii)(A) allows 'Insubstantial Amounts only', 'neither primarily intended for, or directed towards, commercial advantage or revenue generation'; s.3(a)(v) fn.1 bars 'making more than 5 (five) raw data points ... accessible for download'. Attribution s.3(b). The CC BY-NC-SA 4.0 IGO licence for free data in the 2026-10-27 check was not found on the pages read here: unverified"
+checked = 2026-11-06
+confidence = "low"
+closed_source_only = true
+notes = "The balances product page offers 'Purchase licence'; whether a free tier exists for 2000 balances is unverified. Never committed: hashes and scores only."
+
+[[source]]
+id = "gennaioli-regions"
+name = "Growth in Regions: sub-national GDP and human capital database"
+provider = "Gennaioli, La Porta, Lopez-de-Silanes, Shleifer"
+version = "1569 regions (2014 paper database)"
+role = "Held-out regional GDP per capita, circa 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-NoLicence"
+licence_url = "https://ideas.repec.org/a/kap/jecgro/v19y2014i3p259-309.html"
+attribution = "Gennaioli, La Porta, Lopez-de-Silanes and Shleifer (2014), Journal of Economic Growth 19(3)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: unverified; treated as no licence stated, so closed only and user-fetch only. The paper record (RePEc) gives no dataset location or terms; the authors' dataset site blocks automated reads and was not read"
+checked = 2026-11-06
+confidence = "low"
+closed_source_only = true
+
+[[source]]
+id = "lis"
+name = "Luxembourg Income Study, income deciles"
+provider = "LIS Cross-National Data Center in Luxembourg"
+version = "Current waves around 2000"
+role = "Held-out income deciles around 2000 (RFC 0314 tier 1)"
+licence = "LicenseRef-LIS-Terms"
+licence_url = "https://www.lisdatacenter.org/data-access/lissy/eligibility/"
+attribution = "LIS Database, citation per LIS usage rules (not read)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only (registered researcher runs LISSY), excluded from the paid build. LISSY page: 'Use of the microdata is for scholarly, research or educational purposes only.' and 'Use of the microdata for commercial purposes is never permitted.' Microdata cannot be redistributed; whether aggregate scores may be published, the citation rule and the Key Figures licence are unverified (usage-agreement page returned only the site privacy policy)"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+notes = "LISSY is remote execution for registered researchers; there is no file to fetch, so a script cannot automate it."
+
+[[source]]
+id = "exiobase"
+name = "EXIOBASE 3.9, multi-regional input-output tables"
+provider = "XIO Sustainability Analytics; Vienna University of Economics and Business"
+version = "3.9 and later (Zenodo record shows 3.11.2)"
+role = "Held-out foreign input shares, year 2000 (RFC 0314 tier 1; replaces dropped Eora)"
+licence = "LicenseRef-EXIOBASE-licence"
+licence_url = "https://zenodo.org/records/23039074"
+attribution = "Credit EXIOBASE and cite per Zenodo record"
+commercial_use = false
+share_alike = true
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, excluded from the paid build. Zenodo: 'EXIOBASE v3.9 is released under a customized derivative of the CC-BY-SA-NC license.' Free use limited to universities, non-profit research institutes, environmental/social NGOs and environmental agencies; excludes 'Contracted or commissioned activities' and use 'intended to generate revenue'. Publication of derived results allowed with attribution but 'must not include the original or derived coefficients'. Competing IO databases need written permission. Whether an individual maintainer of a free open-source project is an eligible user is unverified; ask exiobase-support@googlegroups.com before the first fetch"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+
+[[source]]
+id = "acled"
+name = "Armed Conflict Location and Event Data"
+provider = "ACLED"
+version = "Current"
+role = "Held-out conflict events (RFC 0314, licence-only registration)"
+licence = "LicenseRef-ACLED-EULA"
+licence_url = "https://acleddata.com/eula"
+attribution = "ACLED must be 'clearly and prominently acknowledged'; state filters and manipulation (Attribution Policy, acleddata.com/attributionpolicy)"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only (each user registers and accepts the EULA), excluded from the paid build. EULA s.1.2: 'Commercial entities may not access or use the Content and/or Platforms without first obtaining a corporate license'; s.3.1 'not permitted to reproduce, republish, redistribute'; s.3.1 external materials 'must be transformative, such that they cannot be reverse engineered to recreate the Licensed Content'; s.7 bars ML training and automated access 'except through ACLED's designated API'. Content Usage Terms bar creating 'any dataset, product, or platform that competes with' ACLED and benchmarking a similar one: a simulator scored against ACLED looks compatible, unconfirmed with ACLED"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true
+
+[[source]]
+id = "polity5"
+name = "Polity5 political regime characteristics"
+provider = "Center for Systemic Peace"
+version = "Polity5"
+role = "Held-out regime scores (RFC 0314, licence-only registration)"
+licence = "LicenseRef-CSP-AllRightsReserved"
+licence_url = "https://www.systemicpeace.org/inscrdata.html"
+attribution = "Cite Center for Systemic Peace in published work"
+commercial_use = false
+share_alike = false
+use = "validation"
+holdout = "H"
+policy = "fetch"
+reason = "Verdict: user-fetch only, never bundled, excluded from the paid build. 'All resources listed on this page are copyrighted by the Center for Systemic Peace.' 'Reproduction or redistribution of these resources, or substantial portions thereof, is prohibited' without 'prior, written permission'. 'Use of any of these resources in published work must provide proper citation.' Commercial use not mentioned: unverified; the User's Manual was not read"
+checked = 2026-11-06
+confidence = "medium"
+closed_source_only = true

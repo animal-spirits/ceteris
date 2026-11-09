@@ -110,6 +110,23 @@ comparing runs.
 - **Determinism.** The app reads; edits go through the core. A headless run and an app run
   of the same ticks give the same state hash (test below).
 
+## P3 workbench views (ADR 0323)
+
+P3 ships the views the gate needs; the rest of the lab UI is a track after the gate. Every action
+goes through the command registry shared with the CLI (0188). Starts after the shell's exit
+criteria pass and the effect tables of `specs/workbench/SPEC.md` exist.
+
+| View | Content | Test |
+|---|---|---|
+| W1 Branch manager and edit log | Tree of branches, fork at the cursor, step back (seek), run to tick; the edit log with source and god flag | a headless run and an app run of one scenario give the same run hash |
+| W2 Difference map | Any map mode as branch minus baseline per province, diverging ramp passing the 0221 check, sign-robustness mask hatched; picking shows the paired interval | ramp check in CI |
+| W3 Fan charts | Any series for a branch and its baseline as quantile bands across members, paired-effect panel beside it; 0137 chart tokens | panel tests at 200% |
+| W4 Why panel (0049) | Channel shares with intervals for a variable, province and window, run as a background job | shares sum to the total |
+| W7 State names (0143) | Countries and states labelled with the English short name of the 2000 state; no names by date until P6 | every state id has a non-empty short name |
+
+W5 (lenses, 0155) and W6 (keyboard, query bar and exports, 0188, 0197) belong to the lab-UI track
+after the gate.
+
 ## Invariants
 
 | Invariant | Statement | Checked where |

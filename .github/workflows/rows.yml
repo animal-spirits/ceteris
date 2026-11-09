@@ -12,7 +12,7 @@ env:
 jobs:
   rows:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_PR || '["self-hosted","macOS","ARM64","ceteris"]') }}
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rows
     steps:
@@ -29,3 +29,6 @@ jobs:
       - name: Registry, appendix, RFC numbers, research index, codes
         run: cargo run -p ceteris-rows -- check
       - run: cargo test -p ceteris-rows
+      - name: Disk cleanup
+        if: always()
+        run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"

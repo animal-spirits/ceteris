@@ -1,9 +1,11 @@
+#![allow(clippy::disallowed_methods)] // offline owner-side fitting: its output is shipped as pack data, never recomputed by a run
 //! Steady-state calibration of the 2000 data state (ADR 0089): [`steady`] solves it from a
 //! `ceteris export` read by the reference model's reader, [`write`] writes the tables that
 //! `EconInputs::from_pack` loads; [`benchmark`] runs a calibrated pack under [`shock`]s and
 //! measures welfare (ADRs 0200, 0207).
 
 pub mod air_share;
+pub mod balance;
 pub mod benchmark;
 pub mod block;
 pub mod border;
@@ -13,6 +15,8 @@ pub mod elasticity;
 pub mod gravity;
 pub mod json;
 pub mod pyfmt;
+pub mod rho;
+pub mod rho_panel;
 pub mod shock;
 pub mod stability;
 pub mod steady;

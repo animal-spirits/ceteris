@@ -127,9 +127,30 @@ pub struct TradeParams {
     /// P45's start, the constant learning gain of Milani (2007), 0.0183 a quarter (DESIGN 17;
     /// owner approval 2026-10-31).
     pub storage_gain: f64,
+    /// P53 monthly adjustment rate of cross-border sourcing by theta class (ADR 0027), in
+    /// (0, 1]. Each crossing's kernel moves toward its target in logs at this rate, so a
+    /// permanent tariff change has the short-run elasticity rho theta in month one and theta
+    /// in the limit. 1 is instant adjustment, the S12 switch off and the default until the
+    /// falsification test of Branch E passes; prior half-life 12 to 48 months, rho = 1 -
+    /// 2^(-1/half-life).
+    pub rho: [f64; N_CLASSES],
 }
 
 impl TradeParams {
+    /// S12: whether any class adjusts partially.
+    pub fn partial_adjustment(&self) -> bool {
+        self.rho.iter().any(|&r| r != 1.0)
+    }
+
+    /// P53 of good `g`, by its theta class; 1 for a local good.
+    pub fn rho_of(&self, g: usize) -> f64 {
+        if self.goods.is_traded(g) {
+            self.rho[usize::from(self.theta_class[g])]
+        } else {
+            1.0
+        }
+    }
+
     /// Refuses a per-good field without one entry per good of `goods`.
     pub fn check_goods(&self) -> Result<(), String> {
         let n = self.goods.n();
@@ -317,6 +338,7 @@ impl Default for TradeParams {
             speculation: vec![0.0; p2::N],
             convenience: vec![1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
             storage_gain: 0.006,
+            rho: [1.0; N_CLASSES],
         }
     }
 }

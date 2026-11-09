@@ -15,12 +15,12 @@ trap 'rm -rf "$CETERIS_PACK_EXPORT"' EXIT
 
 step() {
   local name=$1; shift
+  local start=$SECONDS
   echo "== $name"
   "$@" 2>&1 | tee "$logs/$name.log"
+  echo "== $name: $((SECONDS - start)) s" | tee -a "$logs/timings.log"
 }
 
 step export cargo run --release --bin ceteris -- export --pack "$CETERIS_PACK" --out "$CETERIS_PACK_EXPORT"
-step p2-acceptance cargo test -p ceteris-econ --release --test golden --test p2_acceptance
-step p2-gate cargo test -p ceteris-cli --release --test p2_gate -- --nocapture
-step calibrate cargo test -p ceteris-calibrate --release --test steady_state --test benchmark -- --nocapture
-step workspace cargo test --workspace --release
+# One workspace run covers the econ golden/p2_acceptance, cli p2_gate and calibrate targets.
+step workspace cargo test --workspace --release --no-fail-fast -- --nocapture

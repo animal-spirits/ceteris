@@ -49,7 +49,7 @@ fn calibrate_writes_and_reports_the_fixture_calibration() {
         serde_json::from_str(&lines[open..lines.len() - 1].join("\n")).unwrap();
     assert_eq!(summary["passes"].as_u64().unwrap() as usize, open);
     for key in [
-        "r",
+        "column_factor",
         "pass_history",
         "local_va_gap_quantiles",
         "ln_a_quantiles_traded",

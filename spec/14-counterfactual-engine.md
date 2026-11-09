@@ -1,6 +1,6 @@
 ## 14. Counterfactual Engine: Ex Ante and Ex Post Interventions
 
-Every experiment is a branch: a parent run plus an ordered list of timed edits, replayed under the same random streams across an ensemble of seeds, so the reported effect of an intervention is a paired distribution rather than an anecdote.
+Every experiment is a branch: a parent run plus an ordered list of timed edits, replayed under the same random streams across an ensemble of seeds (members differ by their draws of the uncertain parameters from the register priors, shared with the baseline; ADR 0322), so the reported effect of an intervention is a paired distribution rather than an anecdote.
 
 ### 14.1 Objects
 
@@ -28,7 +28,7 @@ In-world edits are distinguished from god-mode edits in the log, because only in
 
 ### 14.3 Snapshots and replay
 
-Full state snapshots are written every 12 ticks as compressed columnar chunks, content-addressed so unchanged tables are shared across branches. Reaching any tick means loading the nearest earlier snapshot and replaying deterministically. Forking at tick t costs one snapshot load. A null intervention must reproduce the parent bit for bit (a CI test). A snapshot carries the run's parameters and names the network it was taken on by the network's content digest, so a restore returns to both; seek reapplies the branch's timed edits as it replays past their ticks, a snapshot at a tick holding the world before that tick's edits; an edit made after seeking back starts a new timeline and drops the later snapshots and edits (ADRs 0291 to 0293).
+Full state snapshots are written every 12 ticks as compressed chunks of the canonical encoding, content-addressed so unchanged regions are shared across branches (ADR 0326). Reaching any tick means loading the nearest earlier snapshot and replaying deterministically. Forking at tick t costs one snapshot load. A null intervention must reproduce the parent bit for bit (a CI test). A snapshot carries the run's parameters and names the network it was taken on by the network's content digest, so a restore returns to both; seek reapplies the branch's timed edits as it replays past their ticks, a snapshot at a tick holding the world before that tick's edits; an edit made after seeking back starts a new timeline and drops the later snapshots and edits (ADRs 0291 to 0293).
 
 ### 14.4 Common random numbers
 
@@ -51,5 +51,5 @@ For each variable the engine measures when across-seed dispersion of the baselin
 
 ### 14.8 Scripting API
 
-Everything in the UI is available from scripts through the `ceteris` CLI driven by a scenario file (ADR 0113), for example: create a branch from a baseline at a tick, apply edits, run an ensemble. Runs write their outcome tables as Arrow IPC and Parquet, which Polars, DuckDB or any other language reads for analysis without glue code. A thin Python client that only drives runs and reads Arrow is added only if notebook-driven runs prove necessary, under its own ADR.
+Everything in the UI is available from scripts through the `ceteris` CLI driven by a scenario file (ADR 0113) and, after the P3 gate, through the read-only `ceteris serve` local API (ADRs 0197, 0323), for example: create a branch from a baseline at a tick, apply edits, run an ensemble. Runs write their outcome tables as Arrow IPC and Parquet, which Polars, DuckDB or any other language reads for analysis without glue code. A thin Python client that only drives runs and reads Arrow is added only if notebook-driven runs prove necessary, under its own ADR.
 

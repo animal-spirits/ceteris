@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! Measurement harness of MIGRATION Task 3 (price rule under origin clearing): the growth
 //! factors per tick of a small deviation from the fixture's GE equilibrium over a grid of
 //! (kappa1, kappa2), in both modes and with crossing lags as built, 0 or 3 (the trade SPEC's

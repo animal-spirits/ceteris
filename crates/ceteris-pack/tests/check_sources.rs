@@ -389,3 +389,149 @@ fn the_county_lock_adds_geoboundaries_to_the_pack_sources() {
         ["geoboundaries: read by the pack but missing from sources.toml"]
     );
 }
+
+const HELD_OUT: &str = "holdout = \"{class}\"\n";
+
+/// A manifest whose `sample` source is held out, with the validation file written by hand.
+fn held_out(class: &str, validation_file: &str, extra_files: &[(&str, &str)]) -> Config {
+    let sample = SAMPLE.replace("{use}", "validation").replace(
+        "closed_source_only",
+        &format!("{}closed_source_only", HELD_OUT.replace("{class}", class)),
+    );
+    let config = Config::new(&format!("{PACK_INPUT}{sample}"), &["pack-input"], &[]);
+    let dir = config.path().join(CONFIG_DIR);
+    fs::write(dir.join("validation.toml"), validation_file).unwrap();
+    for (path, body) in extra_files {
+        let full = config.path().join(path);
+        fs::create_dir_all(full.parent().unwrap()).unwrap();
+        fs::write(full, body).unwrap();
+    }
+    config
+}
+
+const READ_FILE: &str = "[[file]]\nsource = \"sample\"\nname = \"sample.csv\"\nsha256 = \"abc\"\nurl = \"u\"\nread_by = [\"crates/x/tests/score.rs\"]\n";
+const PREREG: &str =
+    "[[entry]]\nsource = \"sample\"\nmetric = \"m\"\ntolerance = \"t\"\ntarget_sha256 = \"abc\"\n";
+
+fn has(lines: &[String], needle: &str) -> bool {
+    lines.iter().any(|l| l.contains(needle))
+}
+
+#[test]
+fn a_registered_held_out_source_read_only_by_its_scorer_passes() {
+    let config = held_out(
+        "H",
+        READ_FILE,
+        &[
+            ("crates/x/tests/score.rs", "const F: &str = \"sample.csv\";"),
+            (&format!("{CONFIG_DIR}/prereg.toml"), PREREG),
+        ],
+    );
+    assert!(config.lines(None).is_empty(), "{:?}", config.lines(None));
+}
+
+#[test]
+fn a_held_out_source_cannot_be_in_the_pack_build() {
+    let sample = SAMPLE.replace("{use}", "validation").replace(
+        "closed_source_only",
+        &format!("{}closed_source_only", HELD_OUT.replace("{class}", "R")),
+    );
+    let config = Config::new(
+        &format!("{PACK_INPUT}{sample}"),
+        &["pack-input", "sample"],
+        &[],
+    );
+    assert!(has(
+        &config.lines(None),
+        "held out but read by the pack build"
+    ));
+}
+
+#[test]
+fn a_held_out_file_needs_read_by() {
+    let file = READ_FILE.replace("read_by = [\"crates/x/tests/score.rs\"]\n", "");
+    let config = held_out("R", &file, &[]);
+    assert!(has(&config.lines(None), "needs read_by"));
+}
+
+#[test]
+fn another_file_opening_a_held_out_file_is_reported() {
+    let config = held_out(
+        "R",
+        READ_FILE,
+        &[
+            ("crates/x/tests/score.rs", "\"sample.csv\""),
+            (
+                "crates/ceteris-calibrate/src/fit.rs",
+                "open(\"sample.csv\")",
+            ),
+        ],
+    );
+    let lines = config.lines(None);
+    assert!(has(
+        &lines,
+        "crates/ceteris-calibrate/src/fit.rs opens held-out sample.csv"
+    ));
+    assert!(!has(&lines, "crates/x/tests/score.rs opens"));
+}
+
+#[test]
+fn a_scored_h_source_needs_a_preregistration_with_its_hash() {
+    let none = held_out("H", READ_FILE, &[]);
+    assert!(has(&none.lines(None), "prereg.toml has no entry"));
+    let wrong = held_out(
+        "H",
+        READ_FILE,
+        &[(
+            &format!("{CONFIG_DIR}/prereg.toml"),
+            &PREREG.replace("abc", "def"),
+        )],
+    );
+    assert!(has(&wrong.lines(None), "prereg.toml has no entry"));
+    let incomplete = held_out(
+        "H",
+        READ_FILE,
+        &[(
+            &format!("{CONFIG_DIR}/prereg.toml"),
+            &PREREG.replace("tolerance = \"t\"\n", ""),
+        )],
+    );
+    assert!(has(&incomplete.lines(None), "lacks 'tolerance'"));
+    let r_source = held_out(
+        "R",
+        READ_FILE,
+        &[(&format!("{CONFIG_DIR}/prereg.toml"), PREREG)],
+    );
+    assert!(has(&r_source.lines(None), "not H"));
+}
+
+#[test]
+fn holdout_class_and_use_are_checked() {
+    let bad = held_out("X", READ_FILE, &[]);
+    assert!(has(&bad.lines(None), "holdout must be 'H' or 'R'"));
+    let primary = Config::single(&PACK_INPUT.replacen(
+        "use = \"primary\"",
+        "use = \"primary\"\nholdout = \"H\"",
+        1,
+    ));
+    assert!(has(&primary.lines(None), "not validation"));
+}
+
+#[test]
+fn leaving_the_held_out_set_names_the_replacement() {
+    let moved = format!("{PACK_INPUT}was_holdout = true\n");
+    assert!(has(
+        &Config::single(&moved).lines(None),
+        "replaces_holdout must name an H source"
+    ));
+}
+
+#[test]
+fn the_current_manifest_passes_the_holdout_register() {
+    let lines: Vec<String> = sources::problems(&sources::workspace_root(), None)
+        .unwrap()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(lines.is_empty(), "{lines:?}");
+}

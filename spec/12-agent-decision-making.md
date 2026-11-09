@@ -15,6 +15,8 @@ Decisions are made in tiers of increasing cost and decreasing frequency: cheap b
 
 Agents forecast prices, wages and demand using a set of simple heuristics (adaptive, trend-following, anchoring to a long-run mean) and switch between them by recent forecasting performance, the heuristic-switching model of Brock and Hommes (1997), whose parameters have laboratory estimates (Anufriev and Hommes 2012). The intensity of choice controls how quickly agents herd onto the best-performing rule, a known source of endogenous cycles.
 
+The inflation that the price and wage rules expect (ADR 0019) is that of a world price index over the buyer prices of all goods, weighted by base consumption, local goods included at their country's price level p_c (ADR 0284).
+
 ### 12.3 State planner (Tier 1a)
 
 The state objective is a weighted sum over regime survival, revenue, power, prestige, territorial goals and interest-group welfare, with weights equal to the ruling coalition's power shares from Section 10.4. Policy modules (budget, taxes, tariffs, investment, laws, diplomacy, military) each score a small set of candidate actions with a one-step model of their effects (using local elasticities estimated online from the simulation itself) and pick the best feasible one, with inertia and noise. This keeps state AI cheap, legible (the UI shows the score breakdown for every decision), and responsive to who holds power.
