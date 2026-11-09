@@ -69,7 +69,7 @@ pub const REGISTRY: &[Command] = &[
     ),
     cmd(
         "explain",
-        "explain FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR",
+        "explain FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR [--reference]",
         "Shapley split of a branch's effect over the price and wage channels",
         true,
     ),

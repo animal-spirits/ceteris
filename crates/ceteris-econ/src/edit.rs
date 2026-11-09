@@ -8,8 +8,9 @@ use std::fmt;
 
 use ceteris_run::{Edit, EditKind, Query, QueryError};
 
-use ceteris_trade::TradeParams;
+use ceteris_trade::{TradeParams, Wedges};
 
+use crate::inputs::EconInputs;
 use crate::params::EconParams;
 use crate::world::EconWorld;
 
@@ -147,15 +148,34 @@ pub fn member_params(
 
 /// `tariff.<importer>.<exporter>.<group>`, country indices and the tariff group.
 fn set_tariff(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
-    let idx = indices::<3>(target, "tariff")?;
     let mut wedges = w.inputs().wedges.clone();
+    set_tariff_in(&mut wedges, target, v)?;
+    w.set_wedges(wedges);
+    Ok(())
+}
+
+fn set_tariff_in(wedges: &mut Wedges, target: &str, v: f64) -> Result<(), EditError> {
+    let idx = indices::<3>(target, "tariff")?;
     let n = wedges.n_countries();
     if idx[0] >= n || idx[1] >= n || idx[2] >= 2 {
         return Err(EditError::OutOfRange(target.to_string()));
     }
     wedges.tariff[(idx[0] * n + idx[1]) * 2 + idx[2]] = v as f32;
-    w.set_wedges(wedges);
     Ok(())
+}
+
+/// The inputs with every tariff edit of `log` in force from the start, whatever its tick: the
+/// network the long-run counterfactual equilibrium is solved on (14.7). Other edits are not
+/// inputs and are left out.
+pub fn tariff_inputs(inputs: &EconInputs, log: &[Edit]) -> Result<EconInputs, EditError> {
+    let mut out = inputs.clone();
+    for e in log
+        .iter()
+        .filter(|e| e.kind == EditKind::Policy && e.target.starts_with("tariff."))
+    {
+        set_tariff_in(&mut out.wedges, &e.target, e.value)?;
+    }
+    Ok(out)
 }
 
 /// The province columns a query can name: the world's own tables at the edit's tick.
