@@ -174,7 +174,7 @@ where each good has its own (ADR 0276). Factors are f64: an f32 ln K resolves K 
 stored in f64 (ADR 0093's second option), which holds it down to about 1e-308.
 
 nu is the non-tariff border friction (P05): an iceberg cost, destroyed at the crossing and
-tallied as border loss. t is the applied tariff: a routing wedge only, no goods lost; its revenue
+tallied as border loss. `Wedges.ntb` (ADR 0337) multiplies it per (importer, exporter, tariff group), an iceberg factor of at least 1, empty meaning 1: the crossing loss is `tau (1 + nu_g) ntb`. Edit targets `trade.border_nu.<good>` (ADR 0336) and `ntb.<i>.<e>.<g>` (test `ntb_edit_sets_the_wedge_survives_snapshot_and_rejects_bad_values`, kernel test `crossing_includes_border_and_tariff`). An empty `ntb` adds nothing to the snapshot, so existing goldens do not move; an edited one rides after the tariffs in the snapshot's tariff list. t is the applied tariff: a routing wedge only, no goods lost; its revenue
 is paid in money (Payments, below). The sum over gateway pairs is
 the entropic route choice of Allen and Arkolakis (2022): parallel routes add access. Gateways
 belong to one country; a land crossing is two gateways, one on each side, joined by the crossing
