@@ -1570,3 +1570,18 @@ sections = "8.3, 19.4"
 rows = "0331"
 topic = "[T2b journals one netted entry per flow, from and to per tick; per-leg entries only in detail mode](../rfcs/0316-net-the-t2b-ledger-journal.md)"
 sections = "4.6, 19.2, 19.4"
+
+[[entry]]
+rows = "0332"
+topic = "[Pipeline slots are good-major, an exception to goods-innermost layout](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0333"
+topic = "[Pipeline snapshot bytes stay buyer-major; encode and decode transpose](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0334"
+topic = "[In-flight totals are computed inside the per-good deliver and dispatch tasks](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"

@@ -41,7 +41,7 @@ them only as quantities offered to and demanded from each market.
 | Selection constant Gamma_d,g (ADR 0200) | (province, traded good) | `f64` (`ProvinceData::gamma`; static) | | the data state's 1 / (alpha_d P_d) at prices 1, or the calibration tables' value at the calibrated prices; 1 where no origin is reachable |
 | Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
-| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
+| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, traded good, buyer), stored good-major (ADR 0332; snapshot bytes buyer-major, ADR 0333) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 
