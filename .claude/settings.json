@@ -2,7 +2,6 @@
   "permissions": {
     "ask": [
       "Edit(/tests/golden/**)",
-      "Write(/tests/golden/**)",
       "Edit(/crates/ceteris-pack/config/sources.toml)",
       "Edit(/clippy.toml)",
       "Edit(/rust-toolchain.toml)"
