@@ -1585,3 +1585,8 @@ sections = "19.4"
 rows = "0334"
 topic = "[In-flight totals are computed inside the per-good deliver and dispatch tasks](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
 sections = "19.4"
+
+[[entry]]
+rows = "0335"
+topic = "[P4 gate tolerances for UN 2000-2010 fixed before any run](../rfcs/0335-accept-p4-population-adrs-and-gate-tolerances.md)"
+sections = "6.2, 21.1"

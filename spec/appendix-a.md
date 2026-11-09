@@ -322,4 +322,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0332 | [Pipeline slots are good-major, an exception to goods-innermost layout](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md) | 19.4 |
 | 0333 | [Pipeline snapshot bytes stay buyer-major; encode and decode transpose](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md) | 19.4 |
 | 0334 | [In-flight totals are computed inside the per-good deliver and dispatch tasks](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md) | 19.4 |
+| 0335 | [P4 gate tolerances for UN 2000-2010 fixed before any run](../rfcs/0335-accept-p4-population-adrs-and-gate-tolerances.md) | 6.2, 21.1 |
 <!-- rows:end -->
