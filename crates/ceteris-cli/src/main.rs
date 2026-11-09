@@ -105,6 +105,7 @@ use ceteris_trade::{Kernel, TradeParams};
 const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
   ceteris pack check-sources [--profile research|release]
+  ceteris setup [--from DIR]
   ceteris pack fetch [--record]
   ceteris pack record-counties
   ceteris pack build [--out DIR]
@@ -420,6 +421,27 @@ fn fetch_sources(args: impl Iterator<Item = String>) -> Result<ExitCode, String>
             Ok(ExitCode::FAILURE)
         }
     }
+}
+
+/// `setup [--from DIR]`: the first-run path (ADR 0215): lists the sources, checks the disk,
+/// downloads what is missing and takes manual files from DIR. Exit 1 until every file verifies.
+fn setup_verb(args: Vec<String>) -> Result<ExitCode, String> {
+    let from = match args.as_slice() {
+        [] => None,
+        [flag, dir] if flag == "--from" => Some(PathBuf::from(dir)),
+        _ => return Err("usage: ceteris setup [--from DIR]".into()),
+    };
+    let done = ceteris_pack::setup::run(
+        &sources::workspace_root(),
+        from.as_deref(),
+        ceteris_pack::setup::BUILD_BYTES,
+        &mut std::io::stdout(),
+    )?;
+    Ok(if done {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 /// `pack record-counties`: rewrites `counties.lock.toml` from the geoBoundaries API, downloading
@@ -1465,6 +1487,12 @@ fn main() -> ExitCode {
     }
     if command == "serve" || command == "api" {
         return serve_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if command == "setup" {
+        return setup_verb(argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
