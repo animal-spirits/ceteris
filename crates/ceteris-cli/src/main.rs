@@ -1041,11 +1041,11 @@ fn serve_verb(command: &str, args: Vec<String>) -> Result<ExitCode, String> {
             token
         }
     };
-    let server = Arc::new(ceteris_run::serve::Server {
+    let server = Arc::new(ceteris_run::serve::Server::new(
         token,
         scenario,
-        tables: PathBuf::from(need("--tables")?),
-    });
+        PathBuf::from(need("--tables")?),
+    ));
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = ceteris_run::serve::bind(addr).map_err(|e| e.to_string())?;
     println!(

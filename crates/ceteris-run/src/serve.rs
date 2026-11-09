@@ -4,11 +4,15 @@
 //! reply is one line `{"id":1,"result":...}` or `{"id":1,"error":{"code":C,"message":M}}`. A
 //! `table.read` result carries `bytes`, and that many raw bytes of the IPC stream follow the
 //! reply line. The server never touches a world, so reads cannot change a state hash.
-//! Per-tick subscriptions are not built.
+//! `tick.subscribe` turns a connection into a stream of `{"event":"tick","tick":N}` lines, one per
+//! tick the owner of the server announces with `Server::publish`; the connection takes no
+//! further requests. The CLI's `serve` runs no world, so it announces nothing yet (tracked in
+//! #201).
 
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::sync::{Condvar, Mutex};
 
 use serde_json::{Value, json};
 
@@ -38,6 +42,7 @@ pub struct Server {
     pub scenario: Scenario,
     /// Where the `.arrow` tables of the verbs' `--out` live.
     pub tables: PathBuf,
+    ticks: (Mutex<Option<u64>>, Condvar),
 }
 
 enum Reply {
@@ -47,6 +52,34 @@ enum Reply {
 }
 
 impl Server {
+    pub fn new(token: String, scenario: Scenario, tables: PathBuf) -> Self {
+        Server {
+            token,
+            scenario,
+            tables,
+            ticks: (Mutex::new(None), Condvar::new()),
+        }
+    }
+
+    /// Announces that `tick` is complete to every subscriber.
+    pub fn publish(&self, tick: u64) {
+        *self.ticks.0.lock().unwrap() = Some(tick);
+        self.ticks.1.notify_all();
+    }
+
+    /// Writes each announced tick above `seen` to `out` until the write fails.
+    fn stream_ticks(&self, out: &mut impl Write, mut seen: Option<u64>) -> io::Result<()> {
+        let mut now = self.ticks.0.lock().unwrap();
+        loop {
+            while *now == seen {
+                now = self.ticks.1.wait(now).unwrap();
+            }
+            seen = *now;
+            writeln!(out, "{}", json!({"event": "tick", "tick": seen}))?;
+            out.flush()?;
+        }
+    }
+
     fn call(&self, method: &str, params: &Value) -> Reply {
         match method {
             "api.schema" => Reply::Result(json!(
@@ -108,7 +141,20 @@ impl Server {
     pub fn serve(&self, stream: TcpStream) -> io::Result<()> {
         let mut out = stream.try_clone()?;
         for line in BufReader::new(stream).lines() {
-            let (reply, bytes) = self.line(&line?);
+            let line = line?;
+            if serde_json::from_str::<Value>(&line).is_ok_and(|r| {
+                r["token"].as_str() == Some(self.token.as_str())
+                    && r["method"].as_str() == Some("tick.subscribe")
+            }) {
+                let seen = *self.ticks.0.lock().unwrap();
+                writeln!(
+                    out,
+                    "{}",
+                    json!({"id": serde_json::from_str::<Value>(&line)?["id"], "result": "subscribed"})
+                )?;
+                return self.stream_ticks(&mut out, seen);
+            }
+            let (reply, bytes) = self.line(&line);
             writeln!(out, "{reply}")?;
             if let Some(b) = bytes {
                 out.write_all(&b)?;
@@ -141,11 +187,7 @@ mod tests {
     fn start(dir: &std::path::Path) -> (SocketAddr, Arc<Server>) {
         let listener = bind("127.0.0.1:0".parse().unwrap()).unwrap();
         let addr = listener.local_addr().unwrap();
-        let server = Arc::new(Server {
-            token: "secret".into(),
-            scenario: scenario(),
-            tables: dir.to_path_buf(),
-        });
+        let server = Arc::new(Server::new("secret".into(), scenario(), dir.to_path_buf()));
         let s = Arc::clone(&server);
         thread::spawn(move || {
             for stream in listener.incoming().flatten() {
@@ -167,6 +209,28 @@ mod tests {
         let mut raw = vec![0; n];
         reader.read_exact(&mut raw).unwrap();
         (reply, raw)
+    }
+
+    #[test]
+    fn subscribers_get_each_published_tick() {
+        let dir = tempfile::tempdir().unwrap();
+        let (addr, server) = start(dir.path());
+        let mut stream = TcpStream::connect(addr).unwrap();
+        writeln!(
+            stream,
+            r#"{{"id":1,"token":"secret","method":"tick.subscribe"}}"#
+        )
+        .unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.contains("subscribed"));
+        for t in [3u64, 4] {
+            server.publish(t);
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["tick"], t);
+        }
     }
 
     #[test]
