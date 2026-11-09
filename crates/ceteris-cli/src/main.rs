@@ -1068,6 +1068,7 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
             ticks,
             branch,
             &out,
+            args.iter().any(|a| a == "--reference"),
         );
     }
     let pair = run_pair(
@@ -1206,6 +1207,46 @@ fn blame(
     Ok(ExitCode::SUCCESS)
 }
 
+/// Solves the GE reference with the baseline's and the branch's tariff edits in force from the
+/// start (14.7) and prints the long-run effect on each declared outcome beside the simulated
+/// one: the world price index and the mean wage over provinces.
+fn reference_gap(
+    inputs: &Arc<ceteris_econ::inputs::EconInputs>,
+    base: &(EconParams, ceteris_trade::TradeParams),
+    (baseline_log, branch_log): (&[ceteris_run::Edit], &[ceteris_run::Edit]),
+    simulated: &[f64],
+    out: &std::path::Path,
+) -> Result<(), String> {
+    use ceteris_econ::edit::tariff_inputs;
+    use ceteris_econ::export::write_inputs;
+
+    let solve_log = |log: &[ceteris_run::Edit], name: &str| -> Result<[f64; 2], String> {
+        let inp = tariff_inputs(inputs, log).map_err(|e| format!("{e:?}"))?;
+        let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, &base.1);
+        let dir = out.join("reference").join(name);
+        write_inputs(&dir, &inp, &kernel, &base.0, &base.1).map_err(|e| e.to_string())?;
+        let ref_inputs = reference_io::load(&dir)?;
+        let model = Model::new(&ref_inputs)?;
+        let eq = solve::equilibrium(&model, None, solve::TOL, None)
+            .map_err(|e| format!("no equilibrium for {name}: {e}"))?;
+        let n = eq.wage.len() as f64;
+        Ok([eq.price_index, eq.wage.iter().sum::<f64>() / n])
+    };
+    let (before, after) = (
+        solve_log(baseline_log, "baseline")?,
+        solve_log(branch_log, "branch")?,
+    );
+    for (o, name) in ceteris_econ::ensemble::OUTCOME_NAMES.iter().enumerate() {
+        let long_run = after[o] - before[o];
+        println!(
+            "reference {name}: {long_run:+.6e} simulated {:+.6e} gap {:+.6e}",
+            simulated[o],
+            simulated[o] - long_run
+        );
+    }
+    Ok(())
+}
+
 /// `explain`: the Shapley split of the paired effect over the shut-able channels (prices,
 /// wages), per member, with bootstrap intervals over members, written as `channel_shares`.
 #[allow(clippy::too_many_arguments)]
@@ -1218,6 +1259,7 @@ fn explain(
     ticks: u32,
     branch: &str,
     out: &std::path::Path,
+    reference: bool,
 ) -> Result<ExitCode, String> {
     use ceteris_econ::ensemble::{channel_shares, outcomes};
     use ceteris_run::effects::bootstrap_mean;
@@ -1231,6 +1273,12 @@ fn explain(
         .map(|&k| channel_shares(inputs, base, priors, logs, k, ticks, all))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("{e:?}"))?;
+    if reference {
+        let simulated: Vec<f64> = (0..ceteris_econ::ensemble::OUTCOME_NAMES.len())
+            .map(|o| per_member.iter().map(|m| m[o].total).sum::<f64>() / per_member.len() as f64)
+            .collect();
+        reference_gap(inputs, base, logs, &simulated, out)?;
+    }
     let (mut outcome, mut channel) = (vec![], vec![]);
     let (mut share, mut lo, mut hi) = (vec![], vec![], vec![]);
     for (o, name) in ceteris_econ::ensemble::OUTCOME_NAMES.iter().enumerate() {

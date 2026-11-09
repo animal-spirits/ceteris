@@ -233,3 +233,62 @@ fn blame_ranks_the_edits_of_a_branch() {
     assert!(first.contains("edit 1:"), "{out}");
     assert_eq!(out.lines().count(), 4, "{out}");
 }
+
+#[test]
+fn explain_reference_reports_the_long_run_gap() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    let out = dir.path().join("out");
+    let o = out.to_str().unwrap();
+    for args in [
+        vec![
+            "new",
+            f,
+            "--pack-hash",
+            "abc",
+            "--engine",
+            "test+1",
+            "--seeds",
+            "1",
+        ],
+        vec!["fork", f, "--from", "main", "--at", "3", "--id", "tariff"],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "tariff",
+            "--at",
+            "4",
+            "--kind",
+            "policy",
+            "--target",
+            "tariff.0.1.0",
+            "--value",
+            "0.25",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let (ok, stdout) = ceteris(&[
+        "explain",
+        f,
+        "--branch",
+        "tariff",
+        "--baseline",
+        "main",
+        "--ticks",
+        "8",
+        "--fixture",
+        "--out",
+        o,
+        "--reference",
+    ]);
+    assert!(ok, "{stdout}");
+    let refs: Vec<&str> = stdout
+        .lines()
+        .filter(|l| l.starts_with("reference "))
+        .collect();
+    assert_eq!(refs.len(), 2, "{stdout}");
+    assert!(refs[0].contains("world_price_index") && refs[0].contains("gap"));
+}
