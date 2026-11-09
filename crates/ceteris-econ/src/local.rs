@@ -981,6 +981,7 @@ pub fn fills(p: &Province) -> Fills {
         recent.push(last);
         // a limit from the shortest cycle that reaches one, else the first cycle that runs ahead
         let mut ahead = None;
+        let mut limit = false;
         w.inapplicable = false;
         for period in 1..=recent.len() {
             let cycle = &recent[recent.len() - period..];
@@ -988,6 +989,7 @@ pub fn fills(p: &Province) -> Fills {
                 Some(Jump::Limit(h)) => {
                     passes += period;
                     ahead = Some(h);
+                    limit = true;
                     break;
                 }
                 Some(Jump::Ahead(h)) => {
@@ -1005,7 +1007,9 @@ pub fn fills(p: &Province) -> Fills {
                 .into_iter()
                 .map(|x| if x < f64::MIN_POSITIVE { 0.0 } else { x })
                 .collect();
-            recent.clear();
+            if limit {
+                recent.clear();
+            }
         }
     }
 }
