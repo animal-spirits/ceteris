@@ -49,7 +49,7 @@ Recommendation: A, because the development laws forbid moving a pass criterion a
 results, and 2000-2010 is in the calibration window, so the check is a fit check, not a
 forecast.
 
-Decision: pending, Antonio.
+Decision: A, Antonio, 2026-11-09 (decision card).
 Row: P4 gate row, filled in once accepted.
 
 ### D3. Cause shares in the paid build (O3)
