@@ -1,6 +1,6 @@
 # RFC 0319. Good-major pipeline slots and parallel tick checks for the 45-goods budget
 
-Status: proposed
+Status: accepted
 Date: 2026-11-09
 Design sections: 19.2, 19.4; `specs/trade/SPEC.md` (pipeline, T1 deliver, T2b dispatch)
 Release: 1.0, P3
@@ -70,8 +70,8 @@ Recommendation: A, because it removes all four pipeline costs, is bit-identical,
 exception follows the rule's own reason (the layout serves the access pattern of the hot
 readers); every hot reader of this array works per good.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-09.
+Row: ADR 0332
 
 ### D2. What byte order does the snapshot keep for the pipeline?
 
@@ -86,8 +86,8 @@ Options:
 Recommendation: A, because the format is public (CLAUDE.md: formats change only by RFC and for
 cause) and the cost is outside the tick.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-09.
+Row: ADR 0333
 
 ### D3. Where are the in-flight totals computed?
 
@@ -106,8 +106,8 @@ Options:
 Recommendation: A, because it is bit-identical, has no extra pass and keeps the invariant
 exact by construction; B is the fallback if the fused tasks make the code unclear.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-09.
+Row: ADR 0334
 
 ## Parallel checks and totals (no decision; class A)
 
