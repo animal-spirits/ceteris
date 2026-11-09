@@ -1,0 +1,14 @@
+# Showcase scenarios (issue 409, plan P2). Question, edit, horizon and finding are written
+# before any run and do not change after one; a scenario that fails its check is dropped.
+# `status = "draft"` until the pack and engine are pinned and the hashes below filled in on a
+# full-pack run; a "pinned" entry must carry a real pack_hash and one run hash per branch and seed.
+
+[[scenario]]
+id = "us-china-tariff"
+file = "us-china-tariff.toml"
+status = "draft"
+question = "What does a 25% US tariff on all Chinese goods do to bilateral trade and US consumer prices over four years?"
+edit = "tariff.226.41.{0,1} = 0.25 from tick 13 (US importer 226, China exporter 41; both tariff groups)"
+horizon_ticks = 60
+finding = "US imports from China fall by more than 20% at tick 60 against main, with the median-seed effect outside the CRN band of the 8 seeds; total US imports fall by less than the bilateral drop (third-country rerouting)."
+check = "ceteris effects over the 8 seeds: bilateral US-from-China import value and total US import value at tick 60, branch tariff versus main."
