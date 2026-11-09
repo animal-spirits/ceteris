@@ -993,6 +993,60 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `fetch HASH --scenario FILE --ticks N --fixture|--pack DIR`: finds the (branch, seed) of the
+/// scenario file whose run hash is HASH, recomputes that member to `ticks` and prints its state
+/// hash. Pulling chunks from a mirror is not built.
+fn fetch_verb(args: Vec<String>) -> Result<ExitCode, String> {
+    use ceteris_econ::ensemble::run_member;
+    use ceteris_run::ensemble::register_priors;
+
+    let hash = args.first().ok_or("expected a run HASH")?;
+    let flag = |name: &str| -> Option<&str> {
+        let at = args.iter().position(|a| a == name)?;
+        args.get(at + 1).map(String::as_str)
+    };
+    let need = |name: &str| flag(name).ok_or(format!("missing {name}"));
+    let file = need("--scenario")?;
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenario = ceteris_run::Scenario::parse(&text).map_err(|e| e.to_string())?;
+    let ticks: u32 = need("--ticks")?
+        .parse()
+        .map_err(|_| "--ticks wants a count".to_string())?;
+    let source = match (flag("--pack"), args.iter().any(|a| a == "--fixture")) {
+        (Some(dir), false) => Source::Pack(PathBuf::from(dir)),
+        (None, true) => Source::Fixture,
+        _ => return Err("choose an input with --fixture or --pack DIR".into()),
+    };
+    let mut found = None;
+    for b in &scenario.branches {
+        for &seed in &scenario.seeds {
+            if ceteris_run::commands::share(&scenario, &b.id, seed).map_err(|e| e.to_string())?
+                == *hash
+            {
+                found = Some((b.id.clone(), seed));
+            }
+        }
+    }
+    let (branch, seed) = found.ok_or("no branch and seed of the scenario has that run hash")?;
+    let inputs = source.load(true)?;
+    let base = (EconParams::default(), inputs.trade_params());
+    let inputs = Arc::new(inputs);
+    let log = scenario.edits_of(&branch).map_err(|e| e.to_string())?;
+    let m = run_member(
+        &inputs,
+        &base,
+        &register_priors(),
+        &log,
+        seed,
+        ticks,
+        |_| (),
+    )
+    .map_err(|e| format!("{e:?}"))?;
+    let state: String = m.state_hash.iter().map(|b| format!("{b:02x}")).collect();
+    println!("{branch} seed {seed} tick {ticks} state {state}");
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `ensemble` and `effects`: run a branch (and its baseline) over the scenario's seeds, with
 /// the register priors drawn per member, and write the `outcomes` and `effects` tables.
 fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
@@ -1339,6 +1393,12 @@ fn main() -> ExitCode {
     .contains(&command.as_str())
     {
         return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if command == "fetch" {
+        return fetch_verb(argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
