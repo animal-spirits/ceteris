@@ -167,3 +167,69 @@ fn explain_writes_channel_shares_for_every_outcome() {
             > 0
     );
 }
+
+#[test]
+fn blame_ranks_the_edits_of_a_branch() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    for args in [
+        vec![
+            "new",
+            f,
+            "--pack-hash",
+            "abc",
+            "--engine",
+            "test+1",
+            "--seeds",
+            "1",
+        ],
+        vec!["fork", f, "--from", "main", "--at", "2", "--id", "b"],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "b",
+            "--at",
+            "2",
+            "--kind",
+            "param",
+            "--target",
+            "econ.kappa_w",
+            "--value",
+            "0.2501",
+        ],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "b",
+            "--at",
+            "3",
+            "--kind",
+            "policy",
+            "--target",
+            "tariff.0.1.0",
+            "--value",
+            "0.4",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let (ok, out) = ceteris(&[
+        "blame",
+        f,
+        "--branch",
+        "b",
+        "--baseline",
+        "main",
+        "--ticks",
+        "8",
+        "--fixture",
+    ]);
+    assert!(ok);
+    let first = out.lines().next().unwrap();
+    assert!(first.starts_with("world_price_index"), "{out}");
+    assert!(first.contains("edit 1:"), "{out}");
+    assert_eq!(out.lines().count(), 4, "{out}");
+}
