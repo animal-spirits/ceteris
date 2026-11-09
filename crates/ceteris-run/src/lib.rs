@@ -11,6 +11,7 @@ pub mod query;
 pub mod replay;
 pub mod retention;
 pub mod scenario;
+pub mod serve;
 pub mod store;
 pub mod vcs;
 
