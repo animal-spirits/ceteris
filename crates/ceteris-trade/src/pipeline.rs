@@ -11,16 +11,12 @@ use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 pub const SLOTS: usize = 4;
 
-/// One good's shipments sorted by bucket: bucket offsets, then (buyer, units).
-type Bucketed = (Vec<usize>, Vec<(u32, f64)>);
-
-/// Target number of buyer ranges per slot in [`Pipeline::push_all`].
-const RANGES: usize = 16;
-
 /// A shipment for [`Pipeline::push_all`]: slot (1 to 4), buyer, units.
 pub type Push = (u8, u32, f64);
 
-/// Arrays are `[buyer * n_goods + g]`, buyers numbered by the caller.
+/// Arrays are good-major, `[g * n_buyers + buyer]` (RFC 0319 D1, an exception to the
+/// goods-innermost rule of 19.4: every hot reader works per good), buyers numbered by the
+/// caller. The snapshot bytes stay buyer-major (D2).
 /// The per-good in-flight sums of the current contents; never part of equality.
 #[derive(Clone, Debug, Default)]
 struct FlightCache(std::sync::OnceLock<Vec<f64>>);
@@ -76,13 +72,12 @@ impl Pipeline {
             "buyer {buyer} good {g}"
         );
         self.flight = FlightCache::default();
-        self.slots[(self.cursor + slot - 1) % SLOTS][buyer * self.goods + g] += units;
+        self.slots[(self.cursor + slot - 1) % SLOTS][g * self.buyers + buyer] += units;
     }
 
-    /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`, good by good in turn.
-    /// Each good's list is first sorted, stably and in parallel, into (slot, buyer range)
-    /// buckets; then one task per bucket column fills its cells, adding the goods in order, so
-    /// every cell sums the same terms in the same order however many ranges or threads there are.
+    /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`: one task per good adds
+    /// its list in order to its own contiguous run of each slot, so every cell sums the same
+    /// terms in the same order however many threads there are.
     pub fn push_all(&mut self, lists: &[&[Push]]) {
         self.flight = FlightCache::default();
         let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
@@ -91,60 +86,28 @@ impl Pipeline {
             assert!(lists.iter().all(|l| l.is_empty()), "no buyers");
             return;
         }
-        let range = buyers.div_ceil(RANGES);
-        let ranges = buyers.div_ceil(range);
-        let keys = SLOTS * ranges;
-        // key = storage slot * ranges + buyer range
-        let key = |slot: u8, buyer: u32| {
-            let slot = slot as usize;
-            (((cursor + slot - 1) % SLOTS) * ranges) + buyer as usize / range
-        };
-        let sorted: Vec<Bucketed> = lists
-            .par_iter()
+        let [s0, s1, s2, s3] = &mut self.slots;
+        let mut runs = [s0, s1, s2, s3].map(|s| s.chunks_exact_mut(buyers));
+        let tasks: Vec<([&mut [f64]; SLOTS], &[Push])> = lists
+            .iter()
+            .map(|&list| (runs.each_mut().map(|r| r.next().expect("good run")), list))
+            .collect();
+        tasks
+            .into_par_iter()
             .enumerate()
-            .map(|(g, list)| {
-                let mut offs = vec![0usize; keys + 1];
-                for &(slot, buyer, _) in *list {
+            .for_each(|(g, (cells, list))| {
+                for &(slot, buyer, units) in list {
                     assert!(
                         (1..=SLOTS).contains(&(slot as usize)),
                         "slot {slot} outside 1 to {SLOTS}"
                     );
                     assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
-                    offs[key(slot, buyer) + 1] += 1;
+                    cells[(cursor + slot as usize - 1) % SLOTS][buyer as usize] += units;
                 }
-                for k in 0..keys {
-                    offs[k + 1] += offs[k];
-                }
-                let mut next = offs.clone();
-                let mut out = vec![(0, 0.0); list.len()];
-                for &(slot, buyer, units) in *list {
-                    let k = key(slot, buyer);
-                    out[next[k]] = (buyer, units);
-                    next[k] += 1;
-                }
-                (offs, out)
-            })
-            .collect();
-        let mut tasks: Vec<(usize, &mut [f64])> = Vec::with_capacity(keys);
-        for (k, cells) in self.slots.iter_mut().enumerate() {
-            tasks.extend(
-                cells
-                    .chunks_mut(range * goods)
-                    .enumerate()
-                    .map(|(r, c)| (k * ranges + r, c)),
-            );
-        }
-        tasks.into_par_iter().for_each(|(key, cells)| {
-            let base = key % ranges * range;
-            for (g, (offs, out)) in sorted.iter().enumerate() {
-                for &(buyer, units) in &out[offs[key]..offs[key + 1]] {
-                    cells[(buyer as usize - base) * goods + g] += units;
-                }
-            }
-        });
+            });
     }
 
-    /// Delivers what is due this tick, `[buyer * n_goods + g]`, and advances the pipeline.
+    /// Delivers what is due this tick, `[g * n_buyers + buyer]`, and advances the pipeline.
     /// The slice stays valid until the next call.
     pub fn pop_due(&mut self) -> &[f64] {
         // the delivered slot is swapped out for the zeroed previous delivery, so a slot-4 push
@@ -157,7 +120,7 @@ impl Pipeline {
     }
 
     /// Goods delivered `ticks` from now (1 to 4) if nothing more is pushed,
-    /// `[buyer * n_goods + g]`.
+    /// `[g * n_buyers + buyer]`.
     pub fn scheduled(&self, ticks: usize) -> &[f64] {
         assert!(
             (1..=SLOTS).contains(&ticks),
@@ -168,19 +131,20 @@ impl Pipeline {
 
     /// Goods of `g` on order for `buyer`, over every slot.
     pub fn on_order(&self, buyer: usize, g: usize) -> f64 {
-        self.slots.iter().map(|s| s[buyer * self.goods + g]).sum()
+        self.slots.iter().map(|s| s[g * self.buyers + buyer]).sum()
     }
 
-    /// Total goods of `g` in flight, the transit account balance per good.
+    /// Total goods of `g` in flight, the transit account balance per good: slots in storage
+    /// order, buyers in order, from -0.0.
     pub fn in_flight(&self, g: usize) -> f64 {
-        self.slots
-            .iter()
-            .flat_map(|s| s.iter().skip(g).step_by(self.goods))
-            .sum()
+        self.slots.iter().flat_map(|s| self.run(s, g)).sum()
     }
 
-    /// [`Pipeline::in_flight`] of every good, each summed in the same order: one row-major pass
-    /// per block of goods that share a cache line, the blocks in parallel.
+    fn run<'a>(&self, slot: &'a [f64], g: usize) -> &'a [f64] {
+        &slot[g * self.buyers..(g + 1) * self.buyers]
+    }
+
+    /// [`Pipeline::in_flight`] of every good, one task per good over its contiguous runs.
     pub fn in_flight_all(&self) -> Vec<f64> {
         self.in_flight_cached().to_vec()
     }
@@ -192,33 +156,11 @@ impl Pipeline {
     }
 
     fn scan_in_flight(&self) -> Vec<f64> {
-        const BLOCK: usize = 8;
         let _span = ceteris_core::timing::span("in_flight_all", ceteris_core::timing::NONE);
-        let goods = self.goods;
-        // -0.0, the start of `f64::sum`, so that a good with nothing in flight matches it too
-        let mut out = vec![-0.0; goods];
-        out.par_chunks_mut(BLOCK).enumerate().for_each(|(k, acc)| {
-            let lo = k * BLOCK;
-            let rows = || self.slots.iter().flat_map(|s| s.chunks_exact(goods));
-            if let Ok(acc) = <&mut [f64; BLOCK]>::try_from(&mut *acc) {
-                // a full block keeps its lanes in registers across the rows
-                let mut lanes = *acc;
-                for row in rows() {
-                    let q: &[f64; BLOCK] = row[lo..lo + BLOCK].try_into().expect("full block");
-                    for (a, &q) in lanes.iter_mut().zip(q) {
-                        *a += q;
-                    }
-                }
-                *acc = lanes;
-            } else {
-                for row in rows() {
-                    for (a, &q) in acc.iter_mut().zip(&row[lo..]) {
-                        *a += q;
-                    }
-                }
-            }
-        });
-        out
+        (0..self.goods)
+            .into_par_iter()
+            .map(|g| self.in_flight(g))
+            .collect()
     }
 }
 
@@ -226,7 +168,19 @@ impl Encode for Pipeline {
     fn encode(&self, e: &mut Encoder) {
         e.count(self.buyers);
         e.u8(self.cursor as u8);
-        self.slots.iter().for_each(|s| e.f64s(s));
+        // buyer-major bytes, as before good-major slots (RFC 0319 D2)
+        let (buyers, goods) = (self.buyers, self.goods);
+        for s in &self.slots {
+            let mut out = vec![0.0; buyers * goods];
+            if goods > 0 {
+                out.par_chunks_mut(goods).enumerate().for_each(|(b, row)| {
+                    for (g, x) in row.iter_mut().enumerate() {
+                        *x = s[g * buyers + b];
+                    }
+                });
+            }
+            e.f64s(&out);
+        }
     }
 }
 
@@ -240,12 +194,20 @@ impl Pipeline {
         }
         let mut slots: [Vec<f64>; SLOTS] = Default::default();
         for s in &mut slots {
-            *s = d.f64s()?;
-            if s.len() != buyers * n_goods {
+            let bytes = d.f64s()?;
+            if bytes.len() != buyers * n_goods {
                 return Err(DecodeError(format!(
                     "pipeline slot of {} for {buyers} buyers",
-                    s.len()
+                    bytes.len()
                 )));
+            }
+            *s = vec![0.0; bytes.len()];
+            if buyers > 0 {
+                s.par_chunks_mut(buyers).enumerate().for_each(|(g, run)| {
+                    for (b, x) in run.iter_mut().enumerate() {
+                        *x = bytes[b * n_goods + g];
+                    }
+                });
             }
         }
         Ok(Self {
@@ -310,6 +272,59 @@ mod tests {
         }
     }
 
+    /// Buyer-major reference of the pipeline contents, by the pre-RFC 0319 layout, in storage-slot order.
+    fn buyer_major(p: &Pipeline) -> [Vec<f64>; SLOTS] {
+        std::array::from_fn(|k| {
+            let s = p.scheduled((k + SLOTS - p.cursor) % SLOTS + 1);
+            let (b, g) = (p.n_buyers(), p.n_goods());
+            (0..b * g).map(|i| s[(i % g) * b + i / g]).collect()
+        })
+    }
+
+    #[test]
+    fn in_flight_and_snapshot_match_the_buyer_major_layout() {
+        let buyers = 37;
+        let mut p = Pipeline::new(buyers, N_GOODS);
+        let mut x = 0.123_f64;
+        for t in 0..9 {
+            p.pop_due();
+            let lists: Vec<Vec<Push>> = (0..N_GOODS)
+                .map(|g| {
+                    (0..11)
+                        .map(|i| {
+                            x = (x * 7.3 + 0.1).fract();
+                            let slot = 1 + (i + g + t) % SLOTS;
+                            (
+                                slot as u8,
+                                ((i * 5 + g * 3) % buyers) as u32,
+                                x * 1e-3_f64.powi((i % 3) as i32),
+                            )
+                        })
+                        .collect()
+                })
+                .collect();
+            let refs: Vec<&[Push]> = lists.iter().map(|l| &l[..]).collect();
+            p.push_all(&refs);
+        }
+        let ref_slots = buyer_major(&p);
+        for g in 0..N_GOODS {
+            let want: f64 = ref_slots
+                .iter()
+                .flat_map(|s| s.iter().skip(g).step_by(N_GOODS))
+                .sum();
+            assert_eq!(p.in_flight(g).to_bits(), want.to_bits(), "good {g}");
+            assert_eq!(p.in_flight_all()[g].to_bits(), want.to_bits(), "good {g}");
+        }
+        // snapshot bytes are the buyer-major bytes
+        let mut e = Encoder::default();
+        p.encode(&mut e);
+        let mut want = Encoder::default();
+        want.count(buyers);
+        want.u8(p.cursor as u8);
+        ref_slots.iter().for_each(|s| want.f64s(s));
+        assert_eq!(e.into_bytes(), want.into_bytes());
+    }
+
     #[test]
     fn pipeline_delivers_each_buyer_after_its_slot() {
         let buyers = 3;
@@ -326,7 +341,7 @@ mod tests {
                         .filter(|e| (e.0, e.1, e.2) == (t, b, g))
                         .map(|e| e.3)
                         .sum();
-                    assert_eq!(due[b * N_GOODS + g], want, "tick {t} buyer {b} good {g}");
+                    assert_eq!(due[g * buyers + b], want, "tick {t} buyer {b} good {g}");
                 }
             }
             expect.retain(|e| e.0 > t);
@@ -381,7 +396,7 @@ mod tests {
             p.push(slot, 1, 2, slot as f64);
         }
         for ticks in 1..=SLOTS {
-            assert_eq!(p.scheduled(ticks)[N_GOODS + 2], ticks as f64);
+            assert_eq!(p.scheduled(ticks)[2 * 2 + 1], ticks as f64);
         }
         for ticks in 1..=SLOTS {
             let want = p.scheduled(1).to_vec();
