@@ -1012,7 +1012,7 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     let branch = need("--branch")?;
     let baseline = match flag("--baseline") {
         Some(b) => Some(b.to_string()),
-        None if verb == "effects" => scenario
+        None if verb != "ensemble" => scenario
             .branch(branch)
             .map_err(|e| e.to_string())?
             .parent
@@ -1020,8 +1020,10 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
         None => None,
     };
     let baseline = match (verb, baseline) {
-        ("effects", None) => {
-            return Err("effects needs --baseline (the branch has no parent)".into());
+        ("effects" | "explain", None) => {
+            return Err(format!(
+                "{verb} needs --baseline (the branch has no parent)"
+            ));
         }
         (_, b) => b,
     };
@@ -1044,6 +1046,18 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
         None => Vec::new(),
     };
     let priors = register_priors();
+    if verb == "explain" {
+        return explain(
+            &inputs,
+            &base,
+            &priors,
+            (&baseline_log, &branch_log),
+            &scenario.seeds,
+            ticks,
+            branch,
+            &out,
+        );
+    }
     let pair = run_pair(
         &inputs,
         &base,
@@ -1144,6 +1158,76 @@ fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `explain`: the Shapley split of the paired effect over the shut-able channels (prices,
+/// wages), per member, with bootstrap intervals over members, written as `channel_shares`.
+#[allow(clippy::too_many_arguments)]
+fn explain(
+    inputs: &Arc<ceteris_econ::inputs::EconInputs>,
+    base: &(EconParams, ceteris_trade::TradeParams),
+    priors: &[ceteris_run::ensemble::ParamPrior],
+    logs: (&[ceteris_run::Edit], &[ceteris_run::Edit]),
+    seeds: &[u64],
+    ticks: u32,
+    branch: &str,
+    out: &std::path::Path,
+) -> Result<ExitCode, String> {
+    use ceteris_econ::ensemble::{channel_shares, outcomes};
+    use ceteris_run::effects::bootstrap_mean;
+    use ceteris_run::outputs::{Column, batch, ipc};
+
+    let all = |w: &ceteris_econ::world::EconWorld| -> Vec<f64> {
+        outcomes(w).into_iter().map(|(_, v)| v).collect()
+    };
+    let per_member = seeds
+        .iter()
+        .map(|&k| channel_shares(inputs, base, priors, logs, k, ticks, all))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("{e:?}"))?;
+    let (mut outcome, mut channel) = (vec![], vec![]);
+    let (mut share, mut lo, mut hi) = (vec![], vec![], vec![]);
+    for (o, name) in ceteris_econ::ensemble::OUTCOME_NAMES.iter().enumerate() {
+        let mut rows: Vec<(String, Vec<f64>)> = vec![("direct".into(), vec![])];
+        rows.extend(
+            ceteris_econ::ensemble::CHANNELS
+                .iter()
+                .map(|c| (format!("{c:?}").to_lowercase(), vec![])),
+        );
+        for m in &per_member {
+            rows[0].1.push(m[o].direct);
+            for (i, (_, v)) in m[o].shares.iter().enumerate() {
+                rows[i + 1].1.push(*v);
+            }
+        }
+        for (c, xs) in rows {
+            let i = bootstrap_mean(&xs, Seed(1), 1000, 0.9);
+            println!("{name} {c}: {:+.6e} [{:+.6e}, {:+.6e}]", i.mean, i.lo, i.hi);
+            outcome.push((*name).to_string());
+            channel.push(c);
+            share.push(i.mean);
+            lo.push(i.lo);
+            hi.push(i.hi);
+        }
+    }
+    let rows = outcome.len();
+    let table = batch(
+        "channel_shares",
+        vec![
+            Column::Text(vec![branch.to_string(); rows]),
+            Column::Text(outcome),
+            Column::Text(channel),
+            Column::Real(share),
+            Column::Real(lo),
+            Column::Real(hi),
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let path = out.join("channel_shares.arrow");
+    std::fs::write(&path, ipc(&table).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mut argv = std::env::args().skip(1);
     let command = argv.next().unwrap_or_default();
@@ -1163,7 +1247,7 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         });
     }
-    if ["ensemble", "effects"].contains(&command.as_str()) {
+    if ["ensemble", "effects", "explain"].contains(&command.as_str()) {
         return ensemble_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE

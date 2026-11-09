@@ -69,9 +69,9 @@ pub const REGISTRY: &[Command] = &[
     ),
     cmd(
         "explain",
-        "explain FILE --branch B",
-        "channel decomposition of an effect",
-        false,
+        "explain FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR",
+        "Shapley split of a branch's effect over the price and wage channels",
+        true,
     ),
     cmd(
         "blame",
