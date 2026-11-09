@@ -7,7 +7,6 @@
 use rayon::prelude::*;
 
 use crate::invariant::Violation;
-use crate::reduce::fixed_sum;
 use crate::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -667,17 +666,7 @@ impl Ledger {
 
     /// Every good's total over the accounts, each column summed by `fixed_sum`.
     fn good_totals(&self) -> Vec<f64> {
-        let n = self.n_accounts();
-        let mut columns = vec![0.0; self.n_goods * n];
-        for (a, holdings) in self.goods.chunks_exact(self.n_goods).enumerate() {
-            for (g, &q) in holdings.iter().enumerate() {
-                columns[g * n + a] = q;
-            }
-        }
-        if n == 0 {
-            return vec![fixed_sum(&[]); self.n_goods];
-        }
-        columns.chunks_exact(n).map(fixed_sum).collect()
+        crate::reduce::fixed_sum_columns(&self.goods, self.n_goods, self.n_accounts())
     }
 
     pub fn begin_tick(&mut self) {
@@ -709,7 +698,10 @@ impl Ledger {
             ));
         }
         let span = crate::timing::span("end.ledger.sign", crate::timing::NONE);
-        let bad = self.goods.iter().position(|&q| q.is_nan() || q < 0.0);
+        let bad = self
+            .goods
+            .par_iter()
+            .position_first(|&q| q.is_nan() || q < 0.0);
         drop(span);
         if let Some(i) = bad {
             let account = i / self.n_goods;
@@ -1065,6 +1057,31 @@ mod tests {
         l.begin_tick();
         l.ship(a, b, 0, 1.0);
         assert_eq!(l.check(0).unwrap_err().invariant, "goods sign");
+    }
+
+    #[test]
+    fn the_first_bad_holding_by_index_is_reported_and_totals_match_fixed_sum() {
+        let mut l = Ledger::new(3);
+        let ids: Vec<_> = (0..5000).map(|_| l.open()).collect();
+        for (i, &a) in ids.iter().enumerate() {
+            for g in 0..3 {
+                *l.slot(a, g) = ((i * 31 + g * 7) % 101) as f64 * 0.1 + 1e-12 * i as f64;
+            }
+        }
+        for g in 0..3 {
+            let col: Vec<f64> = (0..5000).map(|a| l.goods[a * 3 + g]).collect();
+            assert_eq!(
+                l.good_totals()[g].to_bits(),
+                crate::reduce::fixed_sum(&col).to_bits()
+            );
+        }
+        *l.slot(ids[4000], 1) = -1.0;
+        *l.slot(ids[2500], 2) = f64::NAN;
+        *l.slot(ids[2500], 0) = -2.0;
+        l.begin_tick();
+        let v = l.check(0).unwrap_err();
+        assert_eq!(v.invariant, "goods sign");
+        assert!(v.to_string().contains("account 2500 good 0"), "{v}");
     }
 
     #[test]
