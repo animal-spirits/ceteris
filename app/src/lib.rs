@@ -1,6 +1,7 @@
 //! Native desktop app (ADR 0088): Slint panels over a wgpu map drawn into a texture.
 
 pub mod bench;
+pub mod branches;
 pub mod camera;
 pub mod chunks;
 pub mod clock;
