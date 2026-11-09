@@ -2,7 +2,9 @@
 //! channels, and a run that reads them back instead of its own dynamics. A shut channel holds
 //! the baseline's value at every tick, so the effect of an intervention that has to pass through
 //! it is removed. Off by default; with no channel shut and no recording a run is unchanged.
-//! Trade shares (the sourcing kernel) are not yet a channel.
+//! The trade-share channel holds the gravity kernel, and with it the sourcing shares and the
+//! tariffs' pass-through into delivered prices, at the one the run started with: a tariff edit
+//! still applies to the wedges but no longer rebuilds the kernel.
 
 use std::sync::Arc;
 
@@ -12,6 +14,7 @@ use crate::world::EconWorld;
 pub enum Channel {
     Prices,
     Wages,
+    TradeShares,
 }
 
 /// What a baseline run posted at the end of each tick it recorded: wages after E1 and origin
@@ -52,7 +55,7 @@ impl Channels {
         self.shut = Some((baseline, channels.to_vec()));
     }
 
-    fn is_shut(&self, c: Channel) -> bool {
+    pub fn is_shut(&self, c: Channel) -> bool {
         self.shut.as_ref().is_some_and(|(_, s)| s.contains(&c))
     }
 }
