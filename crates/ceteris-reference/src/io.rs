@@ -190,6 +190,31 @@ pub struct Crossings {
     pub lag: Vec<usize>,
 }
 
+/// Per-country monthly growth rates of the moving reference (ADR 0243): labour force, labour-
+/// augmenting productivity and price level. All zero is ADR 0089's steady state.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Trends {
+    pub n: Vec<f64>,
+    pub g: Vec<f64>,
+    pub pi: Vec<f64>,
+}
+
+impl Trends {
+    pub fn zero(n_countries: usize) -> Self {
+        Self {
+            n: vec![0.0; n_countries],
+            g: vec![0.0; n_countries],
+            pi: vec![0.0; n_countries],
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        [&self.n, &self.g, &self.pi]
+            .iter()
+            .all(|v| v.iter().all(|&x| x == 0.0))
+    }
+}
+
 /// G goods, P provinces, C countries, N gateways, E enterprises, K pops.
 #[derive(Clone, Debug)]
 pub struct Inputs {
@@ -237,6 +262,9 @@ pub struct Inputs {
     pub unemployment: Vec<f64>,
     /// (C,) natural rate (ADR 0089): labour clears at (1 - u*) L^s.
     pub u_star: Vec<f64>,
+    /// (C,) monthly trends of ADR 0243 (the export's `trend_n`, `trend_g`, `trend_pi`; zeros when
+    /// the export has none).
+    pub trends: Trends,
     pub gini: Vec<f64>,
     /// (C,) transfer share s_c of ADR 0100: households of country c receive s_c times world
     /// income (`countries.transfer`, 0 where the export has none).
@@ -902,6 +930,23 @@ pub fn load(dir: impl AsRef<Path>) -> Result<Inputs, String> {
         },
         unemployment: countries.f64("unemployment")?,
         u_star: countries.f64("u_star")?,
+        trends: Trends {
+            n: if countries.has("trend_n") {
+                countries.f64("trend_n")?
+            } else {
+                vec![0.0; n_c]
+            },
+            g: if countries.has("trend_g") {
+                countries.f64("trend_g")?
+            } else {
+                vec![0.0; n_c]
+            },
+            pi: if countries.has("trend_pi") {
+                countries.f64("trend_pi")?
+            } else {
+                vec![0.0; n_c]
+            },
+        },
         gini: countries.f64("gini")?,
         transfer: if countries.has("transfer") {
             countries.f64("transfer")?

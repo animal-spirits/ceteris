@@ -23,7 +23,7 @@ use ceteris_core::rng::Seed;
 use ceteris_core::schedule::SystemId;
 use ceteris_pack::compare::{self, Tolerance};
 use ceteris_reference::demand;
-use ceteris_reference::io::{self, Inputs, Mat};
+use ceteris_reference::io::{self, Inputs, Mat, Trends};
 use ceteris_reference::model::{self, Factors, Model, max_abs};
 use ceteris_trade::TradeParams;
 
@@ -271,6 +271,28 @@ fn aggregate_data_state_shares_match_omega() {
 /// ADR 0106: the passes reach the same fixed point from eight starts, every traded buyer price
 /// of the data state times a factor uniform in [0.5, 1.5] (Philox seeds 0 to 7, one stream per
 /// province). A failure means several steady states, not a flake.
+/// ADR 0243: every trend zero is ADR 0089's steady state. The trends are explicit zeros here,
+/// so the run goes through the trend path, not the default.
+#[test]
+fn zero_trends_equal_the_steady_state_calibration() {
+    let w = &worlds()[0];
+    let mut inp = w.inp.clone();
+    inp.trends = Trends::zero(inp.u_star.len());
+    let s = steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).unwrap();
+    assert_eq!(s.price.data, w.s.price.data);
+    assert_eq!(s.consumer.data, w.s.consumer.data);
+    assert_eq!(s.output, w.s.output);
+    assert_eq!(s.value, w.s.value);
+    assert_eq!(s.w0, w.s.w0);
+}
+
+#[test]
+fn nonzero_trends_are_refused_until_stage_5_carries_them() {
+    let mut inp = worlds()[0].inp.clone();
+    inp.trends.n[0] = 1e-3;
+    assert!(steady::calibrate(&inp, &inp.u_star.clone(), &mut quiet()).is_err());
+}
+
 #[test]
 fn calibration_unique_from_eight_starts() {
     let inp = io::load(fixture()).unwrap();
