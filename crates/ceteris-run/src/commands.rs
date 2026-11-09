@@ -257,7 +257,7 @@ mod tests {
         let mut names: Vec<_> = REGISTRY.iter().map(|c| c.name).collect();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 16);
         assert!(REGISTRY.iter().all(|c| c.usage.starts_with(c.name)));
     }
 
