@@ -1,6 +1,6 @@
 # Population SPEC
 
-Status: draft (P4 Branch 0; nothing here is built, and ADRs 0031, 0032, 0033, 0074, 0105, 0109 and 0167 stay `proposed` until the status RFC of this branch is accepted)
+Status: draft (P4 Branch 0; nothing here is built; ADRs 0031, 0032, 0033, 0074, 0105, 0109 and 0167 accepted by RFC 0335)
 Phase: P4
 Design sections: 6.1 to 6.3, 6.5, 8.6, 8.7, 15.4, 17.1, 19.2, 19.4; ADRs 0031, 0032, 0033, 0074, 0095, 0105, 0109, 0167, 0236, 0241; plan `specs/p4/PLAN.md`
 
@@ -53,9 +53,7 @@ row, about 64 x 22 x 2 floats. Snapshots add 6.5 MB per frame before compression
 
 ## Equations
 
-Parameter ids shown as `P62` etc. are provisional codes written in ADRs 0031 to 0033 that were
-never registered; real codes come from `cargo run -p ceteris-rows -- next-code P` in the PR that
-accepts the status RFC. This spec names them by role until then.
+Register codes P162 to P170 are those of RFC 0335 (the ADRs wrote them provisionally as P60 to P65, P126 and P127; ADR 0167's labour loss is P169, ADR 0109's z is P170).
 
 **Ageing (Branch A1).** Yearly cadence for band transfers, applied once per year on tick
 `t mod 12 = 0` of the cohort calendar (the cohort tick count, not a date: ADR 0241). Persons in
@@ -80,7 +78,7 @@ province-age row so that integer rounding does not accumulate bias; every death 
     TFR = TFR^min + (TFR^max - TFR^min) * sigma(gamma_0 - gamma_e e^f - gamma_y ln y - gamma_u urban + gamma_m child mortality)
 
 (spec 6.2). Age-specific rates follow a parametric schedule (Hadwiger or Gamma) whose mean age
-`mu` is shifted by tempo (P63: responds to female education and housing cost). Births in period
+`mu` is shifted by tempo (P165: responds to female education and housing cost). Births in period
 `= round(sum_a ASFR_a(mu) N_{p,a,female,e})` by apportionment; newborns enter band 0, education
 none, sex by the biological ratio 1.05 male per female (data constant, not free). The test fixes
 a postponement and checks period TFR falls while cohort completed fertility does not
@@ -88,7 +86,7 @@ a postponement and checks period TFR falls while cohort completed fertility does
 
 **Education progression (A3).** For cohort bands 15..34 and each transition `e -> e + 1`:
 `progress_e = rho_e * clamp(f(spending, income))`, with `rho_e` the WCDE schedule prior and
-`f` the response of P62 to education spending per student and household income (ADR 0032).
+`f` the response of P164 to education spending per student and household income (ADR 0032).
 Attainment above 34 is fixed. Headship: `households_p = sum h_{a,s,e} N_c`, used by housing
 demand (8.7) and consumption's household size.
 
@@ -119,12 +117,12 @@ province, education, age band, sex) reconsiders; destination shares by logit:
 diaspora preference `(1 + chi * stock_share_od)`; rejected applicants stay, and a fraction `z`
 of them migrate irregularly at extra cost. Settlement classes (D3): within a province, class
 shares move by the same logit with short distances; cities grow with agglomeration net of
-congestion (P126), slum share rises when housing supply lags (P127). Flows are integer by
+congestion (P167), slum share rises when housing supply lags (P168). Flows are integer by
 Hamilton over `(o, d)` rows; each person moves once per tick (no chain moves).
 
 **Structural change (Branch E, ADR 0031).** The sector-class catch-up factor multiplies the
-catch-up rate of ADR 0108 (P60); informal to formal transitions scale with enforcement
-capacity (P61). Lives in `ceteris-econ`, not here; listed for the test plan.
+catch-up rate of ADR 0108 (P162); informal to formal transitions scale with enforcement
+capacity (P163). Lives in `ceteris-econ`, not here; listed for the test plan.
 
 ## System order
 
@@ -166,20 +164,17 @@ stream by system ID (ADR 0241 forbids reading the date, not drawing).
 
 | ID | Name | Prior / value | Class |
 |---|---|---|---|
-| P62 (provisional) | Education progression response to spending and income | WCDE prior | free, calibrated |
-| P63 (provisional) | Fertility tempo response to female education and housing cost | Bongaarts-Feeney range | free |
-| P60, P61 (provisional) | Sector-class catch-up factor; formalization scaled by enforcement | ADR 0031 priors | literature, free |
-| P65 (provisional) | Deaths-of-despair scenario hazard | 0 | scenario |
-| P126, P127 (provisional) | Congestion cost; slum share rise | ADR 0074 | free |
+| P164 | Education progression response to spending and income | WCDE prior | free, calibrated |
+| P165 | Fertility tempo response to female education and housing cost | Bongaarts-Feeney range | free |
+| P162, P163 | Sector-class catch-up factor; formalization scaled by enforcement | ADR 0031 priors | literature, free |
+| P166 | Deaths-of-despair scenario hazard | 0 | scenario |
+| P167, P168 | Congestion cost; slum share rise | ADR 0074 | free |
 | s | Skill CES elasticity | 1.6 | literature (Katz and Murphy 1992; Ciccone and Peri 2005) |
 | m, omega_s | Sector-switch share and dispersion | Artuc, Chaudhuri and McLaren (2010), monthly | literature |
 | Q_d | Admission cap per country | UN DESA 2000-2005 mean | data |
 | z | Irregular share of rejected applicants | 0 to 0.2 | calibrated to Abel and Cohen |
 | nu, beta, m_od | Migration dispersion, discount, moving costs | calibrated to 2000-2010 bilateral stocks | calibrated |
 
-Provisional codes are replaced by `next-code P` results when the status RFC is accepted.
-ADR 0167's new register entry (labour loss per untreated prevalence) and ADR 0109's z are
-checked against `spec/rows.toml` then.
 
 ## Equilibrium nesting
 
