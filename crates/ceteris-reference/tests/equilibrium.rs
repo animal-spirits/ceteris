@@ -819,6 +819,7 @@ fn two_provinces(
         owners: Mat::zeros(0, 1),
         unemployment: vec![u],
         u_star: vec![0.0],
+        trends: ceteris_reference::io::Trends::zero(1),
         gini: vec![0.35],
         transfer: vec![0.0],
         omega: Mat::filled(1, 1, 1.0),
