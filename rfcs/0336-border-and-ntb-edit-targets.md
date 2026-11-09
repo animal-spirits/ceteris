@@ -42,7 +42,7 @@ Options:
 Recommendation: A, because the benchmark NTB values are iceberg estimates and B changes
 revenue and prices differently.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-09 (decision card in the #409 thread).
 Row: to be taken when this PR writes the spec.
 
 ## Spec changes
