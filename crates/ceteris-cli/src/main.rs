@@ -18,8 +18,14 @@
 //! ceteris export --fixture|--pack DIR --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
-//!     [--timing] --out DIR
+//!     [--timing] [--inject-halt TICK] --out DIR
+//! ceteris replay BUNDLE [--out DIR]
 //! ```
+//!
+//! A halt (an invariant violation, or `--inject-halt TICK`, which halts a healthy run at that
+//! tick) writes a repro bundle, `OUT/bundle/bundle.txt` (ADR 0214): the engine version, the
+//! arguments of the run and the halt record. `replay` runs it again and exits 0 when the same
+//! halt recurs.
 //!
 //! `--pack` loads the 2000 world of a built pack (`EconInputs::from_pack`) instead of the
 //! generated fixture: `run` starts from its calibrated steady state when the pack holds the
@@ -82,6 +88,7 @@ use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
 use ceteris_calibrate::{border, gravity};
+use ceteris_core::invariant::Violation;
 use ceteris_core::rng::Seed;
 use ceteris_core::sim::Sim;
 use ceteris_core::timing;
@@ -122,7 +129,8 @@ const USAGE: &str = "usage:
   ceteris effects FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
-    [--timing] --out DIR";
+    [--timing] [--inject-halt TICK] --out DIR
+  ceteris replay BUNDLE [--out DIR]";
 
 /// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
 const PERTURBATION: f64 = 0.1;
@@ -166,10 +174,24 @@ struct Args {
     history_every: Option<u32>,
     history_format: Option<Format>,
     timing: bool,
+    inject_halt: Option<u32>,
+    /// The arguments without `--out`, as a bundle records them.
+    argv: Vec<String>,
 }
 
 fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut args = args;
+    let all: Vec<String> = args.collect();
+    let mut argv = Vec::new();
+    let mut it = all.iter();
+    while let Some(a) = it.next() {
+        if a == "--out" {
+            it.next();
+        } else {
+            argv.push(a.clone());
+        }
+    }
+    let mut args = all.into_iter();
+    let mut inject_halt = None;
     let (mut source, mut out, mut ticks, mut frictionless) = (None, None, None, false);
     let (mut equilibrium, mut no_drift) = (None, false);
     let (mut data_state, mut perturb) = (false, None);
@@ -195,6 +217,10 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--history" => history = true,
             "--timing" => timing = true,
+            "--inject-halt" => {
+                let n = args.next().ok_or("--inject-halt needs a tick")?;
+                inject_halt = Some(n.parse().map_err(|_| format!("bad tick '{n}'"))?);
+            }
             "--history-every" => {
                 let n = args.next().ok_or("--history-every needs a count")?;
                 match n.parse::<u32>() {
@@ -230,6 +256,8 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         history_every,
         history_format,
         timing,
+        inject_halt,
+        argv,
     })
 }
 
@@ -244,10 +272,11 @@ fn export(args: &Args) -> Result<(), String> {
         || args.history_every.is_some()
         || args.history_format.is_some()
         || args.timing
+        || args.inject_halt.is_some()
     {
         return Err(
             "--ticks, --frictionless, --no-drift, --from-equilibrium, --data-state, --perturb, --history, \
-             --history-every, --history-format and --timing belong to run"
+             --history-every, --history-format, --timing and --inject-halt belong to run"
                 .into(),
         );
     }
@@ -260,7 +289,120 @@ fn export(args: &Args) -> Result<(), String> {
     write_inputs(&args.out, &inputs, &kernel, &params, &trade).map_err(|e| e.to_string())
 }
 
+enum RunFailure {
+    Halt(Violation),
+    Other(String),
+}
+
+impl From<String> for RunFailure {
+    fn from(e: String) -> Self {
+        Self::Other(e)
+    }
+}
+
+impl From<&str> for RunFailure {
+    fn from(e: &str) -> Self {
+        Self::Other(e.into())
+    }
+}
+
+/// Runs, and on a halt writes the repro bundle beside the run's output.
 fn run(args: &Args) -> Result<(), String> {
+    match run_core(args) {
+        Ok(()) => Ok(()),
+        Err(RunFailure::Other(e)) => Err(e),
+        Err(RunFailure::Halt(v)) => {
+            let dir = args.out.join("bundle");
+            write_bundle(&dir, &args.argv, &v)?;
+            Err(format!("halted, bundle in {}: {v}", dir.display()))
+        }
+    }
+}
+
+const BUNDLE_FILE: &str = "bundle.txt";
+
+fn write_bundle(dir: &Path, argv: &[String], v: &Violation) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut text = format!("ceteris-bundle 1\nengine={}\n", env!("CARGO_PKG_VERSION"));
+    for a in argv {
+        text.push_str(&format!("arg={}\n", a.replace('\n', " ")));
+    }
+    text.push_str(&format!(
+        "halt-tick={}\nhalt-invariant={}\nhalt-detail={}\n",
+        v.tick,
+        v.invariant,
+        v.detail.replace('\n', " ")
+    ));
+    let file = dir.join(BUNDLE_FILE);
+    std::fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))
+}
+
+/// `replay BUNDLE [--out DIR]`: exit 0 when the bundle's halt recurs, 1 otherwise.
+fn replay(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let mut args = args;
+    let (mut bundle, mut out) = (None, None);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--out" => out = Some(PathBuf::from(args.next().ok_or("--out needs a directory")?)),
+            _ if bundle.is_none() => bundle = Some(PathBuf::from(a)),
+            _ => return Err(format!("unknown argument '{a}'")),
+        }
+    }
+    let bundle = bundle.ok_or("replay needs a bundle directory")?;
+    let file = if bundle.is_dir() {
+        bundle.join(BUNDLE_FILE)
+    } else {
+        bundle
+    };
+    let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let mut lines = text.lines();
+    if lines.next() != Some("ceteris-bundle 1") {
+        return Err(format!("{}: not a version 1 bundle", file.display()));
+    }
+    let (mut argv, mut halt) = (Vec::new(), [None, None, None]);
+    for line in lines {
+        match line.split_once('=') {
+            Some(("arg", v)) => argv.push(v.to_string()),
+            Some(("halt-tick", v)) => halt[0] = Some(v.to_string()),
+            Some(("halt-invariant", v)) => halt[1] = Some(v.to_string()),
+            Some(("halt-detail", v)) => halt[2] = Some(v.to_string()),
+            _ => {}
+        }
+    }
+    let [Some(tick), Some(invariant), Some(detail)] = halt else {
+        return Err(format!("{}: no halt record", file.display()));
+    };
+    let scratch;
+    let out = match out {
+        Some(o) => o,
+        None => {
+            scratch = tempfile::tempdir().map_err(|e| format!("temporary directory: {e}"))?;
+            scratch.path().to_owned()
+        }
+    };
+    argv.extend(["--out".into(), out.display().to_string()]);
+    match run_core(&parse(argv.into_iter())?) {
+        Err(RunFailure::Halt(v))
+            if v.tick.to_string() == tick
+                && v.invariant == invariant
+                && v.detail.replace('\n', " ") == detail =>
+        {
+            println!("reproduced: {v}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(RunFailure::Halt(v)) => {
+            eprintln!("different halt: {v}");
+            Ok(ExitCode::FAILURE)
+        }
+        Err(RunFailure::Other(e)) => Err(e),
+        Ok(()) => {
+            eprintln!("no halt: the run completed");
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+fn run_core(args: &Args) -> Result<(), RunFailure> {
     let ticks = args.ticks.ok_or("--ticks is required")?;
     if args.history_every.is_some() && !args.history {
         return Err("--history-every needs --history".into());
@@ -314,21 +456,36 @@ fn run(args: &Args) -> Result<(), String> {
     if args.timing {
         timing::enable();
     }
+    // An injected halt stops the healthy run at its tick; later ticks are never run.
+    let stop = args.inject_halt.map_or(ticks, |h| h.min(ticks));
     if args.history {
-        let history = run_recorded(&mut sim, ticks, args.history_every.unwrap_or(1))
-            .map_err(|v| v.to_string())?;
+        let history = run_recorded(&mut sim, stop, args.history_every.unwrap_or(1))
+            .map_err(RunFailure::Halt)?;
+        inject(args, stop)?;
         write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
         history
             .write(&args.out, args.history_format.unwrap_or(Format::Arrow))
             .map_err(|e| e.to_string())?;
     } else {
-        sim.run_until(ticks).map_err(|v| v.to_string())?;
+        sim.run_until(stop).map_err(RunFailure::Halt)?;
+        inject(args, stop)?;
         write_run(&args.out, sim.world()).map_err(|e| e.to_string())?;
     }
     if args.timing {
         write_timing(&args.out, &timing::take()).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+fn inject(args: &Args, tick: u32) -> Result<(), RunFailure> {
+    match args.inject_halt {
+        Some(h) if h == tick => Err(RunFailure::Halt(Violation::new(
+            tick,
+            "injected",
+            "--inject-halt".into(),
+        ))),
+        _ => Ok(()),
+    }
 }
 
 /// `timing.csv`, one row per span, and each span's median per tick in ms on stdout: spans of
@@ -1487,6 +1644,12 @@ fn main() -> ExitCode {
     }
     if command == "serve" || command == "api" {
         return serve_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if command == "replay" {
+        return replay(argv).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
