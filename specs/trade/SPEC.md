@@ -1057,6 +1057,15 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   stay three, since E5's transit check must read the pipeline itself. Alternating rounds
   against the serial loop, load 17 to 31: the three calls 2.30 to 2.39 ms a tick before, 1.18
   to 1.26 after in three of four rounds (2.52 in a noisy one).
+  Pipeline layout (RFC 0319 S1 to S3, ADRs 0332 to 0334; 2026-11-09): the slots are good-major;
+  `Pipeline::push_all` is one task per good adding its list in order to its own contiguous run
+  of each slot (no bucket sort), and T1 delivers each good from the contiguous run of the due
+  slot. `Pipeline::pop_due` and `push_all` each end their per-good task by summing the good's
+  in-flight total (storage slots, then buyers, from -0.0), which `in_flight_cached` returns, so
+  the separate scan is gone. `Ledger::good_totals` sums the strided columns without the
+  transposed copy (`fixed_sum_columns`, the same tree as `fixed_sum`), and the ledger sign and
+  Leontief end_tick checks run in parallel reporting the first violation by index. Class A:
+  state and journal hashes and every golden unchanged. Timings and the 19.2 table follow in S4.
   T1 and T3's local goods by good (RFC 0287 item 6, 2026-11-04): T1 delivers each traded good
   on its ledger column in parallel (its deliveries in buyer order, then its largest); T3 clears
   each local good on its column in parallel and posts the purchases with `Ledger::post` in
