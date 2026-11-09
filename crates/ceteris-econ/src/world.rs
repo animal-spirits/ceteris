@@ -2182,6 +2182,7 @@ impl Encode for EconWorld {
             .wedges
             .tariff
             .iter()
+            .chain(&self.inputs.wedges.ntb)
             .map(|t| t.to_bits())
             .collect();
         e.u32s(&tariff);
@@ -2492,8 +2493,12 @@ impl State for EconWorld {
             return Err(DecodeError("snapshot belongs to other inputs".into()));
         }
         let network = decode_hash(d)?;
-        let tariff: Vec<f32> = d.u32s()?.into_iter().map(f32::from_bits).collect();
-        expect_len("tariffs", tariff.len(), self.inputs.wedges.tariff.len())?;
+        let mut tariff: Vec<f32> = d.u32s()?.into_iter().map(f32::from_bits).collect();
+        let n_tariff = self.inputs.wedges.tariff.len();
+        if tariff.len() != n_tariff {
+            expect_len("ntb", tariff.len(), 2 * n_tariff)?;
+        }
+        let ntb = tariff.split_off(n_tariff);
         let params = decode_params(
             d,
             (self.inputs.one_vintage(), self.params.technology),
@@ -2584,7 +2589,12 @@ impl State for EconWorld {
         let same_tariff = tariff
             .iter()
             .zip(&self.inputs.wedges.tariff)
-            .all(|(a, b)| a.to_bits() == b.to_bits());
+            .all(|(a, b)| a.to_bits() == b.to_bits())
+            && ntb.len() == self.inputs.wedges.ntb.len()
+            && ntb
+                .iter()
+                .zip(&self.inputs.wedges.ntb)
+                .all(|(a, b)| a.to_bits() == b.to_bits());
         if network != self.network_digest
             || !same_tariff
             || params != self.params
@@ -2602,6 +2612,7 @@ impl State for EconWorld {
                 inputs.network = (**net).clone();
             }
             inputs.wedges.tariff = tariff;
+            inputs.wedges.ntb = ntb;
             let inputs = Arc::new(inputs);
             restored.configure(inputs, network, params, trade);
         }

@@ -329,6 +329,7 @@ impl EconInputs {
         }
         let wedges = Wedges {
             tariff: rate.iter().map(|&r| r as f32).collect(),
+            ntb: Vec::new(),
         };
 
         let p = table("econ_provinces.arrow")?;

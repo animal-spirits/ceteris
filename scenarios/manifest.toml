@@ -12,3 +12,13 @@ edit = "tariff.226.41.{0,1} = 0.25 from tick 13 (US importer 226, China exporter
 horizon_ticks = 60
 finding = "US imports from China fall by more than 20% at tick 60 against main, with the median-seed effect outside the CRN band of the 8 seeds; total US imports fall by less than the bilateral drop (third-country rerouting)."
 check = "ceteris effects over the 8 seeds: bilateral US-from-China import value and total US import value at tick 60, branch tariff versus main."
+
+[[scenario]]
+id = "brexit-hard-vs-soft"
+file = "brexit-hard-vs-soft.toml"
+status = "draft"
+question = "How much more trade does the UK lose under a hard Brexit than under a soft one over five years?"
+edit = "Branch hard and branch soft each set the UK-EU tariffs and NTB icebergs of research/benchmark-2026-10-28/shocks/brexit_hard.txt and brexit_soft.txt from tick 13 (NTB applied to both groups); country indices as in those files"
+horizon_ticks = 60
+finding = "UK-EU bilateral trade falls more under hard than under soft at tick 60 in every one of the 8 seeds, and the hard-soft difference in UK real income is negative with the median seed outside the CRN band."
+check = "ceteris effects over the 8 seeds: UK-EU import value and UK real income at tick 60, branch hard versus branch soft."
