@@ -48,9 +48,9 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0028 | [Oil and gas market structure](0028-oil-and-gas-market-structure.md) | proposed | ADR 0028 |
 | 0029 | [Food system: competitive storage, export restrictions and famine](0029-food-system-storage-export-bans-and-famine.md) | proposed | ADR 0029 |
 | 0030 | [Variable markups within cells](0030-variable-markups.md) | proposed | ADR 0030 |
-| 0031 | [Structural transformation and informality dynamics](0031-structural-transformation-and-informality.md) | proposed | ADR 0031 |
-| 0032 | [Cohort demography: education transitions, fertility timing and households](0032-cohort-demography-and-education-transitions.md) | proposed | ADR 0032 |
-| 0033 | [Mortality causes and health](0033-mortality-causes-and-health.md) | proposed | ADR 0033 |
+| 0031 | [Structural transformation and informality dynamics](0031-structural-transformation-and-informality.md) | accepted (RFC 0335) | ADR 0031 |
+| 0032 | [Cohort demography: education transitions, fertility timing and households](0032-cohort-demography-and-education-transitions.md) | accepted (RFC 0335) | ADR 0032 |
+| 0033 | [Mortality causes and health](0033-mortality-causes-and-health.md) | accepted (RFC 0335) | ADR 0033 |
 | 0034 | [Power sector via residual load duration curves](0034-power-sector-residual-load-duration-curves.md) | proposed | ADR 0034 |
 | 0035 | [Technology diffusion and energy policy instruments](0035-technology-diffusion-and-energy-policy-instruments.md) | proposed | ADR 0035 |
 | 0036 | [Climate damage lanes](0036-climate-damage-lanes.md) | proposed | ADR 0036 |
@@ -91,7 +91,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0071 | [Information technology and the information environment](0071-information-technology-and-the-information-environment.md) | proposed | ADR 0071 |
 | 0072 | [International order, peace operations, courts and soft power](0072-international-order-and-soft-power.md) | proposed | ADR 0072 |
 | 0073 | [Proliferation, the Arctic, frozen conflicts and intelligence](0073-proliferation-arctic-frozen-conflicts-and-intelligence.md) | proposed | ADR 0073 |
-| 0074 | [Settlement hierarchy and urban systems](0074-settlement-hierarchy-and-urban-systems.md) | proposed | ADR 0074 |
+| 0074 | [Settlement hierarchy and urban systems](0074-settlement-hierarchy-and-urban-systems.md) | accepted (RFC 0335) | ADR 0074 |
 | 0075 | [Infrastructure interdependence and cascading failures](0075-infrastructure-interdependence-and-cascades.md) | proposed | ADR 0075 |
 | 0076 | [Groundwater, shared river basins and glacier water towers](0076-groundwater-river-basins-and-glaciers.md) | proposed | ADR 0076 |
 | 0077 | [Heat, wildfire, fisheries and deforestation frontiers](0077-heat-wildfire-fisheries-and-deforestation.md) | proposed | ADR 0077 |
@@ -122,11 +122,11 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0102 | [Bilateral, transit and internal trade frictions](0102-bilateral-and-internal-trade-frictions.md) | proposed | ADR 0102 |
 | 0103 | [Initial drift: 2000 is not a rest point](0103-initial-drift-off-steady-state.md) | accepted (RFC 0312) | ADR 0103 |
 | 0104 | [Sector labour shares and the distribution of capital income](0104-sector-factor-shares-and-capital-income.md) | proposed | ADR 0104 |
-| 0105 | [Skill groups and sector switching costs](0105-skill-groups-and-sector-switching-costs.md) | proposed | ADR 0105 |
+| 0105 | [Skill groups and sector switching costs](0105-skill-groups-and-sector-switching-costs.md) | accepted (RFC 0335) | ADR 0105 |
 | 0106 | [Price clip on the gap only, and money width](0106-price-clip-and-money-width.md) | accepted (RFC 0312) | ADR 0106 |
 | 0107 | [Holdout protocol, Monte Carlo error and parameter lanes](0107-holdout-protocol-and-monte-carlo-error.md) | proposed | ADR 0107 |
 | 0108 | [Estimation windows per module and long-run lanes](0108-estimation-windows-and-long-run-lanes.md) | proposed | ADR 0108 |
-| 0109 | [International migration under admission caps](0109-international-migration-under-admission-caps.md) | proposed | ADR 0109 |
+| 0109 | [International migration under admission caps](0109-international-migration-under-admission-caps.md) | accepted (RFC 0335) | ADR 0109 |
 | 0110 | [Reduced-form conflict hazard as the lab default](0110-reduced-form-conflict-hazard-default.md) | proposed | ADR 0110 |
 | 0111 | [Amendments from the assumption audit](0111-amendments-from-the-assumption-audit.md) | proposed | ADR 0111 |
 | 0112 | [Loss write-off in P2](0112-loss-write-off-in-p2.md) | accepted | ADR 0112 |
@@ -184,7 +184,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0164 | [Whip count and private ledger objective](0164-whip-count-and-private-ledger-objective.md) | proposed | ADR 0164 |
 | 0165 | [Mobilization and the war economy](0165-mobilization-and-the-war-economy.md) | proposed | ADR 0165 |
 | 0166 | [War interaction surfaces and modding](0166-war-interaction-surfaces-and-modding.md) | proposed | ADR 0166 |
-| 0167 | [Endemic disease: HIV/AIDS, malaria and tuberculosis](0167-endemic-disease.md) | proposed | ADR 0167 |
+| 0167 | [Endemic disease: HIV/AIDS, malaria and tuberculosis](0167-endemic-disease.md) | accepted (RFC 0335) | ADR 0167 |
 | 0168 | [Cross-border services trade and tourism](0168-cross-border-services-and-tourism.md) | proposed | ADR 0168 |
 | 0169 | [Hours worked and short-time work](0169-hours-and-short-time-work.md) | proposed | ADR 0169 |
 | 0170 | [Enterprise input stocks and inventory investment](0170-enterprise-input-stocks.md) | proposed | ADR 0170 |
@@ -325,4 +325,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0318 | [Accept ADR 0212 and the built parts of ADRs 0211 and 0128 as built](0318-accept-history-retention-and-run-files-as-built.md) | accepted | none new |
 | 0319 | [Good-major pipeline slots and parallel tick checks for the 45-goods budget](0319-good-major-pipeline-and-parallel-tick-checks.md) | accepted | ADR 0332, ADR 0333, ADR 0334 |
 | 0332 | [Status of ADR 0108 (estimation windows and long-run lanes)](0332-status-of-adr-0108-estimation-windows.md) | accepted | none new |
-| 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | proposed | none yet |
+| 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | accepted | ADR 0335 |

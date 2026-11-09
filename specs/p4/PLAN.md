@@ -19,9 +19,9 @@
 
 | # | Question | Default if not answered |
 |---|---|---|
-| O1 | ADRs 0031, 0032, 0033, 0074, 0105, 0109, 0167 are still `proposed`. Accept them as written for the 1.0 path in one status RFC (as RFC 0312 did for the built ones)? | Branch 0 writes that RFC with one decision per ADR; nothing is built before it is accepted |
+| O1 (closed, RFC 0335 D1: accepted) | ADRs 0031, 0032, 0033, 0074, 0105, 0109, 0167 are still `proposed`. Accept them as written for the 1.0 path in one status RFC (as RFC 0312 did for the built ones)? | Branch 0 writes that RFC with one decision per ADR; nothing is built before it is accepted |
 | O2 | Order: Branch F (moving reference) first, or after demography? | F first: population growth breaks the steady state, and demography without it cannot be tested against the reference |
-| O3 | WHO GHE and IHME are non-commercial (ADR 0050, 0033): the release pack takes World Bank re-publications or published cause-group parameters. Which cause shares ship in the paid build? | Research pack only until #231 (NC audit) says otherwise |
+| O3 (closed, RFC 0335 D3: World Bank CC BY cause groups ship in the paid build, else all-cause) | WHO GHE and IHME are non-commercial (ADR 0050, 0033): the release pack takes World Bank re-publications or published cause-group parameters. Which cause shares ship in the paid build? | Research pack only until #231 (NC audit) says otherwise |
 
 ## Global constraints
 
