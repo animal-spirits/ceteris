@@ -517,6 +517,7 @@ dependencies = [
  "ceteris-core",
  "libm",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
  "zstd",

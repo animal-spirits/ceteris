@@ -346,3 +346,12 @@ fn fetch_recomputes_state_hashes() {
     assert_ne!(a, fetch(&hash("2")).1, "members differ");
     assert!(!fetch("00").0, "unknown hash is an error");
 }
+
+#[test]
+fn api_schema_lists_every_table() {
+    let (ok, out) = ceteris(&["api", "schema"]);
+    assert!(ok);
+    for t in ["outcomes(", "effects(", "channel_shares("] {
+        assert!(out.contains(t), "{out}");
+    }
+}
