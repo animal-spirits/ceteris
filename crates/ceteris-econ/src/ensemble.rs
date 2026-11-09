@@ -146,13 +146,13 @@ pub fn channel_shares(
     (baseline_log, branch_log): (&[Edit], &[Edit]),
     seed: u64,
     ticks: u32,
-    outcome: impl Fn(&EconWorld) -> f64,
-) -> Result<ChannelShares, MemberError> {
+    outcomes: impl Fn(&EconWorld) -> Vec<f64>,
+) -> Result<Vec<ChannelShares>, MemberError> {
     let draws = member_edits(Seed(seed), priors);
     let mut baseline = run_world(inputs, base, &draws, baseline_log, ticks, |w| {
         w.scratch.channels.record_from(0);
     })?;
-    let reference = outcome(baseline.world());
+    let reference = outcomes(baseline.world());
     let path = Arc::new(
         baseline
             .world_mut()
@@ -172,25 +172,30 @@ pub fn channel_shares(
             let sim = run_world(inputs, base, &draws, branch_log, ticks, |w| {
                 w.scratch.channels.shut(Arc::clone(&path), &shut);
             })?;
-            Ok(outcome(sim.world()) - reference)
+            let v = outcomes(sim.world());
+            Ok(v.iter().zip(&reference).map(|(a, b)| a - b).collect())
         })
-        .collect::<Result<Vec<f64>, MemberError>>()?;
-    let shapley = shapley(CHANNELS.len(), |s| values[s as usize], Seed(seed), 0);
-    Ok(ChannelShares {
-        total: values[values.len() - 1],
-        direct: values[0],
-        shares: CHANNELS.iter().copied().zip(shapley).collect(),
-    })
+        .collect::<Result<Vec<Vec<f64>>, MemberError>>()?;
+    Ok((0..reference.len())
+        .map(|o| {
+            let shapley = shapley(CHANNELS.len(), |s| values[s as usize][o], Seed(seed), 0);
+            ChannelShares {
+                total: values[values.len() - 1][o],
+                direct: values[0][o],
+                shares: CHANNELS.iter().copied().zip(shapley).collect(),
+            }
+        })
+        .collect())
 }
 
 /// The declared outcomes read from a final world, by name.
 pub fn outcomes(w: &EconWorld) -> Vec<(&'static str, f64)> {
     let n = w.wage.len() as f64;
-    vec![
-        ("world_price_index", w.world_price_index()),
-        ("mean_wage", w.wage.iter().sum::<f64>() / n),
-    ]
+    let values = [w.world_price_index(), w.wage.iter().sum::<f64>() / n];
+    OUTCOME_NAMES.into_iter().zip(values).collect()
 }
+
+pub const OUTCOME_NAMES: [&str; 2] = ["world_price_index", "mean_wage"];
 
 #[cfg(test)]
 mod tests {
@@ -387,9 +392,10 @@ mod tests {
             (&[], &tariff_log()),
             1,
             10,
-            |w| w.world_price_index(),
+            |w| vec![w.world_price_index()],
         )
-        .unwrap();
+        .unwrap()
+        .remove(0);
         let sum: f64 = s.shares.iter().map(|(_, v)| v).sum();
         assert!((sum - (s.total - s.direct)).abs() <= 1e-12 * s.total.abs().max(1.0));
         assert_ne!(s.total, 0.0);

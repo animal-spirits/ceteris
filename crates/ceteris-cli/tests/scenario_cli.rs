@@ -107,3 +107,63 @@ fn rebase_and_cherry_pick_rewrite_the_scenario_and_report_skips() {
     assert_eq!(s.branch("b").unwrap().edits.len(), 2);
     assert!(!ceteris(&["rebase", f, "--branch", "a", "--onto", "nope", "--at", "1"]).0);
 }
+
+#[test]
+fn explain_writes_channel_shares_for_every_outcome() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    let out = dir.path().join("out");
+    let o = out.to_str().unwrap();
+    for args in [
+        vec![
+            "new",
+            f,
+            "--pack-hash",
+            "abc",
+            "--engine",
+            "test+1",
+            "--seeds",
+            "1,2",
+        ],
+        vec!["fork", f, "--from", "main", "--at", "3", "--id", "tariff"],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "tariff",
+            "--at",
+            "4",
+            "--kind",
+            "policy",
+            "--target",
+            "tariff.0.1.0",
+            "--value",
+            "0.25",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let (ok, stdout) = ceteris(&[
+        "explain",
+        f,
+        "--branch",
+        "tariff",
+        "--baseline",
+        "main",
+        "--ticks",
+        "8",
+        "--fixture",
+        "--out",
+        o,
+    ]);
+    assert!(ok);
+    assert_eq!(stdout.lines().count(), 6, "{stdout}");
+    assert!(stdout.contains("world_price_index prices:"));
+    assert!(
+        std::fs::metadata(out.join("channel_shares.arrow"))
+            .unwrap()
+            .len()
+            > 0
+    );
+}
