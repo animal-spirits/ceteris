@@ -27,7 +27,7 @@ Options:
 
 Recommendation: A, because the scenario is one edit and per-good control can be added later.
 
-Decision: pending.
+Decision: B, Antonio, 2026-11-09 (decision card in the #409 thread).
 Row: to be taken when this PR writes the spec.
 
 ### D2. How is a pair-specific NTB edited?
@@ -47,13 +47,13 @@ Row: to be taken when this PR writes the spec.
 
 ## Spec changes
 
-- 14.2: list `trade.border_nu_scale` and `ntb.<i>.<e>.<g>` as edit targets (kind `param` and
+- 14.2: list `trade.border_nu.<good>` (kind `param`, replaces the good's border iceberg nu; border x10 is one edit per traded good) and `ntb.<i>.<e>.<g>` as edit targets (kind `param` and
   `policy`).
-- 8: the crossing loss is `tau * (1 + nu * scale) * ntb`; `Wedges` gains an `ntb` vector of the
+- 8: the crossing loss is `tau * (1 + nu_g) * ntb`; `Wedges` gains an `ntb` vector of the
   tariff's shape. The state hash sees `ntb` only when it differs from all ones, so existing goldens
   do not move; a test asserts this.
 
 ## Open points for the review
 
-- The scale multiplies nu, not 1 + nu: "x10" of friction means x10 of the iceberg excess.
+- "x10" of friction means x10 of nu per good, not of 1 + nu.
 - Whether `ntb` enters the snapshot format, and a migration for old snapshots.
