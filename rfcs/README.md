@@ -321,3 +321,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0314 | [Held-out sources register and the C7 guard](0314-held-out-sources-register-and-c7-guard.md) | proposed | none yet |
 | 0315 | [Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](0315-snapshot-chunks-are-zstd-canonical-bytes.md) | accepted | ADR 0326 |
 | 0317 | [Canonical summation order, province slices of the ledger and goods-innermost dispatch blocks](0317-summation-order-and-goods-layout.md) | accepted | ADR 0327, ADR 0328, ADR 0329, ADR 0330 |
+| 0318 | [Accept ADR 0212 and the built part of ADR 0211 as built](0318-accept-history-retention-and-run-files-as-built.md) | proposed | pending |
