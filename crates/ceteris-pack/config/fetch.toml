@@ -527,6 +527,24 @@ sha256 = "9df6be2133ae76306e9242918cf27ea8ddc5cb35a9661d5524c6508b603a7cf3"
 bytes = 4238783
 url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/sbs_r_nuts03?format=TSV&compressed=true"
 
+# Statistics Finland's API answers POST only, so the file is saved by hand. POST this body to
+# https://statfin.stat.fi/PxWeb/api/v1/en/StatFin/altp/12bd.px and save the response:
+# {"query":[{"code":"alue_23_20250101","selection":{"filter":"all","values":["*"]}},
+#  {"code":"taloustoimi_1_20180101","selection":{"filter":"item","values":["B1GPH"]}},
+#  {"code":"toimiala_79_20180101","selection":{"filter":"all","values":["*"]}},
+#  {"code":"sektoriluokitus_7_20230101","selection":{"filter":"item","values":["S1"]}},
+#  {"code":"timeperiod_y","selection":{"filter":"item","values":["2000"]}},
+#  {"code":"contentscode","selection":{"filter":"item","values":["CP"]}}],
+#  "response":{"format":"csv"}}
+[[file]]
+source = "statfin-12bd"
+name = "statfin_12bd_b1gph_2000.csv"
+optional = true
+manual = true
+sha256 = "a892afd147df3c71cebe5b3fd9c7944aa6e0ecd7e7ac80a29ad791fbb8821cd2"
+bytes = 677478
+url = "https://statfin.stat.fi/PxWeb/api/v1/en/StatFin/altp/12bd.px"
+
 # Overpass at a fixed attic date returns the same bytes on every call (checked twice).
 [[file]]
 source = "osm"
