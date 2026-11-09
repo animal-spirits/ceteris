@@ -323,4 +323,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0333 | [Pipeline snapshot bytes stay buyer-major; encode and decode transpose](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md) | 19.4 |
 | 0334 | [In-flight totals are computed inside the per-good deliver and dispatch tasks](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md) | 19.4 |
 | 0335 | [P4 gate tolerances for UN 2000-2010 fixed before any run](../rfcs/0335-accept-p4-population-adrs-and-gate-tolerances.md) | 6.2, 21.1 |
+| 0336 | [Border friction is edited per good: trade.border_nu.<good> replaces that good's border iceberg](../rfcs/0336-border-and-ntb-edit-targets.md) | 8, 14.2 |
+| 0337 | [Pair-specific non-tariff barriers are an ntb.<importer>.<exporter>.<group> iceberg wedge](../rfcs/0336-border-and-ntb-edit-targets.md) | 8, 14.2 |
 <!-- rows:end -->
