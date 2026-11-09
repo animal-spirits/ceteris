@@ -380,7 +380,7 @@ pub struct Scratch {
     pub fill: Vec<[f64; 2]>,
     /// Local output perished per cell at T3.
     pub spoiled: Vec<f64>,
-    /// Pipeline arrivals at T1, `[buyer * ng + g]` (pops, then enterprises).
+    /// Pipeline arrivals at T1, `[g * n_buyers + buyer]` (pops, then enterprises).
     pub due: Vec<f64>,
     /// Sourcing of each traded good: at unit spending from the price refresh of E3, then
     /// from T2 to its dispatch at T2b.
