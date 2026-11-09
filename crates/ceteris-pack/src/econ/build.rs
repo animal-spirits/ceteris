@@ -15,18 +15,19 @@ use arrow_ipc::reader::FileReader;
 use super::downscale::{self, Downscaled, GEM, Geography, Provinces, RESOURCES};
 use super::gateways::{self, Edges, Nodes};
 use super::theta::{self, ClassTable};
-use super::{goods, icio, people, tariffs};
+use super::{drift, factors, foreign, goods, icio, people, price_level, tariffs, transfers};
 use crate::json::Json;
 use crate::numeric::pairwise_sum;
 use crate::raster::geotiff;
 use crate::raster::population::{BLOCK_ROWS, CellOwner, province_population};
 use crate::read::YEAR;
-use crate::read::baci::trade_by_country;
+use crate::read::baci::{read_hs_cpa, trade_by_country, trade_by_good};
 use crate::read::icio::{aggregate, home_use, load_wdi};
 use crate::read::natural_earth::read_codes;
-use crate::read::people::load_observed;
+use crate::read::people::{load_observed, parts};
 use crate::read::tariffs::{DTA, GRAVITY, read_cepii, read_dta};
-use crate::read::wdi::read_rates;
+use crate::read::wdi::{read_rates, read_wdi};
+use crate::read::{aamne, sea};
 use crate::table;
 
 /// The written tables, in writing order.
@@ -334,13 +335,24 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
     let population = people::scale_to_national(&raw, &country, &totals);
 
     let wdi = load_wdi(cache)?;
-    let world = icio::impute_pack(
-        &countries,
-        &aggregate(&cache.join(icio::ICIO), YEAR)?,
-        &wdi,
-        &obs,
-        &iso,
-        &worldpop,
+    let hs = read_hs_cpa(&cache.join(HS_KEY))?;
+    let by_good = trade_by_good(&cache.join(BACI), &goods::hs_goods(&hs), &iso, &codes)?;
+    let real = aggregate(&cache.join(icio::ICIO), YEAR)?;
+    let world = icio::impute_pack(&countries, &real, &wdi, &obs, &iso, &worldpop, &by_good)?;
+
+    let pwt_levels = price_level::relative(&obs.price_level_pwt, "PWT")?;
+    let [gdp, ppp, pop] = price_level::WDI_PRICE_LEVEL.map(|n| read_wdi(&cache.join(n)));
+    let gdp_by_year = gdp?;
+    let wdi_level = price_level::wdi_implied(&gdp_by_year, &ppp?, &pop?);
+    let screen = price_level::Screen::fit(&pwt_levels, &wdi.income)?;
+    let levels = price_level::price_levels(
+        &codes,
+        &|c| parts(c, &iso),
+        &|c| world.get(c).and_then(|e| e.donor.clone()),
+        &pwt_levels,
+        &price_level::relative(&wdi_level, "WDI")?,
+        &wdi.income,
+        &screen,
     )?;
 
     let working_age = population
@@ -406,6 +418,58 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         vec![("code".into(), Arc::new(StringArray::from(codes.clone())))];
     countries_columns.extend(icio::country_columns(&codes, &world, &wdi, &iso)?);
     countries_columns.extend(people::country_columns(&codes, &labour)?);
+    countries_columns.extend(price_level::columns(&levels));
+    let (pack_gdp, _) = icio::country_gdp(&codes, &world, &wdi, &iso)?;
+    let imbalances = transfers::transfers(
+        &codes,
+        &iso,
+        &pack_gdp,
+        &read_wdi(&cache.join(transfers::CURRENT_ACCOUNT))?,
+        &gdp_by_year,
+    );
+    countries_columns.extend(transfers::columns(&imbalances));
+    // wealth shares from the Gini 2000 in every profile (ADRs 0311, 0312)
+    countries_columns.extend(factors::wealth_columns(&factors::wealth(&codes, &|c| {
+        labour.get(c).map(|l| l.gini)
+    })?));
+    // initial drift from PWT 1995-2000 in every profile (ADR 0103)
+    let drifts = drift::drifts(
+        &codes,
+        &|c| parts(c, &iso),
+        &|c| labour.get(c).map(|l| l.labour_share),
+        &obs.drift_pwt,
+        &obs.region,
+    )?;
+    countries_columns.extend(drift::columns(&drifts));
+    // sector labour shares (ADR 0307) where SEA is cached
+    let sea_path = cache.join(sea::SEA);
+    if sea_path.exists() {
+        let f = factors::factors(
+            &codes,
+            &|c| labour.get(c).map(|l| l.labour_share),
+            &|c| world.get(c).map(|e| e.table.va),
+            &|c| parts(c, &iso),
+            &obs.gdp_per_capita,
+            &sea::read_sea(&sea_path)?,
+        )?;
+        countries_columns.extend(factors::columns(&f));
+    }
+    // foreign-owned shares and their owners (ADR 0309) where AAMNE is cached
+    let (aamne_va, aamne_output) = (cache.join(aamne::VA), cache.join(aamne::OUTPUT));
+    let foreign = if aamne_va.exists() && aamne_output.exists() {
+        let f = foreign::foreign(
+            &codes,
+            &|c| parts(c, &iso),
+            &|c| world.get(c).and_then(|e| e.donor.clone()),
+            &pack_gdp,
+            &aamne::read_owned(&aamne_va)?,
+            &aamne::read_parents(&aamne_output)?,
+        )?;
+        countries_columns.extend(foreign::columns(&f));
+        Some(f)
+    } else {
+        None
+    };
     let [
         goods_t,
         countries_t,
@@ -438,9 +502,16 @@ pub fn build(pack: &Path, out: &Path, cache: &Path) -> Result<BuildReport, Strin
         tables,
         stats: BuildStats::new(&gw, &rates, &matched, &placed),
         summary: vec![
+            icio::balance_report(&world, &by_good, real.get("ROW")),
             downscale::report(&placed, &matched),
             tariffs::report(&rates, &codes, &trade),
             gateways::report(&gw, &codes),
-        ],
+            price_level::report(&levels, &screen),
+            transfers::report(&imbalances, &codes, &pack_gdp),
+            drift::report(&drifts, &codes),
+        ]
+        .into_iter()
+        .chain(foreign.map(|f| foreign::report(&f, &codes)))
+        .collect(),
     })
 }

@@ -3,7 +3,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-expected=26 # 10 rayon methods + 10 algebraic methods + 3 HashMap + 3 HashSet uses
+expected=76 # 10 rayon + 10 algebraic + 50 float transcendental methods + 3 HashMap + 3 HashSet uses
 
 # Clippy does not track CLIPPY_CONF_DIR in its fingerprint: force a re-check.
 touch "$root/scripts/clippy-bans/src/main.rs"

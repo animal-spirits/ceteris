@@ -9,7 +9,7 @@
 //! | `econ_calib_provinces` | province u32, w0, employment, income f64 |
 //! | `econ_calib_pops` | province u32, edu u8, money, income, wage f64 |
 //! | `econ_calib_pipeline` | buyer u8 (0 pops, 1 enterprises), province u32, key u8 (edu or good), good u8, ahead u8, units f64 |
-//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_sigma (the within-pop dispersion, ADR 0094), pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9 f64 |
+//! | `econ_calib_countries` | country u32, u_star, rebate, pigl_scale, pigl_sigma (the within-pop dispersion, ADR 0094), pigl_omega_0 to pigl_omega_2, pigl_within_0 to pigl_within_9, and where demand is split (ADR 0099) gov_0 to gov_9, inv_0 to inv_9 f64 |
 //!
 //! Every table carries `calibration_format` [`FORMAT`] in its schema metadata.
 
@@ -117,8 +117,8 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
     let meta = Json::object([
         ("format", Json::Str(FORMAT.into())),
         (
-            "r",
-            Json::List(s.r.iter().map(|&x| Json::Float(x)).collect()),
+            "column_factor",
+            Json::List(s.column_factor.iter().map(|&x| Json::Float(x)).collect()),
         ),
         (
             "border_nu",
@@ -135,16 +135,7 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
         named("va0", f64s(s.va0.iter().copied())),
         named("l0", f64s(s.l0.iter().copied())),
         named("a_va", f64s(s.a_va.iter().copied())),
-        named(
-            "price",
-            f64s((0..n_e).map(|e| {
-                if inp.traded[eg[e]] {
-                    s.price[(ep[e], eg[e])]
-                } else {
-                    1.0
-                }
-            })),
-        ),
+        named("price", f64s((0..n_e).map(|e| s.price[(ep[e], eg[e])]))),
         named("output", f64s(s.output.iter().copied())),
         named("sales", f64s(s.value.iter().copied())),
         named("profit", f64s((0..n_e).map(|e| (1.0 - s_l[e]) * s.va0[e]))),
@@ -263,6 +254,11 @@ pub fn write(out: &Path, inp: &Inputs, s: &Steady, pack_province: &[usize]) -> R
     ];
     countries.extend((0..N_CATEGORIES).map(|c| (format!("pigl_omega_{c}"), column(&w.omega, c))));
     countries.extend((0..n_g).map(|g| (format!("pigl_within_{g}"), column(&w.within, g))));
+    // government's and investment's spending shares (ADR 0099), where the inputs split demand
+    if w.gov.rows > 0 {
+        countries.extend((0..n_g).map(|g| (format!("gov_{g}"), column(&w.gov, g))));
+        countries.extend((0..n_g).map(|g| (format!("inv_{g}"), column(&w.inv, g))));
+    }
     write_table(&out.join("econ_calib_countries.arrow"), countries, None)
 }
 
@@ -294,6 +290,12 @@ impl Table {
             batches,
             metadata,
         })
+    }
+
+    pub(crate) fn has(&self, col: &str) -> bool {
+        self.batches
+            .first()
+            .is_some_and(|b| b.column_by_name(col).is_some())
     }
 
     fn column(&self, col: &str, to: &DataType) -> Result<Vec<ArrayRef>, String> {
@@ -484,6 +486,16 @@ pub fn read_reference(
         omega: by_column("pigl_omega_", N_CATEGORIES)?,
         within: by_column("pigl_within_", n_g)?,
         sigma: countries.f64("pigl_sigma")?,
+        gov: if countries.has("gov_0") {
+            by_column("gov_", n_g)?
+        } else {
+            Mat::zeros(0, n_g)
+        },
+        inv: if countries.has("inv_0") {
+            by_column("inv_", n_g)?
+        } else {
+            Mat::zeros(0, n_g)
+        },
     };
 
     let cells = read("econ_calib_cells.arrow")?;

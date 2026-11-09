@@ -155,6 +155,7 @@ pub fn lock_text(
             sha256: None,
             bytes: None,
             url: field(r, "simplifiedGeometryGeoJSON")?,
+            mirror: None,
             optional: false,
             manual: false,
         };

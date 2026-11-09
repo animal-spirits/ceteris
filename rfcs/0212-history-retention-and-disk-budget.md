@@ -48,6 +48,14 @@ replaced 19.2's.
 - A full-pack run to 2150 and an ensemble of 32 to 2050 stay within their budgets.
 - A series recomputed from a snapshot equals the one recorded densely, bit for bit.
 
+## Measured (P3 A3)
+
+`cargo run --release -p ceteris-econ --example disk_bench` on the full pack (2026-11-06, M4 Pro):
+
+- One live run to 2150: 1.59 GB of the 20 GB budget. Snapshots 51 at about 13 MB each, 684 MB (380 KB per tick); history projected 0.91 GB (2.1 MB per dense tick); declared series 5 KB.
+- Ensemble of 32 to 2050: 13.01 GB of the 50 GB budget (677 KB per tick per member), series 231 KB. Members share almost no chunks.
+- Snapshots dominate; both budgets hold, so the snapshot intervals (12, then 60) stay as decided.
+
 ## Consequences
 
 Long runs and ensembles fit a laptop disk. Opening an old, thinned series costs a replay of the

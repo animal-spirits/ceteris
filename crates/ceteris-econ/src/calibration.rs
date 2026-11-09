@@ -245,6 +245,18 @@ impl EconInputs {
             .map(|c| f64s(&countries, &format!("pigl_omega_{c}")))
             .collect::<Result<Vec<_>, _>>()?;
         let within = per_good(&countries, "pigl_within_", ng)?;
+        // government's and investment's spending shares as calibrated (ADR 0099), where the
+        // tables have them
+        let fixed = |prefix: &str| -> Result<Option<Rows<f64>>, PackError> {
+            if countries.column_by_name(&format!("{prefix}0")).is_some() {
+                per_good(&countries, prefix, ng).map(Some)
+            } else {
+                Ok(None)
+            }
+        };
+        let (gov, inv) = (fixed("gov_")?, fixed("inv_")?);
+        let row =
+            |r: &Option<Rows<f64>>, c: usize| r.as_ref().map_or(Vec::new(), |r| r[c].to_vec());
         self.countries.pigl = Some(
             (0..nc)
                 .map(|c| PiglWeights {
@@ -253,6 +265,8 @@ impl EconInputs {
                     within: within[c].to_vec(),
                     category: self.goods.category.clone(),
                     sigma: sigma[c],
+                    gov: row(&gov, c),
+                    inv: row(&inv, c),
                 })
                 .collect(),
         );

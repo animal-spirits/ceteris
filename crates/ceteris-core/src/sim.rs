@@ -5,6 +5,7 @@ use crate::invariant::Violation;
 use crate::rng::Seed;
 use crate::schedule::Schedule;
 use crate::snapshot::{self, DecodeError, Decoder, Encode, Hash, SnapshotStore};
+use crate::timing;
 
 pub const SNAPSHOT_EVERY: u32 = 12;
 
@@ -119,17 +120,29 @@ impl<W: State> Sim<W> {
     }
 
     fn snapshot(&mut self) {
-        self.store
-            .insert(self.tick, &snapshot::canonical(self.tick, &self.world));
+        let bytes = {
+            let _span = timing::span("snap.encode", timing::NONE);
+            snapshot::canonical(self.tick, &self.world)
+        };
+        self.store.insert(self.tick, &bytes);
     }
 
     pub fn step(&mut self) -> Result<(), Violation> {
         let t = self.tick;
-        self.world.begin_tick();
+        timing::set_tick(t);
+        let _tick = timing::span("tick", timing::NONE);
+        {
+            let _span = timing::span("begin_tick", timing::NONE);
+            self.world.begin_tick();
+        }
         self.schedule.run_tick(&mut self.world, self.seed, t);
-        self.world.end_tick(t)?;
+        {
+            let _span = timing::span("end_tick", timing::NONE);
+            self.world.end_tick(t)?;
+        }
         self.tick = t + 1;
         if self.tick.is_multiple_of(SNAPSHOT_EVERY) {
+            let _span = timing::span("snapshot", timing::NONE);
             self.snapshot();
         }
         self.apply_interventions();
@@ -140,6 +153,16 @@ impl<W: State> Sim<W> {
         while self.tick < tick {
             self.step()?;
         }
+        Ok(())
+    }
+
+    /// Replaces the world and the tick with a canonical snapshot kept elsewhere (the run
+    /// store). Snapshots and interventions held by this sim are untouched, so use it on a
+    /// scratch sim that replays forward, as the run store's recompute does.
+    pub fn load(&mut self, canonical: &[u8]) -> Result<(), DecodeError> {
+        let (tick, world) = snapshot::decode_canonical_with(canonical, |d| self.world.restore(d))?;
+        self.world = world;
+        self.tick = tick;
         Ok(())
     }
 
