@@ -56,6 +56,9 @@ jobs:
       - name: Bench build
         if: github.event_name == 'push'
         run: cargo bench --workspace --no-run
+      - name: Disk cleanup
+        if: always()
+        run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
 
   slow:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -72,6 +75,9 @@ jobs:
           cargo test -p ceteris-econ --test p2_acceptance -- --ignored hundred_years_without_violation
       - name: Elasticity finite-difference tests (ADRs 0263, 0267)
         run: cargo test -p ceteris-calibrate --release --test steady_state -- --ignored own_price_elasticity_matches_finite_difference cross_price_elasticity_matches_finite_difference
+      - name: Disk cleanup
+        if: always()
+        run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
 
   # Gate commands from CLAUDE.md on main, nightly and on demand.
   gates:
@@ -95,6 +101,9 @@ jobs:
           cargo test -p ceteris-econ --release --test golden --test p2_acceptance
       - run: cargo run --release --bin ceteris -- pack check-sources --profile research
       - run: cargo deny check licenses
+      - name: Disk cleanup
+        if: always()
+        run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
 
   # Failures file one issue per day, so they notify the owner and stay on the board.
   report:
@@ -131,3 +140,6 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - name: Disk cleanup
+        if: always()
+        run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
