@@ -318,4 +318,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0328 | [Ledger goods stay account-major; per-province systems take disjoint account slices](../rfcs/0317-summation-order-and-goods-layout.md) | 4.6, 19.4 |
 | 0329 | [Cross-province float tallies sum by province partials in province order](../rfcs/0317-summation-order-and-goods-layout.md) | 19.4 |
 | 0330 | [Goods sharing a kernel are stored in goods-innermost blocks for batched dispatch](../rfcs/0317-summation-order-and-goods-layout.md) | 8.3, 19.4 |
+| 0331 | [T2b journals one netted entry per flow, from and to per tick; per-leg entries only in detail mode](../rfcs/0316-net-the-t2b-ledger-journal.md) | 4.6, 19.2, 19.4 |
 <!-- rows:end -->

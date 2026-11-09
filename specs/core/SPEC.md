@@ -69,7 +69,10 @@ systems (19.4) arrive with the first module that needs them.
 - `transfer(flow, from, to, amount)` moves an `i64` amount between two accounts of either
   kind with checked arithmetic; a narrow balance leaving the `i64` range, or a wide one the
   `i128` range, halts the run (`ledger overflow`). Every transfer is journaled with its
-  `Flow` tag for later sector flow matrices.
+  `Flow` tag for later sector flow matrices. The journal of a tick is the sequence of posted
+  blocks. T2b's PURCHASE, TRADE and TARIFF entries are per-(flow, from, to) totals; the
+  world's `detail` flag (off in production, on in the `identity` example and in tests that
+  count legs) posts one entry per leg instead, with the same balances and state hash (ADR 0331).
 - `ship(from, to, good, qty)` moves goods between accounts.
 - `create(account, good, qty)` and `destroy(account, good, qty)` are the only ways
   goods appear or disappear (production, consumption, spoilage); both are tallied.
