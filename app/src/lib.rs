@@ -19,6 +19,7 @@ pub mod ramps;
 pub mod sim;
 pub mod tokens;
 pub mod web;
+pub mod why;
 
 /// A Tracy zone over the rest of the enclosing scope with the `profile` feature; nothing
 /// without it.
