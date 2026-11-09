@@ -993,6 +993,72 @@ fn scenario_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `serve --scenario FILE --tables DIR --token-file F [--port P]`: the read-only API on
+/// 127.0.0.1 (default port 7878). A missing token file is created with a random token (mode
+/// 0600). Runs until killed. `api schema` prints the tables.
+fn serve_verb(command: &str, args: Vec<String>) -> Result<ExitCode, String> {
+    use std::io::Read;
+
+    if command == "api" {
+        if args.first().map(String::as_str) != Some("schema") {
+            return Err("expected api schema".into());
+        }
+        for (table, cols) in ceteris_run::outputs::TABLES {
+            let cols: Vec<String> = cols.iter().map(|(c, k)| format!("{c}:{k:?}")).collect();
+            println!("{table}({})", cols.join(", "));
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let flag = |name: &str| -> Option<&str> {
+        let at = args.iter().position(|a| a == name)?;
+        args.get(at + 1).map(String::as_str)
+    };
+    let need = |name: &str| flag(name).ok_or(format!("missing {name}"));
+    let file = need("--scenario")?;
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenario = ceteris_run::Scenario::parse(&text).map_err(|e| e.to_string())?;
+    let port: u16 = flag("--port")
+        .unwrap_or("7878")
+        .parse()
+        .map_err(|_| "--port wants a number".to_string())?;
+    let token_path = PathBuf::from(need("--token-file")?);
+    let token = match std::fs::read_to_string(&token_path) {
+        Ok(t) => t.trim().to_string(),
+        Err(_) => {
+            let mut raw = [0u8; 16];
+            std::fs::File::open("/dev/urandom")
+                .and_then(|mut f| f.read_exact(&mut raw))
+                .map_err(|e| format!("cannot draw a token: {e}"))?;
+            let token: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+            std::fs::write(&token_path, format!("{token}\n"))
+                .map_err(|e| format!("{}: {e}", token_path.display()))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|e| e.to_string())?;
+            }
+            token
+        }
+    };
+    let server = Arc::new(ceteris_run::serve::Server {
+        token,
+        scenario,
+        tables: PathBuf::from(need("--tables")?),
+    });
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = ceteris_run::serve::bind(addr).map_err(|e| e.to_string())?;
+    println!(
+        "listening on {}",
+        listener.local_addr().map_err(|e| e.to_string())?
+    );
+    for stream in listener.incoming().flatten() {
+        let server = Arc::clone(&server);
+        std::thread::spawn(move || server.serve(stream));
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `fetch HASH --scenario FILE --ticks N --fixture|--pack DIR`: finds the (branch, seed) of the
 /// scenario file whose run hash is HASH, recomputes that member to `ticks` and prints its state
 /// hash. Pulling chunks from a mirror is not built.
@@ -1393,6 +1459,12 @@ fn main() -> ExitCode {
     .contains(&command.as_str())
     {
         return scenario_verb(&command, argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if command == "serve" || command == "api" {
+        return serve_verb(&command, argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
