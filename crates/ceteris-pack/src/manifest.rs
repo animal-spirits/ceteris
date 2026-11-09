@@ -144,6 +144,7 @@ mod tests {
             sha256: sha256.map(str::to_owned),
             bytes: None,
             url: "u".to_owned(),
+            mirror: None,
             optional: false,
             manual: false,
         };

@@ -28,6 +28,9 @@ pub struct Entry {
     pub sha256: Option<String>,
     pub bytes: Option<u64>,
     pub url: String,
+    /// The release archive's copy, tried when the upstream URL fails or serves the wrong bytes
+    /// (ADR 0215).
+    pub mirror: Option<String>,
     pub optional: bool,
     pub manual: bool,
 }
@@ -39,6 +42,7 @@ pub enum FetchError {
         name: String,
         url: String,
         cache: PathBuf,
+        bytes: Option<u64>,
     },
     /// The downloaded file does not match the pinned digest or size; it was discarded.
     Mismatch {
@@ -52,11 +56,22 @@ pub enum FetchError {
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Manual { name, url, cache } => write!(
-                f,
-                "{name}: the host rejects scripted downloads; save {url} into {} in a browser",
-                cache.display()
-            ),
+            Self::Manual {
+                name,
+                url,
+                cache,
+                bytes,
+            } => {
+                write!(
+                    f,
+                    "{name}: the host rejects scripted downloads; save {url} into {} as {name}",
+                    cache.display()
+                )?;
+                match bytes {
+                    Some(n) => write!(f, " ({n} bytes) in a browser"),
+                    None => f.write_str(" in a browser"),
+                }
+            }
             Self::Mismatch {
                 name,
                 sha256,
@@ -87,6 +102,7 @@ fn entry_of(file: &Table) -> Entry {
             .and_then(Value::as_integer)
             .and_then(|b| u64::try_from(b).ok()),
         url: text("url").unwrap_or_default().to_owned(),
+        mirror: text("mirror").map(str::to_owned),
         optional: flag("optional"),
         manual: flag("manual"),
     }
@@ -175,38 +191,71 @@ pub fn digest(path: &Path) -> std::io::Result<(String, u64)> {
     }
 }
 
-fn download(entry: &Entry, part: &Path) -> Result<(String, u64), FetchError> {
+/// Appends the response for `url` to `part`, resuming from its current size when the server
+/// honours a range request; nothing is created for an error status.
+fn download(url: &str, part: &Path) -> Result<(), FetchError> {
     let client = reqwest::blocking::Client::builder()
         .user_agent(USER_AGENT)
         .build()
         .map_err(|e| FetchError::Other(e.to_string()))?;
-    let mut response = client
-        .get(&entry.url)
+    let have = fs::metadata(part).map_or(0, |m| m.len());
+    let mut request = client.get(url);
+    if have > 0 {
+        request = request.header("Range", format!("bytes={have}-"));
+    }
+    let response = request
         .send()
-        .and_then(|r| r.error_for_status())
-        .map_err(|e| FetchError::Other(format!("{}: {e}", entry.url)))?;
-    let mut out = File::create(part).map_err(|e| io(part, e))?;
-    let mut hasher = Sha256::new();
+        .map_err(|e| FetchError::Other(format!("{url}: {e}")))?;
+    if have > 0 && response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+        // The partial file is already as long as the resource or longer: start again.
+        fs::remove_file(part).map_err(|e| io(part, e))?;
+        return download(url, part);
+    }
+    let mut response = response
+        .error_for_status()
+        .map_err(|e| FetchError::Other(format!("{url}: {e}")))?;
+    let resumed = have > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
+    let mut out = if resumed {
+        fs::OpenOptions::new().append(true).open(part)
+    } else {
+        File::create(part)
+    }
+    .map_err(|e| io(part, e))?;
     let mut buffer = vec![0; CHUNK];
-    let mut size = 0;
     loop {
         let n = response
             .read(&mut buffer)
-            .map_err(|e| FetchError::Other(format!("{}: {e}", entry.url)))?;
+            .map_err(|e| FetchError::Other(format!("{url}: {e}")))?;
         if n == 0 {
-            break;
+            return out.flush().map_err(|e| io(part, e));
         }
-        hasher.update(&buffer[..n]);
         out.write_all(&buffer[..n]).map_err(|e| io(part, e))?;
-        size += n as u64;
     }
-    out.flush().map_err(|e| io(part, e))?;
-    Ok((format!("{:x}", hasher.finalize()), size))
+}
+
+/// Downloads from `url` into `part` and renames it to `path` once it matches the pin. A failed
+/// transfer keeps the partial file for the next run; a wrong file is discarded.
+fn download_checked(entry: &Entry, url: &str, part: &Path, path: &Path) -> Result<(), FetchError> {
+    eprintln!("fetching {url}");
+    download(url, part)?;
+    let (sha256, bytes) = digest(part).map_err(|e| io(part, e))?;
+    if let Some(pinned) = &entry.sha256
+        && (pinned != &sha256 || entry.bytes != Some(bytes))
+    {
+        let _ = fs::remove_file(part);
+        return Err(FetchError::Mismatch {
+            name: entry.name.clone(),
+            sha256,
+            bytes,
+        });
+    }
+    fs::rename(part, path).map_err(|e| io(path, e))
 }
 
 /// Ensures the entry is in `cache` and returns its path. A file already there is returned
 /// unverified; a download is checked against the pinned digest and size before it is renamed
-/// into place. Nothing is downloaded for an optional or manual entry.
+/// into place. The upstream URL is tried first, then the mirror. Nothing is downloaded for an
+/// optional or manual entry.
 pub fn fetch(entry: &Entry, cache: &Path) -> Result<PathBuf, FetchError> {
     let path = cache.join(&entry.name);
     if path.exists() || entry.optional {
@@ -217,29 +266,88 @@ pub fn fetch(entry: &Entry, cache: &Path) -> Result<PathBuf, FetchError> {
             name: entry.name.clone(),
             url: entry.url.clone(),
             cache: cache.to_owned(),
+            bytes: entry.bytes,
         });
     }
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| io(dir, e))?;
     }
-    let mut part = path.clone().into_os_string();
+    let part = part_of(&path);
+    let upstream = download_checked(entry, &entry.url, &part, &path);
+    let Some(mirror) = entry.mirror.as_deref() else {
+        return upstream.map(|()| path);
+    };
+    let Err(first) = upstream else {
+        return Ok(path);
+    };
+    // A partial upstream file is not a prefix of the mirror's copy by assumption.
+    let _ = fs::remove_file(&part);
+    download_checked(entry, mirror, &part, &path)
+        .map(|()| path)
+        .map_err(|second| FetchError::Other(format!("{first}; mirror: {second}")))
+}
+
+fn part_of(path: &Path) -> PathBuf {
+    let mut part = path.to_owned().into_os_string();
     part.push(".part");
-    let part = PathBuf::from(part);
-    eprintln!("fetching {}", entry.url);
-    let (sha256, bytes) = download(entry, &part).inspect_err(|_| {
-        let _ = fs::remove_file(&part);
-    })?;
-    if let Some(pinned) = &entry.sha256
-        && (pinned != &sha256 || entry.bytes != Some(bytes))
-    {
-        let _ = fs::remove_file(&part);
-        return Err(FetchError::Mismatch {
-            name: entry.name.clone(),
-            sha256,
-            bytes,
-        });
+    PathBuf::from(part)
+}
+
+/// What the cache holds for an entry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Status {
+    /// The file is there and matches its pin.
+    Verified,
+    /// The file is there and the entry has no pin to check it against.
+    Unpinned,
+    /// The file is there and does not match its pin.
+    Wrong {
+        sha256: String,
+        bytes: u64,
+    },
+    /// A download was interrupted; this many bytes are kept.
+    Partial(u64),
+    Missing,
+}
+
+/// Checks the cached file for `entry` against its pin.
+pub fn status(entry: &Entry, cache: &Path) -> std::io::Result<Status> {
+    let path = cache.join(&entry.name);
+    if !path.exists() {
+        return Ok(
+            fs::metadata(part_of(&path)).map_or(Status::Missing, |m| Status::Partial(m.len()))
+        );
     }
-    fs::rename(&part, &path).map_err(|e| io(&path, e))?;
+    let Some(pinned) = &entry.sha256 else {
+        return Ok(Status::Unpinned);
+    };
+    let (sha256, bytes) = digest(&path)?;
+    Ok(if pinned == &sha256 && entry.bytes == Some(bytes) {
+        Status::Verified
+    } else {
+        Status::Wrong { sha256, bytes }
+    })
+}
+
+/// Moves a file the user downloaded by hand into the cache when it matches the pin. A wrong
+/// file is refused with the name and size the entry expects; `source` is left untouched.
+pub fn accept(entry: &Entry, source: &Path, cache: &Path) -> Result<PathBuf, String> {
+    let (sha256, bytes) = digest(source).map_err(|e| format!("{}: {e}", source.display()))?;
+    if entry.sha256.as_ref() != Some(&sha256) || entry.bytes != Some(bytes) {
+        let expected = entry
+            .bytes
+            .map_or("unknown size".to_owned(), |n| format!("{n} bytes"));
+        return Err(format!(
+            "{}: not the expected file (got {bytes} bytes); expected {} ({expected})",
+            source.display(),
+            entry.name
+        ));
+    }
+    let path = cache.join(&entry.name);
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    fs::copy(source, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
 }
 
