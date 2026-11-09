@@ -170,6 +170,33 @@ impl ChunkStore {
         Ok(out)
     }
 
+    /// Copies each chunk of `m` this store lacks from the store in `mirror`, checking its raw
+    /// bytes against the chunk hash first, and returns how many it copied. A URL mirror is not
+    /// built.
+    pub fn pull(&self, mirror: &Path, m: &Manifest) -> Result<usize, StoreError> {
+        let mirror = Self::open(mirror, &fs::read_to_string(self.dir.join("ENGINE"))?)?;
+        let mut copied = 0;
+        for h in &m.chunks {
+            let path = self.chunk_path(h);
+            if path.exists() {
+                continue;
+            }
+            let packed = fs::read(mirror.chunk_path(h)).map_err(|e| match e.kind() {
+                io::ErrorKind::NotFound => StoreError::MissingChunk(hex(h)),
+                _ => e.into(),
+            })?;
+            if blake3::hash(&zstd::decode_all(packed.as_slice())?).as_bytes() != h {
+                return Err(StoreError::Corrupt(format!("chunk {}", hex(h))));
+            }
+            fs::create_dir_all(path.parent().expect("chunk path has a parent"))?;
+            let tmp = path.with_extension("tmp");
+            fs::write(&tmp, packed)?;
+            fs::rename(&tmp, &path)?;
+            copied += 1;
+        }
+        Ok(copied)
+    }
+
     pub fn dir(&self) -> &Path {
         &self.dir
     }
@@ -226,6 +253,27 @@ mod tests {
         assert_eq!(m, m2);
         let (tick, _toy): (u32, Toy) = decode_canonical(&s.get(&m2).unwrap()).unwrap();
         assert_eq!(tick, 0);
+    }
+
+    #[test]
+    fn pull_fills_a_store_from_a_mirror_and_refuses_damage() {
+        let dir = tempfile::tempdir().unwrap();
+        let mirror = ChunkStore::open(dir.path().join("mirror"), ENGINE).unwrap();
+        let bytes = canonical(0, &big_toy());
+        let m = mirror.put(&bytes).unwrap();
+        let local = store(&dir);
+        assert_eq!(local.pull(mirror.dir(), &m).unwrap(), mirror.chunk_count());
+        assert_eq!(local.get(&m).unwrap(), bytes);
+        assert_eq!(local.pull(mirror.dir(), &m).unwrap(), 0);
+
+        let other = ChunkStore::open(dir.path().join("other"), ENGINE).unwrap();
+        let bad = mirror.chunk_path(&m.chunks[0]);
+        let swapped = zstd::encode_all(&b"damaged"[..], ZSTD_LEVEL).unwrap();
+        fs::write(&bad, swapped).unwrap();
+        assert!(matches!(
+            other.pull(mirror.dir(), &m),
+            Err(StoreError::Corrupt(_))
+        ));
     }
 
     #[test]
