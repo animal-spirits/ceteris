@@ -1,6 +1,6 @@
 # RFC 0332. Status of ADR 0108 (estimation windows and long-run lanes)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-09
 Design sections: 6.2, 7.5, 10, 11, 15.1, 15.2, 17
 Release: 1.0, P8
@@ -43,7 +43,7 @@ Recommendation: A, because nothing is built or measured, and the 0318 precedent 
 has code and numbers behind it. The Right gate (CLAUDE.md) needs the published-benchmark
 reproduction before acceptance; the catch-up equation's home depends on the P4 factor.
 
-Decision: pending Antonio.
+Decision: A, Antonio, 2026-11-09.
 Row: none new; ADR 0108 keeps its row
 
 ## Spec changes
