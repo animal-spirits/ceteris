@@ -6,6 +6,7 @@ pub mod chunks;
 pub mod clock;
 pub mod commands;
 pub mod econ;
+pub mod fan;
 pub mod fill;
 pub mod freight;
 pub mod inspect;
