@@ -31,7 +31,7 @@ Options:
 Recommendation: A, because each is scoped to P4 by `specs/p4/PLAN.md`, the post-1.0 parts are
 already fenced out (issue #258), and Branch F plus A1 can start the day this is accepted.
 
-Decision: pending, Antonio.
+Decision: A, Antonio, 2026-11-09 (decision card).
 Row: ADRs 0031, 0032, 0033, 0074, 0105, 0109, 0167, filled in once accepted.
 
 ### D2. Tolerances for gate item 1 (UN 2000-2010)
