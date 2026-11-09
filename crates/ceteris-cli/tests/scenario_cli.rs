@@ -158,7 +158,7 @@ fn explain_writes_channel_shares_for_every_outcome() {
         o,
     ]);
     assert!(ok);
-    assert_eq!(stdout.lines().count(), 6, "{stdout}");
+    assert_eq!(stdout.lines().count(), 8, "{stdout}");
     assert!(stdout.contains("world_price_index prices:"));
     assert!(
         std::fs::metadata(out.join("channel_shares.arrow"))

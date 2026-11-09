@@ -1836,9 +1836,16 @@ impl EconWorld {
         params: EconParams,
         trade: TradeParams,
     ) {
-        if network != self.network_digest
-            || trade != self.trade
-            || !Arc::ptr_eq(&inputs, &self.inputs)
+        let kernel_held = network == self.network_digest
+            && trade == self.trade
+            && self
+                .scratch
+                .channels
+                .is_shut(crate::channels::Channel::TradeShares);
+        if !kernel_held
+            && (network != self.network_digest
+                || trade != self.trade
+                || !Arc::ptr_eq(&inputs, &self.inputs))
         {
             let target = Arc::new(Kernel::build(
                 &inputs.network,

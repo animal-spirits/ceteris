@@ -137,7 +137,7 @@ pub struct ChannelShares {
     pub shares: Vec<(Channel, f64)>,
 }
 
-pub const CHANNELS: [Channel; 2] = [Channel::Prices, Channel::Wages];
+pub const CHANNELS: [Channel; 3] = [Channel::Prices, Channel::Wages, Channel::TradeShares];
 
 pub fn channel_shares(
     inputs: &Arc<EconInputs>,
@@ -480,5 +480,29 @@ mod tests {
             "a cancelled commitment changes nothing"
         );
         assert_ne!(hash(&by_user), hash(&[]));
+    }
+
+    #[test]
+    fn shut_trade_shares_hold_the_kernel_at_the_baseline() {
+        let inputs = Arc::new(small_world());
+        let draws = member_edits(Seed(1), &priors());
+        let go = |shut: &[Channel]| {
+            let path = Arc::new(crate::channels::Path::default());
+            run_world(&inputs, &base(), &draws, &tariff_log(), 8, |w| {
+                w.scratch.channels.shut(Arc::clone(&path), shut);
+            })
+            .unwrap()
+        };
+        let baseline = run_world(&inputs, &base(), &draws, &[], 8, |_| ()).unwrap();
+        let held = go(&[Channel::TradeShares]);
+        let open = go(&[]);
+        assert_eq!(
+            held.world().target.crossing_k(),
+            baseline.world().target.crossing_k()
+        );
+        assert_ne!(
+            open.world().target.crossing_k(),
+            baseline.world().target.crossing_k()
+        );
     }
 }
