@@ -12,7 +12,7 @@ env:
 jobs:
   rows:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_PR || '["self-hosted","macOS","ARM64","ceteris"]') }}
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rows
     steps:

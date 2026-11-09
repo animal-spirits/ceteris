@@ -25,7 +25,7 @@ jobs:
   rust:
     # Fork pull requests never reach the self-hosted runner.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64, ceteris]
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && vars.CI_RUNNER_PR || '["self-hosted","macOS","ARM64","ceteris"]') }}
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rust
     steps:
