@@ -75,9 +75,25 @@ impl Pipeline {
         self.slots[(self.cursor + slot - 1) % SLOTS][g * self.buyers + buyer] += units;
     }
 
+    /// One contiguous run of every slot per good, for per-good tasks.
+    fn good_runs(&mut self) -> Vec<[&mut [f64]; SLOTS]> {
+        let [s0, s1, s2, s3] = &mut self.slots;
+        let mut runs = [s0, s1, s2, s3].map(|s| s.chunks_exact_mut(self.buyers));
+        (0..self.goods)
+            .map(|_| runs.each_mut().map(|r| r.next().expect("good run")))
+            .collect()
+    }
+
+    /// The in-flight total of one good: slots in storage order, buyers in order, from -0.0,
+    /// the order of [`Pipeline::in_flight`].
+    fn total(cells: &[&mut [f64]; SLOTS]) -> f64 {
+        cells.iter().flat_map(|c| c.iter()).sum()
+    }
+
     /// [`Pipeline::push`] of every shipment in `lists[g]` for good `g`: one task per good adds
     /// its list in order to its own contiguous run of each slot, so every cell sums the same
-    /// terms in the same order however many threads there are.
+    /// terms in the same order however many threads there are. The task then sums the good's
+    /// in-flight total, which [`Pipeline::in_flight_cached`] returns (RFC 0319 D3).
     pub fn push_all(&mut self, lists: &[&[Push]]) {
         self.flight = FlightCache::default();
         let (buyers, goods, cursor) = (self.buyers, self.goods, self.cursor);
@@ -86,17 +102,12 @@ impl Pipeline {
             assert!(lists.iter().all(|l| l.is_empty()), "no buyers");
             return;
         }
-        let [s0, s1, s2, s3] = &mut self.slots;
-        let mut runs = [s0, s1, s2, s3].map(|s| s.chunks_exact_mut(buyers));
-        let tasks: Vec<([&mut [f64]; SLOTS], &[Push])> = lists
-            .iter()
-            .map(|&list| (runs.each_mut().map(|r| r.next().expect("good run")), list))
-            .collect();
-        tasks
+        let totals: Vec<f64> = self
+            .good_runs()
             .into_par_iter()
             .enumerate()
-            .for_each(|(g, (cells, list))| {
-                for &(slot, buyer, units) in list {
+            .map(|(g, cells)| {
+                for &(slot, buyer, units) in lists.get(g).copied().unwrap_or_default() {
                     assert!(
                         (1..=SLOTS).contains(&(slot as usize)),
                         "slot {slot} outside 1 to {SLOTS}"
@@ -104,7 +115,10 @@ impl Pipeline {
                     assert!((buyer as usize) < buyers, "buyer {buyer} good {g}");
                     cells[(cursor + slot as usize - 1) % SLOTS][buyer as usize] += units;
                 }
-            });
+                Self::total(&cells)
+            })
+            .collect();
+        self.flight = FlightCache(totals.into());
     }
 
     /// Delivers what is due this tick, `[g * n_buyers + buyer]`, and advances the pipeline.
@@ -113,9 +127,23 @@ impl Pipeline {
         // the delivered slot is swapped out for the zeroed previous delivery, so a slot-4 push
         // right after lands in a clean slot
         self.flight = FlightCache::default();
-        self.due.fill(0.0);
-        std::mem::swap(&mut self.due, &mut self.slots[self.cursor]);
-        self.cursor = (self.cursor + 1) % SLOTS;
+        let old = self.cursor;
+        std::mem::swap(&mut self.due, &mut self.slots[old]);
+        self.cursor = (old + 1) % SLOTS;
+        if self.buyers > 0 {
+            // per good: zero the old delivery's run, then total what stays in flight
+            let totals: Vec<f64> = self
+                .good_runs()
+                .into_par_iter()
+                .map(|cells| {
+                    cells[old].fill(0.0);
+                    Self::total(&cells)
+                })
+                .collect();
+            self.flight = FlightCache(totals.into());
+        } else {
+            self.slots[old].fill(0.0);
+        }
         &self.due
     }
 
@@ -288,6 +316,11 @@ mod tests {
         let mut x = 0.123_f64;
         for t in 0..9 {
             p.pop_due();
+            let after_pop = p.in_flight_all();
+            p.flight = FlightCache::default();
+            for (g, total) in after_pop.iter().enumerate() {
+                assert_eq!(total.to_bits(), p.in_flight(g).to_bits(), "pop, good {g}");
+            }
             let lists: Vec<Vec<Push>> = (0..N_GOODS)
                 .map(|g| {
                     (0..11)
