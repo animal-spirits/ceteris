@@ -1,6 +1,6 @@
 //! Applies the edit log (Section 14.2) to an [`EconWorld`] at a tick boundary.
 //!
-//! Targets at P2: scalar economic and trade parameters, tariffs, wages per province, and the
+//! Targets at P2: scalar economic and trade parameters, border icebergs per good, tariffs, non-tariff barriers, wages per province, and the
 //! frictionless switch. Event injection, decision override and replay entries have no targets
 //! until later phases and are rejected by name.
 
@@ -66,6 +66,7 @@ pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
     }
     match e.kind {
         EditKind::Param => set_param(w, target, e.value),
+        EditKind::Policy if target.starts_with("ntb.") => set_ntb(w, target, e.value),
         EditKind::Policy => set_tariff(w, target, e.value),
         EditKind::State => set_state(w, target, e.value),
         EditKind::Switch if e.tick > 0 => Err(EditError::SwitchAfterStart { tick: e.tick }),
@@ -117,6 +118,14 @@ fn set_param_in(
                 _ => return Err(unknown()),
             } = v;
         }
+        ("trade", name) if name.starts_with("border_nu.") => {
+            let [g] = indices::<1>(name, "border_nu")?;
+            let nu = t.border_nu.get_mut(g).ok_or_else(unknown)?;
+            if !(v.is_finite() && v >= 0.0) {
+                return Err(EditError::OutOfRange(target.to_string()));
+            }
+            *nu = v;
+        }
         ("trade", name) => {
             *match name {
                 "theta_scale" => &mut t.theta_scale,
@@ -154,6 +163,27 @@ fn set_tariff(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> 
     Ok(())
 }
 
+/// `ntb.<importer>.<exporter>.<group>`, an iceberg factor of at least 1 (ADR 0337).
+fn set_ntb(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
+    let mut wedges = w.inputs().wedges.clone();
+    set_ntb_in(&mut wedges, target, v)?;
+    w.set_wedges(wedges);
+    Ok(())
+}
+
+fn set_ntb_in(wedges: &mut Wedges, target: &str, v: f64) -> Result<(), EditError> {
+    let idx = indices::<3>(target, "ntb")?;
+    let n = wedges.n_countries();
+    if idx[0] >= n || idx[1] >= n || idx[2] >= 2 || !(v.is_finite() && v >= 1.0) {
+        return Err(EditError::OutOfRange(target.to_string()));
+    }
+    if wedges.ntb.is_empty() {
+        wedges.ntb = vec![1.0; wedges.tariff.len()];
+    }
+    wedges.ntb[(idx[0] * n + idx[1]) * 2 + idx[2]] = v as f32;
+    Ok(())
+}
+
 fn set_tariff_in(wedges: &mut Wedges, target: &str, v: f64) -> Result<(), EditError> {
     let idx = indices::<3>(target, "tariff")?;
     let n = wedges.n_countries();
@@ -169,11 +199,12 @@ fn set_tariff_in(wedges: &mut Wedges, target: &str, v: f64) -> Result<(), EditEr
 /// inputs and are left out.
 pub fn tariff_inputs(inputs: &EconInputs, log: &[Edit]) -> Result<EconInputs, EditError> {
     let mut out = inputs.clone();
-    for e in log
-        .iter()
-        .filter(|e| e.kind == EditKind::Policy && e.target.starts_with("tariff."))
-    {
-        set_tariff_in(&mut out.wedges, &e.target, e.value)?;
+    for e in log.iter().filter(|e| e.kind == EditKind::Policy) {
+        if e.target.starts_with("tariff.") {
+            set_tariff_in(&mut out.wedges, &e.target, e.value)?;
+        } else if e.target.starts_with("ntb.") {
+            set_ntb_in(&mut out.wedges, &e.target, e.value)?;
+        }
     }
     Ok(out)
 }
@@ -507,6 +538,56 @@ mod tests {
                 .unwrap();
         assert_eq!(restored.inputs().wedges.rate(0, 1, 0), 0.25);
         assert_eq!(restored.digest(), edited.digest());
+    }
+
+    #[test]
+    fn ntb_edit_sets_the_wedge_survives_snapshot_and_rejects_bad_values() {
+        use ceteris_core::snapshot::{canonical, decode_canonical_with};
+
+        let ntb = |target: &str, v: f64| edit(0, EditSource::User, EditKind::Policy, target, v);
+        let mut edited = world();
+        assert!(edited.inputs().wedges.ntb.is_empty());
+        let before = canonical(0, &edited);
+        apply_edit(&mut edited, &ntb("ntb.0.1.1", 1.25)).unwrap();
+        assert_eq!(edited.inputs().wedges.ntb_factor(0, 1, 1), 1.25);
+        assert_eq!(edited.inputs().wedges.ntb_factor(1, 0, 1), 1.0);
+        let bytes = canonical(0, &edited);
+        assert_ne!(bytes, before, "the state hash sees the NTB");
+        let fresh = world();
+        let (_, restored) =
+            decode_canonical_with(&bytes, |d| ceteris_core::sim::State::restore(&fresh, d))
+                .unwrap();
+        assert_eq!(restored.inputs().wedges.ntb_factor(0, 1, 1), 1.25);
+        assert_eq!(restored.digest(), edited.digest());
+        for bad in [("ntb.0.1.1", 0.9), ("ntb.0.1.2", 1.1), ("ntb.99.0.0", 1.1)] {
+            let r = apply_edit(&mut world(), &ntb(bad.0, bad.1));
+            assert!(matches!(r, Err(EditError::OutOfRange(_))), "{bad:?}");
+        }
+        let log = [ntb("ntb.0.1.0", 1.5)];
+        let inputs = tariff_inputs(world().inputs(), &log).unwrap();
+        assert_eq!(inputs.wedges.ntb_factor(0, 1, 0), 1.5);
+    }
+
+    #[test]
+    fn border_nu_edit_sets_one_good() {
+        let mut w = world();
+        let nu0 = w.trade().border_nu.clone();
+        let e = edit(
+            0,
+            EditSource::User,
+            EditKind::Param,
+            "trade.border_nu.2",
+            3.0,
+        );
+        apply_edit(&mut w, &e).unwrap();
+        assert_eq!(w.trade().border_nu[2], 3.0);
+        for g in (0..nu0.len()).filter(|&g| g != 2) {
+            assert_eq!(w.trade().border_nu[g], nu0[g]);
+        }
+        for bad in [("trade.border_nu.99", 1.0), ("trade.border_nu.2", -1.0)] {
+            let e = edit(0, EditSource::User, EditKind::Param, bad.0, bad.1);
+            assert!(apply_edit(&mut world(), &e).is_err(), "{bad:?}");
+        }
     }
 
     fn query_edit(tick: u32, query: &str, value: f64) -> Edit {

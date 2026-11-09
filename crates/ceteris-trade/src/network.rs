@@ -139,6 +139,9 @@ pub fn equal_gateway_mass(gateway_country: &[u16]) -> Vec<f64> {
 #[derive(Clone, Debug, Default)]
 pub struct Wedges {
     pub tariff: Vec<f32>,
+    /// Non-tariff barriers as iceberg factors (>= 1), same index as `tariff`, destroyed at the
+    /// crossing with the border iceberg (ADR 0337). Empty means 1 everywhere.
+    pub ntb: Vec<f32>,
 }
 
 impl Wedges {
@@ -146,6 +149,7 @@ impl Wedges {
     pub fn none(n_countries: usize) -> Self {
         Self {
             tariff: vec![0.0; 2 * n_countries * n_countries],
+            ntb: Vec::new(),
         }
     }
 
@@ -157,6 +161,14 @@ impl Wedges {
             "tariff length must be 2 * n_countries^2"
         );
         n
+    }
+
+    pub fn ntb_factor(&self, importer: usize, exporter: usize, group: usize) -> f32 {
+        let n = self.n_countries();
+        self.ntb
+            .get((importer * n + exporter) * 2 + group)
+            .copied()
+            .unwrap_or(1.0)
     }
 
     pub fn rate(&self, importer: usize, exporter: usize, group: usize) -> f32 {
