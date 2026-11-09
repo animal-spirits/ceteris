@@ -5,6 +5,7 @@ pub mod camera;
 pub mod chunks;
 pub mod clock;
 pub mod commands;
+pub mod diffmap;
 pub mod econ;
 pub mod fill;
 pub mod freight;
