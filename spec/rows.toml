@@ -1565,3 +1565,8 @@ sections = "19.4"
 rows = "0330"
 topic = "[Goods sharing a kernel are stored in goods-innermost blocks for batched dispatch](../rfcs/0317-summation-order-and-goods-layout.md)"
 sections = "8.3, 19.4"
+
+[[entry]]
+rows = "0331"
+topic = "[T2b journals one netted entry per flow, from and to per tick; per-leg entries only in detail mode](../rfcs/0316-net-the-t2b-ledger-journal.md)"
+sections = "4.6, 19.2, 19.4"
