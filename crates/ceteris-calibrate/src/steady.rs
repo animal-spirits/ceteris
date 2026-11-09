@@ -1200,6 +1200,11 @@ pub fn calibrate_from(
     progress: &mut dyn FnMut(&str),
 ) -> Result<Steady, CalibrationError> {
     let t0 = Instant::now();
+    if !inp.trends.is_zero() {
+        return Err(
+            "nonzero trends (ADR 0243) need the moving-reference stage 5, not built".into(),
+        );
+    }
     if inp.base_price.data.iter().any(|p| !p.is_finite()) {
         return Err("a traded good is unreachable at some province".into());
     }
