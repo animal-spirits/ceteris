@@ -336,6 +336,8 @@ impl Layout {
 /// so it is not part of snapshots; a restored world starts with it zeroed.
 #[derive(Clone, Debug)]
 pub struct Scratch {
+    /// Channel recording and shutdown ([`crate::channels`]); configuration, not state.
+    pub channels: crate::channels::Channels,
     /// Output Y of each enterprise at E2.
     pub produced: Vec<f64>,
     /// Inputs available before use (stock, plus for a local good the units drawn from this
@@ -433,6 +435,7 @@ impl Scratch {
     fn new(nc: usize, np: usize, n_pops: usize, n_ent: usize, goods: &Goods) -> Self {
         let (ng, n_traded) = (goods.n(), goods.traded);
         Self {
+            channels: Default::default(),
             produced: vec![0.0; n_ent],
             input_before: vec![0.0; n_ent * ng],
             input_used: vec![0.0; n_ent * ng],
