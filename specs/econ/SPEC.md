@@ -1443,6 +1443,68 @@ estimation); the PIGL weights omega_M, omega_S, lambda and alpha per country (ex
 of the 2000 final demand shares, above). P07 stays the S03 (non-homothetic CES) row of the
 design register.
 
+## Moving reference (ADR 0243, P4 Branch F; spec before code)
+
+ADR 0089's steady state is the special case of zero trends. From P4 the calibration target is the
+t0 point of a moving equilibrium path and the test target is the frictionless equilibrium solved
+along that path. Nothing below is built until this section is merged; P2 and P3 are untouched.
+
+**Trend inputs.** Per country i, three monthly rates, inputs to the calibration and not targets:
+
+| Rate | Meaning | Source | Value until |
+|---|---|---|---|
+| `trend_n` | labour-force growth, (1 + n_i)^12 the mean annual growth 1995 to 2005 | ILOSTAT labour force, the series u*_i uses (CC BY 4.0, `sources.toml`) | P4 sets it |
+| `trend_g` | labour-augmenting productivity growth | P8 (frontier growth and catch-up) | 0 before P8 |
+| `trend_pi` | inflation target pi*_i | P5a | 0 before P5a |
+
+They are three optional columns of `econ_countries.arrow` (a country without the ILOSTAT series
+takes its donor's, flagged in `trend_imputed`). A pack without the columns reads as all zeros,
+so no existing pack or golden changes. Column names and the format bump are settled in the
+pack PR that writes them. From t0 population and productivity are simulated (P4, P8); the
+trends only set the t0 state and the reference.
+
+**Calibration.** Stages 1 to 4 run unchanged on the 2000 values. Stage 5 and the wage rule change:
+
+- Pipeline slot s holds the shipments of s months ago deflated at the origin country o's
+  quantity trend (1 + n_o)(1 + g_o) per month per slot and, for values, its price trend
+  (1 + pi*_o) too. Input stocks, merchant stocks and the buyers' pipelines scale with sales as
+  now (ADRs 0090, 0091). pi^e_i = pi*_i.
+- The wage step of the natural-rate rule becomes
+  `dlnw = clip( pi^e + g_i + kappa_w (x_i + u*_i), -c_max, c_max )`, times (1 - delta_w) when
+  negative, so at x = -u* the step is exactly pi^e + g_i (`wage_step_at_natural_rate_is_pi_plus_g`).
+  With g_i = 0 it is the rule above.
+- Stage 4 inverts PIGL at the t0 buyer prices as now. Along the path real income per person grows
+  at each country's rate and category shares follow Boppart's (2014) closed form; that drift is
+  part of the path, not a calibration error.
+
+**Reference.** `ceteris-reference` solves the frictionless equilibrium at a date t with each
+country's effective labour A_i(t) L_i(t) = A_i L_i ((1 + g_i)(1 + n_i))^t, prices and wages
+detrended by (1 + pi*_i)^t, starting each solve from the previous date's root (the path is
+slow, about 0.2% a month). The path solver is the existing static solve (GE reference model,
+above) called once per sampled date; no new equilibrium concept. With every trend zero it
+returns the static reference bit for bit.
+
+**Tests** (all with their trends set as stated; `zero_trends_equal_the_steady_state_calibration`
+is the Working gate of Task F1):
+
+- `zero_trends_equal_the_steady_state_calibration`: with every trend zero, `calibrate` returns a
+  `Steady` bit-identical to the trend-free calibration on the fixture and the pack, the 0089
+  steady-state tests are unchanged, and every golden hash holds.
+- `common_trend_moves_no_detrended_quantity`: equal n_i, g_i, pi*_i in every country and PIGL's
+  non-homotheticity off, 120 ticks of the fixture move no detrended price, wage or flow by more
+  than 1e-9 (the resolution-aware rule on the full pack, as in Checks).
+- `country_trends_stay_within_one_percent_of_the_moving_reference`: with the pack's n_i and g_i,
+  detrended prices, wages and trade shares are within 1% of the path at every year to year 25
+  where the uniqueness check (ADR 0022) holds.
+- `no_burn_in_against_the_moving_reference`: with frictions on, the gap over ticks 1 to 12 is no
+  larger than over ticks 109 to 120.
+- `pigl_shares_follow_the_boppart_closed_form` (1e-9 at each pop's income) and
+  `wage_step_at_natural_rate_is_pi_plus_g`.
+- `path_solver_at_zero_trends_equals_the_static_reference` (bitwise).
+
+**Out of F1:** the stage 5 wage state and pipelines carrying the trend through the run (Task F2)
+and i128 ledger money (Task F3, ADR 0106; it moves every golden once, in its own re-bless commit).
+
 ## Equilibrium nesting
 
 H1/V1: with frictionless settings (Walrasian wage, eta = 1, delta_w = 0) and any stable kappa,
