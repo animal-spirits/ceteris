@@ -6,11 +6,14 @@ use std::sync::Arc;
 
 use ceteris_core::invariant::Violation;
 use ceteris_core::rng::Seed;
+use ceteris_core::sim::Sim;
 use ceteris_core::snapshot::Hash;
 use ceteris_run::Edit;
+use ceteris_run::attribution::shapley;
 use ceteris_run::ensemble::{ParamPrior, member_edits};
 use ceteris_trade::TradeParams;
 
+use crate::channels::Channel;
 use crate::edit::{EditError, apply_due, member_params};
 use crate::inputs::EconInputs;
 use crate::params::EconParams;
@@ -44,19 +47,34 @@ pub fn run_member<T>(
     outcome: impl FnOnce(&EconWorld) -> T,
 ) -> Result<Member<T>, MemberError> {
     let edits = member_edits(Seed(seed), priors);
-    let (p, t) = member_params(base, &edits).map_err(MemberError::Edit)?;
-    let mut sim = EconWorld::sim(Arc::clone(inputs), p, t);
-    while sim.tick() < ticks {
-        let t = sim.tick();
-        apply_due(sim.world_mut(), log, t).map_err(MemberError::Edit)?;
-        sim.step().map_err(MemberError::Invariant)?;
-    }
+    let sim = run_world(inputs, base, &edits, log, ticks, |_| ())?;
     Ok(Member {
         seed,
         edits,
         state_hash: sim.state_hash(),
         outcome: outcome(sim.world()),
     })
+}
+
+/// A world with the member's `draws` applied, `setup` run on it at tick 0, and `log` applied at
+/// its ticks, stepped to `ticks`.
+fn run_world(
+    inputs: &Arc<EconInputs>,
+    base: &(EconParams, TradeParams),
+    draws: &[Edit],
+    log: &[Edit],
+    ticks: u32,
+    setup: impl FnOnce(&mut EconWorld),
+) -> Result<Sim<EconWorld>, MemberError> {
+    let (p, t) = member_params(base, draws).map_err(MemberError::Edit)?;
+    let mut sim = EconWorld::sim(Arc::clone(inputs), p, t);
+    setup(sim.world_mut());
+    while sim.tick() < ticks {
+        let t = sim.tick();
+        apply_due(sim.world_mut(), log, t).map_err(MemberError::Edit)?;
+        sim.step().map_err(MemberError::Invariant)?;
+    }
+    Ok(sim)
 }
 
 /// Members for `seeds`, one after another.
@@ -105,6 +123,63 @@ pub fn run_pair<T>(
     Ok(Pair {
         baseline: go(baseline_log)?,
         branch: go(branch_log)?,
+    })
+}
+
+/// The effect of one branch on one outcome for one member, split over the channels by Shapley
+/// value (14.7, ADR 0049): `v(S)` is the outcome with only the channels in `S` open (the rest
+/// held at the baseline's paths) less the baseline's, so the shares add up to
+/// `total - direct`, `direct` being what the branch does with every channel shut.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChannelShares {
+    pub total: f64,
+    pub direct: f64,
+    pub shares: Vec<(Channel, f64)>,
+}
+
+pub const CHANNELS: [Channel; 2] = [Channel::Prices, Channel::Wages];
+
+pub fn channel_shares(
+    inputs: &Arc<EconInputs>,
+    base: &(EconParams, TradeParams),
+    priors: &[ParamPrior],
+    (baseline_log, branch_log): (&[Edit], &[Edit]),
+    seed: u64,
+    ticks: u32,
+    outcome: impl Fn(&EconWorld) -> f64,
+) -> Result<ChannelShares, MemberError> {
+    let draws = member_edits(Seed(seed), priors);
+    let mut baseline = run_world(inputs, base, &draws, baseline_log, ticks, |w| {
+        w.scratch.channels.record_from(0);
+    })?;
+    let reference = outcome(baseline.world());
+    let path = Arc::new(
+        baseline
+            .world_mut()
+            .scratch
+            .channels
+            .take_record()
+            .expect("recording was set up"),
+    );
+    let values = (0..1u32 << CHANNELS.len())
+        .map(|open| {
+            let shut: Vec<Channel> = CHANNELS
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| open >> i & 1 == 0)
+                .map(|(_, &c)| c)
+                .collect();
+            let sim = run_world(inputs, base, &draws, branch_log, ticks, |w| {
+                w.scratch.channels.shut(Arc::clone(&path), &shut);
+            })?;
+            Ok(outcome(sim.world()) - reference)
+        })
+        .collect::<Result<Vec<f64>, MemberError>>()?;
+    let shapley = shapley(CHANNELS.len(), |s| values[s as usize], Seed(seed), 0);
+    Ok(ChannelShares {
+        total: values[values.len() - 1],
+        direct: values[0],
+        shares: CHANNELS.iter().copied().zip(shapley).collect(),
     })
 }
 
@@ -247,5 +322,76 @@ mod tests {
                 "outcome {i}: crn {c} not tighter than independent {d}"
             );
         }
+    }
+
+    fn tariff_log() -> [Edit; 1] {
+        [edit(3, EditKind::Policy, "tariff.0.1.0", 0.25)]
+    }
+
+    #[test]
+    fn recording_changes_no_hash() {
+        let inputs = Arc::new(small_world());
+        let plain = run_member(&inputs, &base(), &priors(), &[], 2, 8, |_| ()).unwrap();
+        let (p, t) = member_params(&base(), &plain.edits).unwrap();
+        let mut sim = EconWorld::sim(Arc::clone(&inputs), p, t);
+        sim.world_mut().scratch.channels.record_from(0);
+        sim.run_until(8).unwrap();
+        assert_eq!(sim.state_hash(), plain.state_hash);
+        let path = sim.world_mut().scratch.channels.take_record().unwrap();
+        assert_eq!((path.wage.len(), path.price.len()), (8, 8));
+    }
+
+    #[test]
+    fn shutting_every_channel_gives_zero_effect_on_prices_and_wages() {
+        let inputs = Arc::new(small_world());
+        let go = |log: &[Edit], shut: Option<Arc<crate::channels::Path>>| {
+            let draws = member_edits(Seed(1), &priors());
+            run_world(&inputs, &base(), &draws, log, 8, |w| match &shut {
+                Some(p) => w.scratch.channels.shut(Arc::clone(p), &CHANNELS),
+                None => w.scratch.channels.record_from(0),
+            })
+            .unwrap()
+        };
+        let mut baseline = go(&[], None);
+        let path = Arc::new(baseline.world_mut().scratch.channels.take_record().unwrap());
+        let open = go(&tariff_log(), None);
+        let shut = go(&tariff_log(), Some(Arc::clone(&path)));
+        assert_ne!(open.world().wage, baseline.world().wage);
+        assert_eq!(shut.world().wage, baseline.world().wage);
+        assert_eq!(shut.world().markets.price, baseline.world().markets.price);
+    }
+
+    #[test]
+    fn null_branch_with_channels_shut_equals_baseline() {
+        let inputs = Arc::new(small_world());
+        let draws = member_edits(Seed(1), &priors());
+        let mut baseline = run_world(&inputs, &base(), &draws, &[], 8, |w| {
+            w.scratch.channels.record_from(0);
+        })
+        .unwrap();
+        let path = Arc::new(baseline.world_mut().scratch.channels.take_record().unwrap());
+        let replay = run_world(&inputs, &base(), &draws, &[], 8, |w| {
+            w.scratch.channels.shut(Arc::clone(&path), &CHANNELS);
+        })
+        .unwrap();
+        assert_eq!(replay.state_hash(), baseline.state_hash());
+    }
+
+    #[test]
+    fn channel_shares_sum_to_total_less_direct() {
+        let inputs = Arc::new(small_world());
+        let s = channel_shares(
+            &inputs,
+            &base(),
+            &priors(),
+            (&[], &tariff_log()),
+            1,
+            10,
+            |w| w.world_price_index(),
+        )
+        .unwrap();
+        let sum: f64 = s.shares.iter().map(|(_, v)| v).sum();
+        assert!((sum - (s.total - s.direct)).abs() <= 1e-12 * s.total.abs().max(1.0));
+        assert_ne!(s.total, 0.0);
     }
 }
