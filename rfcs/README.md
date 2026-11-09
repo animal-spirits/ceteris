@@ -145,7 +145,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0125 | [LLM tools outside the core](0125-llm-tools-outside-the-core.md) | proposed | ADR 0125 |
 | 0126 | [Public benchmarks: CeterisBench and an agent gym](0126-public-benchmarks-ceterisbench-and-agent-gym.md) | proposed | ADR 0126 |
 | 0127 | [Research infrastructure: living papers, parameter wiki, volunteer ensembles, model court](0127-research-infrastructure.md) | proposed | ADR 0127 |
-| 0128 | [Distribution: runs as hashes, reproducible builds, annual report, engine crate](0128-distribution-runs-as-hashes-and-reproducible-builds.md) | proposed | ADR 0128 |
+| 0128 | [Distribution: runs as hashes, reproducible builds, annual report, engine crate](0128-distribution-runs-as-hashes-and-reproducible-builds.md) | accepted in part (RFC 0318) | ADR 0128 |
 | 0129 | [Constitutional wind tunnel and veil-of-ignorance scoring](0129-constitutions-and-veil-of-ignorance-scoring.md) | proposed | ADR 0129 |
 | 0130 | [New seats: idea, founder, coalition partner, mediator, quartermaster, citizen](0130-new-seats.md) | proposed | ADR 0130 |
 | 0131 | [Deep history: economic reanalysis, agrarian worlds, period advisers, long runs](0131-deep-history.md) | proposed | ADR 0131 |
@@ -228,8 +228,8 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0208 | [Presentation pipeline and time controls](0208-presentation-pipeline-and-time-controls.md) | accepted | ADR 0208 |
 | 0209 | [Sparse hourly war phase](0209-sparse-hourly-war-phase.md) | proposed | ADR 0209 |
 | 0210 | [Policy in 1.0: estimated rules per lever and the policy tape](0210-policy-rules-and-the-policy-tape-in-1.0.md) | proposed | ADR 0210 |
-| 0211 | [Run files and compatibility across versions](0211-run-files-and-compatibility-across-versions.md) | proposed | ADR 0211 |
-| 0212 | [History retention and the disk budget](0212-history-retention-and-disk-budget.md) | proposed | ADR 0212 |
+| 0211 | [Run files and compatibility across versions](0211-run-files-and-compatibility-across-versions.md) | accepted in part (RFC 0318) | ADR 0211 |
+| 0212 | [History retention and the disk budget](0212-history-retention-and-disk-budget.md) | accepted (RFC 0318) | ADR 0212 |
 | 0213 | [Data licences in shared runs and exports](0213-data-licences-in-shared-runs-and-exports.md) | proposed | ADR 0213 |
 | 0214 | [Failure handling, repro bundles and opt-in usage statistics](0214-failure-handling-repro-bundles-and-usage-stats.md) | proposed | ADR 0214 |
 | 0215 | [First-run data fetch and the source archive](0215-first-run-data-fetch-and-source-archive.md) | proposed | ADR 0215 |
@@ -321,4 +321,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0314 | [Held-out sources register and the C7 guard](0314-held-out-sources-register-and-c7-guard.md) | proposed | none yet |
 | 0315 | [Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](0315-snapshot-chunks-are-zstd-canonical-bytes.md) | accepted | ADR 0326 |
 | 0317 | [Canonical summation order, province slices of the ledger and goods-innermost dispatch blocks](0317-summation-order-and-goods-layout.md) | accepted | ADR 0327, ADR 0328, ADR 0329, ADR 0330 |
-| 0318 | [Accept ADR 0212 and the built part of ADR 0211 as built](0318-accept-history-retention-and-run-files-as-built.md) | proposed | pending |
+| 0318 | [Accept ADR 0212 and the built parts of ADRs 0211 and 0128 as built](0318-accept-history-retention-and-run-files-as-built.md) | accepted | none new |
