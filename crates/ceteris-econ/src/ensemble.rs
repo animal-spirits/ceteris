@@ -188,6 +188,38 @@ pub fn channel_shares(
         .collect())
 }
 
+/// Leave-one-out effect of each edit of `log` for member `seed`: the outcomes with the whole
+/// log less the outcomes with that edit removed, one row per edit in log order. The input of
+/// `blame` (14.7, ADR 0116).
+pub fn edit_effects(
+    inputs: &Arc<EconInputs>,
+    base: &(EconParams, TradeParams),
+    priors: &[ParamPrior],
+    log: &[Edit],
+    seed: u64,
+    ticks: u32,
+    outcomes: impl Fn(&EconWorld) -> Vec<f64>,
+) -> Result<Vec<Vec<f64>>, MemberError> {
+    let draws = member_edits(Seed(seed), priors);
+    let run = |log: &[Edit]| -> Result<Vec<f64>, MemberError> {
+        let sim = run_world(inputs, base, &draws, log, ticks, |_| ())?;
+        Ok(outcomes(sim.world()))
+    };
+    let full = run(log)?;
+    (0..log.len())
+        .map(|i| {
+            let without: Vec<Edit> = log
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, e)| e.clone())
+                .collect();
+            let v = run(&without)?;
+            Ok(full.iter().zip(&v).map(|(a, b)| a - b).collect())
+        })
+        .collect()
+}
+
 /// The declared outcomes read from a final world, by name.
 pub fn outcomes(w: &EconWorld) -> Vec<(&'static str, f64)> {
     let n = w.wage.len() as f64;
@@ -399,5 +431,22 @@ mod tests {
         let sum: f64 = s.shares.iter().map(|(_, v)| v).sum();
         assert!((sum - (s.total - s.direct)).abs() <= 1e-12 * s.total.abs().max(1.0));
         assert_ne!(s.total, 0.0);
+    }
+
+    #[test]
+    fn blame_ranks_planted_edit_first() {
+        use ceteris_run::attribution::blame;
+
+        let inputs = Arc::new(small_world());
+        let log = [
+            edit(2, EditKind::Param, "econ.kappa_w", 0.2501),
+            edit(3, EditKind::Policy, "tariff.0.1.0", 0.4),
+        ];
+        let rows = edit_effects(&inputs, &base(), &priors(), &log, 1, 10, |w| {
+            vec![w.world_price_index()]
+        })
+        .unwrap();
+        let effects: Vec<f64> = rows.iter().map(|r| r[0]).collect();
+        assert_eq!(blame(&effects)[0], 1, "{effects:?}");
     }
 }
