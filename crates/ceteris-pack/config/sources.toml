@@ -935,6 +935,24 @@ confidence = "high"
 notes = "Indicators: local units, wages and salaries, persons employed, investment; no VA. 2000 is present, coverage by country and division not yet checked. NACE Rev 1.1 divisions equal ISIC Rev 3.1 divisions. Non-EU country data in Eurostat is non-commercial; this table has none."
 
 [[source]]
+id = "statfin-12bd"
+name = "Statistics Finland table 12bd, income and production by area (B1GPH, 2000)"
+provider = "Statistics Finland"
+version = "StatFin altp/12bd, 2000-2024*, area classification 2025"
+role = "Gross value added at basic prices by maakunta and industry, 2000: Finland manufacturing province seeds (RFC 0283, ADR 0287)"
+licence = "CC-BY-4.0"
+licence_url = "https://stat.fi/en/about-us/get-to-know-statistics-finland/legislation/terms-of-use"
+attribution = "Source: Statistics Finland, table 12bd (accessed 2026-11-09)"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "Statistics Finland terms of use: open data under CC BY 4.0 for texts, tables and statistical graphs, source named"
+checked = 2026-11-09
+confidence = "high"
+notes = "Terms page read 2026-11-09. The API serves data by POST only, so the fetch entry is manual: query the table with all areas, all industries, B1GPH, S1, 2000, CP, response format csv (query kept in fetch.toml). Two POSTs returned identical bytes. Merged industry groups (19-22, 24-25, 26-27, 29-30) are split by the Eurostat 2005 shares per RFC 0283."
+
+[[source]]
 id = "hansen-gfc"
 name = "Global Forest Change (Hansen et al. 2013), treecover2000"
 provider = "University of Maryland, Google, USGS, NASA"
