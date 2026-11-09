@@ -68,6 +68,7 @@ fn entry(url: &str) -> Entry {
         sha256: Some(hex(BODY)),
         bytes: Some(BODY.len() as u64),
         url: format!("{url}/file"),
+        mirror: None,
         optional: false,
         manual: false,
     }

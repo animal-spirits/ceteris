@@ -16,7 +16,9 @@ ceteris-econ = { path = "../ceteris-econ" }
 ceteris-geo = { path = "../ceteris-geo" }
 ceteris-pack = { path = "../ceteris-pack" }
 ceteris-reference = { path = "../ceteris-reference" }
+ceteris-run = { path = "../ceteris-run" }
 ceteris-trade = { path = "../ceteris-trade" }
+mimalloc = { version = "0.1.52", default-features = false }
 tempfile = "3.27.0"
 
 [features]

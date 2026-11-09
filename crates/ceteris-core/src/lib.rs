@@ -4,6 +4,8 @@
 
 pub mod entity;
 pub mod event;
+pub mod flatness;
+pub mod hazard;
 pub mod invariant;
 pub mod ledger;
 pub mod reduce;
@@ -12,4 +14,5 @@ pub mod rows;
 pub mod schedule;
 pub mod sim;
 pub mod snapshot;
+pub mod timing;
 pub mod toy;

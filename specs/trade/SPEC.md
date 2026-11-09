@@ -41,7 +41,7 @@ them only as quantities offered to and demanded from each market.
 | Selection constant Gamma_d,g (ADR 0200) | (province, traded good) | `f64` (`ProvinceData::gamma`; static) | | the data state's 1 / (alpha_d P_d) at prices 1, or the calibration tables' value at the calibrated prices; 1 where no origin is reachable |
 | Trade kernel legs | domestic pairs, province-gateway legs, gateway pairs, per traded good | `f64` K = tau^-theta_g and the reciprocals 1 / tau, 1 / (tau (1 + nu)), 1 / (1 + t), CSR | | least-cost leg costs (S05; route-choice factors from `Network.route_taus` are off in P2, ADR 0017) at load; rebuilt when the graph version moves |
 | Transit lag | gateway pair | `u8` | months | gateway-pair hours |
-| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, buyer, traded good) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
+| Pipeline: goods paid for and in flight | (delivery slot 1 to 4, traded good, buyer), stored good-major (ADR 0332; snapshot bytes buyer-major, ADR 0333) | `f64` | units | empty; in the calibrated steady state, j ticks ahead one month of the shipments of every arrival slot j or later |
 | Tariff and border wedge | (importer country, exporter country, traded good) | `f32` | ad valorem | border friction P05 plus 2000 tariffs (econ pack) |
 | Market, gateway, transit accounts | ledger | money `i64`, goods `f64` | | opened at load |
 
@@ -169,7 +169,7 @@ gateway with half its mass on each copy changes no flow (`duplicating_a_gateway_
 takes 1/k. The masses fold into the crossing factor, k = m_a m_b K_ab, so the low-rank
 evaluation and the stored reciprocals are unchanged. nu_c is the border friction of good g
 (P05, one per good, `TradeParams::border_nu_of`): its theta class's value, except in class 3,
-where each good has its own (ADR 0276, proposed). Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and theta 64.85
+where each good has its own (ADR 0276). Factors are f64: an f32 ln K resolves K only to 1.5e-5 at tau 1e4 and theta 64.85
 (about 4e-260, `kernel_round_trip_at_extreme_tau`), beyond ADR 0093's 1e-7, so K is
 stored in f64 (ADR 0093's second option), which holds it down to about 1e-308.
 
@@ -892,7 +892,7 @@ collapse ADR 0090 places beyond P2's range.
 | P04 | Mode costs | geo SPEC (direct PPML estimate recorded as a diagnostic, ADR 0022: not identified) | Literature + calibrated |
 | P154 | Bulk freight rate: multiplier on the sea cost per tonne-km per theta class, `TradeParams::bulk_sea` (ADR 0247) | 1, 1, 1 and 0.017 (class 3; 0.026 over the old P04c 0.008, rescaled to P04c's 0.0121 by ADR 0269, owner 2026-10-31), on by default (owner ruling 2026-10-30; ADR 0247, As built): the slope s = 2.05e-4 USD per tonne-km (s.e. 7.0e-5) of a least-squares line through the 2000 voyage rates per tonne of class-3 cargoes in UNCTAD's Review of Maritime Transport 2001 (ch. IV, paras. 82 and 96, pp. 51 and 54) and 2002 (ch. VII, pp. 107 to 108), eight routes (iron ore and coal in Capesize bulk carriers, crude and products in tankers) against their sea km on the pack graph (Port Hedland to Rotterdam round the Cape, 19,450 km: no loaded Capesize transited Suez in 2000; no route canal-routed, so no canal fee netted), over P04c; dry-bulk routes alone 0.039 over 0.008, 0.026 over 0.0121. Not fitted to the cross-border share | Literature |
 | P155 | Bulk freight rate: multiplier on the listed and minor port fees per theta class, `TradeParams::bulk_port` (ADR 0247) | 1, 1, 1 and 0.40 (class 3), on by default (as P154): half the line's fixed part F = 6.47 USD/t (s.e. 0.89; one port call at each end) over P04m's listed-port fee of 8; dry-bulk routes alone 0.29. The quoted rates are port to port, so terminal cargo handling is not identified | Literature |
-| P05 | Border friction nu per good, ad valorem equivalent (ADRs 0092, 0276) | Calibrated per friction group to ICIO 2000's cross-border share of its goods: a theta class, or in class 3 each good alone (ADR 0276, proposed) (`ceteris_calibrate::border`, econ SPEC Calibration), read from the calibration tables into `TradeParams::border_nu`, one value per good (`EconInputs::trade_params`); default (uncalibrated worlds and the fixture) 0.3 for every good, the start of the old prior log-uniform 0.1 to 1.0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated |
+| P05 | Border friction nu per good, ad valorem equivalent (ADRs 0092, 0276) | Calibrated per friction group to ICIO 2000's cross-border share of its goods: a theta class, or in class 3 each good alone (ADR 0276) (`ceteris_calibrate::border`, econ SPEC Calibration), read from the calibration tables into `TradeParams::border_nu`, one value per good (`EconInputs::trade_params`); default (uncalibrated worlds and the fixture) 0.3 for every good, the start of the old prior log-uniform 0.1 to 1.0. Direct PPML estimate recorded as a diagnostic, ADR 0022 (2000 BACI with ICIO domestic flows; value kept, owner 2026-10-24): 0.204 (s.e. 0.035) at the same-fit thetas (11 to 14); about 3.0 for food at the class value 2.62 | Calibrated |
 | P43 | Time cost of transit lambda_g, ad valorem per day | manufactures (goods 4 to 6) 0.006 to 0.021, start 0.010 (Hummels and Schaur 2013); food 0.003 to 0.010, start 0.005; primary (goods 0 to 2) 0 to 0.006, start 0.002 | Literature for manufactures; free for food and primary |
 | P45 | Expectation gain g of pi^e (ADR 0019) | 0.004 to 0.65 per month. Low end: Poledna et al. (2023, EER 151, Section 3.3 p. 7; IIASA WP 2020 version, Appendix A.1.2 eqs. 8 to 10 pp. 23 to 24) let firms scale every cost component of the price by (1 + pi^e) (unit pass-through), with pi^e from an AR(1) on past inflation re-estimated by OLS every quarter on all data since 1997Q1: decreasing-gain learning, gain 1/n on the mean, 0.011 to 0.019 per quarter over their reference quarters 2010 to 2019 (n = 53 to 91), about 0.004 to 0.006 per month. High end: the adaptive heuristic of 12.2, p^e_{t+1} = w p_{t-1} + (1 - w) p^e_t (Anufriev and Hommes 2012, AEJ Micro 4(4), eq. 6 p. 45), w = 0.65 in their four-heuristic model (Table 1 p. 51; Figure 4 p. 44 also 0.25; individual estimates up to 1, fn. 4 p. 45), per experimental period, which has no calendar length Start 0.006, the Poledna end (owner decision 2026-10-24, MIGRATION Task 6; at kappa1 0.02 every value in the prior broke V1) | Literature |
 | P44 | Route-choice dispersion theta_r (ADR 0017); unused in P2 (ADR 0017 deferred) | 41 to 182, value 111.5: Fan, Lu and Luo (2021, pp. 21 and 23, Table 3; Table 4 p. 28), routing elasticity on China's road network from exporters' port choice and price gaps, 111.5 (s.e. 35.4; bootstrap p10 to p90 103.5 to 127.3), prior = estimate +- 2 s.e. The other route-choice models set it equal to the trade elasticity by assumption: 8 in Allen and Arkolakis (2022, p. 2936) and Fuchs and Wong (2026, pp. 16 and 36), 4 in Ganapati, Wong and Ziv (2024, p. 268; p. 254 fn. 27 names a separate route elasticity as an alternative, not estimated). On the P1 graph the spectral radius at the prior's upper end is 2.96 (coal) to 6.04 (machinery), and radius 0.99 needs theta_r 4,700 to 880,000 (MIGRATION Task 4 report), so no value in the prior passes | Literature |
@@ -1023,8 +1023,97 @@ with the per-cell gain of ADR 0263, M4 Pro on AC, the B scratch pack, criterion 
   budget in both runs (5 to 7% over; the earlier runs on 2026-10-26 and 2026-10-27 gave 7.7 to
   7.8 ms); a whole tick 37.3 and 35.5 ms, which missed the 35 ms budget in both runs;
   `unit_source_dispatch_parallel` 6.55 and 6.56 ms.
+  Tick speed-up (2026-11-01, no output change: state hash and ledger journal identical over 24
+  full-pack ticks on Linux x86 and the M4 Pro). Measured on the M4 Pro in a quiet sim loop
+  before it: a tick 39 ms, of which T2b 17.9 (per-good dispatch tasks 10, then 7.3 serial:
+  ledger posting 4.8, goods moves 2.5) and E3 8 (the unit dispatch of the price refresh 7).
+  Changes: the E3 price refresh runs `arrivals`, the unit dispatch reduced to what the
+  delivered prices and lead times read (bit-identical to `dispatch`'s arrivals, tested);
+  T2b posts every good's entries in one `Ledger::post_all` after the goods moves, applies the
+  chunk sums in parallel over accounts and copies the journal in parallel. Criterion on the
+  idle M4 Pro (2026-11-03, two rounds, medians): a tick 46.1 ms before, 41.2 after; consume
+  7.8 to 6.0; dispatch 24.3 to 22.6. Tried and dropped: a `trade_legs` that builds its legs in
+  parallel (nested inside the per-good tasks, tick 43.7 ms, dispatch 24.8) and a chunked
+  parallel dispatch per good (dispatch 27.2 against 24.4 ms). Profile of the per-good region
+  (7 goods, 14 threads): its wall time is the slowest good, 11.9 ms, against 71 ms of task
+  time, and the serial tail is 6.8 ms; the crossing pass (2.3 to 3.7 ms per good) is the
+  largest part of the kernel dispatch.
+  T2b goods moves by good (RFC 0287 item 2, ADR 0294; 2026-11-04): each good's goods moves run
+  at the end of its own per-good task on its ledger column (`Ledger::take_columns`,
+  `GoodColumn`, `Ledger::put_columns`, account chunks in parallel), its pipeline shipments are
+  listed and applied by `Pipeline::push_all` with the four slots in parallel, each in good
+  then list order. Every quantity and tally sums the same terms in the same order, so the
+  `identity` example's state and journal hashes equal `main`'s over 24 full-pack ticks at 1 and
+  14 threads. Sim loop with `--timing`, 60 ticks, three alternating rounds on the M4 Pro (load
+  10 to 22): dispatch 17.4 to 17.5 ms before, 16.2 to 16.4 after; a tick 40.0 before, 38.8 to
+  39.2 after. The serial tail is now the column write-back and `push_all`, 1.2 ms.
+  The end_tick income check (RFC 0287 item 3, 2026-11-04) reads `Ledger::tally` of WAGE,
+  DIVIDEND and REBATE, kept as they are posted, instead of scanning the whole journal; the
+  journal stays one contiguous record. Same alternating rounds: end_tick 3.55 to 3.61 ms before,
+  2.67 to 2.69 after; the tick 38.3 to 38.6 before, 37.8 to 38.2 after, within the noise of
+  that load.
+  `Pipeline::in_flight_all` (RFC 0287 item 4, 2026-11-04) runs the goods in parallel, each by
+  `Pipeline::in_flight`, the same sum in the same order; its three calls a tick (T1, T2b, E5)
+  stay three, since E5's transit check must read the pipeline itself. Alternating rounds
+  against the serial loop, load 17 to 31: the three calls 2.30 to 2.39 ms a tick before, 1.18
+  to 1.26 after in three of four rounds (2.52 in a noisy one).
+  Pipeline layout (RFC 0319 S1 to S3, ADRs 0332 to 0334; 2026-11-09): the slots are good-major;
+  `Pipeline::push_all` is one task per good adding its list in order to its own contiguous run
+  of each slot (no bucket sort), and T1 delivers each good from the contiguous run of the due
+  slot. `Pipeline::pop_due` and `push_all` each end their per-good task by summing the good's
+  in-flight total (storage slots, then buyers, from -0.0), which `in_flight_cached` returns, so
+  the separate scan is gone. `Ledger::good_totals` sums the strided columns without the
+  transposed copy (`fixed_sum_columns`, the same tree as `fixed_sum`), and the ledger sign and
+  Leontief end_tick checks run in parallel reporting the first violation by index. Class A:
+  state and journal hashes and every golden unchanged. Timings and the 19.2 table follow in S4.
+  T1 and T3's local goods by good (RFC 0287 item 6, 2026-11-04): T1 delivers each traded good
+  on its ledger column in parallel (its deliveries in buyer order, then its largest); T3 clears
+  each local good on its column in parallel and posts the purchases with `Ledger::post` in
+  province then good order, the serial loop's journal order. Same alternating rounds, load 6 to
+  8: deliver 1.52 to 1.54 ms before, 1.11 to 1.14 after; clear 1.69 to 1.70 before, 1.36 to
+  1.45 after. E2 produce was tried with its SALE, WAGE and PURCHASE transfers posted as one
+  block: 4.5 ms before, 4.7 after (the per-chunk sums over every account cost more than the
+  serial transfers), so it keeps its transfers; distribute reads balances and is unchanged.
+  Crossing weights (RFC 0287 item 8, 2026-11-04): `dispatch` and `arrivals` keep each
+  crossing's weight `k carry y_b` from the pass that sums z_a to the pass that shares it out
+  (the same product), instead of recomputing it. Same alternating rounds, load 4 to 7: T2b's
+  kernel time summed over goods 42.4 to 42.9 ms before, 39.7 to 40.9 after; its slowest good
+  10.6 to 11.8 before, 10.1 to 10.2 after. Tried and not kept: the z pass parallel over origin
+  gateways inside each good's task (slowest good unchanged, 10.3 to 10.5 ms), and two rows
+  interleaved in the z pass (kernel time 41.9 to 42.7 ms, slower).
+  E3 PIGL once per province (RFC 0287 item 10, 2026-11-04; econ SPEC demand): the part of a
+  pop's PIGL demand that depends only on its country's weights and the buyer prices (category
+  indexes, within-category shares, Dtilde(P), B(P) and `scale (Dt / B)^gamma`, `demand::PiglAt`)
+  is computed once per province and shared by its pops, with the same operations in the same
+  order (`pigl` itself goes through `PiglAt`). Same alternating rounds, load 4 to 8: demand
+  5.91 to 5.96 ms before, 5.59 to 5.71 after (of which the price refresh, 4.2, is unchanged).
+  The `pow` in E1 labour sits in each enterprise's CES target at each trial wage and is not
+  shared; fewer parallel regions was not pursued after items 7 and 9 put allocation and
+  posting below the noise.
+  E3's price refresh overlaps T1 to E2 (RFC 0287 item 11, 2026-11-04; 19.4, systems with
+  disjoint read and write sets run concurrently): it reads only the posted prices, the active
+  markets, the kernel and Gamma, which nothing changes between T1 and E3 (T4 reprices), and
+  writes the buyer price index and lead, which nothing reads before E3 (E1 reads last tick's
+  index). T1 begins it on the thread pool (`EconWorld::start_refresh`) on copies of the prices
+  and active markets, into a new index and lead and the traded goods' sourcing scratch; E3
+  (`refresh_price_index`) waits for it, helping the pool, and takes its result, the same values
+  as computing it there. A refresh begun and not taken (systems run singly) is dropped by the
+  next start; a clone of the world waits for it. Alternating rounds against item 10, load 9 to
+  14: a tick 35.9 to 36.0 ms before, 33.8 to 34.0 after in three of four rounds (one noisy
+  round each); demand 5.9 to 6.1 before, 1.5 after, while deliver (1.3 to 3.0) and labour
+  (1.2 to 1.5) slow as they share the cores with it.
+  mimalloc (ADR 0297, 2026-11-04) is the global allocator of the `ceteris` binary and the
+  `identity` example; allocation never touches results (identity equal to `main` at 1 and 14
+  threads). Alternating rounds against the system allocator: E2's local chain 1.8 to 2.5 ms
+  before, 0.6 to 0.8 after, produce 5.6 to 6.2 before, 4.2 to 4.8 after in every round; the tick
+  lower in 5 of 6 rounds of a loaded run (44 to 48 ms), by 0.9 to 2.3 ms (median about 1.3).
+  The criterion benches keep the system allocator.
 
 ## Open questions
+
+- Pre-P3 benchmark (C7, 2026-11-06): the three ADR 0207 cases and the Brexit, distance and
+  US-China records are in the econ SPEC, "Pre-P3 benchmark". H2 distance (-0.45) and Brexit
+  magnitudes are tier-2 misses naming P4 (ADR 0272) as the removal phase.
 
 - Gateway count and selection rule are an agent default (22.2); the rule is in the econ SPEC
   pack section. As built (Task 17, controller ruling): 600 gateways (286 ports, 171 airports,

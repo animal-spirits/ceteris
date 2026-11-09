@@ -27,14 +27,14 @@ investment, finance, the state and politics are later phases.
 | PIGL over five categories: food, energy, housing, manufactures, services (8.6) | PIGL over the three categories the form was estimated on, A (goods 0, 3), M (goods 1, 2, 4, 5, 6), S (goods 7, 8, 9), with a CES over goods within each (ADR 0021, controller ruling 2026-10-24) | Alder, Boppart and Mueller (2022) estimate agriculture, manufacturing and services only; crude oil, coal and utilities have no clean counterpart there and are placed by the nearest category |
 | Intermediates Leontief plus a CES energy nest (7.2) | All intermediates Leontief | The energy nest comes with energy and emissions (P8) |
 | Putty-clay intermediates: coefficients per capacity vintage, chosen at investment by a CES at P38, Leontief once installed (7.2, ADR 0020) | Each enterprise runs on its own coefficient vector (`EntData.coef`, `Layout.coef`), one vintage: its country's 2000 ICIO column as cost shares at base delivered prices (row above), filled at load (`EconInputs::set_coefficients`). S09 `Technology::FixedLeontief` reads that base column (`EconInputs::base_column`) instead. With one vintage both settings read the same numbers and run bit for bit alike, state hashes included: the switch enters the static digest only once some enterprise's coefficients differ from its country's (`putty_clay_one_vintage_equals_fixed_leontief`) | No investment in P2, so no vintage beyond the first; the vintage choice and P38 arrive with investment (7.4) |
-| Input-output coefficients a_kg as quantities (7.2) | ICIO coefficients are cost shares at base delivered prices: coef_e,k = a_kg / q_k(base), q_k(base) the base delivered unit price of k at the enterprise's province (`ProvinceData::base_price`: 1 for local goods, sourcing at prices 1 for traded goods, tariffs and iceberg included; coefficient 0 where unreachable), under both S09 settings (owner decision, 2026-10-25; ADR 0020 mapping) | At base prices every enterprise's input cost share equals the ICIO share, a_VA = 1 - sum_k a_kg > 0, and the national IO value structure is exact; read as quantities, delivered prices above 1 made inputs cost more than output for 11.5% of traded VA at prices 1 |
+| Input-output coefficients a_kg as quantities (7.2) | ICIO coefficients are cost shares at base delivered prices: coef_e,k = a_kg p_o / q_k(base), q_k(base) the base delivered unit price of k at the enterprise's province (`ProvinceData::base_price`: the country's price level p_c for local goods (ADR 0098), sourcing at prices 1 for traded goods, tariffs and iceberg included; coefficient 0 where unreachable), under both S09 settings (owner decision, 2026-10-25; ADR 0020 mapping) | At base prices every enterprise's input cost share equals the ICIO share, a_VA = 1 - sum_k a_kg > 0, and the national IO value structure is exact; read as quantities, delivered prices above 1 made inputs cost more than output for 11.5% of traded VA at prices 1 |
 | Within-tick rationing, inventories as the buffer (8.2, 19.4, ADR 0020) | Local goods (utilities, construction, services): a same-tick chain at E2 per province (`local.rs`, Production below): a shortage of a local good cuts its users' output in the tick it happens. Traded goods keep their stocks and transit lags. Departures from the migration brief's chain, each needed for exact Leontief use: (1) a producer's own use of its good comes out of its output first, since cutting the producer pro rata with its users leaves the ratio of output to need unchanged and with empty stocks drives the pair to zero; (2) each user covers its residue from its own stock (the ledger holds stocks per enterprise), so the stock that counts for a good is sum min(b, n), and output is split so that each user's residue fits its stock; (3) one fill per local good, every user of the good at the smallest fill of its local inputs, solved exactly as the limit of the fill iteration (ADR 0093, Amendment), with no pass bound and no clearing step, so input use always equals coef Y exactly | ADR 0020 Mapping (owner, 2026-10-24): local goods have no transit, so their production, input use and rationing run as one pass within the tick |
 | VA over K, effective L by education, land or resources T (7.2) | Normalized CES over one fixed factor F (capital, land and resources together) and effective labour | No investment in P2, so K and T never move separately; one fixed factor keeps the reference model small |
 | Pops keyed by province, ethnic group, education, labour status (6.1) | Province x education (3 levels); labour status as employed and unemployed counts inside each pop | Ethnicity and status transitions are P4 |
 | Wage posting and matching function (8.7) | Wage moves with excess labour demand, with downward rigidity; employment rationed pro rata | Matching and occupational mobility are P4 |
 | Explicit fiat money through banks (A9) | Numeraire-only mode (A9 alternative); every account may run a negative balance at an interest-free clearing facility | No banks before P5 |
 | Final demand split into households, government, investment | One final demander per pop, with country shares from all ICIO final demand | No state or investment in P2 |
-| Observed 2000 trade imbalances | Balanced trade: pops spend their income each month | Deficits need finance (P5) |
+| Observed 2000 trade imbalances | Exogenous transfers D_c through a world transfer account (ADR 0100 as amended by ADRs 0299, 0300 and 0318 to 0321, Transfers below): pops spend their income plus their share of D_c; balanced trade is the switch's Off setting | Endogenous current accounts need finance (P5) |
 | Agglomeration in productivity (A5, P09) | Off by default | Ablation rule: on only once it improves a test |
 | Buyers face posted prices (8.6, 7.3) | Traded goods are bought at the buyer price q_d = Gamma_d P_d of the buyer's province, the CES index times a selection constant per cell fixed at the calibration point (trade SPEC, Sourcing; ADR 0200, owner ruling 2026-10-30), in household demand, input orders and the value-added price | Destination sourcing gives no single posted price at a destination; with selection on trade links (Eaton-Kortum) every source delivers at the index, and Gamma keeps q_d at the calibrated point where 1 / alpha_d put it before ADR 0200 (owner decision, 2026-10-24) |
 | Inventory coverage at the market (7.3) | Enterprises order inputs up to an inventory position (stock plus goods on order) of (1 + cover + L) months of capacity use, cover = 1, L the expected months in transit (owner decision, 2026-10-24); an input that caps the enterprise's labour is ordered on its notional output instead (effective demand, owner decision 2026-10-30T22:43Z, ADR 0266) | Goods paid at dispatch and delivered after transit must be counted, and the target must hold them: a two-month position cannot hold a month in transit |
@@ -66,9 +66,9 @@ licences in `sources.toml`, byte-identical rebuilds, `tests/golden/p2-pack.txt`)
 | Table | Rows | Content | Sources |
 |---|---|---|---|
 | `econ_goods.arrow` | 10 | name, traded flag, weight per value w_g (t per unit), inventory coverage prior; optional storable flag, tariff group (0 primary, 1 manufactured) and PIGL category (0 A, 1 M, 2 S) | BACI HS92 2000 (tonnes and values, OECD BTiGE HS to CPA key) |
-| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, national VA by good (10), final demand shares (10), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), participation rate, working-age share, education shares (3), GDP 2000, Gini 2000, coal share of good 2; an imputed flag per series | ICIO, PWT 11 (labsh), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini: WDI SI.POV.GINI nearest year 1995 to 2005, else SWIID (disposable-income Gini, CC0; WIID is non-commercial) |
-| `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated |
-| `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals; VA downscaled as below |
+| `econ_countries.arrow` | 242 | ICIO economy or imputation donor, VA basis and income source, IO basis (`io_basis`: `icio`, `ras` or `donor`, ADR 0286; Donor table balance, below), national VA by good (10), final demand shares (10) and government's (`gov_g`, GGFC and NPISH) and investment's (`inv_g`, GFCF) parts of them (10 each, ADRs 0099, 0302: each good's inventory change shared over the three in proportion to their purchases, households the rest), labour share, unemployment rate, natural rate u* (mean unemployment rate 1995 to 2005, ADR 0089), the labour share of each good (`labour_share_g`, 10, with `labour_share_pooled` and `labour_share_clipped`) and the wealth shares of the bottom 50%, middle 40% and top 10% (`wealth_0` to `wealth_2`, from the Gini 2000 for every country; Factor shares, below; ADRs 0307, 0308, 0311), labour shares where SEA is in the fetch cache, the foreign-owned share of each good (`foreign_g`, 10, nonzero for goods 1 to 6) and each host's owners by country index (`owner_c`, one per country, summing to 1 where a share is nonzero), with `foreign_source` `aamne`, `donor` or `none` and `foreign_capped` (Foreign owners, below; ADR 0309), where AAMNE is in the fetch cache, participation rate, working-age share, education shares (3), GDP 2000, Gini 2000 and its source (`gini_source`: `swiid`, `wdi` or `donor`), coal share of good 2, price level p_c (`price_level`, the base price of local goods, ADR 0098, with `price_level_source` `pwt`, `wdi` or `donor` and `price_level_imputed` where it is not PWT's; Price levels, below); current account 2000 (`ca_2000`, USD, 0 where missing, with `ca_missing`), the transfer ratio -CA_c / GDP_c of 2000 (`transfer`) and of each year 2000 to 2024 (`transfer_2000` to `transfer_2024`; Transfers, below; ADR 0315); the initial drift (`g_a` per year, `f_gap`, `drift_source`; Initial drift, below; ADR 0103); an imputed flag per series | ICIO, PWT 11 (labsh; rtfpna, rnna, rgdpna, csh_i, delta and pop 1995 to 2000 for the drift), ILOSTAT (modelled estimates: 2000 rates, and 1995 to 2005 for u*), WIC reconstruction (Barro-Lee cross-check), WDI; Gini (ADR 0098): SWIID disposable-income Gini (CC0) nearest year 1995 to 2005, else WDI SI.POV.GINI (income and consumption surveys mixed, flagged imputed), else the donor's (flagged imputed); WIID is non-commercial; price level (ADRs 0282, 0289, 0317): PWT 11 pl_da, else the level WDI's NY.GDP.MKTP.CD, NY.GDP.PCAP.PP.CD and SP.POP.TOTL imply (CC BY 4.0), else the donor's; current account (ADRs 0100, 0319, 0300): WDI BN.CAB.XOKA.CD (CC BY 4.0), GDP of each year WDI NY.GDP.MKTP.CD; labour shares by good: WIOD SEA 2016 LAB and VA of 2000 (CC BY 4.0); wealth shares: the Gini 2000 above and P161, the Federal Reserve DFA 2000Q1 top-10% net worth share (US government work); foreign owners: OECD Analytical AMNE 2026 edition (ICIO 2025 grid), GVA by ownership and the bilateral output matrix of 2000 (OECD terms) |
+| `econ_io.arrow` | countries x 10 x 10 | input coefficient a_kg (units of k per unit of g) | ICIO 2000, aggregated; imputed economies the donor's, RAS-balanced where `io_basis` is `ras` (BACI 2000 trade by good) |
+| `econ_provinces.arrow` | 4,594 | population 2000, working-age population, VA by good (10, million USD per year), with an imputed flag and the proxy level per good | WorldPop 2000 aggregated through the H3 cells, scaled to WDI national totals, else UN WPP 2024 totals (Western Sahara: WDI has no row, WorldPop's cells give 811 people against WPP's 271,943; ADR 0098); VA downscaled as below |
 | `econ_pops.arrow` | 4,594 x 3 | province, education level, population, working-age population, labour force, imputed flag | provinces split by their country's education shares; labour force at the country's participation rate of the working-age population |
 | `econ_tariffs.arrow` | importer x exporter x 2 groups | applied tariff, primary and manufactured; agreement and imputed flags | WDI weighted applied rates by importer (TM.TAX.TCOM.WM.AR.ZS, TM.TAX.MANF.WM.AR.ZS); zero inside agreements and customs unions (CEPII gravity, WB DTA), as below |
 | `gateways.arrow` | about 600 | node, country, kind (port, airport, land crossing), mass (share of the country's trade throughput, ADR 0092) | P1 graph, BACI 2000 trade by country |
@@ -85,6 +85,33 @@ the P2 digests and golden hashes do not move.
 snapshot digest and the export (`goods.arrow`, which the GE reference reads) all use it. The
 `econ_goods.arrow` column is the pack's copy of the default, never read by Rust; it must equal
 `TradeParams::default().coverage`, and a change to one is made to both.
+
+**Factor shares (ADRs 0307, 0308; `econ::factors`).** Labour shares:
+s_L,c,g = s_L,c r_g,c / (sum_h VA_c,h r_h,c / VA_c), s_L,c the PWT share, VA_c,h the table's
+national VA by good, r_g,c = (LAB_g / VA_g) / (LAB / VA) from SEA 2000 summed over the country's
+economies (WIOD's one mining industry B counts in full for goods 1 and 2); a good SEA does not
+give takes the mean r of the 5 SEA economies nearest in log GDP per person (PWT), else 1
+(`labour_share_pooled`). A share outside [0.05, 0.95] is clipped and the rest rescaled until the
+VA-weighted mean is s_L,c again (`labour_share_clipped`; `labour_share_va_weighted_mean_equals_pwt`,
+1e-12). Wealth shares (ADR 0311): with G_c the country's Gini 2000,
+sigma_y,c = sqrt(2) Phi^-1((G_c + 1) / 2) and sigma_w,c = sqrt(sigma_y,c^2 + tau^2), the shares
+are wealth_0 = Phi(-sigma_w,c), wealth_2 = 1 - Phi(z - sigma_w,c), wealth_1 = 1 - wealth_0 -
+wealth_2, z = Phi^-1(0.9); tau^2 = sigma_w,US^2 - sigma_y,US^2 with
+sigma_w,US = z - Phi^-1(1 - T), T the DFA 2000Q1 top-10% share 0.638 (P161), so the US top
+decile is T (`wealth_proxy_fits_the_us_top_decile`, 1e-12; `wealth_proxy_shares_sum_to_one`,
+1e-12). WID (`shweal992j` p0p50, p50p90, p90p100, nearest year 1995 to 2005) is read only by
+the C6 gate report of a research pack, which lists each country's proxy top-10% share against
+WID's, not asserted (ADR 0312).
+
+**Foreign owners (ADR 0309; `econ::foreign`).** f_c,g = F_g / (D_g + F_g), AAMNE 2000 GVA of
+foreign- and domestic-owned firms summed over the country's AAMNE economies, for goods 1 to 6
+(AAMNE's one mining industry B05T09 counts in full for goods 1 and 2, and C19 for good 1), capped
+at 0.8 (`foreign_capped`); other goods 0. The owners are the parents of the foreign-owned gross
+output of those goods (the host's own column left out), each mapped to the pack country whose
+economy it is; AAMNE's rest of the world, and a parent outside the pack, is spread over the pack
+countries outside AAMNE by GDP 2000. A country outside AAMNE takes its ICIO donor's shares and
+owners (`donor`), else none; a country whose owners sum to 0 has no foreign shares
+(`shares_owners_donors_and_the_rest_of_the_world`, pack crate).
 
 **Value added convention.** National VA by good is output less intermediate inputs, summed over
 all sellers: ICIO value added at basic prices plus its taxes less subsidies on products. Hence
@@ -110,20 +137,148 @@ nearest in (region, log GDP per capita); national VA by good from WDI sector sha
 (agriculture, industry, manufacturing, services) split within each group by the donor's
 proportions. Agent default under 22.2, ADR 0014. Donor income is PWT GDP per person, else WDI
 (ADB Key Indicators where WDI has none) GDP per person, else Maddison Project GDP per person,
-always against the donors' in the same source, never the region median when an income exists. With manufacturing missing, industry goes over goods 1 to 8. With
+always against the donors' in the same source, never the region median when an income exists.
+PWT income is set aside where it falls more than 3 times below WDI's at the US ratio of the two
+(PWT_c / WDI_c < (PWT_USA / WDI_USA) / 3, `PWT_BELOW_WDI`; ADR 0098): PWT is at PPP and WDI at
+market rates, so PWT above WDI is the Balassa-Samuelson norm (124 economies differ by more than 3
+times that way), while PWT a third of the US ratio below WDI would need a price level above 3
+times the US's (Japan's, the highest in 2000, is 1.4). Only Venezuela falls there (PWT 490 against
+WDI 4,776 USD per person in 2000, 0.068 of the US ratio; the next lowest, Barbados, is 0.55); it
+ranks and scales by WDI income, flagged `income_source` `wdi_not_pwt`. With manufacturing missing, industry goes over goods 1 to 8. With
 agriculture, industry or services missing, the known shares keep their goods and the goods they
 do not cover take WDI GDP times the ICIO median VA over GDP less the known shares (at least zero),
 by the donor's proportions; with no share, GDP times that median. Where WDI has oil or natural gas
 rents, crude oil and gas takes GDP times the rents times the ICIO ratio of crude oil and gas
-extraction VA (B06, B09 output less their inputs, without refining; ADR 0281, proposed) to rents,
+extraction VA (B06, B09 output less their inputs, without refining; ADR 0281) to rents,
 out of its group (all of industry where industry less manufacturing is too small) and at most the
 largest ICIO share of that extraction VA in industry VA of it (ADR 0249), with the ICIO
 world crude oil and gas extraction (B06, B09, without refining) inputs per unit of output,
-weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WorldPop national
-total if WDI has none) times the donor's VA per person scaled by income. A territory inside its
+weighted by extraction output, in place of the donor's (ADRs 0256, 0270); with no GDP, population (WDI, else UN WPP,
+else the WorldPop national total) times the donor's VA per person scaled by income. Regions the World Bank
+does not give come from an override table: Western Sahara Middle East and North Africa, Northern
+Cyprus Europe and Central Asia, Somaliland Sub-Saharan Africa, and Anguilla and Montserrat Latin
+America and Caribbean (dependencies the World Bank does not classify, whose sovereign's region,
+Europe and Central Asia, gave them a European donor; ADR 0098). A territory inside its
 parent's WDI totals (Somaliland, Aland, Northern Cyprus) takes its population share of the
 parent's VA out of the parent's. Uninhabited territories keep zero VA. Each row carries the
 basis (`icio`, `wdi`, `wdi_gdp`, `donor`, `parent`, `none`) and the income source.
+
+**Donor table balance** (`econ::icio::impute`, `econ::ras::balance`; ADR 0098 as amended by ADR
+0286, RFC 0282 D6, which supersedes D3). The donor's coefficients are balanced to the economy's
+own totals by RAS (Stone 1961; Miller and Blair 2009, ch. 7), for every imputed economy with VA
+basis `wdi`, `wdi_gdp` or `donor` and BACI 2000 trade. Seed: the 10 x 11 use table [Z | F], with
+Z_kg = a_kg X_g, the donor's coefficients (with the world crude oil and gas column where rents
+set good 1) at the economy's output X, and F_k = f_k (VA + M - E), the donor's final demand shares
+f times the economy's final demand. M_k and E_k are BACI 2000 imports and exports of good k
+(`read::baci::trade_by_good`: HS lines to goods by the BTiGE key as for the goods' weights,
+million USD, the economies a pack country combines summed), VA, M and E without a subscript their
+sums over goods. Row targets, domestic use of each good: u_k = X_k + M_k - E_k. Output enters
+because ICIO's uses count every source economy (`CountryIo::io` and the final demand shares sum
+the sellers of all economies), so a good's use at home is what the economy makes less what it
+sells abroad plus what it buys abroad. Local goods (7 to 9) have no BACI trade and are not traded
+in the model, so their use is their output. BACI's FOB values enter as they are; the margins
+between them and ICIO's basic prices are not corrected. Column targets: the intermediate inputs
+of each good, X_g - VA_g (the seed's own column sums, as VA_g = X_g (1 - sum_k a_kg)), and final
+demand VA + M - E; rows and columns both total sum_k (X_k + M_k - E_k). Tolerance 1e-10 relative
+on every row and column total, at most 200 passes of a row then a column scaling (ADR 0098). The
+balance moves uses only: output and VA stay, so VA + inputs = output holds as before. The
+economy's coefficients become a_kg = Z_kg / X_g (a good without output keeps the donor's column)
+and its final demand shares F_k / sum_k F_k (`io_basis` `ras`). The donor's table is kept
+(`io_basis` `donor`) where a target is negative, u_k < 0 for some good (exports above output plus
+imports: RAS cannot reach a negative total from a non-negative seed), where the economy has no
+BACI trade, and for VA basis `none`; a territory inside its parent (`parent`) takes its parent's
+table and IO basis (the parent is balanced on its whole, before the territory takes its share). A positive target on a row the seed leaves empty, or a balance that does not
+converge, stops the build. Rest of world (reported, not a constraint): the imputed economies' VA
+by good against ICIO's ROW block (`read::icio::aggregate` keeps it as ROW), in the build summary.
+Built: 87 economies balanced (88 rows `ras` with Somaliland), 48 keep the donor's table for a
+negative domestic use, 15 for no BACI trade, 9 have no VA; 10 to 56 passes (median 19), worst
+residual 1.0e-10 on rows and 4.9e-16 on columns; imputed VA 1,014,073 million USD against ROW's
+1,019,231 (0.9949; by good 0.674 to 1.330).
+Tests (`tests/ras.rs`, `tests/icio.rs`): `ras_balances_a_rectangular_table`,
+`ras_balances_the_donor_use_table_to_domestic_use`,
+`negative_domestic_use_keeps_the_donor_table`, `no_trade_keeps_the_donor_table`,
+`territory_inside_takes_its_parents_balanced_table`; `tests/read_trade.rs`
+`trade_by_good_sums_exports_and_imports_by_the_good_of_each_line`; on the built tables
+`econ_build.rs` `donor_tables_are_balanced_to_domestic_use`.
+
+**Price levels** (`econ::price_level`; ADR 0098 as amended by ADRs 0282, 0289 and 0317, RFC 0282
+D1, D7 and D9). A country's price level p_c, the base price of its local goods, is PWT 11 pl_da (the
+price level of domestic absorption, C + I + G) over the US's; else the level WDI implies
+(`wdi_implied`), NY.GDP.MKTP.CD over NY.GDP.PCAP.PP.CD times SP.POP.TOTL (GDP at market rates over
+GDP at PPP), over the US's; else the level
+of the country's imputation donor (`donor`) by the same two rules. Each series is read at the
+year nearest 2000 within five and divided by the US's of that year (PWT: Curacao and Sint Maarten
+2005, South Sudan outside). A country of several economies takes the mean of their levels and
+incomes. Screen (`Screen`): Tukey's far-out fences, 3 interquartile ranges beyond the quartiles
+(`FAR_OUT`, quartiles by linear interpolation), first on the logs of the 184 PWT levels (0.0250
+to 8.84 times the US), then on the residuals of the Penn effect ln p = a + b ln y, y WDI GDP per
+person at market rates, fitted by OLS on the PWT levels inside the first fences: over 180
+economies ln p = -2.6571 + 0.2453 ln y (R2 0.611), residual fences -1.198 to 1.188. A PWT or
+WDI value is kept when its residual lies inside them, or, with no WDI income (Anguilla,
+Montserrat, Taiwan, the British Virgin Islands), its level inside the level fences. Rejected:
+PWT Somalia (1.04) only; no WDI level is rejected. WDI has no GDP at PPP for Cuba, New Caledonia,
+French Polynesia and Kosovo, which take the donor's. (Before ADR 0289 the fallback was the WDI
+Database Archives file of PA.NUS.PPPC.RF, whose US row is not constant and whose 2000 values the
+screen rejected for Afghanistan 0.025, Greenland 0.079, Nauru 0.056, East Timor 0.003, the US
+Virgin Islands 0.117 and others.) Built: 181 pack countries from PWT, 21 from WDI, 40 from the
+donor; p_c from 0.127 (Tajikistan) to 1.80 (Bermuda), Somalia 0.827 (WDI). Values stay at 2000
+market rates: ADR 0098's rescale of ICIO blocks to 1999-2001 rates is dropped (ADR 0283). Tests
+(`tests/price_level.rs`): `pwt_reader_keeps_the_domestic_absorption_price_level`,
+`pwt_reader_keeps_the_price_basis_of_2000`, `wdi_level_is_gdp_over_gdp_at_ppp`,
+`levels_are_relative_to_the_united_states_in_the_same_year`,
+`fences_are_tukeys_far_out_fences_on_the_logs`,
+`the_screen_fits_the_penn_effect_and_fences_its_residuals`, `pwt_first_then_wdi_then_the_donor`,
+`values_the_screen_rejects_fall_to_the_next_source`,
+`a_country_of_several_economies_takes_their_mean`, `no_level_and_no_donor_is_an_error`; on the
+built tables `econ_build.rs` `price_levels_come_from_pwt_then_wdi_then_the_donor`.
+
+Real GDP check (ADR 0098, Tests; ADRs 0285, 0290 and 0317, RFC 0282 D5, D7 and D8). For each
+ICIO economy WDI reports, the pack's real GDP, `gdp` over p_c, against WDI NY.GDP.MKTP.PP.CD 2000
+(current international dollars, so of 2000 prices as the pack's values are; validation only,
+`validation.toml`). Totals, not per person: WDI's SP.POP.TOTL counts all of Cyprus while its GDP
+covers the south, which put Cyprus at 0.708 per person (0.967 on totals). The pack's `gdp` equals
+WDI's, so the ratio is WDI's price level over PWT's. Enforced where PWT's `i_cig` of 2000 is
+Benchmark (31 economies, mostly Eurostat-OECD): within 10% (P160, `BENCHMARK_TOLERANCE`, the
+measured agreement of two vintages of the same benchmark PPPs). Measured: 31 of 31 within 10%, 23
+within 5%, the largest gap the UK's 1.093 (Portugal 0.912, Norway 0.915, Greece 0.930). The
+other 48 (37 Interpolated, the US among them, and 11 Extrapolated) are reported with `i_cig` and
+not gated: PWT interpolates between ICP 1996 and 2005 there or extrapolates back from 2005, WDI
+backcasts from ICP 2011. Over
+all 79: 35 within 5%, 51 within 10%, median 0.955 (0.165 Nigeria to 1.88 DR Congo), slope of the
+log ratio on ln income 0.0523, correlation 0.267, pinned (`econ_build.rs`
+`real_gdp_against_wdi_ppp`).
+
+**Initial drift** (`econ::drift`; ADR 0103, C5). From PWT 11, 1995 to 2000, in every profile.
+TFP: the OLS trend of ln rtfpna of each economy with all six years, less the world's (the mean
+trend weighted by rgdpna 2000), shrunk to its WDI region's mean by empirical Bayes, g = m_r +
+B (g_raw - m_r), B = tau^2 / (tau^2 + se^2), se^2 the trend's squared standard error and tau^2 the
+mean squared deviation from the regional means less the mean se^2 (at least 0). ADR 0108's
+catch-up term is not built, so nothing is netted out of it yet. Capital: the log gap between the
+steady-state capital-output ratio s / (n + g + delta) (means of csh_i and delta, trends of ln pop
+and ln rgdpna / pop) and the 2000 ratio rnna / rgdpna, 0 where a series is missing or n + g +
+delta <= 0; F rises by gap / s_L in total (`f_gap`, s_L the country's labour share), which closes
+the gap at fixed A and L where VA is Cobb-Douglas. A pack country takes the rgdpna-weighted mean
+over its economies (`parts`); with no TFP trend, its first economy's regional mean g_A and no
+capital drift (`drift_source` `pwt`, `region` or `none`).
+
+**Transfers** (`econ::transfers`; ADR 0100 as amended by ADRs 0319, 0321, 0300 and 0315, RFCs
+0308, 0306). A pack country's current account CA_c is the sum of BN.CAB.XOKA.CD over its WDI
+economies (`parts`) in the year; a country none of whose economies reports it is 0 and flagged
+(`ca_missing`, 2000 only). Its transfer ratio is minus its current account over its own GDP:
+
+```
+rho_c = -CA_c / GDP_c
+```
+
+0 where GDP_c is missing or not positive; a country with rho_c > 0 runs a deficit. The model
+scales it by national income and spreads the world discrepancy by income (Transfers, below), so
+the ratios need not sum to zero. For 2000 (`transfer`, the fixed-share mode) GDP_c is the pack's
+`gdp` column (ADR 0321); for each year y of the path (`transfer_y`, 2000 to 2024, ADR 0300) GDP_c
+is the sum of NY.GDP.MKTP.CD over the country's economies in year y. Before ADR 0315 the columns
+held s_c, the current account less its GDP share of the world discrepancy over world GDP, which
+paid a country whose model income is far below its GDP more than it earns (Aruba, whose tourism
+the model cannot export: income 7% of GDP, D_c -1.59 times income). A pack without these columns
+(built before ADR 0100) loads with no transfers.
 
 **Gateways.** Per country: k gateways, the k-medoids on great-circle distance of its
 candidates: its listed ports and airports and its land crossing points, the endpoints of graph
@@ -192,16 +347,16 @@ build, another format or other coefficients stop the load with a `PackError`.
 | Employed | pop | `f64` | persons | (1 - u*) x labour force (natural rate, ADR 0089) |
 | Ownership share | pop | `f64` | share of its country's profit pool | population share N_k / N_c (national ownership) |
 | Income last tick | pop | `f64` | numeraire | |
-| Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table |
+| Sector, productivity A, base VA0, base employment L0, labour share s_L | enterprise (province, sector) | `f64` | | calibration table; in the data state A = 1 / p_o (1 for traded goods, 1 / p_c for local goods, ADR 0098); s_L its country's for its good (`Countries::s_l_good`, ADR 0104), else national |
 | Employment L | enterprise | `f64` | effective labour units | base L0 |
 | Output, sales, profit last tick | enterprise | `f64` | | |
-| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage, the 2000 column `EntData::column`: calibrated a_kg p_o / q_ik (calibration tables), else the country's ICIO column over base delivered prices, a_kg / q_k(base) |
-| VA coefficient a_VA | enterprise | `f64` | real VA per unit of output | calibrated 1 - sum_k a_kg, else 1 - sum_k coef_k q_k(base) |
+| Input coefficients coef_k (putty-clay, ADR 0020; static in P2) | enterprise x 10 goods | `f64` | units per unit of output | one vintage, the 2000 column `EntData::column`: calibrated a_kg p_o / q_ik (calibration tables), else the country's ICIO column at base delivered prices, a_kg p_o / q_k(base), p_o the base price of the output (1 for traded goods, p_c for local goods, ADR 0098) |
+| VA coefficient a_VA | enterprise | `f64` | real VA per unit of output | calibrated 1 - sum_k a_kg, else 1 - sum_k coef_k q_k(base) / p_o (1 - sum_k a_kg) |
 | Input stock | enterprise x 10 goods | `f64`, held in the ledger | units | calibrated (1 + COVER) months of use, else one month of base input use |
 | Wage w | province | `f64` | numeraire per effective unit | base w0 = sum_g s_L VA0_ig / ((1 - u*_i) L^s_i) |
 | Wage clip ticks: ticks at which the wage step clip bound | province | `u32` | ticks | zero |
 | Effective labour supply L^s | province | `f64` | effective units | sum_k e_k LF_k |
-| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint | ledger | money in minor units (1 minor unit = 1e-4 numeraire): `i64` for pops and enterprises, `i128` for markets, gateways, rebate and profit pools and the mint (ADR 0106); goods `f64` | |
+| Accounts | pops, enterprises, markets, gateways, transit (per traded good), rebate and profit pool (one each per country), mint, world transfer account (only where S22 is on and some transfer share is nonzero, ADR 0100), world dividend account (only where some foreign-owned share is nonzero, after the transfer account, ADR 0310) | ledger | money in minor units (1 minor unit = 1e-4 numeraire): `i64` for pops and enterprises, `i128` for markets, gateways, rebate and profit pools and the mint (ADR 0106); goods `f64` | |
 
 **Initial state.** A world whose inputs carry the calibration tables (`EconInputs::calibrate`,
 `EconInputs::from_pack` when the pack holds them) starts from the calibrated steady state of ADR
@@ -209,7 +364,7 @@ build, another format or other coefficients stop the load with a `PackError`.
 the pipeline, each pop's money (dividends and rebates; wages come at E2) and last income, each
 enterprise's last output, sales and profit; wages w0, employment L0, unemployment u*, pi^e = 0
 and buyer prices refreshed at the posted prices. Otherwise it starts from the data state: prices
-1, the same base point, input stocks at one month of base use, merchant stocks at coverage times
+1 for traded goods and p_c for local goods (ADR 0098, below), the same base point, input stocks at one month of base use, merchant stocks at coverage times
 the origin's own base output of the good (s_g Y0 at every active traded cell, Y0 = A VA0 / a_VA
 of the province's enterprise of that good, the base output that sizes the input stocks; local
 goods hold none, as before), nothing in flight and one month of base dividends minted to each
@@ -255,6 +410,37 @@ pops may hold at most their money before, plus one month of the island's base va
 (1 + max s_g) e^(max c_g) times its base traded output at prices 1: what a month of its own
 activity, and the sale of its whole stock and a month's output at the step-clipped price, can pay
 them. Under the old rule they held 5,850 times their money before.
+
+Local base price (ADR 0098). Each country's local goods (utilities, construction, services)
+start at its price level p_c (`Countries::price_level`, from `econ_countries.arrow` `price_level`,
+1 where the pack predates the column). Values stay those of the data: for a local enterprise p_o =
+p_c, A = 1 / p_c, so real output is Y0 = A VA0 / a_VA = V / p_c and nominal value added at base
+employment is VA0; coef_k = a_kg p_o / q_k and a_VA = 1 - sum_k coef_k q_k / p_o = 1 - sum_k a_kg,
+so every enterprise's input cost shares are the ICIO shares at base prices. The base delivered
+price of a local good (`ProvinceData::base_price`, `world::base_delivered_prices`) is p_c, the
+data state's local market prices are p_c, and the PIGL weights are inverted at the data state's
+prices, 1 for traded goods and p_c for local goods, so households' t = 0 shares are Omega in
+value. Traded goods are untouched: their origin prices start at 1, their base delivered prices
+and Gamma come from sourcing at those prices. With p_c = 1 everywhere every quantity is the one
+before, bit for bit (A = 1 / 1, a_kg 1 / q, coef q / 1), and so is every golden; the pack's
+p_c come from Price levels (Pack additions). The world price index of the run
+(`EconWorld::world_price_index`) keeps its weights, base consumption values over all goods.
+Tests (`crates/ceteris-econ/tests/p2_properties.rs`): `price_level_values_unchanged`, the fixture
+with p_c = 1.3 in one country: at t = 0 only that country's local base and market prices move
+(by 1.3), local units by 1 / 1.3 and local input coefficients of its local producers by 1.3,
+while every enterprise's nominal VA, output value and input cost shares, every pop's money and
+base income, household value shares and the national accounts (VA and final demand by country
+and good) are the p_c = 1 world's to 1e-12; `price_level_one_is_the_data_state`, the same world
+at p_c = 1 has the fixture's digest. The GE reference reads p_c as the base price of local goods
+(`Inputs::data_state_price`), and the calibration keeps local goods at p_c (stages 2 and 3; the
+block gain of ADR 0267 normalizes a household's local spending by the value of the cell's output,
+p_c times its units). Tests (`crates/ceteris-calibrate/tests/price_level.rs`, same fixture):
+`reference_reads_the_price_level` (data-state prices, A, a_VA and coefficients bit for bit, PIGL
+weights to 1e-12), `v1_price_level_matches_reference` (the frictionless run from the data state
+against the reference solved from the export, V1's 1%; measured 5.9e-6 on prices, 2.5e-6 on
+wages), `calibration_keeps_local_goods_at_the_price_level` and
+`calibrated_price_level_world_is_stationary` (120 ticks from the tables, every price and wage
+within 1e-9; measured 3.9e-12).
 
 Enterprises exist for every (province, traded good) with VA > 0 and every (province, local
 good). About 4,594 x 10 rows at most, sorted by province (CSR offsets, 19.4). Every pop and
@@ -604,14 +790,33 @@ solves sum_g L*_ig(w) = (1 - u*_i) L^s_i. The base wage uses u*: w0_i = sum_g s_
 u*_i) L^s_i), and the data state starts at unemployment u* (a generated world, which has no 1995
 to 2005 window, takes its 2000 rate as u*). P4 matching replaces u* with matching frictions.
 
-**Income (national profit ownership, owner 2026-10-25).** Labour income stays local; profits
-and rebates are national, paid per person. Pop k of country c in province i receives, per tick:
+**Income (national profit ownership, owner 2026-10-25; dividends by wealth, ADR 0308).** Labour
+income stays local; profits and rebates are national, rebates paid per person, profits by
+dividend share d_k (N_k / N_c where the inputs have no wealth shares). Pop k of country c in
+province i receives, per tick:
 
 ```
 income_k = w_i * e_k * employed_k                  (wages, local)
-         + N_k / N_c * sum_(e in c) profit_e       (profits, national)
+         + d_k * pool_c                            (profits, national)
          + N_k / N_c * rebate_c                    (tariffs, national)
 ```
+
+pool_c = sum_(e in c) (1 - f_e) profit_e + sum_h o_h,c sum_(e in h) f_e profit_e, f_e the
+foreign-owned share of e's country and good and o_h,c country c's share of host h's foreign-owned
+profits (ADR 0310; f = 0 and pool_c the national sum without foreign owners). Foreign dividends
+are income of the owners' pops, so they enter Y, the transfer base.
+
+*Dividend shares (ADR 0308; `wealth::dividend_shares`, `EconInputs::set_dividend_shares`).*
+Fixed at load from the country's wealth shares W_b of the bottom 50%, middle 40% and top 10%,
+with perfect rank correlation of income and wealth: the country's income distribution is the
+mixture of its pops' lognormals (mean the pop's base income per person with dividends per
+person, dispersion s_w those incomes imply; Pop demand), cut at its quantiles 0.5 and 0.9 by
+bisection, and d_k = sum_b W_b n_kb / n_b, n_kb the pop's population in bracket b and n_b the
+bracket's; with s_w = 0 the pops fill the ranks in order of income, then of ID. The shares sum
+to 1 over the country's pops and are positive for every pop with people
+(`dividend_shares_integrate_wealth_over_income`, against a quadrature, 1e-4 relative). Base incomes and
+s_w are then those of the shares (one pass, no fixed point). The export writes d_k (`pops`
+`dividend`), which the GE reference and the calibration read.
 
 employed_k = LF_k L_i / L^s_i is set by E1 (LF_k the pop's labour force, L_i = sum_g L_ig the
 province's employment, L^s_i its labour supply), so sum_(k in i) e_k employed_k = L_i exactly and
@@ -622,13 +827,15 @@ loss stays with the enterprise as retained losses and later cash flow repays it 
 payout, so enterprises pay no negative dividend), and in the profit pool each province market's
 signed cash flow (trade SPEC), so the pool is sum over the country's enterprises and markets.
 Markets keep the signed rule (ADR 0112, Markets). Retained losses beyond M months of base sales
-are written off against the country's pops (loss write-off, ADR 0112, below). Shares are fixed
+are written off against the country's pops (loss write-off, ADR 0112, below). Transfers D_c
+(below) are paid after the rebates and are not income. Shares are fixed
 at load. At a steady state profit_e = (1 - s_L) VA0_e > 0, no loss is carried, nothing is
 written off, and market cash flow is 0. A province without traded output so
 earns dividends and buys local goods (it had only its rebate share under provincial ownership,
 Task 18e). The base income of a province, rebates aside (`world::base_income`,
-`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c sum_(e in c) (1 - s_L) VA0_e, N_i the
-population of its pops. A pack country with enterprises but no pops stops the load (`PackError`):
+`io.Inputs.base_income`), is w0 (1 - u*) L^s + N_i / N_c pool_c at profit_e = (1 - s_L) VA0_e, N_i the
+population of its pops (with dividend shares, sum_(k in i) d_k in place of N_i / N_c). A pack
+country with enterprises but no pops stops the load (`PackError`):
 nobody would own its profits.
 
 *Rounding (E4).* Every enterprise pays its balance when positive, and every province market its
@@ -636,7 +843,12 @@ signed cash flow, in minor units, into its country's profit pool account; an ent
 negative balance pays nothing and keeps it. Each country then pays its pool, one i128 sum per tick,
 and its rebate account to its pops in pop ID order by cumulative population shares rounded half
 to even: part_j = round(P S_j / S) - round(P S_(j-1) / S), S_j the population of the first j
-pops, the last pop taking P - round(P S_(n-1) / S). The parts add up to the pool exactly, so the
+pops, the last pop taking P - round(P S_(n-1) / S) (the pool by cumulative dividend shares d_k
+where the inputs have them, `wealth_dividends_pay_the_pool_by_share`). With foreign owners (ADR
+0310) an enterprise of a good with f > 0 splits a positive payout by the same rule into (1 - f)
+to its pool and f to the world dividend account (flow `FOREIGN_DIVIDEND`), which pays each host's
+total, an i128 sum, over the owners' pools by its owner shares before the pools pay their pops; the
+account ends every tick at zero (`foreign_dividends_net_to_zero_worldwide`). The parts add up to the pool exactly, so the
 pool, the rebate account and every market end the tick at zero, every enterprise at its
 retained losses or zero, and money is conserved exactly; each part is within one minor unit of
 N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
@@ -660,10 +872,60 @@ calibration tables, `--fixture` runs) base sales are A VA0 / a_VA, so the cap is
 which is harmless while A is near 1 and is not corrected. An enterprise that loses money every month becomes a perpetual levy on its
 country's pops once its cap is full.
 
+**Initial drift (ADR 0103; S23 `EconParams::drift`, P153 `drift_half_life`).** At E0 each
+country's multipliers are set from the tick (`systems::drift_factors`): with fade(t) = 1 -
+2^(-t / h), t = tick / 12 years, ln alpha_c = g_A,c h / ln 2 fade(t) (TFP growing at g_A,c
+2^(-t / h)) and ln phi_c = f_c fade(t) (F / F0, closing the log gap f_c at half-life h). VA is
+homogeneous of degree one in F and L, so VA(A, F0 phi, L) = VA(A phi, F0, L / phi): every
+production call reads A alpha phi and L0 phi. Both are 1 at tick 0, so the calibrated steady
+state is the first tick's, and the drift acts from the second on
+(`drift_is_zero_at_the_first_tick`). The factors are a function of the tick, not state; S23 and
+P153 enter the static digest and snapshots only where some drift is nonzero. The steady-state
+test, the P2 gate (`--no-drift`) and the benchmark run with S23 off
+(`drift_off_keeps_the_steady_state`).
+
+**Transfers (ADR 0100 as amended by ADRs 0299, 0300, 0315 and 0318 to 0321; S22 `EconParams::transfers`).**
+At E4, after dividends and rebates, each country receives
+
+```
+D_c = (rho_c(t) - rho_bar) Y_c,t-1,   rho_bar = sum_c rho_c(t) Y_c,t-1 / Y_t-1
+```
+
+from one world transfer account (wide), Y_c,t-1 the sum of its pops' income_k of the previous
+tick (wages, dividends and rebates; at the first tick of a data-state start, which has no previous
+income, the tick's own) and Y_t-1 = sum_c Y_c,t-1, so the transfers net to zero, the world
+discrepancy spread pro rata to income, and a pop spends (1 + rho_c - rho_bar) times its income,
+positive while |CA_c| < GDP_c (ADR 0315). rho_c(t) is the pack's 2000 ratio
+(`Transfers::FixedShares`, the default), or the observed ratio of the tick's year
+(`Transfers::ObservedPath`, tick t in year 2000 + t / 12, lab profile), which after 2024 fades as
+rho_c(2024) 2^-((t - 299) / 120) (a 10-year half-life, ADR 0100); `Transfers::Off` pays nothing
+(balanced trade). Exactly: with s_c = D_c / Y, every paying country (s_c < 0) pays
+round_half_even(|s_c| Y) minor units, the account splits their total over the receiving
+countries in proportion to s_c ([`split`], so it pays out exactly what it took in), and each
+country's amount is split over its pops in proportion to the income credited to them this tick.
+The account is opened only where the transfers are on and some share is nonzero, so a world
+without transfers keeps its ledger, and the switch enters the static digest and snapshots only
+then (`transfers_net_to_zero_every_tick`, `off_switch_reproduces_balanced_trade`). Pops spend the
+transfer with their money next tick, through the three final demanders (ADRs 0320, 0303).
+
 **Final demand (ADR 0021).** Each pop spends its whole money balance each month (when positive;
 the consumption rule of 8.6 with m = 1, lambda = 0) at buyer prices (q_d for traded goods, the
 province price for local goods; a good with no reachable origin has q_d infinite and gets
 nothing): PIGL across three categories, a CES over goods within each.
+
+*Three demanders (ADR 0099 as accepted by ADRs 0301 to 0306, RFC 0301).* Where the inputs split final
+demand (`Countries::gov`, `inv`), a pop's money is spent by three demanders: government buys
+g_cg M and investment s_cg M of good g at fixed nominal shares (`demand::fixed_shares`; a good with
+no reachable origin gets nothing and its share goes to the demander's other goods in proportion),
+and households spend h_c M, h_c = 1 - sum_g (g_cg + s_cg), by PIGL at income per person h_c M /
+N. g_cg and s_cg are the shares of all final demand, absorption income + D_c, so the transfer is
+spent by the three; calibrated in stage 4 (`PiglWeights::gov`, `inv`), else the data's parts over
+the country's final demand. The government and investment goods are consumed on arrival like the
+households': in P2 they are demand only (the fiscal and capital blocks, 9.6 and 7.4, replace the
+fixed shares; the accelerator of ADR 0099 waits for P4, ADR 0306). Without the split h_c = 1 exactly and nothing changes
+(`households_only_keeps_the_fixture`); at the data state the three buy the final demand shares
+(`three_demanders_spend_the_final_demand_shares_at_the_data_state`, 1e-10) and leave the money
+stock unchanged (`money_stock_unchanged_by_three_demanders`).
 
 *Source.* Alder, Simon, Timo Boppart and Andreas Mueller (2022), "A Theory of Structural Change
 That Can Fit the Data", American Economic Journal: Macroeconomics 14(2): 160-206. Equation and
@@ -728,7 +990,7 @@ the money balance: spending equals money.
 
 *Inversion (per country, over its pops; ADR 0094, Amendment).* Parameters theta, sigma_B, phi,
 gamma, eps and omega_A = 0 from the pooled PIGL column of the paper (Tables 3 and A3, column 3,
-pp. 24 and 48). The unknowns lambda, omega_M = t, omega_S = 1 - t and alpha (summing to 1 within
+pp. 24 and 48), omega_A = 0 wherever a country's shares allow it (ADR 0313, below). The unknowns lambda, omega_M = t, omega_S = 1 - t and alpha (summing to 1 within
 each category over the goods with demand) solve, for every good,
 
 ```
@@ -736,17 +998,26 @@ sum_k E_k s_kg(q_k, m_k, s_w) = Omega_g sum_k E_k
 ```
 
 over the country's pops k, each at its own buyer prices q_k and income per person m_k, weighted
-by its spending E_k (unclamped shares). Rounds from alpha_g = Omega_g / Omega_c(g): at the
-current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) for each t, and
+by its spending E_k, at the shares the run spends: a negative category share 0 and the rest
+rescaled, as above (ADR 0316; the unclamped shares before it). Rounds from alpha_g = Omega_g / Omega_c(g): at the
+current alpha, lambda follows from the food aggregate in closed form (sB_A = 0) for each t (where
+some pop's share is negative at that lambda, by a bracketed secant on the clamped food aggregate,
+its bracket doubled from the closed form, ADR 0316), and
 t solves the M aggregate by a bracketed secant (Illinois) on [0, 1]; then alpha_g is rescaled by
 Omega_g over its aggregate share and renormalized within its category (the contraction of Berry,
 Levinsohn and Pakes 1995). The rounds stop when every aggregate share is within 1e-14 of Omega
-relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000 is an error. No
-sign change of the M aggregate on [0, 1] or a negative lambda is a negative weight and stops the
-load (never clipped). At load without a calibration the pops are at prices 1 with E_k their base
+relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000 is an error.
+Where the M aggregate is above Omega_M even at t = 0, M binds instead of A (ADR 0313): omega_M =
+0, lambda follows from the M aggregate and t = omega_A of omega_A + omega_S = 1 solves the food
+aggregate by the same secant; where it is below Omega_M at t = 1, S binds likewise (omega_S = 0,
+t = omega_A of omega_A + omega_M = 1). The income-effect weight is so the largest at which every
+omega is nonnegative, and the same as with omega_A = 0 wherever that fits. No sign change for the
+binding category or a negative lambda stops the load (never clipped). At load without a calibration the pops are at the data state's prices (1
+for traded goods, p_c for local goods, ADR 0098) with E_k their base
 income and m_k their base income per person (`world::household_preferences`); with one pop, or
-pops alike, the solve is the closed form of one lognormal: z = Omega_A / theta_A, omega_c =
-(Omega_c - z theta_c) / (1 - z), lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g =
+pops alike, the solve is the closed form of one lognormal: z = min_c Omega_c / theta_c (A on a
+tie, so z = Omega_A / theta_A wherever omega_A = 0 fits; z >= 1 only where Omega = theta, which
+panics), omega_c = (Omega_c - z theta_c) / (1 - z), 0 for the binding category, lambda = z m_0^eps exp(eps (1 - eps) s^2 / 2), alpha_g =
 Omega_g / Omega_c(g) (`invert_pigl`). The simulator (`demand::invert_pigl_pops`) and the GE
 reference (`demand::invert_pops`) implement it independently.
 
@@ -782,7 +1053,7 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
 3. Before the stages, `ceteris calibrate --pack` fits the border friction nu of each friction
    group (P05, ADRs 0092, 0276; `ceteris_calibrate::border`): a group is a theta class, except
    class 3, each of whose goods (crude oil, gas and refined fuels; coal and other mining) is a
-   group of its own (ADR 0276, proposed: one class value set by crude oil took mining below its
+   group of its own (ADR 0276: one class value set by crude oil took mining below its
    own share and the calibration failed). It is fitted so that the cross-border share of the
    group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
@@ -824,19 +1095,41 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
 pack's. Destination spending on traded goods E_dg is households' PIGL spending at q_d (stage 4)
 plus sum_g' a_gg' V_dg' of the province's enterprises. Household income follows Income above:
 the province's wages s_L VA by effective labour share, and the country's profits (1 - s_L) VA and
-tariff rebate by population. One scalar r_g per traded
-good rescales its V and VA so that world spending net of tariffs equals world output value (the
-2000 imbalances, reported). Spending scales with the r (incomes are value added, and stage 4
-re-inverts lambda at the new income), so this fixes the r only up to one common factor; each pass
-rescales the traded r so that world traded value added sum_e r_g VA_e equals the data's (ADR 0106;
-without it the level depended on the start and the mixing path, by up to 4e-4 from starts at
-+-50% of the data state's buyer prices, `calibration_unique_from_eight_starts`). Rebates follow from
+tariff rebate by population; households also receive the transfer D_c = (rho_c - rho_bar) Y_c
+(ADR 0315) in proportion to income, Y_c = sum of the country's pops' income_k (Transfers, above; 0 where the export has no
+`transfer` column, which it writes only when S22 is on and some share is nonzero) and spend
+income + D_c by PIGL. V and VA stay at the data: ADR 0100 removes the per-good rescale r_g of ADR
+0089, which assigned the 2000 imbalances to goods. World spending net of tariffs then meets world
+sales V / (1 + delta s) of each good through stage 4's targets instead (ADR 0318, RFC 0308 D1): per
+pass, each country's traded final demand at its data shares, F_cg = Omega_cg (Y_c + D_c) (Y_c its
+households' income), is rescaled biproportionally, F'_cg = a_c b_g F_cg, so that its row is
+unchanged (each country's traded absorption, sum_g F'_cg = sum_g F_cg) and each good's world net
+household spending sum_c nu_cg F'_cg meets mu C_g, C_g = sales_g - sum_d nu_dg I_dg the good's
+world sales less its net intermediate spending, nu the net-of-tariff share of a destination's
+spending (`Model::flows`, 1 - tariff; nu_cg its households' spending-weighted mean in the
+country) and mu one common factor. Within a pass the row and column totals need not agree (local
+output, rebates and incomes are those of the pass), hence mu; at the fixed point the accounting
+identity makes it 1 (`balance_residual`, reported with the Sinkhorn's r_g - 1). b_g is iterated
+on its own, a_c following from the rows, until the column ratios agree to `RAS_TOL` (1e-14, the
+local fixed point's tolerance; at most `MAX_RAS` 10,000 rounds, an iteration cap); a good with no
+final demand anywhere (the fixture's crude oil) is left out, and must be balanced by its data
+(else its imbalance stays in its r_g - 1 and in mu); a good with final demand whose column target
+is not positive within a pass (intermediate use above sales, a transient of the passes' local
+output) is held at its previous factor for that pass, and stops the calibration only at the
+settled pass. The targets of stage 4 are then F'_cg / (Y_c + D_c) for
+traded goods and the data's Omega_cg for local goods. The column factors beta_g = sum_c F'_cg /
+sum_c F_cg are the residual of the old r_g (`column_factor` in the summary). The fixture's
+traded value added is its generated value times the r_g its calibration solved before ADR 0100
+(`fixture::BALANCE`, ADR 0299), so it is balanced at D_c = 0: its column factors are 1 and its
+calibrated state is the one before to rounding. With V fixed the
+fixed point has no free level (ADR 0106's pin of sum_e r_g VA_e is gone with r). Rebates follow from
 sourcing, local output from income and income from local output, so passes of stages 1, 2 and 4
-repeat until rebates, r, buyer prices and the PIGL weights change by at most 1e-13 relative
-(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before), so the returned state is a fixed
+repeat until rebates, buyer prices and the PIGL weights change by at most 1e-13 relative
+(Anderson-mixed; `PASS_TOL`, P159, owner, 2026-10-31; 1e-12 before; at most `MAX_PASSES` 300, an
+iteration cap, 100 before the C6 pack, which was still contracting at pass 100), so the returned state is a fixed
 point to the 1e-12 its checks claim (`sinkhorn_is_unique_up_to_scale`, and stage 5's
 `stage5_state_is_stationary_under_the_stock_rules`). The stage-5 check compares Q, the output
-settled at the last pass's r, rebates, buyer prices and PIGL weights, with D, the orders at the
+settled at the last pass's rebates, buyer prices and PIGL weights, with D, the orders at the
 settled prices from the spending those values give; the Sinkhorn of that pass fitted the orders
 to the previous pass's spending, so D - Q carries the last pass change, about 3.8 times on the
 B8 pack (worst cell 1.34e-12 at a last change of 3.55e-13, B8d), plus a rounding term of about
@@ -844,7 +1137,7 @@ B8 pack (worst cell 1.34e-12 at a last change of 3.55e-13, B8d), plus a rounding
 may reach about 3.8e-12 + 3e-13, above its 1e-12; the tolerance must be at most (1e-12 - 3e-13)
 / 3.8 = 1.8e-13, and 1e-13 is the decade below (gap at most about 6.8e-13; 5.25e-13 measured in
 B8d at pass 71). The mixing runs on a state in the units `change` uses:
-ln q, ln r, the PIGL omega and within-good weights as they are, and the rebates and the PIGL
+ln q, the PIGL omega and within-good weights as they are, and the rebates and the PIGL
 scales each divided by their block's largest magnitude (the rebates' from the first pass, the
 scales' from the start), fixed for the whole run. In money units the rebates' residual (about
 1e7) swamped the prices' (about 1) in Anderson's least squares, and on the full pack with the
@@ -859,6 +1152,8 @@ iterated until no local output changes by more than 1e-14 relative.
 
 **Stage 2, origin prices.** Per traded good, balanced matrix scaling on the two-level kernel:
 w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o with Phi_d = sum_o K_od w_o, unique up to scale
+(r_g = received over V within the scaling, 1 at the fixed point since stage 4's targets balance
+each good; it is no longer a rescale of output)
 (Sinkhorn 1967). Sweeps run in the log domain (each good's weights shifted by their largest
 before each pass over the kernel), Anderson-accelerated (memory 8), to max |ln(received /
 target)| <= 1e-13, within at most 100,000 sweeps (`MAX_SWEEPS`, an iteration cap, not a
@@ -883,8 +1178,8 @@ reached 532 by pass 3, where a unit in the last place of ln w is 1.1e-13, and pa
 froze at 1.208e-13 (the same value from sweep 22,199 to the 100,000 cap, after falling from
 1.15e-12 at sweep 1,000 at about 0.9987 a sweep): a rounding floor of the unpinned level, not
 conditioning (pinned, pass 9 converges in 1,960 sweeps). The tolerance does not change. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
-price index (Omega_g times calibrated province VA as weights) is 1; local goods take p = 1, so
-the index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
+price index (Omega_g times calibrated province VA as weights) is 1; local goods take their price
+level p = p_c (ADR 0098), so the normalization runs over traded goods only and their index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
 delivered unit price of the physical arrivals, at every pass (`Model::physical`), and the
 selection constant of ADR 0200, Gamma_d,g = q_d / P_d at the calibrated prices (1 where no origin
 is reachable), is written to `econ_calib_cells.arrow` (`gamma`), so a calibrated world's buyer
@@ -897,7 +1192,8 @@ do, `steady_state_unchanged_by_selection`).
 **Stage 3, technology.** coef_kg = a_kg p_o / q_ik (the 2000 cost shares at the solved prices,
 so input coefficients differ across enterprises of a country), a_VA = 1 - sum_k a_kg (cost
 shares at the calibrated prices, not at base prices), p_VA = p_o, A = 1 / p_VA, Y_o = V_o / p_o.
-Local goods take p = 1, and local output solves the 3 x 3 Leontief system of each province
+Local goods take p = p_c (ADR 0098; coef = a_kg p_c / q, A = 1 / p_c, Y = V / p_c), and local
+output value solves the 3 x 3 Leontief system of each province
 against its local demand (households and every enterprise's a_kg V); local VA = a_VA Y is an
 output of calibration, and its national gap to ICIO is reported. w0_i = sum_g s_L VA0_ig / ((1 -
 u*_i) L^s_i) and L0 = s_L VA0 / w0, so with L = L0 nominal VA is VA0 and the labour first-order
@@ -910,13 +1206,18 @@ Amendment; `demand::invert_pops`), each pop at its province's buyer prices q of 
 income per person, and weighted by its income (rebates included), at the within-pop dispersion
 s_w fixed by the inputs. Pops then spend by PIGL at those prices and incomes, so in the data
 state each country's aggregate household shares are Omega
-(`aggregate_data_state_shares_match_omega`, 1e-12).
+(`aggregate_data_state_shares_match_omega`, 1e-12). Where final demand is split (ADR 0304), stage 1's balance rescales all of it with one factor per country and good; PIGL is
+inverted on the households' part of the balanced shares, each pop at its households' share h_c of
+its spending, and government and investment keep their balanced parts over the country's
+balanced total as their spending shares (`Inputs::final_demand_split`,
+`pigl_inverted_on_hfce_only`, 1e-12).
 
 **Stage 5, state at the start of a tick.** Input stocks (1 + COVER) months of use, traded and
 local, so the order-up-to rule orders one month of use; the pipeline of every buyer (pops and
 enterprises) holds, j ticks ahead, one month of steady-state shipments of every arrival slot j or
 later; merchant stocks coverage times output (S* = coverage D with D = Q); pops hold one month
-of income less this tick's wages (dividends and rebates; wages come at E2); pi^e = 0; last D, Q
+of income less this tick's wages, plus their transfer (dividends, rebates and D_c; wages come at
+E2); pi^e = 0; last D, Q
 and sales their steady-state values (D = Q = sales).
 
 **Checks** (`crates/ceteris-calibrate/tests/steady_state.rs`, fixture and full pack; the full
@@ -1015,6 +1316,44 @@ On the B8 pack (manifest 3c7895d1, settled baseline, drift 3.78e-8) the country 
 | `outcome_aggregates_the_flow_window` | province incomes add to the country's; lambda_p is home over absorption, in [0, 1] |
 | `flows::tests::pairs_account_for_everything_dispatched` | province absorption adds to the country's home purchases and pairs into it, to 1e-12 |
 
+### Pre-P3 benchmark (C7, ADR 0207 gate, ADR 0257)
+
+Run 2026-11-06 on main-plus-audit `ccd9574` and the installed 2000 pack (C6 calibration, ADR 0316),
+baseline settled (largest |d ln p| over the last 50 ticks 1.7e-7), 1,200 ticks per case. Command:
+`CETERIS_PACK=data/packs/2000 cargo test -p ceteris-calibrate --release --test benchmark -- --include-ignored --nocapture --test-threads=1`
+(about 13 minutes). The criteria below are frozen: a change after a run needs an RFC with before
+and after numbers (ADR 0257, PLAN C7); a miss stops work and goes to the owner.
+
+**Criteria (asserted).** All three of the tests below pass.
+
+| Criterion | Test | Result | 28 Oct |
+|---|---|---|---|
+| Openness: foreign share within [1/1.5, 1.5] of ICIO 2000, per theta class group and all traded goods | `openness_within_1_5_of_icio` | ratios 1.050, 1.041, 1.057, 0.948; all traded 0.2177 against 0.2115, ratio 1.029 | about 3 times the data |
+| ACR, province-graded (ADR 0268), crossing tau x 1.1, 80 ICIO countries with \|ACR\| > 1e-4 | `acr_formula_holds_under_costlier_borders` | 0 wrong signs, median 1.225 (p10 0.997, p90 1.547), correlation 0.947 | median 0.66, correlation 0.57 |
+| x10 border shock (reported only since 2026-10-31, a P5 criterion, ADR 0090) | `benchmark_cases_are_reported` | panics in the 1,200-tick run: `payment 1.07e15 does not fit the ledger` (world.rs:74) | stopped at tick 45 |
+
+The ACR median sits 0.025 below the upper band edge; the country forms read `acr_io` median 1.130
+(p10 0.882, p90 1.452), correlation 0.935 and plain `acr` median 2.628, correlation 0.900, all with
+0 wrong signs.
+
+**Reported cases, with the literature beside each and its status.** "Fitted" means the model is
+calibrated to the target, so agreement tests nothing; "free" means nothing was fitted to it.
+
+| Case | Model | Literature | Tag | ADR 0257 tier and status |
+|---|---|---|---|---|
+| Openness by class and all traded goods | above | ICIO 2000 | fitted (class groups, nu, ADR 0092); free (all traded goods) | 2, passes |
+| ACR-IO x1.1 | above | Costinot and Rodriguez-Clare (2014), eq. (28) | free | 1, passes |
+| Japan, border x1.1 | welfare -0.53% | every country loses (ACR) | free | 1 (sign), passes |
+| GBR, soft Brexit | -0.194% (EU27 -0.039%, JPN +0.0006%) | Dhingra et al. (2017): -1.34% total, -0.53% from the NTB part alone | free | 2, miss: about 0.15 of the headline, about 0.37 of the NTB part. Removal phase P4, ADR 0272 (log-distance crossing friction, built with the 50-goods recalibration); services (ADR 0168) in P5a lifts it further |
+| GBR, hard Brexit | -0.511% (EU27 -0.105%, IRL -0.237%) | Dhingra et al.: -2.66% total, -1.44% from NTB plus tariffs | free | 2, miss: about 0.19 of the headline, about 0.36 of the like-for-like part. Removal phase P4, ADR 0272 |
+| H2 distance elasticity | -0.45 (ADR 0264) | Head and Mayer (2014): -0.89 all, -1.14 structural; the SPEC's own gate -1.1 | free | 2, miss traced to an unbuilt mechanism (iceberg legs give about -0.09 theta per class; ADR 0264). Removal phase P4, ADR 0272 |
+| H2 per class | within 2e-8 of theta | Caliendo and Parro (2015) via ADR 0023 | fitted (the model recovers its own theta; a code check, ADR 0264) | 4 (test changed by ADR 0264), passes |
+| US-China 2018, `us-china-2018.shocks` (Fajgelbaum et al. 2020, Table I: US +6.1 points on all imports from China, China +7.6 on US exports, equal on both tariff groups since the model has two and the lists have no value weights; derivation in the file header) | USA welfare +0.003%, CHN -0.087%; pass-through proxy 0.95 | Amiti, Redding and Weinstein (2019); Fajgelbaum et al. (2020): near-complete pass-through, US welfare -0.04% of GDP (all 2018 tariffs and all partners, so the model's China-only case is smaller by construction) | free | 2, reported. Pass-through agrees; the US welfare sign does not. The 28 Oct values (pass-through 0.97, US welfare -0.04%) came from a shock file that was never committed and cannot be recovered, so they are not comparable. The proxy is China's buyer-price change, not an origin-specific import price. Owner 2026-11-06: the sign stays a report-only tier-2 note, not tuned; revisit at the P5a gate (services trade, ADR 0168, and the split price rule) |
+| x10 border | panic above | none in P2's range | free | reported; P5a (RFC 0286 and the write-off fix, #216) |
+
+Misses of the two tier-2 rows named P4 stay recorded until the P4 gate rerun. No gain, friction or
+criterion was changed to pass.
+
 ## GE reference model (`ceteris-reference`)
 
 Static equilibrium of the same economy with all frictions off: unknowns are ln p for every
@@ -1028,7 +1367,9 @@ labour share e_k LF_k / L^s of its province's wages w (1 - u*) L^s, and its popu
 profits (national ownership, Income) and rebate (market cash flow is zero at a fixed point); the rebate is the tariff share of
 spending, so income is iterated to a fixed point (relative 1e-15) inside each evaluation; the
 world price index over consumer prices (q_d for traded goods, 2000 final demand weights) equals
-1. Solved with Newton-Krylov (scipy) from the data state, Anderson-accelerated tatonnement as a
+1. Solved with Newton-Krylov (scipy) from the data state (ln p = 0 for traded origins, ln p_c for
+local goods: the reference reads p_c as the base price of local goods, and inverts PIGL at those
+prices; ADR 0098), Anderson-accelerated tatonnement as a
 fallback (under PIGL the fixture needs the fallback); tolerance 1e-10 on scaled residuals. Balanced Sinkhorn on the dense kernel is the S02
 full solve and reproduces the equilibrium's sourcing flows. numpy and scipy only (JAX stays
 optional, 19.1).
@@ -1045,7 +1386,7 @@ optional, 19.1).
 | T3 | clear (trade) | orders, output, inventory; local demand | fills, sales, inventory; local sales of what the chain left (S11) and payments | markets |
 | T2b | dispatch (trade) | fills | shipments, pipeline, payments, tariffs | inter-province trade |
 | T4 | reprice (trade) | D, Q, S, pi^e, buyer prices | prices, clip counts; then pi^e from the world price index | markets |
-| E4 | distribute | enterprise and market cash flow, rebates, pop money | profit pools (positive enterprise balances, signed market cash flow), pop money for next tick, then the loss write-off (ADR 0112) | finance (P2 stand-in) |
+| E4 | distribute | enterprise and market cash flow, rebates, pop money, last tick's income, the tick | profit pools (positive enterprise balances, signed market cash flow), pop money for next tick, the transfers D_c (ADR 0100), then the loss write-off (ADR 0112) | finance (P2 stand-in) |
 | E5 | assert | ledger, state | | accounting assertions |
 
 System IDs 201 to 210 in this order.
@@ -1067,6 +1408,8 @@ Snapshots every 12 ticks (core). No RNG draws in P2; streams are reserved per sy
 | Local fit | Each local good's uncovered need at most what its producer leaves, U_k <= R_k (exact where the passes end on a pass that changes nothing; to 1e-12 of the flows where they stop at what f64 resolves, ADR 0093 bounded work, seed 7778631857305059895) | 1e-12 of U_k + R_k | `fits_up_to_rounding` in the fill tests of `p2_properties.rs` |
 | Payments | Each buyer pays its share of its class's filled spending, half to even per good; gateways net to zero | exact in ledger | property test |
 | Income | Pop income = wages + dividends + rebates paid this tick | exact in ledger | every tick |
+| Transfers | The world transfer account ends every tick at zero: what paying countries' pops put in is exactly what receiving countries' pops take out (ADR 0100) | exact in ledger | every tick (`end_tick`); `transfers_net_to_zero_every_tick` |
+| Foreign dividends | The world dividend account ends every tick at zero: each host's foreign-owned payouts reach its owners' pools in the same tick (ADR 0310) | exact in ledger | every tick (`end_tick`); `foreign_dividends_net_to_zero_worldwide` |
 | Determinism | Same inputs, same hashes; 1 vs 8 threads; replay from snapshots | exact | P2 acceptance |
 | Long run | 1,200 ticks on the full pack: no violation, all prices and wages finite and positive | exact | P2 acceptance |
 
@@ -1086,6 +1429,9 @@ New register IDs (Section 17 extension, applied to the design doc with the next 
 | P42 | Education efficiency e_k | below secondary 1; secondary 1.4 to 1.6; tertiary 2.0 to 2.6 (Mincer returns about 8 to 12% per year) | Literature |
 | P149 | Input stock cover (COVER, `systems::COVER`): months of use an enterprise keeps beyond replacement and transit, the `cover` of the order rule and of calibration stage 5 | 1 (owner decision, 2026-10-24; not tuned) | Free |
 | P148 | Loss write-off threshold M (ADR 0112): retained losses an enterprise keeps, in months of its base sales | 3 (controller ruling, 2026-10-26; not tuned) | Free |
+| P153 | Half-life h of the initial drift (`EconParams::drift_half_life`, ADR 0103), years | 3 to 15, start 7 (not tuned; fitted with the 2000-2010 holdout) | Free |
+| S23 | Initial drift (`EconParams::drift`, ADR 0103): on (default) or off (steady-state tests, P2 gate, benchmark) | on | Switch |
+| S22 | Trade-imbalance transfers (`EconParams::transfers`, ADR 0100): `Off`, `FixedShares` (default) or `ObservedPath` (lab profile; after 2024 a 10-year half-life, ADR 0100's value, not tuned) | `FixedShares` | Switch |
 
 P149 is a constant of the order rule, not an `EconParams` field, so it is outside the static digest:
 changing it changes the calibrated stocks and needs a recalibration (calibration stage 5 uses the same
@@ -1096,6 +1442,68 @@ populations, education and labour-force shares, Gini. Calibrated: A (inversion, 
 estimation); the PIGL weights omega_M, omega_S, lambda and alpha per country (exact inversion
 of the 2000 final demand shares, above). P07 stays the S03 (non-homothetic CES) row of the
 design register.
+
+## Moving reference (ADR 0243, P4 Branch F; spec before code)
+
+ADR 0089's steady state is the special case of zero trends. From P4 the calibration target is the
+t0 point of a moving equilibrium path and the test target is the frictionless equilibrium solved
+along that path. Nothing below is built until this section is merged; P2 and P3 are untouched.
+
+**Trend inputs.** Per country i, three monthly rates, inputs to the calibration and not targets:
+
+| Rate | Meaning | Source | Value until |
+|---|---|---|---|
+| `trend_n` | labour-force growth, (1 + n_i)^12 the mean annual growth 1995 to 2005 | ILOSTAT labour force, the series u*_i uses (CC BY 4.0, `sources.toml`) | P4 sets it |
+| `trend_g` | labour-augmenting productivity growth | P8 (frontier growth and catch-up) | 0 before P8 |
+| `trend_pi` | inflation target pi*_i | P5a | 0 before P5a |
+
+They are three optional columns of `econ_countries.arrow` (a country without the ILOSTAT series
+takes its donor's, flagged in `trend_imputed`). A pack without the columns reads as all zeros,
+so no existing pack or golden changes. Column names and the format bump are settled in the
+pack PR that writes them. From t0 population and productivity are simulated (P4, P8); the
+trends only set the t0 state and the reference.
+
+**Calibration.** Stages 1 to 4 run unchanged on the 2000 values. Stage 5 and the wage rule change:
+
+- Pipeline slot s holds the shipments of s months ago deflated at the origin country o's
+  quantity trend (1 + n_o)(1 + g_o) per month per slot and, for values, its price trend
+  (1 + pi*_o) too. Input stocks, merchant stocks and the buyers' pipelines scale with sales as
+  now (ADRs 0090, 0091). pi^e_i = pi*_i.
+- The wage step of the natural-rate rule becomes
+  `dlnw = clip( pi^e + g_i + kappa_w (x_i + u*_i), -c_max, c_max )`, times (1 - delta_w) when
+  negative, so at x = -u* the step is exactly pi^e + g_i (`wage_step_at_natural_rate_is_pi_plus_g`).
+  With g_i = 0 it is the rule above.
+- Stage 4 inverts PIGL at the t0 buyer prices as now. Along the path real income per person grows
+  at each country's rate and category shares follow Boppart's (2014) closed form; that drift is
+  part of the path, not a calibration error.
+
+**Reference.** `ceteris-reference` solves the frictionless equilibrium at a date t with each
+country's effective labour A_i(t) L_i(t) = A_i L_i ((1 + g_i)(1 + n_i))^t, prices and wages
+detrended by (1 + pi*_i)^t, starting each solve from the previous date's root (the path is
+slow, about 0.2% a month). The path solver is the existing static solve (GE reference model,
+above) called once per sampled date; no new equilibrium concept. With every trend zero it
+returns the static reference bit for bit.
+
+**Tests** (all with their trends set as stated; `zero_trends_equal_the_steady_state_calibration`
+is the Working gate of Task F1):
+
+- `zero_trends_equal_the_steady_state_calibration`: with every trend zero, `calibrate` returns a
+  `Steady` bit-identical to the trend-free calibration on the fixture and the pack, the 0089
+  steady-state tests are unchanged, and every golden hash holds.
+- `common_trend_moves_no_detrended_quantity`: equal n_i, g_i, pi*_i in every country and PIGL's
+  non-homotheticity off, 120 ticks of the fixture move no detrended price, wage or flow by more
+  than 1e-9 (the resolution-aware rule on the full pack, as in Checks).
+- `country_trends_stay_within_one_percent_of_the_moving_reference`: with the pack's n_i and g_i,
+  detrended prices, wages and trade shares are within 1% of the path at every year to year 25
+  where the uniqueness check (ADR 0022) holds.
+- `no_burn_in_against_the_moving_reference`: with frictions on, the gap over ticks 1 to 12 is no
+  larger than over ticks 109 to 120.
+- `pigl_shares_follow_the_boppart_closed_form` (1e-9 at each pop's income) and
+  `wage_step_at_natural_rate_is_pi_plus_g`.
+- `path_solver_at_zero_trends_equals_the_static_reference` (bitwise).
+
+**Out of F1:** the stage 5 wage state and pipelines carrying the trend through the run (Task F2)
+and i128 ledger money (Task F3, ADR 0106; it moves every golden once, in its own re-bless commit).
 
 ## Equilibrium nesting
 
@@ -1419,6 +1827,25 @@ texture fed from core columns.
   of the fixture runs and on random small provinces, at 1e-12, wherever it converges
   (`exact_fill_equals_converged_iteration`, `exact_fill_equals_converged_iteration_on_random_provinces`);
   S11 Proportional gives one fill ratio (`proportional_rationing_switch`); `split` in `local.rs`.
+- Transfers (ADR 0100, RFC 0308): the world transfer account ends every tick at zero and every
+  pop's transfer is its country's D_c split by income, over 120 ticks of the fixture with
+  nonzero shares (`transfers_net_to_zero_every_tick`, `p2_properties.rs`); on inputs without
+  transfers Off and FixedShares run bit for bit alike, state hashes included, and Off on inputs
+  with shares leaves the dynamic state of the balanced run unchanged
+  (`off_switch_reproduces_balanced_trade`); the observed path takes the year's share and fades
+  after 2024 (`observed_path_fades_after_2024`); the pack's shares sum to zero with missing
+  current accounts at 0 (`transfer_shares_spread_the_discrepancy_by_gdp`, pack crate); calibration
+  reports the column factors and the balance residual and has no r column
+- Foreign dividends (ADRs 0309, 0310): every positive payout of goods 1 to 6 sends round(f x
+  payout) to the world dividend account, which pays each host's total to its owners' pools and ends
+  every tick at zero, as the pools do; money is conserved over 24 ticks and the base point counts
+  foreign profits in the owners' income (`foreign_dividends_net_to_zero_worldwide`,
+  `p2_properties.rs`); AAMNE shares, caps, owners and fallbacks
+  (`shares_owners_donors_and_the_rest_of_the_world`, pack crate). Open: the calibration's stability
+  blocks (`block.rs`) still treat each country's pool as wholly its own enterprises' (no foreign
+  part, no inflow), to be revisited with the C6 recalibration.
+  (`r_g_removed_and_residual_reported`, `steady_state.rs`); the GE reference spends D_c
+  (`reference_spends_the_transfers`).
 - Unit per equation: Leontief binding input, normalized CES and the closed-form L* against
   numerical maximization, wage step and clip, rigidity on nominal cuts
   (`wage_rigidity_applies_to_nominal_cuts`), frictionless wage root, income split, rounding of payments. PIGL (`demand.rs`): pop
@@ -1460,6 +1887,19 @@ texture fed from core columns.
 - Benchmarks: `labour`, `produce`, `consume` (criterion, full pack).
 
 ## Open questions
+
+- ADR 0098 (built: SWIID Gini first, WPP national totals, Anguilla and Montserrat regions, the
+  Venezuela income rule, `econ::ras::balance`; the price level source and the dropped rate
+  rescale are ADRs 0282 and 0283, Price levels above). RFC 0282's other items:
+  - RAS targets: ruled by D6 (ADR 0286, Donor table balance above), which supersedes D3's rows
+    X_k + M_k - E_k - F_k (negative for 321 rows of 122 of the 133 imputed economies with BACI
+    trade). KRAS (D6 B) can follow if the economies that keep the donor's table matter.
+  - D4 (ADR 0284): the run's world price index keeps local goods; no code change. D5 (ADR
+    0285): the real GDP check reads NY.GDP.PCAP.PP.CD (Price levels above). D7 (ADR 0317): PWT
+    pl_da replaces pl_gdpo, and the check's 5% is reported, not enforced. D8 (ADR 0290): the
+    check compares totals on NY.GDP.MKTP.PP.CD and is enforced at 10% on the 31 economies whose
+    PWT level of 2000 is a benchmark. D9 (ADR 0289): the WDI fallback is current WDI's implied
+    level, not the archive PA.NUS.PPPC.RF.
 
 - ICIO 2025 edition industry list (whether B05 and B06 are split) is checked at fetch.
 - Gateways (Task 17): the spec rule above replaced two parts of the first text. k-medoids run on
