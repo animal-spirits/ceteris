@@ -196,7 +196,6 @@ pub fn deliver(w: &mut EconWorld) {
         }
     };
     let n_traded = acc.transit.len();
-    let ng = in_flight.len();
     // each traded good on its own ledger column, in parallel: its deliveries in buyer order,
     // then its largest, as one good after another
     {
@@ -206,11 +205,10 @@ pub fn deliver(w: &mut EconWorld) {
     w.scratch.stock.par_iter_mut().for_each(|stock| {
         let g = stock.good();
         let transit = acc.transit[g];
-        let rows = || due.chunks_exact(ng).enumerate().take(n_buyers);
+        let run = &due[g * n_buyers..(g + 1) * n_buyers];
         // the first largest delivery, as `largest` finds it
         let mut last: Option<(usize, f64)> = None;
-        for (b, row) in due.chunks_exact(ng).enumerate() {
-            let x = row[g];
+        for (b, &x) in run.iter().enumerate() {
             if x > 0.0 && last.is_none_or(|(_, v)| x > v) {
                 last = Some((b, x));
             }
@@ -221,9 +219,9 @@ pub fn deliver(w: &mut EconWorld) {
                 stock.destroy(account(b), x);
             }
         };
-        for (b, row) in rows() {
-            if row[g] > 0.0 && last.is_some_and(|(l, _)| l != b) {
-                let x = row[g].min(stock.goods(transit));
+        for (b, &x) in run.iter().enumerate() {
+            if x > 0.0 && last.is_some_and(|(l, _)| l != b) {
+                let x = x.min(stock.goods(transit));
                 receive(stock, b, x);
             }
         }
