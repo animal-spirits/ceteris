@@ -1,6 +1,6 @@
 # RFC 0335. Accept the P4 population ADRs and fix the P4 gate tolerances
 
-Status: draft
+Status: proposed
 Date: 2026-11-09
 Design sections: 6.1 to 6.3, 6.5, 15.4
 Release: 1.0, P4
@@ -62,7 +62,7 @@ Options:
 
 Recommendation: A, as the plan's default; B can follow #231 without code change.
 
-Decision: pending, Antonio.
+Decision: B, Antonio, 2026-11-09 (decision card; recommendation was A).
 Row: none new.
 
 ## Spec changes
