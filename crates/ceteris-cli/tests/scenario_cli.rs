@@ -292,3 +292,57 @@ fn explain_reference_reports_the_long_run_gap() {
     assert_eq!(refs.len(), 2, "{stdout}");
     assert!(refs[0].contains("world_price_index") && refs[0].contains("gap"));
 }
+
+#[test]
+fn fetch_recomputes_state_hashes() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    for args in [
+        vec![
+            "new",
+            f,
+            "--pack-hash",
+            "abc",
+            "--engine",
+            "test+1",
+            "--seeds",
+            "1,2",
+        ],
+        vec!["fork", f, "--from", "main", "--at", "3", "--id", "tariff"],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "tariff",
+            "--at",
+            "4",
+            "--kind",
+            "policy",
+            "--target",
+            "tariff.0.1.0",
+            "--value",
+            "0.25",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let hash = |seed| ceteris(&["share", f, "--branch", "tariff", "--seed", seed]).1;
+    let fetch = |h: &str| {
+        ceteris(&[
+            "fetch",
+            h.trim(),
+            "--scenario",
+            f,
+            "--ticks",
+            "6",
+            "--fixture",
+        ])
+    };
+    let (ok, a) = fetch(&hash("1"));
+    assert!(ok);
+    assert!(a.starts_with("tariff seed 1 tick 6 state "), "{a}");
+    assert_eq!(a, fetch(&hash("1")).1, "recomputation is deterministic");
+    assert_ne!(a, fetch(&hash("2")).1, "members differ");
+    assert!(!fetch("00").0, "unknown hash is an error");
+}

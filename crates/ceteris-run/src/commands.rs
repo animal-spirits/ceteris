@@ -105,9 +105,9 @@ pub const REGISTRY: &[Command] = &[
     ),
     cmd(
         "fetch",
-        "fetch HASH",
-        "recompute or pull a shared run",
-        false,
+        "fetch HASH --scenario FILE --ticks N --fixture|--pack DIR",
+        "recompute a shared run from its scenario file and print its state hash",
+        true,
     ),
 ];
 
