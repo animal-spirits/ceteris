@@ -1,0 +1,31 @@
+pack_hash = "UNPINNED"
+engine = "UNPINNED"
+start_year = 2000
+replay = "off"
+seeds = [0, 1, 2, 3, 4, 5, 6, 7]
+
+[params]
+
+[[branch]]
+id = "main"
+
+[[branch]]
+id = "tariff"
+parent = "main"
+fork_tick = 12
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "policy"
+target = "tariff.226.41.0"
+value = 0.25
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "policy"
+target = "tariff.226.41.1"
+value = 0.25
