@@ -209,4 +209,43 @@ mod tests {
             assert_ne!(a.state_hash, b.state_hash, "member {}", a.seed);
         }
     }
+
+    #[test]
+    fn crn_intervals_tighter_than_independent_on_fixture() {
+        use ceteris_run::effects::effect;
+
+        let inputs = Arc::new(small_world());
+        let log = [edit(3, EditKind::Policy, "tariff.0.1.0", 0.25)];
+        let k = 8;
+        let seeds: Vec<u64> = (0..k).collect();
+        let run_all = |log: &[Edit], seeds: &[u64]| {
+            run(
+                &inputs,
+                &base(),
+                &priors(),
+                log,
+                seeds.iter().copied(),
+                10,
+                outcomes,
+            )
+            .unwrap()
+        };
+        let baseline = run_all(&[], &seeds);
+        let crn = run_all(&log, &seeds);
+        let indep = run_all(&log, &(k..2 * k).collect::<Vec<_>>());
+        let col = |m: &[Member<Vec<(&'static str, f64)>>], i: usize| -> Vec<f64> {
+            m.iter().map(|m| m.outcome[i].1).collect()
+        };
+        for i in 0..2 {
+            let width = |m| {
+                let e = effect(&col(m, i), &col(&baseline, i), Seed(7)).interval;
+                e.hi - e.lo
+            };
+            let (c, d) = (width(&crn), width(&indep));
+            assert!(
+                c < d,
+                "outcome {i}: crn {c} not tighter than independent {d}"
+            );
+        }
+    }
 }
