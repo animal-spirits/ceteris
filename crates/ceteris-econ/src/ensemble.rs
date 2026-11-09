@@ -449,4 +449,36 @@ mod tests {
         let effects: Vec<f64> = rows.iter().map(|r| r[0]).collect();
         assert_eq!(blame(&effects)[0], 1, "{effects:?}");
     }
+
+    #[test]
+    fn zero_rate_hazards_leave_hashes_unchanged() {
+        use ceteris_run::commitments::{Commitment, Commitments};
+
+        let inputs = Arc::new(small_world());
+        let template = edit(0, EditKind::Policy, "tariff.0.1.0", 0.25);
+        let log_of = |rate: f64| {
+            let mut t = Commitments::default();
+            let c = Commitment {
+                id: 1,
+                offset: 4,
+                edit: template.clone(),
+                rate,
+            };
+            t.add(c).unwrap();
+            (0..10).flat_map(|k| t.due(Seed(3), k)).collect::<Vec<_>>()
+        };
+        let hash = |log: &[Edit]| {
+            run_member(&inputs, &base(), &priors(), log, 2, 10, |_| ())
+                .unwrap()
+                .state_hash
+        };
+        let by_user = [edit(4, EditKind::Policy, "tariff.0.1.0", 0.25)];
+        assert_eq!(hash(&log_of(0.0)), hash(&by_user));
+        assert_eq!(
+            hash(&log_of(1.0)),
+            hash(&[]),
+            "a cancelled commitment changes nothing"
+        );
+        assert_ne!(hash(&by_user), hash(&[]));
+    }
 }
