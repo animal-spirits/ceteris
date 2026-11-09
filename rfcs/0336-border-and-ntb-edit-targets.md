@@ -1,6 +1,6 @@
 # RFC 0336. Border and non-tariff edit targets for the showcase scenarios
 
-Status: draft
+Status: accepted
 Date: 2026-11-09
 Design sections: 14.2 (edit targets), 8 (trade frictions)
 Release: 1.0
@@ -28,7 +28,7 @@ Options:
 Recommendation: A, because the scenario is one edit and per-good control can be added later.
 
 Decision: B, Antonio, 2026-11-09 (decision card in the #409 thread).
-Row: to be taken when this PR writes the spec.
+Row: ADR 0336.
 
 ### D2. How is a pair-specific NTB edited?
 
@@ -43,7 +43,7 @@ Recommendation: A, because the benchmark NTB values are iceberg estimates and B 
 revenue and prices differently.
 
 Decision: A, Antonio, 2026-11-09 (decision card in the #409 thread).
-Row: to be taken when this PR writes the spec.
+Row: ADR 0337.
 
 ## Spec changes
 

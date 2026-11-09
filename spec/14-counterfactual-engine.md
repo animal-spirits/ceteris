@@ -16,9 +16,9 @@ Every experiment is a branch: a parent run plus an ordered list of timed edits, 
 
 | Type | Example | Timing |
 | --- | --- | --- |
-| Parameter | Trade elasticity 5 to 8; migration cost x 0.5 | Ex ante or ex post |
+| Parameter | Trade elasticity 5 to 8; migration cost x 0.5; border iceberg of one good (`trade.border_nu.<good>`, ADR 0336) | Ex ante or ex post |
 | State (god mode) | Transfer a province; add 1M pops; destroy a fleet; set literacy | Ex ante or ex post |
-| Policy (in-world) | The United States does not impose the 2018 steel and aluminium tariffs | Ex post (as a forced decision) |
+| Policy (in-world) | The United States does not impose the 2018 steel and aluminium tariffs; a pair's non-tariff barrier (`ntb.<importer>.<exporter>.<group>`, an iceberg factor, default 1, ADR 0337) | Ex post (as a forced decision) |
 | Event injection | Declare war; assassinate a ruler; discover gold in a province | Ex post |
 | Decision override | Force a state AI's choice at one decision point, or lock a law | Ex post |
 | Event or replay | Remove the run's pandemic; add a multi-year US Midwest drought | Ex ante or ex post |
