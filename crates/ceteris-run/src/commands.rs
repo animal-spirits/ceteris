@@ -104,6 +104,13 @@ pub const REGISTRY: &[Command] = &[
         true,
     ),
     cmd(
+        "serve",
+        "serve --scenario FILE --tables DIR --token-file F [--port P]",
+        "serve the tables read-only on a loopback socket (JSON-RPC, Arrow IPC)",
+        true,
+    ),
+    cmd("api", "api schema", "print the tables of the API", true),
+    cmd(
         "fetch",
         "fetch HASH --scenario FILE --ticks N --fixture|--pack DIR",
         "recompute a shared run from its scenario file and print its state hash",
