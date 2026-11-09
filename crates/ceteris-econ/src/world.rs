@@ -2403,24 +2403,32 @@ impl State for EconWorld {
         drop(span);
         let span = timing::span("end.leontief", timing::NONE);
         let sc = &self.scratch;
-        for e in 0..inp.n_enterprises() {
-            let province = inp.enterprises.province[e] as usize;
-            for k in 0..ng {
-                let traded = k < nt;
-                let want = lay.coef[e][k] * sc.produced[e];
-                let (used, before) = (sc.input_used[e * ng + k], sc.input_before[e * ng + k]);
-                let gap = (used - want).abs();
-                let tolerance = if traded {
-                    LEONTIEF_TOLERANCE * want.max(before)
-                } else {
-                    (LEONTIEF_TOLERANCE + CHAIN_STOP_TOLERANCE) * want.max(before)
-                        + market_drain_tolerance(ng) * sc.drawn[province * ng + k]
-                };
-                if gap.is_nan() || gap > tolerance {
-                    let detail = format!("enterprise {e} used {used} of good {k}, a Y = {want}");
-                    return fail("leontief", detail);
+        // the first failing enterprise in index order, as the serial scan reports it
+        let leontief = (0..inp.n_enterprises())
+            .into_par_iter()
+            .find_map_first(|e| {
+                let province = inp.enterprises.province[e] as usize;
+                for k in 0..ng {
+                    let traded = k < nt;
+                    let want = lay.coef[e][k] * sc.produced[e];
+                    let (used, before) = (sc.input_used[e * ng + k], sc.input_before[e * ng + k]);
+                    let gap = (used - want).abs();
+                    let tolerance = if traded {
+                        LEONTIEF_TOLERANCE * want.max(before)
+                    } else {
+                        (LEONTIEF_TOLERANCE + CHAIN_STOP_TOLERANCE) * want.max(before)
+                            + market_drain_tolerance(ng) * sc.drawn[province * ng + k]
+                    };
+                    if gap.is_nan() || gap > tolerance {
+                        return Some(format!(
+                            "enterprise {e} used {used} of good {k}, a Y = {want}"
+                        ));
+                    }
                 }
-            }
+                None
+            });
+        if let Some(detail) = leontief {
+            return fail("leontief", detail);
         }
 
         drop(span);
