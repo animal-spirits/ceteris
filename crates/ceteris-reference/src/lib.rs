@@ -7,6 +7,7 @@ pub mod io;
 pub mod linalg;
 pub mod model;
 pub mod output;
+pub mod path;
 pub mod ppml;
 pub mod sinkhorn;
 pub mod solve;
