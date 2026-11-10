@@ -17,6 +17,7 @@ pub mod lanes;
 pub mod local;
 pub mod pack;
 pub mod params;
+pub mod pop;
 pub mod production;
 pub mod synthetic;
 pub mod systems;
