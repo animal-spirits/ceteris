@@ -11,7 +11,8 @@ superset of what the study decided.
 
 | Date | Study | Outcome |
 | --- | --- | --- |
-| 2026-11-10 | [P5 E3: island money sink at x10](p5-e3-island-money-sink-2026-11-10.md) | RFC 0341 (draft) |
+| 2026-11-10 | [P5 E3: island money sink at x10](p5-e3-island-money-sink-2026-11-10.md) | RFC 0341 (accepted, spike no-go) |
+| 2026-11-10 | [P5 E3: spike of RFC 0341 D1 and D2](p5-e3-d1d2-spike-2026-11-10.md) | no-go; RFC 0341 not built |
 | 2026-11-10 | [P5 E2 spike: bounded price gap at zero output under the money anchor](p5-e2-zero-output-step-spike-2026-11-10.md) | ADR 0340, 0341 |
 | 2026-11-10 | [P5 price-anchor spike: money anchor and good-level term on the fixture](p5-price-anchor-spike-2026-11-10.md) | ADR 0338, 0339 |
 | 2026-11-04 | [Open substitute for WID 2000 wealth-bracket shares: candidate sources and licences, US DFA anchor, lognormal proxies from the income Gini](/mnt/project-files/research/wealth-shares-open-2026-11-04.md) | ADR 0311, 0312 |
