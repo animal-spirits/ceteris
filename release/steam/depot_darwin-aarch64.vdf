@@ -1,0 +1,10 @@
+"DepotBuild"
+{
+	"DepotID" "DEPOT_ID_MACOS_AARCH64"
+	"FileMapping"
+	{
+		"LocalPath" "darwin-aarch64/*"
+		"DepotPath" "."
+		"Recursive" "0"
+	}
+}

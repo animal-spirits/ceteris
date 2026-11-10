@@ -1,0 +1,10 @@
+"DepotBuild"
+{
+	"DepotID" "DEPOT_ID_LINUX_X86_64"
+	"FileMapping"
+	{
+		"LocalPath" "linux-x86_64/*"
+		"DepotPath" "."
+		"Recursive" "0"
+	}
+}
