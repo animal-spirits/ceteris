@@ -2,10 +2,14 @@
 //! `mu_move` of each origin cell reconsiders; destinations are drawn by
 //! `mu_od = exp((beta V_d - m_od)/nu) / sum_k exp((beta V_k - m_ok)/nu)`, with values `V` from one
 //! Caliendo-Dvorkin-Parro Bellman update per tick. Flows are integers by Hamilton apportionment.
-//! Kernel only: the pack costs, the cell state and tick system 227 are not built yet, so nothing
-//! calls this.
+//! [`Migration`] is the state and tick step of system 227 (`EconWorld::with_migration`; off by
+//! default). Shortcuts, tracked in #210: dense province-by-province costs instead of the sparse
+//! choice set, no pack costs (the caller supplies them), flow utility `ln wage`, no settlement
+//! classes (D3).
 
-use crate::admission::hamilton;
+use crate::admission::{Account, hamilton, ration};
+use crate::pop::{CELLS, Cohorts};
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 /// Log-sum-exp of `x`, stable against large magnitudes.
 fn logsumexp(x: &[f64]) -> f64 {
@@ -59,6 +63,178 @@ pub fn flows(
         .map(|&s| s * movers as f64)
         .collect();
     hamilton(&exact, &vec![movers; v.len()])
+}
+
+/// Migration state and parameters: costs, values and the per-country admission accounts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Migration {
+    /// Moving costs `m_od`, row-major over provinces, zero on the diagonal.
+    pub cost: Vec<f64>,
+    pub beta: f64,
+    pub nu: f64,
+    /// Monthly share of each cell that reconsiders.
+    pub mu_move: f64,
+    /// Diaspora preference in admissions.
+    pub chi: f64,
+    /// Share of rejected applicants who migrate irregularly.
+    pub z: f64,
+    /// Values `V` per province, carried between ticks.
+    pub v: Vec<f64>,
+    /// Admission cap and admissions this year, per destination country.
+    pub accounts: Vec<Account>,
+    /// Persons of origin country `i` settled in country `j` by migration, `i * n_countries + j`.
+    pub diaspora: Vec<u64>,
+}
+
+impl Migration {
+    pub fn new(cost: Vec<f64>, n_countries: usize, beta: f64, nu: f64, mu_move: f64) -> Self {
+        let n = (cost.len() as f64).sqrt() as usize;
+        assert_eq!(n * n, cost.len(), "square cost matrix");
+        Self {
+            cost,
+            beta,
+            nu,
+            mu_move,
+            chi: 0.0,
+            z: 0.0,
+            v: vec![0.0; n],
+            accounts: vec![Account::uncapped(); n_countries],
+            diaspora: vec![0; n_countries * n_countries],
+        }
+    }
+
+    /// One monthly step: updates `V` from `wage`, draws every origin cell's flows from the
+    /// pre-tick counts, rations cross-border applications per destination country, and moves
+    /// the admitted and irregular. Persons only change province: the total is conserved.
+    pub fn step(&mut self, cohorts: &mut Cohorts, wage: &[f64], country: &[usize], tick: u32) {
+        let n = self.v.len();
+        let nc = self.accounts.len();
+        let month = u64::from(tick % 12);
+        if month == 0 {
+            self.accounts.iter_mut().for_each(Account::new_year);
+        }
+        let utility: Vec<f64> = wage.iter().map(|&w| libm::log(w.max(1e-12))).collect();
+        self.v = update_values(&self.v, &utility, &self.cost, self.beta, self.nu);
+
+        // (origin province, cell, destination province, persons), in fixed iteration order
+        let mut domestic: Vec<(usize, usize, usize, u64)> = Vec::new();
+        let mut foreign: Vec<Vec<(usize, usize, usize, u64)>> = vec![Vec::new(); nc];
+        for o in 0..n {
+            for c in 0..CELLS {
+                let stock = cohorts.counts()[o * CELLS + c];
+                if stock == 0 {
+                    continue;
+                }
+                let f = flows(
+                    stock,
+                    self.mu_move,
+                    &self.v,
+                    &self.cost,
+                    o,
+                    self.beta,
+                    self.nu,
+                );
+                for (d, &k) in f.iter().enumerate().filter(|&(d, &k)| d != o && k > 0) {
+                    if country[d] == country[o] {
+                        domestic.push((o, c, d, k));
+                    } else {
+                        foreign[country[d]].push((o, c, d, k));
+                    }
+                }
+            }
+        }
+        let mut moves = domestic;
+        for (dc, apps) in foreign.iter().enumerate() {
+            if apps.is_empty() {
+                continue;
+            }
+            let a: Vec<u64> = apps.iter().map(|m| m.3).collect();
+            let share: Vec<f64> = apps
+                .iter()
+                .map(|m| {
+                    let stock = self.diaspora[country[m.0] * nc + dc] as f64;
+                    stock / (stock + 1.0)
+                })
+                .collect();
+            let room = self.accounts[dc].room(month);
+            let out = ration(&a, &share, room, self.chi, self.z);
+            self.accounts[dc].record(out.admitted.iter().sum());
+            for (i, &(o, c, d, _)) in apps.iter().enumerate() {
+                let k = out.admitted[i] + out.irregular[i];
+                if k > 0 {
+                    self.diaspora[country[o] * nc + dc] += k;
+                    moves.push((o, c, d, k));
+                }
+            }
+        }
+        let n_cells = cohorts.counts().len();
+        let mut next = cohorts.counts().to_vec();
+        for (o, c, d, k) in moves {
+            next[o * CELLS + c] -= k;
+            next[d * CELLS + c] += k;
+        }
+        debug_assert_eq!(next.len(), n_cells);
+        cohorts.replace_counts(next);
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        e.f64s(&self.cost);
+        e.f64s(&[self.beta, self.nu, self.mu_move, self.chi, self.z]);
+        e.f64s(&self.v);
+        let split = |x: u64| [x as u32, (x >> 32) as u32];
+        e.u32s(
+            &self
+                .accounts
+                .iter()
+                .flat_map(|a| split(a.cap))
+                .collect::<Vec<_>>(),
+        );
+        e.u32s(
+            &self
+                .accounts
+                .iter()
+                .flat_map(|a| split(a.used))
+                .collect::<Vec<_>>(),
+        );
+        e.u32s(
+            &self
+                .diaspora
+                .iter()
+                .flat_map(|&x| split(x))
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        let cost = d.f64s()?;
+        let k = d.f64s()?;
+        let v = d.f64s()?;
+        let join = |w: &[u32]| -> Vec<u64> {
+            w.chunks(2)
+                .map(|p| u64::from(p[0]) | u64::from(p[1]) << 32)
+                .collect()
+        };
+        let (cap, used) = (join(&d.u32s()?), join(&d.u32s()?));
+        let diaspora = join(&d.u32s()?);
+        if k.len() != 5 || cost.len() != v.len() * v.len() || cap.len() != used.len() {
+            return Err(DecodeError("migration section does not fit".into()));
+        }
+        Ok(Self {
+            cost,
+            beta: k[0],
+            nu: k[1],
+            mu_move: k[2],
+            chi: k[3],
+            z: k[4],
+            v,
+            accounts: cap
+                .iter()
+                .zip(&used)
+                .map(|(&cap, &used)| Account { cap, used })
+                .collect(),
+            diaspora,
+        })
+    }
 }
 
 #[cfg(test)]

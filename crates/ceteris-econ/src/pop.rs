@@ -63,6 +63,12 @@ impl Cohorts {
         &self.n
     }
 
+    /// Replaces all counts, same length; for system 227, which builds the next state aside.
+    pub(crate) fn replace_counts(&mut self, n: Vec<u64>) {
+        assert_eq!(n.len(), self.n.len());
+        self.n = n;
+    }
+
     pub fn total(&self) -> u64 {
         self.n.iter().sum()
     }
