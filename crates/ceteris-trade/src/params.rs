@@ -127,6 +127,9 @@ pub struct TradeParams {
     /// P45's start, the constant learning gain of Milani (2007), 0.0183 a quarter (DESIGN 17;
     /// owner approval 2026-10-31).
     pub storage_gain: f64,
+    /// ADR 0338 money-anchored price rule (trade SPEC, Money-anchored rule); `None` is the
+    /// aggregate rule as built, bit for bit.
+    pub anchor: Option<PriceAnchor>,
     /// P53 monthly adjustment rate of cross-border sourcing by theta class (ADR 0027), in
     /// (0, 1]. Each crossing's kernel moves toward its target in logs at this rate, so a
     /// permanent tariff change has the short-run elasticity rho theta in month one and theta
@@ -338,7 +341,32 @@ impl Default for TradeParams {
             speculation: vec![0.0; p2::N],
             convenience: vec![1.8, 13.0, 3.5, 0.0, 0.0, 3.5, 0.0, 0.0, 0.0, 0.0],
             storage_gain: 0.006,
+            anchor: None,
             rho: [1.0; N_CLASSES],
+        }
+    }
+}
+
+/// Gains of the money-anchored price rule (ADR 0338).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PriceAnchor {
+    /// P03a kappa_r of traded goods, divided by E_g = theta_g + 1 per good.
+    pub kappa_r_traded: f64,
+    /// P03a kappa_r of local goods, E_g = 1.
+    pub kappa_r_local: f64,
+    /// P178 good-level gain kappa_b.
+    pub kappa_b: f64,
+    /// P177 money-anchor gain kappa_m.
+    pub kappa_m: f64,
+}
+
+impl Default for PriceAnchor {
+    fn default() -> Self {
+        Self {
+            kappa_r_traded: 0.25,
+            kappa_r_local: 0.05,
+            kappa_b: 0.3,
+            kappa_m: 0.2,
         }
     }
 }

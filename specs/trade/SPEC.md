@@ -317,7 +317,7 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
 (`clip_ticks`, run export).
 
-**Money-anchored rule (ADR 0338; not built).** P5 Branch E1 replaces the aggregate
+**Money-anchored rule (ADR 0338; built as `TradeParams::anchor`, off by default).** P5 Branch E1 replaces the aggregate
 term of ADR 0090 with a money anchor and a good-level term. With l_o = (D_o + b_o - Q_o) / Q_eff,
 lbar_g the mean of l_o over the active origins of good g weighted by p_o (Q_o + D_o) / 2, lbar the
 same over all markets (one `fixed_sum` reduction per good per tick), I the world price index
@@ -331,7 +331,7 @@ dlnp_o = clip( a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar)
 a_o is kappa_r / E_g (P03a; E_g = theta_g + 1 traded, 1 local), kappa_b the good-level gain (P178), kappa_m the anchor gain (P177, redefined from kappa_n), I0 and M0 the values at
 t0 or at the last money edit. pi^e is not added: the level target carries the nominal mode. The x10 criterion stays a P5a
 gate item, carried by the E2 step at Q = 0 (ADR 0339, RFC 0286). The
-switch off reproduces the rule above bit for bit (`price_rule_off_equals_status_quo`). Spike
+switch off reproduces the rule above bit for bit (`price_rule_off_equals_status_quo`: the status-quo goldens). Fixture at P178 0.3, P177 0.2, kappa_r 0.25 traded and 0.05 local, no pi^e (`p5_price_anchor.rs`): a 5% money shock returns the index to within 1% of the new level at tick 9 (frictionless and default); the data state ends with V1 price 1.9e-9 frictionless and 2.5e-7 default, peak index 1.034 (tick 56 and 71), last-50-tick max |dlnp| 5e-11 and 2e-9; the as-built rule reaches 1.9e-6 and 5.2e-6. Pack data-state run pending (Mac). The reductions run serially in cell order. Spike
 numbers: `docs/research/p5-price-anchor-spike-2026-11-10.md`.
 
 **Competitive storage (ADR 0091)** replaces the stock rule for the storable commodities, goods 0,
@@ -470,7 +470,7 @@ fixture's eps:
 
 Limits are the first failing value on a 0.0005 grid (`ceteris calibrate stability` prints the rows from the fixture export).
 
-**Good-level gain kappa_b (P178, ADR 0338; derived, not yet measured on the fixture).** With the within-good term summing to zero (weights of lbar_g), the good-level term `kappa_b (lbar_g - lbar)` is a proportional controller on the good's relative price x_g: the gap falls with x_g at the across-goods elasticity E_b, so it is the (x, q) block above with kappa1 = kappa_b, kappa2 = 0, E = E_b and the same eta and eps. E_b is the household CES elasticity sigma (P06, 0.6) at most; inputs are Leontief, so E_b in [0.1, 0.6] by the household share. Spectral radius over E_b in {0.1, 0.3, 0.6}, eps in {0.90, 1.5, 2.61} and eta in {0.3, 1} (kappa_b grid 0.01):
+**Good-level gain kappa_b (P178, ADR 0338; derived; measured on the fixture at 0.3, Money-anchored rule above).** With the within-good term summing to zero (weights of lbar_g), the good-level term `kappa_b (lbar_g - lbar)` is a proportional controller on the good's relative price x_g: the gap falls with x_g at the across-goods elasticity E_b, so it is the (x, q) block above with kappa1 = kappa_b, kappa2 = 0, E = E_b and the same eta and eps. E_b is the household CES elasticity sigma (P06, 0.6) at most; inputs are Leontief, so E_b in [0.1, 0.6] by the household share. Spectral radius over E_b in {0.1, 0.3, 0.6}, eps in {0.90, 1.5, 2.61} and eta in {0.3, 1} (kappa_b grid 0.01):
 
 | kappa_b | 0.02 | 0.05 | 0.1 | 0.2 | 0.3 | 0.5 |
 |---|---|---|---|---|---|---|
