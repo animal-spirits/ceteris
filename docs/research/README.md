@@ -11,6 +11,7 @@ superset of what the study decided.
 
 | Date | Study | Outcome |
 | --- | --- | --- |
+| 2026-11-10 | [P5 E2 spike: bounded price gap at zero output under the money anchor](p5-e2-zero-output-step-spike-2026-11-10.md) | ADR 0340, 0341 |
 | 2026-11-10 | [P5 price-anchor spike: money anchor and good-level term on the fixture](p5-price-anchor-spike-2026-11-10.md) | ADR 0338, 0339 |
 | 2026-11-04 | [Open substitute for WID 2000 wealth-bracket shares: candidate sources and licences, US DFA anchor, lognormal proxies from the income Gini](/mnt/project-files/research/wealth-shares-open-2026-11-04.md) | ADR 0311, 0312 |
 | 2026-11-04 | Tick speed profile and brainstorm: 148 ms single-thread against 43 ms at 14 threads, serial sections and T2b per-good imbalance, 23 ranked ideas by determinism class; project files tick-speed-brainstorm-2026-11-04.md | RFC 0287; ADR 0294 to 0298 |

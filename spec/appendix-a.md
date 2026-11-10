@@ -327,4 +327,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0337 | [Pair-specific non-tariff barriers are an ntb.<importer>.<exporter>.<group> iceberg wedge](../rfcs/0336-border-and-ntb-edit-targets.md) | 8, 14.2 |
 | 0338 | [The P5 price rule anchors the level on money, -kappa_m (ln(I/I0) - ln(M/M0)), with a good-level term kappa_b (lbar_g - lbar), replacing ADR 0090's aggregate term](../rfcs/0338-money-anchored-price-rule.md) | 8.2, 12.2, 17 |
 | 0339 | [The x10 border shock stays a P5a gate criterion, carried by the E2 price step at Q = 0](../rfcs/0338-money-anchored-price-rule.md) | 8.2, 21.1 |
+| 0340 | [The anchored price rule's origin gap is the midpoint 2 (D + b - Q) / (D + b + Q), bounded at zero output, with no Q floor](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 17 |
+| 0341 | [The x10 border shock stays a P5a gate criterion, carried by task E3, the zero-output production trap, instead of the E2 price step (amends ADR 0339)](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 21.1 |
 <!-- rows:end -->
