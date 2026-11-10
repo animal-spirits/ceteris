@@ -112,6 +112,8 @@ province, education, age band, sex) reconsiders; destination shares by logit:
 
     mu_od = exp((beta V_d - m_od)/nu) / sum_k exp((beta V_k - m_ok)/nu)
 
+Moving costs from the pack: `m_od = c_d ln(1 + d_od / d_0) + c_b [country_o != country_d]`, `m_oo = 0`, `d_od` the great-circle distance between pack province centroids (`MovingCost`); `c_d`, `d_0`, `c_b` are the calibrated part of `m_od` (D1).
+
 `V` by the Caliendo-Dvorkin-Parro recursion, one update per tick. International admissions: if
 `sum_o A_od > Q_d / 12` the destination rations proportionally to `A_od` weighted by a
 diaspora preference `(1 + chi * stock_share_od)`; rejected applicants stay, and a fraction `z`
