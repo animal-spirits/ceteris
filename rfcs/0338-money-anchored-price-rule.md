@@ -60,7 +60,7 @@ Row: ADR 0339
   parameters, not finance.
 - Register (spec/17): P177 redefined, P178 added (ADR 0338).
 - x10 criterion: unchanged, carried by E2 (ADR 0339).
-- trade SPEC, Stability region: re-derive J2 for the good-level mode before the build (open).
+- trade SPEC, Stability region: good-level mode derived, kappa_b 0.3 (limit 0.63); measurement before the build open.
 - econ SPEC, Equations: pointer to the trade SPEC rule; wage rule unchanged.
 
 ## Before the build

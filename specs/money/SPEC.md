@@ -178,7 +178,7 @@ none changes after seeing results without an RFC (development laws).
 | P37 | Consumption propensity m, wealth correction lambda, target wealth ratio | spec/17 | calibrated to intertemporal MPCs |
 | P10 | Depreciation by asset class (range widened to 1 to 35%, ADR 0204) | PWT rates | data |
 | P50, P52 | sigma_g by theta class (range 2 to 11, ADR 0202); entry cost f_e | Zipf 1.05; OECD SDBS, Eurostat SBS | literature, data |
-| P03a, P03b, P177, P178 | kappa_r, kappa2, kappa_m, kappa_b (ADRs 0090, 0338) | 0.5, set in region, 0.2, derived | free, calibrated |
+| P03a, P03b, P177, P178 | kappa_r, kappa2, kappa_m, kappa_b (ADRs 0090, 0338) | 0.5, set in region, 0.2, 0.3 (derived) | free, calibrated |
 | P171, P172 | Housing supply elasticity map; investor purchase share | ADR 0040 | data, free |
 | P173, P174 | Public capital elasticity (centred 0.08); efficiency | ADR 0042 | literature, data |
 | P175, P176 | Restructuring options and CAC holdout reduction; reputation period | ADR 0043 | free, calibrated |
