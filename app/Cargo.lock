@@ -760,6 +760,7 @@ dependencies = [
  "ceteris-geo",
  "ceteris-run",
  "ceteris-trade",
+ "libm",
  "pollster",
  "serde",
  "serde_json",
