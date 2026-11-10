@@ -329,3 +329,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0336 | [Border and non-tariff edit targets for the showcase scenarios](0336-border-and-ntb-edit-targets.md) | accepted | ADR 0336, ADR 0337 |
 | 0337 | [Accept the P5 money and fiscal ADRs](0337-accept-p5-money-and-fiscal-adrs.md) | accepted | none yet |
 | 0338 | [Money-anchored split price rule (P5 Branch E1)](0338-money-anchored-price-rule.md) | proposed | none yet |
+| 0339 | [Bounded price gap at zero output under the money anchor (P5 Branch E2)](0339-bounded-gap-at-zero-output.md) | accepted | ADR 0340, ADR 0341 |

@@ -50,11 +50,16 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 ### Task E1: Split price rule with the money anchor (ADR 0338)
 
 - [x] Origin-market rule of ADR 0338 (trade SPEC, Money-anchored rule): `dlnp = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - kappa_m (ln(I/I0) - ln(M/M0)) - stock term)`, `a_o = kappa_r / E_g`; one reduction per good per tick with `fixed_sum`. Before the build: the Mac pack data-state run and the derived kappa_b (RFC 0338, Before the build; the fixture part is done, the Mac pack run is pending, and the rule stays off by default until it passes).
-- [ ] Tests: `price_rule_off_equals_status_quo` (goldens, unchanged); `fixture_steady_state_unchanged` and `nominal_shock_returns_within_30_ticks` (done, `p5_price_anchor.rs`); `x10_border_shock_converges_frictionless` is carried by E2 (ADR 0339). Re-bless, if the rule is switched on by default, in its own commit.
+- [ ] Tests: `price_rule_off_equals_status_quo` (goldens, unchanged); `fixture_steady_state_unchanged` and `nominal_shock_returns_within_30_ticks` (done, `p5_price_anchor.rs`); `x10_border_shock_converges_frictionless` is carried by E3 (ADRs 0339, 0341). Re-bless, if the rule is switched on by default, in its own commit.
 
 ### Task E2: Storage-on frictionless fix (RFC 0286)
 
 - [ ] Fix the storage-on misses on all 16 V1 starts and the fixture tests, as RFC 0286 records the screen and the tests any fix must pass. Failing test first: the recorded screen. Commit.
+- [x] Bounded origin gap of the anchored rule (ADR 0340, RFC 0339): l_o = 2 (D + b - Q) / (D + b + Q). Test `x10_border_shock_keeps_the_index_off_the_bound` (fails with the Q-floor gap). The RFC 0286 screen with the anchor and this gap runs on the Mac (pending).
+
+### Task E3: Zero-output production trap (ADR 0341)
+
+- [ ] Diagnose on the fixture why output dies province by province at x10 with the index held (spike: Q halves each tick while D > 0; hypothesis the Leontief zero state is absorbing, inputs ordered on constrained output, and the eta 1 labour flip). Spec and RFC before code. Carries `x10_border_shock_converges_frictionless` (ADR 0339).
 
 ## Branch A: `p5/balance-sheets` (spec/09 section 9.1, #213)
 
