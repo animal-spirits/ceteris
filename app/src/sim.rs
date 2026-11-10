@@ -2,12 +2,46 @@
 //! finished tick into a bounded run-ahead ring, which the frame loop drains without blocking.
 //! The thread waits when the ring is full and never draws.
 
+use std::any::Any;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{Receiver, sync_channel};
 
 use ceteris_core::sim::{Sim, State};
 
+/// Why the run stopped (ADR 0214). `kind` is the violated invariant, `panic`, or `load` when the
+/// world could not be built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Halt {
+    pub tick: u32,
+    pub kind: String,
+    pub detail: String,
+}
+
+impl Halt {
+    fn load(detail: String) -> Self {
+        Self {
+            tick: 0,
+            kind: "load".into(),
+            detail,
+        }
+    }
+
+    fn panic(tick: u32, payload: &(dyn Any + Send)) -> Self {
+        let detail = payload
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "non-string panic payload".into());
+        Self {
+            tick,
+            kind: "panic".into(),
+            detail,
+        }
+    }
+}
+
 pub struct Runner<V> {
-    views: Receiver<Result<V, String>>,
+    views: Receiver<Result<V, Halt>>,
 }
 
 impl<V: Send + 'static> Runner<V> {
@@ -26,7 +60,7 @@ impl<V: Send + 'static> Runner<V> {
             let mut sim = match build() {
                 Ok(sim) => sim,
                 Err(e) => {
-                    let _ = ring.send(Err(e));
+                    let _ = ring.send(Err(Halt::load(e)));
                     wake();
                     return;
                 }
@@ -43,25 +77,32 @@ impl<V: Send + 'static> Runner<V> {
                 wake();
                 let stepped = {
                     crate::zone!("step");
-                    sim.step()
+                    catch_unwind(AssertUnwindSafe(|| sim.step()))
                 };
-                if let Err(v) = stepped {
-                    let _ = ring.send(Err(format!("tick {}: {v}", sim.tick() + 1)));
-                    wake();
-                    return;
-                }
+                let halt = match stepped {
+                    Ok(Ok(())) => continue,
+                    Ok(Err(v)) => Halt {
+                        tick: v.tick,
+                        kind: v.invariant.into(),
+                        detail: v.detail,
+                    },
+                    Err(payload) => Halt::panic(sim.tick() + 1, payload.as_ref()),
+                };
+                let _ = ring.send(Err(halt));
+                wake();
+                return;
             }
         });
         Self { views }
     }
 
     /// The next published view, if one is ready. Never blocks.
-    pub fn next(&self) -> Option<Result<V, String>> {
+    pub fn next(&self) -> Option<Result<V, Halt>> {
         self.views.try_recv().ok()
     }
 
     /// Blocks for the next view; for tests and headless use.
-    pub fn wait(&self) -> Option<Result<V, String>> {
+    pub fn wait(&self) -> Option<Result<V, Halt>> {
         self.views.recv().ok()
     }
 }

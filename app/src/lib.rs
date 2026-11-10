@@ -11,6 +11,7 @@ pub mod econ;
 pub mod fan;
 pub mod fill;
 pub mod freight;
+pub mod halt;
 pub mod inspect;
 pub mod labels;
 pub mod map;

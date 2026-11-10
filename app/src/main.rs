@@ -13,11 +13,12 @@ use ceteris_app::commands::{self, Command};
 use ceteris_app::econ::{self, View};
 use ceteris_app::fill::Fill;
 use ceteris_app::freight::{Costs, Freight};
+use ceteris_app::halt;
 use ceteris_app::inspect;
 use ceteris_app::labels::Anchors;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes::{self, Mode};
-use ceteris_app::sim::Runner;
+use ceteris_app::sim::{Halt, Runner};
 use ceteris_app::web::{Counties, Provinces};
 use ceteris_app::zone;
 use ceteris_core::sim::Sim;
@@ -127,6 +128,9 @@ struct State {
     costs: Option<Costs>,
     bench: Option<Bench>,
     runner: Runner<View>,
+    pack: PathBuf,
+    /// The issue URL and bundle folder of the halt on show.
+    halt: Option<(String, PathBuf)>,
     clock: Clock,
     /// The presented tick's view and the next one, once published.
     current: Option<View>,
@@ -324,14 +328,35 @@ impl State {
         match self.runner.next() {
             Some(Ok(view)) if self.current.is_none() => self.current = Some(view),
             Some(Ok(view)) => self.next = Some(view),
-            Some(Err(e)) => {
+            Some(Err(halt)) => {
                 self.clock.playing = false;
-                app.set_error(e.into());
+                self.show_halt(app, &halt);
                 return false;
             }
             None => return false,
         }
         true
+    }
+
+    /// Shows the halt panel and writes the repro bundle (ADR 0214); a world that did not load
+    /// has no run to reproduce and gets the plain banner.
+    fn show_halt(&mut self, app: &AppWindow, halt: &Halt) {
+        if halt.kind == "load" {
+            app.set_error(halt.detail.clone().into());
+            return;
+        }
+        let folder = match halt::write_bundle(&halt::bundle_root(), &self.pack, halt) {
+            Ok(dir) => dir,
+            Err(e) => {
+                app.set_error(format!("could not write the repro bundle: {e}").into());
+                PathBuf::new()
+            }
+        };
+        app.set_halt_title(format!("Run halted at tick {}: {}", halt.tick, halt.kind).into());
+        app.set_halt_detail(halt.detail.clone().into());
+        app.set_halt_folder(folder.display().to_string().into());
+        app.set_halt_open(true);
+        self.halt = Some((halt::issue_url(halt), folder));
     }
 
     fn execute(&mut self, app: &AppWindow, cmd: Command) {
@@ -438,7 +463,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let freight = Freight::spawn(pack.clone(), provinces.id.clone(), waker(&app));
     let runner = Runner::spawn(
         4,
-        move || econ(&pack),
+        {
+            let pack = pack.clone();
+            move || econ(&pack)
+        },
         {
             let layout = OnceLock::new();
             move |sim| {
@@ -480,6 +508,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         costs: None,
         bench,
         runner,
+        pack,
+        halt: None,
         clock: Clock::default(),
         current: None,
         next: None,
@@ -604,6 +634,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let weak = app.as_weak();
     app.on_dismiss_error(move || {
         weak.upgrade().inspect(|a| a.set_error("".into()));
+    });
+
+    let weak = app.as_weak();
+    app.on_dismiss_halt(move || {
+        weak.upgrade().inspect(|a| a.set_halt_open(false));
+    });
+
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_open_bundle(move || {
+        let Some((_, dir)) = s.borrow().halt.clone() else {
+            return;
+        };
+        if let Err(e) = halt::open(&dir.display().to_string()) {
+            weak.upgrade().inspect(|a| a.set_error(e.into()));
+        }
+    });
+
+    let s = state.clone();
+    let weak = app.as_weak();
+    app.on_report_problem(move || {
+        let Some((url, dir)) = s.borrow().halt.clone() else {
+            return;
+        };
+        // The bundle is not uploaded: the folder opens beside the form to attach it from.
+        let opened = halt::open(&url).and_then(|()| halt::open(&dir.display().to_string()));
+        if let Err(e) = opened {
+            weak.upgrade().inspect(|a| a.set_error(e.into()));
+        }
     });
 
     let weak = app.as_weak();
