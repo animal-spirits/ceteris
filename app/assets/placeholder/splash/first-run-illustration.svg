@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+<rect width="640" height="360" fill="#EDEFEA"/><rect x="20" y="20" width="600" height="320" rx="6" fill="none" stroke="#1C292F" stroke-dasharray="8 6"/><path d="M320 120v100M280 180l40 40 40-40" fill="none" stroke="#1C292F" stroke-width="4"/><text x="320" y="290" text-anchor="middle" font-family="monospace" font-size="18" fill="#1C292F">drop source files here (placeholder)</text>
+</svg>
