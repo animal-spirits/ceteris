@@ -41,3 +41,7 @@ harness = false
 [[bench]]
 name = "goods"
 harness = false
+
+[[bench]]
+name = "pop"
+harness = false
