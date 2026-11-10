@@ -1,6 +1,6 @@
 # RFC 0341. Stop the island money sink at x10 (P5 Branch E3)
 
-Status: proposed
+Status: accepted, build after the E3 spike
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P03b, P178); trade SPEC Money-anchored rule; econ SPEC E2, E4
 Release: 1.0, P5a
@@ -37,8 +37,8 @@ Options:
 Recommendation: A, because the probe shows the term is needed, and scoping it to the anchor keeps
 the default mode and its goldens untouched.
 
-Decision: pending, Antonio.
-Row: none yet
+Decision: A, Antonio, 2026-11-10 (with D2 A; the spike sets kappa_s).
+Row: none yet, taken in the spec PR once the spike passes
 
 ### D2. What bounds the loss a province market charges its households?
 
@@ -56,8 +56,8 @@ Options:
 Recommendation: A, because it is the only option that stops paying for unsold output, which is
 where the money leaves.
 
-Decision: pending, Antonio.
-Row: none yet
+Decision: A, Antonio, 2026-11-10 (with D1 A; go if x10 survives 700 ticks with the index within 1.10).
+Row: none yet, taken in the spec PR once the spike passes
 
 ## Rejected in the E3 spike (2026-11-10)
 
