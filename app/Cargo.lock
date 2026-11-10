@@ -613,6 +613,7 @@ dependencies = [
  "cfg-if",
  "constant_time_eq",
  "cpufeatures",
+ "rayon-core",
 ]
 
 [[package]]
@@ -757,12 +758,14 @@ dependencies = [
  "ceteris-core",
  "ceteris-econ",
  "ceteris-geo",
+ "ceteris-run",
  "ceteris-trade",
  "pollster",
  "serde",
  "serde_json",
  "slint",
  "slint-build",
+ "tempfile",
  "tracy-client",
 ]
 
@@ -785,6 +788,7 @@ dependencies = [
  "arrow-schema",
  "ceteris-core",
  "ceteris-geo",
+ "ceteris-run",
  "ceteris-trade",
  "libm",
  "rayon",
@@ -799,6 +803,22 @@ dependencies = [
  "arrow-schema",
  "libm",
  "rayon",
+]
+
+[[package]]
+name = "ceteris-run"
+version = "0.0.1"
+dependencies = [
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
+ "blake3",
+ "ceteris-core",
+ "libm",
+ "serde",
+ "serde_json",
+ "toml",
+ "zstd",
 ]
 
 [[package]]
