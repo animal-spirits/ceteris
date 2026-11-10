@@ -332,4 +332,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0339 | [Bounded price gap at zero output under the money anchor (P5 Branch E2)](0339-bounded-gap-at-zero-output.md) | accepted | ADR 0340, ADR 0341 |
 | 0340 | [Drop usage statistics for 1.0](0340-drop-usage-statistics-for-1.0.md) | accepted | ADR 0342 |
 | 0341 | [Stop the island money sink at x10 (P5 Branch E3)](0341-island-money-sink.md) | accepted | none yet |
-| 0342 | [Anchor the price level on cells that trade (P5 Branch E3)](0342-anchor-index-over-traded-cells.md) | proposed | none yet |
+| 0342 | [Anchor the price level on cells that trade (P5 Branch E3)](0342-anchor-index-over-traded-cells.md) | accepted | none yet |
