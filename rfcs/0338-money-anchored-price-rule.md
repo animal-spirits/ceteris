@@ -35,7 +35,7 @@ Options:
 Recommendation: A, because it is the only variant that passes both the nominal test and the
 data state, and B and C fail on record.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-10.
 Row: none yet.
 
 ### D2. What happens to the x10 border-shock criterion of ADR 0090?
