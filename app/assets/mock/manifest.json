@@ -1,0 +1,1052 @@
+[
+ {
+  "section": "identity",
+  "file": "identity/app-icon-a-globe-fork.svg",
+  "label": "App icon A: globe and fork",
+  "status": "1.0 artist",
+  "note": "One run (white) splits at an edit into the edited path (magenta) and a fork (violet).",
+  "w": 1024,
+  "h": 1024,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/app-icon-b-ledger-meridian.svg",
+  "label": "App icon B: ledger meridian",
+  "status": "1.0 artist",
+  "note": "Light variant: the year line as a ruled ledger, one trunk and two branches.",
+  "w": 1024,
+  "h": 1024,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/app-icon-c-clock-dial.svg",
+  "label": "App icon C: clock dial",
+  "status": "1.0 artist",
+  "note": "The month clock: one hand for the run, two for edit and fork.",
+  "w": 1024,
+  "h": 1024,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/app-icon-mono-512.svg",
+  "label": "Monochrome icon",
+  "status": "1.0 mock",
+  "note": "Linux symbolic and tray. Dash marks the fork without colour.",
+  "w": 512,
+  "h": 512,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/favicon-32.svg",
+  "label": "Favicon",
+  "status": "1.0 mock",
+  "note": "Derived from icon A at 32 px.",
+  "w": 32,
+  "h": 32,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/wordmark.svg",
+  "label": "Wordmark",
+  "status": "1.0 artist",
+  "note": "Source Serif 4 Semibold (OFL) with the ledger mark.",
+  "w": 620,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/og-image-1200x630.svg",
+  "label": "Docs site / OG image",
+  "status": "1.0 mock",
+  "note": "1200x630 share card.",
+  "w": 1200,
+  "h": 630,
+  "icon": false
+ },
+ {
+  "section": "identity",
+  "file": "identity/dmg-background-660x400.svg",
+  "label": "DMG background",
+  "status": "1.0 low",
+  "note": "Icon slots dashed; the real icons sit on top.",
+  "w": 660,
+  "h": 400,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/splash-1600x900.svg",
+  "label": "Splash and load stages",
+  "status": "1.0 mock",
+  "note": "Night Atlas. Made-up coast, stepped bathymetry, hachures; the load stages from F4/P13 underneath.",
+  "w": 1600,
+  "h": 900,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/setup-illustration.svg",
+  "label": "First-run setup illustration",
+  "status": "1.0 mock",
+  "note": "Licensed sources fetched on your machine, checked, packed.",
+  "w": 480,
+  "h": 320,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/drop-zone.svg",
+  "label": "Manual-file drop zone",
+  "status": "1.0 mock",
+  "note": "",
+  "w": 320,
+  "h": 200,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/empty-no-branches.svg",
+  "label": "Empty state: no branches",
+  "status": "1.0 optional",
+  "note": "",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/empty-no-edits.svg",
+  "label": "Empty state: no edits",
+  "status": "1.0 optional",
+  "note": "",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/empty-no-ensemble.svg",
+  "label": "Empty state: no ensemble",
+  "status": "1.0 optional",
+  "note": "",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "first-run",
+  "file": "first-run/halt-illustration.svg",
+  "label": "Halt panel illustration",
+  "status": "1.0 mock",
+  "note": "ADR 0214: stopped clock and a stamp naming the tick.",
+  "w": 320,
+  "h": 200,
+  "icon": false
+ },
+ {
+  "section": "icons",
+  "file": "icons/pause.svg",
+  "label": "Pause",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/play.svg",
+  "label": "Play",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/speed-1.svg",
+  "label": "Speed 1",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/speed-2.svg",
+  "label": "Speed 2",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/speed-3.svg",
+  "label": "Speed 3",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/run-to-tick.svg",
+  "label": "Run to tick",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/seek.svg",
+  "label": "Seek",
+  "status": "1.0 mock",
+  "note": "Time controls",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/fork.svg",
+  "label": "Fork",
+  "status": "1.0 mock",
+  "note": "Branch and edit",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/edit-stamp.svg",
+  "label": "Edit stamp",
+  "status": "1.0 mock",
+  "note": "Branch and edit",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/branch-god.svg",
+  "label": "God-mode branch",
+  "status": "1.0 mock",
+  "note": "Branch and edit",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/seek-cursor.svg",
+  "label": "Seek cursor",
+  "status": "1.0 mock",
+  "note": "Branch and edit",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/hash-seal.svg",
+  "label": "Run hash seal",
+  "status": "1.0 mock",
+  "note": "Branch and edit",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/ok.svg",
+  "label": "OK",
+  "status": "1.0 mock",
+  "note": "State",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/warn.svg",
+  "label": "Warn",
+  "status": "1.0 mock",
+  "note": "State",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/crisis.svg",
+  "label": "Crisis",
+  "status": "1.0 mock",
+  "note": "State",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-political.svg",
+  "label": "Political",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-terrain.svg",
+  "label": "Terrain",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-output.svg",
+  "label": "Output",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-price.svg",
+  "label": "Price",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-cost.svg",
+  "label": "Cost",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-wage.svg",
+  "label": "Wage",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-unemployment.svg",
+  "label": "Unemployment",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-trade.svg",
+  "label": "Trade",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-freight.svg",
+  "label": "Freight",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-bottleneck.svg",
+  "label": "Bottleneck",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-edits.svg",
+  "label": "Edits",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/mode-diff.svg",
+  "label": "Diff",
+  "status": "1.0 mock",
+  "note": "Map modes (12 in app/src/modes.rs)",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/ensemble-fan.svg",
+  "label": "Ensemble fan",
+  "status": "1.0 mock",
+  "note": "Analysis",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/paired-effect.svg",
+  "label": "Paired effect",
+  "status": "1.0 mock",
+  "note": "Analysis",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/why.svg",
+  "label": "Why is this here",
+  "status": "1.0 mock",
+  "note": "Analysis",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/scenario.svg",
+  "label": "Scenario",
+  "status": "1.0 mock",
+  "note": "Navigation",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/lesson.svg",
+  "label": "Lesson",
+  "status": "1.0 mock",
+  "note": "Navigation",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/settings.svg",
+  "label": "Settings",
+  "status": "1.0 mock",
+  "note": "Navigation",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/language.svg",
+  "label": "Language",
+  "status": "1.0 mock",
+  "note": "Navigation",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/accessibility.svg",
+  "label": "Accessibility",
+  "status": "1.0 mock",
+  "note": "Navigation",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/fetch-source.svg",
+  "label": "Fetch source",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/disk.svg",
+  "label": "On disk",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/resume.svg",
+  "label": "Resume download",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/verify.svg",
+  "label": "Verify checksum",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/halt.svg",
+  "label": "Halt",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/report-problem.svg",
+  "label": "Report a problem",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/drop-zone.svg",
+  "label": "Drop zone",
+  "status": "1.0 mock",
+  "note": "Setup and halt",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/profiler.svg",
+  "label": "Tick profiler (dev)",
+  "status": "1.0 mock",
+  "note": "Developer builds",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "icons",
+  "file": "icons/hash-diff.svg",
+  "label": "Hash diff (dev)",
+  "status": "1.0 mock",
+  "note": "Developer builds",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "map",
+  "file": "map/compass-rose.svg",
+  "label": "Compass rose",
+  "status": "1.x needs RFC",
+  "note": "Atlas details; 2000s plain style.",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/scale-bar.svg",
+  "label": "Scale bar",
+  "status": "1.x needs RFC",
+  "note": "",
+  "w": 340,
+  "h": 70,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/decade-cartouche-2000s.svg",
+  "label": "Decade cartouche (2000s)",
+  "status": "1.x needs RFC",
+  "note": "Style steps with the simulated decade.",
+  "w": 320,
+  "h": 150,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/water-lining-hachures.svg",
+  "label": "Water lining and hachures",
+  "status": "1.x needs RFC",
+  "note": "Made-up coast. Lines fade offshore; hachure length follows slope.",
+  "w": 420,
+  "h": 240,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/bathymetry-bands.svg",
+  "label": "Bathymetry bands",
+  "status": "1.0 pipeline",
+  "note": "8 stepped bands.",
+  "w": 372,
+  "h": 86,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/ramp-sequential.svg",
+  "label": "Sequential ramp",
+  "status": "1.0 exists (code)",
+  "note": "Swatch; values live in ramps.rs.",
+  "w": 308,
+  "h": 48,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/ramp-diverging.svg",
+  "label": "Diverging ramp",
+  "status": "1.0 exists (code)",
+  "note": "Swatch; values live in ramps.rs.",
+  "w": 344,
+  "h": 48,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/map-pins.svg",
+  "label": "Edit pin, fork pin, selection edge",
+  "status": "1.0 mock",
+  "note": "",
+  "w": 160,
+  "h": 60,
+  "icon": false
+ },
+ {
+  "section": "map",
+  "file": "map/border-styles.svg",
+  "label": "Border styles",
+  "status": "1.0 pipeline",
+  "note": "ADR 0141 worldview variants as shader params.",
+  "w": 300,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "chrome",
+  "file": "chrome/state-chips.svg",
+  "label": "State chips",
+  "status": "1.0 mock",
+  "note": "Shape plus colour for CVD (ADR 0221).",
+  "w": 346,
+  "h": 82,
+  "icon": false
+ },
+ {
+  "section": "chrome",
+  "file": "chrome/panel-frame-light.svg",
+  "label": "Panel frame (light)",
+  "status": "1.0 exists (code)",
+  "note": "Flat, hairline rules.",
+  "w": 340,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "chrome",
+  "file": "chrome/panel-frame-night.svg",
+  "label": "Panel frame (Night Atlas)",
+  "status": "1.0 design",
+  "note": "Dark slate tokens are not in the repo yet.",
+  "w": 340,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "chrome",
+  "file": "chrome/event-notice.svg",
+  "label": "Event notice",
+  "status": "1.0 mock",
+  "note": "Paradox-style notice; severity rule at left.",
+  "w": 360,
+  "h": 150,
+  "icon": false
+ },
+ {
+  "section": "chrome",
+  "file": "chrome/cursors.svg",
+  "label": "Cursors: crosshair and pan",
+  "status": "1.0 mock",
+  "note": "",
+  "w": 72,
+  "h": 32,
+  "icon": false
+ },
+ {
+  "section": "seals",
+  "file": "seals/run-seal-guilloche.svg",
+  "label": "Run seal from hash",
+  "status": "1.0 pipeline",
+  "note": "Three hypotrochoids whose radii come from the run hash bytes. Same hash, same seal.",
+  "w": 240,
+  "h": 240,
+  "icon": false
+ },
+ {
+  "section": "seals",
+  "file": "seals/seal-round-blue.svg",
+  "label": "Round blue office seal",
+  "status": "1.0 mock",
+  "note": "Generic shape; no real seal reproduced (ADR 0141).",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "seals",
+  "file": "seals/seal-red-office.svg",
+  "label": "Square red office seal",
+  "status": "1.0 mock",
+  "note": "",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "seals",
+  "file": "seals/seal-personal.svg",
+  "label": "Personal seal",
+  "status": "1.0 mock",
+  "note": "Abstract strokes, not a real name.",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "seals",
+  "file": "seals/seat-letterhead-es.svg",
+  "label": "Seat letterhead (Spain chrome)",
+  "status": "1.0 mock",
+  "note": "ADR 0140 header and rule hexes; signature line for an Enact.",
+  "w": 420,
+  "h": 120,
+  "icon": false
+ },
+ {
+  "section": "flags",
+  "file": "flags/placeholder-horizontal.svg",
+  "label": "Flag placeholder, horizontal",
+  "status": "1.0 mock",
+  "note": "Real 2000 flags come from Commons per file.",
+  "w": 150,
+  "h": 100,
+  "icon": false
+ },
+ {
+  "section": "flags",
+  "file": "flags/placeholder-vertical.svg",
+  "label": "Flag placeholder, vertical",
+  "status": "1.0 mock",
+  "note": "Real 2000 flags come from Commons per file.",
+  "w": 150,
+  "h": 100,
+  "icon": false
+ },
+ {
+  "section": "flags",
+  "file": "flags/placeholder-unknown.svg",
+  "label": "Flag fallback (no source)",
+  "status": "1.0 mock",
+  "note": "Real 2000 flags come from Commons per file.",
+  "w": 150,
+  "h": 100,
+  "icon": false
+ },
+ {
+  "section": "emblems",
+  "file": "emblems/placeholder-emblem.svg",
+  "label": "Emblem placeholder",
+  "status": "1.0 mock",
+  "note": "Generic escutcheon in a laurel. Real emblems are the slowest sourcing item.",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "houses",
+  "file": "houses/house-per-pale.svg",
+  "label": "House arms: per pale",
+  "status": "2.0+ deferred",
+  "note": "Fictional arms from ordinaries only. Real houses would use their recorded blazon.",
+  "w": 120,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "houses",
+  "file": "houses/house-chevron.svg",
+  "label": "House arms: chevron",
+  "status": "2.0+ deferred",
+  "note": "Fictional arms from ordinaries only. Real houses would use their recorded blazon.",
+  "w": 120,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "houses",
+  "file": "houses/house-bend.svg",
+  "label": "House arms: bend with roundels",
+  "status": "2.0+ deferred",
+  "note": "Fictional arms from ordinaries only. Real houses would use their recorded blazon.",
+  "w": 120,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "scenarios",
+  "file": "scenarios/cover-accession.svg",
+  "label": "Scenario cover: Accession",
+  "status": "1.0 artist",
+  "note": "Map half could be a generated thumbnail from the pack.",
+  "w": 640,
+  "h": 360,
+  "icon": false
+ },
+ {
+  "section": "scenarios",
+  "file": "scenarios/cover-oil-shock.svg",
+  "label": "Scenario cover: Oil shock",
+  "status": "1.0 artist",
+  "note": "Map half could be a generated thumbnail from the pack.",
+  "w": 640,
+  "h": 360,
+  "icon": false
+ },
+ {
+  "section": "scenarios",
+  "file": "scenarios/cover-border-friction.svg",
+  "label": "Scenario cover: Border friction",
+  "status": "1.0 artist",
+  "note": "Map half could be a generated thumbnail from the pack.",
+  "w": 640,
+  "h": 360,
+  "icon": false
+ },
+ {
+  "section": "lessons",
+  "file": "lessons/lesson-diagram-tariff.svg",
+  "label": "Lesson frame diagram",
+  "status": "1.0 optional",
+  "note": "One 320 px diagram per lesson at most (ADR 0158).",
+  "w": 320,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/station-model.svg",
+  "label": "Station model",
+  "status": "1.0 idea 26-39",
+  "note": "Price, growth, rate change, capacity use in weather-plot positions; barbs = trade pressure.",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/trade-wind-rose.svg",
+  "label": "Trade wind rose",
+  "status": "1.0 idea 26-39",
+  "note": "Export value by bearing from the province; violet = top lanes.",
+  "w": 160,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/plimsoll-mark.svg",
+  "label": "Plimsoll mark",
+  "status": "1.0 idea 26-39",
+  "note": "Debt draft against the load lines for each season.",
+  "w": 160,
+  "h": 150,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/spirit-level.svg",
+  "label": "Spirit level",
+  "status": "1.0 idea 26-39",
+  "note": "Balance readout.",
+  "w": 240,
+  "h": 120,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/tree-rings.svg",
+  "label": "Tree rings",
+  "status": "1.0 idea 26-39",
+  "note": "One ring per simulated year; width = growth.",
+  "w": 180,
+  "h": 180,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/strip-chart.svg",
+  "label": "Strip-chart recorder",
+  "status": "1.0 idea 26-39",
+  "note": "",
+  "w": 320,
+  "h": 140,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/departures-board.svg",
+  "label": "Departures board",
+  "status": "1.0 idea 26-39",
+  "note": "Port panel: sailings from the freight model.",
+  "w": 380,
+  "h": 150,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/map-colophon.svg",
+  "label": "Map imprint / colophon",
+  "status": "1.0 idea 2",
+  "note": "Every export says what made it.",
+  "w": 300,
+  "h": 110,
+  "icon": false
+ },
+ {
+  "section": "instruments",
+  "file": "instruments/orrery-clocks.svg",
+  "label": "Orrery of system clocks",
+  "status": "1.0 idea 5",
+  "note": "Each subsystem's period as an orbit.",
+  "w": 200,
+  "h": 200,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-1.svg",
+  "label": "Cut-paper silhouette 1",
+  "status": "2.0+ deferred",
+  "note": "Generated profiles; no likeness of a real person.",
+  "w": 200,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-2.svg",
+  "label": "Cut-paper silhouette 2",
+  "status": "2.0+ deferred",
+  "note": "Generated profiles; no likeness of a real person.",
+  "w": 200,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-3.svg",
+  "label": "Cut-paper silhouette 3",
+  "status": "2.0+ deferred",
+  "note": "Generated profiles; no likeness of a real person.",
+  "w": 200,
+  "h": 160,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/signature.svg",
+  "label": "Generated signature",
+  "status": "2.0+ deferred",
+  "note": "Seeded stroke, unique per character.",
+  "w": 300,
+  "h": 90,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/dossier-stamp.svg",
+  "label": "Dossier stamp",
+  "status": "2.0+ deferred",
+  "note": "Intelligence file header.",
+  "w": 220,
+  "h": 100,
+  "icon": false
+ },
+ {
+  "section": "store",
+  "file": "store/capsule-main-616x353.svg",
+  "label": "Steam capsule, main",
+  "status": "deferred (P9)",
+  "note": "Outside the 1.0 exemption; sized for later.",
+  "w": 616,
+  "h": 353,
+  "icon": false
+ },
+ {
+  "section": "store",
+  "file": "store/capsule-header-460x215.svg",
+  "label": "Steam capsule, header",
+  "status": "deferred (P9)",
+  "note": "Outside the 1.0 exemption; sized for later.",
+  "w": 460,
+  "h": 215,
+  "icon": false
+ }
+]
