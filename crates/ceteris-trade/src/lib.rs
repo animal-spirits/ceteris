@@ -16,6 +16,6 @@ pub use market::{Markets, Rationing};
 pub use network::{
     BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, Wedges, equal_gateway_mass, kappa,
 };
-pub use params::{N_CLASSES, TradeParams};
+pub use params::{N_CLASSES, PriceAnchor, TradeParams};
 pub use pipeline::Pipeline;
 pub use source::{LaneInput, Sourced, arrivals, dispatch, source, source_lanes, source_weighted};

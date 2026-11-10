@@ -17,7 +17,9 @@ use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
 use ceteris_core::timing;
 use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source_weighted};
-use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
+use ceteris_trade::{
+    Goods, Kernel, Markets, Network, Pipeline, PriceAnchor, Rationing, Sourced, TradeParams,
+};
 
 use crate::calibration::Steady;
 use crate::demand::{
@@ -676,6 +678,9 @@ pub struct EconWorld {
     pub expected_inflation: f64,
     /// World price index I at the last update of `expected_inflation`.
     pub price_level: f64,
+    /// I0 and M0 of the money anchor (ADR 0338): the world price index and the money issued by
+    /// the mint at the first repricing; `None` until then and with the anchor off.
+    pub anchor_base: Option<(f64, f64)>,
     /// Employment L per enterprise, effective labour units.
     pub employment: Vec<f64>,
     /// Employed persons per pop.
@@ -752,6 +757,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         speculation,
         convenience,
         storage_gain,
+        anchor,
     } = trade;
     let mut e = Encoder::default();
     inputs.digest().iter().for_each(|&b| e.u8(b));
@@ -798,6 +804,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(speculation);
     e.f64s(convenience);
     e.f64(*storage_gain);
+    // off, the status quo's digest
+    if let Some(a) = anchor {
+        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
+    }
     // instant adjustment is the same dynamics at any class rate
     if trade.partial_adjustment() {
         e.f64s(rho);
@@ -1388,6 +1398,7 @@ impl EconWorld {
             wage_clip_ticks: vec![0; np],
             expected_inflation: 0.0,
             price_level: 0.0,
+            anchor_base: None,
             employment: inp.enterprises.l0.clone(),
             employed,
             income: vec![0.0; n_pops],
@@ -1602,6 +1613,11 @@ impl EconWorld {
             }
         }
         num / den
+    }
+
+    /// Money issued by the mint, numeraire units (the M of the money anchor, ADR 0338).
+    pub fn money_issued(&self) -> f64 {
+        -to_numeraire_wide(self.ledger.money_wide(self.layout.accounts.mint))
     }
 
     /// The adaptive expectation of ADR 0019, after T4: pi^e <- pi^e + g (ln(I_t / I_{t-1}) -
@@ -2121,6 +2137,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
         speculation,
         convenience,
         storage_gain,
+        anchor,
     } = trade;
     e.f64s(theta);
     e.count(theta_class.len());
@@ -2150,9 +2167,17 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
     e.f64s(bulk_sea);
     e.f64s(bulk_port);
     e.f64s(rho);
+    // the snapshot is restored into a world with the same setting, so off writes nothing
+    if let Some(a) = anchor {
+        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
+    }
 }
 
-fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeError> {
+fn decode_trade(
+    d: &mut Decoder,
+    goods: &Goods,
+    anchored: bool,
+) -> Result<TradeParams, DecodeError> {
     let theta = d.f64s()?;
     let theta_class = (0..d.count()?).map(|_| d.u8()).collect::<Result<_, _>>()?;
     let [
@@ -2202,6 +2227,18 @@ fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeErr
         speculation,
         convenience,
         storage_gain,
+        anchor: if anchored {
+            let [kappa_r_traded, kappa_r_local, kappa_b, kappa_m] =
+                decode_array(d, "price anchor")?;
+            Some(PriceAnchor {
+                kappa_r_traded,
+                kappa_r_local,
+                kappa_b,
+                kappa_m,
+            })
+        } else {
+            None
+        },
     };
     trade.check_goods().map_err(DecodeError)?;
     Ok(trade)
@@ -2246,6 +2283,12 @@ impl Encode for EconWorld {
             e.f64s(column);
         }
         e.f64s(&[self.expected_inflation, self.price_level]);
+        if self.trade.anchor.is_some() {
+            match self.anchor_base {
+                Some((i0, m0)) => e.f64s(&[i0, m0]),
+                None => e.f64s(&[]),
+            }
+        }
         e.u32s(&self.wage_clip_ticks);
         // the lagged crossings are state; under instant adjustment there are none
         if self.trade.partial_adjustment() {
@@ -2557,7 +2600,7 @@ impl State for EconWorld {
                 (self.params.drift, self.params.drift_half_life),
             ),
         )?;
-        let trade = decode_trade(d, &self.inputs.goods)?;
+        let trade = decode_trade(d, &self.inputs.goods, self.trade.anchor.is_some())?;
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d, &self.inputs.goods)?;
         let pipeline = Pipeline::decode(d, ng)?;
@@ -2576,6 +2619,15 @@ impl State for EconWorld {
             price_index,
         ]: [Vec<f64>; 8] = columns.try_into().expect("eight columns");
         let expectation = d.f64s()?;
+        let anchor_base = if trade.anchor.is_some() {
+            match d.f64s()?.as_slice() {
+                [] => None,
+                &[i0, m0] => Some((i0, m0)),
+                _ => return Err(DecodeError("anchor base".into())),
+            }
+        } else {
+            None
+        };
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
@@ -2640,6 +2692,7 @@ impl State for EconWorld {
             wage_clip_ticks,
             expected_inflation: expectation[0],
             price_level: expectation[1],
+            anchor_base,
             employment,
             employed,
             income,

@@ -49,8 +49,8 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ### Task E1: Split price rule with the money anchor (ADR 0338)
 
-- [ ] Origin-market rule of ADR 0338 (trade SPEC, Money-anchored rule): `dlnp = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - kappa_m (ln(I/I0) - ln(M/M0)) - stock term)`, `a_o = kappa_r / E_g`; one reduction per good per tick with `fixed_sum`. Before the build: the Mac pack data-state run and the derived kappa_b (RFC 0338, Before the build).
-- [ ] Failing tests: `price_rule_off_equals_status_quo`; `x10_border_shock_converges_frictionless` (the P5 criterion above); `fixture_steady_state_unchanged`. Re-bless in its own commit.
+- [x] Origin-market rule of ADR 0338 (trade SPEC, Money-anchored rule): `dlnp = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - kappa_m (ln(I/I0) - ln(M/M0)) - stock term)`, `a_o = kappa_r / E_g`; one reduction per good per tick with `fixed_sum`. Before the build: the Mac pack data-state run and the derived kappa_b (RFC 0338, Before the build; the fixture part is done, the Mac pack run is pending, and the rule stays off by default until it passes).
+- [ ] Tests: `price_rule_off_equals_status_quo` (goldens, unchanged); `fixture_steady_state_unchanged` and `nominal_shock_returns_within_30_ticks` (done, `p5_price_anchor.rs`); `x10_border_shock_converges_frictionless` is carried by E2 (ADR 0339). Re-bless, if the rule is switched on by default, in its own commit.
 
 ### Task E2: Storage-on frictionless fix (RFC 0286)
 
