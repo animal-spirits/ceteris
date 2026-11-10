@@ -325,4 +325,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0335 | [P4 gate tolerances for UN 2000-2010 fixed before any run](../rfcs/0335-accept-p4-population-adrs-and-gate-tolerances.md) | 6.2, 21.1 |
 | 0336 | [Border friction is edited per good: trade.border_nu.<good> replaces that good's border iceberg](../rfcs/0336-border-and-ntb-edit-targets.md) | 8, 14.2 |
 | 0337 | [Pair-specific non-tariff barriers are an ntb.<importer>.<exporter>.<group> iceberg wedge](../rfcs/0336-border-and-ntb-edit-targets.md) | 8, 14.2 |
+| 0338 | [The P5 price rule anchors the level on money, -kappa_m (ln(I/I0) - ln(M/M0)), with a good-level term kappa_b (lbar_g - lbar), replacing ADR 0090's aggregate term](../rfcs/0338-money-anchored-price-rule.md) | 8.2, 12.2, 17 |
+| 0339 | [The x10 border shock stays a P5a gate criterion, carried by the E2 price step at Q = 0](../rfcs/0338-money-anchored-price-rule.md) | 8.2, 21.1 |
 <!-- rows:end -->

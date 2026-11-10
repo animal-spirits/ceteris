@@ -317,7 +317,7 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
 (`clip_ticks`, run export).
 
-**Money-anchored rule (proposed, RFC 0338; not built).** P5 Branch E1 replaces the aggregate
+**Money-anchored rule (ADR 0338; not built).** P5 Branch E1 replaces the aggregate
 term of ADR 0090 with a money anchor and a good-level term. With l_o = (D_o + b_o - Q_o) / Q_eff,
 lbar_g the mean of l_o over the active origins of good g weighted by p_o (Q_o + D_o) / 2, lbar the
 same over all markets (one `fixed_sum` reduction per good per tick), I the world price index
@@ -328,9 +328,9 @@ dlnp_o = clip( a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar)
                - kappa_m (ln(I / I0) - ln(M / M0)) - kappa2 stock term,  -c_max_g, c_max_g )
 ```
 
-a_o is kappa_r / E_g (P03a; E_g = theta_g + 1 traded, 1 local), kappa_b the good-level gain (code
-on acceptance), kappa_m the anchor gain (P177, redefined from kappa_n), I0 and M0 the values at
-t0 or at the last money edit. pi^e is not added: the level target carries the nominal mode. The
+a_o is kappa_r / E_g (P03a; E_g = theta_g + 1 traded, 1 local), kappa_b the good-level gain (P178), kappa_m the anchor gain (P177, redefined from kappa_n), I0 and M0 the values at
+t0 or at the last money edit. pi^e is not added: the level target carries the nominal mode. The x10 criterion stays a P5a
+gate item, carried by the E2 step at Q = 0 (ADR 0339, RFC 0286). The
 switch off reproduces the rule above bit for bit (`price_rule_off_equals_status_quo`). Spike
 numbers: `docs/research/p5-price-anchor-spike-2026-11-10.md`.
 

@@ -1,6 +1,6 @@
 # RFC 0338. Money-anchored split price rule (P5 Branch E1)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P03a, P03b, P143, P177); trade SPEC Origin market, Stability region; econ SPEC Equations
 Release: 1.0, P5a
@@ -36,7 +36,7 @@ Recommendation: A, because it is the only variant that passes both the nominal t
 data state, and B and C fail on record.
 
 Decision: A, Antonio, 2026-11-10.
-Row: none yet.
+Row: ADR 0338
 
 ### D2. What happens to the x10 border-shock criterion of ADR 0090?
 
@@ -50,14 +50,16 @@ Options:
 Recommendation: A, because the criterion was fixed in advance (development laws) and the spike
 shows the anchor is not what fails it.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-10.
+Row: ADR 0339
 
 ## Spec changes
 
 - trade SPEC, Origin market: proposed money-anchored rule (added as a draft subsection marked
-  "proposed, RFC 0338; not built"); rows and codes taken on acceptance (kappa_m redefines P177
-  kappa_n; kappa_b takes a new P code, one of the 60 free behavioural parameters, not finance).
+  "proposed, RFC 0338; not built"); ADR 0338; kappa_m redefines P177 kappa_n; kappa_b is P178, one of the 60 free behavioural
+  parameters, not finance.
+- Register (spec/17): P177 redefined, P178 added (ADR 0338).
+- x10 criterion: unchanged, carried by E2 (ADR 0339).
 - trade SPEC, Stability region: re-derive J2 for the good-level mode before the build (open).
 - econ SPEC, Equations: pointer to the trade SPEC rule; wage rule unchanged.
 
