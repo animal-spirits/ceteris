@@ -329,4 +329,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0339 | [The x10 border shock stays a P5a gate criterion, carried by the E2 price step at Q = 0](../rfcs/0338-money-anchored-price-rule.md) | 8.2, 21.1 |
 | 0340 | [The anchored price rule's origin gap is the midpoint 2 (D + b - Q) / (D + b + Q), bounded at zero output, with no Q floor](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 17 |
 | 0341 | [The x10 border shock stays a P5a gate criterion, carried by task E3, the zero-output production trap, instead of the E2 price step (amends ADR 0339)](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 21.1 |
+| 0342 | [Drop usage statistics for 1.0: no collector and no opt-in counters (supersedes the usage statistics part of ADR 0214)](../rfcs/0340-drop-usage-statistics-for-1.0.md) | 4.6, 14.3, 20 |
 <!-- rows:end -->

@@ -231,7 +231,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0211 | [Run files and compatibility across versions](0211-run-files-and-compatibility-across-versions.md) | accepted in part (RFC 0318) | ADR 0211 |
 | 0212 | [History retention and the disk budget](0212-history-retention-and-disk-budget.md) | accepted (RFC 0318) | ADR 0212 |
 | 0213 | [Data licences in shared runs and exports](0213-data-licences-in-shared-runs-and-exports.md) | proposed | ADR 0213 |
-| 0214 | [Failure handling, repro bundles and opt-in usage statistics](0214-failure-handling-repro-bundles-and-usage-stats.md) | proposed | ADR 0214 |
+| 0214 | [Failure handling, repro bundles and opt-in usage statistics](0214-failure-handling-repro-bundles-and-usage-stats.md) | proposed (usage statistics superseded by RFC 0340) | ADR 0214 |
 | 0215 | [First-run data fetch and the source archive](0215-first-run-data-fetch-and-source-archive.md) | proposed | ADR 0215 |
 | 0216 | [Platforms, signing, updates and minimum hardware](0216-platforms-signing-updates-and-minimum-hardware.md) | proposed | ADR 0216 |
 | 0217 | [Pack profiles as prebuilt and user-built, and the credits screen](0217-pack-profiles-as-prebuilt-and-user-built-and-credits.md) | proposed | ADR 0217 |
@@ -330,3 +330,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0337 | [Accept the P5 money and fiscal ADRs](0337-accept-p5-money-and-fiscal-adrs.md) | accepted | none yet |
 | 0338 | [Money-anchored split price rule (P5 Branch E1)](0338-money-anchored-price-rule.md) | proposed | none yet |
 | 0339 | [Bounded price gap at zero output under the money anchor (P5 Branch E2)](0339-bounded-gap-at-zero-output.md) | accepted | ADR 0340, ADR 0341 |
+| 0340 | [Drop usage statistics for 1.0](0340-drop-usage-statistics-for-1.0.md) | accepted | ADR 0342 |
