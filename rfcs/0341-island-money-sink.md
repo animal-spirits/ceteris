@@ -79,3 +79,11 @@ island's loss from its pops to its enterprises, but the loss cap and write-off d
 enterprise's overdraft, so the same money leaves and the world dies at the same ticks. The ntb 3
 residual is the same mechanism: an unbounded external deficit financed by whichever account may
 go negative. Nothing here is built; the next step is a new decision on bounding that deficit.
+
+## Follow-up decision (2026-11-10)
+
+Asked how to bound the island's deficit (credit limit on spending, a balance-of-payments price,
+or dropping x10 from the P5a gate), Antonio chose the credit limit and asked that the record say
+the model should have both: a credit limit and a balance-of-payments price. The price closure
+is left to a later RFC. The credit-limit spike is no-go too (study, Follow-up section): it closes
+the money leak but the mainland still dies by t140. No row; nothing built.
