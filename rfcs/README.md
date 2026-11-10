@@ -42,7 +42,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0022 | [Uniqueness check, static nesting gate and direct estimation](0022-uniqueness-nesting-gate-and-direct-estimation.md) | accepted | ADR 0022 |
 | 0023 | [Trade elasticity classes](0023-trade-elasticity-classes.md) | accepted | ADR 0023 |
 | 0024 | [Ensemble lanes](0024-ensemble-lanes.md) | proposed | ADR 0024 |
-| 0025 | [Sequence-space HANK reference for the macro block](0025-sequence-space-hank-reference.md) | proposed | ADR 0025 |
+| 0025 | [Sequence-space HANK reference for the macro block](0025-sequence-space-hank-reference.md) | accepted (RFC 0337) | ADR 0025 |
 | 0026 | [Firm heterogeneity within cells](0026-firm-heterogeneity-within-cells.md) | proposed | ADR 0026 |
 | 0027 | [Short- and long-run trade elasticities](0027-short-and-long-run-trade-elasticities.md) | proposed | ADR 0027 |
 | 0028 | [Oil and gas market structure](0028-oil-and-gas-market-structure.md) | proposed | ADR 0028 |
@@ -57,10 +57,10 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0037 | [Regional climate emulation, tipping elements and sea level](0037-regional-climate-tipping-and-sea-level.md) | proposed | ADR 0037 |
 | 0038 | [Water, air pollution and land use](0038-water-air-and-land.md) | proposed | ADR 0038 |
 | 0039 | [Automation and AI as a scenario lane](0039-automation-and-ai-scenario-lane.md) | proposed | ADR 0039 |
-| 0040 | [Housing supply elasticity and mortgage underwriting](0040-housing-supply-and-mortgage-underwriting.md) | proposed | ADR 0040 |
+| 0040 | [Housing supply elasticity and mortgage underwriting](0040-housing-supply-and-mortgage-underwriting.md) | accepted (RFC 0337) | ADR 0040 |
 | 0041 | [Multinational production and profit shifting](0041-multinational-production-and-profit-shifting.md) | proposed | ADR 0041 |
-| 0042 | [Public capital and fiscal dynamics](0042-public-capital-and-fiscal-dynamics.md) | proposed | ADR 0042 |
-| 0043 | [Sovereign debt restructuring and creditor structure](0043-sovereign-debt-restructuring-and-creditors.md) | proposed | ADR 0043 |
+| 0042 | [Public capital and fiscal dynamics](0042-public-capital-and-fiscal-dynamics.md) | accepted (RFC 0337) | ADR 0042 |
+| 0043 | [Sovereign debt restructuring and creditor structure](0043-sovereign-debt-restructuring-and-creditors.md) | accepted (RFC 0337) | ADR 0043 |
 | 0044 | [Pensions, life-cycle saving and wealth dynamics](0044-pensions-life-cycle-and-wealth-dynamics.md) | proposed | ADR 0044 |
 | 0045 | [Economic statecraft: critical minerals, export controls and sanctions evasion](0045-economic-statecraft-critical-minerals-and-sanctions-evasion.md) | proposed | ADR 0045 |
 | 0046 | [Political economy channels: populism, information, polarization and institutions](0046-political-economy-channels.md) | proposed | ADR 0046 |
@@ -97,7 +97,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0077 | [Heat, wildfire, fisheries and deforestation frontiers](0077-heat-wildfire-fisheries-and-deforestation.md) | proposed | ADR 0077 |
 | 0078 | [Chronicle narration, storyteller camera and legends](0078-chronicle-narration-storyteller-camera-and-legends.md) | proposed | ADR 0078 |
 | 0079 | [Red-team branches and surrogate sliders](0079-red-team-branches-and-surrogate-sliders.md) | proposed | ADR 0079 |
-| 0080 | [Polycrisis coupling audit](0080-polycrisis-coupling-audit.md) | proposed | ADR 0080 |
+| 0080 | [Polycrisis coupling audit](0080-polycrisis-coupling-audit.md) | accepted (RFC 0337) | ADR 0080 |
 | 0081 | [Seasonality and weather-driven demand](0081-seasonality-and-weather-driven-demand.md) | proposed | ADR 0081 |
 | 0082 | [Cohort experience effects on expectations and risk-taking](0082-cohort-experience-effects.md) | proposed | ADR 0082 |
 | 0083 | [Policy implementation and diffusion](0083-policy-implementation-and-diffusion.md) | proposed | ADR 0083 |
@@ -107,7 +107,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0087 | [Synthetic observables for validation](0087-synthetic-observables.md) | proposed | ADR 0087 |
 | 0088 | [Fully native app with Slint panels](0088-native-app-slint.md) | accepted | ADR 0088 |
 | 0089 | [Data-state steady-state calibration and natural-rate unemployment](0089-data-state-steady-state-calibration.md) | accepted | ADR 0089 |
-| 0090 | [Split price rule and inventory gain](0090-split-price-rule-and-inventory-gain.md) | proposed | ADR 0090 |
+| 0090 | [Split price rule and inventory gain](0090-split-price-rule-and-inventory-gain.md) | accepted (RFC 0337) | ADR 0090 |
 | 0091 | [Competitive storage in P2 with per-market price expectations](0091-competitive-storage-in-p2.md) | proposed | ADR 0091 |
 | 0092 | [Trade frictions consistent with theta](0092-trade-frictions-consistent-with-theta.md) | accepted (RFC 0312) | ADR 0092 |
 | 0093 | [Numerical robustness of the P2 core](0093-numerical-robustness-of-the-p2-core.md) | accepted (RFC 0312) | ADR 0093 |
@@ -185,7 +185,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0165 | [Mobilization and the war economy](0165-mobilization-and-the-war-economy.md) | proposed | ADR 0165 |
 | 0166 | [War interaction surfaces and modding](0166-war-interaction-surfaces-and-modding.md) | proposed | ADR 0166 |
 | 0167 | [Endemic disease: HIV/AIDS, malaria and tuberculosis](0167-endemic-disease.md) | accepted (RFC 0335) | ADR 0167 |
-| 0168 | [Cross-border services trade and tourism](0168-cross-border-services-and-tourism.md) | proposed | ADR 0168 |
+| 0168 | [Cross-border services trade and tourism](0168-cross-border-services-and-tourism.md) | accepted (RFC 0337) | ADR 0168 |
 | 0169 | [Hours worked and short-time work](0169-hours-and-short-time-work.md) | proposed | ADR 0169 |
 | 0170 | [Enterprise input stocks and inventory investment](0170-enterprise-input-stocks.md) | proposed | ADR 0170 |
 | 0171 | [State-owned enterprise behaviour](0171-state-owned-enterprise-behaviour.md) | proposed | ADR 0171 |
@@ -193,7 +193,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0173 | [Consumer durables](0173-consumer-durables.md) | proposed | ADR 0173 |
 | 0174 | [Temporary labour migration](0174-temporary-labour-migration.md) | proposed | ADR 0174 |
 | 0175 | [Offshore household wealth, bargaining coverage and space weather](0175-offshore-wealth-bargaining-space-weather.md) | proposed | ADR 0175 |
-| 0176 | [Endogenous neutral rate in the policy rule](0176-endogenous-neutral-rate.md) | proposed | ADR 0176 |
+| 0176 | [Endogenous neutral rate in the policy rule](0176-endogenous-neutral-rate.md) | accepted (RFC 0337) | ADR 0176 |
 | 0177 | [Natural unemployment rate from matching](0177-emergent-natural-unemployment.md) | proposed | ADR 0177 |
 | 0178 | [Endogenous exploration and reserves](0178-endogenous-exploration-and-reserves.md) | proposed | ADR 0178 |
 | 0179 | [Research effort and its direction](0179-research-effort-and-direction.md) | proposed | ADR 0179 |
@@ -219,9 +219,9 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0199 | [Loyalty belief state and coup-proofing](0199-loyalty-belief-state-and-coup-proofing.md) | proposed | ADR 0199 |
 | 0200 | [Selection on trade links](0200-selection-on-trade-links.md) | accepted | ADR 0200 |
 | 0201 | [Ownership cells from OECD Analytical AMNE](0201-ownership-cells-from-oecd-amne.md) | proposed | ADR 0201 |
-| 0202 | [Firm entry, exit and the zombie band](0202-firm-entry-exit-and-zombie-band.md) | proposed | ADR 0202 |
+| 0202 | [Firm entry, exit and the zombie band](0202-firm-entry-exit-and-zombie-band.md) | accepted (RFC 0337) | ADR 0202 |
 | 0203 | [Named firms: view, granular opt-in, political actors](0203-named-firms-view-granular-and-political.md) | proposed | ADR 0203 |
-| 0204 | [Capital formation by asset class and time to build](0204-capital-formation-and-time-to-build.md) | proposed | ADR 0204 |
+| 0204 | [Capital formation by asset class and time to build](0204-capital-formation-and-time-to-build.md) | accepted (RFC 0337) | ADR 0204 |
 | 0205 | [Construction capacity as a priced bottleneck, with priority](0205-construction-capacity-and-priority.md) | proposed | ADR 0205 |
 | 0206 | [Named projects, the 2000 pipeline and the project tape](0206-named-projects-pipeline-and-project-tape.md) | proposed | ADR 0206 |
 | 0207 | [The 1.0 phase plan and scope rule](0207-1.0-phase-plan-and-scope.md) | accepted | ADR 0207 |
@@ -327,3 +327,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0332 | [Status of ADR 0108 (estimation windows and long-run lanes)](0332-status-of-adr-0108-estimation-windows.md) | accepted | none new |
 | 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | accepted | ADR 0335 |
 | 0336 | [Border and non-tariff edit targets for the showcase scenarios](0336-border-and-ntb-edit-targets.md) | accepted | ADR 0336, ADR 0337 |
+| 0337 | [Accept the P5 money and fiscal ADRs](0337-accept-p5-money-and-fiscal-adrs.md) | accepted | none yet |
