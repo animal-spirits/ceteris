@@ -36,6 +36,31 @@ impl Command {
     }
 }
 
+/// Branch verbs (W1). They carry arguments, so they sit beside the keymap and are reached
+/// from buttons and the palette by registry name.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BranchCommand<'a> {
+    /// Fork the current branch at the cursor tick under the given id.
+    Fork(&'a str),
+    Switch(&'a str),
+    Seek(u32),
+    RunTo(u32),
+}
+
+impl<'a> BranchCommand<'a> {
+    pub fn parse(line: &'a str) -> Option<Self> {
+        let (verb, arg) = line.split_once(' ')?;
+        let arg = arg.trim();
+        match verb {
+            "branch.fork" if !arg.is_empty() => Some(Self::Fork(arg)),
+            "branch.switch" if !arg.is_empty() => Some(Self::Switch(arg)),
+            "time.seek" => arg.parse().ok().map(Self::Seek),
+            "time.run-to" => arg.parse().ok().map(Self::RunTo),
+            _ => None,
+        }
+    }
+}
+
 /// The standard keymap's Time and Map groups (0188), as chords in `chord`'s form.
 pub const STANDARD: &[(&str, Command)] = &[
     ("Space", Command::TogglePause),
@@ -117,6 +142,20 @@ mod tests {
         assert_eq!(lookup(&chord(" ", false, false, false)), None);
         assert_eq!(lookup("Space"), Some(Command::TogglePause));
         assert_eq!(by_name("time.speed 4"), Some(Command::Speed(4)));
+    }
+
+    #[test]
+    fn branch_verbs_parse_by_registry_name() {
+        assert_eq!(
+            BranchCommand::parse("branch.fork tariff"),
+            Some(BranchCommand::Fork("tariff"))
+        );
+        assert_eq!(
+            BranchCommand::parse("time.seek 12"),
+            Some(BranchCommand::Seek(12))
+        );
+        assert_eq!(BranchCommand::parse("time.run-to x"), None);
+        assert_eq!(BranchCommand::parse("branch.fork "), None);
     }
 
     #[test]

@@ -476,6 +476,7 @@ dependencies = [
  "proptest",
  "reqwest",
  "rstar",
+ "rustix",
  "serde_json",
  "sha2",
  "tempfile",

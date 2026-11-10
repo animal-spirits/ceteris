@@ -817,7 +817,7 @@ fn good_kernel(
         let importer = usize::from(net.gateway_country[b]);
         let exporter = usize::from(net.gateway_country[a]);
         let duty = 1.0 + f64::from(wedges.rate(importer, exporter, group));
-        let loss = tau * border_tau;
+        let loss = tau * border_tau * f64::from(wedges.ntb_factor(importer, exporter, group));
         Crossing {
             col: l.to,
             k: mass[a] * mass[b] * k_of(loss * duty),
@@ -1343,6 +1343,17 @@ mod tests {
             e.k,
             f64::powf(tau * 1.3 * (1.0 + f64::from(0.25f32)), -p.theta[4])
         ));
+
+        // an NTB on 0 -> 1 manufactured multiplies the loss and leaves the duty alone
+        let mut with_ntb = wedges.clone();
+        with_ntb.ntb = vec![1.0; wedges.tariff.len()];
+        with_ntb.ntb[at(1, 0, 1)] = 1.5;
+        let n = Kernel::build(&net, &W, &with_ntb, &p)
+            .good(4)
+            .crossings
+            .row(0)[0];
+        assert!(close(n.inv_loss, 1.0 / (tau * 1.3 * 1.5)));
+        assert_eq!(n.inv_duty, e.inv_duty);
 
         // same leg, good 0 (primary, group 0)
         let e = k.good(0).crossings.row(0)[0];
