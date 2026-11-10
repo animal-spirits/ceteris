@@ -1,6 +1,6 @@
 # 0214. Failure handling, repro bundles and opt-in usage statistics
 
-Status: proposed (owner chose opt-in usage statistics, 2026-10-28)
+Status: proposed (owner chose opt-in usage statistics, 2026-10-28; usage statistics superseded for 1.0 by ADR 0342, RFC 0340)
 Date: 2026-10-28
 Design sections: 4.5, 4.6, 14.3, 15.7 (fuzz testing), 20; ADRs 0088, 0120, 0197, 0211
 Phase: App shell (halt panel, logging), P3 (repro bundles), R (usage statistics)
@@ -37,7 +37,8 @@ writes the same bundle. Bundles are never uploaded; the user attaches one to an 
 **Logging.** `tracing` to a rotating file in the app's log folder, `info` by default, `debug` from
 a setting. No run contents are logged.
 
-**Usage statistics.**
+**Usage statistics.** Superseded for 1.0 by ADR 0342 (RFC 0340): no collector, no counters, no install ID,
+no settings panel, no request to a project host. Original text kept below as history.
 - Off by default; asked once at first launch; can be switched off at any time.
 - A settings panel shows the exact payload before anything is sent.
 - Contents: app version, macOS version, chip and memory class, counts of modes, panels and
@@ -50,18 +51,17 @@ a setting. No run contents are logged.
 ## Migration
 
 - App shell: halt type, `catch_unwind`, halt panel, logging. P3: bundles and `ceteris replay`.
-- R: statistics client, settings panel, privacy notice, collector.
+- R: statistics client, settings panel, privacy notice, collector (dropped, ADR 0342).
 
 ## Tests
 
 - A planted invariant violation halts with the right record, and the app forks from the last
   snapshot.
 - A bundle replays to the same halt on Linux and macOS.
-- With statistics off, the app makes no request to the collector (network test).
-- The payload contains no field outside the list above (schema test).
+- Dropped (ADR 0342): no-request-to-collector network test and payload schema test.
 
 ## Consequences
 
 Every failure a user sees is reproducible by the maintainer, which few simulators can offer.
-Usage statistics need a small hosted service and a privacy notice, the project's first
-infrastructure.
+Usage statistics would have needed a small hosted service and a privacy notice, the project's first
+infrastructure; 1.0 drops them (ADR 0342).
