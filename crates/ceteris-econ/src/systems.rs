@@ -95,6 +95,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         }),
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(220, "demography", |w, ctx| demography(w, ctx.tick)),
+        def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -1820,6 +1821,24 @@ pub fn demography(w: &mut EconWorld, tick: u32) {
     let flows = d.step(cohorts, tick);
     let expected = i128::from(before) + i128::from(flows.births) - i128::from(flows.deaths);
     w.pop_drift = i64::try_from(i128::from(cohorts.total()) - expected).unwrap_or(i64::MAX);
+}
+
+/// System 227 (`specs/pop/SPEC.md`): internal migration and capped international admissions on
+/// the cohort cells. A no-op when population or migration is off. Moves persons between
+/// provinces only, so any change of the total is a conservation breach.
+pub fn migration(w: &mut EconWorld, tick: u32) {
+    let (Some((_, cohorts)), Some(m)) = (&mut w.pop, &mut w.migration) else {
+        return;
+    };
+    let country: Vec<usize> = (0..w.inputs.n_provinces())
+        .map(|i| w.inputs.country_of(i))
+        .collect();
+    let before = cohorts.total();
+    m.step(cohorts, &w.wage, &country, tick);
+    let drift = i128::from(cohorts.total()) - i128::from(before);
+    w.pop_drift = w
+        .pop_drift
+        .saturating_add(i64::try_from(drift).unwrap_or(i64::MAX));
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
