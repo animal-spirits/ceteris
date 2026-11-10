@@ -731,6 +731,10 @@ price index of 1.19 over 1,200 ticks.
 Employment moves toward the target: L_t = L_{t-1} + eta (L* - L_{t-1}) (P41). If sum_g L_t
 exceeds L^s_i, all are scaled down pro rata.
 
+**Price rule, P5 (proposed, RFC 0338; not built).** The money-anchored rule of the trade SPEC
+(Origin market) replaces ADR 0090's aggregate term; the wage rule below is unchanged and follows
+the anchored price level through pi^e and the labour gap.
+
 **Wages.** Excess labour demand x_i = (sum_g L*_ig - L^s_i) / L^s_i, read against the natural
 rate u*_i (below), expected inflation pi^e (trade SPEC, Origin market; ADR 0019):
 

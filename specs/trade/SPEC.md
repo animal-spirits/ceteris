@@ -317,6 +317,23 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
 (`clip_ticks`, run export).
 
+**Money-anchored rule (proposed, RFC 0338; not built).** P5 Branch E1 replaces the aggregate
+term of ADR 0090 with a money anchor and a good-level term. With l_o = (D_o + b_o - Q_o) / Q_eff,
+lbar_g the mean of l_o over the active origins of good g weighted by p_o (Q_o + D_o) / 2, lbar the
+same over all markets (one `fixed_sum` reduction per good per tick), I the world price index
+above and M the money issued by the mint:
+
+```
+dlnp_o = clip( a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar)
+               - kappa_m (ln(I / I0) - ln(M / M0)) - kappa2 stock term,  -c_max_g, c_max_g )
+```
+
+a_o is kappa_r / E_g (P03a; E_g = theta_g + 1 traded, 1 local), kappa_b the good-level gain (code
+on acceptance), kappa_m the anchor gain (P177, redefined from kappa_n), I0 and M0 the values at
+t0 or at the last money edit. pi^e is not added: the level target carries the nominal mode. The
+switch off reproduces the rule above bit for bit (`price_rule_off_equals_status_quo`). Spike
+numbers: `docs/research/p5-price-anchor-spike-2026-11-10.md`.
+
 **Competitive storage (ADR 0091)** replaces the stock rule for the storable commodities, goods 0,
 1, 2 and 5 (`goods::STORABLE`), where it is on (`TradeParams::stores`: psi or delta positive;
 a positive delta with psi 0, a stock that spoils with nothing targeting it, the slowly growing

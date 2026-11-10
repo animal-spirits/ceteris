@@ -328,3 +328,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | accepted | ADR 0335 |
 | 0336 | [Border and non-tariff edit targets for the showcase scenarios](0336-border-and-ntb-edit-targets.md) | accepted | ADR 0336, ADR 0337 |
 | 0337 | [Accept the P5 money and fiscal ADRs](0337-accept-p5-money-and-fiscal-adrs.md) | accepted | none yet |
+| 0338 | [Money-anchored split price rule (P5 Branch E1)](0338-money-anchored-price-rule.md) | proposed | none yet |
