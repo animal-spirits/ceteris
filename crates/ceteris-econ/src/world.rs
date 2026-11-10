@@ -3093,10 +3093,11 @@ mod tests {
         let w = world();
         let (np, nc) = (w.inputs().n_provinces(), w.inputs().n_countries());
         let (d, c) = crate::pop::toy(np);
-        let cost = (0..np * np)
+        let cost: Vec<f64> = (0..np * np)
             .map(|k| if k / np == k % np { 0.0 } else { 0.5 })
             .collect();
-        let mut m = Migration::new(cost, nc, 0.95, 0.7, 0.02);
+        let choice = crate::migration::ChoiceSet::dense(&cost, np);
+        let mut m = Migration::new(choice, nc, 0.95, 0.7, 0.02);
         m.chi = 1.0;
         m.z = 0.3;
         m.accounts.iter_mut().for_each(|a| a.cap = cap);
