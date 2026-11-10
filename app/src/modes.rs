@@ -124,7 +124,7 @@ pub fn fmt(x: f64) -> String {
         }
         if x < 0.0 { format!("-{out}") } else { out }
     } else {
-        let decimals = (2 - x.abs().log10().floor() as i32).max(0) as usize;
+        let decimals = (2 - libm::log10(x.abs()).floor() as i32).max(0) as usize;
         format!("{x:.decimals$}")
     }
 }

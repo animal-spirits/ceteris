@@ -59,7 +59,7 @@ impl Bench {
         camera.zoom_at(
             viewport,
             [viewport[0] / 2.0, viewport[1] / 2.0],
-            (t * 6.0).exp2(),
+            libm::exp2(t * 6.0),
         );
         if self.frame.is_multiple_of(RECOLOUR) {
             let start = Instant::now();

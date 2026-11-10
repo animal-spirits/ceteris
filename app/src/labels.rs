@@ -34,7 +34,7 @@ fn centroids(fill: &Fill) -> Vec<(f64, [f64; 2])> {
         let [a, b, c] = t.map(|i| fill.xy[i as usize].map(f64::from));
         let mid = [0, 1].map(|k| (a[k] + b[k] + c[k]) / 3.0);
         let flat = ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])).abs() / 2.0;
-        let area = flat * (std::f64::consts::TAU * lon_lat(mid)[1].cos()).powi(2);
+        let area = flat * (std::f64::consts::TAU * libm::cos(lon_lat(mid)[1])).powi(2);
         let f = &mut acc[fill.feature[t[0] as usize] as usize];
         f.0 += area;
         f.1 = [0, 1].map(|k| f.1[k] + area * mid[k]);
