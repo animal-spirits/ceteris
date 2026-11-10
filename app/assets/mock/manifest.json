@@ -590,6 +590,486 @@
   "icon": true
  },
  {
+  "section": "goods",
+  "file": "goods/a01.svg",
+  "label": "A01 Crops and livestock",
+  "status": "1.0 mock",
+  "note": "Agriculture",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/a02.svg",
+  "label": "A02 Forestry",
+  "status": "1.0 mock",
+  "note": "Agriculture",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/a03.svg",
+  "label": "A03 Fishing",
+  "status": "1.0 mock",
+  "note": "Agriculture",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/b05.svg",
+  "label": "B05 Coal",
+  "status": "1.0 mock",
+  "note": "Coal and other mining",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/b06.svg",
+  "label": "B06 Crude oil and gas",
+  "status": "1.0 mock",
+  "note": "Crude oil, gas and refined fuels",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/b07.svg",
+  "label": "B07 Metal ores",
+  "status": "1.0 mock",
+  "note": "Coal and other mining",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/b08.svg",
+  "label": "B08 Quarrying",
+  "status": "1.0 mock",
+  "note": "Coal and other mining",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/b09.svg",
+  "label": "B09 Mining support",
+  "status": "1.0 mock",
+  "note": "Crude oil, gas and refined fuels",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c10t12.svg",
+  "label": "C10T12 Food, drink, tobacco",
+  "status": "1.0 mock",
+  "note": "Food",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c13t15.svg",
+  "label": "C13T15 Textiles and clothing",
+  "status": "1.0 mock",
+  "note": "Light manufacturing",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c16.svg",
+  "label": "C16 Wood products",
+  "status": "1.0 mock",
+  "note": "Light manufacturing",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c17-18.svg",
+  "label": "C17_18 Paper and printing",
+  "status": "1.0 mock",
+  "note": "Light manufacturing",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c19.svg",
+  "label": "C19 Refined fuels",
+  "status": "1.0 mock",
+  "note": "Crude oil, gas and refined fuels",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c20.svg",
+  "label": "C20 Chemicals",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c21.svg",
+  "label": "C21 Pharmaceuticals",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c22.svg",
+  "label": "C22 Rubber and plastics",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c23.svg",
+  "label": "C23 Glass, cement, ceramics",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c24.svg",
+  "label": "C24 Basic metals",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c25.svg",
+  "label": "C25 Metal products",
+  "status": "1.0 mock",
+  "note": "Chemicals and metals",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c26.svg",
+  "label": "C26 Electronics",
+  "status": "1.0 mock",
+  "note": "Machinery, electronics and vehicles",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c27.svg",
+  "label": "C27 Electrical equipment",
+  "status": "1.0 mock",
+  "note": "Machinery, electronics and vehicles",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c28.svg",
+  "label": "C28 Machinery",
+  "status": "1.0 mock",
+  "note": "Machinery, electronics and vehicles",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c29.svg",
+  "label": "C29 Motor vehicles",
+  "status": "1.0 mock",
+  "note": "Machinery, electronics and vehicles",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c30.svg",
+  "label": "C30 Ships, rail, aircraft",
+  "status": "1.0 mock",
+  "note": "Machinery, electronics and vehicles",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/c31t33.svg",
+  "label": "C31T33 Furniture and other",
+  "status": "1.0 mock",
+  "note": "Light manufacturing",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/d.svg",
+  "label": "D Electricity",
+  "status": "1.0 mock",
+  "note": "Electricity and utilities",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/e.svg",
+  "label": "E Water and waste",
+  "status": "1.0 mock",
+  "note": "Electricity and utilities",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/f.svg",
+  "label": "F Construction",
+  "status": "1.0 mock",
+  "note": "Construction",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/g.svg",
+  "label": "G Wholesale and retail",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/h49.svg",
+  "label": "H49 Land transport",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/h50.svg",
+  "label": "H50 Water transport",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/h51.svg",
+  "label": "H51 Air transport",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/h52.svg",
+  "label": "H52 Warehousing",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/h53.svg",
+  "label": "H53 Post and courier",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/i.svg",
+  "label": "I Hotels and restaurants",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/j58t60.svg",
+  "label": "J58T60 Publishing and broadcast",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/j61.svg",
+  "label": "J61 Telecoms",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/j62-63.svg",
+  "label": "J62_63 IT and information",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/k.svg",
+  "label": "K Finance and insurance",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/l.svg",
+  "label": "L Real estate",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/m.svg",
+  "label": "M Professional services",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/n.svg",
+  "label": "N Administrative services",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/o.svg",
+  "label": "O Public administration",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/p.svg",
+  "label": "P Education",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/q.svg",
+  "label": "Q Health and social work",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/r.svg",
+  "label": "R Arts and recreation",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/s.svg",
+  "label": "S Other services",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
+  "section": "goods",
+  "file": "goods/t.svg",
+  "label": "T Household employers",
+  "status": "1.0 mock",
+  "note": "Services",
+  "w": 24,
+  "h": 24,
+  "icon": true
+ },
+ {
   "section": "map",
   "file": "map/compass-rose.svg",
   "label": "Compass rose",
@@ -982,31 +1462,81 @@
  {
   "section": "characters",
   "file": "characters/silhouette-1.svg",
-  "label": "Cut-paper silhouette 1",
+  "label": "Silhouette: Minister of Finance",
   "status": "2.0+ deferred",
-  "note": "Generated profiles; no likeness of a real person.",
+  "note": "Generated: hair crop, suit; cut-paper detail. No likeness of a real person.",
   "w": 200,
-  "h": 160,
+  "h": 220,
   "icon": false
  },
  {
   "section": "characters",
   "file": "characters/silhouette-2.svg",
-  "label": "Cut-paper silhouette 2",
+  "label": "Silhouette: Central bank governor",
   "status": "2.0+ deferred",
-  "note": "Generated profiles; no likeness of a real person.",
+  "note": "Generated: hair bun, scarf; cut-paper detail. No likeness of a real person.",
   "w": 200,
-  "h": 160,
+  "h": 220,
   "icon": false
  },
  {
   "section": "characters",
   "file": "characters/silhouette-3.svg",
-  "label": "Cut-paper silhouette 3",
+  "label": "Silhouette: Trade negotiator",
   "status": "2.0+ deferred",
-  "note": "Generated profiles; no likeness of a real person.",
+  "note": "Generated: hair receding, open; cut-paper detail. No likeness of a real person.",
   "w": 200,
-  "h": 160,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-4.svg",
+  "label": "Silhouette: Union leader",
+  "status": "2.0+ deferred",
+  "note": "Generated: hair curls, turtleneck; cut-paper detail. No likeness of a real person.",
+  "w": 200,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-5.svg",
+  "label": "Silhouette: Planning official",
+  "status": "2.0+ deferred",
+  "note": "Generated: hair long, cardigan; cut-paper detail. No likeness of a real person.",
+  "w": 200,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-6.svg",
+  "label": "Silhouette: Chief of staff",
+  "status": "2.0+ deferred",
+  "note": "Generated: hair cap, uniform; cut-paper detail. No likeness of a real person.",
+  "w": 200,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-7.svg",
+  "label": "Silhouette: Opposition leader",
+  "status": "2.0+ deferred",
+  "note": "Generated: hair crop, open; cut-paper detail. No likeness of a real person.",
+  "w": 200,
+  "h": 220,
+  "icon": false
+ },
+ {
+  "section": "characters",
+  "file": "characters/silhouette-8.svg",
+  "label": "Silhouette: Shipping magnate",
+  "status": "2.0+ deferred",
+  "note": "Generated: hair receding, suit; cut-paper detail. No likeness of a real person.",
+  "w": 200,
+  "h": 220,
   "icon": false
  },
  {

@@ -754,24 +754,200 @@ def instruments():
     save(sec, "orrery-clocks", 200, 200, "".join(orr), "Orrery of system clocks", "1.0 idea 5", "Each subsystem's period as an orbit.")
 
 
+# ------------------------------------------------- goods (ICIO industries)
+
+# (code, aggregate good index, label, body). Aggregates follow crates/ceteris-pack/src/econ/goods.rs.
+GOODS_AGG = ["Agriculture", "Crude oil, gas and refined fuels", "Coal and other mining", "Food",
+             "Light manufacturing", "Chemicals and metals", "Machinery, electronics and vehicles",
+             "Electricity and utilities", "Construction", "Services"]
+GOODS = [
+    ("A01", 0, "Crops and livestock", '<path d="M12 21V7"/><path d="M12 9c-2.5-.5-3.5-2-3.5-4 2.5.3 3.5 1.8 3.5 4zM12 9c2.5-.5 3.5-2 3.5-4-2.5.3-3.5 1.8-3.5 4zM12 13c-2.5-.5-3.5-2-3.5-4 2.5.3 3.5 1.8 3.5 4zM12 13c2.5-.5 3.5-2 3.5-4-2.5.3-3.5 1.8-3.5 4zM12 17c-2.5-.5-3.5-2-3.5-4 2.5.3 3.5 1.8 3.5 4zM12 17c2.5-.5 3.5-2 3.5-4-2.5.3-3.5 1.8-3.5 4z"/><path d="M12 7V3.5"/>'),
+    ("A02", 0, "Forestry", '<path d="M10 3l5 6.5h-2.5L16 14H4l3.5-4.5H5z"/><path d="M10 14v4"/><path d="M14 21h7M15.5 18.5h4v2.5h-4z"/><ellipse cx="17.5" cy="18.5" rx="2" ry="1"/>'),
+    ("A03", 0, "Fishing", '<path d="M3 12c3-4.5 9.5-5 13 0-3.5 5-10 4.5-13 0z"/><path d="M16 12l5-4v8z"/><circle cx="7" cy="11" r=".8" fill="currentColor"/><path d="M10 9.5c1 1.5 1 3.5 0 5"/>'),
+    ("B05", 2, "Coal", '<path d="M3 11h18l-2.5 7h-13z"/><circle cx="8" cy="19.5" r="1.5"/><circle cx="16" cy="19.5" r="1.5"/><path d="M5 11l2-3 2.5 1L12 6l3 2.5 2-1 2 3.5"/>'),
+    ("B06", 1, "Crude oil and gas", '<path d="M7 21L11 3h2l4 18"/><path d="M9.3 13.5h5.4M10.2 8.5h3.6M8 18.5l7-5M16 18.5l-7-5"/><path d="M4 21h16"/>'),
+    ("B07", 2, "Metal ores", '<path d="M3 17l3-8 6-4 7 3 2 8-6 4-8-1z"/><path d="M6 9l5 3 8-4M11 12l-1 7M11 12l10 4"/>'),
+    ("B08", 2, "Quarrying", '<path d="M4 9c3-4.5 13-4.5 16 0"/><path d="M12 6.5L7 21"/><path d="M4 9l2 1M20 9l-2 1"/>'),
+    ("B09", 1, "Mining support", '<path d="M3 17h18"/><path d="M5 17a7 7 0 0114 0"/><path d="M10 10.5V8h4v2.5"/><path d="M12 8V6"/>'),
+    ("C10T12", 3, "Food, drink, tobacco", '<path d="M4 13a4.5 4.5 0 014-5h8a4.5 4.5 0 014 5v6H4z"/><path d="M8.5 10.5l1.5 3M12 10l1.5 3M15.5 10.5l1.5 3"/>'),
+    ("C13T15", 4, "Textiles and clothing", '<path d="M6 4h8M6 20h8M7 4v16M13 4v16"/><path d="M7 8h6M7 11h6M7 14h6M7 17h6" stroke-opacity=".55"/><path d="M19 3v14l-1.5 3.5"/><circle cx="19" cy="5" r=".9"/>'),
+    ("C16", 4, "Wood products", '<circle cx="7" cy="16" r="4"/><circle cx="17" cy="16" r="4"/><circle cx="12" cy="8" r="4"/><circle cx="7" cy="16" r="1.5"/><circle cx="17" cy="16" r="1.5"/><circle cx="12" cy="8" r="1.5"/>'),
+    ("C17_18", 4, "Paper and printing", '<path d="M5 6h11v14H5z"/><path d="M8 4h11v14"/><path d="M7.5 10h6M7.5 13h6M7.5 16h4"/>'),
+    ("C19", 1, "Refined fuels", '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 16h14"/><path d="M12 9.5c-1.5 2-2 3-2 3.8a2 2 0 004 0c0-.8-.5-1.8-2-3.8z"/>'),
+    ("C20", 5, "Chemicals", '<path d="M9 3h6M10 3v6l-5.5 10a1.5 1.5 0 001.3 2h12.4a1.5 1.5 0 001.3-2L14 9V3"/><path d="M7 15h10"/><circle cx="11" cy="17.5" r=".8" fill="currentColor"/><circle cx="14" cy="16.8" r=".6" fill="currentColor"/>'),
+    ("C21", 5, "Pharmaceuticals", '<path d="M10.5 4.5a4.95 4.95 0 017 7l-6 6a4.95 4.95 0 01-7-7z"/><path d="M7.5 7.5l7 7"/><circle cx="18.5" cy="18.5" r="2.5"/>'),
+    ("C22", 5, "Rubber and plastics", '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>'),
+    ("C23", 5, "Glass, cement, ceramics", '<path d="M3 20h18M3 15h18M3 10h18"/><path d="M3 10v10M21 10v10M9 10v5M15 10v5M6 15v5M12 15v5M18 15v5"/><path d="M8 7c0-2 1.5-3 4-3s4 1 4 3v3H8z"/>'),
+    ("C24", 5, "Basic metals", '<path d="M3 20l2-4h6l2 4zM11 20l2-4h6l2 4zM7 15l2-4h6l2 4z"/><path d="M12 7V3M9.5 5L12 7l2.5-2"/>'),
+    ("C25", 5, "Metal products", '<path d="M8 3.5h8l4 7-4 7H8l-4-7z" transform="translate(0 1.5)"/><circle cx="12" cy="12" r="3"/>'),
+    ("C26", 6, "Electronics", '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"/>'),
+    ("C27", 6, "Electrical equipment", '<path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 01-12 0z"/><path d="M12 17v4"/>'),
+    ("C28", 6, "Machinery", gear(10, 10, 7, 5.3, 8).join(['<path d="', '"/>']) + '<circle cx="10" cy="10" r="2.2"/>' + gear(18, 18, 4, 2.9, 6).join(['<path d="', '"/>'])),
+    ("C29", 6, "Motor vehicles", '<path d="M3 16v-3l2-4.5h10l4 4.5h2v3z"/><path d="M7 8.5l-1 4.5M12 8.5v4.5M5 13h14"/><circle cx="7.5" cy="16.5" r="2" fill="#EDEFEA"/><circle cx="16.5" cy="16.5" r="2" fill="#EDEFEA"/>'),
+    ("C30", 6, "Ships, rail, aircraft", '<rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 10h12"/><rect x="8.5" y="5" width="7" height="3" rx=".5"/><circle cx="9" cy="13.5" r="1"/><circle cx="15" cy="13.5" r="1"/><path d="M8 17l-3 4M16 17l3 4M7 20h10"/>'),
+    ("C31T33", 4, "Furniture and other", '<path d="M7 3v18M7 12h10v9M7 15h10"/><path d="M7 3h9v9"/>'),
+    ("D", 7, "Electricity", '<path d="M12 2L7 21M12 2l5 19M9 9h6M8 13.5h8M5.5 6h13M7.5 18L15.5 13M16.5 18l-8-4.5"/>'),
+    ("E", 7, "Water and waste", '<path d="M4 8h8a3 3 0 013 3v1"/><path d="M4 5v6M12 5.5v2.5M9 5.5h6"/><path d="M15 16c-1.6 2.1-2.2 3.1-2.2 3.9a2.2 2.2 0 004.4 0c0-.8-.6-1.8-2.2-3.9z"/>'),
+    ("F", 8, "Construction", '<path d="M6 21V4M3 21h7"/><path d="M6 4h15M6 7l3-3M10 4l-4 4M6 4l-3 3h3"/><path d="M18 4v6"/><rect x="16" y="10" width="4" height="3"/>'),
+    ("G", 9, "Wholesale and retail", '<path d="M4 10v11h16V10"/><path d="M3 4h18l-1 6H4z"/><path d="M3 10c1.5 0 3-1 3-2.5C6 9 7.5 10 9 10s3-1 3-2.5c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5c0 1.5 1.5 2.5 3 2.5" stroke-opacity=".7"/><path d="M10 21v-6h4v6"/>'),
+    ("H49", 9, "Land transport", '<path d="M2 6h12v10H2zM14 9h4.5l3.5 4v3h-8"/><circle cx="6" cy="17.5" r="2" fill="#EDEFEA"/><circle cx="17.5" cy="17.5" r="2" fill="#EDEFEA"/>'),
+    ("H50", 9, "Water transport", '<path d="M2 15h20l-3 5H5z"/><path d="M5 15V11h4v4M9 15V9h4v6M13 15v-3h4v3"/><path d="M19 15V7"/>'),
+    ("H51", 9, "Air transport", '<path d="M21 4l-6 5.5L4 7 2.5 8.5 11 12l-3.5 4H5l-1 1.5 3.5 1 1 3.5L10 21v-2.5l4-3.5 3.5 8.5 1.5-1.5-2.5-11L22 5.5z"/>'),
+    ("H52", 9, "Warehousing", '<path d="M3 21V9l9-5 9 5v12"/><path d="M7 21v-8h10v8M7 16h10M7 18.5h10"/>'),
+    ("H53", 9, "Post and courier", '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 6.5l9 6.5 9-6.5"/>'),
+    ("I", 9, "Hotels and restaurants", '<path d="M4 10h12v4a6 6 0 01-12 0z"/><path d="M16 11h1.5a2.5 2.5 0 010 5H16"/><path d="M8 3c-1 1.5 1 2.5 0 4M12 3c-1 1.5 1 2.5 0 4"/><path d="M3 22h14"/>'),
+    ("J58T60", 9, "Publishing and broadcast", '<path d="M4 4h13v16H6a2 2 0 01-2-2z"/><path d="M17 8h3v10a2 2 0 01-2 2"/><path d="M7 7h7v4H7zM7 14h7M7 17h5"/>'),
+    ("J61", 9, "Telecoms", '<path d="M12 10v11M9 21h6"/><circle cx="12" cy="8" r="1.5"/><path d="M8.5 4.5a5 5 0 000 7M15.5 4.5a5 5 0 010 7M5.6 2a9 9 0 000 12M18.4 2a9 9 0 010 12"/>'),
+    ("J62_63", 9, "IT and information", '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/><path d="M9.5 8l-2 2 2 2M14.5 8l2 2-2 2"/>'),
+    ("K", 9, "Finance and insurance", '<path d="M3 9l9-5 9 5z"/><path d="M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 21h18M4 18h16"/>'),
+    ("L", 9, "Real estate", '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h8"/><circle cx="17" cy="15" r="2.5"/><path d="M17 17.5V21M17 19.5h2"/>'),
+    ("M", 9, "Professional services", '<rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M3 12.5h18M11 12.5v2h2v-2"/>'),
+    ("N", 9, "Administrative services", '<rect x="5" y="4" width="14" height="17" rx="1.5"/><path d="M9 3h6v3H9z"/><path d="M8.5 11l1.5 1.5 2.5-2.5M14 11.5h2M8.5 16l1.5 1.5 2.5-2.5M14 16.5h2"/>'),
+    ("O", 9, "Public administration", '<path d="M3 21h18M5 21v-7h14v7M8 21v-4M12 21v-4M16 21v-4"/><path d="M6 14a6 6 0 0112 0"/><path d="M12 8V3l4 1.5L12 6"/>'),
+    ("P", 9, "Education", '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c2 2 10 2 12 0v-5"/><path d="M21.5 9v6"/>'),
+    ("Q", 9, "Health and social work", '<path d="M12 20s-8-4.6-8-10.5A4.5 4.5 0 0112 7a4.5 4.5 0 018 2.5C20 15.4 12 20 12 20z"/><path d="M5 12h3.5l1.5-3 2.5 6 1.5-3H19"/>'),
+    ("R", 9, "Arts and recreation", '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 9l11-2"/>'),
+    ("S", 9, "Other services", '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.2 8.2L20 19M8.2 15.8L20 5"/>'),
+    ("T", 9, "Household employers", '<path d="M14 3l-5 12"/><path d="M6 14l6 2.5-2 5.5-6-2.5z"/><path d="M5 17.5l5 2"/><path d="M16 21h5"/>'),
+]
+
+
+def goods():
+    for code, agg, label, body in GOODS:
+        save("goods", code.lower().replace("_", "-"), 24, 24, body, f"{code} {label}", "1.0 mock",
+             GOODS_AGG[agg], icon=True)
+
+
 # ------------------------------------------------------- 9 characters (2.0+)
+
+def catmull(pts, closed=False) -> str:
+    """Catmull-Rom through pts as cubic Beziers."""
+    p = [pts[-1]] + pts + pts[:2] if closed else [pts[0]] + pts + [pts[-1]]
+    d = [f"M{f(p[1][0])} {f(p[1][1])}"]
+    for i in range(1, len(p) - 2):
+        x0, y0 = p[i - 1]; x1, y1 = p[i]; x2, y2 = p[i + 1]; x3, y3 = p[i + 2]
+        d.append(f"C{f(x1+(x2-x0)/6)} {f(y1+(y2-y0)/6)} {f(x2-(x3-x1)/6)} {f(y2-(y3-y1)/6)} {f(x2)} {f(y2)}")
+    return " ".join(d)
+
+
+def profile(v: dict) -> tuple[str, dict]:
+    """Right-facing head and shoulders on a 200x200 card. v holds feature offsets."""
+    fs, nl, nb, ch, lp, jw, cr, ag = (v[k] for k in ("forehead", "nose", "bump", "chin", "lips", "jaw", "crown", "age"))
+    front = [(108, 26 - cr), (132, 31 - cr * 0.6), (146 + fs * 0.5, 46), (150 + fs, 62), (151, 72), (147, 79),
+             (151 + nb, 85), (158 + nl, 95), (151, 100), (152 + lp, 105), (148, 109), (152 + lp, 113),
+             (147, 118), (151 + ch, 126), (146 + ch * 0.5, 133 + ag * 0.4), (136, 138 + ag),
+             (128, 142 + ag * 0.5), (126, 156), (132, 164)]
+    back = [(46 - jw, 200), (52, 178), (74, 166), (90, 158), (92, 142), (82, 124), (74, 104), (72, 80), (78, 52), (92, 34)]
+    shoulder = [(132, 164), (160, 172), (178, 186), (184, 200)]
+    d = catmull(front) + " " + catmull(shoulder)[catmull(shoulder).index("C"):] + f" L{back[0][0]} {back[0][1]} " \
+        + catmull(back)[catmull(back).index("C"):] + f" C100 28 104 26 {front[0][0]} {front[0][1]} Z"
+    anchors = dict(ear=(103, 92), eye=(140, 80), nape=(90, 150), neck=(127, 150), chin=(150 + ch, 126),
+                   brow=(150 + fs, 64), mouth=(148, 109))
+    return d, anchors
+
+
+def hair(style: str, v: dict, ink: str, paper: str) -> tuple[str, str]:
+    """Returns (extra silhouette shapes in ink, cut lines in paper)."""
+    cr, fs = v["crown"], v["forehead"]
+    if style == "crop":
+        return "", (f'<path d="M{f(146+fs*0.4)} {f(52)} C130 50 118 58 112 76 C108 88 100 96 92 118" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                    + "".join(f'<path d="M{80+i*9} {44+abs(i-3)*4-cr} q8 6 10 18" stroke="{paper}" stroke-width=".9" fill="none"/>' for i in range(6)))
+    if style == "bun":
+        return (f'<circle cx="72" cy="58" r="17" fill="{ink}"/>',
+                f'<path d="M148 50 C128 46 114 56 108 74 C104 86 98 98 90 116" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                f'<path d="M62 50 q10 6 20 0 M60 60 q12 8 24 0" stroke="{paper}" stroke-width="1" fill="none"/>'
+                + "".join(f'<path d="M{96+i*10} {36-cr} q10 4 16 16" stroke="{paper}" stroke-width=".9" fill="none"/>' for i in range(4)))
+    if style == "long":
+        return (f'<path d="M78 50 C62 80 58 130 66 176 L96 176 C92 150 92 128 98 112 Z" fill="{ink}"/>',
+                f'<path d="M150 54 C134 44 116 52 110 70 C106 84 106 104 100 124 C96 140 94 158 96 176" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                + "".join(f'<path d="M{74+i*6} {70+i*4} C{70+i*6} {110+i*4} {72+i*6} {140} {78+i*5} 172" stroke="{paper}" stroke-width=".8" fill="none"/>' for i in range(4)))
+    if style == "curls":
+        bumps = []
+        for i in range(13):
+            t = math.pi * (0.95 + i * 0.085)
+            bumps.append(f'<circle cx="{f(108+44*math.cos(t))}" cy="{f(78+52*math.sin(t))}" r="10" fill="{ink}"/>')
+        return ("".join(bumps),
+                f'<path d="M146 50 C130 48 116 58 110 76 C106 90 100 100 92 112" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                + "".join(f'<circle cx="{f(92+10*(i%4))}" cy="{f(44+10*(i//4))}" r="3" stroke="{paper}" stroke-width=".8" fill="none"/>' for i in range(8)))
+    if style == "receding":
+        return "", (f'<path d="M126 42 C116 52 112 64 110 78 C108 90 100 100 92 118" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                    + "".join(f'<path d="M{82+i*7} {64+i*2} q4 10 2 20" stroke="{paper}" stroke-width=".9" fill="none"/>' for i in range(4)))
+    if style == "cap":
+        return (f'<path d="M80 50 C84 22 132 18 148 44 L172 50 L170 56 L144 54 C120 52 96 54 80 60 Z" fill="{ink}"/>',
+                f'<path d="M82 56 C100 50 124 50 146 54" stroke="{paper}" stroke-width="1.6" fill="none"/>'
+                f'<path d="M114 26 v26" stroke="{paper}" stroke-width=".9"/>')
+    return "", ""
+
+
+def face_details(v: dict, a: dict, paper: str, ink: str) -> str:
+    ex, ey = a["eye"]
+    out = [f'<path d="M{a["ear"][0]-4} {a["ear"][1]-8} c8 -2 10 12 2 18" stroke="{paper}" stroke-width="1.4" fill="none"/>',
+           f'<path d="M{ex-4} {ey} q4 -3 8 0" stroke="{paper}" stroke-width="1.3" fill="none"/>',
+           f'<path d="M{a["mouth"][0]-6} {a["mouth"][1]} h6" stroke="{paper}" stroke-width="1.1"/>']
+    if v["age"] > 3:
+        out.append(f'<path d="M{ex+2} {ey+6} q-4 5 -10 4 M{ex-14} {ey-2} q2 6 0 10" stroke="{paper}" stroke-width=".8" fill="none"/>')
+        out.append(f'<path d="M{a["brow"][0]-14} {a["brow"][1]-8} h10 M{a["brow"][0]-15} {a["brow"][1]-4} h9" stroke="{paper}" stroke-width=".7"/>')
+    if v.get("glasses"):
+        out.append(f'<path d="M{ex-7} {ey-4} h14 v6 a3 3 0 01-3 3 h-8 a3 3 0 01-3 -3 z M{ex-7} {ey-2} L{a["ear"][0]+2} {ey-6}" stroke="{paper}" stroke-width="1.3" fill="none"/>')
+    if v.get("beard"):
+        cx, cy = a["chin"]
+        out.append(f'<path d="M{a["ear"][0]+8} {a["ear"][1]+8} C112 120 124 128 {cx-8} {cy-6} C{cx-4} {cy-14} 146 112 140 108" stroke="{paper}" stroke-width="1.3" fill="none"/>')
+        out.append("".join(f'<path d="M{118+i*6} {116+i*2} l2 7" stroke="{paper}" stroke-width=".7"/>' for i in range(4)))
+    if v.get("moustache"):
+        out.append(f'<path d="M140 103 q6 -3 12 1 q-6 4 -12 1z" fill="{ink}" stroke="{paper}" stroke-width=".8"/>')
+    if v.get("earring"):
+        out.append(f'<circle cx="{a["ear"][0]+2}" cy="{a["ear"][1]+16}" r="2.4" fill="{paper}"/>')
+    return "".join(out)
+
+
+def clothing(kind: str, paper: str, accent: str) -> str:
+    if kind == "suit":
+        return (f'<path d="M126 158 L136 200 M126 158 L114 178 L120 200 M90 160 L104 178 L100 200" stroke="{paper}" stroke-width="1.4" fill="none"/>'
+                f'<path d="M126 160 l6 6 -4 6 6 28 -10 0 2 -28 -4 -6 z" fill="{accent}"/>')
+    if kind == "open":
+        return f'<path d="M128 158 L120 182 L106 162 M120 182 v18 M92 160 L106 162" stroke="{paper}" stroke-width="1.4" fill="none"/><circle cx="120" cy="190" r="1.2" fill="{paper}"/>'
+    if kind == "turtleneck":
+        return "".join(f'<path d="M{92+i} {146+i*3.5} Q110 {150+i*3.5} {128-i*0.3} {148+i*3.5}" stroke="{paper}" stroke-width=".9" fill="none"/>' for i in range(5))
+    if kind == "uniform":
+        return (f'<path d="M126 158 l-2 42 M94 160 c8 4 22 4 32 -2" stroke="{paper}" stroke-width="1.3" fill="none"/>'
+                f'<path d="M60 176 h30 l2 6 h-32 z" fill="{accent}"/>'
+                + "".join(f'<circle cx="123" cy="{172+i*9}" r="1.6" fill="{paper}"/>' for i in range(3)))
+    if kind == "cardigan":
+        return (f'<path d="M126 158 C116 172 110 184 112 200 M92 160 C100 170 108 176 112 186" stroke="{paper}" stroke-width="1.4" fill="none"/>'
+                + "".join(f'<path d="M{60+i*8} 184 l2 10" stroke="{paper}" stroke-width=".7"/>' for i in range(6)))
+    if kind == "scarf":
+        return f'<path d="M92 152 C104 162 120 162 130 154 L134 166 C118 174 102 172 88 164 Z" fill="{accent}"/><path d="M118 166 l6 30 8 -2 -6 -28" fill="{accent}"/>'
+    return ""
+
+
+SITTERS = [
+    # role, card colour, accent, hair, clothing, feature dict
+    ("Minister of Finance", "#E9E4D6", "#AE2459", "crop", "suit", dict(forehead=1, nose=0, bump=2, chin=1, lips=0, jaw=0, crown=0, age=4, glasses=True)),
+    ("Central bank governor", "#DCE4E0", "#5E45A3", "bun", "scarf", dict(forehead=-1, nose=-2, bump=0, chin=-1, lips=1, jaw=2, crown=2, age=2, earring=True)),
+    ("Trade negotiator", "#E6DCD2", "#3F6E8C", "receding", "open", dict(forehead=3, nose=3, bump=4, chin=2, lips=-1, jaw=-2, crown=-2, age=6, beard=True)),
+    ("Union leader", "#E2E0D2", "#B8403A", "curls", "turtleneck", dict(forehead=0, nose=1, bump=-1, chin=0, lips=1, jaw=4, crown=4, age=1)),
+    ("Planning official", "#D9E1E6", "#B07A1E", "long", "cardigan", dict(forehead=-2, nose=-3, bump=-1, chin=-2, lips=1, jaw=-2, crown=1, age=0, glasses=True)),
+    ("Chief of staff", "#E4DFE6", "#2F5D46", "cap", "uniform", dict(forehead=2, nose=1, bump=1, chin=3, lips=-1, jaw=6, crown=0, age=5, moustache=True)),
+    ("Opposition leader", "#E9E1D0", "#5E45A3", "crop", "open", dict(forehead=-1, nose=4, bump=5, chin=1, lips=0, jaw=0, crown=1, age=3, beard=True, glasses=True)),
+    ("Shipping magnate", "#DDE3D8", "#AE2459", "receding", "suit", dict(forehead=4, nose=2, bump=0, chin=-1, lips=0, jaw=8, crown=-3, age=9, moustache=True)),
+]
+
 
 def characters():
     sec = "characters"
-    head = ("M30 160 C32 132 60 120 82 114 C74 98 68 82 70 66 C72 42 90 26 112 26 C130 26 142 38 144 54 "
-            "C145 62 144 66 146 70 L154 84 C155 87 152 89 148 89 C149 92 151 95 149 97 C151 99 150 102 147 103 "
-            "C148 108 146 112 140 114 C132 115 126 114 122 116 C122 122 124 128 130 132 C150 138 168 144 172 160 Z")
-    extras = [f'<circle cx="74" cy="52" r="15" fill="{INK}"/>',
-              f'<path d="M126 132 L140 160 L116 160 Z" fill="#E9E4D6"/><path d="M128 138 L134 160 L124 160 Z" fill="{CRISIS}"/>',
-              f'<path d="M128 70 H150" stroke="#E9E4D6" stroke-width="2"/><circle cx="138" cy="70" r="6" fill="none" stroke="#E9E4D6" stroke-width="2"/>']
-    profiles = [head + "|" + e for e in extras]
-    for i, de in enumerate(profiles):
-        d, extra = de.split("|")
-        body = (f'<rect width="200" height="160" fill="#E9E4D6"/>'
-                f'<ellipse cx="104" cy="84" rx="70" ry="72" fill="none" stroke="{INK}" stroke-opacity="0.25"/>'
-                f'<path d="{d}" fill="{INK}"/>{extra}')
-        save(sec, f"silhouette-{i+1}", 200, 160, body, f"Cut-paper silhouette {i+1}", "2.0+ deferred",
-             "Generated profiles; no likeness of a real person.")
+    for i, (role, card, accent, style, cloth, v) in enumerate(SITTERS):
+        d, a = profile(v)
+        hx, cuts = hair(style, v, INK, card)
+        body = [f'<rect width="200" height="220" fill="{card}"/>',
+                f'<ellipse cx="104" cy="104" rx="84" ry="92" fill="none" stroke="{INK}" stroke-opacity=".35"/>',
+                f'<ellipse cx="104" cy="104" rx="79" ry="87" fill="none" stroke="{INK}" stroke-opacity=".2" stroke-dasharray="1 3"/>',
+                f'<defs><clipPath id="oval{i}"><ellipse cx="104" cy="104" rx="76" ry="84"/></clipPath></defs>',
+                f'<g clip-path="url(#oval{i})">',
+                f'<g transform="translate(3 3)" opacity=".18"><path d="{d}" fill="{INK}"/>{hx}</g>',
+                f'<path d="{d}" fill="{INK}"/>{hx}{cuts}{face_details(v, a, card, INK)}{clothing(cloth, card, accent)}</g>',
+                text(100, 212, role.upper(), 9, INK2, SANS, "middle", 600, 'letter-spacing="1.6"')]
+        save(sec, f"silhouette-{i+1}", 200, 220, "".join(body), f"Silhouette: {role}", "2.0+ deferred",
+             f"Generated: hair {style}, {cloth}; cut-paper detail. No likeness of a real person.")
     sig = [f'<rect width="300" height="90" fill="#FBFBF7"/>',
            f'<path d="M20 58 c12 -40 24 -20 18 0 s16 -30 28 -10 s10 10 20 -6 c8 -12 14 4 24 0 s20 -24 30 -6 c6 10 16 4 24 -4 q40 -10 96 4" stroke="{INK}" stroke-width="1.8" fill="none"/>',
            f'<line x1="20" y1="70" x2="280" y2="70" stroke="{INK}" stroke-opacity="0.3"/>',
@@ -804,6 +980,6 @@ def store():
         save(sec, name, w, h, "".join(c), label, "deferred (P9)", "Outside the 1.0 exemption; sized for later.")
 
 
-identity(); first_run(); icons(); map_furniture(); chrome(); seals(); flags_emblems(); covers(); instruments(); characters(); store()
+identity(); first_run(); icons(); goods(); map_furniture(); chrome(); seals(); flags_emblems(); covers(); instruments(); characters(); store()
 (OUT / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
 print(len(manifest))
