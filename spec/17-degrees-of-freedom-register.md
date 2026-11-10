@@ -96,7 +96,7 @@ Added for the modern scenario:
 | P175 | Restructuring bargaining options and collective-action-clause holdout reduction (ADR 0043; provisionally P79) | Sovereign debt | Calibrated in P5 Branch G | Cruces and Trebesch haircuts | Calibrated |
 | P176 | Market-exclusion reputation period, rising with the haircut (ADR 0043; provisionally P80) | Sovereign debt | Calibrated in P5 Branch G | Default durations | Calibrated |
 | P177 | Money-anchor gain kappa_m of the price level (ADR 0338, redefined from ADR 0090's kappa_n; provisionally P143) | Markets | Start 0.2 (spike 0.1 to 0.2) | 5% nominal shock back within 1% in under 30 ticks | Free |
-| P178 | Good-level price gain kappa_b, across goods (ADR 0338) | Markets | Spike 0.02 to 0.05; derived in the Stability region before the build | V1 from the data state | Free |
+| P178 | Good-level price gain kappa_b, across goods (ADR 0338) | Markets | 0.3, derived in the Stability region (trade SPEC; limit 0.63, worst-case spectral radius 0.824); to be measured before the build | V1 from the data state | Free |
 
 Held or proposed, not built in P2: P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090` and `pre-p3/b6-wip`, and deferred to P5 by owner ruling, 2026-10-30, ADR 0090 "Deferred to P5") and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 
