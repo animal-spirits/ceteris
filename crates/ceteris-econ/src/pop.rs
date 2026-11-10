@@ -504,9 +504,9 @@ fn take_flag(d: &mut Decoder) -> Result<bool, DecodeError> {
     }
 }
 
-/// A populated toy demography with all three mechanisms on, for tests of the wiring.
-#[cfg(test)]
-pub(crate) fn toy(n_provinces: usize) -> (Demography, Cohorts) {
+/// A populated toy demography with all three mechanisms on, for tests of the wiring and the
+/// tick-cost bench (`benches/pop.rs`); never a calibration input.
+pub fn toy(n_provinces: usize) -> (Demography, Cohorts) {
     let mut std_l = [[1.0; N_AGE + 1]; N_SEX];
     for row in &mut std_l {
         for (a, v) in row.iter_mut().enumerate() {
