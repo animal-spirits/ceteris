@@ -1625,3 +1625,18 @@ sections = "8.2, 21.1"
 rows = "0342"
 topic = "[Drop usage statistics for 1.0: no collector and no opt-in counters (supersedes the usage statistics part of ADR 0214)](../rfcs/0340-drop-usage-statistics-for-1.0.md)"
 sections = "4.6, 14.3, 20"
+
+[[entry]]
+rows = "0343"
+topic = "[Under the E3 package the money anchor reads a chained index over cells that trade, not the fixed-weight world index](../rfcs/0342-anchor-index-over-traded-cells.md)"
+sections = "8.2, 12.2, 17"
+
+[[entry]]
+rows = "0344"
+topic = "[Under the E3 package traded input orders are limited to cash plus a credit line of one loss cap (P148), no new parameter, and producers are paid only for units sold](../rfcs/0342-anchor-index-over-traded-cells.md)"
+sections = "8.2, 9, 17"
+
+[[entry]]
+rows = "0345"
+topic = "[The E3 fix is one change, `PriceAnchor::e3`, in anchor mode only, off by default; RFC 0341 D1's stock term keeps kappa_s = 0](../rfcs/0342-anchor-index-over-traded-cells.md)"
+sections = "8.2, 21.1"

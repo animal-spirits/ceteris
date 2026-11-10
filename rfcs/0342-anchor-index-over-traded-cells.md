@@ -1,6 +1,6 @@
 # RFC 0342. Anchor the price level on cells that trade (P5 Branch E3)
 
-Status: accepted, not built
+Status: accepted, built behind `PriceAnchor::e3` (off by default)
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P177); trade SPEC Money-anchored rule; econ SPEC E2, E3, T4
 Release: 1.0, P5a
@@ -40,7 +40,7 @@ Recommendation: A, because a price nobody pays then cannot move the price level,
 only option the spike shows working.
 
 Decision: A, Antonio, 2026-11-10.
-Row: none yet, taken in the spec PR
+Row: ADR 0343
 
 ### D2. How large is the credit line on traded input orders?
 
@@ -54,7 +54,7 @@ Options:
 Recommendation: A, because it survives as well as B with a third of the debt.
 
 Decision: A, Antonio, 2026-11-10. The credit line is the loss cap T_e = M S_e itself (P148), so orders stop where the write-off starts and no new parameter is added.
-Row: none yet, taken in the spec PR
+Row: ADR 0344
 
 ### D3. How is the E3 fix built?
 
@@ -69,12 +69,11 @@ Options:
 Recommendation: A, because the parts only pass together.
 
 Decision: A, Antonio, 2026-11-10.
-Row: none yet, taken in the spec PR
+Row: ADR 0345
 
 ## Spec changes
 
-None in this PR. Once decided: trade SPEC Money-anchored rule (index of the nominal term),
-econ SPEC E2 (sale rule), E3 (credit line), T4 (chain state); rows and P codes in the spec PR.
+Trade SPEC Money-anchored rule (E3 package: index of the nominal term, chain state); econ SPEC (pay on sales, credit line). No P code: the credit line is P148.
 
 ## Before build
 

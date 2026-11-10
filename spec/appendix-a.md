@@ -330,4 +330,7 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0340 | [The anchored price rule's origin gap is the midpoint 2 (D + b - Q) / (D + b + Q), bounded at zero output, with no Q floor](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 17 |
 | 0341 | [The x10 border shock stays a P5a gate criterion, carried by task E3, the zero-output production trap, instead of the E2 price step (amends ADR 0339)](../rfcs/0339-bounded-gap-at-zero-output.md) | 8.2, 21.1 |
 | 0342 | [Drop usage statistics for 1.0: no collector and no opt-in counters (supersedes the usage statistics part of ADR 0214)](../rfcs/0340-drop-usage-statistics-for-1.0.md) | 4.6, 14.3, 20 |
+| 0343 | [Under the E3 package the money anchor reads a chained index over cells that trade, not the fixed-weight world index](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 12.2, 17 |
+| 0344 | [Under the E3 package traded input orders are limited to cash plus a credit line of one loss cap (P148), no new parameter, and producers are paid only for units sold](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 9, 17 |
+| 0345 | [The E3 fix is one change, `PriceAnchor::e3`, in anchor mode only, off by default; RFC 0341 D1's stock term keeps kappa_s = 0](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 21.1 |
 <!-- rows:end -->
