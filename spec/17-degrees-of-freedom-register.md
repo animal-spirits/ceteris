@@ -89,6 +89,13 @@ Added for the modern scenario:
 | P168 | Slum share rise when housing supply lags urban growth under insecure tenure (ADR 0074; provisionally P127) | Settlements | Calibrated in P4 Branch D3 | UN-Habitat slum estimates (terms to audit) | Free |
 | P169 | Effective labour lost per worker at untreated disease prevalence (ADR 0167) | Population | Prior from Thirumurthy et al. (2008); set in P4 Branch B2 | Thirumurthy, Graff Zivin and Goldstein (2008) | Literature, free |
 | P170 | Irregular share z: fraction of rejected applicants who migrate anyway at an extra cost (ADR 0109) | Migration | 0 to 0.2 | Calibrated to Abel and Cohen (2019) bilateral flows | Calibrated |
+| P171 | Housing supply elasticity map from land unavailability and regulation (ADR 0040; provisionally P74) | Housing | Data-mapped, Saiz (2010) | Province house-price response | Data |
+| P172 | Investor (buy-to-let) share of purchases under extrapolative expectations (ADR 0040; provisionally P75) | Housing | Calibrated in P5 Branch F | Boom amplification | Free |
+| P173 | Public capital elasticity of productivity, by type: core infrastructure, other (ADR 0042; provisionally P77) | Fiscal | Prior centred on 0.08 | Ramey-Zubairy multiplier ordering | Literature |
+| P174 | Public investment efficiency from PIMA scores and governance (ADR 0042; provisionally P78) | Fiscal | IMF PIMA | Efficiency data | Data |
+| P175 | Restructuring bargaining options and collective-action-clause holdout reduction (ADR 0043; provisionally P79) | Sovereign debt | Calibrated in P5 Branch G | Cruces and Trebesch haircuts | Calibrated |
+| P176 | Market-exclusion reputation period, rising with the haircut (ADR 0043; provisionally P80) | Sovereign debt | Calibrated in P5 Branch G | Default durations | Calibrated |
+| P177 | Speed of the traded-market price return kappa_n (ADR 0090; provisionally P143) | Markets | Start 0.2 | x10 border shock convergence | Free |
 
 Held or proposed, not built in P2: P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090` and `pre-p3/b6-wip`, and deferred to P5 by owner ruling, 2026-10-30, ADR 0090 "Deferred to P5") and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 

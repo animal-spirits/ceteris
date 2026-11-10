@@ -1,6 +1,6 @@
 # RFC 0337. Accept the P5 money and fiscal ADRs
 
-Status: draft
+Status: accepted
 Date: 2026-11-10
 Design sections: 3, 4.4, 7.2, 7.4, 8.1 to 8.3, 9.1 to 9.6, 9.10, 9.11, 15.3 to 15.5, 21.1
 Release: 1.0, P5
@@ -22,7 +22,7 @@ a P5 gate dependency.
 
 Register codes P74, P75, P77, P78, P79, P80 and P143 are named in these ADRs but are not in
 `spec/17` or `spec/rows.toml`; codes P10, P35, P37, P50, P52, P56, P03a and P03b exist and widen as the
-ADRs say. Codes and decision ids are taken in the PR that accepts this RFC, not here.
+ADRs say. Codes P171 to P177 for those seven are taken in this accepting PR (table under Spec changes); no new decision id is needed.
 
 ## Decisions
 
@@ -35,8 +35,8 @@ Options:
 
 Recommendation: A, because the P5b gate has no reference without it and the MPC harness already runs.
 
-Decision: pending.
-Row: none new; ADR 0025 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0025 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D2. Accept ADR 0040 (Housing supply elasticity and mortgage underwriting) as written for the 1.0 path?
 
@@ -47,8 +47,8 @@ Options:
 
 Recommendation: A, because spec/09 9.10 and 9.11 already assume the housing block and the caps are macroprudential levers.
 
-Decision: pending.
-Row: none new; ADR 0040 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0040 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D3. Accept ADR 0042 (Public capital and fiscal dynamics, with its ADR 0095 amendment) as written for the 1.0 path?
 
@@ -59,8 +59,8 @@ Options:
 
 Recommendation: A, because fiscal capacity and public investment are needed for the P5a government account; the P77 = 0 switch reproduces the status quo.
 
-Decision: pending.
-Row: none new; ADR 0042 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0042 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D4. Accept ADR 0043 (Sovereign debt restructuring and creditor structure) as written for the 1.0 path?
 
@@ -71,8 +71,8 @@ Options:
 
 Recommendation: A, because it is a P5b system with a switch and a literature target (Cruces and Trebesch); gate item 4 needs only G1.
 
-Decision: pending.
-Row: none new; ADR 0043 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0043 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D5. Accept ADR 0080 (Polycrisis coupling audit) as written for the 1.0 path?
 
@@ -83,8 +83,8 @@ Options:
 
 Recommendation: A, because it is a process rule with no free parameter; the register starts with the couplings already tested through P4.
 
-Decision: pending.
-Row: none new; ADR 0080 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0080 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D6. Accept ADR 0090 (Split price rule and inventory gain (deferred to P5 by the owner, 2026-10-30)) as written for the 1.0 path?
 
@@ -95,8 +95,8 @@ Options:
 
 Recommendation: A, because the P5 criterion (x10 border shock converges frictionless) rests on it, and Branch E runs before any re-bless so one golden move covers it.
 
-Decision: pending.
-Row: none new; ADR 0090 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0090 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D7. Accept ADR 0168 (Cross-border services trade and tourism) as written for the 1.0 path?
 
@@ -107,8 +107,8 @@ Options:
 
 Recommendation: A, because it is independent of the finance branches after A; BaTiS and WDI data are free.
 
-Decision: pending.
-Row: none new; ADR 0168 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0168 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D8. Accept ADR 0176 (Endogenous neutral rate in the policy rule) as written for the 1.0 path?
 
@@ -119,8 +119,8 @@ Options:
 
 Recommendation: A, because without it the 2009-2021 policy rates sit too high and the 15.4 lower-bound target is missed.
 
-Decision: pending.
-Row: none new; ADR 0176 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0176 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D9. Accept ADR 0202 (Firm entry, exit and the zombie band) as written for the 1.0 path?
 
@@ -131,8 +131,8 @@ Options:
 
 Recommendation: A, because entry and exit are needed for the investment step; with the bank capital gap at zero there are no zombies, so it can land before banks.
 
-Decision: pending.
-Row: none new; ADR 0202 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0202 keeps its row and reads accepted (RFC 0337) in the index.
 
 ### D10. Accept ADR 0204 (Capital formation by asset class and time to build) as written for the 1.0 path?
 
@@ -143,16 +143,16 @@ Options:
 
 Recommendation: A, because the investment step of 7.4 depends on it and the 2000 pipeline is the 0089 steady state, so the data state stays a fixed point.
 
-Decision: pending.
-Row: none new; ADR 0204 keeps its row and reads accepted in the index once decided.
+Decision: A, Antonio, 2026-11-10 (decision card).
+Row: none new; ADR 0204 keeps its row and reads accepted (RFC 0337) in the index.
 
 ## Spec changes
 
-Written in the accepting PR, after the decisions:
+Made in this PR:
 
 - `rfcs/README.md`: each accepted ADR shows `accepted (RFC 0337)`; ADR files are not rewritten.
-- `spec/17`: codes for P74, P75, P77, P78, P79, P80 and P143 from `-- next-code P`, replacing the codes
-  written in the ADRs; widened ranges of P10 and P50 as ADRs 0204 and 0202 state.
+- `spec/17`: P74 is P171, P75 P172, P77 P173, P78 P174, P79 P175, P80 P176 and P143 P177 (from
+  `-- next-code P`), replacing the codes written in the ADRs; widened ranges of P10 and P50 as ADRs 0204 and 0202 state.
 - `spec/rows.toml`: entry for this RFC and the status of each decided ADR.
 - `specs/p5/PLAN.md`: O1 closed, codes replaced. `specs/money/SPEC.md`: status follows its own PR.
 - `specs/COUPLINGS.md` (ADR 0080), with the module pairs implemented through P4 and their tests.
