@@ -65,3 +65,21 @@ fn nominal_shock_returns_within_30_ticks() {
         "index {off:.4} log points from the new level at tick 30"
     );
 }
+
+/// ADR 0340: with the Q-floor gap one origin at Q near 0 set the good and world means and every
+/// price stepped at -c_max, the index reaching 1e-4 by tick 100. Output still collapses at x10
+/// (task E3, ADR 0341); this checks only the nominal level.
+#[test]
+fn x10_border_shock_keeps_the_index_off_the_bound() {
+    let mut w = settled(EconParams::frictionless());
+    let i0 = w.world_price_index();
+    let mut wedges = ceteris_trade::network::Wedges::none(w.inputs().n_countries());
+    wedges.ntb = vec![10.0; wedges.tariff.len()];
+    w.set_wedges(wedges);
+    let mut sim = Sim::new(w, schedule(), SEED);
+    for t in 1..=200 {
+        sim.run_until(t).unwrap();
+        let off = libm::log(sim.world().world_price_index() / i0).abs();
+        assert!(off < 0.25, "index {off:.3} log points off I0 at tick {t}");
+    }
+}

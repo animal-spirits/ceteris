@@ -248,7 +248,8 @@ impl Markets {
 
     /// Money-anchored price step (ADR 0338, trade SPEC Money-anchored rule), after clearing:
     /// dlnp_o = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - nominal - kappa2 stock term),
-    /// l_o = (D [+ b] - Q) / Q_eff, a_o = kappa_r / (theta_g + 1) traded and kappa_r local,
+    /// l_o = 2 (D [+ b] - Q) / (D [+ b] + Q), 0 where both are 0 (ADR 0340), a_o = kappa_r /
+    /// (theta_g + 1) traded and kappa_r local,
     /// lbar_g and lbar the p (Q + D) / 2 weighted means over the good's active origins and over
     /// all markets, in cell order. `nominal` is kappa_m (ln(I / I0) - ln(M / M0)). No pi^e.
     pub fn reprice_anchored(&mut self, p: &TradeParams, a: &PriceAnchor, nominal: f64) {
@@ -264,7 +265,12 @@ impl Markets {
             }
             let (q, d) = (self.supply[i], self.demand[i]);
             let b = if p.stores(g) { self.storage[i] } else { 0.0 };
-            *l = (d + b - q) / q.max(floor[g]);
+            let volume = d + b + q;
+            *l = if volume > 0.0 {
+                2.0 * (d + b - q) / volume
+            } else {
+                0.0
+            };
             let v = self.price[i] * 0.5 * (q + d);
             num[g] += v * *l;
             den[g] += v;
