@@ -1,6 +1,6 @@
 # RFC 0341. Stop the island money sink at x10 (P5 Branch E3)
 
-Status: accepted, build after the E3 spike
+Status: accepted, spike no-go 2026-11-10; not built
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P03b, P178); trade SPEC Money-anchored rule; econ SPEC E2, E4
 Release: 1.0, P5a
@@ -70,3 +70,12 @@ Row: none yet, taken in the spec PR once the spike passes
 
 None until D1 and D2 are decided and the spike passes. Then: trade SPEC Money-anchored rule (D1),
 econ SPEC E2 and E4 (D2), Section 17 (a new P code for kappa_s), rows for each accepted item.
+
+## Spike result (2026-11-10): no-go
+
+[Study](../docs/research/p5-e3-d1d2-spike-2026-11-10.md). No kappa_s in 0 to 0.2, with or without
+pay on sales, keeps x10 alive for 700 ticks with the index within 1.10. Pay on sales moves the
+island's loss from its pops to its enterprises, but the loss cap and write-off do not bound an
+enterprise's overdraft, so the same money leaves and the world dies at the same ticks. The ntb 3
+residual is the same mechanism: an unbounded external deficit financed by whichever account may
+go negative. Nothing here is built; the next step is a new decision on bounding that deficit.
