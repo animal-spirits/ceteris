@@ -4,8 +4,7 @@
 //! Caliendo-Dvorkin-Parro Bellman update per tick. Flows are integers by Hamilton apportionment.
 //! [`Migration`] is the state and tick step of system 227 (`EconWorld::with_migration`; off by
 //! default). Choices are a sparse [`ChoiceSet`] per origin (itself, anchors, cheapest others up
-//! to `K_d`). Shortcuts, tracked in #210: no pack costs (the caller supplies them), no
-//! rule for the pooled country nests, flow utility `ln wage`, no settlement classes (D3).
+//! to `K_d`). Shortcuts, tracked in #210: no rule for the pooled country nests, flow utility `ln wage`, no settlement classes (D3).
 
 use crate::admission::{Account, hamilton, ration};
 use crate::pop::{CELLS, Cohorts};
@@ -15,6 +14,68 @@ use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 fn logsumexp(x: &[f64]) -> f64 {
     let max = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     max + libm::log(x.iter().map(|&v| libm::exp(v - max)).sum::<f64>())
+}
+
+/// Moving-cost form `m_od = per_log_km ln(1 + d_od / scale_km) + border [country_o != country_d]`,
+/// zero on the diagonal (`specs/pop/SPEC.md`, Migration). The coefficients are calibrated (D1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MovingCost {
+    pub per_log_km: f64,
+    pub scale_km: f64,
+    pub border: f64,
+}
+
+const EARTH_RADIUS_KM: f64 = 6371.0088;
+
+fn great_circle_km(lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let s = libm::sin((p2 - p1) / 2.0);
+    let t = libm::sin((lon2 - lon1).to_radians() / 2.0);
+    let a = s * s + libm::cos(p1) * libm::cos(p2) * (t * t);
+    2.0 * EARTH_RADIUS_KM * libm::asin(a.min(1.0).sqrt())
+}
+
+impl MovingCost {
+    /// Row-major `n x n` cost matrix for provinces at `(lon, lat)` degrees (pack centroids).
+    pub fn matrix(&self, lon: &[f64], lat: &[f64], country: &[u16]) -> Vec<f64> {
+        let n = lon.len();
+        assert!(
+            lat.len() == n && country.len() == n,
+            "one point per province"
+        );
+        let mut cost = vec![0.0; n * n];
+        for o in 0..n {
+            for d in 0..n {
+                if o != d {
+                    let km = great_circle_km(lon[o], lat[o], lon[d], lat[d]);
+                    let border = if country[o] == country[d] {
+                        0.0
+                    } else {
+                        self.border
+                    };
+                    cost[o * n + d] =
+                        self.per_log_km * libm::log(1.0 + km / self.scale_km) + border;
+                }
+            }
+        }
+        cost
+    }
+
+    /// The matrix for the economy provinces of a pack-loaded world (`ProvinceData::pack`).
+    pub fn from_pack(
+        &self,
+        pack: &ceteris_geo::pack::Provinces,
+        provinces: &crate::inputs::ProvinceData,
+    ) -> Vec<f64> {
+        let at = |v: &[f64]| {
+            provinces
+                .pack
+                .iter()
+                .map(|&i| v[i as usize])
+                .collect::<Vec<_>>()
+        };
+        self.matrix(&at(&pack.lon), &at(&pack.lat), &provinces.country)
+    }
 }
 
 /// Sparse choice set (`specs/pop/SPEC.md`, Bounds): per origin province the destinations it
@@ -303,6 +364,22 @@ impl Migration {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn moving_costs_grow_with_distance_and_borders() {
+        let m = MovingCost {
+            per_log_km: 0.1,
+            scale_km: 100.0,
+            border: 0.5,
+        };
+        // equator points 0, 1 and 10 degrees east; the last is in another country
+        let c = m.matrix(&[0.0, 1.0, 10.0], &[0.0; 3], &[0, 0, 1]);
+        assert_eq!((c[0], c[4], c[8]), (0.0, 0.0, 0.0));
+        assert_eq!(c[1], c[3]);
+        assert!(c[1] > 0.0 && c[1] < c[2]);
+        let km = 10.0 * 2.0 * EARTH_RADIUS_KM * std::f64::consts::PI / 360.0;
+        assert!((c[2] - (0.1 * libm::log(1.0 + km / 100.0) + 0.5)).abs() < 1e-9);
+    }
 
     #[test]
     fn shares_sum_to_one_and_favour_high_value() {
