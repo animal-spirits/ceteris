@@ -276,17 +276,100 @@ impl Cohorts {
     }
 }
 
+/// Cohort bands whose education can still progress: 15-19 .. 30-34 (`specs/pop/SPEC.md`, A3).
+pub const PROGRESS_BANDS: core::ops::Range<usize> = 3..7;
+/// Upper clamp of the response factor f.
+const RESPONSE_MAX: f64 = 2.0;
+
+/// Education progression (A3, P164): yearly share of each cohort cell moving `e -> e + 1`
+/// is `min(rho[s][e] * f, 1)`, `f = clamp((spend / spend_ref)^eps_spend * (income / income_ref)^eps_income, 0, 2)`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Progression {
+    /// WCDE schedule prior by sex and transition (0->1, 1->2, 2->3).
+    pub rho: [[f64; N_EDU - 1]; N_SEX],
+    pub eps_spend: f64,
+    pub eps_income: f64,
+    /// Education spending per student and household income relative to their 2000 references.
+    pub spend_ratio: f64,
+    pub income_ratio: f64,
+}
+
+impl Progression {
+    pub fn response(&self) -> f64 {
+        let f = libm::pow(self.spend_ratio, self.eps_spend)
+            * libm::pow(self.income_ratio, self.eps_income);
+        f.clamp(0.0, RESPONSE_MAX)
+    }
+
+    pub fn shares(&self) -> [[f64; N_EDU - 1]; N_SEX] {
+        let f = self.response();
+        self.rho.map(|r| r.map(|x| (x * f).min(1.0)))
+    }
+}
+
+/// Headship rates `h[a][s][e]`, households per person (A3).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Headship {
+    pub h: [[[f64; N_EDU]; N_SEX]; N_AGE],
+}
+
+impl Headship {
+    pub fn households(&self, cohorts: &Cohorts, p: usize) -> f64 {
+        let mut sum = 0.0;
+        for a in 0..N_AGE {
+            for s in 0..N_SEX {
+                for e in 0..N_EDU {
+                    sum += self.h[a][s][e] * cohorts.get(p, a, s, e) as f64;
+                }
+            }
+        }
+        sum
+    }
+}
+
+impl Cohorts {
+    /// One yearly education step: in bands 15..34, `round(N * share)` persons of each cell move
+    /// from `e` to `e + 1`, taken from the pre-step counts so nobody moves twice.
+    pub fn progress(&mut self, prog: &Progression) {
+        let shares = prog.shares();
+        for n in self.n.as_chunks_mut::<CELLS>().0.iter_mut() {
+            for a in PROGRESS_BANDS {
+                for (s, share) in shares.iter().enumerate() {
+                    let mut out = [0u64; N_EDU - 1];
+                    for e in 0..N_EDU - 1 {
+                        let c = cell(a, s, e);
+                        out[e] = (libm::round(n[c] as f64 * share[e]) as u64).min(n[c]);
+                    }
+                    for e in 0..N_EDU - 1 {
+                        n[cell(a, s, e)] -= out[e];
+                        n[cell(a, s, e + 1)] += out[e];
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Demography on the monthly clock: age (yearly), mortality, fertility, in that order
 /// (systems 220 to 222). A `None` mechanism is off and leaves counts as ageing alone does.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Demography {
     pub mortality: Option<Brass>,
     pub fertility: Option<Fertility>,
+    /// Yearly, on ageing ticks, after ageing.
+    pub education: Option<Progression>,
 }
 
 impl Demography {
     pub fn step(&self, cohorts: &mut Cohorts, tick: u32) -> Flows {
         cohorts.age_at(tick);
+        if let Some(p) = self
+            .education
+            .as_ref()
+            .filter(|_| Cohorts::is_ageing_tick(tick))
+        {
+            cohorts.progress(p);
+        }
         let deaths = self.mortality.as_ref().map_or(0, |b| cohorts.die(b));
         let births = self.fertility.as_ref().map_or(0, |f| cohorts.bear(f));
         Flows { births, deaths }
@@ -308,6 +391,89 @@ mod tests {
             *v = x % 5000;
         }
         c
+    }
+
+    fn prog(f: f64) -> Progression {
+        Progression {
+            rho: [[0.3, 0.2, 0.1]; N_SEX],
+            eps_spend: 1.0,
+            eps_income: 0.0,
+            spend_ratio: f,
+            income_ratio: 1.0,
+        }
+    }
+
+    #[test]
+    fn education_progression_conserves_and_leaves_other_bands_fixed() {
+        let mut c = filled(11, 3);
+        let before = c.clone();
+        c.progress(&prog(1.0));
+        assert_eq!(c.total(), before.total());
+        for p in 0..3 {
+            for a in (0..N_AGE).filter(|a| !PROGRESS_BANDS.contains(a)) {
+                for s in 0..N_SEX {
+                    for e in 0..N_EDU {
+                        assert_eq!(c.get(p, a, s, e), before.get(p, a, s, e));
+                    }
+                }
+            }
+            for a in PROGRESS_BANDS {
+                for s in 0..N_SEX {
+                    let tot = |c: &Cohorts| (0..N_EDU).map(|e| c.get(p, a, s, e)).sum::<u64>();
+                    assert_eq!(tot(&c), tot(&before));
+                    assert!(c.get(p, a, s, 0) < before.get(p, a, s, 0));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn progression_responds_to_spending_and_income() {
+        let hi = prog(1.5).shares();
+        let lo = prog(0.5).shares();
+        assert!(hi[0][0] > lo[0][0]);
+        assert_eq!(prog(1e9).shares()[0][2], 0.2);
+        assert_eq!(prog(0.0).shares()[0][0], 0.0);
+    }
+
+    #[test]
+    fn education_off_equals_status_quo() {
+        let mut a = filled(3, 2);
+        let mut b = a.clone();
+        let off = Demography::default();
+        for t in 0..36 {
+            assert_eq!(off.step(&mut a, t), Flows::default());
+            b.age_at(t);
+        }
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn demography_progresses_education_on_ageing_ticks_only() {
+        let d = Demography {
+            education: Some(prog(1.0)),
+            ..Default::default()
+        };
+        let mut c = filled(5, 1);
+        let before = c.clone();
+        d.step(&mut c, 1);
+        assert_eq!(c, before);
+        d.step(&mut c, 12);
+        assert_ne!(c, before);
+    }
+
+    #[test]
+    fn households_sum_headship_over_cells() {
+        let mut c = Cohorts::new(2);
+        c.set(1, 5, 0, 2, 100);
+        c.set(1, 6, 1, 3, 50);
+        let mut h = Headship {
+            h: [[[0.0; N_EDU]; N_SEX]; N_AGE],
+        };
+        h.h[5][0][2] = 0.5;
+        h.h[6][1][3] = 0.4;
+        assert_eq!(h.households(&c, 1), 70.0);
+        assert_eq!(h.households(&c, 0), 0.0);
     }
 
     #[test]
@@ -448,6 +614,7 @@ mod tests {
         let d = Demography {
             mortality: Some(brass(0.0)),
             fertility: Some(fert),
+            education: None,
         };
         let mut pop = c.total();
         for t in 0..240 {
@@ -492,6 +659,7 @@ mod tests {
             let d = Demography {
                 mortality: Some(brass(0.2)),
                 fertility: Some(Fertility::uniform(2, 3.0, 29.0)),
+                education: None,
             };
             let mut pop = a.total();
             for t in 0..years * 12 {
