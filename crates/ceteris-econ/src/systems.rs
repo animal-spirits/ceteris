@@ -1483,6 +1483,14 @@ fn trade_legs(
 /// without a market keep their price, which nothing reads), then the update of expected
 /// inflation from the world price index (ADR 0019).
 pub fn reprice(w: &mut EconWorld) {
+    if let Some(a) = w.trade.anchor {
+        let (index, money) = (w.world_price_index(), w.money_issued());
+        let (i0, m0) = *w.anchor_base.get_or_insert((index, money));
+        let nominal = a.kappa_m * (libm::log(index / i0) - libm::log(money / m0));
+        w.markets.reprice_anchored(&w.trade, &a, nominal);
+        w.update_expectation();
+        return;
+    }
     w.markets
         .reprice(&w.trade, &w.layout.price_gain, w.expected_inflation);
     w.update_expectation();

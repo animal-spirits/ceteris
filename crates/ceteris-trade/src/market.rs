@@ -13,7 +13,7 @@
 use ceteris_core::snapshot::{DecodeError, Decoder, Encode, Encoder};
 
 use crate::goods::Goods;
-use crate::params::TradeParams;
+use crate::params::{PriceAnchor, TradeParams};
 
 /// Q_floor as a fraction of the good's world mean Q over active cells.
 const Q_FLOOR_FRACTION: f64 = 1e-9;
@@ -238,6 +238,61 @@ impl Markets {
                 self.clip_ticks[i] += 1;
             }
             let step = expected_inflation + gap.clamp(-c_max, c_max);
+            self.price[i] *= libm::exp(step);
+            if p.stores(g) {
+                let pi = self.expectation[i];
+                self.expectation[i] = pi + p.storage_gain * (step - pi);
+            }
+        }
+    }
+
+    /// Money-anchored price step (ADR 0338, trade SPEC Money-anchored rule), after clearing:
+    /// dlnp_o = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - nominal - kappa2 stock term),
+    /// l_o = (D [+ b] - Q) / Q_eff, a_o = kappa_r / (theta_g + 1) traded and kappa_r local,
+    /// lbar_g and lbar the p (Q + D) / 2 weighted means over the good's active origins and over
+    /// all markets, in cell order. `nominal` is kappa_m (ln(I / I0) - ln(M / M0)). No pi^e.
+    pub fn reprice_anchored(&mut self, p: &TradeParams, a: &PriceAnchor, nominal: f64) {
+        let floor = self.floors();
+        let ng = self.n_goods;
+        let n = self.price.len();
+        let mut l = vec![0.0; n];
+        let (mut num, mut den) = (vec![0.0; ng], vec![0.0; ng]);
+        for (i, l) in l.iter_mut().enumerate() {
+            let g = i % ng;
+            if !self.active[i] || floor[g] <= 0.0 {
+                continue;
+            }
+            let (q, d) = (self.supply[i], self.demand[i]);
+            let b = if p.stores(g) { self.storage[i] } else { 0.0 };
+            *l = (d + b - q) / q.max(floor[g]);
+            let v = self.price[i] * 0.5 * (q + d);
+            num[g] += v * *l;
+            den[g] += v;
+        }
+        let lg: Vec<f64> = (0..ng)
+            .map(|g| if den[g] > 0.0 { num[g] / den[g] } else { 0.0 })
+            .collect();
+        let lbar = num.iter().sum::<f64>() / den.iter().sum::<f64>();
+        for (i, &l) in l.iter().enumerate() {
+            let g = i % ng;
+            if !self.active[i] || floor[g] <= 0.0 {
+                continue;
+            }
+            let rel = if self.is_traded(i) {
+                a.kappa_r_traded / (p.theta[g] + 1.0)
+            } else {
+                a.kappa_r_local
+            };
+            let mut gap = rel * (l - lg[g]) + a.kappa_b * (lg[g] - lbar) - nominal;
+            if p.coverage[g] > 0.0 && !p.stores(g) {
+                let target = p.coverage[g] * self.demand[i];
+                gap -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
+            }
+            let c_max = p.price_clip(g);
+            if gap.abs() > c_max {
+                self.clip_ticks[i] += 1;
+            }
+            let step = gap.clamp(-c_max, c_max);
             self.price[i] *= libm::exp(step);
             if p.stores(g) {
                 let pi = self.expectation[i];
