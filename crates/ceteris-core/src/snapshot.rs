@@ -97,6 +97,10 @@ impl<'a> Decoder<'a> {
         Self { buf, pos: 0 }
     }
 
+    pub fn at_end(&self) -> bool {
+        self.pos == self.buf.len()
+    }
+
     pub fn finish(self) -> Result<(), DecodeError> {
         if self.pos == self.buf.len() {
             Ok(())
