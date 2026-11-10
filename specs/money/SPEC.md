@@ -1,6 +1,6 @@
 # Money SPEC
 
-Status: draft (P5 Branch 0; nothing here is built; awaiting owner approval; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 are proposed until the status RFC (RFC 0337 draft) is accepted)
+Status: draft (P5 Branch 0; nothing here is built; awaiting owner approval; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 accepted by RFC 0337, owner decision 2026-11-10)
 Phase: P5 (P5a money and fiscal, P5b banks, debt and flows)
 Design sections: 7.4, 9.1 to 9.14, 15.3 to 15.5, 17, 19.2, 19.4, 21.1; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0095, 0100, 0168, 0176, 0202, 0204, 0227 to 0231, 0233, 0236, 0242, 0278, RFC 0286; plan `specs/p5/PLAN.md`
 
@@ -55,7 +55,7 @@ logs of crises and restructurings are bounded by retention (ADR 0212).
 
 ## Equations
 
-Notation follows spec/09. Parameter IDs are those of spec/17 where they exist; `[new]` marks one
+Notation follows spec/09. Parameter IDs are those of spec/17 where they exist; marks one
 the accepting RFC must register (codes are taken only in that PR).
 
 **Matrices (9.1; Godley and Lavoie 2007).** Balance-sheet matrix `B` (sectors by instruments,
@@ -77,8 +77,8 @@ kappa rises with spending on capacity and depreciates slowly (Besley and Persson
 informality shrinks Base. Spending categories as 9.6; deficit `= spending + interest - revenue`,
 financed by borrowing or monetary financing, budgets set by the state AI under institutional
 rules (Section 10). Energy wedges and state energy cells (ADR 0278) enter as per-unit wedges and
-profits to the government account. Public capital: `A = A_cal (K_g / K_g0)^P77`, public investment
-times an efficiency factor from PIMA scores and governance (P78); the rest is lost. r minus g is
+profits to the government account. Public capital: `A = A_cal (K_g / K_g0)^P173`, public investment
+times an efficiency factor from PIMA scores and governance (P174); the rest is lost. r minus g is
 reported per state.
 
 **Asset-price clearing (9.9).** `w_{i,a} = exp(delta_{i,a}) / (1 + sum_b exp(delta_{i,b}))`,
@@ -97,16 +97,16 @@ streams (14.4), the sovereign-bank loop. Margin-constrained leverage per ADR 023
 levers per 9.11 and ADR 0229 state-triggered rules.
 
 **Housing (ADR 0040).** Supply elasticity per province from land unavailability and regulation
-(P74); mortgage demand per wealth bracket capped by the binding of LTV, LTI and DSTI limits
+(P171); mortgage demand per wealth bracket capped by the binding of LTV, LTI and DSTI limits
 (macroprudential levers, binding share reported); investor demand responds to expected gains
-under extrapolative expectations (9.13), share of purchases P75.
+under extrapolative expectations (9.13), share of purchases P172.
 
 **Sovereign debt (9.4; ADR 0043).** Spread `s = f(debt / revenue, deficit, foreign-currency
 share, reserves, institutions, default history, lender of last resort)` tied to the default
 hazard of the state AI's own rule on the same variables. Restructuring: creditor classes,
-bargaining on capacity to pay with holdouts reduced by collective action clauses (P79),
+bargaining on capacity to pay with holdouts reduced by collective action clauses (P175),
 multilaterals senior with no haircut, market exclusion until agreement plus a reputation period
-rising with the haircut (P80), IMF lending into arrears under conditionality.
+rising with the haircut (P176), IMF lending into arrears under conditionality.
 
 **Flows (9.5, 9.12; ADR 0168).** Gross flows emerge from portfolio rebalancing in the demand
 system; global risk appetite follows a stochastic-volatility process drawn from the run's
@@ -178,23 +178,23 @@ none changes after seeing results without an RFC (development laws).
 | P37 | Consumption propensity m, wealth correction lambda, target wealth ratio | spec/17 | calibrated to intertemporal MPCs |
 | P10 | Depreciation by asset class (range widened to 1 to 35%, ADR 0204) | PWT rates | data |
 | P50, P52 | sigma_g by theta class (range 2 to 11, ADR 0202); entry cost f_e | Zipf 1.05; OECD SDBS, Eurostat SBS | literature, data |
-| P03a, P03b, P143 `[new]` | kappa_r, kappa2, kappa_n (ADR 0090) | 0.5, set in region, 0.2 | free, calibrated |
-| P74, P75 `[new]` | Housing supply elasticity map; investor purchase share | ADR 0040 | data, free |
-| P77, P78 `[new]` | Public capital elasticity (centred 0.08); efficiency | ADR 0042 | literature, data |
-| P79, P80 `[new]` | Restructuring options and CAC holdout reduction; reputation period | ADR 0043 | free, calibrated |
-| delta, eta_e `[new]` | Firm death rate; entry response (ADR 0202) | BDS, DynEmp; 2008-10 start-up response | data, calibrated |
-| Services kernel `[new]`, 2 | Services elasticity, border friction (ADR 0168) | PPML on BaTiS | estimated |
+| P03a, P03b, P177 | kappa_r, kappa2, kappa_n (ADR 0090) | 0.5, set in region, 0.2 | free, calibrated |
+| P171, P172 | Housing supply elasticity map; investor purchase share | ADR 0040 | data, free |
+| P173, P174 | Public capital elasticity (centred 0.08); efficiency | ADR 0042 | literature, data |
+| P175, P176 | Restructuring options and CAC holdout reduction; reputation period | ADR 0043 | free, calibrated |
+| delta, eta_e | Firm death rate; entry response (ADR 0202) | BDS, DynEmp; 2008-10 start-up response | data, calibrated |
+| Services kernel, 2 | Services elasticity, border friction (ADR 0168) | PPML on BaTiS | estimated |
 | Finance free set | Run thresholds, fire-sale impact, diagnostic weight, risk-appetite process (9.14) | spec/17 | free |
 
 **Finance budget.** At most 12 of the 60 free behavioural parameters are finance (9.14; ADR
-0233 spent the last of them). Every `[new]` row above states in its accepting PR which of the
+0233 spent the last of them). Every row above states in its accepting PR which of the
 twelve it spends; any that does not fit is a post-1.0 item, not an exception. Demand elasticities
 are literature-anchored and latent demand and initial balance sheets are data-determined.
 
 ## Equilibrium nesting
 
 With every finance switch off, the economy equals the P4 status quo and every golden holds. With
-the neutral-rate filter frozen, hashes are unchanged; with P77 zero, public capital drops out;
+the neutral-rate filter frozen, hashes are unchanged; with P173 zero, public capital drops out;
 with non-binding caps and zero investors, housing equals the status quo; with `z_b = 0` there are
 no zombies; with instant orders the investment rule equals the instant rule bit for bit; with
 perfect foresight in place of heuristics and frictions off, small-shock responses lie within
