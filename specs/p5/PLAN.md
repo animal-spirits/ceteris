@@ -24,7 +24,7 @@ Both gates also need spec/21 section 21.2 done (invariants over 100 years, budge
 
 | # | Question | Default if not answered |
 |---|---|---|
-| O1 | ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 are still `proposed` (0090 and 0286 deferred to P5). Accept them as written for the 1.0 path in one status RFC? | Branch 0 writes that RFC with one decision per ADR; nothing is built before it is accepted |
+| O1 | Closed: RFC 0337 accepted ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 as written (owner, 2026-11-10) | Done |
 | O2 | Build order inside P5a: balance sheets first (spec/09 section 9.14 stage 1), or the price rule and storage fix first because they change the real economy's goldens? | Balance sheets first; Branch E (price rule) before any branch that re-blesses, so one re-bless covers it |
 | O3 | JST Macrohistory is likely non-commercial and priors-only (9.14); BIS, IMF and ECB commercial terms are unconfirmed. Which holdings series ship in the paid build? | Research pack only until #231 (NC audit) answers |
 
@@ -42,7 +42,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 ## Branch 0: `p5/records` (before code)
 
 - [ ] Write `specs/money/SPEC.md` from `specs/TEMPLATE.md`: sector balance sheets and the matrices of 9.1, regimes and rules of 9.2, fiscal state of 9.6, banks and asset markets of 9.3, 9.10 and 9.11, sovereign debt of 9.4, flows of 9.5 and 9.12, bounds, test plan from this plan.
-- [ ] RFC for O1 with the register entries of each ADR (P35, P74, P75, P77, P78, P79, P80 and those of 0025, 0090, 0168, 0202, 0204 as they are today) checked against `spec/rows.toml`. Create `specs/COUPLINGS.md` (ADR 0080) with the module pairs implemented through P4 and their tests.
+- [ ] RFC for O1 with the register entries of each ADR (P35, P171, P172, P173, P174, P175, P176 and those of 0025, 0090, 0168, 0202, 0204 as they are today) checked against `spec/rows.toml`. Create `specs/COUPLINGS.md` (ADR 0080) with the module pairs implemented through P4 and their tests.
 - [ ] Commit `docs(money): p5 spec and accepted p5 adrs`.
 
 ## Branch E: `p5/price-rule` (ADR 0090, RFC 0286; #215, #216)
@@ -78,7 +78,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 ## Branch C: `p5/fiscal-state` (spec/09 section 9.6, ADR 0042)
 
 - [ ] **C1** Revenue instruments `R = tau x Base x kappa x compliance` with fiscal capacity kappa per instrument that investment builds and depreciation erodes; spending categories; deficits financed by borrowing. Tests: `fiscal_off_equals_status_quo`; `informality_shrinks_the_base`; `revenue_and_spending_close_in_the_government_account`.
-- [ ] **C2** Public capital `A = A_cal (K_g / K_g0)^P77`, public investment times an efficiency factor from PIMA scores and governance (P78); r minus g reported per state. Tests: `public_capital_elasticity_zero_equals_status_quo`; `spending_multipliers_in_slack_and_non_slack_states_order_as_ramey_zubairy`.
+- [ ] **C2** Public capital `A = A_cal (K_g / K_g0)^P173`, public investment times an efficiency factor from PIMA scores and governance (P174); r minus g reported per state. Tests: `public_capital_elasticity_zero_equals_status_quo`; `spending_multipliers_in_slack_and_non_slack_states_order_as_ramey_zubairy`.
 
 - [ ] **C3** Energy policy held at t0 (ADR 0278): fuel excises and subsidies as per-unit wedges on goods B06, C19 and D at their 2000 rates per state, held for the run like trade policy; a subsidy is a fiscal cost at the wedge times quantity. Tests: `energy_wedges_off_equals_status_quo`; `subsidy_cost_equals_wedge_times_quantity`.
 - [ ] **C4** State energy cells (ADR 0278, applying ADR 0201's ownership split to crude oil and gas extraction and power only): a cell splits where the state share is at least 5% of (province, sector) VA in 2000; state cells' profits go to the state's account and their investment follows the 7.4 logit like any owner. Tests: `state_cell_split_off_equals_status_quo`; `state_cell_profits_reach_the_government_account`.
@@ -92,13 +92,13 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 ## Branch F: `p5/banks-and-housing` (spec/09 sections 9.3, 9.10, 9.11; ADR 0040, #217)
 
 - [ ] **F1** Bank archetypes, the monthly fixed-point loop, the four contagion channels, deposit insurance and the safety net. Tests: `banks_off_equals_status_quo`; `bank_balance_sheets_close_every_tick`; `run_threshold_triggers_contagion_through_interbank_exposures`.
-- [ ] **F2** Housing supply elasticity per province (land unavailability and regulation, P74), mortgage caps by LTV, LTI and DSTI (macroprudential levers), investor demand under extrapolative expectations (P75). Tests: `non_binding_caps_and_zero_investors_equal_status_quo`; `tighter_ltv_lowers_the_peak_of_prices_and_credit_in_a_toy_boom`.
+- [ ] **F2** Housing supply elasticity per province (land unavailability and regulation, P171), mortgage caps by LTV, LTI and DSTI (macroprudential levers), investor demand under extrapolative expectations (P172). Tests: `non_binding_caps_and_zero_investors_equal_status_quo`; `tighter_ltv_lowers_the_peak_of_prices_and_credit_in_a_toy_boom`.
 - [ ] **F3** Equity and housing price paths and credit-to-GDP against targets of 9.14, reported.
 
 ## Branch G: `p5/sovereign-and-flows` (spec/09 sections 9.4, 9.5, 9.12; ADR 0043)
 
 - [ ] **G1** Sovereign debt, default hazard, spreads from debt and stress, IMF lending into arrears under conditionality. Test: `spreads_respond_to_debt_and_stress` (gate item 4).
-- [ ] **G2** Creditor classes, restructuring by bargaining on capacity to pay with holdouts reduced by collective action clauses, market exclusion with a reputation period (P79, P80). Tests: `haircut_distribution_and_default_durations_within_tolerance_of_cruces_trebesch`; `larger_haircuts_give_deeper_post_default_losses`.
+- [ ] **G2** Creditor classes, restructuring by bargaining on capacity to pay with holdouts reduced by collective action clauses, market exclusion with a reputation period (P175, P176). Tests: `haircut_distribution_and_default_durations_within_tolerance_of_cruces_trebesch`; `larger_haircuts_give_deeper_post_default_losses`.
 - [ ] **G3** Capital flows, reserves, the global financial cycle, the dollar and capital controls (9.5, 9.12). Test: `flows_off_equals_status_quo`; `current_account_and_financial_account_close_each_tick`.
 
 ## Branch H: `p5/hank-reference` (ADR 0025, #218)
