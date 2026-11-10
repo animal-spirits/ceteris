@@ -470,6 +470,14 @@ fixture's eps:
 
 Limits are the first failing value on a 0.0005 grid (`ceteris calibrate stability` prints the rows from the fixture export).
 
+**Good-level gain kappa_b (P178, ADR 0338; derived, not yet measured on the fixture).** With the within-good term summing to zero (weights of lbar_g), the good-level term `kappa_b (lbar_g - lbar)` is a proportional controller on the good's relative price x_g: the gap falls with x_g at the across-goods elasticity E_b, so it is the (x, q) block above with kappa1 = kappa_b, kappa2 = 0, E = E_b and the same eta and eps. E_b is the household CES elasticity sigma (P06, 0.6) at most; inputs are Leontief, so E_b in [0.1, 0.6] by the household share. Spectral radius over E_b in {0.1, 0.3, 0.6}, eps in {0.90, 1.5, 2.61} and eta in {0.3, 1} (kappa_b grid 0.01):
+
+| kappa_b | 0.02 | 0.05 | 0.1 | 0.2 | 0.3 | 0.5 |
+|---|---|---|---|---|---|---|
+| worst case | 0.980 | 0.950 | 0.900 | 0.828 | 0.824 | 0.816 |
+
+The limit (J2) is 0.63 (frictionless, E_b 0.6, eps 2.61); the default mode has none below 1.89. The worst case bottoms out at kappa_b 0.3, about half the limit, so **P178 = 0.3**, replacing the spike's 0.02 to 0.05 (which left the mode at 0.95 to 0.98 per tick, the slow drift of 2.5e-4 to 7.5e-4 per tick at 1,200 ticks). The single-good linearization ignores coupling with kappa_m and the origin terms; RFC 0338, Before the build, requires the fixture and pack measurement at 0.3 before E1 merges, and a different value after seeing results needs that RFC amended.
+
 The default (kappa1 0.05, kappa2 0) lies on the edge kappa2 = 0 of the region and counts as
 inside (owner ruling, MIGRATION Task 6): J1 holds with equality, so the stock has a unit root (it
 keeps what a transient leaves, as decided: inventories are untargeted in P2) while J2 to J4 hold,
