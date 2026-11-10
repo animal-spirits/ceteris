@@ -33,7 +33,7 @@ fn linear(c: u8) -> f64 {
     if c <= 0.04045 {
         c / 12.92
     } else {
-        ((c + 0.055) / 1.055).powf(2.4)
+        libm::pow((c + 0.055) / 1.055, 2.4)
     }
 }
 
@@ -47,7 +47,7 @@ pub fn lab(rgb: [u8; 3], vision: &[[f64; 3]; 3]) -> [f64; 3] {
     let z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883;
     let f = |t: f64| {
         if t > 216.0 / 24389.0 {
-            t.cbrt()
+            libm::cbrt(t)
         } else {
             (24389.0 / 27.0 * t + 16.0) / 116.0
         }
@@ -60,15 +60,15 @@ pub fn lab(rgb: [u8; 3], vision: &[[f64; 3]; 3]) -> [f64; 3] {
 pub fn ciede2000(a: [f64; 3], b: [f64; 3]) -> f64 {
     let [l1, a1, b1] = a;
     let [l2, a2, b2] = b;
-    let c_bar = (a1.hypot(b1) + a2.hypot(b2)) / 2.0;
+    let c_bar = (libm::hypot(a1, b1) + libm::hypot(a2, b2)) / 2.0;
     let g = 0.5 * (1.0 - (c_bar.powi(7) / (c_bar.powi(7) + 25f64.powi(7))).sqrt());
     let (a1, a2) = (a1 * (1.0 + g), a2 * (1.0 + g));
-    let (c1, c2) = (a1.hypot(b1), a2.hypot(b2));
+    let (c1, c2) = (libm::hypot(a1, b1), libm::hypot(a2, b2));
     let hue = |b: f64, a: f64| {
         if a == 0.0 && b == 0.0 {
             0.0
         } else {
-            b.atan2(a).to_degrees().rem_euclid(360.0)
+            libm::atan2(b, a).to_degrees().rem_euclid(360.0)
         }
     };
     let (h1, h2) = (hue(b1, a1), hue(b2, a2));
@@ -83,7 +83,7 @@ pub fn ciede2000(a: [f64; 3], b: [f64; 3]) -> f64 {
     } else {
         h2 - h1 - 360.0
     };
-    let dh = 2.0 * (c1 * c2).sqrt() * (dh / 2.0).to_radians().sin();
+    let dh = 2.0 * (c1 * c2).sqrt() * libm::sin((dh / 2.0).to_radians());
     let l_bar = (l1 + l2) / 2.0;
     let c_bar = (c1 + c2) / 2.0;
     let h_bar = if c1 * c2 == 0.0 {
@@ -95,16 +95,16 @@ pub fn ciede2000(a: [f64; 3], b: [f64; 3]) -> f64 {
     } else {
         (h1 + h2 - 360.0) / 2.0
     };
-    let t = 1.0 - 0.17 * (h_bar - 30.0).to_radians().cos()
-        + 0.24 * (2.0 * h_bar).to_radians().cos()
-        + 0.32 * (3.0 * h_bar + 6.0).to_radians().cos()
-        - 0.20 * (4.0 * h_bar - 63.0).to_radians().cos();
+    let t = 1.0 - 0.17 * libm::cos((h_bar - 30.0).to_radians())
+        + 0.24 * libm::cos((2.0 * h_bar).to_radians())
+        + 0.32 * libm::cos((3.0 * h_bar + 6.0).to_radians())
+        - 0.20 * libm::cos((4.0 * h_bar - 63.0).to_radians());
     let sl = 1.0 + 0.015 * (l_bar - 50.0).powi(2) / (20.0 + (l_bar - 50.0).powi(2)).sqrt();
     let sc = 1.0 + 0.045 * c_bar;
     let sh = 1.0 + 0.015 * c_bar * t;
-    let d_theta = 30.0 * (-((h_bar - 275.0) / 25.0).powi(2)).exp();
+    let d_theta = 30.0 * libm::exp(-((h_bar - 275.0) / 25.0).powi(2));
     let rc = 2.0 * (c_bar.powi(7) / (c_bar.powi(7) + 25f64.powi(7))).sqrt();
-    let rt = -(2.0 * d_theta).to_radians().sin() * rc;
+    let rt = -libm::sin((2.0 * d_theta).to_radians()) * rc;
     ((dl / sl).powi(2) + (dc / sc).powi(2) + (dh / sh).powi(2) + rt * (dc / sc) * (dh / sh)).sqrt()
 }
 

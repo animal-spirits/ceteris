@@ -505,7 +505,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s = s.borrow_mut();
         let (px, viewport) = (s.physical(x, y), s.viewport);
         if let Some(c) = s.camera.as_mut() {
-            c.zoom_at(viewport, px, (f64::from(delta) / 240.0).exp2());
+            c.zoom_at(viewport, px, libm::exp2(f64::from(delta) / 240.0));
         }
         s.place_labels();
         weak.upgrade().inspect(|a| a.window().request_redraw());
