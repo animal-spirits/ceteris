@@ -47,9 +47,9 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ## Branch E: `p5/price-rule` (ADR 0090, RFC 0286; #215, #216)
 
-### Task E1: Split price rule with the traded-market anchor
+### Task E1: Split price rule with the money anchor (ADR 0338)
 
-- [ ] Origin-market rule `dlnp = clip(pi^e + (kappa_r / E)(l - lbar) + (kappa_n / h) lbar - (kappa2 / E)(S' - S*)/S*)` with `kappa_r` split by traded and local goods; one world reduction per tick with `fixed_sum`.
+- [ ] Origin-market rule of ADR 0338 (trade SPEC, Money-anchored rule): `dlnp = clip(a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar) - kappa_m (ln(I/I0) - ln(M/M0)) - stock term)`, `a_o = kappa_r / E_g`; one reduction per good per tick with `fixed_sum`. Before the build: the Mac pack data-state run and the derived kappa_b (RFC 0338, Before the build).
 - [ ] Failing tests: `price_rule_off_equals_status_quo`; `x10_border_shock_converges_frictionless` (the P5 criterion above); `fixture_steady_state_unchanged`. Re-bless in its own commit.
 
 ### Task E2: Storage-on frictionless fix (RFC 0286)
