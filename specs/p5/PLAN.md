@@ -59,6 +59,8 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ### Task E3: Zero-output production trap (ADR 0341)
 
+- [x] Built behind `PriceAnchor::e3` (ADRs 0343 to 0345, RFC 0342): chained anchor index over cells that trade, pay on sales, traded-input credit line of one loss cap. Tests `e3_x10_border_shock_survives_700_ticks`, `e3_steady_state_unchanged`, `e3_nominal_shock_returns_within_30_ticks`, `e3_snapshot_replays` (`p5_price_anchor.rs`). Pack runs (data state, RFC 0286 screen) pending on the Mac.
+
 - [ ] Diagnose on the fixture why output dies province by province at x10 with the index held (spike: Q halves each tick while D > 0; hypothesis the Leontief zero state is absorbing, inputs ordered on constrained output, and the eta 1 labour flip). Spec and RFC before code. Carries `x10_border_shock_converges_frictionless` (ADR 0339).
 
 ## Branch A: `p5/balance-sheets` (spec/09 section 9.1, #213)

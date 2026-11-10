@@ -88,7 +88,10 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(204, "demand", |w, _| demand(w)),
         def(205, "source", |w, _| source(w)),
         def(206, "clear", |w, _| clear(w)),
-        def(207, "dispatch", |w, _| dispatch(w)),
+        def(207, "dispatch", |w, _| {
+            dispatch(w);
+            pay_sales(w)
+        }),
         def(208, "reprice", |w, ctx| {
             reprice(w);
             crate::channels::after_reprice(w, ctx.tick)
@@ -520,6 +523,7 @@ pub fn produce(w: &mut EconWorld) {
     };
     let (price, wage, employment, employed) =
         (&w.markets.price, &w.wage, &w.employment, &w.employed);
+    let on_sales = w.trade.anchor.is_some_and(|a| a.e3);
     drop(setup);
     let run = timing::span("e2.run", NONE);
     tasks.par_iter_mut().for_each(|t| {
@@ -548,9 +552,11 @@ pub fn produce(w: &mut EconWorld) {
                 t.ledger.create(account, g, y);
                 t.ledger.ship(account, acc.market[i], g, y);
             }
-            let sale = price[cell] * y;
-            t.sales[le] = sale;
-            pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
+            if !on_sales {
+                let sale = price[cell] * y;
+                t.sales[le] = sale;
+                pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
+            }
             t.supply[g] += y;
 
             let bill = to_minor(wage[i] * employment[e]);
@@ -588,6 +594,71 @@ pub fn produce(w: &mut EconWorld) {
     let _put = timing::span("e2.put", NONE);
     let done = tasks.into_iter().map(|t| t.ledger.finish()).collect();
     w.ledger.put_province_slices(done);
+    if on_sales {
+        for (c, &y) in w.consigned.iter_mut().zip(&w.output) {
+            *c += y;
+        }
+    }
+}
+
+/// E3 package (RFC 0342): after clearing, each market pays its producers p for the units it sold,
+/// this tick's output first (pro rata), then the unpaid backlog (pro rata); unsold traded units
+/// stay owed up to the market's stock, unsold local units perish.
+pub fn pay_sales(w: &mut EconWorld) {
+    if !w.trade.anchor.is_some_and(|a| a.e3) {
+        return;
+    }
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let acc = &lay.accounts;
+    let ng = inp.n_goods();
+    let m = &w.markets;
+    for i in 0..inp.n_provinces() {
+        for g in 0..ng {
+            let cell = i * ng + g;
+            let ents: Vec<usize> = lay
+                .enterprises(i)
+                .filter(|&e| usize::from(inp.enterprises.good[e]) == g)
+                .collect();
+            if ents.is_empty() {
+                continue;
+            }
+            let fresh: f64 = ents.iter().map(|&e| w.output[e]).sum();
+            let back: f64 = ents.iter().map(|&e| w.consigned[e] - w.output[e]).sum();
+            let sold = m.sales[cell];
+            let f = sold.min(fresh);
+            let b = (sold - f).min(back).max(0.0);
+            for &e in &ents {
+                let prior = w.consigned[e] - w.output[e];
+                let units = if fresh > 0.0 {
+                    w.output[e] / fresh * f
+                } else {
+                    0.0
+                } + if back > 0.0 { prior / back * b } else { 0.0 };
+                w.consigned[e] = (w.consigned[e] - units).max(0.0);
+                let sale = m.price[cell] * units;
+                w.sales[e] = sale;
+                pay(
+                    &mut w.ledger,
+                    SALE,
+                    acc.market[i],
+                    acc.enterprise[e],
+                    to_minor(sale),
+                );
+            }
+            let owed: f64 = ents.iter().map(|&e| w.consigned[e]).sum();
+            let cap = if m.is_traded(cell) {
+                m.inventory[cell]
+            } else {
+                0.0
+            };
+            if owed > cap {
+                let r = if owed > 0.0 { cap / owed } else { 0.0 };
+                for &e in &ents {
+                    w.consigned[e] *= r;
+                }
+            }
+        }
+    }
 }
 
 /// One province's slices of E2's tables and its accounts.
@@ -720,6 +791,7 @@ pub fn demand(w: &mut EconWorld) {
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
     let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
+    let credit = w.trade.anchor.is_some_and(|a| a.e3);
     sc.ent_order
         .par_chunks_mut(ng)
         .zip(sc.ent_spend.par_chunks_mut(ng))
@@ -756,6 +828,18 @@ pub fn demand(w: &mut EconWorld) {
                 } else {
                     0.0
                 };
+            }
+            // E3 package: traded input spending within cash plus a credit line of one loss cap (P148)
+            if credit {
+                let cost: f64 = spend[..nt].iter().sum();
+                let budget = (to_numeraire(ledger.money(acc.enterprise[e]))
+                    + to_numeraire(lay.ent_loss_cap[e]))
+                .max(0.0);
+                if cost > budget {
+                    let s = budget / cost;
+                    orders[..nt].iter_mut().for_each(|o| *o *= s);
+                    spend[..nt].iter_mut().for_each(|x| *x *= s);
+                }
             }
         });
     // local goods: demand at the province market, in pop then enterprise order
@@ -1479,12 +1563,49 @@ fn trade_legs(
     }
 }
 
+/// The anchor's index under the E3 package (trade SPEC, Money-anchored rule): the level of the
+/// last repricing moved by the base-weight-by-last-price weighted mean log change over cells
+/// bought at both repricings. Traded cells with a finite buyer price are bought, local cells
+/// when they sold; a price nobody pays does not move the index.
+fn chained_index(w: &mut EconWorld) -> f64 {
+    let ng = w.inputs.n_goods();
+    let traded = w.inputs.goods.traded;
+    let bought: Vec<bool> = (0..w.price_index.len())
+        .map(|c| w.price_index[c].is_finite() && (c % ng < traded || w.markets.sales[c] > 0.0))
+        .collect();
+    let level = match &w.anchor_chain {
+        None => w.world_price_index(),
+        Some(prev) => {
+            let (mut num, mut den) = (0.0, 0.0);
+            for (c, &now) in bought.iter().enumerate() {
+                if now && prev.bought[c] {
+                    let share = w.layout.index_weights[c] * prev.price[c];
+                    num += share * libm::log(w.price_index[c] / prev.price[c]);
+                    den += share;
+                }
+            }
+            prev.level * libm::exp(if den > 0.0 { num / den } else { 0.0 })
+        }
+    };
+    w.anchor_chain = Some(crate::world::AnchorChain {
+        price: w.price_index.clone(),
+        bought,
+        level,
+    });
+    level
+}
+
 /// T4: the stock-flow price rule with expected inflation on every active market (cells
 /// without a market keep their price, which nothing reads), then the update of expected
 /// inflation from the world price index (ADR 0019).
 pub fn reprice(w: &mut EconWorld) {
     if let Some(a) = w.trade.anchor {
-        let (index, money) = (w.world_price_index(), w.money_issued());
+        let index = if a.e3 {
+            chained_index(w)
+        } else {
+            w.world_price_index()
+        };
+        let money = w.money_issued();
         let (i0, m0) = *w.anchor_base.get_or_insert((index, money));
         let nominal = a.kappa_m * (libm::log(index / i0) - libm::log(money / m0));
         w.markets.reprice_anchored(&w.trade, &a, nominal);

@@ -859,6 +859,8 @@ N_k / N_c of the pool (`national_profit_pool_conserves_money_exactly`,
 `limited_liability_keeps_losses_and_repays_them_first`). Wages use the same cumulative-share
 rule (`split`) over the province's pops by employed effective labour.
 
+*E3 package: pay on sales and traded-input credit line (ADRs 0344, 0345, RFC 0342; `PriceAnchor::e3`, off by default).* E2 ships output to the market without the SALE payment and adds it to the enterprise's consigned units. After clearing (T2b, system 207) each market pays p_o per unit sold (`Markets::sales`): this tick's output first, then the backlog, both pro rata over the cell's enterprises; the backlog of a traded cell is capped at the market's stock and that of a local cell perishes. At E3 an enterprise's traded input orders are scaled together so their value does not exceed max(0, cash + T_e), T_e = M S_e the loss cap of the write-off above (P148; no new parameter). Cash alone deadlocks, since inputs are paid before the sales that fund them. Consigned units are state. Spike on the fixture at x10 with the chained index of the trade SPEC: 1,500 ticks, Y min 0.989, island enterprise debt held at -2.9e8; ntb 1 exact (`docs/research/p5-e3-mainland-deflation-2026-11-10.md`).
+
 *Loss write-off (E4, ADR 0112).* After the distribution, enterprise e's retained loss beyond
 T_e = M S_e (M P148, 3 months; S_e = VA0_e / a_VA_e its base monthly sales, the calibrated
 steady-state sales value) is written off: per country the excesses E_e = max(0, -balance_e -

@@ -691,6 +691,12 @@ pub struct EconWorld {
     pub output: Vec<f64>,
     pub sales: Vec<f64>,
     pub profit: Vec<f64>,
+    /// E3 package (ADR 0343): units an enterprise has consigned to its market and not been paid
+    /// for; empty-valued (all 0) unless `PriceAnchor::e3`.
+    pub consigned: Vec<f64>,
+    /// E3 package: the chained anchor index (buyer prices, cells bought, level) of the last
+    /// repricing; `None` until the first.
+    pub anchor_chain: Option<AnchorChain>,
     /// Population on the monthly clock (P4, system 220): the mechanisms and the cohort cells.
     /// `None` is the status quo; the snapshot then has no population section.
     pub pop: Option<(Demography, Cohorts)>,
@@ -702,6 +708,14 @@ pub struct EconWorld {
     pub(crate) pop_drift: i64,
     /// Not state: see [`Scratch`].
     pub scratch: Scratch,
+}
+
+/// State of the chained anchor index of the E3 package (trade SPEC, Money-anchored rule).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnchorChain {
+    pub price: Vec<f64>,
+    pub bought: Vec<bool>,
+    pub level: f64,
 }
 
 /// BLAKE3 over the inputs digest and both parameter sets except the write-off threshold P148
@@ -806,7 +820,13 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64(*storage_gain);
     // off, the status quo's digest
     if let Some(a) = anchor {
-        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
+        let gains = [a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m];
+        // a fifth entry marks the E3 package, so worlds without it keep their bytes
+        if a.e3 {
+            e.f64s(&[gains[0], gains[1], gains[2], gains[3], 1.0]);
+        } else {
+            e.f64s(&gains);
+        }
     }
     // instant adjustment is the same dynamics at any class rate
     if trade.partial_adjustment() {
@@ -1405,6 +1425,8 @@ impl EconWorld {
             output: vec![0.0; n_ent],
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
+            consigned: vec![0.0; n_ent],
+            anchor_chain: None,
             pop: None,
             migration: None,
             pop_drift: 0,
@@ -2169,7 +2191,13 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
     e.f64s(rho);
     // the snapshot is restored into a world with the same setting, so off writes nothing
     if let Some(a) = anchor {
-        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
+        let gains = [a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m];
+        // a fifth entry marks the E3 package, so worlds without it keep their bytes
+        if a.e3 {
+            e.f64s(&[gains[0], gains[1], gains[2], gains[3], 1.0]);
+        } else {
+            e.f64s(&gains);
+        }
     }
 }
 
@@ -2228,13 +2256,18 @@ fn decode_trade(
         convenience,
         storage_gain,
         anchor: if anchored {
-            let [kappa_r_traded, kappa_r_local, kappa_b, kappa_m] =
-                decode_array(d, "price anchor")?;
+            let (gains, e3) = match *d.f64s()?.as_slice() {
+                [a, b, c, m] => ([a, b, c, m], false),
+                [a, b, c, m, _] => ([a, b, c, m], true),
+                _ => return Err(DecodeError("price anchor".into())),
+            };
+            let [kappa_r_traded, kappa_r_local, kappa_b, kappa_m] = gains;
             Some(PriceAnchor {
                 kappa_r_traded,
                 kappa_r_local,
                 kappa_b,
                 kappa_m,
+                e3,
             })
         } else {
             None
@@ -2287,6 +2320,21 @@ impl Encode for EconWorld {
             match self.anchor_base {
                 Some((i0, m0)) => e.f64s(&[i0, m0]),
                 None => e.f64s(&[]),
+            }
+        }
+        if self.trade.anchor.is_some_and(|a| a.e3) {
+            e.f64s(&self.consigned);
+            match &self.anchor_chain {
+                Some(c) => {
+                    e.f64s(&c.price);
+                    e.bools(&c.bought);
+                    e.f64s(&[c.level]);
+                }
+                None => {
+                    e.f64s(&[]);
+                    e.bools(&[]);
+                    e.f64s(&[]);
+                }
             }
         }
         e.u32s(&self.wage_clip_ticks);
@@ -2628,6 +2676,22 @@ impl State for EconWorld {
         } else {
             None
         };
+        let (consigned, anchor_chain) = if trade.anchor.is_some_and(|a| a.e3) {
+            let consigned = d.f64s()?;
+            let (price, bought, level) = (d.f64s()?, d.bools()?, d.f64s()?);
+            let chain = match level.as_slice() {
+                [] => None,
+                &[level] => Some(AnchorChain {
+                    price,
+                    bought,
+                    level,
+                }),
+                _ => return Err(DecodeError("anchor chain".into())),
+            };
+            (consigned, chain)
+        } else {
+            (vec![0.0; sales.len()], None)
+        };
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
@@ -2697,6 +2761,8 @@ impl State for EconWorld {
             employed,
             income,
             output,
+            consigned,
+            anchor_chain,
             sales,
             profit,
             pop,
