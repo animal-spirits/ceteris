@@ -26,6 +26,7 @@ use crate::demand::{
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
 use crate::params::{EconParams, Pigl, Technology, Transfers};
+use crate::pop::{Cohorts, Demography};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 /// Buyers per block of the good-major spending arrays (`Scratch::pop_spend_t`).
@@ -684,6 +685,12 @@ pub struct EconWorld {
     pub output: Vec<f64>,
     pub sales: Vec<f64>,
     pub profit: Vec<f64>,
+    /// Population on the monthly clock (P4, system 220): the mechanisms and the cohort cells.
+    /// `None` is the status quo; the snapshot then has no population section.
+    pub pop: Option<(Demography, Cohorts)>,
+    /// Persons the last demography step created or lost beyond births less deaths; zero
+    /// unless conservation broke. Not state.
+    pub(crate) pop_drift: i64,
     /// Not state: see [`Scratch`].
     pub scratch: Scratch,
 }
@@ -1289,6 +1296,18 @@ impl EconWorld {
         Self::with_kernel(inputs, params, trade, kernel)
     }
 
+    /// Switches population on: `cohorts` in province order, evolving under `demography` at
+    /// system 220.
+    pub fn with_population(mut self, demography: Demography, cohorts: Cohorts) -> EconWorld {
+        assert_eq!(
+            cohorts.n_provinces(),
+            self.inputs.n_provinces(),
+            "one cohort block per province"
+        );
+        self.pop = Some((demography, cohorts));
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1361,6 +1380,8 @@ impl EconWorld {
             output: vec![0.0; n_ent],
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
+            pop: None,
+            pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
             ledger,
             markets,
@@ -2218,6 +2239,9 @@ impl Encode for EconWorld {
             e.f64s(&[]);
         }
         e.f64s(&self.smooth);
+        if let Some((demography, cohorts)) = &self.pop {
+            demography.encode(cohorts, e);
+        }
     }
 }
 
@@ -2263,6 +2287,13 @@ impl State for EconWorld {
         let span = timing::span("end.columns", timing::NONE);
         let (inp, lay) = (&*self.inputs, &*self.layout);
         let fail = |invariant, detail| Err(Violation::new(tick, invariant, detail));
+
+        if self.pop_drift != 0 {
+            return fail(
+                "cohort conservation",
+                format!("{} persons beyond births less deaths", self.pop_drift),
+            );
+        }
 
         // pops and enterprises are fixed tables; their populations live in the immutable
         // inputs, so only the dynamic columns can drift
@@ -2530,6 +2561,11 @@ impl State for EconWorld {
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
+        let pop = if d.at_end() {
+            None
+        } else {
+            Some(Demography::decode(d)?)
+        };
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2543,6 +2579,9 @@ impl State for EconWorld {
         expect_len("pipeline buyers", pipeline.n_buyers(), n_pops + n_ent)?;
         expect_len("wages", wage.len(), np)?;
         expect_len("wage clip ticks", wage_clip_ticks.len(), np)?;
+        if let Some((_, c)) = &pop {
+            expect_len("cohort provinces", c.n_provinces(), np)?;
+        }
         expect_len("expectation", expectation.len(), 2)?;
         expect_len("price index", price_index.len(), np * ng)?;
         for (what, column) in [("employed", &employed), ("income", &income)] {
@@ -2584,6 +2623,8 @@ impl State for EconWorld {
             output,
             sales,
             profit,
+            pop,
+            pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
         let same_tariff = tariff
@@ -2974,6 +3015,54 @@ mod tests {
         let (tick, back) = decode_canonical_with(&bytes, |d| w.restore(d)).unwrap();
         assert_eq!(tick, 12);
         (bytes, back)
+    }
+
+    fn population_sim() -> Sim<EconWorld> {
+        let (d, c) = crate::pop::toy(world().inputs().n_provinces());
+        Sim::new(
+            world().with_population(d, c),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    #[test]
+    fn population_runs_conserved_and_changes_the_hash() {
+        let mut on = population_sim();
+        let before = on.world().pop.as_ref().unwrap().1.total();
+        on.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        let after = on.world().pop.as_ref().unwrap().1.total();
+        assert_ne!(before, after);
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        off.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        assert_ne!(on.state_hash(), off.state_hash());
+        let mut again = population_sim();
+        again.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(on.state_hash(), again.state_hash());
+    }
+
+    #[test]
+    fn population_off_adds_nothing_to_the_snapshot() {
+        let off = world();
+        let on = population_sim();
+        assert!(canonical(0, on.world()).len() > canonical(0, &off).len());
+        // the economy's own columns are untouched by the extra system
+        let mut a = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        a.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        let mut b = population_sim();
+        b.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(a.world().wage, b.world().wage);
+        assert_eq!(a.world().income, b.world().income);
+    }
+
+    #[test]
+    fn population_state_round_trips() {
+        let mut sim = population_sim();
+        sim.run_until(13).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world();
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.pop, w.pop);
     }
 
     #[test]

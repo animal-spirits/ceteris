@@ -1,6 +1,8 @@
 //! Cohort cells, ageing, Brass mortality and tempo fertility (P4 Branch A, `specs/pop/SPEC.md`). Counts are exact integers;
 //! every flow is a pair of transfers, so population changes only by births, deaths and moves.
 
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
 /// Five-year age bands 0-4 .. 95-99 plus 100 and over.
 pub const N_AGE: usize = 22;
 pub const N_SEX: usize = 2;
@@ -14,7 +16,7 @@ const BAND_YEARS: u64 = 5;
 pub const AGEING_PERIOD: u32 = 12;
 
 /// Population by (province, age band, sex, education), province-major.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Cohorts {
     n: Vec<u64>,
     /// Fifths of a person per cell not yet moved out of its band (0..5); carried so repeated
@@ -22,6 +24,14 @@ pub struct Cohorts {
     residue: Vec<u8>,
     scratch: Vec<u64>,
 }
+
+/// Equal by state; the scratch buffer is not state.
+impl PartialEq for Cohorts {
+    fn eq(&self, other: &Self) -> bool {
+        self.n == other.n && self.residue == other.residue
+    }
+}
+impl Eq for Cohorts {}
 
 #[inline]
 pub fn cell(a: usize, s: usize, e: usize) -> usize {
@@ -374,6 +384,161 @@ impl Demography {
         let births = self.fertility.as_ref().map_or(0, |f| cohorts.bear(f));
         Flows { births, deaths }
     }
+}
+
+/// Snapshot encoding of the demography state: cohorts, then the mechanisms in field order,
+/// each behind a presence byte. Absent entirely when population is off.
+impl Demography {
+    pub fn encode(&self, cohorts: &Cohorts, e: &mut Encoder) {
+        e.i64s(
+            &cohorts
+                .n
+                .iter()
+                .map(|&v| i64::try_from(v).expect("count"))
+                .collect::<Vec<_>>(),
+        );
+        e.u32s(
+            &cohorts
+                .residue
+                .iter()
+                .map(|&r| u32::from(r))
+                .collect::<Vec<_>>(),
+        );
+        e.u8(u8::from(self.mortality.is_some()));
+        if let Some(b) = &self.mortality {
+            e.f64s(&b.std_l.concat());
+            e.f64s(&b.alpha);
+            e.f64(b.beta);
+        }
+        e.u8(u8::from(self.fertility.is_some()));
+        if let Some(f) = &self.fertility {
+            for col in [&f.tfr, &f.mu, &f.mu_rate] {
+                e.f64s(&col.concat());
+            }
+        }
+        e.u8(u8::from(self.education.is_some()));
+        if let Some(p) = &self.education {
+            e.f64s(&p.rho.concat());
+            e.f64s(&[p.eps_spend, p.eps_income, p.spend_ratio, p.income_ratio]);
+        }
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<(Self, Cohorts), DecodeError> {
+        let n = d
+            .i64s()?
+            .into_iter()
+            .map(|v| u64::try_from(v).map_err(|_| DecodeError("negative cohort count".into())))
+            .collect::<Result<Vec<_>, _>>()?;
+        let residue = d
+            .u32s()?
+            .into_iter()
+            .map(|r| u8::try_from(r).map_err(|_| DecodeError("cohort residue".into())))
+            .collect::<Result<Vec<_>, _>>()?;
+        if n.is_empty() || n.len() % CELLS != 0 || residue.len() != n.len() {
+            return Err(DecodeError("cohort cells do not fit the layout".into()));
+        }
+        let cohorts = Cohorts {
+            n,
+            residue,
+            scratch: vec![0; CELLS],
+        };
+        let np = cohorts.n_provinces();
+        let mut demography = Demography::default();
+        if take_flag(d)? {
+            let std_l = take(d, N_SEX * (N_AGE + 1))?;
+            let alpha = take(d, N_EDU)?;
+            let beta = d.f64()?;
+            demography.mortality = Some(Brass {
+                std_l: std::array::from_fn(|s| std::array::from_fn(|a| std_l[s * (N_AGE + 1) + a])),
+                alpha: std::array::from_fn(|e| alpha[e]),
+                beta,
+            });
+        }
+        if take_flag(d)? {
+            let mut cols = Vec::new();
+            for _ in 0..3 {
+                let v = take(d, np * N_EDU)?;
+                cols.push(
+                    (0..np)
+                        .map(|p| std::array::from_fn(|e| v[p * N_EDU + e]))
+                        .collect::<Vec<[f64; N_EDU]>>(),
+                );
+            }
+            let mu_rate = cols.pop().unwrap();
+            let mu = cols.pop().unwrap();
+            let tfr = cols.pop().unwrap();
+            demography.fertility = Some(Fertility { tfr, mu, mu_rate });
+        }
+        if take_flag(d)? {
+            let rho = take(d, N_SEX * (N_EDU - 1))?;
+            let k = take(d, 4)?;
+            demography.education = Some(Progression {
+                rho: std::array::from_fn(|s| std::array::from_fn(|e| rho[s * (N_EDU - 1) + e])),
+                eps_spend: k[0],
+                eps_income: k[1],
+                spend_ratio: k[2],
+                income_ratio: k[3],
+            });
+        }
+        Ok((demography, cohorts))
+    }
+}
+
+fn take(d: &mut Decoder, len: usize) -> Result<Vec<f64>, DecodeError> {
+    let v = d.f64s()?;
+    if v.len() == len {
+        Ok(v)
+    } else {
+        Err(DecodeError(format!(
+            "demography column: {} entries, want {len}",
+            v.len()
+        )))
+    }
+}
+
+fn take_flag(d: &mut Decoder) -> Result<bool, DecodeError> {
+    match d.u8()? {
+        0 => Ok(false),
+        1 => Ok(true),
+        b => Err(DecodeError(format!("invalid presence byte {b}"))),
+    }
+}
+
+/// A populated toy demography with all three mechanisms on, for tests of the wiring.
+#[cfg(test)]
+pub(crate) fn toy(n_provinces: usize) -> (Demography, Cohorts) {
+    let mut std_l = [[1.0; N_AGE + 1]; N_SEX];
+    for row in &mut std_l {
+        for (a, v) in row.iter_mut().enumerate() {
+            *v = libm::exp(-0.004 * a as f64 * a as f64 / 4.0).max(1e-6);
+        }
+    }
+    let mut cohorts = Cohorts::new(n_provinces);
+    for p in 0..n_provinces {
+        for a in 0..N_AGE {
+            for s in 0..N_SEX {
+                for e in 0..N_EDU {
+                    cohorts.set(p, a, s, e, 1000 + (97 * p + 13 * a + 7 * s + e) as u64);
+                }
+            }
+        }
+    }
+    let demography = Demography {
+        mortality: Some(Brass {
+            std_l,
+            alpha: [0.0; N_EDU],
+            beta: 1.0,
+        }),
+        fertility: Some(Fertility::uniform(n_provinces, 2.1, 28.0)),
+        education: Some(Progression {
+            rho: [[0.3, 0.2, 0.1]; N_SEX],
+            eps_spend: 1.0,
+            eps_income: 0.0,
+            spend_ratio: 1.0,
+            income_ratio: 1.0,
+        }),
+    };
+    (demography, cohorts)
 }
 
 #[cfg(test)]
