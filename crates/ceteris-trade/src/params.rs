@@ -358,6 +358,9 @@ pub struct PriceAnchor {
     pub kappa_b: f64,
     /// P177 money-anchor gain kappa_m.
     pub kappa_m: f64,
+    /// ADR 0343 (RFC 0342): index over cells that trade, pay on sales and a credit line on traded
+    /// input orders. Off by default.
+    pub e3: bool,
 }
 
 impl Default for PriceAnchor {
@@ -367,6 +370,7 @@ impl Default for PriceAnchor {
             kappa_r_local: 0.05,
             kappa_b: 0.3,
             kappa_m: 0.2,
+            e3: false,
         }
     }
 }
