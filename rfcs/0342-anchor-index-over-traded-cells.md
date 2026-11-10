@@ -1,6 +1,6 @@
 # RFC 0342. Anchor the price level on cells that trade (P5 Branch E3)
 
-Status: proposed
+Status: accepted, not built
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P177); trade SPEC Money-anchored rule; econ SPEC E2, E3, T4
 Release: 1.0, P5a
@@ -39,7 +39,7 @@ Options:
 Recommendation: A, because a price nobody pays then cannot move the price level, and it is the
 only option the spike shows working.
 
-Decision: pending
+Decision: A, Antonio, 2026-11-10.
 Row: none yet, taken in the spec PR
 
 ### D2. How large is the credit line on traded input orders?
@@ -53,7 +53,7 @@ Options:
 
 Recommendation: A, because it survives as well as B with a third of the debt.
 
-Decision: pending
+Decision: A, Antonio, 2026-11-10. The credit line is the loss cap T_e = M S_e itself (P148), so orders stop where the write-off starts and no new parameter is added.
 Row: none yet, taken in the spec PR
 
 ### D3. How is the E3 fix built?
@@ -68,7 +68,7 @@ Options:
 
 Recommendation: A, because the parts only pass together.
 
-Decision: pending
+Decision: A, Antonio, 2026-11-10.
 Row: none yet, taken in the spec PR
 
 ## Spec changes
