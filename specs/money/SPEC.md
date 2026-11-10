@@ -1,6 +1,6 @@
 # Money SPEC
 
-Status: draft (P5 Branch 0; nothing here is built; awaiting owner approval; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 accepted by RFC 0337, owner decision 2026-11-10)
+Status: approved (Antonio, 2026-11-10). P5 Branch 0 spec; nothing here is built; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0168, 0176, 0202 and 0204 accepted by RFC 0337 (2026-11-10)
 Phase: P5 (P5a money and fiscal, P5b banks, debt and flows)
 Design sections: 7.4, 9.1 to 9.14, 15.3 to 15.5, 17, 19.2, 19.4, 21.1; ADRs 0025, 0040, 0042, 0043, 0080, 0090, 0095, 0100, 0168, 0176, 0202, 0204, 0227 to 0231, 0233, 0236, 0242, 0278, RFC 0286; plan `specs/p5/PLAN.md`
 

@@ -41,7 +41,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ## Branch 0: `p5/records` (before code)
 
-- [ ] Write `specs/money/SPEC.md` from `specs/TEMPLATE.md`: sector balance sheets and the matrices of 9.1, regimes and rules of 9.2, fiscal state of 9.6, banks and asset markets of 9.3, 9.10 and 9.11, sovereign debt of 9.4, flows of 9.5 and 9.12, bounds, test plan from this plan.
+- [x] Write `specs/money/SPEC.md` from `specs/TEMPLATE.md`: sector balance sheets and the matrices of 9.1, regimes and rules of 9.2, fiscal state of 9.6, banks and asset markets of 9.3, 9.10 and 9.11, sovereign debt of 9.4, flows of 9.5 and 9.12, bounds, test plan from this plan.
 - [ ] RFC for O1 with the register entries of each ADR (P35, P171, P172, P173, P174, P175, P176 and those of 0025, 0090, 0168, 0202, 0204 as they are today) checked against `spec/rows.toml`. Create `specs/COUPLINGS.md` (ADR 0080) with the module pairs implemented through P4 and their tests.
 - [ ] Commit `docs(money): p5 spec and accepted p5 adrs`.
 
