@@ -331,3 +331,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0338 | [Money-anchored split price rule (P5 Branch E1)](0338-money-anchored-price-rule.md) | proposed | none yet |
 | 0339 | [Bounded price gap at zero output under the money anchor (P5 Branch E2)](0339-bounded-gap-at-zero-output.md) | accepted | ADR 0340, ADR 0341 |
 | 0340 | [Drop usage statistics for 1.0](0340-drop-usage-statistics-for-1.0.md) | accepted | ADR 0342 |
+| 0341 | [Stop the island money sink at x10 (P5 Branch E3)](0341-island-money-sink.md) | proposed | none yet |
