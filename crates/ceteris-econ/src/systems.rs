@@ -94,6 +94,7 @@ pub fn schedule() -> Schedule<EconWorld> {
             crate::channels::after_reprice(w, ctx.tick)
         }),
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
+        def(220, "demography", |w, ctx| demography(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -1807,6 +1808,18 @@ fn mul_div(x: u64, t: u128, s: u128) -> (u64, u128) {
         }
     }
     (q, r)
+}
+
+/// Systems 220 to 223 (`specs/pop/SPEC.md`): age, mortality, fertility, education on the cohort
+/// tick. A no-op when population is off.
+pub fn demography(w: &mut EconWorld, tick: u32) {
+    let Some((d, cohorts)) = &mut w.pop else {
+        return;
+    };
+    let before = cohorts.total();
+    let flows = d.step(cohorts, tick);
+    let expected = i128::from(before) + i128::from(flows.births) - i128::from(flows.deaths);
+    w.pop_drift = i64::try_from(i128::from(cohorts.total()) - expected).unwrap_or(i64::MAX);
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
