@@ -37,7 +37,7 @@ const SYSTEMS: [(&str, System); 9] = [
     ("clear", systems::clear),
     ("dispatch", systems::dispatch),
     ("reprice", systems::reprice),
-    ("distribute", systems::distribute),
+    ("distribute", |w| systems::distribute(w, 0)),
 ];
 
 /// The calibrated full pack, or the fixture with a notice.
@@ -79,7 +79,14 @@ fn before(base: &EconWorld, n: usize) -> EconWorld {
 
 fn bench(c: &mut Criterion) {
     let (inputs, what) = inputs();
-    let (params, trade) = (EconParams::default(), inputs.trade_params());
+    let (params, mut trade) = (EconParams::default(), inputs.trade_params());
+    // CETERIS_RHO=0.2 benchmarks sticky sourcing (S12, ADR 0027) at that rate for every class
+    if let Some(rho) = std::env::var("CETERIS_RHO")
+        .ok()
+        .and_then(|r| r.parse().ok())
+    {
+        trade.rho = [rho; 4];
+    }
     // tick 1: its prices are those of tick 0's repricing, so the sourcing that `source`
     // keeps from tick 0 is stale at E3, as in any tick away from an exact fixed point
     let mut base = EconWorld::new(Arc::new(inputs), params, trade.clone());

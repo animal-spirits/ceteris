@@ -83,13 +83,13 @@ pub struct Painted {
     pub note: String,
 }
 
-fn rgba([r, g, b]: [u8; 3]) -> [u8; 4] {
+pub(crate) fn rgba([r, g, b]: [u8; 3]) -> [u8; 4] {
     [r, g, b, 255]
 }
 
 /// Class breaks at quantiles of the positive finite values, so each colour covers a similar
 /// share of provinces. Ties (common with small counts) would leave classes empty, so they merge.
-fn quantile_breaks(values: &[f64], classes: usize) -> Vec<f64> {
+pub(crate) fn quantile_breaks(values: &[f64], classes: usize) -> Vec<f64> {
     let mut v: Vec<f64> = values
         .iter()
         .copied()
@@ -107,7 +107,7 @@ fn quantile_breaks(values: &[f64], classes: usize) -> Vec<f64> {
     breaks
 }
 
-fn classify(x: f64, breaks: &[f64]) -> usize {
+pub(crate) fn classify(x: f64, breaks: &[f64]) -> usize {
     breaks.iter().take_while(|&&b| x >= b).count()
 }
 
@@ -124,7 +124,7 @@ pub fn fmt(x: f64) -> String {
         }
         if x < 0.0 { format!("-{out}") } else { out }
     } else {
-        let decimals = (2 - x.abs().log10().floor() as i32).max(0) as usize;
+        let decimals = (2 - libm::log10(x.abs()).floor() as i32).max(0) as usize;
         format!("{x:.decimals$}")
     }
 }

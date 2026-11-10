@@ -18,24 +18,29 @@
 
 use rayon::prelude::*;
 
-use ceteris_core::ledger::{AccountId, Entry, Flow, Ledger};
+use ceteris_core::ledger::{AccountId, Entry, Flow, GoodColumn, Ledger};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
+use ceteris_core::timing::{self, NONE};
+use ceteris_trade::pipeline::Push;
 use ceteris_trade::source::{HOUSEHOLD, INTERMEDIATE};
-use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source as source_good};
+use ceteris_trade::{Kernel, Sourced, dispatch as dispatch_good, source_weighted};
 
-use crate::inputs::EconInputs;
+use crate::demand::PiglAt;
+use crate::inputs::{EconInputs, TRANSFER_YEARS};
 use crate::labour::{allocate, clearing_wage, wage_step};
 use crate::local;
+use crate::params::{EconParams, Transfers};
 use crate::production::{
     labour_for_value_added, labour_target, labour_target_uncapped, marginal_value_added, rho,
     value_added,
 };
 use crate::world::{
-    Accounts, Buyer, DIVIDEND, EconWorld, Layout, Order, PURCHASE, Payments, REBATE, SALE, TARIFF,
-    TRADE, WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
+    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, LocalClear, Order, PURCHASE,
+    Payments, REBATE, SALE, SPEND_BLOCK, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock,
+    to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -70,17 +75,63 @@ pub fn schedule() -> Schedule<EconWorld> {
         run,
     };
     Schedule::new(vec![
-        def(201, "deliver", |w, _| deliver(w)),
-        def(202, "labour", |w, _| labour(w)),
+        def(201, "deliver", |w, ctx| {
+            w.advance_kernel();
+            drift(w, ctx.tick);
+            deliver(w)
+        }),
+        def(202, "labour", |w, ctx| {
+            labour(w);
+            crate::channels::after_labour(w, ctx.tick)
+        }),
         def(203, "produce", |w, _| produce(w)),
         def(204, "demand", |w, _| demand(w)),
         def(205, "source", |w, _| source(w)),
         def(206, "clear", |w, _| clear(w)),
         def(207, "dispatch", |w, _| dispatch(w)),
-        def(208, "reprice", |w, _| reprice(w)),
-        def(209, "distribute", |w, _| distribute(w)),
+        def(208, "reprice", |w, ctx| {
+            reprice(w);
+            crate::channels::after_reprice(w, ctx.tick)
+        }),
+        def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
+        def(220, "demography", |w, ctx| demography(w, ctx.tick)),
+        def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
+}
+
+/// Each country's multipliers of A and L0 at `tick` from the initial drift (ADR 0103, S23 and
+/// P153): with fade(t) = 1 - 2^(-t / h), t = tick / 12 years, ln alpha = g_A h / ln 2 fade(t)
+/// (TFP growing at g_A 2^(-t / h)) and ln phi = f fade(t) (the fixed factor F closing its log gap
+/// f at half-life h). F enters VA as F / F0 = phi, and by homogeneity VA(A, F, L) =
+/// VA(A phi, F0, L / phi): the multipliers are [alpha phi, phi]. Ones at tick 0, under S23 off
+/// and for inputs without drifts.
+pub fn drift_factors(inp: &EconInputs, params: &EconParams, tick: u32) -> Vec<[f64; 2]> {
+    let c = &inp.countries;
+    let n = inp.n_countries();
+    if !params.drift || !inp.has_drift() {
+        return vec![[1.0; 2]; n];
+    }
+    let h = params.drift_half_life;
+    let fade = 1.0 - libm::exp2(-f64::from(tick) / 12.0 / h);
+    (0..n)
+        .map(|k| {
+            let ln_phi = c.drift_f[k] * fade;
+            let ln_alpha = c.drift_a[k] * h / std::f64::consts::LN_2 * fade;
+            [libm::exp(ln_alpha + ln_phi), libm::exp(ln_phi)]
+        })
+        .collect()
+}
+
+/// E0: this tick's drift multipliers into `Scratch::drift`.
+pub fn drift(w: &mut EconWorld, tick: u32) {
+    w.scratch.drift = drift_factors(&w.inputs, &w.params, tick);
+}
+
+/// Enterprise `e`'s A and L0 under this tick's drift multipliers.
+fn tech(inp: &EconInputs, drift: &[[f64; 2]], e: usize) -> (f64, f64) {
+    let [a, l0] = drift[inp.country_of(inp.enterprises.province[e] as usize)];
+    (inp.enterprises.a[e] * a, inp.enterprises.l0[e] * l0)
 }
 
 fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
@@ -131,6 +182,7 @@ fn largest(values: impl Iterator<Item = f64>) -> Option<usize> {
 /// T1: goods due this tick move from the transit accounts to their buyers: pops consume
 /// them on arrival, enterprises add them to their input stocks.
 pub fn deliver(w: &mut EconWorld) {
+    w.start_refresh();
     let lay = &*w.layout;
     let acc = &lay.accounts;
     let n_buyers = w.pipeline.n_buyers();
@@ -146,38 +198,43 @@ pub fn deliver(w: &mut EconWorld) {
         }
     };
     let n_traded = acc.transit.len();
-    // the first largest delivery of each good, as `largest` finds it
-    let ng = in_flight.len();
-    let mut last: Vec<Option<(usize, f64)>> = vec![None; ng];
-    for (b, row) in due.chunks_exact(ng).enumerate() {
-        for (best, &x) in last.iter_mut().zip(&row[..n_traded]) {
-            if x > 0.0 && best.is_none_or(|(_, v)| x > v) {
-                *best = Some((b, x));
+    // each traded good on its own ledger column, in parallel: its deliveries in buyer order,
+    // then its largest, as one good after another
+    {
+        let _span = timing::span("deliver.take", NONE);
+        w.ledger.take_columns(0..n_traded, &mut w.scratch.stock);
+    }
+    w.scratch.stock.par_iter_mut().for_each(|stock| {
+        let g = stock.good();
+        let transit = acc.transit[g];
+        let run = &due[g * n_buyers..(g + 1) * n_buyers];
+        // the first largest delivery, as `largest` finds it
+        let mut last: Option<(usize, f64)> = None;
+        for (b, &x) in run.iter().enumerate() {
+            if x > 0.0 && last.is_none_or(|(_, v)| x > v) {
+                last = Some((b, x));
             }
         }
-    }
-    let receive = |ledger: &mut Ledger, g: usize, b: usize, x: f64| {
-        ledger.ship(acc.transit[g], account(b), g, x);
-        if b < n_pops {
-            ledger.destroy(account(b), g, x);
-        }
-    };
-    // buyer by buyer; each good's account sees its deliveries in buyer order
-    for (b, row) in due.chunks_exact(ng).enumerate().take(n_buyers) {
-        for g in 0..n_traded {
-            if row[g] > 0.0 && last[g].is_some_and(|(l, _)| l != b) {
-                let x = row[g].min(w.ledger.goods(acc.transit[g], g));
-                receive(&mut w.ledger, g, b, x);
+        let receive = |stock: &mut GoodColumn, b: usize, x: f64| {
+            stock.ship(transit, account(b), x);
+            if b < n_pops {
+                stock.destroy(account(b), x);
+            }
+        };
+        for (b, &x) in run.iter().enumerate() {
+            if x > 0.0 && last.is_some_and(|(l, _)| l != b) {
+                let x = x.min(stock.goods(transit));
+                receive(stock, b, x);
             }
         }
-    }
-    // the largest delivery takes what the account holds beyond the goods still in flight
-    for (g, best) in last.iter().enumerate().take(n_traded) {
-        if let Some((b, _)) = *best {
-            let x = (w.ledger.goods(acc.transit[g], g) - in_flight[g]).max(0.0);
-            receive(&mut w.ledger, g, b, x);
+        // the largest delivery takes what the account holds beyond the goods still in flight
+        if let Some((b, _)) = last {
+            let x = (stock.goods(transit) - in_flight[g]).max(0.0);
+            receive(stock, b, x);
         }
-    }
+    });
+    let _span = timing::span("deliver.put", NONE);
+    w.ledger.put_columns(&w.scratch.stock);
 }
 
 /// Value-added price `(p_g - sum_k a_kg P_k) / a_VA` of a sector with input coefficients
@@ -251,12 +308,13 @@ pub fn labour(w: &mut EconWorld) {
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
     let (index, pi) = (&w.price_index, w.expected_inflation);
+    let drift = &w.scratch.drift;
     type PerProvince = (f64, Vec<f64>, bool, Vec<f64>, Vec<u64>);
     let results: Vec<PerProvince> = (0..inp.n_provinces())
         .into_par_iter()
         .map(|i| {
             let c = inp.country_of(i);
-            let (s_l, u_star) = (inp.countries.s_l[c], inp.countries.u_star[c]);
+            let u_star = inp.countries.u_star[c];
             let supply = lay.labour_supply[i];
             let row = i * ng..(i + 1) * ng;
             let (p, p_in) = (&price[row.clone()], &index[row]);
@@ -273,15 +331,16 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .map(|e| {
                     let va = lay.a_va[e] * input_output(world, e);
-                    labour_for_value_added(va, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                    let (a, l0) = tech(inp, drift, e);
+                    labour_for_value_added(va, a, ent.va0[e], l0, inp.ent_s_l(e), r)
                 })
                 .collect();
             let targets = |w: f64| -> Vec<f64> {
                 ents.clone()
                     .zip(p_va.iter().zip(&equipped))
                     .map(|(e, (&pv, &cap))| {
-                        labour_target(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
-                            .min(cap)
+                        let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                        labour_target(pv, w, a, ent.va0[e], l0, s_l, r, supply).min(cap)
                     })
                     .collect()
             };
@@ -289,7 +348,8 @@ pub fn labour(w: &mut EconWorld) {
             let (w1, t, clipped) = if params.frictionless {
                 let natural = (1.0 - u_star) * supply;
                 let free = |e: usize, pv: f64, w: f64| {
-                    labour_target_uncapped(pv, w, ent.a[e], ent.va0[e], ent.l0[e], s_l, r)
+                    let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                    labour_target_uncapped(pv, w, a, ent.va0[e], l0, s_l, r)
                 };
                 let hiring = || {
                     ents.clone()
@@ -325,7 +385,8 @@ pub fn labour(w: &mut EconWorld) {
                         .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
                     let top = hiring()
                         .map(|(e, (&pv, &cap))| {
-                            pv * marginal_value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, cap)
+                            let (a, l0) = tech(inp, drift, e);
+                            pv * marginal_value_added(a, ent.va0[e], l0, inp.ent_s_l(e), r, cap)
                         })
                         .reduce(f64::min);
                     match top {
@@ -348,7 +409,8 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .zip(&p_va)
                 .map(|(e, &pv)| {
-                    labour_target(pv, wt, ent.a[e], ent.va0[e], ent.l0[e], s_l, r, supply)
+                    let (a, l0) = tech(inp, drift, e);
+                    labour_target(pv, wt, a, ent.va0[e], l0, inp.ent_s_l(e), r, supply)
                 })
                 .collect();
             let short: Vec<u64> = ents
@@ -393,7 +455,10 @@ pub fn labour(w: &mut EconWorld) {
 /// stock. Wages are paid to the pops of the province by effective employed labour.
 pub fn produce(w: &mut EconWorld) {
     let (ng, nt) = (w.inputs.n_goods(), w.inputs.goods.traded);
-    cap_output(w);
+    {
+        let _span = timing::span("e2.cap", NONE);
+        cap_output(w);
+    }
     let (inp, lay) = (
         std::sync::Arc::clone(&w.inputs),
         std::sync::Arc::clone(&w.layout),
@@ -404,66 +469,178 @@ pub fn produce(w: &mut EconWorld) {
 
     w.markets.supply.fill(0.0);
     w.scratch.drawn.fill(0.0);
-    let mut parts = Vec::new();
-    local::chain_all(w);
-    for i in 0..inp.n_provinces() {
-        let pops = lay.pops(i);
-        let effective: Vec<f64> = pops
+    {
+        let _span = timing::span("e2.local_chain", NONE);
+        local::chain_all(w);
+    }
+    let _span = timing::span("e2.provinces", NONE);
+    let np = inp.n_provinces();
+    let ranges: Vec<[std::ops::Range<usize>; 3]> = (0..np)
+        .map(|i| {
+            [
+                account_run(&acc.pop, lay.pops(i)),
+                account_run(&acc.enterprise, lay.enterprises(i)),
+                account_run(&acc.market, i..i + 1),
+            ]
+        })
+        .collect();
+    // every province's tables are contiguous runs, so each task owns its own slices
+    let sc = &mut w.scratch;
+    let from_output = &sc.from_output;
+    let produced = &sc.produced;
+    let setup = timing::span("e2.setup", NONE);
+    let mut tasks: Vec<ProduceTask<'_>> = {
+        let ents = (0..np).map(|i| lay.enterprises(i));
+        let pops = (0..np).map(|i| lay.pops(i));
+        let mut ledgers = w.ledger.province_slices(&ranges).into_iter();
+        let mut before =
+            split_runs(&mut sc.input_before, ents.clone().map(|r| r.len() * ng)).into_iter();
+        let mut used =
+            split_runs(&mut sc.input_used, ents.clone().map(|r| r.len() * ng)).into_iter();
+        let mut output = split_runs(&mut w.output, ents.clone().map(|r| r.len())).into_iter();
+        let mut sales = split_runs(&mut w.sales, ents.clone().map(|r| r.len())).into_iter();
+        let mut paid = split_runs(&mut sc.income_paid, pops.clone().map(|r| r.len())).into_iter();
+        let mut drawn = split_runs(&mut sc.drawn, (0..np).map(|_| ng)).into_iter();
+        let mut supply = split_runs(&mut w.markets.supply, (0..np).map(|_| ng)).into_iter();
+        (0..np)
+            .map(|i| ProduceTask {
+                i,
+                pops: lay.pops(i),
+                ents: lay.enterprises(i),
+                ledger: ledgers.next().expect("one ledger per province"),
+                input_before: before.next().expect("one slice per province"),
+                input_used: used.next().expect("one slice per province"),
+                output: output.next().expect("one slice per province"),
+                sales: sales.next().expect("one slice per province"),
+                income_paid: paid.next().expect("one slice per province"),
+                drawn: drawn.next().expect("one slice per province"),
+                supply: supply.next().expect("one slice per province"),
+            })
+            .collect()
+    };
+    let (price, wage, employment, employed) =
+        (&w.markets.price, &w.wage, &w.employment, &w.employed);
+    drop(setup);
+    let run = timing::span("e2.run", NONE);
+    tasks.par_iter_mut().for_each(|t| {
+        let i = t.i;
+        let effective: Vec<f64> = t
+            .pops
             .clone()
-            .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
+            .map(|k| edu_eff[usize::from(inp.pops.edu[k])] * employed[k])
             .collect();
-        for e in lay.enterprises(i) {
-            let (g, y) = (usize::from(inp.enterprises.good[e]), w.scratch.produced[e]);
+        let mut parts = Vec::new();
+        for e in t.ents.clone() {
+            let (g, y) = (usize::from(inp.enterprises.good[e]), produced[e]);
             let (account, cell) = (acc.enterprise[e], i * ng + g);
+            let (le, lk) = (e - t.ents.start, t.pops.start);
             for k in 0..nt {
                 let a = lay.coef[e][k];
-                let before = w.ledger.goods(account, k);
+                let before = t.ledger.goods(account, k);
                 if a > 0.0 {
-                    w.ledger.destroy(account, k, (a * y).min(before));
+                    t.ledger.destroy(account, k, (a * y).min(before));
                 }
-                w.scratch.input_before[e * ng + k] = before;
-                w.scratch.input_used[e * ng + k] = before - w.ledger.goods(account, k);
+                t.input_before[le * ng + k] = before;
+                t.input_used[le * ng + k] = before - t.ledger.goods(account, k);
             }
-            w.output[e] = y;
+            t.output[le] = y;
             if y > 0.0 {
-                w.ledger.create(account, g, y);
-                w.ledger.ship(account, acc.market[i], g, y);
+                t.ledger.create(account, g, y);
+                t.ledger.ship(account, acc.market[i], g, y);
             }
-            let sale = w.markets.price[cell] * y;
-            w.sales[e] = sale;
-            pay(&mut w.ledger, SALE, acc.market[i], account, to_minor(sale));
-            w.markets.supply[cell] += y;
+            let sale = price[cell] * y;
+            t.sales[le] = sale;
+            pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
+            t.supply[g] += y;
 
-            let bill = to_minor(w.wage[i] * w.employment[e]);
+            let bill = to_minor(wage[i] * employment[e]);
             split(bill, effective.iter().copied(), &mut parts);
-            for (k, &part) in pops.clone().zip(&parts) {
-                pay(&mut w.ledger, WAGE, account, acc.pop[k], part);
-                w.scratch.income_paid[k] += part;
+            for (k, &part) in t.pops.clone().zip(parts.iter()) {
+                pay_in(&mut t.ledger, WAGE, account, acc.pop[k], part);
+                t.income_paid[k - lk] += part;
             }
         }
         // local inputs: this tick's output at the market first, the stock second
-        for e in lay.enterprises(i) {
+        for e in t.ents.clone() {
             let account = acc.enterprise[e];
+            let le = e - t.ents.start;
             for k in nt..ng {
                 let (at, cell) = (e * ng + k, i * ng + k);
-                let need = lay.coef[e][k] * w.scratch.produced[e];
-                let stock = w.ledger.goods(account, k);
-                let take = w.scratch.from_output[at].min(w.ledger.goods(acc.market[i], k));
+                let need = lay.coef[e][k] * produced[e];
+                let stock = t.ledger.goods(account, k);
+                let take = from_output[at].min(t.ledger.goods(acc.market[i], k));
                 if take > 0.0 {
-                    w.ledger.ship(acc.market[i], account, k, take);
-                    let value = to_minor(w.markets.price[cell] * take);
-                    pay(&mut w.ledger, PURCHASE, account, acc.market[i], value);
-                    w.scratch.drawn[cell] += take;
+                    t.ledger.ship(acc.market[i], account, k, take);
+                    let value = to_minor(price[cell] * take);
+                    pay_in(&mut t.ledger, PURCHASE, account, acc.market[i], value);
+                    t.drawn[k] += take;
                 }
                 let used = take + (need - take).clamp(0.0, stock);
                 if used > 0.0 {
-                    w.ledger.destroy(account, k, used);
+                    t.ledger.destroy(account, k, used);
                 }
-                w.scratch.input_before[at] = stock + take;
-                w.scratch.input_used[at] = used;
+                t.input_before[le * ng + k] = stock + take;
+                t.input_used[le * ng + k] = used;
             }
         }
+    });
+    drop(run);
+    let _put = timing::span("e2.put", NONE);
+    let done = tasks.into_iter().map(|t| t.ledger.finish()).collect();
+    w.ledger.put_province_slices(done);
+}
+
+/// One province's slices of E2's tables and its accounts.
+struct ProduceTask<'a> {
+    i: usize,
+    pops: std::ops::Range<usize>,
+    ents: std::ops::Range<usize>,
+    ledger: ceteris_core::ledger::ProvinceLedger<'a>,
+    input_before: &'a mut [f64],
+    input_used: &'a mut [f64],
+    output: &'a mut [f64],
+    sales: &'a mut [f64],
+    income_paid: &'a mut [i64],
+    drawn: &'a mut [f64],
+    supply: &'a mut [f64],
+}
+
+fn pay_in(
+    ledger: &mut ceteris_core::ledger::ProvinceLedger<'_>,
+    flow: Flow,
+    from: AccountId,
+    to: AccountId,
+    amount: i64,
+) {
+    if amount != 0 {
+        ledger.transfer(flow, from, to, amount);
     }
+}
+
+/// The account ids of `accounts[range]` as one run of the ledger's account space.
+fn account_run(accounts: &[AccountId], range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+    let ids = &accounts[range];
+    let Some(first) = ids.first() else {
+        return 0..0;
+    };
+    let start = first.0 as usize;
+    assert!(
+        ids.iter()
+            .enumerate()
+            .all(|(j, a)| a.0 as usize == start + j),
+        "province accounts are not one run"
+    );
+    start..start + ids.len()
+}
+
+/// `slice` cut into consecutive pieces of the given lengths.
+fn split_runs<T>(mut slice: &mut [T], lens: impl Iterator<Item = usize>) -> Vec<&mut [T]> {
+    lens.map(|n| {
+        let (head, rest) = std::mem::take(&mut slice).split_at_mut(n);
+        slice = rest;
+        head
+    })
+    .collect()
 }
 
 /// E2's first step: each enterprise's output capped by capacity and its traded input stocks,
@@ -478,8 +655,8 @@ pub fn cap_output(w: &mut EconWorld) {
         .into_par_iter()
         .map(|e| {
             let ent = &inp.enterprises;
-            let s_l = inp.countries.s_l[inp.country_of(ent.province[e] as usize)];
-            let va = value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, employment[e]);
+            let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, &w.scratch.drift, e));
+            let va = value_added(a, ent.va0[e], l0, s_l, r, employment[e]);
             let mut y = va / lay.a_va[e];
             for k in 0..nt {
                 let a = lay.coef[e][k];
@@ -519,14 +696,20 @@ pub fn demand(w: &mut EconWorld) {
     let sc = &mut w.scratch;
     let (ledger, params, index) = (&w.ledger, &w.params, &w.price_index);
     let row = |i: usize| &index[i * ng..(i + 1) * ng];
+    // the price-only part of PIGL once per province, for all its pops
+    let at: Vec<PiglAt> = (0..inp.n_provinces())
+        .into_par_iter()
+        .map(|i| lay.pigl_at(inp, params, i, row(i)))
+        .collect();
     sc.pop_demand
         .par_chunks_mut(ng)
         .zip(sc.pop_spend.par_chunks_mut(ng))
         .enumerate()
         .for_each(|(k, (x, spend))| {
-            let prices = row(inp.pops.province[k] as usize);
+            let i = inp.pops.province[k] as usize;
+            let prices = row(i);
             let money = to_numeraire(ledger.money(acc.pop[k]));
-            lay.pop_demand(inp, params, k, prices, money, x);
+            lay.pop_demand_at(inp, params, k, &at[i], prices, money, x);
             for g in 0..ng {
                 spend[g] = if g < nt && x[g] > 0.0 {
                     x[g] * prices[g]
@@ -536,7 +719,7 @@ pub fn demand(w: &mut EconWorld) {
             }
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
-    let (short, notional) = (&sc.short, &sc.notional);
+    let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
     sc.ent_order
         .par_chunks_mut(ng)
         .zip(sc.ent_spend.par_chunks_mut(ng))
@@ -544,9 +727,8 @@ pub fn demand(w: &mut EconWorld) {
         .for_each(|(e, (orders, spend))| {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
-            let (prices, s_l) = (row(i), inp.countries.s_l[inp.country_of(i)]);
-            let output =
-                |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
+            let (prices, s_l, (a, l0)) = (row(i), inp.ent_s_l(e), tech(inp, drift, e));
+            let output = |l: f64| value_added(a, ent.va0[e], l0, s_l, r, l) / lay.a_va[e];
             let capacity = output(w.employment[e]);
             let free = if short[e] != 0 {
                 output(notional[e])
@@ -594,39 +776,66 @@ pub fn demand(w: &mut EconWorld) {
 /// T2: spreads each destination's spending on every traded good over the active origins at
 /// posted prices (`ceteris_trade::source`) and places the orders at the origin markets.
 pub fn source(w: &mut EconWorld) {
-    let ng = w.inputs.n_goods();
-    let (inp, lay, kernel) = (&*w.inputs, &*w.layout, &*w.kernel);
-    let np = inp.n_provinces();
+    source_inputs(w);
+    source_kernel(w);
+    source_commit(w);
+}
+
+/// The sourcing kernel of every traded good, one task per good.
+pub(crate) fn source_kernel(w: &mut EconWorld) {
+    let (lay, kernel) = (&*w.layout, &*w.kernel);
     let sc = &mut w.scratch;
-    let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
-    let markets = &w.markets;
+    let weight_price = &w.weight_price;
     sc.sourced
         .par_iter_mut()
-        .zip(sc.columns.par_iter_mut())
+        .zip(&sc.columns)
         .enumerate()
         .for_each(|(g, (sourced, col))| {
-            col.spend.clear();
-            col.spend.extend((0..np).map(|d| {
-                let mut s = [0.0; 2];
-                for e in lay.enterprises(d) {
-                    s[INTERMEDIATE] += ent_spend[e * ng + g];
-                }
-                for k in lay.pops(d) {
-                    s[HOUSEHOLD] += pop_spend[k * ng + g];
-                }
-                s
-            }));
-            col.gather(&markets.price, &markets.active, g, ng);
-            source_good(
+            let wp = (!weight_price.is_empty()).then_some(&col.weight_price[..]);
+            source_weighted(
                 kernel,
                 g,
                 &col.price,
+                wp,
                 &col.active,
                 &lay.gamma[g],
                 &col.spend,
                 sourced,
             );
         });
+}
+
+/// The per-good columns [`source`] reads: spending by class, posted prices, active origins and
+/// the smoothed prices.
+pub(crate) fn source_inputs(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let np = inp.n_provinces();
+    let sc = &mut w.scratch;
+    let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
+    let (markets, weight_price) = (&w.markets, &w.weight_price);
+    sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
+        col.spend.clear();
+        col.spend.extend((0..np).map(|d| {
+            let mut s = [0.0; 2];
+            for e in lay.enterprises(d) {
+                s[INTERMEDIATE] += ent_spend[e * ng + g];
+            }
+            for k in lay.pops(d) {
+                s[HOUSEHOLD] += pop_spend[k * ng + g];
+            }
+            s
+        }));
+        col.gather(&markets.price, &markets.active, g, ng);
+        col.gather_weight(weight_price, g, ng);
+    });
+}
+
+/// Writes the orders of the `sourced` columns into the markets' demand.
+pub(crate) fn source_commit(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let np = w.inputs.n_provinces();
+    let sc = &mut w.scratch;
     for (g, (sourced, col)) in sc.sourced.iter().zip(&sc.columns).enumerate() {
         for o in 0..np {
             let cell = o * ng + g;
@@ -658,73 +867,134 @@ pub fn clear(w: &mut EconWorld) {
     }
     w.markets.clear(w.params.rationing, &mut w.scratch.fill);
     w.markets.clear_local(&mut w.scratch.spoiled);
-    let mut buyers: Vec<(AccountId, f64, bool)> = Vec::new();
-    for i in 0..inp.n_provinces() {
-        let market = acc.market[i];
-        for g in nt..ng {
-            let cell = i * ng + g;
-            let m = &w.markets;
-            if !m.active[cell] {
-                continue;
-            }
-            let keep = w.scratch.spoiled[cell];
-            let price = m.price[cell];
-            let rest = (m.supply[cell] - w.scratch.drawn[cell]).max(0.0);
-            buyers.clear();
-            for k in lay.pops(i) {
-                buyers.push((acc.pop[k], w.scratch.pop_demand[k * ng + g], true));
-            }
-            for e in lay.enterprises(i) {
-                buyers.push((acc.enterprise[e], w.scratch.ent_order[e * ng + g], false));
-            }
-            let total = |households: bool| -> f64 {
-                buyers
-                    .iter()
-                    .filter(|b| b.2 == households)
-                    .map(|b| b.1)
-                    .sum()
-            };
-            let (orders, households) = (total(false), total(true));
-            let [fill_orders, fill_households] = w.params.rationing.fill(rest, orders, households);
-            for b in buyers.iter_mut() {
-                b.1 *= if b.2 { fill_households } else { fill_orders };
-            }
-            if let Some(last) = largest(buyers.iter().map(|b| b.1)) {
-                let n = buyers.len();
-                buyers.swap(last, n - 1);
-                for (j, &(buyer, allocation, consumes)) in buyers.iter().enumerate() {
-                    let q = if j + 1 == n {
-                        // the largest buyer takes the market's balance beyond what stays
-                        (w.ledger.goods(market, g) - keep).max(0.0)
-                    } else {
-                        allocation.min(w.ledger.goods(market, g))
+    // the local goods in parallel, each on its own ledger column: a good's goods moves read and
+    // write only that good, in province order; its purchases are collected per province and
+    // posted in province then good order, as one good after another within each province paid
+    let sc = &mut w.scratch;
+    {
+        let _span = timing::span("clear.take", NONE);
+        w.ledger.take_columns(nt..ng, &mut sc.stock);
+    }
+    sc.local.resize_with(ng - nt, LocalClear::default);
+    let (m, rationing) = (&w.markets, w.params.rationing);
+    let (spoiled, drawn) = (&sc.spoiled, &sc.drawn);
+    let (pop_demand, ent_order) = (&sc.pop_demand, &sc.ent_order);
+    (&mut sc.stock, &mut sc.local)
+        .into_par_iter()
+        .for_each(|(stock, out)| {
+            let g = stock.good();
+            let LocalClear {
+                buyers,
+                entries,
+                ends,
+            } = out;
+            entries.clear();
+            ends.clear();
+            for i in 0..inp.n_provinces() {
+                let market = acc.market[i];
+                let cell = i * ng + g;
+                if m.active[cell] {
+                    let keep = spoiled[cell];
+                    let price = m.price[cell];
+                    let rest = (m.supply[cell] - drawn[cell]).max(0.0);
+                    buyers.clear();
+                    for k in lay.pops(i) {
+                        buyers.push((acc.pop[k], pop_demand[k * ng + g], true));
+                    }
+                    for e in lay.enterprises(i) {
+                        buyers.push((acc.enterprise[e], ent_order[e * ng + g], false));
+                    }
+                    let total = |households: bool| -> f64 {
+                        buyers
+                            .iter()
+                            .filter(|b| b.2 == households)
+                            .map(|b| b.1)
+                            .sum()
                     };
-                    if q > 0.0 {
-                        w.ledger.ship(market, buyer, g, q);
-                        if consumes {
-                            w.ledger.destroy(buyer, g, q);
+                    let (orders, households) = (total(false), total(true));
+                    let [fill_orders, fill_households] = rationing.fill(rest, orders, households);
+                    for b in buyers.iter_mut() {
+                        b.1 *= if b.2 { fill_households } else { fill_orders };
+                    }
+                    if let Some(last) = largest(buyers.iter().map(|b| b.1)) {
+                        let n = buyers.len();
+                        buyers.swap(last, n - 1);
+                        for (j, &(buyer, allocation, consumes)) in buyers.iter().enumerate() {
+                            let q = if j + 1 == n {
+                                // the largest buyer takes the market's balance beyond what stays
+                                (stock.goods(market) - keep).max(0.0)
+                            } else {
+                                allocation.min(stock.goods(market))
+                            };
+                            if q > 0.0 {
+                                stock.ship(market, buyer, q);
+                                if consumes {
+                                    stock.destroy(buyer, q);
+                                }
+                            }
+                            let amount = to_minor(price * q);
+                            if amount != 0 {
+                                entries.push(Entry {
+                                    flow: PURCHASE,
+                                    from: buyer,
+                                    to: market,
+                                    amount,
+                                });
+                            }
                         }
                     }
-                    pay(&mut w.ledger, PURCHASE, buyer, market, to_minor(price * q));
+                    let rest = stock.goods(market);
+                    if rest > 0.0 {
+                        stock.destroy(market, rest);
+                    }
                 }
+                ends.push(entries.len() as u32);
             }
-            let rest = w.ledger.goods(market, g);
-            if rest > 0.0 {
-                w.ledger.destroy(market, g, rest);
-            }
+        });
+    {
+        let _span = timing::span("clear.put", NONE);
+        w.ledger.put_columns(&sc.stock);
+    }
+    sc.local_entries.clear();
+    for i in 0..inp.n_provinces() {
+        for l in &sc.local {
+            let lo = if i == 0 { 0 } else { l.ends[i - 1] as usize };
+            sc.local_entries
+                .extend_from_slice(&l.entries[lo..l.ends[i] as usize]);
         }
     }
+    w.ledger.post(&sc.local_entries, &mut sc.post);
 }
 
 /// Spending on traded goods per enterprise, per pop and per destination cell by class
 /// (`Scratch::ent_spend`, `pop_spend`, `class_spend`).
 #[derive(Clone, Copy)]
 struct Spending<'a> {
-    /// Goods per row of `enterprise`, `pop` and `class`.
+    /// Goods per row of `class` and per block of `enterprise` and `pop`.
     goods: usize,
+    /// `Scratch::ent_spend_t` and `pop_spend_t`, blocked good-major.
     enterprise: &'a [f64],
     pop: &'a [f64],
     class: &'a [[f64; 2]],
+}
+
+/// Index of buyer `i`'s spending on good `g` in a blocked good-major array.
+fn blocked(i: usize, g: usize, goods: usize) -> usize {
+    (i / SPEND_BLOCK) * SPEND_BLOCK * goods + g * SPEND_BLOCK + i % SPEND_BLOCK
+}
+
+/// Regroups `rows` (`[buyer * goods + g]`) into `out` by blocks of `SPEND_BLOCK` buyers, good
+/// major inside a block; each block is one task, reading its rows once.
+fn transpose_spend(rows: &[f64], goods: usize, out: &mut [f64]) {
+    out.par_chunks_mut(SPEND_BLOCK * goods)
+        .zip(rows.par_chunks(SPEND_BLOCK * goods))
+        .for_each(|(block, rows)| {
+            for (i, row) in rows.chunks_exact(goods).enumerate() {
+                for (g, &x) in row.iter().enumerate() {
+                    block[g * SPEND_BLOCK + i] = x;
+                }
+            }
+        });
 }
 
 /// Buyers of good `g` in province `d` with positive spending, enterprises then pops.
@@ -733,7 +1003,7 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
     let n_pops = acc.pop.len();
     out.clear();
     for e in lay.enterprises(d) {
-        let spend = spend.enterprise[e * spend.goods + g];
+        let spend = spend.enterprise[blocked(e, g, spend.goods)];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.enterprise[e],
@@ -744,7 +1014,7 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
         }
     }
     for k in lay.pops(d) {
-        let spend = spend.pop[k * spend.goods + g];
+        let spend = spend.pop[blocked(k, g, spend.goods)];
         if spend > 0.0 {
             out.push(Buyer {
                 account: acc.pop[k],
@@ -759,11 +1029,22 @@ fn buyers_of(lay: &Layout, spend: Spending, d: usize, g: usize, out: &mut Vec<Bu
 /// Each buyer's share of good `g`'s dispatch `r` at its destination, in province and buyer
 /// order: what it may take home now, what it gets in each pipeline slot, and its payment to
 /// the destination market, a ledger entry (left out when zero, as `pay` leaves it).
-fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Payments) {
+fn buyer_orders(
+    lay: &Layout,
+    spend: Spending,
+    g: usize,
+    r: &Sourced,
+    p: &mut Payments,
+    detail: bool,
+) {
     let acc = &lay.accounts;
     p.orders.clear();
     p.order_ends.clear();
     p.entries.clear();
+    p.buyer_amt.clear();
+    if !detail {
+        p.buyer_amt.resize(acc.pop.len() + acc.enterprise.len(), 0);
+    }
     for d in 0..acc.market.len() {
         let (cell, market) = (d * spend.goods + g, acc.market[d]);
         buyers_of(lay, spend, d, g, &mut p.buyers);
@@ -779,13 +1060,17 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
                 slots,
             });
             let amount = to_minor(r.paid_by_class[d][b.class] * share);
-            if amount != 0 {
-                p.entries.push(Entry {
-                    flow: PURCHASE,
-                    from: b.account,
-                    to: market,
-                    amount,
-                });
+            if detail {
+                if amount != 0 {
+                    p.entries.push(Entry {
+                        flow: PURCHASE,
+                        from: b.account,
+                        to: market,
+                        amount,
+                    });
+                }
+            } else {
+                p.buyer_amt[b.index] = amount;
             }
         }
         p.order_ends.push(p.orders.len() as u32);
@@ -805,6 +1090,47 @@ fn buyer_orders(lay: &Layout, spend: Spending, g: usize, r: &Sourced, p: &mut Pa
 /// each gateway nets to zero), the tariff to its country's rebate account. Unfilled spending
 /// stays with the buyer. Records the country-pair flows.
 pub fn dispatch(w: &mut EconWorld) {
+    {
+        let _span = timing::span("t2b.gather_all", NONE);
+        dispatch_gather(w);
+    }
+    {
+        let _span = timing::span("t2b.kernel_all", NONE);
+        dispatch_kernel(w);
+    }
+    dispatch_finish(w);
+}
+
+/// The per-good columns of the dispatch kernel: posted prices and the fill ratios.
+pub(crate) fn dispatch_gather(w: &mut EconWorld) {
+    let ng = w.inputs.n_goods();
+    let np = w.kernel.n_provinces();
+    let sc = &mut w.scratch;
+    transpose_spend(&sc.pop_spend, ng, &mut sc.pop_spend_t);
+    transpose_spend(&sc.ent_spend, ng, &mut sc.ent_spend_t);
+    let (fill, markets) = (&sc.fill, &w.markets);
+    sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
+        col.gather(&markets.price, &markets.active, g, ng);
+        col.fill.clear();
+        col.fill.extend((0..np).map(|o| fill[o * ng + g]));
+    });
+}
+
+/// The dispatch kernel of every traded good, one task per good.
+pub(crate) fn dispatch_kernel(w: &mut EconWorld) {
+    let kernel = &*w.kernel;
+    let sc = &mut w.scratch;
+    sc.sourced
+        .par_iter_mut()
+        .zip(&sc.columns)
+        .enumerate()
+        .for_each(|(g, (r, col))| {
+            let _span = timing::span("t2b.kernel", g as u32);
+            dispatch_good(kernel, g, &col.price, &col.fill, r);
+        });
+}
+
+pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let ng = w.inputs.n_goods();
     let inp = std::sync::Arc::clone(&w.inputs);
     let lay = std::sync::Arc::clone(&w.layout);
@@ -812,92 +1138,124 @@ pub fn dispatch(w: &mut EconWorld) {
     let (inp, lay, kernel) = (&*inp, &*lay, &*kernel);
     let acc = &lay.accounts;
     let np = kernel.n_provinces();
+    let detail = w.scratch.detail;
     let sc = &mut w.scratch;
-    let (fill, markets, net) = (&sc.fill, &w.markets, &inp.network);
+    let (markets, net) = (&w.markets, &inp.network);
     let spending = Spending {
         goods: ng,
-        enterprise: &sc.ent_spend,
-        pop: &sc.pop_spend,
+        enterprise: &sc.ent_spend_t,
+        pop: &sc.pop_spend_t,
         class: &sc.class_spend,
     };
+    // each good's goods moves run in its own task, on its own ledger column: they read and
+    // write only that good, in the same order as one good after another
+    let nt = sc.payments.len();
+    {
+        let _span = timing::span("t2b.take", NONE);
+        w.ledger.take_columns(0..nt, &mut sc.stock);
+    }
+    let inventory = &markets.inventory;
+    let goods_span = timing::span("t2b.goods", NONE);
     (
         &mut sc.sourced,
         &mut sc.columns,
         &mut sc.payments,
         sc.flows.current(),
+        &mut sc.stock,
     )
         .into_par_iter()
         .enumerate()
-        .for_each(|(g, (r, col, legs, flows))| {
-            col.gather(&markets.price, &markets.active, g, ng);
-            col.fill.clear();
-            col.fill.extend((0..np).map(|o| fill[o * ng + g]));
-            dispatch_good(kernel, g, &col.price, &col.fill, r);
+        .for_each(|(g, (r, col, legs, flows, stock))| {
+            let gi = g as u32;
+            let _good = timing::span("t2b.good", gi);
             let r = &*r;
-            rayon::join(
-                || {
-                    let (pc, gc) = (&net.province_country, &net.gateway_country);
-                    flows.record(kernel, pc, gc, g, &col.price, r);
-                },
-                || {
-                    buyer_orders(lay, spending, g, r, legs);
-                    trade_legs(inp, acc, kernel, g, r, legs);
-                },
-            );
+            let record = || {
+                let _span = timing::span("t2b.record", gi);
+                let (pc, gc) = (&net.province_country, &net.gateway_country);
+                flows.record(kernel, pc, gc, g, &col.price, r);
+            };
+            if detail {
+                // the buyers' entries come before the legs' in one list
+                rayon::join(record, || {
+                    let _span = timing::span("t2b.legs", gi);
+                    buyer_orders(lay, spending, g, r, legs, detail);
+                    trade_legs(inp, acc, kernel, g, r, legs, (detail, g == 0));
+                });
+            } else {
+                // netted: the buyers' and the legs' amounts are separate vectors, so the legs
+                // run on their own `Payments` holding those vectors meanwhile
+                let mut apart = Payments {
+                    edge_amt: std::mem::take(&mut legs.edge_amt),
+                    topo: std::mem::take(&mut legs.topo),
+                    at_gateway: std::mem::take(&mut legs.at_gateway),
+                    from_gateway: std::mem::take(&mut legs.from_gateway),
+                    parts: std::mem::take(&mut legs.parts),
+                    ..Payments::default()
+                };
+                rayon::join(record, || {
+                    rayon::join(
+                        || {
+                            let _span = timing::span("t2b.buyers", gi);
+                            buyer_orders(lay, spending, g, r, legs, detail);
+                        },
+                        || {
+                            let _span = timing::span("t2b.legs", gi);
+                            trade_legs(inp, acc, kernel, g, r, &mut apart, (detail, g == 0));
+                        },
+                    )
+                });
+                legs.edge_amt = apart.edge_amt;
+                legs.topo = apart.topo;
+                legs.at_gateway = apart.at_gateway;
+                legs.from_gateway = apart.from_gateway;
+                legs.parts = apart.parts;
+            }
+            let _span = timing::span("t2b.moves", gi);
+            goods_moves(acc, np, ng, inventory, legs, stock);
         });
+    drop(goods_span);
+    let moves_span = timing::span("t2b.apply", NONE);
+    {
+        let _span = timing::span("t2b.put", NONE);
+        w.ledger.put_columns(&w.scratch.stock);
+    }
     let sourced = std::mem::take(&mut w.scratch.sourced);
-    let payments = std::mem::take(&mut w.scratch.payments);
+    let mut payments = std::mem::take(&mut w.scratch.payments);
     for (g, (r, legs)) in sourced.iter().zip(&payments).enumerate() {
-        let transit = acc.transit[g];
-        let mut made = 0.0;
-        let mut first = 0;
         for d in 0..np {
-            let (cell, market) = (d * ng + g, acc.market[d]);
-            w.scratch.dispatched[cell] = r.shipped[d];
-            // buyers at d: home purchases now, shipments into the pipeline
-            let end = legs.order_ends[d] as usize;
-            for o in &legs.orders[first..end] {
-                let shipped = o.home_shipped.min(w.ledger.goods(market, g));
-                if shipped > 0.0 {
-                    w.ledger.ship(market, o.account, g, shipped);
-                    let home = if shipped == o.home_shipped {
-                        o.home
-                    } else {
-                        o.home * (shipped / o.home_shipped)
-                    };
-                    adjust_stock(&mut w.ledger, o.account, g, home - shipped);
-                    made += home - shipped;
-                    if o.household {
-                        // pops hold nothing between purchases, so they consume what they hold:
-                        // `home` itself can differ from it by the rounding of the adjustment
-                        let held = w.ledger.goods(o.account, g);
-                        w.ledger.destroy(o.account, g, held);
-                    }
-                }
-                for (slot, &units) in o.slots.iter().enumerate() {
-                    if units > 0.0 {
-                        w.pipeline.push(slot + 1, o.buyer, g, units);
-                    }
-                }
-            }
-            first = end;
-            // what leaves the origin market beyond its home sales and its carried stock
-            let x = (w.ledger.goods(market, g) - w.markets.inventory[cell]).max(0.0);
-            if x > 0.0 {
-                w.ledger.ship(market, transit, g, x);
-            }
+            w.scratch.dispatched[d * ng + g] = r.shipped[d];
         }
-
-        // the buyers' payments, then the legs
-        w.ledger.post(&legs.entries, &mut w.scratch.post);
-        w.scratch.dispatch_made[g] = made;
+        w.scratch.dispatch_made[g] = legs.made;
         w.scratch.dispatch_due[g] = r.selected - r.lost;
         w.scratch.dispatch_scale[g] = r.shipped.iter().sum::<f64>()
             + r.arrive.iter().flatten().map(|a| a[0] + a[1]).sum::<f64>();
     }
+    let pushes: Vec<&[Push]> = payments.iter().map(|p| &p.pushes[..]).collect();
+    w.pipeline.push_all(&pushes);
+    drop(moves_span);
+    // every good's buyers' payments, then its legs; nothing above reads money
+    {
+        let _span = timing::span("t2b.post", NONE);
+        if detail {
+            let mut blocks: Vec<&mut Vec<Entry>> =
+                payments.iter_mut().map(|p| &mut p.entries).collect();
+            w.ledger.post_blocks(&mut blocks, &mut w.scratch.post);
+        } else {
+            let sc = &mut w.scratch;
+            net_legs(
+                lay,
+                &payments,
+                &mut sc.buyer_tot,
+                &mut sc.edge_tot,
+                &mut sc.netted,
+            );
+            w.ledger.post_blocks(&mut [&mut sc.netted], &mut sc.post);
+        }
+    }
+    let _transit = timing::span("t2b.transit", NONE);
     // each transit account is brought to the goods now in flight: the losses melt what it
     // holds beyond them, selection adds what they hold beyond it
-    let in_flight = w.pipeline.in_flight_all();
+    let in_flight = w.pipeline.in_flight_cached();
     for (g, &transit) in acc.transit.iter().enumerate() {
         let change = in_flight[g] - w.ledger.goods(transit, g);
         adjust_stock(&mut w.ledger, transit, g, change);
@@ -907,11 +1265,147 @@ pub fn dispatch(w: &mut EconWorld) {
     w.scratch.payments = payments;
 }
 
+/// Chunk of buyers or legs summed over goods in one task by [`net_legs`].
+const NET_CHUNK: usize = 1 << 12;
+
+/// `out[j] = sum over goods of column(good)[lo + j]` for the chunk starting at `lo`; the sum of
+/// a leg's rounded amounts is asserted to fit `i64`.
+fn sum_columns(out: &mut [i64], lo: usize, columns: &[&[i64]]) {
+    out.fill(0);
+    for col in columns {
+        for (t, &x) in out.iter_mut().zip(&col[lo..]) {
+            *t = t.checked_add(x).expect("netted leg overflows i64");
+        }
+    }
+}
+
+/// Netted T2b journal (RFC 0316): the goods' rounded payments summed per buyer and per network
+/// leg, as one entry each with a non-zero total, purchases in buyer order (province by province,
+/// enterprises then pops) and then trade and tariff legs in the network's leg order. Sums of
+/// rounded amounts, so every balance equals the per-leg posting's.
+fn net_legs(
+    lay: &Layout,
+    payments: &[Payments],
+    buyer_tot: &mut Vec<i64>,
+    edge_tot: &mut Vec<i64>,
+    out: &mut Vec<Entry>,
+) {
+    out.clear();
+    let Some(first) = payments.first() else {
+        return;
+    };
+    let acc = &lay.accounts;
+    let n_pops = acc.pop.len();
+    let buyers: Vec<&[i64]> = payments.iter().map(|p| &p.buyer_amt[..]).collect();
+    buyer_tot.resize(buyers[0].len(), 0);
+    buyer_tot
+        .par_chunks_mut(NET_CHUNK)
+        .enumerate()
+        .for_each(|(k, t)| sum_columns(t, k * NET_CHUNK, &buyers));
+    for d in 0..acc.market.len() {
+        let market = acc.market[d];
+        let ents = lay.enterprises(d).map(|e| (acc.enterprise[e], n_pops + e));
+        let pops = lay.pops(d).map(|k| (acc.pop[k], k));
+        for (account, i) in ents.chain(pops) {
+            if buyer_tot[i] != 0 {
+                out.push(Entry {
+                    flow: PURCHASE,
+                    from: account,
+                    to: market,
+                    amount: buyer_tot[i],
+                });
+            }
+        }
+    }
+    let edges: Vec<&[i64]> = payments.iter().map(|p| &p.edge_amt[..]).collect();
+    assert!(
+        edges.iter().all(|e| e.len() == first.topo.len()),
+        "goods differ in network legs"
+    );
+    edge_tot.resize(first.topo.len(), 0);
+    edge_tot
+        .par_chunks_mut(NET_CHUNK)
+        .enumerate()
+        .for_each(|(k, t)| sum_columns(t, k * NET_CHUNK, &edges));
+    for (&(flow, from, to), &amount) in first.topo.iter().zip(edge_tot.iter()) {
+        if amount != 0 {
+            out.push(Entry {
+                flow,
+                from,
+                to,
+                amount,
+            });
+        }
+    }
+}
+
+/// T2b's goods moves of one traded good on its ledger column, buyer by buyer in destination
+/// order: home purchases now (households consume what they hold), shipments queued for the
+/// pipeline in `legs.pushes`, then what leaves each origin market beyond its home sales and
+/// its carried stock into transit. Sets `legs.made`, the goods selection created.
+fn goods_moves(
+    acc: &Accounts,
+    np: usize,
+    ng: usize,
+    inventory: &[f64],
+    legs: &mut Payments,
+    stock: &mut GoodColumn,
+) {
+    let g = stock.good();
+    let transit = acc.transit[g];
+    let mut made = 0.0;
+    let mut first = 0;
+    legs.pushes.clear();
+    for d in 0..np {
+        let market = acc.market[d];
+        // buyers at d: home purchases now, shipments into the pipeline
+        let end = legs.order_ends[d] as usize;
+        for o in &legs.orders[first..end] {
+            let shipped = o.home_shipped.min(stock.goods(market));
+            if shipped > 0.0 {
+                stock.ship(market, o.account, shipped);
+                let home = if shipped == o.home_shipped {
+                    o.home
+                } else {
+                    o.home * (shipped / o.home_shipped)
+                };
+                let change = home - shipped;
+                if change >= 0.0 {
+                    stock.create(o.account, change);
+                } else {
+                    stock.destroy(o.account, -change);
+                }
+                made += change;
+                if o.household {
+                    // pops hold nothing between purchases, so they consume what they hold:
+                    // `home` itself can differ from it by the rounding of the adjustment
+                    let held = stock.goods(o.account);
+                    stock.destroy(o.account, held);
+                }
+            }
+            for (slot, &units) in o.slots.iter().enumerate() {
+                if units > 0.0 {
+                    legs.pushes.push((slot as u8 + 1, o.buyer as u32, units));
+                }
+            }
+        }
+        first = end;
+        // what leaves the origin market beyond its home sales and its carried stock
+        let x = (stock.goods(market) - inventory[d * ng + g]).max(0.0);
+        if x > 0.0 {
+            stock.ship(market, transit, x);
+        }
+    }
+    legs.made = made;
+}
+
 /// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
 /// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations
 /// pay origins and their gateways, each gateway splits what it takes in over the legs that
 /// fed it ([`split`]), so it pays out exactly that, and destinations pay tariffs to their
-/// country's rebate account. Zero amounts are left out, as `pay` leaves them.
+/// country's rebate account. In detail mode zero amounts are left out, as `pay` leaves them;
+/// otherwise every leg's amount goes to `edge_amt` in the order the network fixes, the same
+/// for every good, and `topo` (when `topo` is set) names the legs.
 fn trade_legs(
     inp: &EconInputs,
     acc: &Accounts,
@@ -919,18 +1413,28 @@ fn trade_legs(
     g: usize,
     r: &Sourced,
     p: &mut Payments,
+    (detail, topo): (bool, bool),
 ) {
     let (np, ng) = (kernel.n_provinces(), kernel.n_gateways());
     let gk = kernel.good(g);
-    let entries = &mut p.entries;
+    let (entries, edge_amt, legs_of) = (&mut p.entries, &mut p.edge_amt, &mut p.topo);
+    edge_amt.clear();
+    legs_of.clear();
     let mut leg = |flow: Flow, from: AccountId, to: AccountId, amount: i64| {
-        if amount != 0 {
-            entries.push(Entry {
-                flow,
-                from,
-                to,
-                amount,
-            });
+        if detail {
+            if amount != 0 {
+                entries.push(Entry {
+                    flow,
+                    from,
+                    to,
+                    amount,
+                });
+            }
+        } else {
+            edge_amt.push(amount);
+            if topo {
+                legs_of.push((flow, from, to));
+            }
         }
     };
     for o in 0..np {
@@ -956,7 +1460,7 @@ fn trade_legs(
         let legs = kernel.crossings_by_target().column(b);
         let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
         split(p.at_gateway[b], weights, &mut p.parts);
-        for (&(a, _), &part) in legs.iter().zip(&p.parts) {
+        for (&(a, _), &part) in legs.iter().zip(p.parts.iter()) {
             leg(TRADE, acc.gateway[b], acc.gateway[a as usize], part);
             p.from_gateway[a as usize] += part;
         }
@@ -965,7 +1469,7 @@ fn trade_legs(
         let legs = kernel.access_by_gateway().column(a);
         let weights = legs.iter().map(|&(_, j)| r.access_out_value[j as usize]);
         split(p.from_gateway[a], weights, &mut p.parts);
-        for (&(o, _), &part) in legs.iter().zip(&p.parts) {
+        for (&(o, _), &part) in legs.iter().zip(p.parts.iter()) {
             leg(TRADE, acc.gateway[a], acc.market[o as usize], part);
         }
     }
@@ -992,44 +1496,211 @@ pub fn reprice(w: &mut EconWorld) {
 /// pool and its rebate account (tariffs) to its pops by population share N_k / N_c, so both
 /// end the tick at zero. Each pool is one i128 sum, split once per tick by [`split`]: the
 /// cumulative population shares of the country's pops in ID order rounded half to even, so the
-/// parts add up to the pool exactly. Then [`write_off`]. Records each pop's income of the
-/// tick, and as each enterprise's profit its balance before the payout
-/// (this tick's cash flow less any loss it carries).
-pub fn distribute(w: &mut EconWorld) {
+/// parts add up to the pool exactly. With foreign owners (ADR 0310) the foreign-owned share f
+/// of each positive enterprise payout goes to the world dividend account instead ([`split`]
+/// of the payout by 1 - f and f), which pays each host's total over its owners' pools by its
+/// parent vector before the pools pay their pops. Then the transfers of tick `tick`
+/// ([`transfer`]), then [`write_off`]. Records each pop's income of the tick, and as each
+/// enterprise's profit its balance before the payout (this tick's cash flow less any loss it
+/// carries).
+pub fn distribute(w: &mut EconWorld, tick: u32) {
     let (inp, lay) = (&*w.inputs, &*w.layout);
     let acc = &lay.accounts;
+    let mut parts = Vec::new();
+    let mut abroad: Vec<i128> = vec![
+        0;
+        if acc.foreign.is_some() {
+            inp.n_countries()
+        } else {
+            0
+        }
+    ];
     for i in 0..inp.n_provinces() {
-        let pool = acc.dividend[inp.country_of(i)];
+        let c = inp.country_of(i);
+        let pool = acc.dividend[c];
         for e in lay.enterprises(i) {
             let cash = w.ledger.money(acc.enterprise[e]);
             w.profit[e] = to_numeraire(cash);
-            pay(
-                &mut w.ledger,
-                DIVIDEND,
-                acc.enterprise[e],
-                pool,
-                cash.max(0),
-            );
+            let paid = cash.max(0);
+            let f = inp.ent_foreign(e);
+            match acc.foreign {
+                Some(account) if paid > 0 && f > 0.0 => {
+                    split(paid, [1.0 - f, f].into_iter(), &mut parts);
+                    pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, parts[0]);
+                    pay(
+                        &mut w.ledger,
+                        FOREIGN_DIVIDEND,
+                        acc.enterprise[e],
+                        account,
+                        parts[1],
+                    );
+                    abroad[c] += i128::from(parts[1]);
+                }
+                _ => pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, paid),
+            }
         }
         let cash = i64::try_from(w.ledger.money_wide(acc.market[i]))
             .expect("ledger overflow: a market's cash beyond one payment");
         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
     }
-    let mut parts = Vec::new();
+    if let Some(account) = acc.foreign {
+        for (h, &total) in abroad.iter().enumerate().filter(|(_, x)| **x > 0) {
+            let owners = &inp.countries.owners[h];
+            split(total, owners.iter().copied(), &mut parts);
+            for (o, &part) in parts.iter().enumerate() {
+                pay(
+                    &mut w.ledger,
+                    FOREIGN_DIVIDEND,
+                    account,
+                    acc.dividend[o],
+                    part,
+                );
+            }
+        }
+    }
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
-            let weights = pops.iter().map(|&k| inp.pops.population[k as usize]);
+            // the pool by dividend share (by wealth, ADR 0104), the rebate by population
+            let weights = pops.iter().map(|&k| {
+                let k = k as usize;
+                if flow == DIVIDEND && !inp.pops.dividend.is_empty() {
+                    inp.pops.dividend[k]
+                } else {
+                    inp.pops.population[k]
+                }
+            });
             split(w.ledger.money_wide(payer), weights, &mut parts);
-            for (&k, &part) in pops.iter().zip(&parts) {
+            for (&k, &part) in pops.iter().zip(parts.iter()) {
                 pay(&mut w.ledger, flow, payer, acc.pop[k as usize], part);
                 w.scratch.income_paid[k as usize] += part;
             }
         }
     }
+    transfer(w, tick);
     for (income, &paid) in w.income.iter_mut().zip(&w.scratch.income_paid) {
         *income = to_numeraire(paid);
     }
     write_off(w);
+}
+
+/// Months of the half-life with which the observed transfer path fades after 2024 (ADR 0100:
+/// ten years; not tuned).
+pub const TRANSFER_HALF_LIFE: f64 = 120.0;
+
+/// Country `c`'s transfer ratio rho_c, minus its current account over its GDP, at tick `tick`
+/// under `mode` (ADRs 0100, 0315, S22): the 2000 ratio (`FixedShares`), the ratio of the tick's
+/// year 2000 + tick / 12 (`ObservedPath`), which after the last year fades as rho_c(2024)
+/// 2^-((tick - 299) / 120), or 0 (`Off`, or inputs without ratios).
+pub fn transfer_share(inp: &EconInputs, mode: Transfers, c: usize, tick: u32) -> f64 {
+    let countries = &inp.countries;
+    match mode {
+        Transfers::Off => 0.0,
+        Transfers::FixedShares => countries.transfer.get(c).copied().unwrap_or(0.0),
+        Transfers::ObservedPath => {
+            if countries.transfer_path.is_empty() {
+                return 0.0;
+            }
+            let path = &countries.transfer_path[c];
+            let year = tick as usize / 12;
+            if year < TRANSFER_YEARS {
+                path[year]
+            } else {
+                let last = (TRANSFER_YEARS * 12 - 1) as f64;
+                path[TRANSFER_YEARS - 1]
+                    * libm::exp2(-(f64::from(tick) - last) / TRANSFER_HALF_LIFE)
+            }
+        }
+    }
+}
+
+/// E4 transfers (ADR 0100 as amended by ADRs 0299, 0300, 0315 and 0318 to 0321): each country's D_c =
+/// (rho_c - rho_bar) Y_c, Y_c its pops' income of the previous tick (`EconWorld::income`; the
+/// tick's own where the world has none, at the first tick of a data-state start) and rho_bar =
+/// sum_c rho_c Y_c / Y, Y = sum_c Y_c, so the transfers net to zero. With s_c = D_c / Y, each
+/// paying country (s_c < 0) puts round_half_even(|s_c| Y) minor units into the world transfer
+/// account, its pops in proportion to the income credited to them this tick; the account pays
+/// their total out over the receiving countries in proportion to s_c, and each over its pops the
+/// same way ([`split`]), so it ends at zero. Nothing without the account
+/// (`world::transfers_on`).
+pub fn transfer(w: &mut EconWorld, tick: u32) {
+    let Some(account) = w.layout.accounts.transfer else {
+        return;
+    };
+    if w.params.transfers == Transfers::Off {
+        return;
+    }
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let acc = &lay.accounts;
+    let mode = w.params.transfers;
+    let paid: Vec<f64>;
+    let income_k: &[f64] = if fixed_sum(&w.income) > 0.0 {
+        &w.income
+    } else {
+        paid = w
+            .scratch
+            .income_paid
+            .iter()
+            .map(|&m| to_numeraire(m))
+            .collect();
+        &paid
+    };
+    let national: Vec<f64> = lay
+        .country_pops
+        .iter()
+        .map(|pops| {
+            fixed_sum(
+                &pops
+                    .iter()
+                    .map(|&k| income_k[k as usize])
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    let world = fixed_sum(&national);
+    let rho: Vec<f64> = (0..inp.n_countries())
+        .map(|c| transfer_share(inp, mode, c, tick))
+        .collect();
+    let weighted: Vec<f64> = rho.iter().zip(&national).map(|(r, y)| r * y).collect();
+    let rho_bar = if world > 0.0 {
+        fixed_sum(&weighted) / world
+    } else {
+        0.0
+    };
+    let share: Vec<f64> = (0..inp.n_countries())
+        .map(|c| {
+            if world > 0.0 {
+                (rho[c] - rho_bar) * national[c] / world
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let income = |k: u32| w.scratch.income_paid[k as usize].max(0) as f64;
+    let mut parts = Vec::new();
+    let mut paid: i128 = 0;
+    for (c, pops) in lay.country_pops.iter().enumerate() {
+        if share[c] >= 0.0 || pops.is_empty() {
+            continue;
+        }
+        let amount = to_minor(-share[c] * world);
+        split(amount, pops.iter().map(|&k| income(k)), &mut parts);
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
+            pay(&mut w.ledger, TRANSFER, acc.pop[k as usize], account, part);
+        }
+        paid += i128::from(amount);
+    }
+    let receivers: Vec<usize> = (0..inp.n_countries())
+        .filter(|&c| share[c] > 0.0 && !lay.country_pops[c].is_empty())
+        .collect();
+    let mut amounts = Vec::new();
+    split(paid, receivers.iter().map(|&c| share[c]), &mut amounts);
+    for (&c, &amount) in receivers.iter().zip(&amounts) {
+        let pops = &lay.country_pops[c];
+        split(amount, pops.iter().map(|&k| income(k)), &mut parts);
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
+            pay(&mut w.ledger, TRANSFER, account, acc.pop[k as usize], part);
+        }
+    }
 }
 
 /// The loss write-off of E4 (ADR 0112): per country, the excess of every enterprise's retained
@@ -1068,13 +1739,13 @@ pub fn write_off(w: &mut EconWorld) {
             continue;
         }
         largest_remainder(total, &weights, &mut parts);
-        for (&k, &part) in pops.iter().zip(&parts) {
+        for (&k, &part) in pops.iter().zip(parts.iter()) {
             pay(&mut w.ledger, WRITE_OFF, acc.pop[k as usize], pool, part);
         }
         weights.clear();
         weights.extend(holders.iter().map(|&(_, x)| x));
         largest_remainder(total, &weights, &mut parts);
-        for (&(account, _), &part) in holders.iter().zip(&parts) {
+        for (&(account, _), &part) in holders.iter().zip(parts.iter()) {
             pay(&mut w.ledger, WRITE_OFF, pool, account, part);
         }
     }
@@ -1140,6 +1811,36 @@ fn mul_div(x: u64, t: u128, s: u128) -> (u64, u128) {
     (q, r)
 }
 
+/// Systems 220 to 223 (`specs/pop/SPEC.md`): age, mortality, fertility, education on the cohort
+/// tick. A no-op when population is off.
+pub fn demography(w: &mut EconWorld, tick: u32) {
+    let Some((d, cohorts)) = &mut w.pop else {
+        return;
+    };
+    let before = cohorts.total();
+    let flows = d.step(cohorts, tick);
+    let expected = i128::from(before) + i128::from(flows.births) - i128::from(flows.deaths);
+    w.pop_drift = i64::try_from(i128::from(cohorts.total()) - expected).unwrap_or(i64::MAX);
+}
+
+/// System 227 (`specs/pop/SPEC.md`): internal migration and capped international admissions on
+/// the cohort cells. A no-op when population or migration is off. Moves persons between
+/// provinces only, so any change of the total is a conservation breach.
+pub fn migration(w: &mut EconWorld, tick: u32) {
+    let (Some((_, cohorts)), Some(m)) = (&mut w.pop, &mut w.migration) else {
+        return;
+    };
+    let country: Vec<usize> = (0..w.inputs.n_provinces())
+        .map(|i| w.inputs.country_of(i))
+        .collect();
+    let before = cohorts.total();
+    m.step(cohorts, &w.wage, &country, tick);
+    let drift = i128::from(cohorts.total()) - i128::from(before);
+    w.pop_drift = w
+        .pop_drift
+        .saturating_add(i64::try_from(drift).unwrap_or(i64::MAX));
+}
+
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
 /// check them here, so a violation stops the run inside the tick that caused it.
 pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
@@ -1151,6 +1852,7 @@ pub fn assert_invariants(w: &mut EconWorld, tick: u32) {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::cap_cuts;
 
@@ -1284,6 +1986,69 @@ mod tests {
         assert_eq!(out, [0, 5]);
         split(0, [0.4, 0.6].into_iter(), &mut out);
         assert_eq!(out, [0, 0]);
+    }
+
+    /// ADR 0103: TFP grows at g_A 2^(-t / h) and F closes half its gap f by one half-life, so
+    /// at t = h the log multipliers are g_A h / (2 ln 2) and f / 2, and at t = 2h three quarters
+    /// of the totals g_A h / ln 2 and f.
+    #[test]
+    fn drift_fades_with_half_life() {
+        use crate::fixture::small_world;
+
+        let mut inp = small_world();
+        let n = inp.n_countries();
+        let g: Vec<f64> = (0..n).map(|k| 0.01 * (k as f64 + 1.0)).collect();
+        let f: Vec<f64> = (0..n).map(|k| 0.2 - 0.15 * k as f64).collect();
+        (inp.countries.drift_a, inp.countries.drift_f) = (g.clone(), f.clone());
+        let params = EconParams::default();
+        let h = params.drift_half_life;
+        for (years, done) in [(h, 0.5), (2.0 * h, 0.75)] {
+            let factors = drift_factors(&inp, &params, (12.0 * years) as u32);
+            for k in 0..n {
+                let [a, l0] = factors[k];
+                let ln_phi = f[k] * done;
+                let ln_alpha = g[k] * h / std::f64::consts::LN_2 * done;
+                assert!((l0.ln() - ln_phi).abs() < 1e-14, "country {k}: {l0}");
+                assert!(
+                    (a.ln() - ln_alpha - ln_phi).abs() < 1e-14,
+                    "country {k}: {a}"
+                );
+            }
+        }
+        // the rate halves every half-life: the log multiplier's monthly step at t = h is half
+        // its step at t = 0
+        let step = |t: u32| {
+            let (now, next) = (
+                drift_factors(&inp, &params, t),
+                drift_factors(&inp, &params, t + 1),
+            );
+            next[0][0].ln() - next[0][1].ln() - (now[0][0].ln() - now[0][1].ln())
+        };
+        let ratio = step((12.0 * h) as u32) / step(0);
+        assert!((ratio - 0.5).abs() < 1e-2, "{ratio}");
+    }
+
+    /// ADR 0103: the drift is zero at the data state's first tick and with S23 off.
+    #[test]
+    fn drift_factors_are_one_at_tick_0_and_when_off() {
+        use crate::fixture::small_world;
+
+        let mut inp = small_world();
+        let n = inp.n_countries();
+        (inp.countries.drift_a, inp.countries.drift_f) = (vec![0.03; n], vec![0.1; n]);
+        let off = EconParams {
+            drift: false,
+            ..EconParams::default()
+        };
+        assert_eq!(
+            drift_factors(&inp, &EconParams::default(), 0),
+            vec![[1.0; 2]; n]
+        );
+        assert_eq!(drift_factors(&inp, &off, 120), vec![[1.0; 2]; n]);
+        assert_ne!(
+            drift_factors(&inp, &EconParams::default(), 1),
+            vec![[1.0; 2]; n]
+        );
     }
 
     #[test]
@@ -1446,7 +2211,7 @@ mod tests {
         demand(&mut w);
         let ent = &w.inputs.enterprises;
         let i = ent.province[e] as usize;
-        let s_l = w.inputs.countries.s_l[w.inputs.country_of(i)];
+        let s_l = w.inputs.ent_s_l(e);
         let r = rho(w.params.sigma_fl);
         let output = |l: f64| value_added(ent.a[e], ent.va0[e], ent.l0[e], s_l, r, l) / lay.a_va[e];
         let (notional, constrained) = (output(spare.employment[e]), output(w.employment[e]));

@@ -17,7 +17,10 @@ const MAX_SCALE: f64 = 3.2e6;
 pub const MAX_LAT: f64 = 1.484_422_229_745_332_4;
 
 pub fn lon_lat(m: [f64; 2]) -> [f64; 2] {
-    [(m[0] - 0.5) * TAU, (PI * (1.0 - 2.0 * m[1])).sinh().atan()]
+    [
+        (m[0] - 0.5) * TAU,
+        libm::atan(libm::sinh(PI * (1.0 - 2.0 * m[1]))),
+    ]
 }
 
 fn wrap(lon: f64) -> f64 {
@@ -41,18 +44,22 @@ impl Camera {
         if zr.is_nan() {
             return None;
         }
-        let (s, c) = self.centre[1].sin_cos();
+        let (s, c) = libm::sincos(self.centre[1]);
         let y = yr * c + zr * s;
         let z = zr * c - yr * s;
-        Some([wrap(self.centre[0] + x.atan2(z)), y.asin()])
+        Some([wrap(self.centre[0] + libm::atan2(x, z)), libm::asin(y)])
     }
 
     /// Where a world point lands on screen, in physical pixels; `None` on the far side.
     pub fn project(&self, viewport: [f64; 2], xy: [f64; 2]) -> Option<[f64; 2]> {
         let [lon, lat] = lon_lat(xy);
         let dl = lon - self.centre[0];
-        let (x, y, z) = (lat.cos() * dl.sin(), lat.sin(), lat.cos() * dl.cos());
-        let (s, c) = self.centre[1].sin_cos();
+        let (x, y, z) = (
+            libm::cos(lat) * libm::sin(dl),
+            libm::sin(lat),
+            libm::cos(lat) * libm::cos(dl),
+        );
+        let (s, c) = libm::sincos(self.centre[1]);
         let yr = y * c - z * s;
         let zr = y * s + z * c;
         (zr > 0.0).then(|| {
@@ -67,7 +74,7 @@ impl Camera {
     pub fn pan(&mut self, dx: f64, dy: f64) {
         let [lon, lat] = self.centre;
         self.centre = [
-            wrap(lon - dx / (self.scale * lat.cos())),
+            wrap(lon - dx / (self.scale * libm::cos(lat))),
             (lat + dy / self.scale).clamp(-MAX_LAT, MAX_LAT),
         ];
     }
@@ -152,7 +159,7 @@ mod tests {
         let [lon, lat] = c.screen_to_lon_lat(VIEW, px).unwrap();
         let m = [
             lon / TAU + 0.5,
-            0.5 - (lat.tan() + 1.0 / lat.cos()).ln() / TAU,
+            0.5 - libm::log(libm::tan(lat) + 1.0 / libm::cos(lat)) / TAU,
         ];
         let back = c.project(VIEW, m).unwrap();
         assert!(close(back, px, 1e-6), "{back:?}");

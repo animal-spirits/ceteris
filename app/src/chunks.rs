@@ -28,7 +28,11 @@ pub struct Chunks {
 
 fn unit(m: [f32; 2]) -> [f64; 3] {
     let [lon, lat] = lon_lat(m.map(f64::from));
-    [lat.cos() * lon.sin(), lat.sin(), lat.cos() * lon.cos()]
+    [
+        libm::cos(lat) * libm::sin(lon),
+        libm::sin(lat),
+        libm::cos(lat) * libm::cos(lon),
+    ]
 }
 
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -76,11 +80,7 @@ impl Chunks {
                 };
                 let radius = ids
                     .iter()
-                    .map(|&i| {
-                        dot(centre, unit(fill.xy[i as usize]))
-                            .clamp(-1.0, 1.0)
-                            .acos()
-                    })
+                    .map(|&i| libm::acos(dot(centre, unit(fill.xy[i as usize])).clamp(-1.0, 1.0)))
                     .fold(0.0, f64::max);
                 Chunk {
                     start: (3 * start[c]) as u32,
@@ -97,8 +97,8 @@ impl Chunks {
     /// merged.
     pub fn visible(&self, camera: &Camera, viewport: [f64; 2]) -> Vec<Range<u32>> {
         let [lon, lat] = camera.centre;
-        let (sl, cl) = lon.sin_cos();
-        let (sp, cp) = lat.sin_cos();
+        let (sl, cl) = libm::sincos(lon);
+        let (sp, cp) = libm::sincos(lat);
         // The camera's right, up and towards-viewer axes in world coordinates.
         let right = [cl, 0.0, -sl];
         let up = [-sp * sl, cp, -sp * cl];
@@ -108,9 +108,9 @@ impl Chunks {
         for c in &self.chunks {
             // Orthographic projection shortens distances, so the chunk lies within a disc of
             // the cap's chord around its centre's projection.
-            let reach = 2.0 * (c.radius / 2.0).sin();
-            let facing =
-                c.radius >= std::f64::consts::FRAC_PI_2 || dot(c.centre, view) > -c.radius.sin();
+            let reach = 2.0 * libm::sin(c.radius / 2.0);
+            let facing = c.radius >= std::f64::consts::FRAC_PI_2
+                || dot(c.centre, view) > -libm::sin(c.radius);
             let on_screen = dot(c.centre, right).abs() <= half[0] + reach
                 && dot(c.centre, up).abs() <= half[1] + reach;
             if !(facing && on_screen) {

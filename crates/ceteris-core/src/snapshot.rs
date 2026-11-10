@@ -1,6 +1,7 @@
 //! Canonical state encoding, state hashes and content-addressed snapshots
 //! (Sections 4.1, 14.3; ADR 0002).
 
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 #[expect(
     clippy::disallowed_types,
@@ -14,6 +15,7 @@ const MAGIC: &[u8; 4] = b"CETS";
 /// carry their parameters and name their network.
 const FORMAT: u32 = 3;
 const ZSTD_LEVEL: i32 = 1;
+const ZSTD_FRAME: usize = 4 << 20;
 
 pub type Hash = [u8; 32];
 
@@ -95,6 +97,10 @@ impl<'a> Decoder<'a> {
         Self { buf, pos: 0 }
     }
 
+    pub fn at_end(&self) -> bool {
+        self.pos == self.buf.len()
+    }
+
     pub fn finish(self) -> Result<(), DecodeError> {
         if self.pos == self.buf.len() {
             Ok(())
@@ -168,7 +174,11 @@ pub fn canonical<W: Encode>(tick: u32, world: &W) -> Vec<u8> {
 }
 
 pub fn state_hash(canonical: &[u8]) -> Hash {
-    *blake3::hash(canonical).as_bytes()
+    // the same digest as `blake3::hash`, with the tree hashed on the rayon pool
+    *blake3::Hasher::new()
+        .update_rayon(canonical)
+        .finalize()
+        .as_bytes()
 }
 
 pub fn hex(hash: &Hash) -> String {
@@ -215,10 +225,19 @@ pub struct SnapshotStore {
 impl SnapshotStore {
     /// Stores the canonical bytes for `tick` and returns their hash.
     pub fn insert(&mut self, tick: u32, canonical: &[u8]) -> Hash {
-        let hash = state_hash(canonical);
-        self.blobs.entry(hash).or_insert_with(|| {
-            zstd::bulk::compress(canonical, ZSTD_LEVEL).expect("zstd compression failed")
-        });
+        // the blob is concatenated zstd frames of `ZSTD_FRAME` bytes, compressed in parallel and
+        // read back whole by `decode_all`; compressing ahead of the dedup check costs only on a repeat
+        let (hash, blob) = rayon::join(
+            || state_hash(canonical),
+            || {
+                let frames: Vec<Vec<u8>> = canonical
+                    .par_chunks(ZSTD_FRAME)
+                    .map(|c| zstd::bulk::compress(c, ZSTD_LEVEL).expect("zstd compression failed"))
+                    .collect();
+                frames.concat()
+            },
+        );
+        self.blobs.entry(hash).or_insert(blob);
         self.by_tick.insert(tick, hash);
         hash
     }

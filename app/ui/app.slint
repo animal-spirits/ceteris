@@ -130,6 +130,10 @@ export component AppWindow inherits Window {
     in property <[Row]> inspector;
     in property <bool> inspector-open;
     in property <string> error;
+    in property <bool> halt-open;
+    in property <string> halt-title;
+    in property <string> halt-detail;
+    in property <string> halt-folder;
     in-out property <bool> about-open;
     // Index into the mode buttons; resource group 0 is all groups.
     in-out property <int> mode;
@@ -149,6 +153,9 @@ export component AppWindow inherits Window {
     callback mode-changed();
     callback ui-scale(float);
     callback dismiss-error();
+    callback dismiss-halt();
+    callback open-bundle();
+    callback report-problem();
     callback close-inspector();
     // Registry commands by name, and key events for the keymap (ADR 0188).
     callback command(string);
@@ -455,6 +462,59 @@ export component AppWindow inherits Window {
             Action {
                 text: "Dismiss";
                 clicked => { root.dismiss-error(); }
+            }
+        }
+    }
+
+    if root.halt-open: Panel {
+        x: (parent.width - self.width) / 2;
+        y: Tokens.pad;
+        width: min(parent.width - 2 * Tokens.pad, Tokens.body-size * 48);
+        height: halt-box.preferred-height;
+        border-color: Tokens.ink;
+        border-width: 2px;
+        halt-box := VerticalLayout {
+            padding: Tokens.pad;
+            spacing: Tokens.pad;
+            HorizontalLayout {
+                spacing: Tokens.pad;
+                Image {
+                    source: @image-url("../assets/mock/icons/halt.svg");
+                    width: Tokens.body-size * 1.5;
+                    height: self.width;
+                    vertical-alignment: center;
+                }
+                Heading {
+                    text: root.halt-title;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: root.halt-detail;
+                color: Tokens.ink;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.halt-folder == "" ? "No bundle was written." : "Repro bundle: " + root.halt-folder;
+                color: Tokens.ink;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: Tokens.pad;
+                alignment: end;
+                Action {
+                    text: "Open bundle folder";
+                    clicked => { root.open-bundle(); }
+                }
+                Action {
+                    text: "Report a problem";
+                    clicked => { root.report-problem(); }
+                }
+                Action {
+                    text: "Dismiss";
+                    clicked => { root.dismiss-halt(); }
+                }
             }
         }
     }

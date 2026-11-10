@@ -1,14 +1,17 @@
 //! Readers of the econ sources in the fetch cache: each turns one file into typed rows, as the
 //! Python readers of `packs/econ` did, value for value.
 
+pub mod aamne;
 pub mod baci;
 pub mod downscale;
 pub mod geojson;
 pub mod icio;
 pub mod natural_earth;
 pub mod people;
+pub mod sea;
 pub mod tariffs;
 pub mod wdi;
+pub mod wid;
 pub mod xlsx;
 
 use std::collections::BTreeMap;
@@ -86,7 +89,12 @@ pub(crate) struct Csv<R: Read> {
 
 impl<R: Read> Csv<R> {
     pub fn new(input: R, origin: &Path) -> Result<Self, String> {
+        Self::new_delimited(input, origin, b',')
+    }
+
+    pub fn new_delimited(input: R, origin: &Path, delimiter: u8) -> Result<Self, String> {
         let mut reader = csv::ReaderBuilder::new()
+            .delimiter(delimiter)
             .has_headers(false)
             .flexible(true)
             .from_reader(input);

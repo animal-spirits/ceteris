@@ -3,26 +3,36 @@
 //! `specs/trade/SPEC.md`, State components).
 
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
 use ceteris_core::invariant::Violation;
-use ceteris_core::ledger::{AccountId, Entry, Flow, GOODS_TOLERANCE, Ledger, PostScratch};
+use ceteris_core::ledger::{
+    AccountId, Entry, Flow, GOODS_TOLERANCE, GoodColumn, Ledger, PostScratch,
+};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rows::Rows;
 use ceteris_core::sim::{Sim, State};
 use ceteris_core::snapshot::{Decode, DecodeError, Decoder, Encode, Encoder, Hash, state_hash};
-use ceteris_trade::source::{INTERMEDIATE, dispatch, source};
+use ceteris_core::timing;
+use ceteris_trade::source::{INTERMEDIATE, arrivals, dispatch, source_weighted};
 use ceteris_trade::{Goods, Kernel, Markets, Network, Pipeline, Rationing, Sourced, TradeParams};
 
 use crate::calibration::Steady;
-use crate::demand::{PiglWeights, PopAt, invert_pigl_pops, pigl, within_sigma};
+use crate::demand::{
+    PiglAt, PiglWeights, PopAt, fixed_shares, invert_pigl_pops, pigl, within_sigma,
+};
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
-use crate::params::{EconParams, Pigl, Technology};
+use crate::migration::Migration;
+use crate::params::{EconParams, Pigl, Technology, Transfers};
+use crate::pop::{Cohorts, Demography};
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
+/// Buyers per block of the good-major spending arrays (`Scratch::pop_spend_t`).
+pub(crate) const SPEND_BLOCK: usize = 512;
+
 pub const MINOR_PER_UNIT: f64 = 1e4;
 
 /// Relative slack of the labour bounds (spec Invariants, Labour).
@@ -65,6 +75,8 @@ pub const DIVIDEND: Flow = Flow(6);
 pub const REBATE: Flow = Flow(7);
 pub const MINT: Flow = Flow(8);
 pub const WRITE_OFF: Flow = Flow(9);
+pub const TRANSFER: Flow = Flow(10);
+pub const FOREIGN_DIVIDEND: Flow = Flow(11);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -109,6 +121,16 @@ pub struct Accounts {
     pub dividend: Vec<AccountId>,
     /// Issues the initial money; holds minus all money ever minted.
     pub mint: AccountId,
+    /// The world transfer account of ADR 0100: takes the paying countries' transfers and pays
+    /// the receiving countries', ending every tick at zero. Opened only where S22 is on and
+    /// some transfer share is nonzero, after the mint, so a world without transfers keeps its
+    /// ledger.
+    pub transfer: Option<AccountId>,
+    /// The world dividend account of ADR 0310: takes the foreign-owned part of each payout and
+    /// pays it to the owners' profit pools, ending every tick at zero. Opened only where some
+    /// foreign-owned share is nonzero, after the transfer account, so a world without foreign
+    /// owners keeps its ledger.
+    pub foreign: Option<AccountId>,
 }
 
 /// Static structure derived at load from the inputs and parameters: never in snapshots,
@@ -122,9 +144,12 @@ pub struct Layout {
     pub ent_offsets: Vec<u32>,
     /// Effective labour supply L^s per province.
     pub labour_supply: Vec<f64>,
-    /// Pop's share N_k / N_c of its country's profit pool and rebate (national ownership,
-    /// owner 2026-10-25): its population over its country's pops' population.
+    /// Pop's share N_k / N_c of its country's rebate (national ownership, owner 2026-10-25):
+    /// its population over its country's pops' population.
     pub ownership: Vec<f64>,
+    /// Pop's share of its country's profit pool: `ownership`, or by wealth (ADR 0104,
+    /// [`EconInputs::pop_dividend_shares`]).
+    pub dividend: Vec<f64>,
     /// Input coefficients each enterprise runs on (S09): its own putty-clay coefficients
     /// `EntData::coef`, or its 2000 column `EntData::column` under fixed Leontief.
     pub coef: Rows<f64>,
@@ -135,7 +160,7 @@ pub struct Layout {
     /// Weights of the world price index, [`price_index_weights`].
     pub index_weights: Vec<f64>,
     /// PIGL weights per country: the calibrated ones (`Countries::pigl`), else inverted at
-    /// load over its pops at prices 1 ([`household_preferences`]).
+    /// load over its pops at the data state's prices ([`household_preferences`]).
     pub pigl: Vec<PiglWeights>,
     /// Within-pop log income dispersion of every pop of a country, which its weights carry
     /// (ADR 0094).
@@ -195,6 +220,7 @@ impl Layout {
             ent_offsets: offsets(&inp.enterprises.province, np),
             labour_supply: inp.labour_supply(&params.edu_eff),
             ownership,
+            dividend: inp.pop_dividend_shares(),
             country_pops,
             a_va: inp.enterprises.a_va.clone(),
             coef,
@@ -229,16 +255,81 @@ impl Layout {
         }
         let c = inp.country_of(inp.pops.province[k] as usize);
         let people = inp.pops.population[k];
+        let w = &self.pigl[c];
+        // households spend their share by PIGL, government and investment theirs at fixed
+        // shares (ADR 0099); without the split the household share is exactly 1
+        let household = if w.gov.is_empty() {
+            money
+        } else {
+            w.household_share() * money
+        };
         pigl(
-            &self.pigl[c],
+            w,
             price,
-            money / people,
+            household / people,
             self.sigma_income[c],
             params,
             out,
         );
         for x in out.iter_mut() {
             *x *= people;
+        }
+        if !w.gov.is_empty() {
+            fixed_shares(&w.gov, price, money, out);
+            fixed_shares(&w.inv, price, money, out);
+        }
+    }
+
+    /// The price-only part of PIGL demand for the pops of province `i` at `price`
+    /// ([`Layout::pop_demand_at`]).
+    pub fn pigl_at(
+        &self,
+        inp: &EconInputs,
+        params: &EconParams,
+        i: usize,
+        price: &[f64],
+    ) -> PiglAt {
+        PiglAt::new(&self.pigl[inp.country_of(i)], price, params)
+    }
+
+    /// [`Layout::pop_demand`] from its province's [`Layout::pigl_at`] at the same prices.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pop_demand_at(
+        &self,
+        inp: &EconInputs,
+        params: &EconParams,
+        k: usize,
+        at: &PiglAt,
+        price: &[f64],
+        money: f64,
+        out: &mut [f64],
+    ) {
+        out.fill(0.0);
+        if money <= 0.0 {
+            return;
+        }
+        let c = inp.country_of(inp.pops.province[k] as usize);
+        let people = inp.pops.population[k];
+        let w = &self.pigl[c];
+        let household = if w.gov.is_empty() {
+            money
+        } else {
+            w.household_share() * money
+        };
+        at.demand(
+            w,
+            price,
+            household / people,
+            self.sigma_income[c],
+            params,
+            out,
+        );
+        for x in out.iter_mut() {
+            *x *= people;
+        }
+        if !w.gov.is_empty() {
+            fixed_shares(&w.gov, price, money, out);
+            fixed_shares(&w.inv, price, money, out);
         }
     }
 }
@@ -247,6 +338,8 @@ impl Layout {
 /// so it is not part of snapshots; a restored world starts with it zeroed.
 #[derive(Clone, Debug)]
 pub struct Scratch {
+    /// Channel recording and shutdown ([`crate::channels`]); configuration, not state.
+    pub channels: crate::channels::Channels,
     /// Output Y of each enterprise at E2.
     pub produced: Vec<f64>,
     /// Inputs available before use (stock, plus for a local good the units drawn from this
@@ -275,6 +368,11 @@ pub struct Scratch {
     /// by good (0 for local goods).
     pub pop_spend: Vec<f64>,
     pub ent_spend: Vec<f64>,
+    /// `pop_spend` and `ent_spend` regrouped by blocks of `SPEND_BLOCK` buyers, good-major
+    /// inside a block (`[block][good][buyer % SPEND_BLOCK]`), so one good's buyers read
+    /// sequentially in T2b; filled by `dispatch_gather`.
+    pub pop_spend_t: Vec<f64>,
+    pub ent_spend_t: Vec<f64>,
     /// Spending by class `[intermediate, household]` per destination cell, the sums of
     /// `ent_spend` and `pop_spend` over the province in ID order, given to `source` at T2.
     pub class_spend: Vec<[f64; 2]>,
@@ -284,7 +382,7 @@ pub struct Scratch {
     pub fill: Vec<[f64; 2]>,
     /// Local output perished per cell at T3.
     pub spoiled: Vec<f64>,
-    /// Pipeline arrivals at T1, `[buyer * ng + g]` (pops, then enterprises).
+    /// Pipeline arrivals at T1, `[g * n_buyers + buyer]` (pops, then enterprises).
     pub due: Vec<f64>,
     /// Sourcing of each traded good: at unit spending from the price refresh of E3, then
     /// from T2 to its dispatch at T2b.
@@ -295,6 +393,21 @@ pub struct Scratch {
     pub payments: Vec<Payments>,
     /// Working space of `Ledger::post` at T2b.
     pub post: PostScratch,
+    /// Whether T2b journals every leg (detail) or one netted entry per buyer and network leg
+    /// (RFC 0316). Balances and hashes are the same.
+    pub detail: bool,
+    /// T2b's netted entries, and the sums over goods they come from.
+    pub netted: Vec<Entry>,
+    pub buyer_tot: Vec<i64>,
+    pub edge_tot: Vec<i64>,
+    /// The price refresh of E3 when [`EconWorld::start_refresh`] began it early.
+    pub refresh: Refresh,
+    /// Per traded good, its ledger column while T2b moves its goods; per local good at T3.
+    pub stock: Vec<GoodColumn>,
+    /// Per local good, its T3 clearing ([`LocalClear`]), and every local purchase in posting
+    /// order.
+    pub local: Vec<LocalClear>,
+    pub local_entries: Vec<Entry>,
     /// Expected months in transit of each traded good to each destination, the arrival
     /// slots weighted by the units arriving per unit of spending (home 0, domestic 1, a
     /// crossing 1 + lag); 0 for local goods. `[province * ng + g]`, refreshed with
@@ -315,12 +428,16 @@ pub struct Scratch {
     /// those inputs on the output at that employment (ADR 0266).
     pub short: Vec<u64>,
     pub notional: Vec<f64>,
+    /// Per country, this tick's multipliers of A and of L0 from the initial drift
+    /// (`systems::drift`, ADR 0103), set at E0; 1 until then.
+    pub drift: Vec<[f64; 2]>,
 }
 
 impl Scratch {
     fn new(nc: usize, np: usize, n_pops: usize, n_ent: usize, goods: &Goods) -> Self {
         let (ng, n_traded) = (goods.n(), goods.traded);
         Self {
+            channels: Default::default(),
             produced: vec![0.0; n_ent],
             input_before: vec![0.0; n_ent * ng],
             input_used: vec![0.0; n_ent * ng],
@@ -333,6 +450,8 @@ impl Scratch {
             ent_order: vec![0.0; n_ent * ng],
             pop_spend: vec![0.0; n_pops * ng],
             ent_spend: vec![0.0; n_ent * ng],
+            pop_spend_t: vec![0.0; n_pops.div_ceil(SPEND_BLOCK) * SPEND_BLOCK * ng],
+            ent_spend_t: vec![0.0; n_ent.div_ceil(SPEND_BLOCK) * SPEND_BLOCK * ng],
             class_spend: vec![[0.0; 2]; np * ng],
             income_paid: vec![0; n_pops],
             fill: vec![[1.0; 2]; np * ng],
@@ -342,6 +461,14 @@ impl Scratch {
             columns: vec![Columns::default(); n_traded],
             payments: vec![Payments::default(); n_traded],
             post: PostScratch::default(),
+            detail: false,
+            netted: Vec::new(),
+            buyer_tot: Vec::new(),
+            edge_tot: Vec::new(),
+            stock: Vec::new(),
+            refresh: Refresh::default(),
+            local: Vec::new(),
+            local_entries: Vec::new(),
             lead: vec![0.0; np * ng],
             flows: FlowWindow::new(nc, np, ng, n_traded),
             dispatch_made: vec![0.0; n_traded],
@@ -349,6 +476,7 @@ impl Scratch {
             dispatch_scale: vec![0.0; n_traded],
             short: vec![0; n_ent],
             notional: vec![0.0; n_ent],
+            drift: vec![[1.0; 2]; nc],
         }
     }
 }
@@ -359,6 +487,8 @@ impl Scratch {
 #[derive(Clone, Debug, Default)]
 pub struct Columns {
     pub price: Vec<f64>,
+    /// The prices of the origin shares under sticky sourcing (S12), empty when instant.
+    pub weight_price: Vec<f64>,
     pub active: Vec<bool>,
     pub spend: Vec<[f64; 2]>,
     pub fill: Vec<[f64; 2]>,
@@ -375,6 +505,13 @@ impl Columns {
         self.active.clear();
         self.active.extend(cells.map(|c| active[c]));
     }
+
+    /// The smoothed prices of good `g`, or none for an empty `weight`.
+    pub fn gather_weight(&mut self, weight: &[f64], g: usize, n_goods: usize) {
+        self.weight_price.clear();
+        self.weight_price
+            .extend(weight.iter().skip(g).step_by(n_goods));
+    }
 }
 
 /// One traded good's dispatch to its buyers and its money legs at T2b, computed in the
@@ -387,10 +524,82 @@ pub struct Payments {
     pub orders: Vec<Order>,
     pub order_ends: Vec<u32>,
     pub entries: Vec<Entry>,
+    /// Netted mode: the good's rounded payment per buyer index (pops, then enterprises) and per
+    /// network leg in the fixed leg order, zero where none; `topo` names the legs of the first
+    /// good ([`Payments::entries`] holds the same amounts one by one in detail mode).
+    pub buyer_amt: Vec<i64>,
+    pub edge_amt: Vec<i64>,
+    pub topo: Vec<(Flow, AccountId, AccountId)>,
     pub buyers: Vec<Buyer>,
     pub at_gateway: Vec<i64>,
     pub from_gateway: Vec<i64>,
     pub parts: Vec<i64>,
+    /// T2b's pipeline shipments of the good, (slot, buyer, units) in order, applied after
+    /// the per-good tasks, and the goods its selection created.
+    pub pushes: Vec<ceteris_trade::pipeline::Push>,
+    pub made: f64,
+}
+
+/// What a price refresh reads and writes: the traded goods' sourcing and columns, and the
+/// index and lead it fills.
+#[derive(Clone, Debug)]
+struct RefreshParts {
+    sourced: Vec<Sourced>,
+    columns: Vec<Columns>,
+    index: Vec<f64>,
+    lead: Vec<f64>,
+}
+
+/// A price refresh running on the thread pool (`EconWorld::start_refresh`), its parts handed
+/// back when it finishes; empty when none runs. A clone waits for it and copies its result.
+#[derive(Default)]
+pub struct Refresh(Option<Arc<Mutex<Option<RefreshParts>>>>);
+
+impl Refresh {
+    /// Waits for the refresh, helping the pool meanwhile, and takes its parts.
+    fn wait(slot: &Mutex<Option<RefreshParts>>) -> RefreshParts {
+        loop {
+            if let Some(parts) = slot.lock().expect("refresh lock").take() {
+                return parts;
+            }
+            // a worker thread runs pending jobs here, the refresh among them
+            if rayon::yield_now().is_none() {
+                std::thread::yield_now();
+            }
+        }
+    }
+}
+
+impl Clone for Refresh {
+    fn clone(&self) -> Self {
+        match &self.0 {
+            None => Self(None),
+            Some(slot) => {
+                let parts = Self::wait(slot);
+                *slot.lock().expect("refresh lock") = Some(parts.clone());
+                Self(Some(Arc::new(Mutex::new(Some(parts)))))
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Refresh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "Refresh(running)"
+        } else {
+            "Refresh"
+        })
+    }
+}
+
+/// One local good's T3 clearing: its buyers in the province at hand (account, allocation,
+/// whether it consumes), its purchases, and where each province's end in them.
+#[derive(Clone, Debug, Default)]
+pub struct LocalClear {
+    pub buyers: Vec<(AccountId, f64, bool)>,
+    pub entries: Vec<Entry>,
+    pub ends: Vec<u32>,
 }
 
 /// One buyer of a traded good at its destination: ledger account, pipeline index, class
@@ -421,7 +630,20 @@ pub struct Order {
 #[derive(Clone, Debug)]
 pub struct EconWorld {
     pub(crate) inputs: Arc<EconInputs>,
+    /// The kernel sourcing and dispatch run on: the target kernel (same `Arc`) under instant
+    /// adjustment, else its crossings lagged behind the target (S12, ADR 0027). Its crossing k
+    /// are dynamic state when lagged.
     pub(crate) kernel: Arc<Kernel>,
+    /// The kernel of the network, tariffs and parameters now in force.
+    pub(crate) target: Arc<Kernel>,
+    /// Smoothed origin prices of the short-run adjustment (S12, ADR 0027), state: per cell
+    /// `[province * ng + g]` of the traded goods the log `-theta ln p~` with `p~^-theta` the
+    /// blend `(1 - rho) p~^-theta + rho p^-theta` of the posted prices. Empty under instant
+    /// adjustment, and until the first tick.
+    pub(crate) smooth: Vec<f64>,
+    /// `p~` of [`EconWorld::smooth`] as the origin shares read it, with the posted price
+    /// where the two agree; empty when `smooth` is. Derived, not state.
+    pub(crate) weight_price: Vec<f64>,
     pub(crate) params: EconParams,
     pub(crate) trade: TradeParams,
     pub(crate) layout: Arc<Layout>,
@@ -464,6 +686,15 @@ pub struct EconWorld {
     pub output: Vec<f64>,
     pub sales: Vec<f64>,
     pub profit: Vec<f64>,
+    /// Population on the monthly clock (P4, system 220): the mechanisms and the cohort cells.
+    /// `None` is the status quo; the snapshot then has no population section.
+    pub pop: Option<(Demography, Cohorts)>,
+    /// Internal migration and admissions (P4 D1/D2, system 227); needs `pop`. `None` is off and
+    /// adds nothing to the snapshot.
+    pub migration: Option<Migration>,
+    /// Persons the last demography step created or lost beyond births less deaths; zero
+    /// unless conservation broke. Not state.
+    pub(crate) pop_drift: i64,
     /// Not state: see [`Scratch`].
     pub scratch: Scratch,
 }
@@ -487,6 +718,9 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // fires only on retained losses, which the steady states that calibration and the
         // reference solutions describe do not have; the snapshot header carries it
         write_off_months: _,
+        transfers,
+        drift,
+        drift_half_life,
     } = params;
     let TradeParams {
         // the inputs' goods (`EconWorld::new`), in their digest
@@ -512,6 +746,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
         // refuses values other than the ones the network was built with
         bulk_sea: _,
         bulk_port: _,
+        rho,
         storage_loss,
         storage_cost,
         speculation,
@@ -537,6 +772,17 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     if !inputs.one_vintage() {
         e.u8(*technology as u8);
     }
+    // without transfer shares all three settings run identically
+    if inputs.has_transfers() {
+        e.u8(*transfers as u8);
+    }
+    // without drifts both settings and every half-life run identically
+    if inputs.has_drift() {
+        e.u8(u8::from(*drift));
+        if *drift {
+            e.f64(*drift_half_life);
+        }
+    }
     e.f64s(theta);
     e.f64(*theta_scale);
     e.f64s(&[*kappa1, *kappa2, *c_max, *expectation_gain]);
@@ -552,6 +798,10 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
     e.f64s(speculation);
     e.f64s(convenience);
     e.f64(*storage_gain);
+    // instant adjustment is the same dynamics at any class rate
+    if trade.partial_adjustment() {
+        e.f64s(rho);
+    }
     state_hash(&e.into_bytes())
 }
 
@@ -571,6 +821,7 @@ pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &Trade
             pigl: params.pigl.clone(),
             sigma_fl: params.sigma_fl,
             edu_eff: params.edu_eff,
+            transfers: params.transfers.calibrated(),
             ..EconParams::default()
         },
         &TradeParams {
@@ -646,33 +897,50 @@ fn pop_people(inp: &EconInputs) -> (Vec<f64>, Vec<f64>) {
     (province, country)
 }
 
-/// The profit pool of each country at the base point, sum (1 - s_L) VA0 over its enterprises.
+/// The profit pool of each country at the base point: sum (1 - f) (1 - s_L) VA0 over its
+/// enterprises, plus its owner share of every host's foreign-owned sum f (1 - s_L) VA0 (ADR 0310).
 fn base_profit_pool(inp: &EconInputs) -> Vec<f64> {
-    let mut pool = vec![0.0; inp.n_countries()];
+    let nc = inp.n_countries();
+    let (mut pool, mut abroad) = (vec![0.0; nc], vec![0.0; nc]);
     for e in 0..inp.n_enterprises() {
         let c = inp.country_of(inp.enterprises.province[e] as usize);
-        pool[c] += (1.0 - inp.countries.s_l[c]) * inp.enterprises.va0[e];
+        let profit = (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e];
+        let f = inp.ent_foreign(e);
+        pool[c] += (1.0 - f) * profit;
+        abroad[c] += f * profit;
     }
+    inp.pay_abroad(&abroad, &mut pool);
     pool
 }
 
 /// Household income per province at the base point, rebates aside: wages w0 (1 - u*) L^s
-/// plus the province's population share N_i / N_c of its country's profit pool sum (1 -
-/// s_L) VA0 (national ownership). As `ceteris_reference::io::Inputs::base_income`.
+/// plus its pops' dividend shares of their country's profit pool sum (1 - s_L) VA0 (national
+/// ownership; by population, or by wealth, ADR 0104). As
+/// `ceteris_reference::io::Inputs::base_income`.
 pub fn base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let supply = inp.labour_supply(&params.edu_eff);
     let pool = base_profit_pool(inp);
-    let (people, country_people) = pop_people(inp);
+    // by population as N_i / N_c, the order of the hashes before ADR 0104
+    let share = if inp.pops.dividend.is_empty() {
+        let (people, country_people) = pop_people(inp);
+        (0..inp.n_provinces())
+            .map(|i| {
+                let n = country_people[inp.country_of(i)];
+                if n > 0.0 { people[i] / n } else { 0.0 }
+            })
+            .collect()
+    } else {
+        let mut share = vec![0.0; inp.n_provinces()];
+        for (k, &d) in inp.pops.dividend.iter().enumerate() {
+            share[inp.pops.province[k] as usize] += d;
+        }
+        share
+    };
     (0..inp.n_provinces())
         .map(|i| {
             let c = inp.country_of(i);
             let u = inp.countries.u_star[c];
-            let share = if country_people[c] > 0.0 {
-                people[i] / country_people[c]
-            } else {
-                0.0
-            };
-            inp.provinces.w0[i] * (1.0 - u) * supply[i] + share * pool[c]
+            inp.provinces.w0[i] * (1.0 - u) * supply[i] + share[i] * pool[c]
         })
         .collect()
 }
@@ -697,11 +965,11 @@ pub fn base_spend(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Base income per person of each pop, rebates aside (ADR 0094): w0 (1 - u*) times its
-/// effective labour, plus its population share of its country's base profit pool, over its
+/// effective labour, plus its dividend share of its country's base profit pool, over its
 /// population; 0 without people. As `ceteris_reference::io::Inputs::pop_base_income`.
 pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
     let pool = base_profit_pool(inp);
-    let (_, country_people) = pop_people(inp);
+    let dividend = inp.pop_dividend_shares();
     (0..inp.n_pops())
         .map(|k| {
             let i = inp.pops.province[k] as usize;
@@ -711,7 +979,7 @@ pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
                 let effective =
                     params.edu_eff[usize::from(inp.pops.edu[k])] * inp.pops.labour_force[k];
                 let wage = inp.provinces.w0[i] * (1.0 - inp.countries.u_star[c]) * effective;
-                (wage + n / country_people[c] * pool[c]) / n
+                (wage + dividend[k] * pool[c]) / n
             } else {
                 0.0
             }
@@ -720,7 +988,8 @@ pub fn pop_base_income(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
 }
 
 /// Per country, the calibrated PIGL weights (`Countries::pigl`) or else the weights inverted
-/// jointly over its pops at prices 1, each at its [`pop_base_income`] and weighted by its base
+/// jointly over its pops at the data state's prices (1 for traded goods, p_c for local goods,
+/// ADR 0098), each at its [`pop_base_income`] and weighted by its base
 /// spending (ADR 0094), and the within-pop log income dispersion every pop of the country uses,
 /// which the weights carry. Panics where a country's shares cannot be inverted
 /// (`invert_pigl_pops`).
@@ -745,27 +1014,66 @@ pub fn household_preferences(
                         .map(|&k| (inp.pops.population[k], income[k]))
                         .collect();
                     let sigma = within_sigma(inp.countries.gini[c], &people);
-                    let at: Vec<PopAt> = people
+                    let split = Split::of(inp, c);
+                    let at: Vec<PopAt> = members
                         .iter()
-                        .map(|&(n, m)| PopAt {
-                            price: vec![1.0; ng],
-                            income: m,
-                            spend: n * m,
+                        .zip(&people)
+                        .map(|(&k, &(n, m))| PopAt {
+                            price: (0..ng)
+                                .map(|g| inp.data_state_price(inp.pops.province[k] as usize, g))
+                                .collect(),
+                            income: split.household * m,
+                            spend: n * split.household * m,
                         })
                         .collect();
-                    invert_pigl_pops(
-                        &inp.countries.omega[c],
-                        &inp.goods.category,
-                        &at,
-                        sigma,
-                        params,
-                    )
+                    let mut w =
+                        invert_pigl_pops(&split.omega, &inp.goods.category, &at, sigma, params);
+                    (w.gov, w.inv) = (split.gov, split.inv);
+                    w
                 })
                 .collect()
         }
     };
     let sigma = weights.iter().map(|w| w.sigma).collect();
     (weights, sigma)
+}
+
+/// A country's final demand split over its demanders at the data (ADR 0099): households' part
+/// of the final demand shares, the spending shares of government and investment (their parts
+/// over all final demand, empty without the split) and the households' share of spending.
+struct Split {
+    omega: Vec<f64>,
+    gov: Vec<f64>,
+    inv: Vec<f64>,
+    household: f64,
+}
+
+impl Split {
+    fn of(inp: &EconInputs, c: usize) -> Split {
+        let (omega, cs) = (&inp.countries.omega[c], &inp.countries);
+        if cs.gov.is_empty() {
+            return Split {
+                omega: omega.to_vec(),
+                gov: Vec::new(),
+                inv: Vec::new(),
+                household: 1.0,
+            };
+        }
+        let total: f64 = omega.iter().sum();
+        let (gov, inv) = (&cs.gov[c], &cs.inv[c]);
+        let hh: Vec<f64> = (0..omega.len())
+            .map(|g| (omega[g] - gov[g] - inv[g]).max(0.0))
+            .collect();
+        let gov: Vec<f64> = gov.iter().map(|x| x / total).collect();
+        let inv: Vec<f64> = inv.iter().map(|x| x / total).collect();
+        Split {
+            // as `PiglWeights::household_share`, so the run spends what was inverted
+            household: 1.0 - gov.iter().sum::<f64>() - inv.iter().sum::<f64>(),
+            omega: hh,
+            gov,
+            inv,
+        }
+    }
 }
 
 /// Base household consumption quantities at prices 1, the weights of the world price index
@@ -786,6 +1094,12 @@ pub fn price_index_weights(inp: &EconInputs, params: &EconParams) -> Vec<f64> {
         }
     }
     out
+}
+
+/// Whether a world of `inp` under `params` pays transfers (ADR 0100): S22 on and some share
+/// nonzero.
+pub fn transfers_on(inp: &EconInputs, params: &EconParams) -> bool {
+    params.transfers != Transfers::Off && inp.has_transfers()
 }
 
 fn open_n(ledger: &mut Ledger, n: usize) -> Vec<AccountId> {
@@ -831,11 +1145,15 @@ fn gamma_columns(gamma: &Rows<f64>, goods: &Goods) -> Vec<Vec<f64>> {
 /// destination, weighted by the units arriving); a local good's posted price, lead 0.
 /// `sourced` holds one sourcing per traded good, left at the unit spending: T2 sources the
 /// same good at the same prices on it again, and `source` then reuses the origin access.
-/// Traded goods run in parallel, each on its own `sourced` and `columns` entry.
+/// Traded goods run in parallel, each on its own `sourced` and `columns` entry. Without
+/// `full`, the unit dispatch computes only the arrivals ([`arrivals`]), all that the index and
+/// the lead read; with it, every output of `dispatch`.
 #[allow(clippy::too_many_arguments)]
 fn delivered_prices(
+    full: bool,
     kernel: &Kernel,
     price: &[f64],
+    weight_price: &[f64],
     active: &[bool],
     gamma: &[Vec<f64>],
     sourced: &mut [Sourced],
@@ -859,8 +1177,23 @@ fn delivered_prices(
         .enumerate()
         .for_each(|(g, (unit, col))| {
             col.gather(price, active, g, ng);
-            source(kernel, g, &col.price, &col.active, &gamma[g], &spend, unit);
-            dispatch(kernel, g, &col.price, &fill, unit);
+            col.gather_weight(weight_price, g, ng);
+            let wp = (!weight_price.is_empty()).then_some(&col.weight_price[..]);
+            source_weighted(
+                kernel,
+                g,
+                &col.price,
+                wp,
+                &col.active,
+                &gamma[g],
+                &spend,
+                unit,
+            );
+            if full {
+                dispatch(kernel, g, &col.price, &fill, unit);
+            } else {
+                arrivals(kernel, g, unit);
+            }
             col.index.clone_from(&unit.buyer_price);
             col.lead.clear();
             for d in 0..np {
@@ -888,7 +1221,7 @@ fn delivered_prices(
 /// delivered unit price of the physical arrivals, 1 / alpha_d with alpha_d the units that
 /// survive the losses per unit of spending (infinite where no active origin is reachable), and
 /// Gamma = (1 / alpha_d) / P_d (ADR 0200; 1 where unreachable), so that the buyer price of tick
-/// 0, Gamma P_d, is the base price. Local goods: 1 and 1.
+/// 0, Gamma P_d, is the base price. Local goods: the country's price level p_c (ADR 0098) and 1.
 pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64>, Rows<f64>) {
     let (ng, nt) = (inp.n_goods(), inp.goods.traded);
     let kernel = Kernel::build(&inp.network, &inp.weight, &inp.wedges, trade);
@@ -908,8 +1241,10 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64
     let mut columns = vec![Columns::default(); n_traded];
     let ones = vec![vec![1.0; np]; n_traded];
     delivered_prices(
+        true,
         &kernel,
         &price,
+        &[],
         &active,
         &ones,
         &mut sourced,
@@ -918,6 +1253,11 @@ pub fn base_delivered_prices(inp: &EconInputs, trade: &TradeParams) -> (Rows<f64
         &mut lead,
     );
     let (mut base, mut gamma) = (Rows::filled(np, ng, 1.0), Rows::filled(np, ng, 1.0));
+    for d in 0..np {
+        for g in nt..ng {
+            base[d][g] = inp.data_state_price(d, g);
+        }
+    }
     for (g, unit) in sourced.iter().enumerate() {
         for d in 0..np {
             let alpha: f64 = unit.survived.iter().map(|s| s[d]).sum();
@@ -939,8 +1279,8 @@ const TRANSIT_ROUNDING: f64 = 1e-12;
 impl EconWorld {
     /// Builds the kernel, opens the accounts and seeds the initial state: the calibrated
     /// steady state of `EconInputs::steady` (ADR 0089, [`EconWorld::start_steady`]) when the
-    /// inputs carry one, else the 2000 data state: prices 1, base wages w0 and employment L0
-    /// from the inputs, unemployment at the natural rate u*, input stocks at one month of base
+    /// inputs carry one, else the 2000 data state: prices 1 (p_c for local goods, ADR 0098),
+    /// base wages w0 and employment L0 from the inputs, unemployment at the natural rate u*, input stocks at one month of base
     /// use (base output Y0 = A VA0 / a_VA), origin inventories at coverage times own base
     /// output (see [`EconWorld::stock_base_output`]), nothing in flight, and one month of base
     /// dividends (the pop's population share of its country's profit pool, `(1 - s_L) VA0`
@@ -951,17 +1291,51 @@ impl EconWorld {
     /// parameters other than the defaults with the calibrated border friction
     /// ([`structural_digest`], [`EconInputs::trade_params`]).
     pub fn new(inputs: Arc<EconInputs>, params: EconParams, trade: TradeParams) -> EconWorld {
+        let kernel = Arc::new(Kernel::build(
+            &inputs.network,
+            &inputs.weight,
+            &inputs.wedges,
+            &trade,
+        ));
+        Self::with_kernel(inputs, params, trade, kernel)
+    }
+
+    /// Switches population on: `cohorts` in province order, evolving under `demography` at
+    /// system 220.
+    pub fn with_population(mut self, demography: Demography, cohorts: Cohorts) -> EconWorld {
+        assert_eq!(
+            cohorts.n_provinces(),
+            self.inputs.n_provinces(),
+            "one cohort block per province"
+        );
+        self.pop = Some((demography, cohorts));
+        self
+    }
+
+    /// Switches migration (system 227) on; requires population.
+    pub fn with_migration(mut self, migration: Migration) -> EconWorld {
+        let np = self.inputs.n_provinces();
+        assert!(self.pop.is_some(), "migration needs population");
+        assert_eq!(migration.v.len(), np, "one value per province");
+        assert_eq!(migration.accounts.len(), self.inputs.n_countries());
+        self.migration = Some(migration);
+        self
+    }
+
+    /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
+    /// worlds of equal trade parameters share (ADR 0024).
+    pub fn with_kernel(
+        inputs: Arc<EconInputs>,
+        params: EconParams,
+        trade: TradeParams,
+        kernel: Arc<Kernel>,
+    ) -> EconWorld {
         inputs.validate();
         trade.check_storage().unwrap_or_else(|e| panic!("{e}"));
         let inp = &*inputs;
         let (np, nc) = (inp.n_provinces(), inp.n_countries());
         let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
-        let kernel = Arc::new(Kernel::build(
-            &inp.network,
-            &inp.weight,
-            &inp.wedges,
-            &trade,
-        ));
+        let target = Arc::clone(&kernel);
         let digest = static_digest(inp, &params, &trade);
         let (base_digest, network) = (inp.base_digest(), network_digest(&inp.network));
         let networks = Arc::new(vec![(network, Arc::new(inp.network.clone()))]);
@@ -981,6 +1355,8 @@ impl EconWorld {
             rebate: open_wide_n(&mut ledger, nc),
             dividend: open_wide_n(&mut ledger, nc),
             mint: ledger.open_wide(),
+            transfer: transfers_on(inp, &params).then(|| ledger.open_wide()),
+            foreign: inp.has_foreign().then(|| ledger.open_wide()),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -1018,6 +1394,9 @@ impl EconWorld {
             output: vec![0.0; n_ent],
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
+            pop: None,
+            migration: None,
+            pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
             ledger,
             markets,
@@ -1025,6 +1404,9 @@ impl EconWorld {
             price_index: vec![0.0; np * ng],
             inputs,
             kernel,
+            target,
+            smooth: Vec::new(),
+            weight_price: Vec::new(),
             params,
             trade,
             layout: Arc::new(layout),
@@ -1075,9 +1457,15 @@ impl EconWorld {
         let pool = base_profit_pool(inp);
         for k in 0..inp.n_pops() {
             let i = inp.pops.province[k] as usize;
-            let dividends = lay.ownership[k] * pool[inp.country_of(i)];
+            let dividends = lay.dividend[k] * pool[inp.country_of(i)];
             self.ledger
                 .transfer(MINT, accounts.mint, accounts.pop[k], to_minor(dividends));
+        }
+        // local goods at the country's price level p_c (ADR 0098), traded goods at 1
+        for i in 0..inp.n_provinces() {
+            for g in inp.goods.traded..ng {
+                self.markets.price[i * ng + g] = inp.data_state_price(i, g);
+            }
         }
         // input stocks at one month of base use (Y0 = A VA0 / a_VA)
         for e in 0..inp.n_enterprises() {
@@ -1253,10 +1641,19 @@ impl EconWorld {
     /// (`ceteris_trade::source`) and dispatched in full: q_d = Gamma_d P_d (ADR 0200), and the
     /// lead is the mean arrival slot of the units arriving.
     pub fn refresh_price_index(&mut self) {
+        let _span = timing::span("e3.price_refresh", timing::NONE);
         let sc = &mut self.scratch;
+        if let Some(slot) = sc.refresh.0.take() {
+            let parts = Refresh::wait(&slot);
+            (sc.sourced, sc.columns) = (parts.sourced, parts.columns);
+            (self.price_index, sc.lead) = (parts.index, parts.lead);
+            return;
+        }
         delivered_prices(
+            false,
             &self.kernel,
             &self.markets.price,
+            &self.weight_price,
             &self.markets.active,
             &self.layout.gamma,
             &mut sc.sourced,
@@ -1264,6 +1661,46 @@ impl EconWorld {
             &mut self.price_index,
             &mut sc.lead,
         );
+    }
+
+    /// Begins E3's price refresh on the thread pool, from the posted prices and active markets,
+    /// which nothing changes between T1 and E3 (T4 reprices), so it overlaps T1 to E2;
+    /// [`EconWorld::refresh_price_index`] then takes its result, the same as computing it
+    /// there. It writes a new index and lead: E1 still reads last tick's index.
+    pub fn start_refresh(&mut self) {
+        let sc = &mut self.scratch;
+        // one begun and never taken (systems run singly) is dropped: prices may have moved
+        if let Some(stale) = sc.refresh.0.take() {
+            let parts = Refresh::wait(&stale);
+            (sc.sourced, sc.columns) = (parts.sourced, parts.columns);
+        }
+        let slot = Arc::new(Mutex::new(None));
+        sc.refresh = Refresh(Some(Arc::clone(&slot)));
+        let mut parts = RefreshParts {
+            sourced: std::mem::take(&mut sc.sourced),
+            columns: std::mem::take(&mut sc.columns),
+            index: self.price_index.clone(),
+            lead: sc.lead.clone(),
+        };
+        let (kernel, layout) = (Arc::clone(&self.kernel), Arc::clone(&self.layout));
+        let (price, active) = (self.markets.price.clone(), self.markets.active.clone());
+        let weight_price = self.weight_price.clone();
+        rayon::spawn(move || {
+            let _span = timing::span("e3.refresh_early", timing::NONE);
+            delivered_prices(
+                false,
+                &kernel,
+                &price,
+                &weight_price,
+                &active,
+                &layout.gamma,
+                &mut parts.sourced,
+                &mut parts.columns,
+                &mut parts.index,
+                &mut parts.lead,
+            );
+            *slot.lock().expect("refresh lock") = Some(parts);
+        });
     }
 
     /// Sets every crossing's transit lag to `lag` months (`Kernel::set_crossing_lags`), on
@@ -1276,7 +1713,79 @@ impl EconWorld {
             empty,
             "crossing lags change only on a world with nothing in flight"
         );
-        Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
+        Arc::make_mut(&mut self.target).set_crossing_lags(lag);
+        if self.trade.partial_adjustment() {
+            Arc::make_mut(&mut self.kernel).set_crossing_lags(lag);
+        } else {
+            self.kernel = Arc::clone(&self.target);
+        }
+    }
+
+    /// Blends the posted prices into the smoothed origin prices (P53) and refreshes the prices
+    /// the origin shares read. A class at rho 1, an inactive market and a price within 1e-12
+    /// of its smoothed value read the posted price.
+    fn advance_smoothing(&mut self) {
+        let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        let cells = self.markets.price.len();
+        let fresh = self.smooth.len() != cells;
+        if fresh {
+            self.smooth = vec![0.0; cells];
+        }
+        for cell in 0..cells {
+            let g = cell % ng;
+            let p = self.markets.price[cell];
+            if g >= nt || p <= 0.0 || !self.markets.active[cell] {
+                continue;
+            }
+            let (theta, rho) = (self.kernel.theta(g), self.trade.rho_of(g));
+            let now = -theta * libm::log(p);
+            let held = &mut self.smooth[cell];
+            *held = if fresh || rho >= 1.0 {
+                now
+            } else {
+                let (a, b) = (libm::log(1.0 - rho) + *held, libm::log(rho) + now);
+                let top = a.max(b);
+                top + libm::log(libm::exp(a - top) + libm::exp(b - top))
+            };
+            if (*held - now).abs() < 1e-12 {
+                *held = now;
+            }
+        }
+        self.refresh_weight_prices();
+    }
+
+    /// `p~` of every cell from [`EconWorld::smooth`]; the posted price where it equals the
+    /// current one in logs, for local goods and for inactive markets.
+    fn refresh_weight_prices(&mut self) {
+        let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        self.weight_price.clear();
+        self.weight_price.extend((0..self.smooth.len()).map(|cell| {
+            let g = cell % ng;
+            let p = self.markets.price[cell];
+            if g >= nt || p <= 0.0 || !self.markets.active[cell] {
+                return p;
+            }
+            let theta = self.kernel.theta(g);
+            if self.smooth[cell] == -theta * libm::log(p) {
+                p
+            } else {
+                libm::exp(-self.smooth[cell] / theta)
+            }
+        }));
+    }
+
+    /// E0: under partial adjustment (S12), moves the lagged crossings toward the target
+    /// kernel by their classes' rates (P53, `Kernel::adjust_toward`). Instant adjustment
+    /// has nothing to do.
+    pub fn advance_kernel(&mut self) {
+        if !self.trade.partial_adjustment() {
+            self.smooth.clear();
+            self.weight_price.clear();
+            return;
+        }
+        self.advance_smoothing();
+        let trade = &self.trade;
+        Arc::make_mut(&mut self.kernel).adjust_toward(&self.target, |g| trade.rho_of(g));
     }
 
     /// Replaces the trade network (system T0 of the trade SPEC: the kernel follows the graph
@@ -1306,6 +1815,19 @@ impl EconWorld {
         self.configure(
             Arc::new(inputs),
             digest,
+            self.params.clone(),
+            self.trade.clone(),
+        );
+    }
+
+    /// Replaces the applied tariffs between ticks, an ex-post policy edit: the kernel is
+    /// rebuilt as in [`EconWorld::set_network`] and the digest follows.
+    pub fn set_wedges(&mut self, wedges: ceteris_trade::network::Wedges) {
+        let mut inputs = (*self.inputs).clone();
+        inputs.wedges = wedges;
+        self.configure(
+            Arc::new(inputs),
+            self.network_digest,
             self.params.clone(),
             self.trade.clone(),
         );
@@ -1350,21 +1872,41 @@ impl EconWorld {
         params: EconParams,
         trade: TradeParams,
     ) {
-        if network != self.network_digest || trade != self.trade {
-            self.kernel = Arc::new(Kernel::build(
+        let kernel_held = network == self.network_digest
+            && trade == self.trade
+            && self
+                .scratch
+                .channels
+                .is_shut(crate::channels::Channel::TradeShares);
+        if !kernel_held
+            && (network != self.network_digest
+                || trade != self.trade
+                || !Arc::ptr_eq(&inputs, &self.inputs))
+        {
+            let target = Arc::new(Kernel::build(
                 &inputs.network,
                 &inputs.weight,
                 &inputs.wedges,
                 &trade,
             ));
+            // a tariff edit leaves the lagged crossings behind their new target; any other
+            // change starts the kernel at its target
+            if trade.partial_adjustment() && trade == self.trade && self.kernel.same_legs(&target) {
+                Arc::make_mut(&mut self.kernel).adjust_toward(&target, |_| 0.0);
+            } else {
+                self.kernel = Arc::clone(&target);
+            }
+            self.target = target;
         }
-        if params != self.params || trade != self.trade {
-            self.layout = Arc::new(Layout::build(
-                &inputs,
-                &params,
-                &trade,
-                self.layout.accounts.clone(),
-            ));
+        let mut accounts = self.layout.accounts.clone();
+        if accounts.transfer.is_none() && transfers_on(&inputs, &params) {
+            accounts.transfer = Some(self.ledger.open_wide());
+        }
+        if accounts.foreign.is_none() && inputs.has_foreign() {
+            accounts.foreign = Some(self.ledger.open_wide());
+        }
+        if params != self.params || trade != self.trade || accounts != self.layout.accounts {
+            self.layout = Arc::new(Layout::build(&inputs, &params, &trade, accounts));
         }
         self.digest = static_digest(&inputs, &params, &trade);
         self.network_digest = network;
@@ -1420,9 +1962,16 @@ fn decode_hash(d: &mut Decoder) -> Result<Hash, DecodeError> {
     Ok(h)
 }
 
-/// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, as
-/// in [`static_digest`], since with one both settings run identically.
-fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
+/// `params` as snapshots carry them; S09 only where the inputs have more than one vintage, S22
+/// only where they have transfer shares and S23 and P153 only where they have drifts, as in
+/// [`static_digest`], since without them every setting runs identically.
+fn encode_params(
+    e: &mut Encoder,
+    params: &EconParams,
+    one_vintage: bool,
+    transfers_on: bool,
+    has_drift: bool,
+) {
     // destructured so a new parameter cannot be left out of snapshots
     let EconParams {
         sigma_demand,
@@ -1436,6 +1985,9 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
         rationing,
         technology,
         write_off_months,
+        transfers,
+        drift,
+        drift_half_life,
     } = params;
     let Pigl {
         sigma_b,
@@ -1454,6 +2006,13 @@ fn encode_params(e: &mut Encoder, params: &EconParams, one_vintage: bool) {
         e.u8(*technology as u8);
     }
     e.f64(*write_off_months);
+    if transfers_on {
+        e.u8(*transfers as u8);
+    }
+    if has_drift {
+        e.bools(&[*drift]);
+        e.f64(*drift_half_life);
+    }
 }
 
 fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N], DecodeError> {
@@ -1463,11 +2022,13 @@ fn decode_array<const N: usize>(d: &mut Decoder, what: &str) -> Result<[f64; N],
         .map_err(|_| DecodeError(format!("{what}: {n} entries, want {N}")))
 }
 
-/// Decodes [`encode_params`]; with one vintage S09 is `technology`, the restoring world's.
+/// Decodes [`encode_params`]; with one vintage S09 is `technology`, without transfer shares S22
+/// is `transfers`, and without drifts S23 and P153 are `drift`, the restoring world's.
 fn decode_params(
     d: &mut Decoder,
-    one_vintage: bool,
-    technology: Technology,
+    (one_vintage, technology): (bool, Technology),
+    (transfers_on, transfers): (bool, Transfers),
+    (has_drift, drift): (bool, (bool, f64)),
 ) -> Result<EconParams, DecodeError> {
     let [sigma_demand, sigma_fl, kappa_w, delta_w, eta] = decode_array(d, "econ parameters")?;
     let [sigma_b, phi, gamma, eps] = decode_array(d, "PIGL parameters")?;
@@ -1507,6 +2068,23 @@ fn decode_params(
         rationing,
         technology,
         write_off_months: d.f64()?,
+        transfers: if transfers_on {
+            match d.u8()? {
+                0 => Transfers::Off,
+                1 => Transfers::FixedShares,
+                2 => Transfers::ObservedPath,
+                b => return Err(DecodeError(format!("transfers {b}"))),
+            }
+        } else {
+            transfers
+        },
+        drift: if has_drift {
+            let [on] = decode_array_bool(d)?;
+            on
+        } else {
+            drift.0
+        },
+        drift_half_life: if has_drift { d.f64()? } else { drift.1 },
     })
 }
 
@@ -1514,7 +2092,7 @@ fn decode_array_bool(d: &mut Decoder) -> Result<[bool; 1], DecodeError> {
     let v = d.bools()?;
     let n = v.len();
     v.try_into()
-        .map_err(|_| DecodeError(format!("frictionless switch: {n} entries")))
+        .map_err(|_| DecodeError(format!("switch: {n} entries, want 1")))
 }
 
 fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
@@ -1537,6 +2115,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
         theta_r,
         bulk_sea,
         bulk_port,
+        rho,
         storage_loss,
         storage_cost,
         speculation,
@@ -1570,6 +2149,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
     }
     e.f64s(bulk_sea);
     e.f64s(bulk_port);
+    e.f64s(rho);
 }
 
 fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeError> {
@@ -1616,6 +2196,7 @@ fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeErr
         theta_r,
         bulk_sea: decode_array(d, "bulk sea rates")?,
         bulk_port: decode_array(d, "bulk port rates")?,
+        rho: decode_array(d, "short-run adjustment rates")?,
         storage_loss,
         storage_cost,
         speculation,
@@ -1627,12 +2208,27 @@ fn decode_trade(d: &mut Decoder, goods: &Goods) -> Result<TradeParams, DecodeErr
 }
 
 impl Encode for EconWorld {
-    /// The inputs' digest without the network, the network's digest and both parameter sets,
-    /// then the dynamic state.
+    /// The inputs' digest without the network, the network's digest, the applied tariffs
+    /// (edits change them mid-run) and both parameter sets, then the dynamic state.
     fn encode(&self, e: &mut Encoder) {
         encode_hash(e, &self.base_digest);
         encode_hash(e, &self.network_digest);
-        encode_params(e, &self.params, self.inputs.one_vintage());
+        let tariff: Vec<u32> = self
+            .inputs
+            .wedges
+            .tariff
+            .iter()
+            .chain(&self.inputs.wedges.ntb)
+            .map(|t| t.to_bits())
+            .collect();
+        e.u32s(&tariff);
+        encode_params(
+            e,
+            &self.params,
+            self.inputs.one_vintage(),
+            self.inputs.has_transfers(),
+            self.inputs.has_drift(),
+        );
         encode_trade(e, &self.trade);
         self.ledger.encode(e);
         self.markets.encode(e);
@@ -1651,6 +2247,19 @@ impl Encode for EconWorld {
         }
         e.f64s(&[self.expected_inflation, self.price_level]);
         e.u32s(&self.wage_clip_ticks);
+        // the lagged crossings are state; under instant adjustment there are none
+        if self.trade.partial_adjustment() {
+            e.f64s(&self.kernel.crossing_k());
+        } else {
+            e.f64s(&[]);
+        }
+        e.f64s(&self.smooth);
+        if let Some((demography, cohorts)) = &self.pop {
+            demography.encode(cohorts, e);
+            if let Some(m) = &self.migration {
+                m.encode(e);
+            }
+        }
     }
 }
 
@@ -1666,6 +2275,7 @@ fn expect_len(what: &str, got: usize, want: usize) -> Result<(), DecodeError> {
 
 impl State for EconWorld {
     fn begin_tick(&mut self) {
+        self.ledger.track(&[WAGE, DIVIDEND, REBATE]);
         self.ledger.begin_tick();
         self.scratch.income_paid.fill(0);
         self.scratch.flows.advance();
@@ -1685,12 +2295,23 @@ impl State for EconWorld {
     /// dispatch mass (units dispatched = origin sales, 1e-12 of the larger plus the rounding below
     /// the normal range the kernel carries, [`dispatch_tolerance`])
     /// and income (wages, dividends and rebates credited to each pop in the journal equal
-    /// its recorded income, exact in minor units).
+    /// its recorded income, exact in minor units); and the world transfer account at zero
+    /// (ADR 0100, exact).
     fn end_tick(&self, tick: u32) -> Result<(), Violation> {
         let (ng, nt) = (self.inputs.n_goods(), self.inputs.goods.traded);
+        let span = timing::span("end.ledger", timing::NONE);
         self.ledger.check(tick)?;
+        drop(span);
+        let span = timing::span("end.columns", timing::NONE);
         let (inp, lay) = (&*self.inputs, &*self.layout);
         let fail = |invariant, detail| Err(Violation::new(tick, invariant, detail));
+
+        if self.pop_drift != 0 {
+            return fail(
+                "cohort conservation",
+                format!("{} persons beyond births less deaths", self.pop_drift),
+            );
+        }
 
         // pops and enterprises are fixed tables; their populations live in the immutable
         // inputs, so only the dynamic columns can drift
@@ -1732,6 +2353,8 @@ impl State for EconWorld {
             }
         }
 
+        drop(span);
+        let span = timing::span("end.bounds", timing::NONE);
         let bad = |x: &f64| !(x.is_finite() && *x > 0.0);
         if let Some(cell) = self.markets.price.iter().position(bad) {
             let detail = format!("cell {cell} price {}", self.markets.price[cell]);
@@ -1744,6 +2367,8 @@ impl State for EconWorld {
             );
         }
 
+        drop(span);
+        let span = timing::span("end.inventory", timing::NONE);
         for (i, &account) in lay.accounts.market.iter().enumerate() {
             for g in 0..ng {
                 let cell = i * ng + g;
@@ -1760,7 +2385,9 @@ impl State for EconWorld {
                 }
             }
         }
-        let in_flight = self.pipeline.in_flight_all();
+        drop(span);
+        let span = timing::span("end.transit", timing::NONE);
+        let in_flight = self.pipeline.in_flight_cached();
         for (g, &account) in lay.accounts.transit.iter().enumerate() {
             let (flight, held) = (in_flight[g], self.ledger.goods(account, g));
             // the account is filled with differences of market holdings, so it carries their
@@ -1790,6 +2417,8 @@ impl State for EconWorld {
                 );
             }
         }
+        drop(span);
+        let span = timing::span("end.gateway", timing::NONE);
         if let Some(a) = lay
             .accounts
             .gateway
@@ -1808,28 +2437,52 @@ impl State for EconWorld {
                 return fail("gateway clearing", detail);
             }
         }
-
-        let sc = &self.scratch;
-        for e in 0..inp.n_enterprises() {
-            let province = inp.enterprises.province[e] as usize;
-            for k in 0..ng {
-                let traded = k < nt;
-                let want = lay.coef[e][k] * sc.produced[e];
-                let (used, before) = (sc.input_used[e * ng + k], sc.input_before[e * ng + k]);
-                let gap = (used - want).abs();
-                let tolerance = if traded {
-                    LEONTIEF_TOLERANCE * want.max(before)
-                } else {
-                    (LEONTIEF_TOLERANCE + CHAIN_STOP_TOLERANCE) * want.max(before)
-                        + market_drain_tolerance(ng) * sc.drawn[province * ng + k]
-                };
-                if gap.is_nan() || gap > tolerance {
-                    let detail = format!("enterprise {e} used {used} of good {k}, a Y = {want}");
-                    return fail("leontief", detail);
-                }
-            }
+        if let Some(a) = lay.accounts.transfer
+            && self.ledger.money_wide(a) != 0
+        {
+            let detail = format!("world transfer account holds {}", self.ledger.money_wide(a));
+            return fail("transfers", detail);
+        }
+        if let Some(a) = lay.accounts.foreign
+            && self.ledger.money_wide(a) != 0
+        {
+            let detail = format!("world dividend account holds {}", self.ledger.money_wide(a));
+            return fail("foreign dividends", detail);
         }
 
+        drop(span);
+        let span = timing::span("end.leontief", timing::NONE);
+        let sc = &self.scratch;
+        // the first failing enterprise in index order, as the serial scan reports it
+        let leontief = (0..inp.n_enterprises())
+            .into_par_iter()
+            .find_map_first(|e| {
+                let province = inp.enterprises.province[e] as usize;
+                for k in 0..ng {
+                    let traded = k < nt;
+                    let want = lay.coef[e][k] * sc.produced[e];
+                    let (used, before) = (sc.input_used[e * ng + k], sc.input_before[e * ng + k]);
+                    let gap = (used - want).abs();
+                    let tolerance = if traded {
+                        LEONTIEF_TOLERANCE * want.max(before)
+                    } else {
+                        (LEONTIEF_TOLERANCE + CHAIN_STOP_TOLERANCE) * want.max(before)
+                            + market_drain_tolerance(ng) * sc.drawn[province * ng + k]
+                    };
+                    if gap.is_nan() || gap > tolerance {
+                        return Some(format!(
+                            "enterprise {e} used {used} of good {k}, a Y = {want}"
+                        ));
+                    }
+                }
+                None
+            });
+        if let Some(detail) = leontief {
+            return fail("leontief", detail);
+        }
+
+        drop(span);
+        let span = timing::span("end.dispatch", timing::NONE);
         let traded: Vec<usize> = (0..nt).collect();
         let m = &self.markets;
         for (cell, (&sent, &sold)) in sc.dispatched.iter().zip(&m.sales).enumerate() {
@@ -1848,7 +2501,8 @@ impl State for EconWorld {
                     0.0
                 }
             };
-            let rounding = r.shipped_rounding[o]
+            // nothing was dispatched before a world's first T2b, so nothing was rounded
+            let rounding = r.shipped_rounding.get(o).copied().unwrap_or(0.0)
                 + f[0] * r.orders_rounding[o][0]
                 + f[1] * r.orders_rounding[o][1]
                 + below(f[0]) * m.demand_int[cell]
@@ -1860,36 +2514,16 @@ impl State for EconWorld {
             }
         }
 
-        // pops hold the first account IDs
-        let pop_of = |a: AccountId| (a.0 as usize) < inp.n_pops();
-        // one slot per chunk, combined in chunk order
-        let slots: Vec<Vec<i64>> = self
-            .ledger
-            .journal()
-            .par_chunks(1 << 16)
-            .map(|entries| {
-                let mut credited = vec![0i64; inp.n_pops()];
-                for entry in entries {
-                    if [WAGE, DIVIDEND, REBATE].contains(&entry.flow) {
-                        if pop_of(entry.to) {
-                            credited[entry.to.0 as usize] += entry.amount;
-                        }
-                        if pop_of(entry.from) {
-                            credited[entry.from.0 as usize] -= entry.amount;
-                        }
-                    }
-                }
-                credited
-            })
-            .collect();
-        let mut credited = vec![0i64; inp.n_pops()];
-        for slot in &slots {
-            credited.iter_mut().zip(slot).for_each(|(x, y)| *x += y);
-        }
-        if let Some(k) = (0..inp.n_pops()).find(|&k| credited[k] != sc.income_paid[k]) {
+        // pops hold the first account IDs; the ledger tallies the income flows per account
+        // as it posts them, the sum the journal gives
+        drop(span);
+        let _span = timing::span("end.income", timing::NONE);
+        let credited = |k: usize| self.ledger.tally(AccountId(k as u32));
+        if let Some(k) = (0..inp.n_pops()).find(|&k| credited(k) != sc.income_paid[k]) {
             let detail = format!(
                 "pop {k}: journal credits {}, income paid {}",
-                credited[k], sc.income_paid[k]
+                credited(k),
+                sc.income_paid[k]
             );
             return fail("income", detail);
         }
@@ -1908,7 +2542,21 @@ impl State for EconWorld {
             return Err(DecodeError("snapshot belongs to other inputs".into()));
         }
         let network = decode_hash(d)?;
-        let params = decode_params(d, self.inputs.one_vintage(), self.params.technology)?;
+        let mut tariff: Vec<f32> = d.u32s()?.into_iter().map(f32::from_bits).collect();
+        let n_tariff = self.inputs.wedges.tariff.len();
+        if tariff.len() != n_tariff {
+            expect_len("ntb", tariff.len(), 2 * n_tariff)?;
+        }
+        let ntb = tariff.split_off(n_tariff);
+        let params = decode_params(
+            d,
+            (self.inputs.one_vintage(), self.params.technology),
+            (self.inputs.has_transfers(), self.params.transfers),
+            (
+                self.inputs.has_drift(),
+                (self.params.drift, self.params.drift_half_life),
+            ),
+        )?;
         let trade = decode_trade(d, &self.inputs.goods)?;
         let ledger = Ledger::decode(d)?;
         let markets = Markets::decode(d, &self.inputs.goods)?;
@@ -1929,6 +2577,18 @@ impl State for EconWorld {
         ]: [Vec<f64>; 8] = columns.try_into().expect("eight columns");
         let expectation = d.f64s()?;
         let wage_clip_ticks = d.u32s()?;
+        let lagged = d.f64s()?;
+        let smooth_state = d.f64s()?;
+        let pop = if d.at_end() {
+            None
+        } else {
+            Some(Demography::decode(d)?)
+        };
+        let migration = if pop.is_some() && !d.at_end() {
+            Some(Migration::decode(d)?)
+        } else {
+            None
+        };
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -1942,6 +2602,9 @@ impl State for EconWorld {
         expect_len("pipeline buyers", pipeline.n_buyers(), n_pops + n_ent)?;
         expect_len("wages", wage.len(), np)?;
         expect_len("wage clip ticks", wage_clip_ticks.len(), np)?;
+        if let Some((_, c)) = &pop {
+            expect_len("cohort provinces", c.n_provinces(), np)?;
+        }
         expect_len("expectation", expectation.len(), 2)?;
         expect_len("price index", price_index.len(), np * ng)?;
         for (what, column) in [("employed", &employed), ("income", &income)] {
@@ -1959,6 +2622,9 @@ impl State for EconWorld {
         let mut restored = EconWorld {
             inputs: Arc::clone(&self.inputs),
             kernel: Arc::clone(&self.kernel),
+            target: Arc::clone(&self.target),
+            smooth: smooth_state,
+            weight_price: Vec::new(),
             params: self.params.clone(),
             trade: self.trade.clone(),
             layout: Arc::clone(&self.layout),
@@ -1980,12 +2646,27 @@ impl State for EconWorld {
             output,
             sales,
             profit,
+            pop,
+            migration,
+            pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
-        if network != self.network_digest || params != self.params || trade != self.trade {
-            let inputs = if network == self.network_digest {
-                Arc::clone(&self.inputs)
-            } else {
+        let same_tariff = tariff
+            .iter()
+            .zip(&self.inputs.wedges.tariff)
+            .all(|(a, b)| a.to_bits() == b.to_bits())
+            && ntb.len() == self.inputs.wedges.ntb.len()
+            && ntb
+                .iter()
+                .zip(&self.inputs.wedges.ntb)
+                .all(|(a, b)| a.to_bits() == b.to_bits());
+        if network != self.network_digest
+            || !same_tariff
+            || params != self.params
+            || trade != self.trade
+        {
+            let mut inputs = (*self.inputs).clone();
+            if network != self.network_digest {
                 let (_, net) = self
                     .networks
                     .iter()
@@ -1993,17 +2674,36 @@ impl State for EconWorld {
                     .ok_or_else(|| {
                         DecodeError("snapshot names a network this run has not had".into())
                     })?;
-                let mut inputs = (*self.inputs).clone();
                 inputs.network = (**net).clone();
-                Arc::new(inputs)
-            };
+            }
+            inputs.wedges.tariff = tariff;
+            inputs.wedges.ntb = ntb;
+            let inputs = Arc::new(inputs);
             restored.configure(inputs, network, params, trade);
+        }
+        if restored.trade.partial_adjustment() {
+            let mut kernel = (*restored.target).clone();
+            if !kernel.set_crossing_k(&lagged) {
+                return Err(DecodeError(
+                    "lagged crossings do not fit the kernel of the snapshot".into(),
+                ));
+            }
+            restored.kernel = Arc::new(kernel);
+        } else {
+            expect_len("lagged crossings", lagged.len(), 0)?;
+            expect_len("smoothed prices", restored.smooth.len(), 0)?;
+            restored.kernel = Arc::clone(&restored.target);
+        }
+        // the shares' prices are rebuilt from the smoothed state at the next tick's start
+        if !restored.smooth.is_empty() {
+            expect_len("smoothed prices", restored.smooth.len(), np * ng)?;
         }
         Ok(restored)
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::fixture::small_world;
@@ -2275,10 +2975,9 @@ mod tests {
         let inp = small_world();
         let lay = &w.layout;
         for (c, pops) in lay.country_pops.iter().enumerate() {
-            let s_l = inp.countries.s_l[c];
             let pool: f64 = (0..inp.n_enterprises())
                 .filter(|&e| inp.country_of(inp.enterprises.province[e] as usize) == c)
-                .map(|e| (1.0 - s_l) * inp.enterprises.va0[e])
+                .map(|e| (1.0 - inp.ent_s_l(e)) * inp.enterprises.va0[e])
                 .sum();
             let people: f64 = pops.iter().map(|&k| inp.pops.population[k as usize]).sum();
             for &k in pops {
@@ -2342,6 +3041,110 @@ mod tests {
         (bytes, back)
     }
 
+    fn population_sim() -> Sim<EconWorld> {
+        let (d, c) = crate::pop::toy(world().inputs().n_provinces());
+        Sim::new(
+            world().with_population(d, c),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    #[test]
+    fn population_runs_conserved_and_changes_the_hash() {
+        let mut on = population_sim();
+        let before = on.world().pop.as_ref().unwrap().1.total();
+        on.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        let after = on.world().pop.as_ref().unwrap().1.total();
+        assert_ne!(before, after);
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        off.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        assert_ne!(on.state_hash(), off.state_hash());
+        let mut again = population_sim();
+        again.run_until(25).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(on.state_hash(), again.state_hash());
+    }
+
+    #[test]
+    fn population_off_adds_nothing_to_the_snapshot() {
+        let off = world();
+        let on = population_sim();
+        assert!(canonical(0, on.world()).len() > canonical(0, &off).len());
+        // the economy's own columns are untouched by the extra system
+        let mut a = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        a.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        let mut b = population_sim();
+        b.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(a.world().wage, b.world().wage);
+        assert_eq!(a.world().income, b.world().income);
+    }
+
+    #[test]
+    fn population_state_round_trips() {
+        let mut sim = population_sim();
+        sim.run_until(13).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world();
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.pop, w.pop);
+    }
+
+    fn migration_sim(cap: u64) -> Sim<EconWorld> {
+        let w = world();
+        let (np, nc) = (w.inputs().n_provinces(), w.inputs().n_countries());
+        let (d, c) = crate::pop::toy(np);
+        let cost: Vec<f64> = (0..np * np)
+            .map(|k| if k / np == k % np { 0.0 } else { 0.5 })
+            .collect();
+        let choice = crate::migration::ChoiceSet::dense(&cost, np);
+        let mut m = Migration::new(choice, nc, 0.95, 0.7, 0.02);
+        m.chi = 1.0;
+        m.z = 0.3;
+        m.accounts.iter_mut().for_each(|a| a.cap = cap);
+        Sim::new(
+            w.with_population(d, c).with_migration(m),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    /// Migration moves persons between provinces only: with no births or deaths the total is
+    /// fixed, the cells change, and the end-of-tick conservation check stays green.
+    #[test]
+    fn migration_conserves_persons_and_moves_cells() {
+        for cap in [u64::MAX, 50] {
+            let mut sim = migration_sim(cap);
+            sim.world_mut().pop.as_mut().unwrap().0 = Default::default();
+            let before = sim.world().pop.as_ref().unwrap().1.clone();
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            let after = &sim.world().pop.as_ref().unwrap().1;
+            assert_eq!(before.total(), after.total());
+            assert_ne!(&before, after);
+        }
+    }
+
+    #[test]
+    fn migration_is_deterministic_and_round_trips() {
+        let (mut a, mut b) = (migration_sim(50), migration_sim(50));
+        a.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        b.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(a.state_hash(), b.state_hash());
+        let (bytes, back) = round_trip(a.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.migration, a.world().migration);
+        assert!(back.migration.unwrap().diaspora.iter().sum::<u64>() > 0);
+    }
+
+    #[test]
+    fn migration_off_leaves_the_population_run_unchanged() {
+        let mut on = migration_sim(u64::MAX);
+        on.world_mut().migration = None;
+        let mut off = population_sim();
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(on.state_hash(), off.state_hash());
+    }
+
     #[test]
     fn encode_restore_round_trip() {
         let mut w = world();
@@ -2372,6 +3175,181 @@ mod tests {
         assert_eq!(back.price_level, w.price_level);
         assert_eq!(back.wage_clip_ticks, w.wage_clip_ticks);
         assert_eq!(back.markets.clip_ticks, w.markets.clip_ticks);
+    }
+
+    fn slow_world(rho: f64) -> EconWorld {
+        let trade = TradeParams {
+            rho: [rho; 4],
+            ..TradeParams::default()
+        };
+        EconWorld::new(Arc::new(small_world()), EconParams::default(), trade)
+    }
+
+    fn tariffs_up(w: &mut EconWorld) {
+        let mut wedges = w.inputs().wedges.clone();
+        wedges.tariff.iter_mut().for_each(|t| *t = 0.25);
+        w.set_wedges(wedges);
+    }
+
+    /// ADR 0027: a settled lagged kernel is its target bit for bit, so at any rho the steady
+    /// state and every tick without a policy change equal the instant path's.
+    #[test]
+    fn lagged_kernel_without_a_change_equals_instant() {
+        let mut slow = slow_world(0.1);
+        let mut fast = world();
+        for _ in 0..3 {
+            slow.advance_kernel();
+        }
+        assert_eq!(slow.kernel().crossing_k(), fast.kernel().crossing_k());
+        assert_eq!(slow.kernel().crossing_k(), slow.target.crossing_k());
+        fast.advance_kernel();
+    }
+
+    /// ADR 0027, closed form: after a tariff edit the k of a crossing at tick n is
+    /// `ln K* + (1 - rho)^n (ln K0 - ln K*)`; the other crossing fields follow at once.
+    #[test]
+    fn tariff_edit_moves_crossings_along_the_closed_form() {
+        let rho = 0.2;
+        let mut w = slow_world(rho);
+        let before = w.kernel().crossing_k();
+        tariffs_up(&mut w);
+        assert_eq!(w.kernel().crossing_k(), before, "k lags the edit");
+        let target = w.target.crossing_k();
+        assert!(
+            before.iter().zip(&target).any(|(a, b)| a != b),
+            "the edit moves some k"
+        );
+        let duty = w.target.good(6).crossings.row(6)[0].inv_duty;
+        assert_eq!(w.kernel().good(6).crossings.row(6)[0].inv_duty, duty);
+        for n in 1..=6 {
+            w.advance_kernel();
+            let decay = (1.0 - rho).powi(n);
+            for ((&k, &k0), &kt) in w.kernel().crossing_k().iter().zip(&before).zip(&target) {
+                if k0 > 0.0 && kt > 0.0 {
+                    let want = kt.ln() + decay * (k0.ln() - kt.ln());
+                    assert!(
+                        (k.ln() - want).abs() < 1e-9,
+                        "tick {n}: {} vs {want}",
+                        k.ln()
+                    );
+                }
+            }
+        }
+        for _ in 0..400 {
+            w.advance_kernel();
+        }
+        assert_eq!(
+            w.kernel().crossing_k(),
+            target,
+            "settles on the target exactly"
+        );
+    }
+
+    fn price_index_at(k: &Kernel, g: usize, d: usize) -> f64 {
+        let np = k.n_provinces();
+        let mut out = Sourced::new();
+        ceteris_trade::source(
+            k,
+            g,
+            &vec![1.0; np],
+            &vec![true; np],
+            &vec![1.0; np],
+            &vec![[1.0, 0.0]; np],
+            &mut out,
+        );
+        out.price_index[d]
+    }
+
+    /// ADR 0027, the elasticity path: with every border at one tariff the foreign part of a
+    /// destination's access scales with `f = ((1 + t1) / (1 + t0))^-theta` at the target, and
+    /// at tick n by `f^(1 - (1 - rho)^n)`, so the short-run elasticity is rho theta in month
+    /// one and theta in the limit.
+    #[test]
+    fn tariff_elasticity_path_matches_closed_form() {
+        let (rho, g, d) = (0.25, 0, 0);
+        let mut w = slow_world(rho);
+        let flat = |w: &mut EconWorld, t: f32| {
+            let mut wedges = w.inputs().wedges.clone();
+            wedges.tariff.iter_mut().for_each(|x| *x = t);
+            w.set_wedges(wedges);
+        };
+        flat(&mut w, 0.0);
+        for _ in 0..400 {
+            w.advance_kernel();
+        }
+        let theta = w.kernel().theta(g);
+        let phi0 = price_index_at(w.kernel(), g, d).powf(-theta);
+        flat(&mut w, 0.25);
+        let phi_end = price_index_at(&w.target, g, d).powf(-theta);
+        let f = 1.25f64.powf(-theta);
+        // phi = home + abroad f^s: two points fix both parts
+        let abroad = (phi0 - phi_end) / (1.0 - f);
+        let home = phi0 - abroad;
+        assert!(abroad > 0.0 && home > 0.0, "home {home} abroad {abroad}");
+        for n in 1..=8 {
+            w.advance_kernel();
+            let s = 1.0 - (1.0 - rho).powi(n);
+            let want = home + abroad * f.powf(s);
+            let got = price_index_at(w.kernel(), g, d).powf(-theta);
+            assert!((got / want - 1.0).abs() < 1e-9, "tick {n}: {got} vs {want}");
+        }
+    }
+
+    /// Sticky sourcing keeps every invariant while a tariff is phased in, and settles on the
+    /// target's prices.
+    #[test]
+    fn sticky_sourcing_runs_through_a_tariff_edit() {
+        let trade = TradeParams {
+            rho: [0.2; 4],
+            ..TradeParams::default()
+        };
+        let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);
+        sim.run_until(6).unwrap_or_else(|v| panic!("{v}"));
+        let mut wedges = sim.world_mut().inputs().wedges.clone();
+        wedges.tariff.iter_mut().for_each(|x| *x = 0.25);
+        sim.world_mut().set_wedges(wedges);
+        sim.run_until(200).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world_mut();
+        assert_eq!(w.kernel().crossing_k(), w.target.crossing_k());
+        assert!(!w.smooth.is_empty());
+    }
+
+    /// The smoothed prices are snapshot state; the prices the shares read follow from them.
+    #[test]
+    fn smoothed_prices_round_trip() {
+        let trade = TradeParams {
+            rho: [0.2; 4],
+            ..TradeParams::default()
+        };
+        let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);
+        sim.run_until(10).unwrap_or_else(|v| panic!("{v}"));
+        let w = sim.world_mut();
+        assert!(
+            w.weight_price
+                .iter()
+                .zip(&w.markets.price)
+                .any(|(a, b)| a != b)
+        );
+        let (bytes, mut back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.smooth, w.smooth);
+        // the next tick start rebuilds the prices of the shares from the state
+        w.advance_kernel();
+        back.advance_kernel();
+        assert_eq!(back.weight_price, w.weight_price);
+    }
+
+    /// Lagged crossings are snapshot state.
+    #[test]
+    fn lagged_kernel_round_trips() {
+        let mut w = slow_world(0.2);
+        tariffs_up(&mut w);
+        w.advance_kernel();
+        assert_ne!(w.kernel().crossing_k(), w.target.crossing_k());
+        let (bytes, back) = round_trip(&w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.kernel().crossing_k(), w.kernel().crossing_k());
+        assert_eq!(back.target.crossing_k(), w.target.crossing_k());
     }
 
     /// Parameters are snapshot state: a world under other parameters restores a snapshot

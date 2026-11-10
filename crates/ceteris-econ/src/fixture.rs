@@ -18,7 +18,7 @@ use ceteris_core::rows::Rows;
 use ceteris_trade::goods::p2::N as N_GOODS;
 use ceteris_trade::{BulkLegs, Goods, Leg, Network, TradeParams, Wedges, equal_gateway_mass};
 
-use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
+use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData, TRANSFER_YEARS};
 use crate::params::EconParams;
 
 const MAINLAND: usize = 3;
@@ -37,8 +37,24 @@ const OMEGA: [f64; N_GOODS] = [0.06, 0.0, 0.01, 0.12, 0.08, 0.04, 0.07, 0.04, 0.
 const WEIGHT: [f64; N_GOODS] = [
     0.006, 0.005, 0.03, 0.001, 0.0002, 0.001, 0.0001, 0.0, 0.0, 0.0,
 ];
-/// Monthly VA per million inhabitants, millions.
+/// Monthly VA per million inhabitants, millions, before [`BALANCE`].
 const VA_PER_MILLION: [f64; N_GOODS] = [6.0, 15.0, 5.0, 9.0, 12.0, 20.0, 25.0, 5.0, 9.0, 55.0];
+/// The rescale r_g the fixture's calibration solved before ADR 0100 (`econ_calib.arrow` metadata
+/// `r` of `tests/golden/p2-fixture` at 10aca34), by which its traded VA is scaled so that the
+/// generated world's trade is balanced at D_c = 0 (ADR 0299): world spending on each good then
+/// meets its sales at the calibrated point without a rescale. Local goods keep their VA.
+pub const BALANCE: [f64; N_GOODS] = [
+    1.29785350385634,
+    0.31575067666417733,
+    1.7889243250587707,
+    1.344554534377183,
+    1.4498775355598215,
+    0.5119326997712083,
+    0.7778673920235661,
+    1.0,
+    1.0,
+    1.0,
+];
 const S_L: [f64; 4] = [0.55, 0.60, 0.50, 0.45];
 const UNEMPLOYMENT: [f64; 4] = [0.06, 0.08, 0.05, 0.10];
 /// Gini of income: the mainland countries, then the island.
@@ -55,7 +71,7 @@ const PARTICIPATION: f64 = 0.47;
 type Point = (f64, f64);
 
 fn leg(from: usize, to: usize, a: Point, b: Point, cost_per_tkm: f64) -> Leg {
-    let km = (a.0 - b.0).hypot(a.1 - b.1);
+    let km = libm::hypot(a.0 - b.0, a.1 - b.1);
     Leg {
         from: from as u32,
         to: to as u32,
@@ -81,6 +97,17 @@ fn mainland_goods(c: usize, j: usize) -> Vec<usize> {
 }
 
 pub fn small_world() -> EconInputs {
+    generate(&BALANCE)
+}
+
+/// The fixture as generated before ADR 0299, its traded VA not scaled by [`BALANCE`]: a data
+/// state far from balanced trade, for the tests of the dynamics off the steady state (the
+/// same-tick chain, rationed frictionless labour) whose scenarios it was built for.
+pub fn unbalanced_world() -> EconInputs {
+    generate(&[1.0; N_GOODS])
+}
+
+fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
     let island = MAINLAND;
     let n_countries = MAINLAND + 1;
 
@@ -190,13 +217,26 @@ pub fn small_world() -> EconInputs {
     }
     let countries = Countries {
         omega: Rows::from_rows(N_GOODS, vec![OMEGA; n_countries]),
+        // households buy all of a generated world's final demand
+        gov: Rows::new(N_GOODS),
+        inv: Rows::new(N_GOODS),
         io: Rows::from_rows(N_GOODS * N_GOODS, vec![io; n_countries]),
         s_l: S_L.to_vec(),
+        s_l_good: Rows::new(N_GOODS),
+        wealth: Rows::new(3),
         unemployment: UNEMPLOYMENT.to_vec(),
         // a generated world has no 1995 to 2005 window: its 2000 rate is its natural rate
         u_star: UNEMPLOYMENT.to_vec(),
         gini: GINI.to_vec(),
         pigl: None,
+        price_level: vec![1.0; n_countries],
+        // a generated world has no current accounts: its trade is balanced (ADR 0299)
+        transfer: Vec::new(),
+        transfer_path: Rows::new(TRANSFER_YEARS),
+        foreign: Rows::new(N_GOODS),
+        owners: Rows::new(n_countries),
+        drift_a: Vec::new(),
+        drift_f: Vec::new(),
     };
 
     let mut pops = PopData::default();
@@ -216,7 +256,7 @@ pub fn small_world() -> EconInputs {
             } else {
                 1.0
             };
-            let va0 = population[i] * VA_PER_MILLION[g] * tilt;
+            let va0 = population[i] * VA_PER_MILLION[g] * tilt * balance[g];
             ent.province.push(i as u32);
             ent.good.push(g as u8);
             ent.a.push(1.0);

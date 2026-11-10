@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // independent oracle: deliberately uses std, never feeds a hash
 //! The reference model and its solve on the fixture export and on closed-form worlds.
 
 use std::fs::File;
@@ -813,10 +814,17 @@ fn two_provinces(
         base_price: Mat::filled(2, 1, 1.0),
         gamma: None,
         s_l: vec![s_l],
+        s_l_good: Mat::zeros(0, 1),
+        foreign: Mat::zeros(0, 1),
+        owners: Mat::zeros(0, 1),
         unemployment: vec![u],
         u_star: vec![0.0],
+        trends: ceteris_reference::io::Trends::zero(1),
         gini: vec![0.35],
+        transfer: vec![0.0],
         omega: Mat::filled(1, 1, 1.0),
+        gov: Mat::zeros(0, 1),
+        inv: Mat::zeros(0, 1),
         io: vec![Mat::zeros(1, 1)],
         active: vec![vec![true]; 2],
         ent_province: vec![0, 0, 1, 1],
@@ -827,6 +835,7 @@ fn two_provinces(
         pop_province: vec![0, 0, 1, 1],
         pop_effective: [0.3, 0.7, 0.3, 0.7].iter().map(|s| s * labour).collect(),
         pop_population: vec![4e5, 6e5, 4e5, 6e5],
+        pop_dividend: vec![0.2, 0.3, 0.2, 0.3],
         domestic: Legs {
             good: vec![0, 0],
             row: vec![0, 1],

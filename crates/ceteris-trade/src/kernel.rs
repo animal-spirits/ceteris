@@ -485,6 +485,113 @@ impl Kernel {
 }
 
 impl Kernel {
+    /// Whether `other` has the same domestic and access legs bit for bit and crossings with the
+    /// same endpoints: it differs from this kernel at most in the crossings' k, duty, loss and
+    /// lag, as after a tariff edit.
+    pub fn same_legs(&self, other: &Kernel) -> bool {
+        let legs = |a: &Csr<Entry>, b: &Csr<Entry>| {
+            a.offsets == b.offsets
+                && a.entries.iter().zip(&b.entries).all(|(x, y)| {
+                    x.col == y.col
+                        && x.k.to_bits() == y.k.to_bits()
+                        && x.inv_tau.to_bits() == y.inv_tau.to_bits()
+                })
+        };
+        self.n_provinces == other.n_provinces
+            && self.goods.len() == other.goods.len()
+            && self
+                .goods
+                .iter()
+                .zip(&other.goods)
+                .all(|(a, b)| match (a, b) {
+                    (Some(a), Some(b)) => {
+                        legs(&a.domestic, &b.domestic)
+                            && legs(&a.access, &b.access)
+                            && a.crossings.offsets == b.crossings.offsets
+                            && a.crossings
+                                .entries
+                                .iter()
+                                .zip(&b.crossings.entries)
+                                .all(|(x, y)| x.col == y.col)
+                    }
+                    (None, None) => true,
+                    _ => false,
+                })
+    }
+
+    /// Short-run trade adjustment (ADR 0027, P53): moves every crossing's k toward the k of
+    /// `target` in logs, `ln K = ln K + rho_g (ln K* - ln K)`, with `rho(g)` the rate of good g (0 keeps k),
+    /// and takes everything else of the crossings (duty, loss, lag, links) from `target`
+    /// at once. A rate of 1, a crossing with k = 0 on either side and a gap below
+    /// [`SNAP`] take the target's k exactly, so a settled kernel equals its target bit for bit.
+    /// Requires [`Kernel::same_legs`]. Returns whether any k moved.
+    pub fn adjust_toward(&mut self, target: &Kernel, rho: impl Fn(usize) -> f64) -> bool {
+        debug_assert!(self.same_legs(target));
+        self.id = next_id();
+        let mut moved = false;
+        for (g, (gk, t)) in self.goods.iter_mut().zip(&target.goods).enumerate() {
+            let (Some(gk), Some(t)) = (gk, t) else {
+                continue;
+            };
+            let rho = rho(g);
+            gk.links.clone_from(&t.links);
+            for (e, t) in gk.crossings.entries.iter_mut().zip(&t.crossings.entries) {
+                let k = e.k;
+                *e = *t;
+                if rho <= 0.0 {
+                    e.k = k;
+                    continue;
+                }
+                if rho >= 1.0 || k <= 0.0 || t.k <= 0.0 {
+                    continue;
+                }
+                let gap = libm::log(t.k) - libm::log(k);
+                if gap.abs() > SNAP {
+                    e.k = libm::exp(libm::log(k) + rho * gap);
+                    moved = true;
+                }
+            }
+        }
+        moved
+    }
+
+    /// The k of every crossing of every traded good, in order: the state of a kernel that
+    /// [`Kernel::adjust_toward`] has moved off its target.
+    pub fn crossing_k(&self) -> Vec<f64> {
+        self.goods
+            .iter()
+            .flatten()
+            .flat_map(|gk| gk.crossings.entries.iter().map(|e| e.k))
+            .collect()
+    }
+
+    /// Sets the k of every crossing from [`Kernel::crossing_k`] of a kernel with the same legs;
+    /// false when the length is not this kernel's.
+    pub fn set_crossing_k(&mut self, k: &[f64]) -> bool {
+        let n: usize = self
+            .goods
+            .iter()
+            .flatten()
+            .map(|g| g.crossings.entries.len())
+            .sum();
+        if k.len() != n {
+            return false;
+        }
+        self.id = next_id();
+        let mut k = k.iter();
+        for gk in self.goods.iter_mut().flatten() {
+            for e in &mut gk.crossings.entries {
+                e.k = *k.next().expect("length checked");
+            }
+        }
+        true
+    }
+}
+
+/// Smallest log gap [`Kernel::adjust_toward`] still closes gradually.
+const SNAP: f64 = 1e-12;
+
+impl Kernel {
     /// Sets the transit lag of every crossing of every good to `lag` months, at most
     /// `MAX_LAG`. Lags only time deliveries, so steady states do not change; for nesting
     /// tests (lags 0) and stability studies (the longest lag).
@@ -710,7 +817,7 @@ fn good_kernel(
         let importer = usize::from(net.gateway_country[b]);
         let exporter = usize::from(net.gateway_country[a]);
         let duty = 1.0 + f64::from(wedges.rate(importer, exporter, group));
-        let loss = tau * border_tau;
+        let loss = tau * border_tau * f64::from(wedges.ntb_factor(importer, exporter, group));
         Crossing {
             col: l.to,
             k: mass[a] * mass[b] * k_of(loss * duty),
@@ -735,6 +842,7 @@ fn good_kernel(
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::goods::Goods;
@@ -1235,6 +1343,17 @@ mod tests {
             e.k,
             f64::powf(tau * 1.3 * (1.0 + f64::from(0.25f32)), -p.theta[4])
         ));
+
+        // an NTB on 0 -> 1 manufactured multiplies the loss and leaves the duty alone
+        let mut with_ntb = wedges.clone();
+        with_ntb.ntb = vec![1.0; wedges.tariff.len()];
+        with_ntb.ntb[at(1, 0, 1)] = 1.5;
+        let n = Kernel::build(&net, &W, &with_ntb, &p)
+            .good(4)
+            .crossings
+            .row(0)[0];
+        assert!(close(n.inv_loss, 1.0 / (tau * 1.3 * 1.5)));
+        assert_eq!(n.inv_duty, e.inv_duty);
 
         // same leg, good 0 (primary, group 0)
         let e = k.good(0).crossings.row(0)[0];

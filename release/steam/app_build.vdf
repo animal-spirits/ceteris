@@ -1,0 +1,16 @@
+// steamcmd +run_app_build release/steam/app_build.vdf
+// Replace APP_ID and the depot ids with the values Steamworks assigns (owner action).
+"AppBuild"
+{
+	"AppID" "APP_ID"
+	"Desc" "1.0 release candidate"
+	"ContentRoot" "../../dist/"
+	"BuildOutput" "../../dist/steam-output/"
+	"SetLive" ""
+	"Depots"
+	{
+		"DEPOT_ID_LINUX_X86_64" "depot_linux-x86_64.vdf"
+		"DEPOT_ID_LINUX_AARCH64" "depot_linux-aarch64.vdf"
+		"DEPOT_ID_MACOS_AARCH64" "depot_darwin-aarch64.vdf"
+	}
+}

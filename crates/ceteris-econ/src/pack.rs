@@ -16,7 +16,10 @@ use ceteris_trade::goods::p2;
 use ceteris_trade::{BulkLegs, GoodLegs, Goods, Leg, LegSet, Network, TradeParams, Wedges, kappa};
 use rayon::prelude::*;
 
-use crate::inputs::{Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData};
+use crate::inputs::{
+    Countries, EconInputs, EntData, N_EDU, PopData, ProvinceData, TRANSFER_FIRST_YEAR,
+    TRANSFER_YEARS,
+};
 use crate::params::EconParams;
 
 /// Million USD per year, the pack's VA unit, to numeraire (USD) per month.
@@ -194,7 +197,8 @@ impl EconInputs {
 
     /// The uncalibrated P2 world of a pack, the data state, which the calibration starts from
     /// and `ceteris export` writes. Leg costs are least-cost paths
-    /// ([`EconInputs::network_from_graph`]); A is 1. The base point is filled with the default
+    /// ([`EconInputs::network_from_graph`]); A is 1 / p_o, 1 but for the local goods of a
+    /// country with a price level (ADR 0098, [`EconInputs::set_price_levels`]). The base point is filled with the default
     /// education efficiencies (`EconParams::default().edu_eff`) at the natural rate u*, base
     /// prices under the default trade parameters, coefficients with one vintage.
     pub fn from_pack_data(pack: &Pack, dir: &Path) -> Result<EconInputs, PackError> {
@@ -227,12 +231,82 @@ impl EconInputs {
         expect_rows("econ_io", a.len(), nc * ng * ng)?;
         let countries = Countries {
             omega: per_good(&c, "fd_", ng)?,
+            // packs before ADR 0099 have no split: households buy all final demand
+            gov: if c.column_by_name("gov_0").is_some() {
+                per_good(&c, "gov_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            inv: if c.column_by_name("inv_0").is_some() {
+                per_good(&c, "inv_", ng)?
+            } else {
+                Rows::new(ng)
+            },
             io: Rows::from_flat(a, ng * ng),
             s_l: f64s(&c, "labour_share")?,
+            // packs before ADR 0104 have one labour share per country
+            s_l_good: if c.column_by_name("labour_share_0").is_some() {
+                per_good(&c, "labour_share_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            // packs before ADR 0104 pay dividends per person
+            wealth: if c.column_by_name("wealth_0").is_some() {
+                per_good(&c, "wealth_", 3)?
+            } else {
+                Rows::new(3)
+            },
             unemployment: f64s(&c, "unemployment")?,
             u_star: f64s(&c, "u_star")?,
             gini: f64s(&c, "gini")?,
             pigl: None,
+            // packs before ADR 0098 have no price level: their local goods start at 1
+            price_level: if c.column_by_name("price_level").is_some() {
+                f64s(&c, "price_level")?
+            } else {
+                vec![1.0; nc]
+            },
+            // packs before ADR 0100 have no current accounts: they run without transfers
+            transfer: if c.column_by_name("transfer").is_some() {
+                f64s(&c, "transfer")?
+            } else {
+                Vec::new()
+            },
+            transfer_path: if c.column_by_name("transfer").is_some() {
+                let years = (0..TRANSFER_YEARS)
+                    .map(|y| f64s(&c, &format!("transfer_{}", TRANSFER_FIRST_YEAR + y)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Rows::from_flat(
+                    (0..nc)
+                        .flat_map(|k| years.iter().map(move |y| y[k]))
+                        .collect(),
+                    TRANSFER_YEARS,
+                )
+            } else {
+                Rows::new(TRANSFER_YEARS)
+            },
+            // packs before ADR 0309 have no foreign owners
+            foreign: if c.column_by_name("foreign_0").is_some() {
+                per_good(&c, "foreign_", ng)?
+            } else {
+                Rows::new(ng)
+            },
+            owners: if c.column_by_name("foreign_0").is_some() {
+                per_good(&c, "owner_", nc)?
+            } else {
+                Rows::new(nc)
+            },
+            // packs before ADR 0103 start without drift
+            drift_a: if c.column_by_name("g_a").is_some() {
+                f64s(&c, "g_a")?
+            } else {
+                Vec::new()
+            },
+            drift_f: if c.column_by_name("g_a").is_some() {
+                f64s(&c, "f_gap")?
+            } else {
+                Vec::new()
+            },
         };
 
         let t = table("econ_tariffs.arrow")?;
@@ -255,6 +329,7 @@ impl EconInputs {
         }
         let wedges = Wedges {
             tariff: rate.iter().map(|&r| r as f32).collect(),
+            ntb: Vec::new(),
         };
 
         let p = table("econ_provinces.arrow")?;
@@ -338,9 +413,10 @@ impl EconInputs {
         };
         inputs.network =
             inputs.network_from_graph(pack, &Gateways::read(dir)?, &TradeParams::default());
-        inputs.set_base_prices(&TradeParams::default());
-        inputs.set_coefficients();
+        let levels = inputs.countries.price_level.clone();
+        inputs.set_price_levels(levels, &TradeParams::default());
         inputs.set_base_point(&EconParams::default().edu_eff);
+        inputs.set_dividend_shares(&EconParams::default());
         Ok(inputs)
     }
 

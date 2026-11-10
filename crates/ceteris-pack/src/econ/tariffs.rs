@@ -145,7 +145,7 @@ pub fn table(
             .filter_map(|p| obs.gdp_per_capita.get(p))
             .copied()
             .collect();
-        let log_income = (!income.is_empty()).then(|| mean(&income).ln());
+        let log_income = (!income.is_empty()).then(|| libm::log(mean(&income)));
         let d = donor(region, log_income, &by_iso, obs, &ps)?;
         own[i] = by_iso[&d];
         donors[i] = d;

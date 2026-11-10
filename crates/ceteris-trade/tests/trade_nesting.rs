@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)] // tests are not hashed; libm is required only on simulation paths
 //! Two-level versus direct kernel (`specs/trade/SPEC.md`, Invariants): on a planar world,
 //! destination spending sourced through gateways is compared with sourcing on direct
 //! province-to-province leg costs. Reported, not asserted; both must spend E exactly.

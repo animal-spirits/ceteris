@@ -87,7 +87,11 @@ pub fn world(pack: &Path, shocks: &[Shock]) -> Result<EconWorld, String> {
     let trade = shock::trade_params(&inputs, trade);
     Ok(EconWorld::new(
         Arc::new(inputs),
-        EconParams::frictionless(),
+        // shocks are read against the steady state, which the initial drift leaves (ADR 0103)
+        EconParams {
+            drift: false,
+            ..EconParams::frictionless()
+        },
         trade,
     ))
 }
@@ -112,7 +116,7 @@ pub fn max_dlnp(w: &EconWorld, before: &[f64]) -> f64 {
         .zip(before)
         .zip(&w.markets.active)
         .filter(|&(_, &on)| on)
-        .map(|((p, q), _)| (p / q).ln().abs())
+        .map(|((p, q), _)| libm::log(p / q).abs())
         .fold(0.0, f64::max)
 }
 
@@ -210,10 +214,10 @@ pub fn welfare(base: &Outcome, shocked: &Outcome) -> Vec<f64> {
             let prices: f64 = (0..base.omega.width())
                 .filter(|&g| base.omega[c][g] > 0.0)
                 .map(|g| {
-                    base.omega[c][g] * (shocked.buyer_price[c][g] / base.buyer_price[c][g]).ln()
+                    base.omega[c][g] * libm::log(shocked.buyer_price[c][g] / base.buyer_price[c][g])
                 })
                 .sum();
-            (shocked.income[c] / base.income[c]).ln() - prices
+            libm::log(shocked.income[c] / base.income[c]) - prices
         })
         .collect()
 }
@@ -228,10 +232,12 @@ pub fn welfare_province(base: &Outcome, shocked: &Outcome) -> Vec<f64> {
             .filter(|&g| base.omega[c][g] > 0.0)
             .map(|g| {
                 base.omega[c][g]
-                    * (shocked.province_buyer_price[p][g] / base.province_buyer_price[p][g]).ln()
+                    * libm::log(
+                        shocked.province_buyer_price[p][g] / base.province_buyer_price[p][g],
+                    )
             })
             .sum();
-        (shocked.province_income[p] / base.province_income[p]).ln() - prices
+        libm::log(shocked.province_income[p] / base.province_income[p]) - prices
     })
 }
 
@@ -333,7 +339,7 @@ fn weighted_dln_home(
             let none = |l: f64| l.is_nan() || l <= 0.0;
             match (none(l0), none(l1)) {
                 (true, true) => 0.0,
-                (false, false) => weight[g] / theta[g] * (l1 / l0).ln(),
+                (false, false) => weight[g] / theta[g] * libm::log(l1 / l0),
                 _ => f64::NAN,
             }
         })

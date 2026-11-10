@@ -7,13 +7,16 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use ceteris_pack::econ::icio::{
-    Basis, Economy, ICIO, INSIDE, IncomeSource, Rules, home_share_columns, impute, impute_pack,
-    median_va_over_gdp, oil_gas_most_of_industry, oil_gas_va_over_rents, sector_shares,
-    world_oil_gas_column,
+    Basis, Economy, ICIO, INSIDE, IncomeSource, IoBasis, REGIONS, Rules, home_share_columns,
+    impute, impute_pack, median_va_over_gdp, oil_gas_most_of_industry, oil_gas_va_over_rents,
+    sector_shares, world_oil_gas_column,
 };
 use ceteris_pack::raster::geotiff;
 use ceteris_pack::raster::population::{BLOCK_ROWS, CellOwner, province_population};
-use ceteris_pack::read::icio::{CountryIo, HomeUse, N_GOODS, Wdi, aggregate, load_wdi};
+use ceteris_pack::read::baci::Trade;
+use ceteris_pack::read::icio::{
+    CountryIo, HOUSEHOLDS_ONLY, HomeUse, N_GOODS, Wdi, aggregate, load_wdi,
+};
 use ceteris_pack::read::natural_earth::read_codes;
 use ceteris_pack::read::people::{Observed, load_observed};
 use ceteris_pack::read::wdi::Names;
@@ -40,6 +43,7 @@ fn country(colsum: f64, fd: [f64; N_GOODS]) -> CountryIo {
         va: DONOR_VA,
         io: [[colsum / 10.0; N_GOODS]; N_GOODS],
         final_demand_shares: fd,
+        final_demand_split: HOUSEHOLDS_ONLY,
         coal_share: 0.0,
         extraction: [0.0; N_GOODS],
         extraction_output: 0.0,
@@ -129,6 +133,8 @@ struct Case<'a> {
     inside: &'a [(&'a str, &'a str)],
     regions: &'a [(&'a str, &'a str)],
     split: &'a [(&'a str, &'a [&'a str])],
+    /// BACI trade by good, USD.
+    trade: &'a [(&'a str, Trade)],
 }
 
 const PLAIN: Case = Case {
@@ -136,6 +142,7 @@ const PLAIN: Case = Case {
     inside: &[],
     regions: &[],
     split: &[],
+    trade: &[],
 };
 
 fn run(
@@ -167,6 +174,7 @@ fn run(
         obs,
         &Names::new(),
         &map(case.worldpop),
+        &map(case.trade),
         &rules,
     )
     .unwrap()
@@ -231,6 +239,7 @@ fn imputed_country_uses_nearest_donor() {
         x.table.final_demand_shares,
         donors["BBB"].final_demand_shares
     );
+    assert_eq!(x.io_basis, IoBasis::Donor);
 }
 
 #[test]
@@ -247,6 +256,7 @@ fn icio_economies_keep_their_own_tables() {
     assert_eq!(a.donor, None);
     assert_eq!(a.va_basis, Basis::Icio);
     assert_eq!(a.table, donors["AAA"]);
+    assert_eq!(a.io_basis, IoBasis::Icio);
     assert_eq!(got["XXX"].donor.as_deref(), Some("BBB"));
 }
 
@@ -632,6 +642,34 @@ fn without_pwt_income_donors_are_ranked_and_scaled_by_wdi_gdp_per_person() {
     ));
 }
 
+/// XXX with PWT and WDI incomes; the US at a PWT over WDI ratio of 1.
+fn pwt_against_wdi(pwt: f64, income: f64) -> (Observed, Wdi) {
+    let o = obs_with(
+        Some(with(&PWT, &[("XXX", pwt), ("USA", 30000.0)])),
+        &[],
+        &[],
+    );
+    let mut w = wdi_income("wdi");
+    w.income.extend(map(&[("XXX", income), ("USA", 30000.0)]));
+    (o, w)
+}
+
+#[test]
+fn pwt_far_below_wdi_ranks_by_wdi_income() {
+    // PWT 3000 against WDI 40000 is 0.075 of the US ratio, below a third: WDI ranks, and picks
+    // BBB (50000) where PWT would pick AAA (1000).
+    let (o, w) = pwt_against_wdi(3000.0, 40000.0);
+    let got = one("XXX", &w, &o);
+    assert_eq!(got.income_source, IncomeSource::WdiNotPwt);
+    assert_eq!(got.donor.as_deref(), Some("BBB"));
+    assert_eq!(IncomeSource::WdiNotPwt.as_str(), "wdi_not_pwt");
+    // 3000 against 8000 is 0.375 of it: PWT stays.
+    let (o, w) = pwt_against_wdi(3000.0, 8000.0);
+    let got = one("XXX", &w, &o);
+    assert_eq!(got.income_source, IncomeSource::Pwt);
+    assert_eq!(got.donor.as_deref(), Some("AAA"));
+}
+
 #[test]
 fn adb_income_is_flagged() {
     let got = one("XXX", &wdi_income("adb"), &no_pwt_for_xxx());
@@ -699,6 +737,25 @@ fn region_override_places_an_unclassified_country() {
     let got = &run(&[("XXX", "XXX")], &donors(), &wdi(), &o, &case)["XXX"];
     assert_eq!(got.region.as_deref(), Some("R2"));
     assert_eq!(got.donor.as_deref(), Some("CCC"));
+    // Anguilla and Montserrat, which the World Bank does not classify, take Latin America and
+    // Caribbean donors through the pack table, not their sovereign's European region.
+    let lac = "Latin America & Caribbean";
+    let o = obs_with(None, &[("AAA", "Europe & Central Asia"), ("CCC", lac)], &[]);
+    let case = Case {
+        regions: &REGIONS,
+        ..PLAIN
+    };
+    let got = run(
+        &[("AIA", "AAA"), ("MSR", "AAA")],
+        &donors(),
+        &wdi(),
+        &o,
+        &case,
+    );
+    for code in ["AIA", "MSR"] {
+        assert_eq!(got[code].region.as_deref(), Some(lac), "{code}");
+        assert_eq!(got[code].donor.as_deref(), Some("CCC"), "{code}");
+    }
 }
 
 #[test]
@@ -717,6 +774,24 @@ fn people_come_from_worldpop_when_wdi_has_none() {
     assert_eq!(got.donor.as_deref(), Some("AAA"));
     assert_eq!(got.va_basis, Basis::Donor);
     assert!(approx(total(&got.table.va), 200.0, 1e-6));
+}
+
+#[test]
+fn people_come_from_wpp_before_worldpop() {
+    let mut o = obs_with(None, &[("WWW", "R1")], &[]);
+    o.population_wpp = map(&[("WWW", 3e6)]);
+    let w = Wdi {
+        gdp: map(&DONOR_GDP),
+        ..wdi()
+    };
+    let case = Case {
+        worldpop: &[("WWW", 2e6)],
+        ..PLAIN
+    };
+    let got = &run(&[("WWW", "WWW")], &donors(), &w, &o, &case)["WWW"];
+    // WPP's 3 million people at donor AAA's 100 USD per person, not WorldPop's 2 million.
+    assert_eq!(got.va_basis, Basis::Donor);
+    assert!(approx(total(&got.table.va), 300.0, 1e-6));
 }
 
 #[test]
@@ -814,6 +889,136 @@ fn split_economies_sum_gdp_and_weight_shares_by_gdp() {
     assert!(approx(got.table.va[0], 4000.0 * 0.05, 1e-6));
 }
 
+/// XXX's BACI trade in USD: imports and exports of traded goods that leave every domestic use
+/// positive (XXX makes 125 of good 0 and 75 of good 1, million USD, at donor BBB's output per VA).
+fn xxx_trade() -> Trade {
+    let mut t = Trade::default();
+    t.imports[..7].copy_from_slice(&[30e6, 50e6, 5e6, 40e6, 25e6, 10e6, 60e6]);
+    t.exports[..7].copy_from_slice(&[80e6, 10e6, 2e6, 20e6, 40e6, 5e6, 15e6]);
+    t
+}
+
+/// `donors()` with BBB's final demand on every good but good 2, so the balance is feasible.
+fn spread_donors() -> BTreeMap<String, CountryIo> {
+    let mut d = donors();
+    d.get_mut("BBB").unwrap().final_demand_shares =
+        [0.1, 0.1, 0.0, 0.15, 0.1, 0.1, 0.1, 0.1, 0.1, 0.15];
+    d
+}
+
+/// [Z | F] of an economy: intermediate use Z_kg = a_kg X_g and final demand F_k = f_k F.
+fn use_table(t: &ceteris_pack::read::icio::CountryIo, final_demand: f64) -> [[f64; 11]; N_GOODS] {
+    std::array::from_fn(|k| {
+        std::array::from_fn(|g| {
+            if g < N_GOODS {
+                t.io[k][g] * t.output[g]
+            } else {
+                t.final_demand_shares[k] * final_demand
+            }
+        })
+    })
+}
+
+#[test]
+fn ras_balances_the_donor_use_table_to_domestic_use() {
+    let trade = [("XXX", xxx_trade())];
+    let case = Case {
+        trade: &trade,
+        ..PLAIN
+    };
+    let plain = &run(&[("XXX", "XXX")], &spread_donors(), &wdi(), &obs(), &PLAIN)["XXX"];
+    let got = &run(&[("XXX", "XXX")], &spread_donors(), &wdi(), &obs(), &case)["XXX"];
+    assert_eq!(got.io_basis, IoBasis::Ras);
+    let t = &got.table;
+    // Output and VA stay; only the uses move.
+    assert_eq!(t.output, plain.table.output);
+    assert_eq!(t.va, plain.table.va);
+    assert!(closes(t, 1e-9, 1e-12));
+    let (m, e) = (
+        xxx_trade().imports.map(|v| v / 1e6),
+        xxx_trade().exports.map(|v| v / 1e6),
+    );
+    let final_demand = total(&t.va) + total(&m) - total(&e);
+    let z = use_table(t, final_demand);
+    for k in 0..N_GOODS {
+        let row: f64 = z[k].iter().sum();
+        let want = t.output[k] + m[k] - e[k];
+        assert!(approx(row, want, 1e-10), "row {k}: {row} vs {want}");
+    }
+    for g in 0..N_GOODS {
+        let inputs: f64 = z.iter().map(|row| row[g]).sum();
+        assert!(approx(inputs, t.output[g] - t.va[g], 1e-10), "column {g}");
+    }
+    assert!(approx(total(&t.final_demand_shares), 1.0, 1e-12));
+    assert!(t.io.iter().flatten().all(|a| *a >= 0.0));
+    assert_ne!(t.io, plain.table.io);
+    assert_ne!(t.final_demand_shares, plain.table.final_demand_shares);
+    // The donor's zeros stay zero.
+    assert_eq!(t.final_demand_shares[2], 0.0);
+}
+
+#[test]
+fn negative_domestic_use_keeps_the_donor_table() {
+    let mut t = xxx_trade();
+    // Exports of good 0 above its output plus imports: 125 + 30 - 200 < 0.
+    t.exports[0] = 200e6;
+    let trade = [("XXX", t)];
+    let case = Case {
+        trade: &trade,
+        ..PLAIN
+    };
+    let got = &run(&[("XXX", "XXX")], &donors(), &wdi(), &obs(), &case)["XXX"];
+    assert_eq!(got.io_basis, IoBasis::Donor);
+    assert_eq!(got.table.io, donors()["BBB"].io);
+    assert_eq!(
+        got.table.final_demand_shares,
+        donors()["BBB"].final_demand_shares
+    );
+}
+
+#[test]
+fn no_trade_keeps_the_donor_table() {
+    let trade = [("YYY", xxx_trade())];
+    let case = Case {
+        trade: &trade,
+        ..PLAIN
+    };
+    let got = &run(&[("XXX", "XXX")], &donors(), &wdi(), &obs(), &case)["XXX"];
+    assert_eq!(got.io_basis, IoBasis::Donor);
+    assert_eq!(got.table.io, donors()["BBB"].io);
+}
+
+#[test]
+fn territory_inside_takes_its_parents_balanced_table() {
+    let o = obs_with(None, &[("TER", "R1")], &[]);
+    let trade = [("XXX", xxx_trade())];
+    let balanced = Case {
+        trade: &trade,
+        ..PLAIN
+    };
+    let alone = &run(&[("XXX", "XXX")], &spread_donors(), &wdi(), &o, &balanced)["XXX"];
+    let case = Case {
+        worldpop: &[("TER", 1e5)],
+        inside: &[("TER", "XXX")],
+        trade: &trade,
+        ..PLAIN
+    };
+    let got = run(
+        &[("XXX", "XXX"), ("TER", "XXX")],
+        &spread_donors(),
+        &wdi(),
+        &o,
+        &case,
+    );
+    let (ter, par) = (&got["TER"], &got["XXX"]);
+    assert_eq!(alone.io_basis, IoBasis::Ras);
+    for e in [ter, par] {
+        assert_eq!(e.io_basis, IoBasis::Ras);
+        assert_eq!(e.table.io, alone.table.io);
+        assert_eq!(e.table.final_demand_shares, alone.table.final_demand_shares);
+    }
+}
+
 // Tests below need the downloaded sources and the 2000 pack; CI is data-free.
 
 const NAMES: [&str; 20] = [
@@ -884,7 +1089,16 @@ fn data() -> Option<&'static Data> {
         for (c, p) in strings(&provinces, "country").into_iter().zip(raw) {
             *worldpop.entry(c).or_insert(0.0) += p;
         }
-        let imputed = impute_pack(&countries, &real, &wdi, &obs, &iso, &worldpop).unwrap();
+        let imputed = impute_pack(
+            &countries,
+            &real,
+            &wdi,
+            &obs,
+            &iso,
+            &worldpop,
+            &BTreeMap::new(),
+        )
+        .unwrap();
         Some(Data {
             real,
             countries,
@@ -977,6 +1191,15 @@ fn real_populated_territories_have_value_added() {
     assert_eq!(region("SAH"), "Middle East & North Africa");
     assert_eq!(region("CYN"), "Europe & Central Asia");
     assert_eq!(region("SOL"), "Sub-Saharan Africa");
+    assert_eq!(d.imputed["VEN"].income_source, IncomeSource::WdiNotPwt);
+    let set_aside = d
+        .imputed
+        .values()
+        .filter(|c| c.income_source == IncomeSource::WdiNotPwt)
+        .count();
+    assert_eq!(set_aside, 1);
+    assert_eq!(region("AIA"), "Latin America & Caribbean");
+    assert_eq!(region("MSR"), "Latin America & Caribbean");
 }
 
 #[test]

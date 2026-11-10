@@ -1430,3 +1430,173 @@ sections = "14.3"
 rows = "0293"
 topic = "[A run's parameters are snapshot state](../rfcs/0285-interventions-and-parameters-as-snapshot-state.md)"
 sections = "14.3"
+
+[[entry]]
+rows = "0282, 0283"
+topic = "[Price level source and market rates, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
+sections = "16, 16.1"
+
+[[entry]]
+rows = "0284 to 0286"
+topic = "[World price index, real GDP check series and donor use-table balance, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
+sections = "12.2, 16.1"
+
+[[entry]]
+rows = "0317"
+topic = "[Price level of domestic absorption, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
+sections = "16, 16.1"
+
+[[entry]]
+rows = "0289, 0290"
+topic = "[Real GDP check on benchmark economies and current WDI price level, amending ADR 0098](../rfcs/0282-price-level-source-market-rates-and-donor-table-targets.md)"
+sections = "16, 16.1, 17"
+
+[[entry]]
+rows = "0318 to 0321"
+topic = "[Trade imbalances: balanced final demand, missing current accounts, household spending and world GDP, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+sections = "9.5, 16, 17"
+
+[[entry]]
+rows = "0299, 0300"
+topic = "[Balanced fixture and the observed current-account path per year, amending ADR 0100](../rfcs/0308-trade-imbalances-balanced-final-demand-and-the-current-account-path.md)"
+sections = "9.5, 15, 16"
+
+[[entry]]
+rows = "0301 to 0306"
+topic = "[Three final demanders in P2: pops spend the shares, inventory change pro rata, shares of absorption, one balance, fixed nominal shares, accelerator in P4, accepting ADR 0099](../rfcs/0301-three-final-demanders-in-p2.md)"
+sections = "8.6, 9.6"
+
+[[entry]]
+rows = "0307 to 0310"
+topic = "[Sector labour shares from WIOD SEA clipped and rescaled to PWT, dividends by WID wealth ranked on base income in one pass, foreign-owned shares from OECD AAMNE 2000, foreign dividends as income through a world dividend account, accepting ADR 0104](../rfcs/0302-sector-labour-shares-and-wealth-weighted-dividends.md)"
+sections = "6.1, 7.2, 9.1, 16"
+
+[[entry]]
+rows = "0311, 0312"
+topic = "[Wealth-bracket shares from the income Gini by a variance-additive lognormal fitted to the US DFA, WID as a research check only, amending ADR 0308](../rfcs/0303-open-wealth-shares-from-the-income-gini.md)"
+sections = "9.1, 17"
+
+[[entry]]
+rows = "0313"
+topic = "[The largest income-effect weight the household shares allow: omega_A = 0 where it fits, else the binding category's omega 0, amending ADR 0094](../rfcs/0304-largest-income-effect-weight-the-shares-allow.md)"
+sections = "8.6"
+
+[[entry]]
+rows = "0315"
+topic = "[Transfers as the current account's share of national income, the world discrepancy spread by income, amending ADR 0100](../rfcs/0306-transfers-as-a-share-of-national-income.md)"
+sections = "9.5"
+
+[[entry]]
+rows = "0316"
+topic = "[Invert PIGL on the shares the run spends, a negative category share at 0, amending ADR 0094](../rfcs/0307-invert-pigl-on-the-clamped-shares.md)"
+sections = "8.6"
+
+[[entry]]
+rows = "0294"
+topic = "[Speed work goes bit-identical first, gated by a 24-tick hash and journal identity](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0295"
+topic = "[Unchecked indexing is the only unsafe, in hot modules, with a safe twin compared in CI](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0296"
+topic = "[Profile-guided release and bench builds with a fixed CPU baseline](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0297"
+topic = "[mimalloc as global allocator where measured](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0298"
+topic = "[Order-free exact sums for scatter accumulators, one golden move](../rfcs/0287-tick-speed-programme.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0314"
+topic = "[New work defaults to 1.x, not 1.0, amending ADR 0207](../rfcs/0305-new-work-defaults-to-1x.md)"
+sections = "21"
+
+[[entry]]
+rows = "0322"
+topic = "[Ensemble spread at P3 comes from register priors](../rfcs/0309-ensemble-spread-from-register-priors.md)"
+sections = "14, 21"
+
+[[entry]]
+rows = "0323"
+topic = "[P3 ships the gate's workbench views; the rest of the lab UI follows the gate, amending ADR 0207](../rfcs/0310-p3-ships-gate-views-lab-ui-after.md)"
+sections = "21"
+
+[[entry]]
+rows = "0324"
+topic = "[Re-rate of the 1.0 plan at the pre-P3 gate, amending ADR 0248](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md)"
+sections = "21"
+
+[[entry]]
+rows = "0325"
+topic = "[Tick budget after the speed stack: 35 ms kept, 160 ms ceiling kept](../rfcs/0313-re-rate-the-1-0-plan-at-the-pre-p3-gate.md)"
+sections = "19.2"
+
+[[entry]]
+rows = "0326"
+topic = "[Snapshot chunks are zstd pieces of the canonical bytes, not Arrow tables](../rfcs/0315-snapshot-chunks-are-zstd-canonical-bytes.md)"
+sections = "14.3"
+
+[[entry]]
+rows = "0327"
+topic = "[Long single-good reductions sum in four fixed interleaved accumulators, one golden move](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0328"
+topic = "[Ledger goods stay account-major; per-province systems take disjoint account slices](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "4.6, 19.4"
+
+[[entry]]
+rows = "0329"
+topic = "[Cross-province float tallies sum by province partials in province order](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0330"
+topic = "[Goods sharing a kernel are stored in goods-innermost blocks for batched dispatch](../rfcs/0317-summation-order-and-goods-layout.md)"
+sections = "8.3, 19.4"
+
+[[entry]]
+rows = "0331"
+topic = "[T2b journals one netted entry per flow, from and to per tick; per-leg entries only in detail mode](../rfcs/0316-net-the-t2b-ledger-journal.md)"
+sections = "4.6, 19.2, 19.4"
+
+[[entry]]
+rows = "0332"
+topic = "[Pipeline slots are good-major, an exception to goods-innermost layout](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0333"
+topic = "[Pipeline snapshot bytes stay buyer-major; encode and decode transpose](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0334"
+topic = "[In-flight totals are computed inside the per-good deliver and dispatch tasks](../rfcs/0319-good-major-pipeline-and-parallel-tick-checks.md)"
+sections = "19.4"
+
+[[entry]]
+rows = "0335"
+topic = "[P4 gate tolerances for UN 2000-2010 fixed before any run](../rfcs/0335-accept-p4-population-adrs-and-gate-tolerances.md)"
+sections = "6.2, 21.1"
+
+[[entry]]
+rows = "0336"
+topic = "[Border friction is edited per good: trade.border_nu.<good> replaces that good's border iceberg](../rfcs/0336-border-and-ntb-edit-targets.md)"
+sections = "8, 14.2"
+
+[[entry]]
+rows = "0337"
+topic = "[Pair-specific non-tariff barriers are an ntb.<importer>.<exporter>.<group> iceberg wedge](../rfcs/0336-border-and-ntb-edit-targets.md)"
+sections = "8, 14.2"
