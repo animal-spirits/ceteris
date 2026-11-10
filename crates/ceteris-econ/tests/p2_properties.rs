@@ -1974,15 +1974,19 @@ proptest! {
     }
 }
 
-/// ADR 0093, jump ahead to the last whole cycle: the 13 provinces of 1,000,000 (200,000 of each
+/// ADR 0093, jump ahead to the last whole cycle: the 12 provinces of 1,000,000 (200,000 of each
 /// family, seeds k x 0x9E3779B97F4A7C15 for k = 1 to 200,000; k in the comments) whose passes
 /// exceed [`kink_bound`], each within it once the passes outside its accounting are added:
 /// - the stall rule (12): pieces that repeat over 4 or more passes or binding fills that switch
 ///   every pass (99418: goods 0 and 1 switch 204 times), so no jump of up to 3 passes applies and
 ///   the stall rule ends the fall at 257 passes (73799 stalls, 792 passes, and is within the
 ///   bound only by the charge for every pass after a stall);
-/// - a root rounded onto a kink (1, 170254: 14 against 11): good 0's step lands on good 2's
-///   fill every other pass, so the cycle's map is undefined and no jump applies there.
+///
+/// 170254 (14 against 11) is no longer here: a jump that stopped short of its limit cleared the
+/// passes it had seen, so a collapse alternating two pieces never showed its cycle of 2 passes
+/// to the jump (family 2, seed 10209637172777702640: 91 passes against 13, uncovered 0, a
+/// geometric fall to 0 at a gain of 0.48 per cycle). The passes are now kept unless a jump
+/// reaches its limit, and that seed takes 8.
 ///
 /// Before the stock floor (ADR 0093, amendment of 2026-10-30) there were 22: the 10 more cut a
 /// good by rounding alone every other pass, sitting at its limit with U = R where users' stocks
@@ -1998,7 +2002,6 @@ fn chain_passes_beyond_their_kinks_are_uncovered() {
         (2, 1643254794265822703),     // 50931
         (2, 16419583651343627261),    // 51785
         (2, 12969786537767039842),    // 99418
-        (2, 13995925185394726438),    // 170254
         (2, 16771139658170358534),    // 189038
         (3, 4922913425195756184),     // 175672
         (4, 1532048138609151479),     // 2267
@@ -2017,10 +2020,17 @@ fn chain_passes_beyond_their_kinks_are_uncovered() {
     }
 }
 
+/// The collapse of family 2 seed 10209637172777702640 (91 passes before the fix).
+#[test]
+fn collapse_alternating_two_pieces_shows_its_cycle() {
+    let (extra, coef_max, no_stock) = FAMILIES[2];
+    let p = random_province_with(10209637172777702640, extra, coef_max, no_stock);
+    assert_within_kinks(&p, "family 2 seed 10209637172777702640");
+}
+
 /// ADR 0093, jump ahead to the last whole cycle: (passes, uncovered) pinned for a few provinces,
 /// so that a solver change that adds passes the counter charges is seen, though the property
-/// [`chain_passes_within_their_kinks`] still holds. Exceeding their kink bound: 170254 (bound
-/// 11), 99418 (15, stall rule), 73799 (15, stalled), 95996 (21, stall rule, stocks drawn).
+/// [`chain_passes_within_their_kinks`] still holds. Exceeding their kink bound: 99418 (15, stall rule), 73799 (15, stalled), 95996 (21, stall rule, stocks drawn).
 /// Within it, no pass uncovered: k = 6, 320, 419 and 461 (4 to 11 passes against bounds of 15
 /// to 29).
 /// The stocked provinces 175527 and 3779 were pinned at 88 and 68 passes before the stock floor
@@ -2029,7 +2039,8 @@ fn chain_passes_beyond_their_kinks_are_uncovered() {
 #[test]
 fn chain_passes_and_uncovered_are_pinned() {
     for (family, seed, passes, uncovered) in [
-        (2, 13995925185394726438u64, 14, 3),
+        (2, 13995925185394726438u64, 11, 3),
+        (2, 10209637172777702640, 8, 0),
         (2, 12969786537767039842, 257, 256),
         (4, 5355749340075788755, 792, 791),
         (1, 14587390709483492012, 257, 256),

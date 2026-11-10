@@ -11,6 +11,7 @@ pub mod manifest;
 pub mod numeric;
 pub mod raster;
 pub mod read;
+pub mod setup;
 pub mod sources;
 pub mod table;
 pub mod web;
