@@ -109,7 +109,7 @@ fn proportional(applications: &[u64], w: &[f64], room: u64) -> Vec<u64> {
 
 /// Largest-remainder rounding of `exact` to integers summing to `round(sum)`; ties to the
 /// lowest index, no entry above its cap.
-fn hamilton(exact: &[f64], cap: &[u64]) -> Vec<u64> {
+pub(crate) fn hamilton(exact: &[f64], cap: &[u64]) -> Vec<u64> {
     let mut out: Vec<u64> = exact
         .iter()
         .zip(cap)

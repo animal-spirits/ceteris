@@ -16,6 +16,7 @@ pub mod inputs;
 pub mod labour;
 pub mod lanes;
 pub mod local;
+pub mod migration;
 pub mod pack;
 pub mod params;
 pub mod pop;
