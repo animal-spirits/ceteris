@@ -48,8 +48,10 @@ cells with Q < 1e-6 Q0, of 177; dmax the largest |dlnp| at the last tick).
 
 Near the steady state the bounded gap changes nothing measurable: `p5_price_anchor` passes with gap
 1 and 2 (steady state, nominal shock), and the fixture data state ends at V1 6.7e-2 price / 8.9e-2
-wage (gap 1) against 7.1e-2 / 9.1e-2 (gap 0), I 1.0149 both. (V1 at 1,200 with the merged default
-kappa_b 0.3 is short of the E1 spike's 3.6e-3 at kappa_b 0.02; not an E2 question, noted.)
+wage (gap 1) against 7.1e-2 / 9.1e-2 (gap 0), I 1.0149 both. These data-state runs went through
+the x10 harness with `set_wedges` at NTB 1, and their V1 is far from the trade SPEC's E1 figure
+(1.9e-9 frictionless); the harness, not the gap, is the likely cause (same V1 with both gaps), but
+it is not checked: rerun the data state with the E1 harness before relying on it.
 
 ## The second failure: a real trap at x10
 

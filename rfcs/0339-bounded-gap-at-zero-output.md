@@ -1,6 +1,6 @@
 # RFC 0339. Bounded price gap at zero output under the money anchor (P5 Branch E2)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-10
 Design sections: 8.2, 12.2, 17 (P03a, P03c, P151, P178); trade SPEC Money-anchored rule
 Release: 1.0, P5a
@@ -35,8 +35,8 @@ Options:
 Recommendation: A, because it removes the failure with no kink and gives the weighted mean a plain
 reading, and B matches it only with a kink.
 
-Decision: pending.
-Row: pending.
+Decision: A, Antonio, 2026-11-10.
+Row: ADR 0340
 
 ### D2. Where does the x10 criterion go, now that the price step alone does not carry it?
 
@@ -52,15 +52,15 @@ Options:
 Recommendation: A, because the criterion was fixed in advance (development laws), and the spike
 points to a specific, diagnosable mechanism rather than an open-ended one.
 
-Decision: pending.
-Row: pending.
+Decision: A, Antonio, 2026-11-10.
+Row: ADR 0341
 
 ## Spec changes
 
 - trade SPEC, Money-anchored rule: the gap l_o of D1 replaces (D + b - Q) / Q_eff in the anchored
-  rule; the as-built rule keeps Q_eff. ADR to be taken on decision.
-- x10: per D2 (amends ADR 0339's carrier).
-- P5 PLAN, Branch E: E2 builds the bounded gap; under D2 A, task E3 added.
+  rule; the as-built rule keeps Q_eff. ADR 0340.
+- x10: carried by task E3 (ADR 0341, amends ADR 0339's carrier).
+- P5 PLAN, Branch E: E2 builds the bounded gap; task E3 added (ADR 0341).
 
 ## Before the build is switched on
 

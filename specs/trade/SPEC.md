@@ -318,7 +318,7 @@ GE reference is unchanged. Every tick the clip binds on the gap terms at a cell 
 (`clip_ticks`, run export).
 
 **Money-anchored rule (ADR 0338; built as `TradeParams::anchor`, off by default).** P5 Branch E1 replaces the aggregate
-term of ADR 0090 with a money anchor and a good-level term. With l_o = (D_o + b_o - Q_o) / Q_eff,
+term of ADR 0090 with a money anchor and a good-level term. With l_o = 2 (D_o + b_o - Q_o) / (D_o + b_o + Q_o), 0 where both are 0 (ADR 0340: bounded in [-2, 2] at zero output, first order equal to (D - Q) / Q at the steady state, no Q floor),
 lbar_g the mean of l_o over the active origins of good g weighted by p_o (Q_o + D_o) / 2, lbar the
 same over all markets (one `fixed_sum` reduction per good per tick), I the world price index
 above and M the money issued by the mint:
@@ -330,7 +330,7 @@ dlnp_o = clip( a_o (l_o - lbar_g) + kappa_b (lbar_g - lbar)
 
 a_o is kappa_r / E_g (P03a; E_g = theta_g + 1 traded, 1 local), kappa_b the good-level gain (P178), kappa_m the anchor gain (P177, redefined from kappa_n), I0 and M0 the values at
 t0 or at the last money edit. pi^e is not added: the level target carries the nominal mode. The x10 criterion stays a P5a
-gate item, carried by the E2 step at Q = 0 (ADR 0339, RFC 0286). The
+gate item (ADR 0339), carried by task E3, the zero-output production trap (ADR 0341): with the Q-floor gap one origin at Q near 0 put l_o at 1e4 to 1e11, set lbar_g and lbar through its weight p D / 2, and stepped every other price at -c_max to the price bound; with the bounded gap the index holds at x10 on the fixture but output dies province by province (`x10_border_shock_keeps_the_index_off_the_bound`; `docs/research/p5-e2-zero-output-step-spike-2026-11-10.md`). The
 switch off reproduces the rule above bit for bit (`price_rule_off_equals_status_quo`: the status-quo goldens). Fixture at P178 0.3, P177 0.2, kappa_r 0.25 traded and 0.05 local, no pi^e (`p5_price_anchor.rs`): a 5% money shock returns the index to within 1% of the new level at tick 9 (frictionless and default); the data state ends with V1 price 1.9e-9 frictionless and 2.5e-7 default, peak index 1.034 (tick 56 and 71), last-50-tick max |dlnp| 5e-11 and 2e-9; the as-built rule reaches 1.9e-6 and 5.2e-6. Pack data-state run pending (Mac). The reductions run serially in cell order. Spike
 numbers: `docs/research/p5-price-anchor-spike-2026-11-10.md`.
 
