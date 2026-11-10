@@ -119,3 +119,12 @@ Total new effort if all recommended choices are taken: about 4 to 6 owner-weeks,
 4. Problem reports (item 5): prefilled GitHub issue, or a hosted collector. Recommended: prefilled GitHub issue.
 5. Update check (item 10): Steam only, or keep the GitHub check. Recommended: Steam only.
 6. Linux aarch64 hash coverage (item 4): rent a small Arm host, or defer to a manual check per release. Recommended: manual check per release until the repo opens.
+
+## Decisions taken (Antonio, 2026-11-10)
+
+1. Statistics collector: dropped for 1.0; RFC 0214 to be amended.
+2. Pack location: Steam depot, with the Zenodo record as archive of record.
+3. Mac single point of failure: runbook plus backups; rent a cloud Mac only on failure.
+4. Problem reports: prefilled GitHub issue.
+5. Update check: Steam only.
+6. Linux aarch64 hash coverage: rent a small Arm host (not the recommended manual check).
