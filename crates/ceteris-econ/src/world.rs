@@ -25,6 +25,7 @@ use crate::demand::{
 };
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
+use crate::migration::Migration;
 use crate::params::{EconParams, Pigl, Technology, Transfers};
 use crate::pop::{Cohorts, Demography};
 
@@ -688,6 +689,9 @@ pub struct EconWorld {
     /// Population on the monthly clock (P4, system 220): the mechanisms and the cohort cells.
     /// `None` is the status quo; the snapshot then has no population section.
     pub pop: Option<(Demography, Cohorts)>,
+    /// Internal migration and admissions (P4 D1/D2, system 227); needs `pop`. `None` is off and
+    /// adds nothing to the snapshot.
+    pub migration: Option<Migration>,
     /// Persons the last demography step created or lost beyond births less deaths; zero
     /// unless conservation broke. Not state.
     pub(crate) pop_drift: i64,
@@ -1308,6 +1312,16 @@ impl EconWorld {
         self
     }
 
+    /// Switches migration (system 227) on; requires population.
+    pub fn with_migration(mut self, migration: Migration) -> EconWorld {
+        let np = self.inputs.n_provinces();
+        assert!(self.pop.is_some(), "migration needs population");
+        assert_eq!(migration.v.len(), np, "one value per province");
+        assert_eq!(migration.accounts.len(), self.inputs.n_countries());
+        self.migration = Some(migration);
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1381,6 +1395,7 @@ impl EconWorld {
             sales: vec![0.0; n_ent],
             profit: vec![0.0; n_ent],
             pop: None,
+            migration: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
             ledger,
@@ -2241,6 +2256,9 @@ impl Encode for EconWorld {
         e.f64s(&self.smooth);
         if let Some((demography, cohorts)) = &self.pop {
             demography.encode(cohorts, e);
+            if let Some(m) = &self.migration {
+                m.encode(e);
+            }
         }
     }
 }
@@ -2566,6 +2584,11 @@ impl State for EconWorld {
         } else {
             Some(Demography::decode(d)?)
         };
+        let migration = if pop.is_some() && !d.at_end() {
+            Some(Migration::decode(d)?)
+        } else {
+            None
+        };
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2624,6 +2647,7 @@ impl State for EconWorld {
             sales,
             profit,
             pop,
+            migration,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
@@ -3063,6 +3087,61 @@ mod tests {
         let (bytes, back) = round_trip(w);
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.pop, w.pop);
+    }
+
+    fn migration_sim(cap: u64) -> Sim<EconWorld> {
+        let w = world();
+        let (np, nc) = (w.inputs().n_provinces(), w.inputs().n_countries());
+        let (d, c) = crate::pop::toy(np);
+        let cost = (0..np * np)
+            .map(|k| if k / np == k % np { 0.0 } else { 0.5 })
+            .collect();
+        let mut m = Migration::new(cost, nc, 0.95, 0.7, 0.02);
+        m.chi = 1.0;
+        m.z = 0.3;
+        m.accounts.iter_mut().for_each(|a| a.cap = cap);
+        Sim::new(
+            w.with_population(d, c).with_migration(m),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    /// Migration moves persons between provinces only: with no births or deaths the total is
+    /// fixed, the cells change, and the end-of-tick conservation check stays green.
+    #[test]
+    fn migration_conserves_persons_and_moves_cells() {
+        for cap in [u64::MAX, 50] {
+            let mut sim = migration_sim(cap);
+            sim.world_mut().pop.as_mut().unwrap().0 = Default::default();
+            let before = sim.world().pop.as_ref().unwrap().1.clone();
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            let after = &sim.world().pop.as_ref().unwrap().1;
+            assert_eq!(before.total(), after.total());
+            assert_ne!(&before, after);
+        }
+    }
+
+    #[test]
+    fn migration_is_deterministic_and_round_trips() {
+        let (mut a, mut b) = (migration_sim(50), migration_sim(50));
+        a.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        b.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(a.state_hash(), b.state_hash());
+        let (bytes, back) = round_trip(a.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.migration, a.world().migration);
+        assert!(back.migration.unwrap().diaspora.iter().sum::<u64>() > 0);
+    }
+
+    #[test]
+    fn migration_off_leaves_the_population_run_unchanged() {
+        let mut on = migration_sim(u64::MAX);
+        on.world_mut().migration = None;
+        let mut off = population_sim();
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(on.state_hash(), off.state_hash());
     }
 
     #[test]
