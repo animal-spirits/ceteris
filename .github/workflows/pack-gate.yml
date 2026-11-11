@@ -59,3 +59,27 @@ jobs:
       - name: Disk cleanup
         if: always()
         run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
+
+  # Failure alert: one open issue, commented on each further failing night. Runs on a GitHub-hosted
+  # runner so it still fires when the Mac is offline (a never-started job counts as failed).
+  alert:
+    needs: [pack, flatness]
+    if: always() && (needs.pack.result != 'success' || needs.flatness.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Open or update the pack-gate issue
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="pack: ${{ needs.pack.result }}, flatness: ${{ needs.flatness.result }}. $run_url"
+          n=$(gh issue list --state open --search 'in:title "pack-gate failing"' --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body "$body"
+          else
+            gh issue create --title "pack-gate failing" --body "$body"
+          fi
