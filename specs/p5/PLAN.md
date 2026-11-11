@@ -92,7 +92,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ## Branch D: `p5/investment` (ADRs 0202, 0204; #214)
 
-- [ ] **D1** Capital formation by asset class (machinery, structures, ICT, dwellings, public core and other) priced on province markets from the ICIO investment column, orders with a schedule, coefficients locked at order. Tests: `instant_orders_equal_the_instant_rule_bit_for_bit`; `goods_and_money_close_with_work_in_progress`; `steady_state_2000_pipeline_holds_for_100_years`; `price_shock_after_order_keeps_pre_shock_coefficients`.
+- [~] (kernel in `investment.rs`, not in the tick; the four tests pass on the kernel; stage-0 steady state is `I(1-r)/r`, others `I/r`, `r = k/T`, because the order joins stage 0 before it flows; cash calls, paused-WIP depreciation, ICIO bundles and the tick wiring wait on Branch F and the pack) **D1** Capital formation by asset class (machinery, structures, ICT, dwellings, public core and other) priced on province markets from the ICIO investment column, orders with a schedule, coefficients locked at order. Tests: `instant_orders_equal_the_instant_rule_bit_for_bit`; `goods_and_money_close_with_work_in_progress`; `steady_state_2000_pipeline_holds_for_100_years`; `price_shock_after_order_keeps_pre_shock_coefficients`.
 - [ ] **D2** Firm entry, exit and the zombie band, quarterly per cell. Tests: `free_entry_mass_scales_with_labour_and_not_trade_costs`; `cutoff_rise_removes_exactly_the_share`; `entry_exit_off_equals_fixed_mass_path`. The zombie share needs the bank capital gap (Branch F); with `z_b = 0` there are no zombies.
 - [ ] **D3** Investment-to-GDP and capital-output paths 2000-2010 within tolerance of PWT (reported at the P5a gate, asserted at P9).
 
