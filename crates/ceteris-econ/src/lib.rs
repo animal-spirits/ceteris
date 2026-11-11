@@ -17,6 +17,7 @@ pub mod flows;
 pub mod history;
 pub mod hlw;
 pub mod inputs;
+pub mod investment;
 pub mod labour;
 pub mod lanes;
 pub mod local;
