@@ -422,6 +422,12 @@ pub struct Demography {
 
 impl Demography {
     pub fn step(&self, cohorts: &mut Cohorts, tick: u32) -> Flows {
+        self.step_with(cohorts, tick, None)
+    }
+
+    /// As [`Demography::step`] with an additive monthly death probability per (province, band),
+    /// `extra[p * N_AGE + a]` (disease excess, B2).
+    pub fn step_with(&self, cohorts: &mut Cohorts, tick: u32, extra: Option<&[f64]>) -> Flows {
         cohorts.age_at(tick);
         if let Some(p) = self
             .education
@@ -430,7 +436,10 @@ impl Demography {
         {
             cohorts.progress(p);
         }
-        let deaths = self.mortality.as_ref().map_or(0, |b| cohorts.die(b));
+        let deaths = self
+            .mortality
+            .as_ref()
+            .map_or(0, |b| cohorts.die_with(b, extra));
         let births = self.fertility.as_ref().map_or(0, |f| cohorts.bear(f));
         Flows { births, deaths }
     }
