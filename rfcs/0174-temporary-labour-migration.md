@@ -13,7 +13,7 @@ Europe and North America, and EU posted workers. Non-citizens are about 88% of t
 Qatar's populations, and remittances from these workers are a large share of GDP in Nepal, the
 Philippines and Kerala. The permanent channel gets the stocks wrong in the Gulf and makes
 remittances too small (family joins, and ties weaken).
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

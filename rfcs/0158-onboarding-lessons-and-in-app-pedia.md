@@ -10,7 +10,7 @@ Phase: P3 (pedia, first lessons), extended through 1.0 as mechanisms land
 The specs have no onboarding. Victoria 3 teaches through Lessons, short guided sequences that open
 when the player first meets a mechanic, inside the player's own game. Crusader Kings III links
 every game term inside a tooltip to its concept entry, and Civilization keeps an encyclopedia one
-click away. The parameter wiki of 0127 is a static site outside the app. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+click away. The parameter wiki of 0127 is a static site outside the app. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

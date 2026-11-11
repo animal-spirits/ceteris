@@ -9,7 +9,7 @@ Phase: P9 (CeterisBench), 2.0-alpha (agent gym, ADR 0239)
 
 The simulator knows the true effect of every intervention, which real data never does. That
 makes it a benchmark for causal-inference methods, and, with Steward seats, for AI agents
-acting over long horizons. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas
+acting over long horizons. Brainstorm (ideas
 23 and 24).
 
 ## Options

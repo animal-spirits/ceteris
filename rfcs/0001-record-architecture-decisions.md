@@ -7,7 +7,7 @@ Design sections: 21.2, 22.2
 ## Context
 
 The design document (`specs/DESIGN.md`, snapshot of the Claude Docs original
-https://claude.ai/artifact/PuUQN6KQSPJnWv3QhvC42x at rev 89) is the contract. Section 21.2 requires every deviation to be recorded with
+ at rev 89) is the contract. Section 21.2 requires every deviation to be recorded with
 context, options and consequences, and 22.2 lists defaults the coding agent may take
 as ADRs.
 

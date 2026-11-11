@@ -14,8 +14,7 @@ the Tier 1a planner of 12.3 weighs coalition power shares that only exist with P
 The tape has one bullet in 15.7: no levers, sources or format. Without a policy agent P5a cannot
 set taxes and spending, P5b cannot decide a default, the P8 run to 2150 has no policy after the
 tape ends, and the P9 hindcast cannot separate mechanism error from policy error. The 2.0-alpha player
-score (23.4) is measured against "the AI", which in 1.x is this agent. Audit:
-https://claude.ai/artifact/QxYA4tkRQQ4mCx6g8YKg6Q (gap 1).
+score (23.4) is measured against "the AI", which in 1.x is this agent. Audit (gap 1).
 
 ## Options
 

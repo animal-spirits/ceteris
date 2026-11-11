@@ -10,9 +10,7 @@ Phase: P6 (2.0-alpha), with the character record
 Characters (ADRs 0183-0186) need a face in the UI. The owner rejected procedural portraits in
 the atlas style and in a CK2 style, and a set of alternatives (halftone press photos,
 silhouettes, signatures, epithets, personal effects). He chose the intelligence dossier.
-Mocks: https://claude.ai/artifact/NaioKTnQY5V1vsBWQdtvWc (portraits, rejected),
-https://claude.ai/artifact/LrARgmWSbvfLtpSJsJe3f6 (alternatives),
-https://claude.ai/artifact/5uPxcrucstS3fZQ7UViyDs (dossier, chosen).
+Mocks (portraits, rejected) (alternatives) (dossier, chosen).
 
 ## Options
 

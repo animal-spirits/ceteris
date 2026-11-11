@@ -16,7 +16,7 @@ uneven: Brazil in 2000 had 27 states and 5,507 municipalities, China's four muni
 directly under the centre, India's union territories have no state, and US congressional and
 school districts do not nest in counties.
 
-Design brainstorm with diagrams: https://claude.ai/artifact/9DHJmPTEUEbthJhMoRZw5W
+Design brainstorm with diagrams
 
 The government side of that brainstorm (bodies with membership, decision rule, agenda,
 competences and scope; lever composition across tiers; appointment policies; integration of

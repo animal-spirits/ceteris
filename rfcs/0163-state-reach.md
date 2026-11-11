@@ -12,7 +12,7 @@ which caps what can be extracted there and makes roads and administrative seats 
 trade. The evidence agrees: national institutions matter less far from the capital
 (Michalopoulos and Papaioannou 2014), and state power thins with distance where infrastructure is
 poor (Herbst 2000). ADRs 0067 and 0068 have no distance term. Institutions are held fixed in 1.0
-(ADR 0136), so this belongs to 2.0. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+(ADR 0136), so this belongs to 2.0. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

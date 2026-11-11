@@ -8,8 +8,7 @@ Phase: P3 (run hashes, reproducible builds); 1.0 and later (annual report, engin
 ## Context
 
 Snapshots are content-addressed (14.3) and runs are deterministic, so a run is fully described
-by a hash. Distribution can lean on that instead of hosting. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 29 to 32).
+by a hash. Distribution can lean on that instead of hosting. Brainstorm (ideas 29 to 32).
 
 ## Options
 

@@ -33,7 +33,7 @@ that write state only through orders (0145), and mods must keep runs reproducibl
   Ceteris amplifiers under the frame (supply and cohesion bars, delegation level, order latency);
   at strategic zoom, country-coloured atlas pills with army totals on control-shaded cells.
   Estimates are dashed and faded with a confidence. Wargame counters and a staff-map style may
-  ship later as skins. Mockups: https://claude.ai/artifact/C8TXwPJD8uPSoFXkHboCmV. Symbology never
+  ship later as skins. Mockups. Symbology never
   changes state.
 - **Modding.** Data mods in the 23.3 manifest: equipment catalog, templates, doctrines,
   consumption tables, OOBs, air zones and naming grammars. Parameter lanes for every coefficient.

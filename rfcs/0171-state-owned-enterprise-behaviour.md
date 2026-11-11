@@ -15,7 +15,7 @@ through state-owned enterprises and local government vehicles funded by state ba
 misallocation between state and private firms is a large part of Chinese TFP dispersion (Hsieh
 and Klenow 2009; Song, Storesletten and Zilibotti 2011). The 2009-2015 Chinese investment and
 credit paths are 15.4 targets.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

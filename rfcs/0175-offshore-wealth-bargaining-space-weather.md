@@ -13,7 +13,7 @@ wealth distribution and tax bases are wrong at the top. Wage rigidity (P40) is o
 country, but collective-bargaining coverage ranges from under 10% to over 90% across OECD
 countries. Space weather (a Carrington-scale storm) is a low-probability hazard to grids and
 satellites that is missing from 0051's hazard list.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

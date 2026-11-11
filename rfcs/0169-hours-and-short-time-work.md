@@ -12,7 +12,7 @@ so labour hoarding and short-time work cannot happen. In 2009 Germany kept unemp
 flat through Kurzarbeit while output fell about 5% (Balleer, Gehrke, Lechthaler and Merkl
 2016), and in 2020 European job-retention schemes kept unemployment low while US unemployment
 reached about 15%. Unemployment is a headline 15.4 target, and Okun's law is a V2 fact.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

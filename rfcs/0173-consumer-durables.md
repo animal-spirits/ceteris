@@ -13,7 +13,7 @@ consumption in recessions, and purchase subsidies move timing: the 2009 Cash for
 programme pulled sales forward and reversed them within a year (Mian and Sufi 2012). In 2020-21
 spending shifted from services to goods, which is part of the COVID case of 15.5. The car stock
 also drives fuel demand and the vehicle-technology diffusion of ADR 0035.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

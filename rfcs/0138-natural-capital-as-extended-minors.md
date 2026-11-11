@@ -17,8 +17,7 @@ What stays frozen: impacts are regressions fitted on 2000-2024 variation, and na
 overharvest, collapse and recovery cannot happen. These variables move a few percent per decade.
 The 2011-2024 holdout cannot separate them from the regression lane, so they would fail
 ablation (15.7). Fisheries are the exception: stock assessments give biomass series, and
-collapses since 2000 are observed. Feasibility study:
-https://claude.ai/artifact/WS9DBVdJaBuEba8aVVgqZ5
+collapses since 2000 are observed. Feasibility study
 
 ## Options
 

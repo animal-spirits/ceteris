@@ -11,8 +11,7 @@ The owner asked (2026-10-30) for real royal houses with their people and family 
 January 2000, deposed houses and pretenders included, and for a way to play a restoration.
 ADR 0183 gives real people a character record but no kinship; ADR 0195 has a membership rule
 "heredity" without a succession law; ADR 0066 has succession crises but no claimants. 1.0 has no
-politics (0136) and no seats (0239), and nothing after t0 may be scheduled (0241). Design page:
-https://claude.ai/artifact/TXuNKumDApPAt5ZW5QChVh
+politics (0136) and no seats (0239), and nothing after t0 may be scheduled (0241). Design page
 
 Four questions: phasing (D1), which houses (D2), how far real trees and living relatives go (D3),
 and how a restoration comes about (D4).

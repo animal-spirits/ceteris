@@ -18,7 +18,7 @@ The run store and snapshots (14.3) are Arrow. The LLM research assistant of ADR 
 coupling protocol of ADR 0135 both need a programmatic way in.
 
 Any outside access must keep 2.5 (7): the same pack, parameters, seed and intervention list give
-bit-identical output. Assessment: https://claude.ai/artifact/3rJLuwN8cDUXDmA2vbwijC
+bit-identical output. Assessment
 
 ## Options
 

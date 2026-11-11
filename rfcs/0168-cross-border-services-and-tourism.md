@@ -13,7 +13,7 @@ and deferred it "until goods grow toward 45". Services are about a fifth of worl
 current accounts of Spain, Greece, Thailand, the Caribbean, Ireland, Luxembourg and India depend
 on them. The COVID 2020 case of 15.5 is largely a collapse of travel. Services trade follows
 gravity with larger border effects than goods (Anderson, Borchert, Mattoo and Yotov 2018).
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

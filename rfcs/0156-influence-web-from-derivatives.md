@@ -10,7 +10,7 @@ Phase: P5 (economic levers), P6 (political edges)
 Democracy 4's policy web makes a complex system learnable by drawing which policies move which
 statistics and voter groups. Its links are authored and fixed. Ceteris can compute them: ADR 0096
 gives forward-mode derivatives of any output with respect to parameters and edits. The leverage
-map of 0117 is spatial and per outcome; nothing shows the per-lever view. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+map of 0117 is spatial and per outcome; nothing shows the per-lever view. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

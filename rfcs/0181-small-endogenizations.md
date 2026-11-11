@@ -14,7 +14,7 @@ and naval patrols. ADR 0040's housing regulation index is fixed, but incumbent h
 for restrictions (Fischel 2001). Pandemic arrivals come from a fixed historical rate (Marani et
 al. 2021 via 0051), though spillover risk rises with deforestation, livestock density and the
 wildlife trade.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

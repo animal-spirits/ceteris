@@ -9,7 +9,7 @@ Design sections: 19.2, 21.2; ADRs 0207, 0212, 0236
 Paradox and Civ games slow down as a campaign runs: pops split, characters and units accumulate,
 scripts run per entity. Ceteris avoids most of these causes by design, but nothing measures it.
 The P2 benchmarks time tick 1 from steady state (econ SPEC, Task 19); none compares a late tick
-with an early one. Assessment: https://claude.ai/artifact/HnTopU8Pz7RiuPLTNGWR1E
+with an early one. Assessment
 
 ## Options
 

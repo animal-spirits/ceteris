@@ -17,7 +17,7 @@ sector, EIA by US state. Countries: input-output tables and the national series.
 (ADR 0009) add shapes and names but no statistics of their own; theirs are sampled from cells.
 No source gives pops by education or labour status, or capital, below the country.
 
-Exploration, with diagrams: https://claude.ai/artifact/XcrCGoq3WgM1p9FPSPgMsC
+Exploration, with diagrams
 
 ## Options
 

@@ -10,8 +10,7 @@ Phase: P3
 A branch is a parent plus an ordered list of timed edits (14.1), and a null edit reproduces the
 parent bit for bit (14.3). That is the data model of a version-control system, but the
 workbench offers only fork and compare. With twenty edits on a branch, finding which one
-flipped an outcome means rerunning subsets by hand. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (idea 1).
+flipped an outcome means rerunning subsets by hand. Brainstorm (idea 1).
 
 ## Options
 

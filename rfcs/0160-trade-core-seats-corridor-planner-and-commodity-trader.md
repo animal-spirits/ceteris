@@ -14,7 +14,7 @@ gaps between markets and the trader's own price impact. Section 5.5 lets states 
 infrastructure projects but has no model of delay or cost overrun, though overruns are large and
 fat-tailed (Flyvbjerg, Holm and Buhl 2002: rail about 45% on average, roads about 20%). The seats
 in 0130 and the research notes (supply-chain manager, macro fund) do not cover either loop.
-Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

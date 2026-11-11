@@ -9,7 +9,7 @@ Phase: 2.x (variants, importers, zoom); 3.x (LLM-drafted packs)
 
 Synthetic worlds (23.3) generate geography from noise. Four cheaper or more targeted routes to
 other worlds reuse the consistency solver (23.2) and the cell partitions of ADR 0115.
-Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 51, 56, 57 and 58).
+Brainstorm (ideas 51, 56, 57 and 58).
 
 ## Options
 

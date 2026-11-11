@@ -20,7 +20,7 @@ after 2004; in KwaZulu-Natal adult life expectancy rose 11.3 years in eight year
 P4 acceptance test (mortality within tolerance of UN data for 2000-2010) is at risk for about 20
 states. Treatment also restores labour supply: ART raised the labour supply of treated workers
 by about 20% within six months in western Kenya (Thirumurthy, Graff Zivin and Goldstein 2008).
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

@@ -10,8 +10,7 @@ Phase: 3.x (reanalysis may start after P9)
 Pre-1995 packs are planned for 3.x and need a historical hindcast before they leave the
 extended profile (23.3). Weather science built its hindcasts by reanalysis: assimilating sparse
 observations into a model to rebuild a consistent past (ERA5, the 20th Century Reanalysis). The
-same approach gives Ceteris its pre-1995 world and a dataset of independent value. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 48, 49, 54, 55 and 59).
+same approach gives Ceteris its pre-1995 world and a dataset of independent value. Brainstorm (ideas 48, 49, 54, 55 and 59).
 
 ## Options
 
