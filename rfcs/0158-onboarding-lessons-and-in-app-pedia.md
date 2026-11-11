@@ -1,6 +1,6 @@
 # 0158. Onboarding: lessons and in-app pedia
 
-Status: proposed
+Status: accepted (owner, 2026-11-11)
 Date: 2026-10-28
 Design sections: 14, 20.2; ADRs 0049, 0078, 0127, 0141
 Phase: P3 (pedia, first lessons), extended through 1.0 as mechanisms land
