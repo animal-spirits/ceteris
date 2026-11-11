@@ -83,6 +83,31 @@ impl Fiscal {
     }
 }
 
+/// Public capital of one type (core infrastructure or other), ADR 0042. Productivity factor
+/// `A / A_cal = (K_g / K_g0)^P173`; investment is scaled by an efficiency factor (P174).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PublicCapital {
+    pub stock: f64,
+    pub stock0: f64,
+    /// P173; zero leaves productivity at its calibrated level.
+    pub elasticity: f64,
+    pub depreciation: f64,
+}
+
+impl PublicCapital {
+    pub fn productivity_factor(&self) -> f64 {
+        if self.elasticity == 0.0 {
+            return 1.0;
+        }
+        libm::pow(self.stock / self.stock0, self.elasticity)
+    }
+
+    /// `K' = K (1 - d) + efficiency * investment`, with efficiency from P174 in `[0, 1]`.
+    pub fn invest(&mut self, investment: f64, efficiency: f64) {
+        self.stock = self.stock * (1.0 - self.depreciation) + efficiency * investment;
+    }
+}
+
 /// Debt service minus growth: `(r - g)` reported per state.
 pub fn r_minus_g(interest_rate: f64, growth: f64) -> f64 {
     interest_rate - growth
@@ -161,5 +186,38 @@ mod tests {
             assert_eq!(after.positions[BONDS][GOVERNMENT], -f.debt);
             sheets = after;
         }
+    }
+
+    #[test]
+    fn public_capital_elasticity_zero_equals_status_quo() {
+        let mut k = PublicCapital {
+            stock: 100.0,
+            stock0: 100.0,
+            elasticity: 0.0,
+            depreciation: 0.01,
+        };
+        for _ in 0..50 {
+            k.invest(5.0, 0.7);
+        }
+        assert_eq!(k.productivity_factor(), 1.0);
+    }
+
+    #[test]
+    fn public_capital_raises_productivity_and_efficiency_scales_investment() {
+        let k0 = PublicCapital {
+            stock: 100.0,
+            stock0: 100.0,
+            elasticity: 0.08,
+            depreciation: 0.0,
+        };
+        assert_eq!(k0.productivity_factor(), 1.0);
+        let (mut lo, mut hi) = (k0, k0);
+        lo.invest(10.0, 0.5);
+        hi.invest(10.0, 1.0);
+        assert!(lo.productivity_factor() > 1.0);
+        assert!(hi.productivity_factor() > lo.productivity_factor());
+        assert!((lo.stock - 105.0).abs() < 1e-12);
+        let doubled = PublicCapital { stock: 200.0, ..k0 };
+        assert!((doubled.productivity_factor() - libm::pow(2.0, 0.08)).abs() < 1e-12);
     }
 }
