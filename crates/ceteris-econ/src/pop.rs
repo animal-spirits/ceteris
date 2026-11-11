@@ -285,13 +285,20 @@ pub struct Flows {
 impl Cohorts {
     /// One month of mortality: deaths per (province, band) apportioned over sex and education.
     pub fn die(&mut self, brass: &Brass) -> u64 {
+        self.die_with(brass, None)
+    }
+
+    /// As [`Cohorts::die`] plus an additive monthly death probability per (province, band),
+    /// `extra[p * N_AGE + a]`, on every sex and education cell (disease excess, B2).
+    pub fn die_with(&mut self, brass: &Brass, extra: Option<&[f64]>) -> u64 {
         let q = brass.table();
         let mut deaths = 0;
-        for n in self.n.as_chunks_mut::<CELLS>().0.iter_mut() {
+        for (p, n) in self.n.as_chunks_mut::<CELLS>().0.iter_mut().enumerate() {
             for a in 0..N_AGE {
                 let base = a * N_SEX * N_EDU;
+                let add = extra.map_or(0.0, |x| x[p * N_AGE + a]);
                 let exact: [f64; N_SEX * N_EDU] =
-                    core::array::from_fn(|k| n[base + k] as f64 * q[base + k]);
+                    core::array::from_fn(|k| n[base + k] as f64 * (q[base + k] + add).min(1.0));
                 let cap: [u64; N_SEX * N_EDU] = core::array::from_fn(|k| n[base + k]);
                 for (k, d) in hamilton(&exact, &cap).into_iter().enumerate() {
                     n[base + k] -= d;
