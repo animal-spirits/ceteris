@@ -99,6 +99,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(220, "demography", |w, ctx| demography(w, ctx.tick)),
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
+        def(229, "settlement", |w, _| settlement(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -1968,6 +1969,29 @@ pub fn migration(w: &mut EconWorld, tick: u32) {
     w.pop_drift = w
         .pop_drift
         .saturating_add(i64::try_from(drift).unwrap_or(i64::MAX));
+}
+
+/// System 229 (`specs/pop/SPEC.md`, P4 D3): monthly settlement class step after migration. Class
+/// counts follow the cohort totals per province; classes only trade persons among themselves.
+/// A no-op when settlement is off.
+pub fn settlement(w: &mut EconWorld) {
+    let (Some((_, cohorts)), Some(s)) = (&w.pop, &mut w.settlement) else {
+        return;
+    };
+    let totals: Vec<u64> = (0..cohorts.n_provinces())
+        .map(|p| {
+            cohorts.counts()[p * crate::pop::CELLS..(p + 1) * crate::pop::CELLS]
+                .iter()
+                .sum()
+        })
+        .collect();
+    s.sync_totals(&totals);
+    let wage: Vec<f64> = w
+        .wage
+        .iter()
+        .flat_map(|&x| [x; crate::settlement::N_CLASS])
+        .collect();
+    s.step(&wage);
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also

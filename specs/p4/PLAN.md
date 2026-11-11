@@ -88,7 +88,7 @@ P3's constraints carry over (determinism at 1, 3 and all threads with `fixed_sum
 
 - [ ] **D1** Internal migration: dynamic discrete choice over provinces on real wages net of bilateral costs. Acceptance (#210): 2000-2010 bilateral stocks within tolerance.
 - [ ] **D2** International admission caps Q_d, proportional rationing with diaspora weights, irregular share z. Tests: `infinite_caps_equal_the_pure_logit`; `admissions_never_exceed_the_cap_and_shares_sum_to_one`; PPML pseudo-R2 against Abel and Cohen reported.
-- [~] **D3** (kernel in `settlement.rs`, not in the tick; the out-of-sample urban-share and Zipf tests wait on GHSL class shares and the tick wiring) Settlement classes per province (rural, town, city), urban growth with agglomeration and congestion, slum share. Tests: `settlements_off_equals_status_quo`; `urban_shares_2000_2020_out_of_sample_after_2010`; `city_sizes_stay_close_to_zipf_in_ensembles`.
+- [~] **D3** (kernel in `settlement.rs`, in the tick as system 229 behind `EconWorld::with_settlement`, off by default, snapshot section after migration; `settlement_off_equals_status_quo` passes in `world.rs`; the out-of-sample urban-share and Zipf tests wait on GHSL class shares) Settlement classes per province (rural, town, city), urban growth with agglomeration and congestion, slum share. Tests: `settlements_off_equals_status_quo`; `urban_shares_2000_2020_out_of_sample_after_2010`; `city_sizes_stay_close_to_zipf_in_ensembles`.
 
 ## Branch E: `p4/structural-change` (ADR 0031)
 
