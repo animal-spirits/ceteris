@@ -27,8 +27,9 @@ Option 2.
   already runs Linux. Windows runs only the cross-platform golden test of ADR 0128.
 - **Channel:** GitHub Releases (the repository is public from 1.0, ADR 0218) and a Homebrew cask
   for the app and a formula for the CLI.
-- **Updates:** the app asks GitHub Releases for the latest version at launch and shows a notice;
-  it never installs by itself. The check can be switched off and sends nothing but the request.
+- **Updates:** the app makes no network request to check for updates. Steam delivers them
+  (infrastructure gaps report 2026-11-10, #457). Users of the GitHub Releases or cask builds update
+  by hand.
 - **Minimum:** Apple silicon, 16 GB, macOS from the current version minus two. Below 18 GB the
   defaults drop to 8 ensemble lanes and a longer history interval (ADR 0212).
 - **Signing:** the owner's Apple Developer account; the yearly fee is the project's one fixed cost
@@ -36,7 +37,7 @@ Option 2.
 
 ## Migration
 
-- R: release workflow (build, sign, notarize, checksums, cask, formula), update notice.
+- R: release workflow (build, sign, notarize, checksums, cask, formula), no update check (Steam updates).
 
 ## Tests
 
