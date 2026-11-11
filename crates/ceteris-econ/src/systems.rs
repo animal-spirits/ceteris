@@ -98,6 +98,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         }),
         def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
         def(220, "demography", |w, ctx| demography(w, ctx.tick)),
+        def(225, "wage_grid", |w, _| wage_grid(w)),
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(229, "settlement", |w, _| settlement(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
@@ -1973,6 +1974,14 @@ pub fn migration(w: &mut EconWorld, tick: u32) {
     w.pop_drift = w
         .pop_drift
         .saturating_add(i64::try_from(drift).unwrap_or(i64::MAX));
+}
+
+/// System 225 (`specs/pop/SPEC.md`, P4 C1 and C2): monthly split of the province wages over
+/// sectors and skills and sector switching on them. A no-op when the wage grid is off.
+pub fn wage_grid(w: &mut EconWorld) {
+    if let Some(g) = &mut w.wage_grid {
+        g.step(&w.wage);
+    }
 }
 
 /// System 229 (`specs/pop/SPEC.md`, P4 D3): monthly settlement class step after migration. Class

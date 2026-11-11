@@ -81,8 +81,8 @@ P3's constraints carry over (determinism at 1, 3 and all threads with `fixed_sum
 
 ## Branch C: `p4/skills` (ADR 0105)
 
-- [~] **C1** (kernel in `skills.rs`, not in the tick; waits on the (province, sector, skill) wage state, the per-country premium in the pack and register codes for s and alpha) Two skill groups with a CES (s = 1.6, alpha calibrated per country to the 2000 skill premium); wage state widens to (province, sector, skill). Test: `skills_off_equals_status_quo`; `skill_premium_matches_2000_data`.
-- [~] **C2** (kernel in `sectors.rs`, not in the tick; waits on the (province, sector, skill) wage state and register codes for m and omega_s) Sector switching by logit with monthly share m and dispersion omega_s from the literature. Tests: `switching_off_equals_status_quo`; `import_shock_leaves_persistent_local_losses` (China-shock sign).
+- [~] **C1** (kernel in `skills.rs`; the (province, sector, skill) wage grid is in the tick as system 225 behind `EconWorld::with_wage_grid`, off by default, a side state beside the province wage with a tagged last snapshot section; the per-country premium in the pack and register codes for s and alpha wait) Two skill groups with a CES (s = 1.6, alpha calibrated per country to the 2000 skill premium); wage state widens to (province, sector, skill). Test: `skills_off_equals_status_quo`; `skill_premium_matches_2000_data`.
+- [~] **C2** (kernel in `sectors.rs`; switching runs per skill on the wage grid in system 225, off by default; register codes for m and omega_s wait; the grid does not yet feed back into E1, so `import_shock_leaves_persistent_local_losses` waits) Sector switching by logit with monthly share m and dispersion omega_s from the literature. Tests: `switching_off_equals_status_quo`; `import_shock_leaves_persistent_local_losses` (China-shock sign).
 
 ## Branch D: `p4/migration` (ADRs 0109, 0074)
 
