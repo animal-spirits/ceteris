@@ -333,4 +333,7 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0343 | [Under the E3 package the money anchor reads a chained index over cells that trade, not the fixed-weight world index](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 12.2, 17 |
 | 0344 | [Under the E3 package traded input orders are limited to cash plus a credit line of one loss cap (P148), no new parameter, and producers are paid only for units sold](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 9, 17 |
 | 0345 | [The E3 fix is one change, `PriceAnchor::e3`, in anchor mode only, off by default; RFC 0341 D1's stock term keeps kappa_s = 0](../rfcs/0342-anchor-index-over-traded-cells.md) | 8.2, 21.1 |
+| 0346 | [Simulator code under AGPL-3.0-or-later, with commercial licences from the owner (supersedes MIT OR Apache-2.0)](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 22.1 |
+| 0347 | [2.0 game in a separate repository, source-available under a non-commercial licence; art all rights reserved](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 23 |
+| 0348 | [Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md) | 19.3, 22.1 |
 <!-- rows:end -->

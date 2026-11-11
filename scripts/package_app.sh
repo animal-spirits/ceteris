@@ -20,7 +20,7 @@ cargo build --release --locked --manifest-path app/Cargo.toml "$@"
 cargo build --release --locked --bin ceteris
 cp app/target/release/ceteris-app "$out/"
 cp target/release/ceteris "$out/"
-cp LICENSE-MIT LICENSE-APACHE "$out/"
+cp LICENSE "$out/"
 
 (cd "$out" && if command -v sha256sum >/dev/null; then sha256sum *; else shasum -a 256 *; fi > SHA256SUMS)
 echo "$out"
