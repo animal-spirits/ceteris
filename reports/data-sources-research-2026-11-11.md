@@ -194,3 +194,13 @@ request); OECD ICIO/AMNE under the 2024 open model; ADB MRIO exact grid; GREG, S
 
 One issue per adopted source (manifest entry, fetch entry, `pack check-sources` profile). Suggested
 order: EIA international, FAOSTAT (after the clause decision), MAP, ADB MRIO, PRIMAP-hist, HMD.
+
+## Decisions (Antonio, 2026-11-11)
+
+- FAOSTAT and `fao-ffpi`: ship in all packs; the FAO no-promotion clause is not treated as
+  blocking a paid build; no email to FAO (#498).
+- Energy: EIA International Energy Statistics calibrates in all packs; IEA balances stay held-out
+  and user-fetched (#499).
+- IO: ADB MRIO added as a held-out check alongside EXIOBASE, which stays (#500).
+- Issues opened for the other six: MAP #501, HMD #502, PRIMAP-hist #503, ICP #504, Ember #505,
+  GLC_FCS30D #506.
