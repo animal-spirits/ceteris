@@ -2326,7 +2326,7 @@ policy = "fetch"
 reason = "CC BY 4.0 on the Zenodo record; replaces IEA-EDGAR CO2 (CC BY-NC-ND 4.0), which must never enter a release pack (#503)"
 checked = 2026-11-11
 confidence = "medium"
-notes = "Excludes international aviation and shipping; LULUCF only in the no-rounding file. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the record: cloud host cannot reach zenodo.org. Fetch file name and hash unpinned; confirm both at pack build."
+notes = "Excludes international aviation and shipping; LULUCF only in the no-rounding file. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the record: cloud host cannot reach zenodo.org. Fetch file name and hash pinned 2026-11-11 by `pack fetch --record` (Zenodo MD5 a9d2d3958211b90885d149a89c27f10e matched)."
 
 [[source]]
 id = "ember-yearly"
