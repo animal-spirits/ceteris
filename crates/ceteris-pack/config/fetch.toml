@@ -4642,3 +4642,9 @@ source = "faostat"
 name = "Inputs_LandUse_E_All_Data_(Normalized).zip"
 optional = true
 url = "https://bulks-faostat.fao.org/inputs/Inputs_LandUse_E_All_Data_(Normalized).zip"
+
+[[file]]
+source = "primap-hist"
+name = "Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_09-Sep-2024.csv"
+optional = true
+url = "https://zenodo.org/api/records/13752654/files/Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_09-Sep-2024.csv/content"
