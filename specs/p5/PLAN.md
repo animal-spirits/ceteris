@@ -69,7 +69,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 **Interfaces:** sector accounts for households, enterprises, banks, government, central bank and rest of world; balance-sheet matrix and transactions-flow matrix computed every tick; initial sheets from national financial accounts where available and imputed elsewhere.
 
-- [ ] Failing tests: `matrices_sum_to_zero_across_rows_and_columns_every_tick`; `agent_claims_aggregate_to_sector_matrices_exactly`; `sfc_off_equals_status_quo`. Implement, commit.
+- [~] (kernel in `sfc.rs`, not in the tick; agent claims, flow rows and columns close in unit tests; `sfc_off_equals_status_quo`, the national-accounts initial sheets and the tick wiring wait on Branch A2's data and the system ID check) Failing tests: `matrices_sum_to_zero_across_rows_and_columns_every_tick`; `agent_claims_aggregate_to_sector_matrices_exactly`; `sfc_off_equals_status_quo`. Implement, commit.
 
 ### Task A2: Who-to-whom holdings
 
