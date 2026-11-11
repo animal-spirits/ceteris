@@ -24,6 +24,7 @@ pub mod pop;
 pub mod production;
 pub mod sectors;
 pub mod settlement;
+pub mod sfc;
 pub mod skills;
 pub mod structural;
 pub mod synthetic;
