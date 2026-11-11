@@ -101,6 +101,15 @@ impl<'a> Decoder<'a> {
         self.pos == self.buf.len()
     }
 
+    /// The next length prefix, without consuming it.
+    pub fn peek_count(&self) -> Result<usize, DecodeError> {
+        let bytes = self
+            .buf
+            .get(self.pos..self.pos + 4)
+            .ok_or_else(|| DecodeError(format!("truncated at byte {}", self.pos)))?;
+        Ok(u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
+    }
+
     pub fn finish(self) -> Result<(), DecodeError> {
         if self.pos == self.buf.len() {
             Ok(())

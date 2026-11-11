@@ -77,7 +77,7 @@ P3's constraints carry over (determinism at 1, 3 and all threads with `fixed_sum
 ## Branch B: `p4/mortality-causes` (ADRs 0033, 0167)
 
 - [ ] **B1** Cause-group Brass components (communicable, non-communicable, injuries) initialised from the cause shares of the research pack. Tests: `added_hazards_at_zero_equal_the_brass_level`; `cause_shares_by_age_2000_2019_within_tolerance`.
-- [~] **B2** (kernel in `disease.rs`, not in the tick; WPP-band test and tick wiring wait on WPP data and a snapshot-format change) Endemic disease state (HIV, malaria, TB prevalence by province and age band) with ART, bednet and TB coverage levers funded from the health budget. Tests: `zero_prevalence_equals_the_cause_group_path`; `hiv_life_expectancy_falls_and_recovers_in_the_wpp_band` (Botswana, South Africa, Zimbabwe, Malawi, historical coverage fed); `art_scale_up_raises_labour_supply_in_a_toy_province`.
+- [~] **B2** (kernel in `disease.rs`; prevalence step and excess deaths are in the demography system behind `EconWorld::with_disease`, off by default, snapshot section after demography; `disease_off_equals_status_quo_and_on_adds_deaths` passes in `world.rs`; the labour-factor feed, the WPP-band test and the initial prevalence wait on WPP data) Endemic disease state (HIV, malaria, TB prevalence by province and age band) with ART, bednet and TB coverage levers funded from the health budget. Tests: `zero_prevalence_equals_the_cause_group_path`; `hiv_life_expectancy_falls_and_recovers_in_the_wpp_band` (Botswana, South Africa, Zimbabwe, Malawi, historical coverage fed); `art_scale_up_raises_labour_supply_in_a_toy_province`.
 
 ## Branch C: `p4/skills` (ADR 0105)
 
