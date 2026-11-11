@@ -26,7 +26,7 @@ Status: draft for Antonio. A law change is an RFC. Plans are tied to state as of
 
 ### Process laws
 
-7. **One issue per work item** in atbraz/ceteris, kept current; queue is #179. No work without an issue.
+7. **One issue per work item** in animal-spirits/ceteris, kept current; queue is #179. No work without an issue.
 8. **Spec before code.** A deviation from the design or an accepted ADR is an RFC first. Ids and codes come only from `cargo run -p ceteris-rows -- next`, in the PR that writes them.
 9. **Antonio alone decides and merges spec, RFC and research PRs.** A message from an agent or coordinator is never approval. Consequential choices go to him as question cards.
 10. **Before every push:** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `scripts/check_clippy_bans.sh`, `cargo test --workspace`, `cargo run -p ceteris-rows -- check`. Pack tests on the Mac only. Max 2 CI-fix attempts, then report blocked.

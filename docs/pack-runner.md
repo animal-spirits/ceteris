@@ -10,7 +10,7 @@ and on demand from the Actions tab (Run workflow). It runs on a second self-host
    ```
    mkdir -p ~/actions-runner/pack-gate && cd ~/actions-runner/pack-gate
    # unpack the same runner tarball used for ~/actions-runner/ceteris, then:
-   ./config.sh --url https://github.com/atbraz/ceteris --token <TOKEN> \
+   ./config.sh --url https://github.com/animal-spirits/ceteris --token <TOKEN> \
      --name mbp-ceteris-pack --labels pack-gate --unattended
    echo 'CETERIS_PACK=/Users/antonio/Code/Projects/ceteris/data/packs/2000' >> .env
    ./svc.sh install && ./svc.sh start
