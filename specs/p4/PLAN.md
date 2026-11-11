@@ -92,7 +92,7 @@ P3's constraints carry over (determinism at 1, 3 and all threads with `fixed_sum
 
 ## Branch E: `p4/structural-change` (ADR 0031)
 
-- [ ] Sector-class catch-up factor and informal-formal transitions scaled by enforcement capacity (register entries as in ADR 0031, provisional P60 and P61; codes from `next-code P`). Tests: `class_factors_one_equal_status_quo`; `manufacturing_converges_while_aggregate_does_not_2000_2024`; `enforcement_raises_formal_employment_in_a_toy_state`. Depends on ADR 0108's catch-up term (#173), so this branch waits for it or builds the factor with catch-up fixed at zero.
+- [~] (kernels in `structural.rs`, not in the tick; waits on ADR 0108's catch-up term, the pack's enforcement capacity and register codes P162, P163; the 2000-2024 cross-section test waits on ETD/GGDC data) Sector-class catch-up factor and informal-formal transitions scaled by enforcement capacity (register entries as in ADR 0031, provisional P60 and P61; codes from `next-code P`). Tests: `class_factors_one_equal_status_quo`; `manufacturing_converges_while_aggregate_does_not_2000_2024`; `enforcement_raises_formal_employment_in_a_toy_state`. Depends on ADR 0108's catch-up term (#173), so this branch waits for it or builds the factor with catch-up fixed at zero.
 
 ## Branch G: `p4/distance-friction` (ADR 0272, #212)
 
