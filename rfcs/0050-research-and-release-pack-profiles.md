@@ -1,6 +1,6 @@
 # 0050. Research and release pack profiles, and sources to audit
 
-Status: proposed; amended per ADR 0113 (2026-10-29)
+Status: accepted (owner, 2026-11-11); amended per ADR 0113 (2026-10-29)
 Date: 2026-10-24
 Design sections: 16, 16.1, 2.5, 15.4, 22
 Phase: pipeline, now
