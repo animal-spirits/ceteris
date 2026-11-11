@@ -1,8 +1,13 @@
 //! Endemic disease state (P4 Branch B2, ADR 0167, `specs/pop/SPEC.md`): prevalence by
 //! (province, age band, disease) with treatment and prevention coverage levers. Prevalence feeds an
-//! additive monthly death probability and a labour-loss factor; the kernel is not yet in the tick.
+//! additive monthly death probability and a labour-loss factor. Prevalence and mortality are in the
+//! tick through `demography` (`EconWorld::with_disease`, off by default); the labour factor is not.
 
 use crate::pop::{Cohorts, N_AGE, N_EDU, N_SEX};
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+/// Leading word of the snapshot section; no length prefix of another section reaches it.
+pub const SNAPSHOT_TAG: u32 = 0xD15E_A5E0;
 
 /// HIV, malaria, TB.
 pub const N_DISEASE: usize = 3;
@@ -61,6 +66,60 @@ impl Disease {
         self.prevalence.len() / (N_AGE * N_DISEASE)
     }
 
+    pub fn encode(&self, cov: &[[f64; N_DISEASE]], e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        e.f64s(
+            &self
+                .params
+                .iter()
+                .flat_map(|k| {
+                    [
+                        k.incidence,
+                        k.prevention,
+                        k.exit,
+                        k.treat_exit,
+                        k.excess_q,
+                        k.treat_eff,
+                        k.labour_loss,
+                    ]
+                })
+                .collect::<Vec<_>>(),
+        );
+        e.f64s(&self.prevalence);
+        e.f64s(&cov.concat());
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<(Self, Coverage), DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("disease section tag".into()));
+        }
+        let (par, prevalence, cov) = (d.f64s()?, d.f64s()?, d.f64s()?);
+        let n = prevalence.len() / (N_AGE * N_DISEASE);
+        if par.len() != 7 * N_DISEASE
+            || prevalence.len() != n * N_AGE * N_DISEASE
+            || cov.len() != n * N_DISEASE
+        {
+            return Err(DecodeError("disease section does not fit".into()));
+        }
+        let params = core::array::from_fn(|i| {
+            let k = &par[i * 7..i * 7 + 7];
+            DiseaseParams {
+                incidence: k[0],
+                prevention: k[1],
+                exit: k[2],
+                treat_exit: k[3],
+                excess_q: k[4],
+                treat_eff: k[5],
+                labour_loss: k[6],
+            }
+        });
+        let cov = cov
+            .chunks(N_DISEASE)
+            .map(|c| core::array::from_fn(|i| c[i]))
+            .collect();
+        Ok((Self { params, prevalence }, cov))
+    }
+
     /// One month of incidence and exit under coverage `cov`.
     pub fn step(&mut self, cov: &[[f64; N_DISEASE]]) {
         for (i, x) in self.prevalence.iter_mut().enumerate() {
@@ -115,11 +174,11 @@ impl Disease {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::pop::{Brass, toy};
 
-    fn params() -> [DiseaseParams; N_DISEASE] {
+    pub(crate) fn params() -> [DiseaseParams; N_DISEASE] {
         [
             DiseaseParams {
                 incidence: 0.002,

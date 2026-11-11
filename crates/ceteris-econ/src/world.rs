@@ -25,6 +25,7 @@ use crate::calibration::Steady;
 use crate::demand::{
     PiglAt, PiglWeights, PopAt, fixed_shares, invert_pigl_pops, pigl, within_sigma,
 };
+use crate::disease::{Coverage, Disease};
 use crate::flows::FlowWindow;
 use crate::inputs::{EconInputs, network_digest};
 use crate::migration::Migration;
@@ -707,6 +708,9 @@ pub struct EconWorld {
     /// Settlement classes per province (P4 D3, system 229); needs `migration`. `None` is off and
     /// adds nothing to the snapshot.
     pub settlement: Option<Settlement>,
+    /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
+    /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
+    pub disease: Option<(Disease, Coverage)>,
     /// Persons the last demography step created or lost beyond births less deaths; zero
     /// unless conservation broke. Not state.
     pub(crate) pop_drift: i64,
@@ -1356,6 +1360,17 @@ impl EconWorld {
         self
     }
 
+    /// Switches endemic disease on, with `coverage` per province held until edited; requires
+    /// population, whose snapshot section it follows.
+    pub fn with_disease(mut self, disease: Disease, coverage: Coverage) -> EconWorld {
+        let n = self.inputs.n_provinces();
+        assert!(self.pop.is_some(), "disease needs population");
+        assert_eq!(disease.n_provinces(), n);
+        assert_eq!(coverage.len(), n);
+        self.disease = Some((disease, coverage));
+        self
+    }
+
     /// Switches settlement classes (system 229) on; requires population and migration, whose
     /// snapshot section it follows.
     pub fn with_settlement(mut self, settlement: Settlement) -> EconWorld {
@@ -1443,6 +1458,7 @@ impl EconWorld {
             pop: None,
             migration: None,
             settlement: None,
+            disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
             ledger,
@@ -2361,6 +2377,9 @@ impl Encode for EconWorld {
         e.f64s(&self.smooth);
         if let Some((demography, cohorts)) = &self.pop {
             demography.encode(cohorts, e);
+            if let Some((dis, cov)) = &self.disease {
+                dis.encode(cov, e);
+            }
             if let Some(m) = &self.migration {
                 m.encode(e);
                 if let Some(s) = &self.settlement {
@@ -2717,6 +2736,14 @@ impl State for EconWorld {
         } else {
             Some(Demography::decode(d)?)
         };
+        let disease = if pop.is_some()
+            && !d.at_end()
+            && d.peek_count()? == crate::disease::SNAPSHOT_TAG as usize
+        {
+            Some(Disease::decode(d)?)
+        } else {
+            None
+        };
         let migration = if pop.is_some() && !d.at_end() {
             Some(Migration::decode(d)?)
         } else {
@@ -2790,6 +2817,7 @@ impl State for EconWorld {
             pop,
             migration,
             settlement,
+            disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
@@ -3229,6 +3257,44 @@ mod tests {
         let (bytes, back) = round_trip(w);
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.pop, w.pop);
+    }
+
+    fn disease_sim(incidence: f64) -> Sim<EconWorld> {
+        use crate::disease::{N_DISEASE, tests::params};
+        let mut sim = population_sim();
+        let np = sim.world().inputs().n_provinces();
+        let mut par = params();
+        par.iter_mut().for_each(|k| k.incidence = incidence);
+        let mut dis = Disease::zero(np, par);
+        dis.prevalence.fill(0.02);
+        let w = std::mem::replace(sim.world_mut(), world());
+        *sim.world_mut() = EconWorld {
+            disease: Some((dis, vec![[0.3; N_DISEASE]; np])),
+            ..w
+        };
+        sim
+    }
+
+    /// With disease off the population run is unchanged; on, prevalence kills beyond the cause
+    /// group path, conservation holds and the section survives a snapshot.
+    #[test]
+    fn disease_off_equals_status_quo_and_on_adds_deaths() {
+        let mut off = population_sim();
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let mut on = disease_sim(0.002);
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let total = |s: &Sim<EconWorld>| s.world().pop.as_ref().unwrap().1.total();
+        assert!(total(&on) < total(&off));
+        let (dis, _) = on.world().disease.as_ref().unwrap();
+        assert!(dis.prevalence.iter().any(|&x| x != 0.02));
+        let (bytes, back) = round_trip(on.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.disease, on.world().disease);
+
+        let mut none = disease_sim(0.002);
+        none.world_mut().disease = None;
+        none.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(none.state_hash(), off.state_hash());
     }
 
     fn migration_sim(cap: u64) -> Sim<EconWorld> {

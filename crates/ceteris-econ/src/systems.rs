@@ -1948,7 +1948,11 @@ pub fn demography(w: &mut EconWorld, tick: u32) {
         return;
     };
     let before = cohorts.total();
-    let flows = d.step(cohorts, tick);
+    let extra = w.disease.as_ref().map(|(dis, cov)| dis.excess_q(cov));
+    let flows = d.step_with(cohorts, tick, extra.as_deref());
+    if let Some((dis, cov)) = &mut w.disease {
+        dis.step(cov);
+    }
     let expected = i128::from(before) + i128::from(flows.births) - i128::from(flows.deaths);
     w.pop_drift = i64::try_from(i128::from(cohorts.total()) - expected).unwrap_or(i64::MAX);
 }
