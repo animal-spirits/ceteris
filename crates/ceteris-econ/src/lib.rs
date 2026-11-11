@@ -23,6 +23,7 @@ pub mod pop;
 pub mod production;
 pub mod synthetic;
 pub mod systems;
+pub mod toy;
 pub mod wealth;
 pub mod world;
 
