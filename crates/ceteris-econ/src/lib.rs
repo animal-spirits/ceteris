@@ -33,6 +33,7 @@ pub mod sectors;
 pub mod settlement;
 pub mod sfc;
 pub mod skills;
+pub mod state_cells;
 pub mod structural;
 pub mod synthetic;
 pub mod systems;
