@@ -4616,38 +4616,50 @@ url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/
 [[file]]
 source = "faostat"
 name = "Production_Crops_Livestock_E_All_Data_(Normalized).zip"
+sha256 = "c5835418c18f9322e7decbd6800f93a216eaae3cdfa31acb08f0518c0c6d6853"
+bytes = 33921825
 optional = true
 url = "https://bulks-faostat.fao.org/production/Production_Crops_Livestock_E_All_Data_(Normalized).zip"
 
 [[file]]
 source = "faostat"
 name = "FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip"
+sha256 = "925bac969ea3904eca1a33f0b3d7ea4416bbac79d14db50b0db43cd2a77a3adb"
+bytes = 72467143
 optional = true
-url = "https://bulks-faostat.fao.org/food_balances/FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip"
+url = "https://bulks-faostat.fao.org/production/FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip"
 
 [[file]]
 source = "faostat"
 name = "FoodBalanceSheets_E_All_Data_(Normalized).zip"
+sha256 = "26200855ed5da3d0805e34219124e241d0e0bc6959d0995ebc77a10dd84cbaf1"
+bytes = 54840802
 optional = true
-url = "https://bulks-faostat.fao.org/food_balances/FoodBalanceSheets_E_All_Data_(Normalized).zip"
+url = "https://bulks-faostat.fao.org/production/FoodBalanceSheets_E_All_Data_(Normalized).zip"
 
 [[file]]
 source = "faostat"
 name = "Prices_E_All_Data_(Normalized).zip"
+sha256 = "327f70a2230032d3966d6e9583ec5caf0e9416aa9fd91b444e02f6b8665c984d"
+bytes = 11684078
 optional = true
-url = "https://bulks-faostat.fao.org/prices/Prices_E_All_Data_(Normalized).zip"
+url = "https://bulks-faostat.fao.org/production/Prices_E_All_Data_(Normalized).zip"
 
 [[file]]
 source = "faostat"
 name = "Inputs_LandUse_E_All_Data_(Normalized).zip"
+sha256 = "39b739fbfb694971207a2efa572c41e8de2386fc5cb33caaf2a188e9c9a6ca3f"
+bytes = 2970716
 optional = true
-url = "https://bulks-faostat.fao.org/inputs/Inputs_LandUse_E_All_Data_(Normalized).zip"
+url = "https://bulks-faostat.fao.org/production/Inputs_LandUse_E_All_Data_(Normalized).zip"
 
 [[file]]
 source = "primap-hist"
-name = "Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_09-Sep-2024.csv"
+name = "Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_13-Sep-2024.csv"
+sha256 = "54c6d6c2983e8ffd9cb34d2ae7259877f74bb17de52ce135489c19f3c8d51a72"
+bytes = 131945102
 optional = true
-url = "https://zenodo.org/api/records/13752654/files/Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_09-Sep-2024.csv/content"
+url = "https://zenodo.org/api/records/13752654/files/Guetschow_et_al_2024a-PRIMAP-hist_v2.6_final_no_rounding_13-Sep-2024.csv/content"
 
 [[file]]
 source = "ember-yearly"
