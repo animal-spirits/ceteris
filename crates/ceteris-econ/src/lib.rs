@@ -26,6 +26,7 @@ pub mod pack;
 pub mod params;
 pub mod pop;
 pub mod production;
+pub mod regime_hazard;
 pub mod sectors;
 pub mod settlement;
 pub mod sfc;
