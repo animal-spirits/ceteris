@@ -14,7 +14,7 @@
 
 | Issue | Decision |
 |---|---|
-| #178 | Licence MIT OR Apache-2.0 (files are in the repo). |
+| #178 | Licence AGPL-3.0-or-later with commercial licences from the owner (ADR 0346); CLA for outside contributions (ADR 0348). |
 | #230 | `[project] distribution` in `sources.toml` flips to open in the release PR, after the NC audit below. |
 | #261 | Trademark registration deferred past 1.0. A fork-rename policy is therefore not a 1.0 item. |
 | #262, #263 | 1.0 is free on Steam; the paid build is 2.0 at 14.99 USD; no Early Access. |

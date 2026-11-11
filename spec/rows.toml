@@ -1640,3 +1640,18 @@ sections = "8.2, 9, 17"
 rows = "0345"
 topic = "[The E3 fix is one change, `PriceAnchor::e3`, in anchor mode only, off by default; RFC 0341 D1's stock term keeps kappa_s = 0](../rfcs/0342-anchor-index-over-traded-cells.md)"
 sections = "8.2, 21.1"
+
+[[entry]]
+rows = "0346"
+topic = "[Simulator code under AGPL-3.0-or-later, with commercial licences from the owner (supersedes MIT OR Apache-2.0)](../rfcs/0343-licences-for-simulator-and-game.md)"
+sections = "19.1, 22.1"
+
+[[entry]]
+rows = "0347"
+topic = "[2.0 game in a separate repository, source-available under a non-commercial licence; art all rights reserved](../rfcs/0343-licences-for-simulator-and-game.md)"
+sections = "19.1, 23"
+
+[[entry]]
+rows = "0348"
+topic = "[Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md)"
+sections = "19.3, 22.1"

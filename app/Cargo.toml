@@ -4,7 +4,7 @@ description = "Ceteris Paribus native desktop app: Slint panels over a wgpu map 
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.99"
-license = "MIT OR Apache-2.0"
+license = "AGPL-3.0-or-later"
 publish = false
 
 # Its own workspace: Slint and wgpu stay out of the core's lockfile, CI and licence check.
