@@ -38,6 +38,7 @@ pub mod structural;
 pub mod synthetic;
 pub mod systems;
 pub mod toy;
+pub mod wagegrid;
 pub mod wealth;
 pub mod world;
 
