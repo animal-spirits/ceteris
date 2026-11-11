@@ -1,0 +1,235 @@
+//! Capital formation pipeline for one (cell, asset class) (P5 Branch D1, ADR 0204, DESIGN 7.4).
+//! An order waits out the permit lag, then passes `k` Erlang stages of mean total time `T`:
+//! `W[s](t+1) = W[s](t) + flow[s-1](t) - flow[s](t)`, `flow[s] = (k/T) W[s] fill`,
+//! `K(t+1) = (1-delta) K(t) + flow[k-1](t)`. Each stage does `1/k` of the work, paid in goods
+//! at the order's locked input mix. Orders enter the first stage the tick they leave the permit
+//! queue, so `k = 1, T = 1, lag = 0` is the instant rule. The kernel is not yet in the tick;
+//! paused work-in-progress depreciation, cash calls and write-offs wait on Branch F.
+
+use std::collections::VecDeque;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Order {
+    pub size: f64,
+    /// Goods per unit of capital, fixed when the order is placed.
+    pub mix: Vec<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Pipeline {
+    k: usize,
+    mean_time: f64,
+    delta: f64,
+    capital: f64,
+    stages: Vec<f64>,
+    stage_mix: Vec<Vec<f64>>,
+    permit: VecDeque<Option<Order>>,
+}
+
+impl Pipeline {
+    pub fn new(
+        k: usize,
+        mean_time: f64,
+        delta: f64,
+        permit_lag: usize,
+        capital: f64,
+        goods: usize,
+    ) -> Self {
+        Self {
+            k,
+            mean_time,
+            delta,
+            capital,
+            stages: vec![0.0; k],
+            stage_mix: vec![vec![0.0; goods]; k],
+            permit: (0..permit_lag).map(|_| None).collect(),
+        }
+    }
+
+    /// The data state of ADR 0089: work in progress per stage is the fixed point of the step
+    /// (the order joins stage 0 before it flows: `I/r` per later stage, `I(1-r)/r` in stage 0 with
+    /// `r = k/T`), and capital replaces its own depreciation.
+    pub fn steady_state(
+        k: usize,
+        mean_time: f64,
+        delta: f64,
+        permit_lag: usize,
+        investment: f64,
+        mix: &[f64],
+    ) -> Self {
+        let mut p = Self::new(
+            k,
+            mean_time,
+            delta,
+            permit_lag,
+            investment / delta,
+            mix.len(),
+        );
+        let r = k as f64 / mean_time;
+        p.stages.fill(investment / r);
+        p.stages[0] *= 1.0 - r;
+        p.stage_mix.fill(mix.to_vec());
+        p.permit = (0..permit_lag)
+            .map(|_| {
+                Some(Order {
+                    size: investment,
+                    mix: mix.to_vec(),
+                })
+            })
+            .collect();
+        p
+    }
+
+    pub fn capital(&self) -> f64 {
+        self.capital
+    }
+
+    pub fn stage_wip(&self) -> &[f64] {
+        &self.stages
+    }
+
+    /// Capital-equivalent work already done on units still in the pipeline.
+    pub fn wip_value(&self) -> f64 {
+        let k = self.k as f64;
+        self.stages
+            .iter()
+            .enumerate()
+            .map(|(s, w)| w * s as f64 / k)
+            .sum()
+    }
+
+    #[cfg(test)]
+    fn permit_size(&self) -> f64 {
+        self.permit.iter().flatten().map(|o| o.size).sum()
+    }
+
+    /// Goods wanted this tick, per good, if every stage progressed in full.
+    pub fn goods_demand(&self, out: &mut [f64]) {
+        out.fill(0.0);
+        for (w, mix) in self.stages.iter().zip(&self.stage_mix) {
+            for (o, m) in out.iter_mut().zip(mix) {
+                *o += m * w / self.mean_time;
+            }
+        }
+    }
+
+    /// Advances one period with delivered share `fill` in `[0, 1]` and the new order, if any.
+    /// Returns the capital-equivalent work paid for this tick.
+    pub fn step(&mut self, fill: f64, order: Option<Order>) -> f64 {
+        let arriving = if self.permit.is_empty() {
+            order
+        } else {
+            self.permit.push_back(order);
+            self.permit.pop_front().flatten()
+        };
+        if let Some(o) = arriving {
+            let w = &mut self.stages[0];
+            for (m, n) in self.stage_mix[0].iter_mut().zip(&o.mix) {
+                *m = if *w + o.size > 0.0 {
+                    (*m * *w + n * o.size) / (*w + o.size)
+                } else {
+                    0.0
+                };
+            }
+            *w += o.size;
+        }
+        let rate = self.k as f64 / self.mean_time * fill;
+        let flows: Vec<f64> = self.stages.iter().map(|w| rate * w).collect();
+        let paid = flows.iter().sum::<f64>() / self.k as f64;
+        for s in (0..self.k).rev() {
+            self.stages[s] -= flows[s];
+            if s + 1 < self.k && flows[s] > 0.0 {
+                let w = self.stages[s + 1];
+                let total = w + flows[s];
+                for g in 0..self.stage_mix[s].len() {
+                    self.stage_mix[s + 1][g] =
+                        (self.stage_mix[s + 1][g] * w + self.stage_mix[s][g] * flows[s]) / total;
+                }
+                self.stages[s + 1] += flows[s];
+            }
+        }
+        self.capital = (1.0 - self.delta) * self.capital + flows[self.k - 1];
+        paid
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn order(size: f64, price_shift: f64) -> Order {
+        Order {
+            size,
+            mix: vec![0.6 + price_shift, 0.4 - price_shift],
+        }
+    }
+
+    #[test]
+    fn instant_orders_equal_the_instant_rule_bit_for_bit() {
+        let mut p = Pipeline::new(1, 1.0, 0.05, 0, 100.0, 2);
+        let mut k = 100.0_f64;
+        for t in 0..400 {
+            let size = 5.0 + (t % 7) as f64;
+            p.step(1.0, Some(order(size, 0.0)));
+            k = (1.0 - 0.05) * k + size;
+            assert_eq!(p.capital().to_bits(), k.to_bits());
+        }
+    }
+
+    #[test]
+    fn goods_and_money_close_with_work_in_progress() {
+        let mut p = Pipeline::new(3, 8.0, 0.0, 2, 0.0, 2);
+        let (mut ordered, mut paid) = (0.0, 0.0);
+        for t in 0..300 {
+            let size = if t < 150 { 2.0 + (t % 5) as f64 } else { 0.0 };
+            let fill = 0.5 + 0.5 * ((t * 37 % 11) as f64 / 10.0);
+            ordered += size;
+            paid += p.step(fill, (size > 0.0).then(|| order(size, 0.0)));
+            let queued = p.permit_size();
+            let in_stages: f64 = p.stage_wip().iter().sum();
+            assert!((ordered - (p.capital() + in_stages + queued)).abs() < 1e-9);
+            assert!((paid - (p.capital() + p.wip_value())).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn steady_state_2000_pipeline_holds_for_100_years() {
+        let mix = [0.6, 0.4];
+        let mut p = Pipeline::steady_state(3, 8.0, 0.02, 2, 10.0, &mix);
+        let (k0, w0) = (p.capital(), p.stage_wip().to_vec());
+        for _ in 0..400 {
+            p.step(
+                1.0,
+                Some(Order {
+                    size: 10.0,
+                    mix: mix.to_vec(),
+                }),
+            );
+        }
+        assert!((p.capital() - k0).abs() < 1e-9 * k0);
+        for (a, b) in p.stage_wip().iter().zip(&w0) {
+            assert!((a - b).abs() < 1e-9 * b);
+        }
+    }
+
+    #[test]
+    fn price_shock_after_order_keeps_pre_shock_coefficients() {
+        let mut p = Pipeline::new(3, 6.0, 0.0, 0, 0.0, 2);
+        p.step(1.0, Some(order(10.0, 0.0)));
+        p.step(1.0, None);
+        // Shock: the next order is chosen at new prices; units already beyond stage 1 are untouched.
+        p.step(1.0, Some(order(10.0, 0.2)));
+        assert_eq!(p.stage_mix[2], vec![0.6, 0.4]);
+        assert!(p.stage_mix[0][0] > 0.6);
+    }
+
+    #[test]
+    fn rationing_slows_progress_in_proportion() {
+        let mut full = Pipeline::new(2, 4.0, 0.0, 0, 0.0, 2);
+        let mut half = full.clone();
+        full.step(1.0, Some(order(8.0, 0.0)));
+        half.step(0.5, Some(order(8.0, 0.0)));
+        assert!((half.stage_wip()[0] - 8.0 * (1.0 - 0.5 * 0.5)).abs() < 1e-12);
+        assert!(full.stage_wip()[0] < half.stage_wip()[0]);
+    }
+}
