@@ -9,6 +9,7 @@ Linux x86_64, Linux aarch64 (RFC 0334, proposed). Windows waits for demand.
   host platform. Run it once per platform; the macOS build still needs signing and notarisation (#228).
 - `release/steam/*.vdf` are steamcmd build scripts with placeholder ids. The depot id placeholders
   and `APP_ID` are filled in after Steamworks assigns them.
+- `docs/pack-distribution.md` covers pack size measurement and the Zenodo archive step.
 - `docs/privacy.md` is the privacy statement draft the store page links to.
 
 Upload: `steamcmd +login <builder> +run_app_build release/steam/app_build.vdf +quit`.
