@@ -268,6 +268,24 @@ closed_source_only = true
 notes = "Before opening: derive suitability from isimip3a-ggcmi and mapspam-2000, or get FAO permission (copyright@fao.org)."
 
 [[source]]
+id = "faostat"
+name = "FAOSTAT crop and livestock production, food balances, producer prices, land use"
+provider = "FAO Statistics Division"
+version = "bulk download, release current at fetch"
+role = "Country agriculture output, food balances, producer prices, land use (7, 8); anchors MapSPAM shares"
+licence = "CC-BY-4.0"
+licence_url = "https://www.fao.org/contact-us/terms/db-terms-of-use"
+attribution = "FAO. FAOSTAT Statistical Database. Rome. Licence: CC BY 4.0. The FAO does not endorse this work"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "fetch"
+reason = "CC BY 4.0 per FAO database terms of use; shipped in all packs by Antonio's decision 2026-11-11 (#498)"
+checked = 2026-11-11
+confidence = "medium"
+notes = "Terms add: no use in conjunction with promotion of a commercial enterprise (treated as not blocking a paid build, no email to FAO, Antonio 2026-11-11); no implied endorsement; third-party datasets need the original provider's consent, so check each dataset's metadata before use. Pre-2010 food balances are the Historic file. Bulk files are replaced in place by FAO; pin hashes at pack build and record the release date."
+
+[[source]]
 id = "isimip3a-ggcmi"
 name = "ISIMIP3a GGCMI crop model outputs"
 provider = "ISIMIP / GGCMI"
@@ -1539,17 +1557,17 @@ name = "FAO Food Price Index"
 provider = "FAO"
 version = "1990 onward"
 role = "Food price validation (15.4)"
-licence = "LicenseRef-FAO-unclear"
+licence = "CC-BY-4.0"
 licence_url = "https://www.fao.org/contact-us/terms/db-terms-of-use"
-attribution = "FAO Food Price Index"
+attribution = "FAO. FAO Food Price Index. Licence: CC BY 4.0. The FAO does not endorse this work"
 commercial_use = true
 share_alike = false
 use = "validation"
 holdout = "H"
 policy = "fetch"
-reason = "May not be one of FAO's CC BY 4.0 Annex 1 databases; licence reading is weak"
-checked = 2026-10-23
-confidence = "low"
+reason = "FAO terms apply CC BY 4.0; same decision as faostat (Antonio 2026-11-11, #498): no-promotion clause not blocking, no email to FAO"
+checked = 2026-11-11
+confidence = "medium"
 
 [[source]]
 id = "pink-sheet"
