@@ -2345,3 +2345,22 @@ reason = "Ember states all content is released under CC BY 4.0; Ember compiles E
 checked = 2026-11-11
 confidence = "medium"
 notes = "Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the provider page: cloud host cannot reach ember-energy.org. Fetch URL, size and hash unpinned; confirm at pack build with `pack fetch --record`."
+
+[[source]]
+id = "icp-basic-headings"
+name = "ICP basic-heading PPPs, rounds 2011 (revised), 2017 and 2021"
+provider = "World Bank, International Comparison Program"
+version = "2011 revised, 2017, 2021 rounds"
+role = "Validation of category relative price levels in the S window (08); PWT stays the T0 source"
+licence = "CC-BY-4.0"
+licence_url = "https://datacatalog.worldbank.org/public-licenses#cc-by"
+attribution = "The World Bank: International Comparison Program. Licence: CC BY 4.0"
+commercial_use = true
+share_alike = false
+use = "validation"
+holdout = "R"
+policy = "fetch"
+reason = "CC BY 4.0 per the data catalogue (https://datacatalog.worldbank.org/search/dataset/0038406/international-comparison-program-2017); report-only because PWT draws on the same ICP benchmarks at aggregate level (#504). Held-out sources stay out of fetch.toml, so no fetch entry"
+checked = 2026-11-11
+confidence = "medium"
+notes = "176-179 economies, 44 headings; no 2000 round at heading level. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the catalogue: cloud host cannot reach datacatalog.worldbank.org. File names and hashes unpinned; confirm at first use."
