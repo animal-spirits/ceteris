@@ -26,6 +26,7 @@ pub mod sectors;
 pub mod settlement;
 pub mod synthetic;
 pub mod systems;
+pub mod toy;
 pub mod wealth;
 pub mod world;
 
