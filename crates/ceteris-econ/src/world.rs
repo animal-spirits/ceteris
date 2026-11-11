@@ -32,6 +32,7 @@ use crate::migration::Migration;
 use crate::params::{EconParams, Pigl, Technology, Transfers};
 use crate::pop::{Cohorts, Demography};
 use crate::settlement::Settlement;
+use crate::wagegrid::WageGrid;
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 /// Buyers per block of the good-major spending arrays (`Scratch::pop_spend_t`).
@@ -708,6 +709,9 @@ pub struct EconWorld {
     /// Settlement classes per province (P4 D3, system 229); needs `migration`. `None` is off and
     /// adds nothing to the snapshot.
     pub settlement: Option<Settlement>,
+    /// Wages per (province, sector, skill) beside `wage` (P4 C1/C2, system 225). `None` is off
+    /// and adds nothing to the snapshot; its section is tagged and last.
+    pub wage_grid: Option<WageGrid>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1380,6 +1384,13 @@ impl EconWorld {
         self
     }
 
+    /// Switches the wage grid (system 225) on; it needs no other section.
+    pub fn with_wage_grid(mut self, grid: WageGrid) -> EconWorld {
+        assert_eq!(grid.n_provinces(), self.inputs.n_provinces());
+        self.wage_grid = Some(grid);
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1458,6 +1469,7 @@ impl EconWorld {
             pop: None,
             migration: None,
             settlement: None,
+            wage_grid: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2387,7 +2399,14 @@ impl Encode for EconWorld {
                 }
             }
         }
+        if let Some(g) = &self.wage_grid {
+            g.encode(e);
+        }
     }
+}
+
+fn wage_grid_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::wagegrid::SNAPSHOT_TAG as usize)
 }
 
 fn expect_len(what: &str, got: usize, want: usize) -> Result<(), DecodeError> {
@@ -2731,7 +2750,7 @@ impl State for EconWorld {
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
-        let pop = if d.at_end() {
+        let pop = if d.at_end() || wage_grid_next(d) {
             None
         } else {
             Some(Demography::decode(d)?)
@@ -2744,15 +2763,20 @@ impl State for EconWorld {
         } else {
             None
         };
-        let migration = if pop.is_some() && !d.at_end() {
+        let migration = if pop.is_some() && !d.at_end() && !wage_grid_next(d) {
             Some(Migration::decode(d)?)
         } else {
             None
         };
-        let settlement = if migration.is_some() && !d.at_end() {
+        let settlement = if migration.is_some() && !d.at_end() && !wage_grid_next(d) {
             Some(Settlement::decode(d)?)
         } else {
             None
+        };
+        let wage_grid = if d.at_end() {
+            None
+        } else {
+            Some(WageGrid::decode(d)?)
         };
 
         let inp = &*self.inputs;
@@ -2817,6 +2841,7 @@ impl State for EconWorld {
             pop,
             migration,
             settlement,
+            wage_grid,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -3391,6 +3416,74 @@ mod tests {
         let (bytes, back) = round_trip(w);
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.settlement.as_ref(), Some(st));
+    }
+
+    fn wage_grid_sim(enabled: bool) -> Sim<EconWorld> {
+        use crate::skills::SkillCes;
+        let w = world();
+        let (np, ns) = (w.inputs().n_provinces(), w.inputs().n_goods());
+        let low = (0..np * ns).map(|i| 4000 + 100 * (i % 7) as u64).collect();
+        let high = (0..np * ns).map(|i| 1000 + 300 * (i % 5) as u64).collect();
+        let mut g = crate::wagegrid::WageGrid::new(SkillCes::new(1.6, 0.4), ns, low, high);
+        g.enabled = enabled;
+        g.skills.enabled = true;
+        g.switching.iter_mut().for_each(|k| {
+            k.enabled = true;
+            k.m = 0.1;
+            k.omega = 0.5;
+        });
+        Sim::new(
+            w.with_wage_grid(g),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    /// With the wage grid off (`None`) the run is the status quo; on, it leaves the labour market
+    /// as it was, gives each (province, sector, skill) its own wage, moves workers between
+    /// sectors, and the section survives a snapshot.
+    #[test]
+    fn wage_grid_off_equals_status_quo_and_on_has_per_cell_wages() {
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        let mut none = wage_grid_sim(true);
+        none.world_mut().wage_grid = None;
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        none.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(off.state_hash(), none.state_hash());
+
+        let mut on = wage_grid_sim(true);
+        let before = on.world().wage_grid.clone().unwrap();
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let w = on.world();
+        assert_eq!(w.wage, off.world().wage);
+        assert_eq!(w.employment, off.world().employment);
+        let g = w.wage_grid.as_ref().unwrap();
+        let ns = g.n_sectors();
+        for p in 0..g.n_provinces() {
+            for s in 0..ns {
+                let (wl, wh) = (g.wage[(p * ns + s) * 2], g.wage[(p * ns + s) * 2 + 1]);
+                assert!(wh > wl);
+            }
+            for k in 0..2 {
+                let now: u64 = g.switching[k].workers[p * ns..(p + 1) * ns].iter().sum();
+                let was: u64 = before.switching[k].workers[p * ns..(p + 1) * ns]
+                    .iter()
+                    .sum();
+                assert_eq!(now, was);
+            }
+        }
+        assert_ne!(g.switching[0].workers, before.switching[0].workers);
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.wage_grid.as_ref(), Some(g));
+    }
+
+    #[test]
+    fn wage_grid_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.wage_grid = None;
+        assert_eq!(canonical(12, &w), a);
     }
 
     #[test]
