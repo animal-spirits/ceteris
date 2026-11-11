@@ -24,6 +24,7 @@ pub mod pop;
 pub mod production;
 pub mod sectors;
 pub mod settlement;
+pub mod skills;
 pub mod synthetic;
 pub mod systems;
 pub mod toy;
