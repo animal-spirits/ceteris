@@ -97,6 +97,12 @@ non-communicable with income and ageing; injuries with conflict and roads. Disea
 fitted offline per region; disease deaths replace the part of the communicable component they
 carry (no double counting: test `zero_prevalence_equals_the_cause_group_path`). Untreated
 prevalence lowers effective labour per worker.
+B2 kernel (`disease.rs`): per disease, monthly `x' = x + inc (1 - prev c_p)(1 - x) - (exit + treat_exit c_t) x`;
+excess death probability `x * excess_q (1 - treat_eff c_t)` is added to the Brass monthly q
+(`Cohorts::die_with`), so zero prevalence is the cause-group path bit for bit; labour factor is
+`1 - sum x * loss (1 - treat_eff c_t)` weighted over working bands. Coverage is a lever in [0, 1],
+bought from the health budget by `coverage_from_budget`. Excess is over the cause-group path;
+the communicable component is not yet reduced by the disease share (open until fitted).
 
 **Skills and switching (Branch C, ADR 0105).** Two skill groups, high = tertiary, low = the rest:
 
