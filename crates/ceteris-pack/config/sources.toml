@@ -2309,3 +2309,21 @@ reason = "Verdict: user-fetch only, never bundled, excluded from the paid build.
 checked = 2026-11-06
 confidence = "medium"
 closed_source_only = true
+
+[[source]]
+id = "primap-hist"
+name = "PRIMAP-hist v2.6 national historical emissions time series, 1750-2023"
+provider = "Climate Resource (Guetschow et al.), PIK PRIMAP"
+version = "2.6 (Zenodo 13752654)"
+role = "Country Kyoto-gas emissions by IPCC 2006 sector; FaIR emission inputs and 2000 emission intensity (13)"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/13752654"
+attribution = "Gütschow, J., Pflüger, M. PRIMAP-hist v2.6, Zenodo, doi:10.5281/zenodo.13752654. Licence: CC BY 4.0"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "fetch"
+reason = "CC BY 4.0 on the Zenodo record; replaces IEA-EDGAR CO2 (CC BY-NC-ND 4.0), which must never enter a release pack (#503)"
+checked = 2026-11-11
+confidence = "medium"
+notes = "Excludes international aviation and shipping; LULUCF only in the no-rounding file. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the record: cloud host cannot reach zenodo.org. Fetch file name and hash unpinned; confirm both at pack build."
