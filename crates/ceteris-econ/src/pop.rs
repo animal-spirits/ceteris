@@ -186,6 +186,43 @@ impl Brass {
     }
 }
 
+/// Cause-group Brass level (ADR 0033, `specs/pop/SPEC.md` Branch B1): `alpha_e` is the sum of
+/// the communicable, non-communicable and injury components plus additive hazards. Hazards are
+/// zero until P7 and P8.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CauseGroups {
+    pub communicable: [f64; N_EDU],
+    pub non_communicable: [f64; N_EDU],
+    pub injuries: [f64; N_EDU],
+    pub hazards: [f64; N_EDU],
+}
+
+impl CauseGroups {
+    /// Components that sum to `alpha`, all on the first component, hazards zero.
+    pub fn from_level(alpha: [f64; N_EDU]) -> Self {
+        Self {
+            communicable: alpha,
+            non_communicable: [0.0; N_EDU],
+            injuries: [0.0; N_EDU],
+            hazards: [0.0; N_EDU],
+        }
+    }
+
+    pub fn alpha(&self) -> [f64; N_EDU] {
+        core::array::from_fn(|e| {
+            self.communicable[e] + self.non_communicable[e] + self.injuries[e] + self.hazards[e]
+        })
+    }
+
+    pub fn brass(&self, std_l: [[f64; N_AGE + 1]; N_SEX], beta: f64) -> Brass {
+        Brass {
+            std_l,
+            alpha: self.alpha(),
+            beta,
+        }
+    }
+}
+
 /// First and one-past-last band of childbearing: 15-19 .. 45-49.
 const FERT_BANDS: core::ops::Range<usize> = 3..10;
 /// Standard deviation of age at childbearing, years (spread held fixed; only the mean shifts).
@@ -572,6 +609,33 @@ mod tests {
             spend_ratio: f,
             income_ratio: 1.0,
         }
+    }
+
+    #[test]
+    fn added_hazards_at_zero_equal_the_brass_level() {
+        let (d, _) = toy(1);
+        let base = d.mortality.unwrap();
+        let alpha = [0.3, 0.1, -0.1, -0.4];
+        let level = Brass {
+            alpha,
+            ..base.clone()
+        };
+        let mut g = CauseGroups::from_level([0.0; N_EDU]);
+        g.communicable = alpha.map(|x| x * 0.5);
+        g.non_communicable = alpha.map(|x| x * 0.25);
+        g.injuries = alpha.map(|x| x * 0.25);
+        let split = g.brass(base.std_l, base.beta);
+        for e in 0..N_EDU {
+            assert!((split.alpha[e] - level.alpha[e]).abs() < 1e-15);
+            for a in 0..N_AGE {
+                assert_eq!(
+                    split.monthly_q(a, 0, e).to_bits(),
+                    level.monthly_q(a, 0, e).to_bits()
+                );
+            }
+        }
+        g.hazards = [0.2; N_EDU];
+        assert!(g.brass(base.std_l, base.beta).monthly_q(10, 0, 0) > split.monthly_q(10, 0, 0));
     }
 
     #[test]
