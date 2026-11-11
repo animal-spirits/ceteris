@@ -30,6 +30,7 @@ use crate::inputs::{EconInputs, network_digest};
 use crate::migration::Migration;
 use crate::params::{EconParams, Pigl, Technology, Transfers};
 use crate::pop::{Cohorts, Demography};
+use crate::settlement::Settlement;
 
 /// Minor units per numeraire unit: 1 minor unit = 1e-4 numeraire.
 /// Buyers per block of the good-major spending arrays (`Scratch::pop_spend_t`).
@@ -703,6 +704,9 @@ pub struct EconWorld {
     /// Internal migration and admissions (P4 D1/D2, system 227); needs `pop`. `None` is off and
     /// adds nothing to the snapshot.
     pub migration: Option<Migration>,
+    /// Settlement classes per province (P4 D3, system 229); needs `migration`. `None` is off and
+    /// adds nothing to the snapshot.
+    pub settlement: Option<Settlement>,
     /// Persons the last demography step created or lost beyond births less deaths; zero
     /// unless conservation broke. Not state.
     pub(crate) pop_drift: i64,
@@ -1352,6 +1356,15 @@ impl EconWorld {
         self
     }
 
+    /// Switches settlement classes (system 229) on; requires population and migration, whose
+    /// snapshot section it follows.
+    pub fn with_settlement(mut self, settlement: Settlement) -> EconWorld {
+        assert!(self.migration.is_some(), "settlement needs migration");
+        assert_eq!(settlement.n_provinces(), self.inputs.n_provinces());
+        self.settlement = Some(settlement);
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1429,6 +1442,7 @@ impl EconWorld {
             anchor_chain: None,
             pop: None,
             migration: None,
+            settlement: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
             ledger,
@@ -2349,6 +2363,9 @@ impl Encode for EconWorld {
             demography.encode(cohorts, e);
             if let Some(m) = &self.migration {
                 m.encode(e);
+                if let Some(s) = &self.settlement {
+                    s.encode(e);
+                }
             }
         }
     }
@@ -2705,6 +2722,11 @@ impl State for EconWorld {
         } else {
             None
         };
+        let settlement = if migration.is_some() && !d.at_end() {
+            Some(Settlement::decode(d)?)
+        } else {
+            None
+        };
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2767,6 +2789,7 @@ impl State for EconWorld {
             profit,
             pop,
             migration,
+            settlement,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
         };
@@ -3252,6 +3275,56 @@ mod tests {
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.migration, a.world().migration);
         assert!(back.migration.unwrap().diaspora.iter().sum::<u64>() > 0);
+    }
+
+    fn settlement_sim() -> Sim<EconWorld> {
+        use crate::settlement::{N_CLASS, Settlement};
+        let mut sim = migration_sim(50);
+        let (np, cells) = (sim.world().inputs().n_provinces(), crate::pop::CELLS);
+        let counts = sim.world().pop.as_ref().unwrap().1.counts().to_vec();
+        let persons = (0..np)
+            .flat_map(|p| {
+                let t: u64 = counts[p * cells..(p + 1) * cells].iter().sum();
+                [t / 2, t / 4, t - t / 2 - t / 4]
+            })
+            .collect();
+        let mut st = Settlement::new(persons, vec![1e6; np * N_CLASS]);
+        st.enabled = true;
+        st.mu_move = 0.05;
+        st.agglomeration = [0.0, 0.05, 0.1];
+        st.cost = [0.0, 0.1, 0.2, 0.1, 0.0, 0.1, 0.2, 0.1, 0.0];
+        sim.world_mut().settlement = Some(st);
+        sim
+    }
+
+    /// With settlement off (`None`) the migration run is unchanged; on, classes follow the
+    /// cohort totals per province, move persons, and the section survives a snapshot.
+    #[test]
+    fn settlement_off_equals_status_quo_and_on_moves_classes_within_provinces() {
+        let mut off = migration_sim(50);
+        let mut none = settlement_sim();
+        none.world_mut().settlement = None;
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        none.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        assert_eq!(off.state_hash(), none.state_hash());
+
+        let mut on = settlement_sim();
+        let before = on.world().settlement.clone().unwrap();
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let w = on.world();
+        let st = w.settlement.as_ref().unwrap();
+        let cohorts = &w.pop.as_ref().unwrap().1;
+        assert_ne!(st.persons, before.persons);
+        for p in 0..st.n_provinces() {
+            let class: u64 = st.persons[p * 3..p * 3 + 3].iter().sum();
+            let cell: u64 = cohorts.counts()[p * crate::pop::CELLS..(p + 1) * crate::pop::CELLS]
+                .iter()
+                .sum();
+            assert_eq!(class, cell);
+        }
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.settlement.as_ref(), Some(st));
     }
 
     #[test]

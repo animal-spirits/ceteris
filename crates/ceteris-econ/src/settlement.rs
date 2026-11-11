@@ -1,9 +1,11 @@
 //! Settlement classes inside a province (P4 Branch D3, ADR 0074, `specs/pop/SPEC.md`): persons
 //! split across rural, town and city; monthly class logit with agglomeration net of congestion
-//! (P167); slum share of the city rising where housing lags (P168). The kernel is not yet in the
-//! tick: the class split has no pack source (GHSL) and no snapshot slot.
+//! (P167); slum share of the city rising where housing lags (P168). The tick system is 229
+//! (`EconWorld::with_settlement`, off by default); the initial class split has no pack source
+//! (GHSL) yet, so callers supply it.
 
 use crate::admission::hamilton;
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 pub const N_CLASS: usize = 3;
 pub const RURAL: usize = 0;
@@ -109,6 +111,82 @@ impl Settlement {
             let target = self.slum_max * pressure;
             self.slum[p] += self.slum_speed * (target - self.slum[p]);
         }
+    }
+
+    /// Rescales each province's classes to `totals[p]` persons, in proportion to the current
+    /// split; migration changes province totals under the class split.
+    pub fn sync_totals(&mut self, totals: &[u64]) {
+        for (p, &total) in totals.iter().enumerate() {
+            let cell = p * N_CLASS..(p + 1) * N_CLASS;
+            let sum: u64 = self.persons[cell.clone()].iter().sum();
+            if sum == total {
+                continue;
+            }
+            let w: Vec<f64> = if sum == 0 {
+                vec![1.0; N_CLASS]
+            } else {
+                self.persons[cell.clone()]
+                    .iter()
+                    .map(|&n| n as f64)
+                    .collect()
+            };
+            let scale = total as f64 / w.iter().sum::<f64>();
+            let exact: Vec<f64> = w.iter().map(|x| x * scale).collect();
+            let out = hamilton(&exact, &[total; N_CLASS]);
+            self.persons[cell].copy_from_slice(&out);
+        }
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        let split = |x: u64| [x as u32, (x >> 32) as u32];
+        e.bools(&[self.enabled]);
+        let mut par = vec![
+            self.nu,
+            self.mu_move,
+            self.congestion,
+            self.slum_max,
+            self.slum_speed,
+        ];
+        par.extend(self.agglomeration);
+        par.extend(self.cost);
+        e.f64s(&par);
+        e.u32s(
+            &self
+                .persons
+                .iter()
+                .flat_map(|&x| split(x))
+                .collect::<Vec<_>>(),
+        );
+        e.f64s(&self.housing);
+        e.f64s(&self.slum);
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        let enabled = d.bools()?;
+        let par = d.f64s()?;
+        let words = d.u32s()?;
+        let housing = d.f64s()?;
+        let slum = d.f64s()?;
+        let n = slum.len();
+        if enabled.len() != 1
+            || par.len() != 5 + N_CLASS + N_CLASS * N_CLASS
+            || words.len() != 2 * N_CLASS * n
+            || housing.len() != N_CLASS * n
+        {
+            return Err(DecodeError("settlement section does not fit".into()));
+        }
+        let persons = words
+            .chunks(2)
+            .map(|p| u64::from(p[0]) | u64::from(p[1]) << 32)
+            .collect();
+        let mut s = Settlement::new(persons, housing);
+        s.enabled = enabled[0];
+        [s.nu, s.mu_move, s.congestion, s.slum_max, s.slum_speed] =
+            [par[0], par[1], par[2], par[3], par[4]];
+        s.agglomeration.copy_from_slice(&par[5..5 + N_CLASS]);
+        s.cost.copy_from_slice(&par[5 + N_CLASS..]);
+        s.slum = slum;
+        Ok(s)
     }
 
     /// Persons living in slums in province `p`.
