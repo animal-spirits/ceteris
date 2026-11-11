@@ -110,7 +110,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 
 ## Branch H: `p5/hank-reference` (ADR 0025, #218)
 
-- [ ] Sequence-space HANK reference in Rust in `ceteris-reference`. Failing tests first: `closed_form_case_mpc_matrix_is_scaled_identity` (m = 1, lambda = 0: intertemporal MPC matrix is `(1 - s_c - g_c)` times the identity, spending out of income is 1); then `responses_match_hank_given_matched_intertemporal_mpcs` (gate item 3).
+- [~] (MPC harness and the closed-form test are in `crates/ceteris-econ/tests/p5_mpc.rs`; the reference and the matched-MPC test wait on the consumption rule with m and lambda of P5a) Sequence-space HANK reference in Rust in `ceteris-reference`. Failing tests first: `closed_form_case_mpc_matrix_is_scaled_identity` (m = 1, lambda = 0: intertemporal MPC matrix is `(1 - s_c - g_c)` times the identity, spending out of income is 1); then `responses_match_hank_given_matched_intertemporal_mpcs` (gate item 3).
 
 ## Branch I: `p5/hazards` (ADR 0242, #219; P5b share)
 
