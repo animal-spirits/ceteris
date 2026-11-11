@@ -10,6 +10,8 @@ use crate::sim::Halt;
 
 const BUNDLE_FILE: &str = "bundle.txt";
 const ISSUES_URL: &str = "https://github.com/atbraz/ceteris/issues/new";
+/// Keeps the URL well under the length browsers and GitHub accept.
+const MAX_DETAIL_CHARS: usize = 600;
 
 /// Where bundles go: the platform's log folder for the app.
 pub fn bundle_root() -> PathBuf {
@@ -45,17 +47,22 @@ pub fn write_bundle(root: &Path, pack: &Path, halt: &Halt) -> Result<PathBuf, St
     Ok(dir)
 }
 
-/// A prefilled new-issue URL. It carries the halt record and the engine version, no paths.
+/// A prefilled new-issue URL. It carries the halt record, engine version and platform, no paths.
 pub fn issue_url(halt: &Halt) -> String {
     let title = format!("Halt at tick {}: {}", halt.tick, halt.kind);
     let body = format!(
-        "Halt record\n\n- tick: {}\n- kind: {}\n- detail: {}\n- engine: {}\n- os: {}\n\n\
+        "Halt record\n\n- tick: {}\n- kind: {}\n- detail: {}\n- engine: {}\n- platform: {}-{}\n\n\
          Attach `bundle.txt` from the bundle folder.\n",
         halt.tick,
         halt.kind,
-        halt.detail.replace('\n', " "),
+        halt.detail
+            .replace('\n', " ")
+            .chars()
+            .take(MAX_DETAIL_CHARS)
+            .collect::<String>(),
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
+        std::env::consts::ARCH,
     );
     format!(
         "{ISSUES_URL}?title={}&body={}",
@@ -116,5 +123,27 @@ mod tests {
         let url = issue_url(&halt());
         assert!(url.starts_with("https://github.com/atbraz/ceteris/issues/new?title=Halt%20at%20tick%207%3A%20injected&body="));
         assert!(!url.contains(' ') && !url.contains('\n'));
+    }
+
+    #[test]
+    fn issue_url_encodes_unicode_and_reserved_and_caps_length() {
+        let mut h = halt();
+        h.detail = format!("é&=#?+/ {}", "x".repeat(5000));
+        let url = issue_url(&h);
+        assert!(url.contains("%C3%A9%26%3D%23%3F%2B%2F%20"));
+        assert!(url.is_ascii() && url.len() < 2500);
+        let query = url.split_once('?').unwrap().1;
+        assert_eq!(query.matches('&').count(), 1);
+    }
+
+    #[test]
+    fn issue_url_has_version_and_platform() {
+        let url = issue_url(&halt());
+        assert!(url.contains(&percent_encode(&format!(
+            "- engine: {}\n- platform: {}-{}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ))));
     }
 }
