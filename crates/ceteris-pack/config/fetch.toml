@@ -4612,3 +4612,33 @@ optional = true
 sha256 = "374aa13f260e5c058485728d9c731a5041a0029db7a8a19f4f2051d8bd72e6a4"
 bytes = 13320378
 url = "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2025-v1.13/Hansen_GFC-2025-v1.13_treecover2000_80N_180W.tif"
+
+[[file]]
+source = "faostat"
+name = "Production_Crops_Livestock_E_All_Data_(Normalized).zip"
+optional = true
+url = "https://bulks-faostat.fao.org/production/Production_Crops_Livestock_E_All_Data_(Normalized).zip"
+
+[[file]]
+source = "faostat"
+name = "FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip"
+optional = true
+url = "https://bulks-faostat.fao.org/food_balances/FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip"
+
+[[file]]
+source = "faostat"
+name = "FoodBalanceSheets_E_All_Data_(Normalized).zip"
+optional = true
+url = "https://bulks-faostat.fao.org/food_balances/FoodBalanceSheets_E_All_Data_(Normalized).zip"
+
+[[file]]
+source = "faostat"
+name = "Prices_E_All_Data_(Normalized).zip"
+optional = true
+url = "https://bulks-faostat.fao.org/prices/Prices_E_All_Data_(Normalized).zip"
+
+[[file]]
+source = "faostat"
+name = "Inputs_LandUse_E_All_Data_(Normalized).zip"
+optional = true
+url = "https://bulks-faostat.fao.org/inputs/Inputs_LandUse_E_All_Data_(Normalized).zip"
