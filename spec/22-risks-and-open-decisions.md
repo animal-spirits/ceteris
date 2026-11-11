@@ -36,7 +36,7 @@ The largest risk is not technical but epistemic: a model this rich can reproduce
 | Parties | Explicit parties over interest groups | Elections, coalitions, party entry |
 | Naming | Real states and provinces, generic party labels by family | Recognizable map, less curation and sensitivity |
 | IO and trade data | OECD ICIO 2025 edition (1995-2022, 80+ economies) + BACI | About 115 economies imputed |
-| Licence | Open source and non-commercial (owner, 28 Oct 2026; supersedes the closed-source fallback of ADR 0005) | Apache-2.0 / MIT code; each user downloads the data, so non-commercial sources are acceptable; nothing restricted is bundled |
+| Licence | Open source and non-commercial (owner, 28 Oct 2026; supersedes the closed-source fallback of ADR 0005) | AGPL-3.0-or-later code (ADR 0346, 11 Nov 2026); each user downloads the data, so non-commercial sources are acceptable; nothing restricted is bundled |
 | LLM leaders | Out of v1 | Tier 2 deferred |
 | First release | 1.0 at the end of R, after P9 (calibrated, validated economic world; P6 and P7 are 2.0, ADR 0136; phase plan ADR 0207) | No public partial builds |
 | Name | Ceteris Paribus; code name ceteris (supersedes WorldSim, which is crowded) | Crates ceteris-\*, CLI ceteris; Python package name dormant until bindings exist (ADRs 0003, 0113); check crates.io, PyPI and GitHub before P0 |
