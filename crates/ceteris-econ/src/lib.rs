@@ -19,6 +19,7 @@ pub mod labour;
 pub mod lanes;
 pub mod local;
 pub mod migration;
+pub mod monetary;
 pub mod pack;
 pub mod params;
 pub mod pop;
