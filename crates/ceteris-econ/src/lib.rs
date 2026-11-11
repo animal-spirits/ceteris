@@ -9,6 +9,7 @@ pub mod disease;
 pub mod edit;
 pub mod energy_policy;
 pub mod ensemble;
+pub mod entry_exit;
 pub mod equilibrium;
 pub mod export;
 pub mod fiscal;
