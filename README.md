@@ -100,7 +100,8 @@ and the same in `app/`.
 ## Licence
 
 Open source and non-commercial (owner ruling 28 October 2026, superseding the closed-source
-fallback of ADR 0005). Code is dual-licensed MIT or Apache-2.0
-([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)). Data is never bundled
+fallback of ADR 0005). Code is licensed under the GNU Affero General Public License v3.0 or
+later ([LICENSE](LICENSE)); commercial licences are available from the copyright holder (ADR 0346).
+Contributions require the [CLA](CLA.md) (ADR 0348, [CONTRIBUTING.md](CONTRIBUTING.md)). Data is never bundled
 when its source bars redistribution; each user's pipeline downloads it under the source's
 own licence.

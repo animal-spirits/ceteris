@@ -15,7 +15,7 @@ A Rust core gives deterministic, parallel speed; Rust crates also own the data p
 | Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow and Parquet outputs | No bindings to maintain; runs are driven by scenario files |
 | Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
-| Licence | Open source, non-commercial: Apache-2.0 / MIT dual for code; data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
+| Licence | Open source: AGPL-3.0-or-later for code, commercial licences from the owner (ADR 0346); 2.0 game in a separate source-available non-commercial repo (ADR 0347); outside contributions under a CLA (ADR 0348); data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
 
 An alternative worth noting: the Julia ecosystem now hosts a data-driven macro ABM framework (BeforeIT.jl, associated with the Bank of Italy), useful as a reference implementation for the economic core even though Ceteris Paribus uses Rust.
 

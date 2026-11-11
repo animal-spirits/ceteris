@@ -333,3 +333,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0340 | [Drop usage statistics for 1.0](0340-drop-usage-statistics-for-1.0.md) | accepted | ADR 0342 |
 | 0341 | [Stop the island money sink at x10 (P5 Branch E3)](0341-island-money-sink.md) | accepted | none yet |
 | 0342 | [Anchor the price level on cells that trade (P5 Branch E3)](0342-anchor-index-over-traded-cells.md) | accepted | ADR 0343, ADR 0344, ADR 0345 |
+| 0343 | [Licences for the simulator and the game](0343-licences-for-simulator-and-game.md) | accepted | ADR 0346, ADR 0347, ADR 0348 |
