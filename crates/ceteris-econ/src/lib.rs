@@ -10,6 +10,7 @@ pub mod edit;
 pub mod ensemble;
 pub mod equilibrium;
 pub mod export;
+pub mod fiscal;
 pub mod fixture;
 pub mod flows;
 pub mod history;
