@@ -2364,3 +2364,21 @@ reason = "CC BY 4.0 per the data catalogue (https://datacatalog.worldbank.org/se
 checked = 2026-11-11
 confidence = "medium"
 notes = "176-179 economies, 44 headings; no 2000 round at heading level. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the catalogue: cloud host cannot reach datacatalog.worldbank.org. File names and hashes unpinned; confirm at first use."
+
+[[source]]
+id = "glc-fcs30d"
+name = "GLC_FCS30D global land-cover change, 1985-2022"
+provider = "Zhang, X., Zhao, T., Xu, H. et al. (Aerospace Information Research Institute, CAS)"
+version = "GLC_FCS30D, 1985-2022 (Zenodo record 8239305)"
+role = "Land-cover classes for the province raster (05, A02); replaces the rejected esa-cci-lc; Hansen tree cover 2000 stays the forest layer"
+licence = "CC-BY-4.0"
+licence_url = "https://zenodo.org/records/8239305"
+attribution = "Zhang, X., Zhao, T., Xu, H. et al. GLC_FCS30D: the first global 30 m land-cover dynamics monitoring product with a fine classification system for the period from 1985 to 2022, Earth Syst. Sci. Data 16 (2024). Zenodo, doi:10.5281/zenodo.8239305. Licence: CC BY 4.0"
+commercial_use = true
+share_alike = false
+use = "primary"
+policy = "bundle-aggregates"
+reason = "CC BY 4.0 on the Zenodo record; 30 m tiles are resampled at build time to the H3 grid and only aggregates ship, bounding pack size (#506)"
+checked = 2026-11-11
+confidence = "medium"
+notes = "Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the record: cloud host cannot reach zenodo.org. No fetch.toml entry yet: tile file names, sizes and hashes unverified from here; add with `pack fetch --record` on a host that reaches Zenodo. Use the 2000 epoch for T0."
