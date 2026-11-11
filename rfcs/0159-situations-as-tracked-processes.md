@@ -11,7 +11,7 @@ Europa Universalis V's situations, Victoria 3's journal entries and Democracy 4'
 a long, multi-actor process its own panel with participants, progress and end conditions. In
 Democracy 4 situations also carry authored effects, which Ceteris must not have. The event-log v2
 plan (Dwarf Fortress path) adds detectors and named arcs, but nothing tracks a process while it
-runs. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+runs. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

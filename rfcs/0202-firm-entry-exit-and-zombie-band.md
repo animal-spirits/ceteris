@@ -19,7 +19,7 @@ The register entry for sigma_g (P50) has a literature prior but no identifying m
 k = theta (sigma - 1) / sigma (0095), the Pareto exponent of firm sales is
 k / (sigma - 1) = theta / sigma. Firm sales are close to Zipf, with an exponent near 1.05
 (Axtell 2001).
-Deep dive: https://claude.ai/artifact/J7jLsKygA6qyLfLmvNXhNa
+Deep dive
 
 ## Options
 

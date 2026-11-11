@@ -8,8 +8,7 @@ Phase: P6, 2.0-alpha (idea, coalition); P7, 2.0-beta (founder, mediator, quarter
 ## Context
 
 Seats so far are offices: heads of government, ministers, central bankers, the IMF, firms. Six
-roles use the model in ways no office does. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 36, 38 to 41 and 52).
+roles use the model in ways no office does. Brainstorm (ideas 36, 38 to 41 and 52).
 
 ## Options
 

@@ -7,8 +7,7 @@ Phase: P3, in the polish pass with the 0260 frosted backdrop and the chart kit
 
 ## Context
 
-The owner asked for mocks of small polish for the native app's UI and UX. The Polish Bench
-(https://claude.ai/artifact/KA5xTZcyPH7AyiPKi2P7a8) mocks 34 touches as playable demos on the
+The owner asked for mocks of small polish for the native app's UI and UX. The Polish Bench mocks 34 touches as playable demos on the
 decided look (0137 tokens, 0260 frost, 0261 glass, 0252 cues, 0258 unit chips, 0188 keys) and
 marks each for Slint 1.18 feasibility and cost. It avoids the charm set the owner rejected on
 the art page and anything springy, since 0137 rules out bounce and shake.

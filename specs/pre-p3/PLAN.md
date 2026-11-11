@@ -10,7 +10,7 @@
 
 **Python removed (ADR 0113, complete at main 7219de2):** Branch A (merged, PR #28) still names the Python files it changed then; B and C name the Rust crates. Pack econ tables: `ceteris pack build --econ-only`; calibration: `ceteris calibrate`; gravity: `ceteris gravity`; GE reference: `ceteris reference solve`; the P2 gate: `crates/ceteris-cli/tests/p2_gate.rs` with `crates/ceteris-econ/tests/p2_acceptance.rs`.
 
-**Spec:** `specs/econ/SPEC.md`, `specs/trade/SPEC.md` (as built), ADRs 0089 to 0112, 0113 (Rust migration), 0200, 0207, the P2 ledger `.superpowers/sdd/PLAN/progress.md` and `.superpowers/sdd/PLAN/final-review.md` (main checkout), the owner request of 2026-10-26 (thread "Prepare the simulator for P3"), and the 28 October benchmark (https://claude.ai/artifact/RKzmS4xciyidJXTp1y1sja; harness `crates/ceteris-econ/examples/shock.rs` on `origin/claude/project-thread-cy0p06`, 90a6940).
+**Spec:** `specs/econ/SPEC.md`, `specs/trade/SPEC.md` (as built), ADRs 0089 to 0112, 0113 (Rust migration), 0200, 0207, the P2 ledger `.superpowers/sdd/PLAN/progress.md` and `.superpowers/sdd/PLAN/final-review.md` (main checkout), the owner request of 2026-10-26 (thread "Prepare the simulator for P3"), and the 28 October benchmark; harness `crates/ceteris-econ/examples/shock.rs` on `origin/claude/project-thread-cy0p06`, 90a6940).
 
 ## Owner decisions (2026-10-26)
 

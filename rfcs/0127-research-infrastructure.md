@@ -9,8 +9,7 @@ Phase: P9
 
 Published results from a model that keeps changing go stale silently. Parameters have
 provenance in the register (17) but no public, citable home. Ensembles and sweeps are limited
-by one machine. Disputes between schools of modelling have no shared test. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 25 to 28).
+by one machine. Disputes between schools of modelling have no shared test. Brainstorm (ideas 25 to 28).
 
 ## Options
 

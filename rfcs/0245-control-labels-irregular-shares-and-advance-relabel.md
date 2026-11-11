@@ -12,7 +12,7 @@ control held by the state, insurgents and criminal groups, so that selective vio
 the contested-but-leaning gradient (Kalyvas 2006). The two do not agree. ADR 0149 gives each front
 segment an advance rate in km per day but no rule for which cells change controller, or who
 controls cells with no formation near them, such as a rear area left undefended (Kyiv 2022, ISIS in
-2014). Explainer: https://claude.ai/artifact/DKERrMw26DBAB5jQ18aaGn
+2014). Explainer
 
 ## Options
 

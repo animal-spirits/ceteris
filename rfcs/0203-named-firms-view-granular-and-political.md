@@ -14,7 +14,7 @@ largest firms (Gabaix 2011; di Giovanni, Levchenko and Mejean 2014) are absent, 
 markups (an option in 0030) need explicit top firms, ADR 0130 lists firms as seats, and DESIGN
 23.7 has conglomerates as lobbies. Victoria 3 layers companies on top of the building economy as
 bonuses; Ceteris must not, since a named firm that adds output would break the cell accounts.
-Deep dive: https://claude.ai/artifact/J7jLsKygA6qyLfLmvNXhNa
+Deep dive
 
 ## Options
 

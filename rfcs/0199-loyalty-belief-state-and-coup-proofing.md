@@ -10,8 +10,7 @@ Phase: P6 (2.0-alpha)
 A democrat sees a whip count (0164) and honest polls (0193); an autocrat sees falsified support
 (0192) and nothing on the people who can depose them. DESIGN 10.8 calibrates coup frequencies but
 gives the ruler no verbs against coups, so a coup reads as dice. About two thirds of dictators who
-lost power irregularly were removed by regime insiders (Svolik 2012). Analysis:
-https://claude.ai/artifact/EHruH8W4Trtq7YD6N2DhqX
+lost power irregularly were removed by regime insiders (Svolik 2012). Analysis
 
 ## Options
 

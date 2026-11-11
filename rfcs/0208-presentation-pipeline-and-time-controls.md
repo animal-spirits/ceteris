@@ -7,7 +7,7 @@ Design sections: 4.4, 14.3, 19.2, 19.4, 20.3; ADRs 0011, 0088, 0097, 0145, 0188,
 ## Context
 
 The owner asked how time can flow at maximum smooth speed with a stable, high frame rate.
-Assessment: https://claude.ai/artifact/VTacA58HcchK1aMaTeYbJG
+Assessment
 
 Tick costs vary by more than an order of magnitude: the econ tick is 34.9 ms (measured
 2026-10-28, migration thread); 0145 estimates 0.2 to 0.9 s per simulated month at war. A frame

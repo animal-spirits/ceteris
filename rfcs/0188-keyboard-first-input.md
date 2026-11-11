@@ -11,7 +11,7 @@ No spec or ADR covers input. The native app (0088) has to decide how keys reach 
 and the core before panels are built, and the owner asked for keyboard-first use: a vim mode
 (the owner uses vim), standard shortcuts that feel familiar, terminal-style interaction in the
 manner of the Bloomberg Terminal, automation, and natural-language input. Brainstorm with a
-playable demo: https://claude.ai/artifact/3YdWCLPyDhXxwQBzjGMcgt
+playable demo
 
 Two properties of the model shape the design. A branch is a parent plus an ordered list of timed
 edits (14.1), which is the data model of an editor with history. Every causal change must enter

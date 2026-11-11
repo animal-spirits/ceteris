@@ -12,7 +12,7 @@ and frictions. Four mechanisms from other games improve that loop without bendin
 World's ambitions (a few generated goals offered over time), Zachtronics' solution histograms (no
 single score, every axis shown against all players), Slay the Spire's Ascension (numbered
 difficulty, one modifier per step) and Kerbal Space Program's maneuver nodes (drag a plan, see
-the predicted path, then commit). Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+the predicted path, then commit). Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

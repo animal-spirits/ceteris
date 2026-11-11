@@ -18,7 +18,7 @@ The OECD Analytical AMNE database splits every row and column of the ICIO into d
 and foreign-owned firms, with the parent country, for 76 economies plus the rest of the world,
 41 industries and the years 2000-2019. It sits on the ICIO grid Ceteris already uses, starts in
 the start year, and is CC BY 4.0 (OECD open by default, July 2024).
-Deep dive: https://claude.ai/artifact/J7jLsKygA6qyLfLmvNXhNa
+Deep dive
 
 ## Options
 

@@ -18,8 +18,7 @@ Clark et al. 2008), a trade-off between unemployment and inflation (Di Tella, Ma
 Oswald 2001; Blanchflower et al. 2014), comparison with a reference group (Clark, Frijters and
 Shields 2008) and adaptation to income gains (Di Tella, Haisken-DeNew and MacCulloch 2010).
 
-Design note with the full chain from wellbeing to laws:
-https://claude.ai/artifact/QEH9bSDBxix6cMvq68NbM2
+Design note with the full chain from wellbeing to laws
 
 ## Options
 

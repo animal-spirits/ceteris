@@ -10,7 +10,7 @@ Phase: P9 (protocol), after 1.0 (coupling)
 Climate modelling converged partly through CMIP: fixed experiments every model runs, with
 outputs in a shared format. Trade and macro modelling has no equivalent. Separately, Ceteris
 will not model every domain itself; climate, epidemic and energy-system models already exist.
-Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 60 and 61).
+Brainstorm (ideas 60 and 61).
 
 ## Options
 

@@ -9,8 +9,7 @@ Phase: P3 (contrastive), P9 (percentile strip)
 
 Ensemble lanes (ADR 0024) hold many versions of the same world. Two questions they can answer
 are not in the design: why did an event not happen in this lane when it did in others, and how
-probable was what actually happened. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 4 and 6).
+probable was what actually happened. Brainstorm (ideas 4 and 6).
 
 ## Options
 

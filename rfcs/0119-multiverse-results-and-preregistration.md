@@ -9,7 +9,7 @@ Phase: P3 (preregistration), P9 (multiverse)
 
 A counterfactual effect depends on structural switches (17.2) as much as on seeds, but results
 are reported for one model variant. DESIGN 21.1 puts preregistration in P9 without saying how a
-reader verifies it. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 5 and
+reader verifies it. Brainstorm (ideas 5 and
 8).
 
 ## Options

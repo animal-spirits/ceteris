@@ -8,8 +8,7 @@ Phase: P5 pack (t0 conflict state), P8 and P9 (1.0 conflict incidence), P6 (cohe
 ## Context
 
 ADR 0241 makes default runs calendar-blind, so every war after 1 January 2000 must emerge from
-simulated state. A survey of conflicts from 2000 to 2025 (research page:
-https://claude.ai/artifact/PyQ6s7BMzZiDcMYoSh66Yg) finds ten causal pathways: opportunistic
+simulated state. A survey of conflicts from 2000 to 2025 (research page finds ten causal pathways: opportunistic
 revision (Georgia 2008, Ukraine 2014 and 2022, Karabakh), revolution to civil war (Syria, Libya,
 Yemen, Myanmar), splits inside the security forces (Sudan 2023, South Sudan 2013), exclusion
 insurgency (Darfur, ISIS 2014, Tigray), cross-border diffusion (Libya to Mali), attack to

@@ -14,7 +14,7 @@ Hoshi and Kashyap 2008; Acharya, Eisert, Eufinger and Hirsch 2019). Cross-border
 financing in the model either. Exports by firms tied to troubled banks fell more in Japan's
 crisis (Amiti and Weinstein 2011), and letters of credit are used more for risky destinations
 (Niepmann and Schmidt-Eisenlohr 2017). Both channels bear on the 2008 crisis case of 15.5.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

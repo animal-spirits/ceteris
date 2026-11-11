@@ -13,8 +13,7 @@ Paradox games never remove the player from power, so they balance regimes with f
 mandate loss (23.4), so the real costs of autocracy can stand in for modifiers: falsified support
 (0192, 0193), the selectorate's private goods (10.6), loyalty over competence (0195), coups
 (10.8), succession. The risk is that these costs arrive late and unseen, so autocracy feels
-smoother even when it scores no better. Analysis:
-https://claude.ai/artifact/EHruH8W4Trtq7YD6N2DhqX
+smoother even when it scores no better. Analysis
 
 ## Options
 

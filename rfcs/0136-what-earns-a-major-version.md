@@ -12,7 +12,7 @@ read as including politics and war, while 23.9 said "2.0 politics and war". ADRs
 then gave features labels from 1.3 to 3.x with no stated rule for what a major version is.
 23.1 also let a mechanism that passes ablation enter the lab profile "with a minor release",
 while the roadmap's bump rules make a new default that invalidates the calibration a major.
-Analysis: https://claude.ai/artifact/Gw9BKMrLK9aHNzL7eZwh6j
+Analysis
 
 ## Options
 
@@ -80,8 +80,7 @@ if all three hold:
 
 Minors are ordered by dependency and theme, not by date. An item not shipped in its planned
 minor rides a later one; a 1.x item not shipped before 2.0-alpha becomes a 2.x minor. The
-planned sequence from 1.1 to 5.x:
-https://claude.ai/artifact/NwyGjzAgZtjXF6XfJwCm7K (proposed placement)
+planned sequence from 1.1 to 5.x (proposed placement)
 
 Phase order note: ADR 0239 replaces "P10 (1.3 Steward)" above. Steward for economic levers lands
 with 2.0-alpha, and full Steward and Tier 1b ship as 2.x minors.

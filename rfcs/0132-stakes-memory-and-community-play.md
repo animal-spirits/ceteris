@@ -9,8 +9,7 @@ lives)
 ## Context
 
 The game notes cover ironman, post-mortems and failure as content. Seven additions use
-determinism and paired counterfactuals for stakes and community play. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 37 and 42 to 47).
+determinism and paired counterfactuals for stakes and community play. Brainstorm (ideas 37 and 42 to 47).
 
 ## Options
 

@@ -17,13 +17,12 @@ that origin is best at, so the price paid is the same for every origin and equal
 P_d = Gamma Phi_d^(-1/theta). Melitz-Chaney (ADR 0026) gives the same result through firms:
 only a cell's most productive firms serve distant markets.
 
-Without selection, a rise in a border cost can lower q_d. The P2 benchmark of 2026-10-28
-(https://claude.ai/artifact/RKzmS4xciyidJXTp1y1sja) found the consequences: the ACR welfare
+Without selection, a rise in a border cost can lower q_d. The P2 benchmark of 2026-10-28 found the consequences: the ACR welfare
 formula (Arkolakis, Costinot and Rodriguez-Clare 2012) fails, Japan gains when its borders get
 costlier, and the EU gains from Brexit. The trade SPEC rejected P_d because "a unit bought at
 P_d delivers fewer than one unit"; that is the missing selection term, not a reason to drop the
 index.
-Deep dive: https://claude.ai/artifact/J7jLsKygA6qyLfLmvNXhNa
+Deep dive
 
 ## Options
 

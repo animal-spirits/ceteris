@@ -9,8 +9,7 @@ Phase: P3 (scripts, calendars, formats), P8 (seasons, night lights), P5-P6 (lett
 
 The owner asked for subtle details that differ by country, culture, region, religion, form of
 government and ideology, to enrich each run. Without artists, details must come from datasets
-and conventions, and must not turn identity into costume. Proposal section "Flavour":
-https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ
+and conventions, and must not turn identity into costume. Proposal section "Flavour"
 
 ## Options
 

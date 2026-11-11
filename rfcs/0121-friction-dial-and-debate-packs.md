@@ -11,7 +11,7 @@ Equilibrium nesting (3.4) means every friction has a limit where the model colla
 equilibrium. That is the best teaching property the model has, and it is visible only in tests.
 Famous policy disputes (the China shock, NAFTA, Brexit, the 2018 tariffs) and long-run theses
 (the Great Divergence, institutions versus geography) are natural experiments users want to
-run. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 9, 10 and 50).
+run. Brainstorm (ideas 9, 10 and 50).
 
 ## Options
 

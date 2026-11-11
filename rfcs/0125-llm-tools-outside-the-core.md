@@ -9,8 +9,7 @@ Phase: P3 (compiler, research assistant); P4 (focus groups)
 
 LLM use is limited to deferred Tier 2 leaders (12.5) and presentation text (ADR 0078). Three
 uses help without touching determinism, because they sit outside the simulation and produce
-ordinary manifests or presentation. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 19, 20 and 22).
+ordinary manifests or presentation. Brainstorm (ideas 19, 20 and 22).
 
 ## Options
 

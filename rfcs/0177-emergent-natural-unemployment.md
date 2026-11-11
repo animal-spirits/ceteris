@@ -12,7 +12,7 @@ holds it as a wedge. It therefore cannot move with demography or institutions. E
 unemployment persistence in 2011-2016 and the fall in German u* after the Hartz reforms
 (Krause and Uhlig 2012) are outside reach, and the wedge was meant to be retired once the labour
 block could produce u*.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

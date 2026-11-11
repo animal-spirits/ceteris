@@ -8,8 +8,7 @@ Phase: P7 (2.0-beta); amends 0145 and 0149
 ## Context
 
 The owner asked whether war can run hour by hour, as Hearts of Iron does. 0145 runs war on a
-daily sub-tick and 0149 resolves each front segment once a day. Assessment:
-https://claude.ai/artifact/VTacA58HcchK1aMaTeYbJG
+daily sub-tick and 0149 resolves each front segment once a day. Assessment
 
 A day is too coarse for some war processes:
 

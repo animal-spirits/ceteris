@@ -13,7 +13,7 @@ origin-destination pairs use each transport edge (0017), and the thresholds of i
 switches (9.2, 9.11, 9.13, 0029). Other games turn exactly these into views: Kerbal Space
 Program's delta-v readout, Factorio's production statistics and alt-mode, Cities: Skylines' route
 view on a road segment, Football Manager's percentile Data Hub, and Europa Universalis IV's macro
-builder. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+builder. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 
