@@ -13,7 +13,7 @@ energy prices shifted patenting toward energy-saving technology (Popp 2002), and
 shifted car-industry patenting from dirty to clean engines (Aghion et al. 2016). Knowledge
 spillovers decay with distance and language. Directed technical change belongs in the frozen
 technology block that ADR 0136 makes the 3.0 major.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

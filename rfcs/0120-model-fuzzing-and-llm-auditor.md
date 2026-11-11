@@ -9,8 +9,7 @@ Phase: P3 (harness), P9 (stylized-fact library)
 
 Invariants (4.6) catch accounting bugs. Nothing searches for runs that are consistent but
 economically absurd: gravity coefficients drifting out of range, price explosions without a
-shock, city sizes leaving Zipf's law. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 7 and 21).
+shock, city sizes leaving Zipf's law. Brainstorm (ideas 7 and 21).
 
 ## Options
 

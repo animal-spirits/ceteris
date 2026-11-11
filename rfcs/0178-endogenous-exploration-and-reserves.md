@@ -12,7 +12,7 @@ only through the use of known reserves. US shale output rose from about 0.5 to 4
 barrels a day in 2008-2014 in response to high prices and falling drilling costs, and its supply
 response shaped the 2014 price collapse. Giant discoveries are news shocks with large macro
 effects (Arezki, Ramey and Sheng 2017).
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

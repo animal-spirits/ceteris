@@ -319,15 +319,12 @@ pub fn check_rfc_numbers(names: &[String]) -> Vec<String> {
 static LINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\]\(([^)\s]+)\)").unwrap());
 
 /// Normalised study targets linked from a Markdown file at `file` (repo-relative):
-/// repo paths under docs/research/ and claude.ai pages.
+/// repo paths under docs/research/. External pages (claude.ai) are not tracked.
 pub fn study_links(text: &str, file: &str) -> Vec<String> {
     let base = Path::new(file).parent().unwrap_or(Path::new(""));
     LINK.captures_iter(text)
         .filter_map(|c| {
             let target = c[1].split('#').next().unwrap_or("");
-            if target.starts_with("https://claude.ai/") {
-                return Some(target.to_string());
-            }
             if target.contains("://") || target.is_empty() {
                 return None;
             }
@@ -668,7 +665,7 @@ also = ["0001"]
         let text = "[s](../docs/research/x.md) [w](https://claude.ai/artifact/abc) [p](https://arxiv.org/x) [o](../specs/core/SPEC.md)";
         assert_eq!(
             study_links(text, "spec/08-markets.md"),
-            vec!["docs/research/x.md", "https://claude.ai/artifact/abc"]
+            vec!["docs/research/x.md"]
         );
     }
 }

@@ -10,8 +10,7 @@ Phase: P6 (2.0-alpha), extended profile; lab candidate at 4.0 (ADR 0136)
 DESIGN 23.5 makes characters generated people with generic names, and ADR 0066 generates
 leaders without names. A start on 1 January 2000 reads far better with the real incumbents,
 and their records are public (Wikidata, WhoGov, Archigos, REIGN). The owner chose real names
-for the 2000 roster on 28 October 2026. Proposal page with a portrait demo:
-https://claude.ai/artifact/NaioKTnQY5V1vsBWQdtvWc
+for the 2000 roster on 28 October 2026. Proposal page with a portrait demo
 
 ## Options
 

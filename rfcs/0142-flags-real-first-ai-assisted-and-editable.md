@@ -11,8 +11,7 @@ States can form, merge and secede, so the game needs flags for states that never
 owner dislikes procedural flags and rejected a rule-based generator and hand-designed options
 as generic. He proposed AI-generated flags (a free model or the user's own credentials) that the
 user can edit by hand, replace by upload, or refine in a chat with the model. A working studio
-(draft four, revise by request, recolour, edit SVG, upload, undo, lint) is in the proposal:
-https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ (section "Flag studio").
+(draft four, revise by request, recolour, edit SVG, upload, undo, lint) is in the proposal (section "Flag studio").
 
 ## Options
 

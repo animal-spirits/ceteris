@@ -12,7 +12,7 @@ series already in the manifest that no module reads. Ceteris is non-commercial a
 and each user fetches their own data, so non-commercial licences are acceptable inputs. CC BY-SA
 (V-Dem) and CC BY-NC-SA (EPR/GeoEPR) cannot be combined in one derived table, and the same
 holds for any NC source against V-Dem.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

@@ -12,7 +12,7 @@ P141) without defining it. Victoria 3 makes construction a sector that turns goo
 HOI4 uses civilian factories. Ceteris already has construction as an ICIO sector with its own
 labour, inputs and province price.
 
-Design note: https://claude.ai/artifact/XmuftWfuBvehjp3ou7SYYd
+Design note
 
 ## Options
 

@@ -9,7 +9,7 @@ Phase: P3 (ghost line, run names, postcards), 1.x (codex, front page, seed of th
 
 The owner asked what keeps each run unique and players coming back. Achievements and unlocks
 fit poorly with a simulation whose goal is counterfactual study. Proposal table "Reasons to come
-back": https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ
+back"
 
 ## Options
 

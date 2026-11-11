@@ -9,8 +9,7 @@ Phase: P3 (tokens and accent), P5-P6 (regime wording once regimes are endogenous
 
 Paradox games reskin their interface by ideology or culture. ADR 0137 fixes one token set (Modern
 Atlas) so the app reads as one product. The owner asked for the header, background, accent and
-UI elements to change with the seat, as Paradox does, and approved the mock in the proposal:
-https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ (section "Seat chrome").
+UI elements to change with the seat, as Paradox does, and approved the mock in the proposal (section "Seat chrome").
 
 ## Options
 

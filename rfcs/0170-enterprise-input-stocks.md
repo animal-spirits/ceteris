@@ -13,7 +13,7 @@ change-in-inventories column. Inventory adjustment explains a large part of the 
 in trade (Alessandria, Kaboski and Midrigan 2010), and input stockpiling amplified the 2021-22
 shortages. Both are 15.5 cases. The rationing model the design cites (Pichler et al. 2022)
 already gives each industry an input inventory with a target in days of use.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

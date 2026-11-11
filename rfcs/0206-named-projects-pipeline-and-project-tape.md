@@ -13,7 +13,7 @@ network: transport links and nodes, ports, power plants, dams, pipelines, LNG te
 overrun, but no ADR says what a named project is, which were under way in 2000, or who may place
 one. EU4's great projects and Paradox building placement are the comparisons.
 
-Design note: https://claude.ai/artifact/XmuftWfuBvehjp3ou7SYYd
+Design note
 
 ## Options
 

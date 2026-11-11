@@ -12,7 +12,7 @@ gives choices weight. The real counterpart is the trade between flexibility and 
 (Kydland and Prescott 1977): fiscal rules, currency boards, central-bank independence, WTO tariff
 bindings. ADR 0083 lets announcements move expectations before implementation, but nothing lets a
 government bind its future levers, and the expectations of 9.13 do not depend on whether a rule is
-binding. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+binding. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

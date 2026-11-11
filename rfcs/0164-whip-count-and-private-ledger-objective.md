@@ -11,7 +11,7 @@ Frostpunk 2 shows how each faction will vote before a council vote and lets the 
 promises to flip them; Suzerain builds a presidency on such bargains. Tropico gives the ruler a
 private Swiss account scored apart from the island's welfare. Both fit Ceteris once politics
 moves in 2.0: the legislative process of 10.6 already produces votes, and corruption (10.1) and
-profit shifting (0041) already move private wealth offshore. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+profit shifting (0041) already move private wealth offshore. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

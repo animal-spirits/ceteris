@@ -9,7 +9,7 @@ Phase: P8 (extended profile until it passes ablation)
 
 Money, goods and people are conserved (4.6). Physical flows are not tracked, so the model
 cannot say where the world's copper, lithium or phosphorus goes, or what a sanction does to
-material supply. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (idea 11).
+material supply. Brainstorm (idea 11).
 
 ## Options
 

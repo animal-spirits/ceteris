@@ -11,7 +11,7 @@ Amended by: 0209 (sparse hourly phase inside the daily sub-tick)
 The owner asked for a war and military system in the Hearts of Iron line, closer to HOI3 than
 HOI4 (deep chain of command, order of battle, supply, delegation of theatres to the AI), but more
 detailed and realistic, with several interaction surfaces and customization. Breakdown, with
-diagrams and estimates: https://claude.ai/artifact/AJ5TQdDUAbesAPsNhYPwEg
+diagrams and estimates
 
 The design has the pieces spread out: aggregate capability and Lanchester combat (11.4, 11.5), a
 command layer in the extended profile (23.5), a daily sub-tick while at war (4.3, 19.2), a

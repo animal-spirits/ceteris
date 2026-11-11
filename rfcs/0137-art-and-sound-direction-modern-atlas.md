@@ -11,8 +11,7 @@ Nothing fixes how the app looks or sounds. The Iberia mock assumes dark panels w
 accent and Cormorant Garamond, which no one decided. Constraints: one part-time developer with
 AI help and no artists; native Rust UI (winit, Slint panels, wgpu map; ADR 0088); a real world
 from 2000 onwards. Sonification (data turned into sound) was rejected in the bold-ideas
-brainstorm. Proposal with rendered options:
-https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ
+brainstorm. Proposal with rendered options
 
 ## Options
 

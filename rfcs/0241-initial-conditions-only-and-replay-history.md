@@ -14,8 +14,7 @@ past 2000. The design does not do this today. 13.1 replays observed 2000-2024 sh
 validation default and switches to fitted generators "after 2024". ADR 0210 defaults to
 `tape-then-rules`, and 0210, 0229 and 0233 put tariffs, capital controls, regime changes and
 prudential settings on a tape to 2024 and hold them after. So every default run has a seam at the
-end of the data, and a hindcast follows history because it is told to. Brainstorm:
-https://claude.ai/artifact/1RphqtMVgze9SF1vtz6ByR
+end of the data, and a hindcast follows history because it is told to. Brainstorm
 
 Three questions: what a default run may read after t0 (D1), what counts as initial state beyond
 levels (D2), and how to calibrate and validate without a tape (D3).

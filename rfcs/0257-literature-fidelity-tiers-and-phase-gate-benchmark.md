@@ -6,7 +6,7 @@ Design sections: 3.4, 15.3, 15.7, 17, 21.1, 21.2; ADRs 0022, 0200, 0207, 0247
 
 ## Context
 
-The econ fidelity audit of 2026-10-30 (https://claude.ai/artifact/5cw16uEFECEswpiYYn2vt3) found
+The econ fidelity audit of 2026-10-30 found
 the P2 structure faithful to its sources (structural gravity, exact-inversion calibration, PIGL,
 Pichler rationing, ACR after ADR 0200) but its fit to the literature's numbers drifting: H2
 distance went from -0.753 at the P2 gate to -0.463 on pre-P3 B, only one of four theta classes

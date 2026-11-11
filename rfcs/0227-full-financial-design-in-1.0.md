@@ -14,7 +14,7 @@ which also hold the Rust HANK reference, did not price that design. The review o
 also found that the finance parameters come to about 14 against the cap of 12 in 9.14, that the
 posted export-price layer of 8.8 is in no phase, that the 8 ms finance budget of 19.2 predates the
 demand system, that holdings data for 2000 is thin outside the OECD, and that the banking-crisis
-database ends in 2017. Review: https://claude.ai/artifact/X8c2Ah1MkJPnViYcku6zyk
+database ends in 2017. Review
 
 ## Options
 

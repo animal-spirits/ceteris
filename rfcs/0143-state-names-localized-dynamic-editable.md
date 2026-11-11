@@ -10,8 +10,7 @@ Phase: P3 (real names by date, game-language exonyms), P6 (new and renamed state
 The owner asked for localized names, and for dynamic state names the user can change, drafted
 by AI or by a procedural fallback. Real countries change names (Zaire 1971, Burma to Myanmar
 1989, Eswatini 2018, Türkiye 2022) and new states need names in every member language and every
-game language. Working names panel in the proposal:
-https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ (section "Names").
+game language. Working names panel in the proposal (section "Names").
 
 ## Options
 

@@ -19,7 +19,7 @@ Today, 10.3 gives provinces an autonomy level, 0068 splits revenue and spending 
 two tiers, and 0129 has constitution modules with no territorial scope. The government-simulation
 design of 2026-10-23 (original project chat) proposed composable bodies; it was never recorded.
 
-Design doc with diagrams: https://claude.ai/artifact/9DHJmPTEUEbthJhMoRZw5W
+Design doc with diagrams
 
 ## Options
 

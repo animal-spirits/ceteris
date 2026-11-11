@@ -10,7 +10,7 @@ Phase: P5 onward, extended profile
 Expectations are formed by rules (12.2). Real forecasts are made with models and move markets,
 which can make them self-fulfilling or self-defeating. Monetary regimes are limited to the 2000
 set (9.2), though users ask about the gold standard, currency boards, demurrage or a global
-unit. Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 12 and 13).
+unit. Brainstorm (ideas 12 and 13).
 
 ## Options
 

@@ -9,8 +9,7 @@ Phase: P9 (needs the calibration build of ADR 0096)
 
 The workbench answers "what if X?". Users often want the inverse: "what would it take to avoid
 Y?". ADR 0096 already makes the P2 kernels generic over a dual-number type for calibration, so
-the same build gives derivatives of outcomes with respect to edits. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 2 and 3).
+the same build gives derivatives of outcomes with respect to edits. Brainstorm (ideas 2 and 3).
 
 ## Options
 

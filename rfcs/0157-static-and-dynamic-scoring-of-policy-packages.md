@@ -11,7 +11,7 @@ Budget games (American Public Media's Budget Hero, the CRFB Debt Fixer) give the
 cards with official costs; Rule the Waves shows every trade-off live while a ship is designed
 within a budget. Real fiscal practice separates the conventional score (cost at current
 quantities) from the dynamic score (after behaviour and general equilibrium respond). The gap
-between them is what Ceteris exists to show. Survey of other games' mechanics (2026-10-28): https://claude.ai/artifact/LcDMgZuczpSefSVeadiZWT
+between them is what Ceteris exists to show. Survey of other games' mechanics (2026-10-28)
 
 ## Options
 

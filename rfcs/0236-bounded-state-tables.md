@@ -10,7 +10,7 @@ Entity growth is the main reason strategy games slow down late. Ceteris fixes pr
 cells and firm cells, but several tables can grow over a long run with no rule: financial claims
 (19.2 budgets 1M; loans and bonds accumulate), characters (0183-0187), pop cells created by
 migration and identity change (0223-0226), and units in war. History is bounded by 0212.
-Assessment: https://claude.ai/artifact/HnTopU8Pz7RiuPLTNGWR1E
+Assessment
 
 ## Options
 

@@ -8,8 +8,7 @@ Phase: P3 (cartogram, receipt, atlas); 1.x (eras)
 ## Context
 
 Map modes show levels on geographic space. Some of the model's best stories are about distance
-and provenance, which geography hides. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 14, 15, 17 and 18).
+and provenance, which geography hides. Brainstorm (ideas 14, 15, 17 and 18).
 
 ## Options
 

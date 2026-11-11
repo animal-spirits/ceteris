@@ -18,8 +18,7 @@ LLM agents as the carrier fail on cost and validity. At about 200 states decidin
 50-year run needs about 40,000 calls, which is days of local inference per seed. The hash cache
 of 12.5 misses on every new branch, which is exactly the counterfactual case. Anonymization
 conflicts with the real map, and LLM expectations are more homogeneous than humans' (Lin et al.
-2025). Section 15.7 already excludes LLM agents. Feasibility study:
-https://claude.ai/artifact/WS9DBVdJaBuEba8aVVgqZ5
+2025). Section 15.7 already excludes LLM agents. Feasibility study
 
 ## Options
 

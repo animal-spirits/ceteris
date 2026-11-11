@@ -15,7 +15,7 @@ Prescott 1982; Koeva 2000 finds structures take about two years). Register P10 g
 depreciation, but PWT uses about 31.5% for computers and software and about 19% for transport
 equipment.
 
-Design note: https://claude.ai/artifact/XmuftWfuBvehjp3ou7SYYd
+Design note
 
 ## Options
 

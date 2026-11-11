@@ -13,7 +13,7 @@ imbalanced trade lanes have asymmetric freight rates (Brancaccio, Kalouptsidi an
 2020). Inland waterways (ADR 0007) are not limited by water. Low water on the Rhine in 2018 cut
 barge capacity and German industrial output; the Mississippi in 2022 and the Panama Canal drought
 of 2023-24 cut capacity the same way.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

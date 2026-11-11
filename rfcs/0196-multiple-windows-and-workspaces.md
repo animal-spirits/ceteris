@@ -18,7 +18,7 @@ that change subject together), a cursor of place x tick x branch, and a "Termina
 four linked panels. Nothing says whether a panel may live outside the main window.
 
 A panel host that assumes one window is cheap to build and expensive to retrofit once P3 has
-dozens of panels. Assessment: https://claude.ai/artifact/3rJLuwN8cDUXDmA2vbwijC
+dozens of panels. Assessment
 
 ## Options
 

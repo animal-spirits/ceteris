@@ -4,7 +4,7 @@ Status: accepted
 Date: 2026-11-10
 Design sections: 4.6, 14.3, 20
 Release: 1.0
-Research: [Infrastructure gaps for 1.0, 2026-11-10](../reports/infrastructure-gaps-2026-11-10.md)
+Research: Infrastructure gaps for 1.0 (2026-11-10, kept outside the repository)
 
 ## Summary
 

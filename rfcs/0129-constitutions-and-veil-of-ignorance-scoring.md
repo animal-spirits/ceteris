@@ -11,7 +11,7 @@ Institutions are a vector (10.1) and the legislative process is fixed per state.
 rules (electoral system, federalism, veto players, term limits, emergency powers) are where
 institutional design actually happens, and they can be tested across many societies. Scoring
 rewards the state's metrics; nothing asks how the player's choices land on a random citizen.
-Brainstorm: https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (ideas 33 and 35).
+Brainstorm (ideas 33 and 35).
 
 ## Options
 

@@ -7,8 +7,7 @@ Phase: P3, with the hillshade (0255 stage 1) and the chart kit
 
 ## Context
 
-The owner asked how Slint and other Rust crates can make the native app look polished. Research
-(https://claude.ai/artifact/2nENnk6RjLKDC2hjmr9C39) checked Slint 1.18.1 in its source: it has
+The owner asked how Slint and other Rust crates can make the native app look polished. Research checked Slint 1.18.1 in its source: it has
 drop shadows, gradients, eased animations, `animation-tick()`, SVG `colorize` and
 `Palette.color-scheme`, but no backdrop blur, blend modes or per-element shaders. Three choices
 were left open: how panels sit over the globe (0137 says flat), which theme the app opens in

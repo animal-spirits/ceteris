@@ -9,8 +9,7 @@ Phase: stage 1 with the P3 hillshade; stage 2 before 1.0
 
 ADR 0137 picked Modern Atlas and rejected Diorama Earth (tilted 3D relief) as the main view,
 keeping 3D only for a hand-off at the deepest zoom. ADR 0250 made the app globe only. The owner
-saw a working mock of the globe with exaggerated relief and tilt
-(https://claude.ai/artifact/Anr2PRTTGdCjAJRbEuMFHw) and wants it.
+saw a working mock of the globe with exaggerated relief and tilt and wants it.
 
 The 0137 objections still hold for data reading: tilt hides valleys behind ridges and shrinks the
 far side, so areas stop comparing fairly. The mock answers this with relief that eases flat in

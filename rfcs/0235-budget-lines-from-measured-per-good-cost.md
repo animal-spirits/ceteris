@@ -11,7 +11,7 @@ pack with 10 goods, 7 traded (econ SPEC, Task 19), and the trade line already us
 Dispatch costs about 5.9 ms of CPU per traded good (41.3 ms for 7 in series) and runs in parallel
 across goods, so trade cost grows with the traded-good count. Extrapolated, not measured: today's
 systems at 45 goods take about 70 to 120 ms, and all 1.0 systems about 90 to 150 ms.
-Assessment: https://claude.ai/artifact/HnTopU8Pz7RiuPLTNGWR1E
+Assessment
 
 ## Options
 

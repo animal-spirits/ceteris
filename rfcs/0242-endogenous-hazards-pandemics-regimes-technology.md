@@ -13,7 +13,7 @@ endogenous, and 0051 gives disasters a hazard library. Three gaps remain. Pandem
 the tape (13.1). Levers without a 0210 rule (exchange-rate regime, prudential settings) were taped
 to 2024 and held after, so in a calendar-blind run they never move. Frontier growth (7.5) is
 smooth, so there are no technology surprises. Politics and war stay in 2.0 (ADR 0136).
-Brainstorm: https://claude.ai/artifact/1RphqtMVgze9SF1vtz6ByR
+Brainstorm
 
 ## Options
 

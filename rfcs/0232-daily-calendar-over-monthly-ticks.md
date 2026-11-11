@@ -7,7 +7,7 @@ Design sections: 4.3, 4.4, 4.5, 19.2, 20.3; ADRs 0016, 0145, 0188, 0208, 0209
 ## Context
 
 The owner asked whether the economy could tick weekly or daily so time feels faster, as in
-Paradox games. Assessment: https://claude.ai/artifact/HnTopU8Pz7RiuPLTNGWR1E
+Paradox games. Assessment
 
 A tick costs the same work whatever its length, so weekly ticks cost about 4.3 times and daily
 ticks 30 times per simulated year: 0.1 to 0.25 years per second weekly, 30 to 60 s per year

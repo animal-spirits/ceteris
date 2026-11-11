@@ -12,7 +12,7 @@ real rate fell by about two percentage points in the US, the euro area and the U
 and 2015 (Holston, Laubach and Williams 2017). With a fixed intercept the simulated policy rates
 in 2009-2021 sit too high and the effective lower bound binds too rarely, which misses a 15.4
 target. ADR 0065 already lets agents read published statistics rather than true state.
-Gap audit (2026-10-28): https://claude.ai/artifact/HRDQVbjJz8MrcDuPphPyYs
+Gap audit (2026-10-28)
 
 ## Options
 

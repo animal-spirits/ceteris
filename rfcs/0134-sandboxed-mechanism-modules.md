@@ -8,8 +8,7 @@ Phase: 2.x (with the module ABI)
 ## Context
 
 The module ABI of 23.3 lets third-party crates register systems, but native code can break
-determinism or invariants in ways no review catches. Brainstorm:
-https://claude.ai/artifact/N9zi5kznSaqvjg9ztw4WMT (idea 53).
+determinism or invariants in ways no review catches. Brainstorm (idea 53).
 
 ## Options
 
