@@ -1,6 +1,6 @@
 # 0128. Distribution: runs as hashes, reproducible builds, annual report, engine crate
 
-Status: proposed
+Status: accepted (owner, 2026-11-11)
 Date: 2026-10-28
 Design sections: 2.5 (principle 7), 14.3, 19.1
 Phase: P3 (run hashes, reproducible builds); 1.0 and later (annual report, engine crate, wasm)

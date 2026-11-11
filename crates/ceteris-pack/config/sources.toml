@@ -860,7 +860,7 @@ policy = "bundle-aggregates"
 reason = "Iron and steel CC BY 4.0, cement CC0 1.0 (as stated by the Earth Engine community catalogue records)"
 checked = 2026-10-31
 confidence = "medium"
-notes = "The provider page (sustainablefinance.ox.ac.uk/geoasset-databases) states no licence; the licences come from the community catalogue records and Dryad's CC0 policy. Read the licence file in each download. Fields: capacity (Mt), start year, coordinates within about 10 km. The pulp and paper (3,403 mills) and ethylene (303) databases could seed C17_18 and C20 later."
+notes = "The provider page (sustainablefinance.ox.ac.uk/geoasset-databases) states no licence; the licences come from the community catalogue records and Dryad's CC0 policy. Read the licence file in each download. Fields: capacity (Mt), start year, coordinates within about 10 km. The pulp and paper (3,403 mills) and ethylene (303) databases could seed C17_18 and C20 later. Steel data: unavailable. The request to SFI (sent before 2026-11-04) has had no reply; decided 2026-11-11 (issue #175) to calibrate steel and the 50-goods set on public data and revisit if SFI replies. Cement (Dryad) is unaffected."
 
 [[source]]
 id = "usgs-smelters"
