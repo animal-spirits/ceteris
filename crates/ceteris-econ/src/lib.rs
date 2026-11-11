@@ -14,6 +14,7 @@ pub mod fiscal;
 pub mod fixture;
 pub mod flows;
 pub mod history;
+pub mod hlw;
 pub mod inputs;
 pub mod labour;
 pub mod lanes;
