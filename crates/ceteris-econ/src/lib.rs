@@ -22,6 +22,7 @@ pub mod pack;
 pub mod params;
 pub mod pop;
 pub mod production;
+pub mod settlement;
 pub mod synthetic;
 pub mod systems;
 pub mod wealth;
