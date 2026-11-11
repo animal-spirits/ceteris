@@ -17,25 +17,29 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
-  # Both jobs run on the owner's self-hosted Mac (aarch64-darwin) while hosted minutes are
-  # exhausted. The x86-64 Linux leg of the cross-architecture golden check (Section 4.5) is
-  # paused until hosted runners return. Target dirs sit outside the checkout so they survive
-  # the clean checkout between runs.
+  # Pull requests, including forks, run only on GitHub-hosted runners. Push to main, nightly and
+  # on-demand jobs run on the owner's self-hosted Mac (aarch64-darwin), which fork code never
+  # reaches. Self-hosted target dirs sit outside the checkout so they survive the clean
+  # checkout between runs; hosted runners use the default target dir, restored by rust-cache.
   rust:
-    # Fork pull requests never reach the self-hosted runner.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && vars.CI_RUNNER_PR || '["self-hosted","macOS","ARM64","ceteris"]') }}
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rust
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '"ubuntu-latest"' || '["self-hosted","macOS","ARM64","ceteris"]') }}
     steps:
       - uses: actions/checkout@v4
+      - name: Target dir outside the checkout (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/../target/rust" >> "$GITHUB_ENV"
       - name: Toolchain (pinned by rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        if: runner.environment == 'github-hosted'
       # Golden drift fails here, before the slower lint and test steps; the later nextest run skips it.
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          tool: cargo-nextest,cargo-deny
       - name: Stale-golden check
         run: cargo nextest run -p ceteris-core -p ceteris-econ -p ceteris-geo -E 'binary(golden)'
       - name: Data-source licence manifest and research pack profile (ADRs 0005, 0050)
@@ -57,7 +61,7 @@ jobs:
         if: github.event_name == 'push'
         run: cargo bench --workspace --no-run
       - name: Disk cleanup
-        if: always()
+        if: always() && runner.environment == 'self-hosted'
         run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"
 
   slow:
