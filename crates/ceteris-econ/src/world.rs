@@ -82,6 +82,10 @@ pub const MINT: Flow = Flow(8);
 pub const WRITE_OFF: Flow = Flow(9);
 pub const TRANSFER: Flow = Flow(10);
 pub const FOREIGN_DIVIDEND: Flow = Flow(11);
+/// Fiscal Flows (ADR 0360): taxes to, transfers and interest from the government account.
+pub const TAX: Flow = Flow(12);
+pub const GOV_TRANSFER: Flow = Flow(13);
+pub const GOV_INTEREST: Flow = Flow(14);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -136,6 +140,10 @@ pub struct Accounts {
     /// foreign-owned share is nonzero, after the transfer account, so a world without foreign
     /// owners keeps its ledger.
     pub foreign: Option<AccountId>,
+    /// Per country: the government account of the fiscal system (ADR 0359), opened in every
+    /// world after the foreign account; zero and untouched with the fiscal system off, negative
+    /// by the debt when it borrows (ADR 0363).
+    pub government: Vec<AccountId>,
 }
 
 /// Static structure derived at load from the inputs and parameters: never in snapshots,
@@ -1445,6 +1453,7 @@ impl EconWorld {
             mint: ledger.open_wide(),
             transfer: transfers_on(inp, &params).then(|| ledger.open_wide()),
             foreign: inp.has_foreign().then(|| ledger.open_wide()),
+            government: open_wide_n(&mut ledger, nc),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -3087,6 +3096,7 @@ mod tests {
             .map(|a| a.0)
             .collect();
         all.push(acc.mint.0);
+        all.extend(acc.government.iter().map(|a| a.0));
         assert_eq!(all, (0..all.len() as u32).collect::<Vec<_>>());
     }
 
@@ -3717,10 +3727,11 @@ mod tests {
         )
     }
 
-    /// With the government accounts off the run is the status quo; on, the real economy is
-    /// untouched, each country collects revenue from the tick's bases, runs the 10% deficit
-    /// its spending shares imply into debt that the balance sheet carries as bonds, builds VAT
-    /// capacity, and the section survives a snapshot next to the monetary one.
+    /// With the fiscal system off the government accounts stay at zero; on, each country collects
+    /// revenue from the tick's bases, runs the 10% deficit its spending shares imply into debt
+    /// that its ledger account holds as a negative balance and its balance sheet as bonds,
+    /// builds VAT capacity, moves pops' money and so the real economy, and the section survives a
+    /// snapshot next to the monetary one.
     #[test]
     fn fiscal_off_equals_status_quo_and_on_books_the_government_account() {
         use crate::fiscal::{CORPORATE, PERSONAL_INCOME, VAT};
@@ -3736,10 +3747,28 @@ mod tests {
         off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
         on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
         let w = on.world();
-        assert_eq!(w.wage, off.world().wage);
-        assert_eq!(w.employment, off.world().employment);
+        let quo = off.world();
+        for &a in &quo.layout.accounts.government {
+            assert_eq!(quo.ledger.money_wide(a), 0);
+        }
+        let pops = |w: &EconWorld| -> Vec<i64> {
+            w.layout
+                .accounts
+                .pop
+                .iter()
+                .map(|&a| w.ledger.money(a))
+                .collect()
+        };
+        assert_ne!(pops(w), pops(quo));
+        assert_ne!(w.employment, quo.employment);
         let g = w.fiscal.as_ref().unwrap();
-        for (f, sheet) in g.fiscal.iter().zip(&g.sheets) {
+        for ((f, sheet), &a) in g
+            .fiscal
+            .iter()
+            .zip(&g.sheets)
+            .zip(&w.layout.accounts.government)
+        {
+            assert_eq!(w.ledger.money_wide(a), -f.debt);
             for i in [PERSONAL_INCOME, VAT, CORPORATE] {
                 assert!(f.instruments[i].base > 0, "instrument {i} has no base");
             }

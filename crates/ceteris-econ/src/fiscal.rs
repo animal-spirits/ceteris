@@ -91,21 +91,28 @@ impl Fiscal {
     }
 }
 
-/// The government account of every country (system 232, `specs/money/SPEC.md`): its fiscal
-/// state and its column of the sector balance sheet, which holds the debt as bonds. State only:
-/// taxes and spending are booked here and in the SFC matrices, not moved on the money ledger, so
-/// they feed no demand yet (shortcut, #546).
+/// The government of every country (system 232, `specs/money/SPEC.md`): its fiscal state and
+/// its column of the sector balance sheet, which holds the debt as bonds. Its money is the
+/// government ledger account (ADRs 0359 to 0363); the system posts each [`Budget`] there.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Government {
     pub fiscal: Vec<Fiscal>,
     pub sheets: Vec<BalanceSheets>,
     /// Spending by category as a share of the tick's revenue; shares summing to 1 balance the
-    /// primary budget. Held for the run until budgets are set by the state AI (P6).
+    /// primary budget. Held for the run until budgets are set by the state AI (P6, #546).
     pub spending_share: [f64; N_SPENDING],
     /// Capacity spending per instrument as a share of GDP, held for the run.
     pub capacity_spend: [f64; N_REVENUE],
-    /// Interest per tick on the debt.
+    /// Interest per tick on the debt (#546).
     pub interest_rate: f64,
+}
+
+/// One tick of one country's government account, minor units.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Budget {
+    pub revenue: [i128; N_REVENUE],
+    pub spending: i128,
+    pub interest: i128,
 }
 
 impl Government {
@@ -126,18 +133,27 @@ impl Government {
         }
     }
 
+    /// Corporate tax of country `c` on the profit pool `base` (ADR 0362), which becomes the
+    /// instrument's base for the tick.
+    pub fn corporate_tax(&mut self, c: usize, base: i128) -> i128 {
+        self.fiscal[c].instruments[CORPORATE].base = base;
+        self.fiscal[c].revenue(CORPORATE)
+    }
+
     /// One tick: set the bases the tick measured (`None` leaves an instrument's base as it is),
-    /// collect, spend, pay interest, finance the deficit and post it all to the government
-    /// account, then update capacity.
-    pub fn step(&mut self, bases: &[[Option<i128>; N_REVENUE]]) {
+    /// collect, spend, pay interest, finance the deficit and post it all to the balance sheet,
+    /// then update capacity. Returns each country's budget for the ledger.
+    pub fn step(&mut self, bases: &[[Option<i128>; N_REVENUE]]) -> Vec<Budget> {
+        let mut budgets = Vec::with_capacity(self.fiscal.len());
         for ((f, sheet), base) in self.fiscal.iter_mut().zip(&mut self.sheets).zip(bases) {
             for (x, b) in f.instruments.iter_mut().zip(base) {
                 if let Some(b) = *b {
                     x.base = b;
                 }
             }
-            let revenue = f.total_revenue() as f64;
-            let spending = self.spending_share.map(|s| (s * revenue).round() as i128);
+            let revenue: [i128; N_REVENUE] = std::array::from_fn(|i| f.revenue(i));
+            let total = revenue.iter().sum::<i128>() as f64;
+            let spending = self.spending_share.map(|s| (s * total).round() as i128);
             let interest = ((f.debt as f64) * self.interest_rate).round() as i128;
             let before = *sheet;
             let (tx, acq) = f.close_tick(&spending, interest);
@@ -150,7 +166,13 @@ impl Government {
                 &[[0; N_SECTOR]; N_INSTRUMENT]
             ));
             f.update_capacity(&self.capacity_spend);
+            budgets.push(Budget {
+                revenue,
+                spending: spending.iter().sum(),
+                interest,
+            });
         }
+        budgets
     }
 
     pub fn encode(&self, e: &mut Encoder) {

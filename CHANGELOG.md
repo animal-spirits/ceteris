@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### BEHAVIOUR: government ledger accounts and the fiscal system 232 (ADRs 0359 to 0363, RFC 0349)
+
+- Every world opens one wide government account per country after the foreign account (ADR
+  0359); with the fiscal system off it stays at zero and nothing posts to it. The extra accounts
+  move every state hash once: `tests/golden/p2-econ.txt` and `tests/golden/p3-workbench.txt`
+  re-blessed for that alone.
+- System 232 (`EconWorld::with_fiscal`, off by default): taxes under TAX (Flow 12), corporate
+  from the profit pool at E4, income, payroll and VAT from pops after E4 (ADR 0362); spending to
+  pops as GOV_TRANSFER (Flow 13) by population (ADR 0361); interest as GOV_INTEREST (Flow 14)
+  by dividend share; the deficit leaves the account negative by the debt (ADR 0363).
+  Shortcuts in #546.
+
 ### BEHAVIOUR: largest income-effect weight the household shares allow (ADR 0313, RFC 0304)
 
 - PIGL inversion: z = min_c Omega_c / theta_c, the binding category's omega 0; omega_A = 0
