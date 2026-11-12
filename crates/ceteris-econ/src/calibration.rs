@@ -18,7 +18,7 @@ use arrow_array::cast::AsArray;
 use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::hex;
 use ceteris_geo::pack::{PackError, f64s, read_table, u8s, u32s};
-use ceteris_trade::TradeParams;
+use ceteris_trade::{Goods, TradeParams};
 
 use crate::demand::{N_CATEGORIES, PiglWeights};
 use crate::inputs::{EconInputs, MarketElasticity};
@@ -166,13 +166,15 @@ impl EconInputs {
     /// state a world starts from ([`EconInputs::steady`]).
     pub fn calibrate(&mut self, dir: &Path) -> Result<(), PackError> {
         let ent_table = table(dir, "econ_calib.arrow")?;
-        let want = hex(&static_digest(
-            self,
-            &EconParams::default(),
-            &TradeParams::default(),
-        ));
+        let digest = |trade: &TradeParams| hex(&static_digest(self, &EconParams::default(), trade));
+        let want = digest(&TradeParams::default());
         let found = calibrated_digest(&ent_table)?;
-        if found != want {
+        // a calibration solved under the approved storage values runs with storage on (RFC 0286
+        // screen); its digest says so
+        let storage = found != want
+            && self.goods == Goods::p2()
+            && found == digest(&TradeParams::default().with_storage());
+        if found != want && !storage {
             return Err(err(format!(
                 "the calibration in {} belongs to other inputs (static digest {found}, these \
                  inputs {want}); recalibrate with `ceteris calibrate`",
@@ -339,6 +341,7 @@ impl EconInputs {
 
         self.provinces.gamma = Rows::from_flat(gamma, ng);
         self.border_nu = Some(border_nu);
+        self.storage = storage;
         self.market_elasticity = Some(market_elasticity);
         self.steady = Some(std::sync::Arc::new(Steady {
             price,

@@ -9,16 +9,21 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   rows:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ fromJSON(vars.CI_RUNNER_PR || '["self-hosted","macOS","ARM64","ceteris"]') }}
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/../target/rows
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '"ubuntu-latest"' || '["self-hosted","macOS","ARM64","ceteris"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Target dir outside the checkout (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/../target/rows" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        if: runner.environment == 'github-hosted'
       - name: Agent branches stay out of owner-only paths
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'claude/')
         run: |
@@ -30,5 +35,5 @@ jobs:
         run: cargo run -p ceteris-rows -- check
       - run: cargo test -p ceteris-rows
       - name: Disk cleanup
-        if: always()
+        if: always() && runner.environment == 'self-hosted'
         run: "$GITHUB_WORKSPACE/scripts/ci-cleanup.sh"

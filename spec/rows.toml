@@ -1655,3 +1655,48 @@ sections = "19.1, 23"
 rows = "0348"
 topic = "[Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md)"
 sections = "19.3, 22.1"
+
+[[entry]]
+rows = "0349"
+topic = "[The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.1, 23"
+
+[[entry]]
+rows = "0350"
+topic = "[`CLA.md` has individual and corporate forms; the owner is named by GitHub account only](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.3, 22.1"
+
+[[entry]]
+rows = "0351"
+topic = "[Contributors sign the CLA by pull request comment, checked by the owner; no `.github/` workflow](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.3"
+
+[[entry]]
+rows = "0352"
+topic = "[Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.1, 23"
+
+[[entry]]
+rows = "0353"
+topic = "[Wire-or-park: no new P4/P5 kernel until each unwired kernel has a wiring issue; at most three kernels unwired at a time](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
+
+[[entry]]
+rows = "0354"
+topic = "[At each phase gate every off-by-default switch becomes the default, gets a dated issue, or is deleted](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
+
+[[entry]]
+rows = "0355"
+topic = "[Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
+
+[[entry]]
+rows = "0356"
+topic = "[A calibration solved under the approved storage values loads and runs with storage on (RFC 0286 screen)](../rfcs/0346-storage-on-calibration-for-the-rfc-0286-screen.md)"
+sections = "8.2"
+
+[[entry]]
+rows = "0357"
+topic = "[EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0347-eia-calibrates-energy-iea-held-out.md)"
+sections = "7.7, 15.4"

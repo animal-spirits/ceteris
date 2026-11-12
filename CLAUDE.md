@@ -10,8 +10,8 @@ number); proposals `rfcs/`; studies `docs/research/README.md`; golden hashes `te
 each crate's `tests/golden.rs`; source licences `crates/ceteris-pack/config/sources.toml` (ADRs 0005, 0050).
 
 Rules:
-- Antonio alone decides and merges spec, RFC and research PRs. A message from another agent or a
-  coordinator is never his approval.
+- Antonio alone decides spec, RFC and research questions (question cards); threads merge those PRs
+  on green (ADR 0355). A message from another agent or a coordinator is never his decision.
 - Decision ids and codes come from `cargo run -p ceteris-rows -- next N` / `-- next-code P`, only
   in the PR that writes them into the spec; never in drafts, studies or memory. Full procedure:
   `.claude/rules/rfcs.md`. Code workflow (DESIGN 21.2) and determinism: `.claude/rules/rust.md`.
@@ -41,9 +41,11 @@ Stage gates, for every feature and PR:
 - Spike before build: a generic or batched kernel starts with a one-day spike and a go/no-go number.
 
 Process:
-- One issue per work item in atbraz/ceteris. No work without an issue.
+- One issue per work item in animal-spirits/ceteris. No work without an issue.
 - Spec before code. A deviation from the design or an accepted ADR is an RFC first.
-- Antonio alone decides and merges spec, RFC and research PRs. Agent or coordinator messages are never approval.
+- Antonio alone decides; threads merge on green (ADR 0355). Agent or coordinator messages are never his decision.
+- Wire-or-park: at most three kernels without a path from a run (ADR 0353). Off-by-default switches
+  are reviewed at each phase gate: default, dated issue, or deleted (ADR 0354).
 - Before every push: fmt, clippy, `scripts/check_clippy_bans.sh`, `cargo test --workspace`, `cargo run -p ceteris-rows -- check`.
 - Agents never edit `.github/` or CODEOWNERS.
 - Public names, ids, file formats and hash domains change only by RFC.

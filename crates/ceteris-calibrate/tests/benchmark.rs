@@ -685,6 +685,11 @@ fn pack() -> Option<PathBuf> {
     p
 }
 
+/// The price rule of every pack run ([`benchmark::ANCHOR_VAR`]).
+fn anchor() -> Option<ceteris_trade::PriceAnchor> {
+    benchmark::anchor_from_env().unwrap()
+}
+
 fn codes(pack: &Path) -> &'static [String] {
     static CODES: OnceLock<Vec<String>> = OnceLock::new();
     CODES.get_or_init(|| benchmark::codes(pack).unwrap())
@@ -692,7 +697,13 @@ fn codes(pack: &Path) -> &'static [String] {
 
 fn base(pack: &Path) -> &'static Outcome {
     static BASE: OnceLock<Outcome> = OnceLock::new();
-    BASE.get_or_init(|| benchmark::run(pack, &[], TICKS).unwrap())
+    BASE.get_or_init(|| {
+        eprintln!(
+            "price rule: {}",
+            std::env::var(benchmark::ANCHOR_VAR).unwrap_or_else(|_| "off".into())
+        );
+        benchmark::run(pack, &[], TICKS, anchor()).unwrap()
+    })
 }
 
 fn run(pack: &Path, file: &str) -> Result<Outcome, String> {
@@ -701,6 +712,7 @@ fn run(pack: &Path, file: &str) -> Result<Outcome, String> {
         pack,
         &shock::parse(&text, codes(pack), benchmark::n_goods(pack)?)?,
         TICKS,
+        anchor(),
     )
 }
 
@@ -784,7 +796,7 @@ fn acr_stats(pairs: &[(f64, f64)]) -> (usize, [f64; 3], f64) {
 /// The model's theta per good, the theta classes of the traded goods grouped, and the ICIO
 /// foreign-share target of each group.
 fn openness_groups(pack: &Path) -> (Vec<Vec<usize>>, Vec<f64>, Vec<bool>) {
-    let world = benchmark::world(pack, &[]).unwrap();
+    let world = benchmark::world(pack, &[], anchor()).unwrap();
     let class: Vec<usize> = world
         .trade()
         .theta_class
@@ -847,7 +859,7 @@ fn acr_formula_holds_under_costlier_borders() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
     let (_, _, icio) = openness_groups(&pack);
-    let world = benchmark::world(&pack, &[]).unwrap();
+    let world = benchmark::world(&pack, &[], anchor()).unwrap();
     let theta: [f64; N_GOODS] = std::array::from_fn(|g| world.kernel().theta(g));
     let io = &world.inputs().countries.io;
     let shocked = run(&pack, "border-1.1.shocks").unwrap();
@@ -878,7 +890,7 @@ fn benchmark_cases_are_reported() {
     let Some(pack) = pack() else { return };
     let base = base(&pack);
     // theta, classes and A of the run itself
-    let world = benchmark::world(&pack, &[]).unwrap();
+    let world = benchmark::world(&pack, &[], anchor()).unwrap();
     let theta: [f64; N_GOODS] = std::array::from_fn(|g| world.kernel().theta(g));
     let io = &world.inputs().countries.io;
     let class: Vec<usize> = world

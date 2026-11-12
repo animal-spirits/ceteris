@@ -459,7 +459,8 @@ fn mode_costs_halve_a_step_that_raises_the_deviance() {
         let full: [f64; 3] = std::array::from_fn(|m| r[m] + step[m]);
         if gravity::mode_tau(&s, &full, &p).iter().all(|&t| t > 0.0) {
             let d = gravity::profile_deviance(&s, &SYNTHETIC_CLASSES, &p, &full).unwrap();
-            if d > est.deviance[k] {
+            // The fit accepts a rise within the PPML's resolution; below it the sign is rounding noise.
+            if d > est.deviance[k] + ceteris_reference::ppml::TOL * (est.deviance[k].abs() + 0.1) {
                 assert!(est.halvings[k] > 0, "step {k}: {est:?}");
                 rises += 1;
             }
@@ -678,7 +679,7 @@ fn s05_costs_match_the_rust_crossing_legs() {
         return;
     }
     let tmp = tempfile::tempdir().unwrap();
-    ceteris_calibrate::export_pack(&pack, tmp.path()).unwrap();
+    ceteris_calibrate::export_pack(&pack, tmp.path(), false).unwrap();
     let (legs, nodes, edges) = (
         table(&tmp.path().join("legs.arrow")),
         table(&pack.join("nodes.arrow")),

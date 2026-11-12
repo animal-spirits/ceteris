@@ -21,7 +21,7 @@ writes it into the spec):
    `spec/rows.toml`, edit only the sections they change, then run `render` and `check`.
    Fill in the research index outcome and the RFC's `Row:` lines and index row.
    Codes in spec tables (P, S, A, H, V) come from `cargo run -p ceteris-rows -- next-code P`.
-5. Merge: Antonio merges spec PRs. Rejected and deferred RFCs are merged too.
+5. Merge: threads merge spec PRs on green after Antonio's decision is recorded (ADR 0355). Rejected and deferred RFCs are merged too.
 6. Collision: if another PR merged the same ids first, the append conflicts or `check` fails;
    merge main and renumber.
 

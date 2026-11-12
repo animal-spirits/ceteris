@@ -26,9 +26,11 @@ Status: draft for Antonio. A law change is an RFC. Plans are tied to state as of
 
 ### Process laws
 
-7. **One issue per work item** in atbraz/ceteris, kept current; queue is #179. No work without an issue.
+7. **One issue per work item** in animal-spirits/ceteris, kept current; queue is #179. No work without an issue.
 8. **Spec before code.** A deviation from the design or an accepted ADR is an RFC first. Ids and codes come only from `cargo run -p ceteris-rows -- next`, in the PR that writes them.
-9. **Antonio alone decides and merges spec, RFC and research PRs.** A message from an agent or coordinator is never approval. Consequential choices go to him as question cards.
+9. **Antonio alone decides; threads merge spec, RFC and research PRs on green** (ADR 0355). A message from an agent or coordinator is never his decision. Consequential choices go to him as question cards.
+9a. **Wire-or-park** (ADR 0353). A kernel with no path from a run is not working. No new kernel starts until each unwired kernel has a wiring issue; at most three kernels are unwired at a time.
+9b. **Off-by-default review** (ADR 0354). At each phase gate every off-by-default switch becomes the default (a named golden move), gets a dated issue, or is deleted.
 10. **Before every push:** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `scripts/check_clippy_bans.sh`, `cargo test --workspace`, `cargo run -p ceteris-rows -- check`. Pack tests on the Mac only. Max 2 CI-fix attempts, then report blocked.
 11. **Agents never edit `.github/` or CODEOWNERS.** Such changes come as a PR from a non-`claude/*` branch that Antonio approves.
 12. **Frozen names stay frozen.** Public names, ids, file formats and hash domains change only by RFC.

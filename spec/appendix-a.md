@@ -336,4 +336,13 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0346 | [Simulator code under AGPL-3.0-or-later, with commercial licences from the owner (supersedes MIT OR Apache-2.0)](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 22.1 |
 | 0347 | [2.0 game in a separate repository, source-available under a non-commercial licence; art all rights reserved](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 23 |
 | 0348 | [Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md) | 19.3, 22.1 |
+| 0349 | [The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
+| 0350 | [`CLA.md` has individual and corporate forms; the owner is named by GitHub account only](../rfcs/0344-game-licence-and-cla-process.md) | 19.3, 22.1 |
+| 0351 | [Contributors sign the CLA by pull request comment, checked by the owner; no `.github/` workflow](../rfcs/0344-game-licence-and-cla-process.md) | 19.3 |
+| 0352 | [Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
+| 0353 | [Wire-or-park: no new P4/P5 kernel until each unwired kernel has a wiring issue; at most three kernels unwired at a time](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0354 | [At each phase gate every off-by-default switch becomes the default, gets a dated issue, or is deleted](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0355 | [Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0356 | [A calibration solved under the approved storage values loads and runs with storage on (RFC 0286 screen)](../rfcs/0346-storage-on-calibration-for-the-rfc-0286-screen.md) | 8.2 |
+| 0357 | [EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0347-eia-calibrates-energy-iea-held-out.md) | 7.7, 15.4 |
 <!-- rows:end -->

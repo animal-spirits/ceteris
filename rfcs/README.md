@@ -334,3 +334,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0341 | [Stop the island money sink at x10 (P5 Branch E3)](0341-island-money-sink.md) | accepted | none yet |
 | 0342 | [Anchor the price level on cells that trade (P5 Branch E3)](0342-anchor-index-over-traded-cells.md) | accepted | ADR 0343, ADR 0344, ADR 0345 |
 | 0343 | [Licences for the simulator and the game](0343-licences-for-simulator-and-game.md) | accepted | ADR 0346, ADR 0347, ADR 0348 |
+| 0344 | [Game licence and CLA process](0344-game-licence-and-cla-process.md) | accepted | ADR 0349, ADR 0350, ADR 0351, ADR 0352 |
+| 0345 | [Process laws from the 12 November retrospective](0345-retrospective-process-laws.md) | accepted | ADR 0353, ADR 0354, ADR 0355 |
+| 0346 | [Storage-on calibration of a pack for the RFC 0286 screen](0346-storage-on-calibration-for-the-rfc-0286-screen.md) | accepted | ADR 0356 |
+| 0347 | [EIA calibrates the energy rows; IEA balances stay held out](0347-eia-calibrates-energy-iea-held-out.md) | accepted | ADR 0357 |

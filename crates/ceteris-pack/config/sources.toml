@@ -1538,7 +1538,7 @@ id = "eia"
 name = "US EIA energy data (EIA-collected series)"
 provider = "US Energy Information Administration"
 version = "Current"
-role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces"
+role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces; International Energy Statistics (country coal, oil and gas production and use, 2000) calibrates the spec 07 energy rows in all packs; IEA balances stay held-out (#499)"
 licence = "LicenseRef-USGov-PublicDomain"
 licence_url = "https://www.eia.gov/about/copyrights_reuse.php"
 attribution = "Source: U.S. Energy Information Administration"
@@ -1549,7 +1549,7 @@ policy = "bundle"
 reason = "US public domain for EIA's own series"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily). SEDS (Complete_SEDS.csv, current release) is EIA's own series, downloaded by a plain scripted request on 2026-10-24; its pin breaks when EIA updates the file, by design."
+notes = "Exclude spot series whose notes credit Refinitiv/LSEG (e.g. WTI, Brent daily). Third-party-materials caveat on the copyrights page: ingest only EIA-collected series. SEDS (Complete_SEDS.csv, current release) is EIA's own series, downloaded by a plain scripted request on 2026-10-24; its pin breaks when EIA updates the file, by design."
 
 [[source]]
 id = "fao-ffpi"
