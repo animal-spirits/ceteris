@@ -1,9 +1,45 @@
 //! State energy cells (P5 Branch C4, ADR 0278 applying ADR 0201's ownership split to crude oil and
 //! gas extraction and power only). A (province, sector) cell splits where the state holds at least
 //! 5% of its 2000 value added; state cells' profits go to the government account instead of pops.
-//! The kernel is not yet in the tick.
+//! In the tick inside `distribute`, off by default (`EconWorld::with_state_cells`).
+
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 use crate::sfc::{DIVIDENDS, ENTERPRISES, GOVERNMENT, HOUSEHOLDS, Transactions};
+
+/// Opens the state cells section of a snapshot, which follows the energy policy one.
+pub const SNAPSHOT_TAG: u32 = 0x3A6E_6F03;
+
+/// The state's share of each enterprise's cell in 2000 value added, one per enterprise; below
+/// [`SPLIT_THRESHOLD`] the enterprise stays private.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StateCells {
+    pub share: Vec<f64>,
+}
+
+impl StateCells {
+    /// The part of enterprise `e`'s positive payout `paid` (minor units) that is the state cell's.
+    pub fn state_part(&self, e: usize, paid: i64) -> i64 {
+        split_cell(i128::from(paid), self.share[e], true).state as i64
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        e.count(self.share.len());
+        for &s in &self.share {
+            e.f64(s);
+        }
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("state cells section tag".into()));
+        }
+        let n = d.count()?;
+        let share = (0..n).map(|_| d.f64()).collect::<Result<_, _>>()?;
+        Ok(StateCells { share })
+    }
+}
 
 /// ADR 0201: a cell splits only where the state holds at least this share of (province, sector) VA.
 pub const SPLIT_THRESHOLD: f64 = 0.05;
