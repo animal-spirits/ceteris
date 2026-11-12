@@ -1660,3 +1660,18 @@ sections = "19.3, 22.1"
 rows = "0349"
 topic = "[The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md)"
 sections = "19.1, 23"
+
+[[entry]]
+rows = "0350"
+topic = "[`CLA.md` has individual and corporate forms; the owner is named by GitHub account only](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.3, 22.1"
+
+[[entry]]
+rows = "0351"
+topic = "[Contributors sign the CLA by pull request comment, checked by the owner; no `.github/` workflow](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.3"
+
+[[entry]]
+rows = "0352"
+topic = "[Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.1, 23"

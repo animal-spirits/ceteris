@@ -337,4 +337,7 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0347 | [2.0 game in a separate repository, source-available under a non-commercial licence; art all rights reserved](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 23 |
 | 0348 | [Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md) | 19.3, 22.1 |
 | 0349 | [The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
+| 0350 | [`CLA.md` has individual and corporate forms; the owner is named by GitHub account only](../rfcs/0344-game-licence-and-cla-process.md) | 19.3, 22.1 |
+| 0351 | [Contributors sign the CLA by pull request comment, checked by the owner; no `.github/` workflow](../rfcs/0344-game-licence-and-cla-process.md) | 19.3 |
+| 0352 | [Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
 <!-- rows:end -->
