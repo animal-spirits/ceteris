@@ -382,7 +382,7 @@ type Fixed = ([f64; N_CATEGORIES], Vec<f64>, [f64; N_CATEGORIES], f64);
 /// (omega_S) = 0, lambda from its aggregate and t = omega_A meets food (ADR 0313), on the shares
 /// [`pigl_shares`] spends, a negative one at 0 (ADR 0316); then alpha_g times Omega_g over its
 /// aggregate share, renormalized within its category; until every aggregate share is within
-/// 1e-14 of Omega (or, below 1e-12, has stopped improving). Pops without spending are left
+/// 1e-14 of Omega (or, below its rounding floor, has stopped improving). Pops without spending are left
 /// out; without any, [`invert_pigl`] at spending 0. Panics where no split meets the aggregates or
 /// a split takes more than [`MAX_SECANT_STEPS`] secant steps. `category` is each good's
 /// (`Goods::category`).
@@ -563,11 +563,18 @@ pub fn invert_pigl_pops(
                 model[g] += k.spend * s[of(g)] * within[g];
             }
         }
+        let rel = |g: usize| (model[g] / spent / share[g] - 1.0).abs();
         let miss = (0..n)
             .filter(|&g| share[g] > 0.0)
-            .map(|g| (model[g] / spent / share[g] - 1.0).abs())
+            .map(rel)
             .fold(0.0, f64::max);
-        if miss <= 1e-14 || (miss <= 1e-12 && stalled >= 20) {
+        // A good's aggregate is a sum over pops of shares carrying an absolute rounding of
+        // order eps each, so its relative miss floors at eps sqrt(pops) over its category's
+        // share (country 222: 4.8e-12 on a services share of 1e-3).
+        let floored = (0..n).filter(|&g| share[g] > 0.0).all(|g| {
+            rel(g) <= 1e-12_f64.max(4.0 * f64::EPSILON * (pops.len() as f64).sqrt() / cat[of(g)])
+        });
+        if miss <= 1e-14 || (floored && stalled >= 20) {
             return w;
         }
         if miss < best {
