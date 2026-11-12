@@ -337,7 +337,12 @@ components): only at `calibration_format` 6 (5 since ADR 0200 added `gamma`, 6 s
 added E and eps) and only when the
 `static_digest` in the `calibration` metadata is that of the uncalibrated inputs under default
 parameters (`EconInputs::from_pack_data`, which `ceteris export` writes), so tables of another pack
-build, another format or other coefficients stop the load with a `PackError`.
+build, another format or other coefficients stop the load with a `PackError`. The one other digest
+accepted is that of the same inputs under the approved storage values, for the P2 goods those
+values are set for (`TradeParams::with_storage`; `ceteris calibrate --pack DIR --storage` exports and calibrates under
+them): the inputs then record `storage`, `EconInputs::trade_params` turns storage on, and a run
+under storage-off parameters is refused like any other structural change (ADR 0356, the
+storage-on half of the RFC 0286 screen; `storage_calibration.rs`).
 
 ## State components
 

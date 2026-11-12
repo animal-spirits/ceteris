@@ -27,7 +27,7 @@ use arrow_array::types::Float64Type;
 use arrow_cast::cast;
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
-use ceteris_calibrate::{border, write};
+use ceteris_calibrate::{benchmark, border, write};
 use ceteris_econ::{EconInputs, EconParams};
 use ceteris_pack::fetch;
 use ceteris_pack::read::natural_earth::read_codes;
@@ -39,7 +39,8 @@ use ceteris_reference::solve::{self, Equilibrium, Info};
 use ceteris_reference::uniqueness::{self, Gains, V1Mode};
 
 const TICKS: u32 = 1200;
-const HISTORY_EVERY: u32 = 12;
+/// History samples per run: every `ticks / HISTORY_SAMPLES` ticks (12 at V1's 1,200).
+const HISTORY_SAMPLES: u32 = 100;
 /// The perturbation seeds V1 runs from: 20, and 21 and 22 so that one draw cannot pass alone.
 const PERTURB_SEEDS: [u64; 3] = [20, 21, 22];
 /// V1's 1% (Equilibrium nesting).
@@ -137,16 +138,19 @@ fn reference() -> Option<&'static Reference> {
 }
 
 fn run(out: &Path, flags: &[&str]) -> String {
-    run_checked(out, flags).unwrap_or_else(|stderr| panic!("{stderr}"))
+    run_checked(out, TICKS, flags).unwrap_or_else(|stderr| panic!("{stderr}"))
 }
 
 /// [`run`], the run's stderr where it fails.
-fn run_checked(out: &Path, flags: &[&str]) -> Result<String, String> {
+/// The price rule is `CETERIS_PRICE_ANCHOR` (`off`, `e1` or `e3`; `ceteris run --price-anchor`).
+fn run_checked(out: &Path, ticks: u32, flags: &[&str]) -> Result<String, String> {
     let pack = pack();
-    let (ticks, every) = (TICKS.to_string(), HISTORY_EVERY.to_string());
+    let (ticks, every) = (ticks.to_string(), (ticks / HISTORY_SAMPLES).to_string());
+    let anchor = std::env::var(benchmark::ANCHOR_VAR).unwrap_or_else(|_| "off".into());
     // the gate measures the steady state, which the initial drift leaves (ADR 0103)
     let mut args = vec!["run", "--pack", pack.to_str().unwrap(), "--ticks", &ticks];
     args.push("--no-drift");
+    args.extend(["--price-anchor", &anchor]);
     args.extend(flags);
     args.extend([
         "--history",
@@ -368,11 +372,18 @@ fn gaps(out: &Path, r: &Reference, excluded: &[(usize, usize)]) -> Gaps {
 /// printed with their gaps; more than 1% of the active cells excluded fails V1. Whether V1
 /// holds, and the summary.
 fn v1(r: &Reference, start: &str, flags: &[&str]) -> (bool, String) {
-    v1_checked(r, start, flags).unwrap_or_else(|stderr| panic!("{stderr}"))
+    let (holds, summary, _) =
+        v1_checked(r, start, TICKS, flags).unwrap_or_else(|stderr| panic!("{stderr}"));
+    (holds, summary)
 }
 
 /// [`v1`], the run's stderr where it fails.
-fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, String), String> {
+fn v1_checked(
+    r: &Reference,
+    start: &str,
+    ticks: u32,
+    flags: &[&str],
+) -> Result<(bool, String, Gaps), String> {
     let bound = uniqueness::spectral_bound(
         &r.inputs.theta,
         0.0,
@@ -384,9 +395,9 @@ fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, Strin
     let excluded = uniqueness::cells_outside_region(&r.inputs, pack_gains());
     let active = r.inputs.active_cells().len();
     let tmp = tempfile::tempdir().unwrap();
-    let stdout = run_checked(tmp.path(), flags)?;
+    let stdout = run_checked(tmp.path(), ticks, flags)?;
     let g = gaps(tmp.path(), r, &excluded);
-    let step = (120 / HISTORY_EVERY) as usize;
+    let step = (HISTORY_SAMPLES / 10) as usize;
     let path: Vec<String> = g
         .path
         .iter()
@@ -403,10 +414,10 @@ fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, Strin
         V1Mode::Report => "report",
     };
     let summary = format!(
-        "V1 from {start} ({perturbation}): bound {bound:.4}, {mode_name} mode; at tick {TICKS} \
+        "V1 from {start} ({perturbation}): bound {bound:.4}, {mode_name} mode; at tick {ticks} \
          price {:.3e} ({}), wage {:.3e} ({}), flow units {:.3e} ({}), flow value {:.3e} ({}); \
          {} flows compared, {} missing; world price index {}; most pops with negative money {}; \
-         cells outside J2 excluded {} of {active} ({:?}); largest price gap every 120 ticks: {}",
+         cells outside J2 excluded {} of {active} ({:?}); largest price gap every {} ticks: {}",
         g.price.0,
         g.price.1,
         g.wage.0,
@@ -421,6 +432,7 @@ fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, Strin
         g.negative_money_pops,
         g.excluded.len(),
         g.excluded,
+        ticks / 10,
         path.join(" ")
     );
     println!("{summary}");
@@ -430,7 +442,7 @@ fn v1_checked(r: &Reference, start: &str, flags: &[&str]) -> Result<(bool, Strin
                 && [g.price.0, g.wage.0, g.flow_units.0, g.flow_value.0]
                     .iter()
                     .all(|&d| d < V1_TOL)));
-    Ok((holds, summary))
+    Ok((holds, summary, g))
 }
 
 /// V1 leaves out a cell outside one-market J2 at the run's gains: on the fixture's frictionless
@@ -488,8 +500,8 @@ fn v1_full_pack_from_the_perturbed_steady_state() {
 #[test]
 fn v1_full_pack_from_the_data_state_stays_open() {
     let Some(r) = reference() else { return };
-    match v1_checked(r, "data_state", &["--frictionless", "--data-state"]) {
-        Ok((holds, summary)) => assert!(!holds, "V1 from the data state now holds: {summary}"),
+    match v1_checked(r, "data_state", TICKS, &["--frictionless", "--data-state"]) {
+        Ok((holds, summary, _)) => assert!(!holds, "V1 from the data state now holds: {summary}"),
         Err(stderr) => {
             assert!(stderr.contains("does not fit the ledger"), "{stderr}");
             println!(
@@ -498,6 +510,66 @@ fn v1_full_pack_from_the_data_state_stays_open() {
             );
         }
     }
+}
+
+/// Horizon of the RFC 0286 screen and the ticks its table reports (RFC 0280, Storage-on V1).
+const SCREEN_TICKS: u32 = 6_000;
+const SCREEN_CHECKPOINTS: [u32; 4] = [1_200, 3_600, 4_800, 6_000];
+
+/// The RFC 0286 screen (specs/p5/PLAN.md, tasks E1 to E3): V1 from the eight starts of RFC 0280's
+/// table (default and frictionless; the perturbed steady state of seeds 20, 21 and 22, and the
+/// data state) for 6,000 ticks, under the price rule of `CETERIS_PRICE_ANCHOR`. Storage is the
+/// pack's: a storage-on calibration of the pack gives the other eight of the sixteen starts.
+/// Prints one row per start: the largest price gap at each checkpoint and the four gaps at the
+/// last; a run that halts prints its stderr. Report only, no pass criterion: RFC 0286 fixes what
+/// a fix must pass.
+#[test]
+#[ignore = "report only; 8 runs of 6,000 ticks on the pack in release"]
+fn rfc0286_screen_is_reported() {
+    let Some(r) = reference() else { return };
+    let anchor = std::env::var(benchmark::ANCHOR_VAR).unwrap_or_else(|_| "off".into());
+    let mut rows = vec![format!(
+        "RFC 0286 screen, price rule {anchor}, pack {}: start | price gap at {SCREEN_CHECKPOINTS:?} \
+         | at {SCREEN_TICKS}: wage, flow units, flow value | holds",
+        pack().display()
+    )];
+    for (mode, friction) in [("default", None), ("frictionless", Some("--frictionless"))] {
+        let seeds = PERTURB_SEEDS.map(|s| s.to_string());
+        let starts = seeds
+            .iter()
+            .map(|s| (format!("seed {s}"), vec!["--perturb", s.as_str()]))
+            .chain([("data state".to_string(), vec!["--data-state"])]);
+        for (start, mut flags) in starts {
+            flags.extend(friction);
+            let row = match v1_checked(r, &start, SCREEN_TICKS, &flags) {
+                Ok((holds, _, g)) => {
+                    let at: Vec<String> = SCREEN_CHECKPOINTS
+                        .iter()
+                        .map(|&c| {
+                            g.path
+                                .iter()
+                                .find(|&&(t, _)| t >= u64::from(c))
+                                .map_or("-".into(), |(_, d)| format!("{d:.2e}"))
+                        })
+                        .collect();
+                    format!(
+                        "{mode}, {start} | {} | {:.2e} ({}), {:.2e} ({}), {:.2e} ({}) | {holds}",
+                        at.join(" "),
+                        g.wage.0,
+                        g.wage.1,
+                        g.flow_units.0,
+                        g.flow_units.1,
+                        g.flow_value.0,
+                        g.flow_value.1
+                    )
+                }
+                Err(stderr) => format!("{mode}, {start} | halted: {}", stderr.trim()),
+            };
+            println!("{row}");
+            rows.push(row);
+        }
+    }
+    println!("{}", rows.join("\n"));
 }
 
 /// The default run of 1,200 ticks from the calibrated steady state.

@@ -1690,3 +1690,8 @@ sections = "21.2"
 rows = "0355"
 topic = "[Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md)"
 sections = "21.2"
+
+[[entry]]
+rows = "0356"
+topic = "[A calibration solved under the approved storage values loads and runs with storage on (RFC 0286 screen)](../rfcs/0346-storage-on-calibration-for-the-rfc-0286-screen.md)"
+sections = "8.2"

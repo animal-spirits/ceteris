@@ -679,7 +679,7 @@ fn s05_costs_match_the_rust_crossing_legs() {
         return;
     }
     let tmp = tempfile::tempdir().unwrap();
-    ceteris_calibrate::export_pack(&pack, tmp.path()).unwrap();
+    ceteris_calibrate::export_pack(&pack, tmp.path(), false).unwrap();
     let (legs, nodes, edges) = (
         table(&tmp.path().join("legs.arrow")),
         table(&pack.join("nodes.arrow")),

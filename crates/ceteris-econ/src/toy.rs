@@ -314,6 +314,7 @@ impl ToyWorld {
             enterprises: ent,
             steady: None,
             border_nu: None,
+            storage: false,
             market_elasticity: None,
         };
         inputs.set_base_prices(trade);

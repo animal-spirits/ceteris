@@ -9,16 +9,16 @@
 //! ceteris pack build [--out DIR]
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
-//! ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
+//! ceteris calibrate --pack DIR [--no-border-fit] [--storage] | --inputs DIR [--out DIR]
 //! ceteris calibrate stability [--storage] [FIXTURE_DIR]
 //! ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
 //!     [--base Y] [--shock Y]
 //! ceteris gravity [--pack DIR] [--write] [--out FILE]
 //! ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
-//! ceteris export --fixture|--pack DIR --out DIR
+//! ceteris export --fixture|--pack DIR [--storage] --out DIR
 //! ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
 //!     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
-//!     [--timing] [--inject-halt TICK] --out DIR
+//!     [--timing] [--inject-halt TICK] [--price-anchor off|e1|e3] --out DIR
 //! ceteris replay BUNDLE [--out DIR]
 //! ```
 //!
@@ -41,6 +41,8 @@
 //! `--history-format csv`, as CSV. `--timing` records wall-time spans (`ceteris_core::timing`:
 //! the tick, each system, the T2b phases and each good's T2b task) into `timing.csv` and prints
 //! each span's median per tick; the run's state is the same as without it (ADR 0294).
+//! `--price-anchor` picks the price rule (`ceteris_calibrate::benchmark::price_anchor`): `off`
+//! (the default), `e1` the anchored rule (ADRs 0338, 0340) or `e3` with ADR 0343's package.
 //!
 //! `reference solve` solves the GE reference of a `ceteris export` directory and writes it with
 //! the column layout of the run export (`prices`, `wages`, `enterprises`, `flows`, `home`) plus
@@ -54,6 +56,10 @@
 //! solved from. Before the steady state it fits the border friction per friction group to ICIO's
 //! cross-border shares (ADRs 0092, 0276) and reports the shares at the steady state;
 //! `--no-border-fit` keeps the default instead, for comparisons, and reads no ICIO shares.
+//! `--storage` exports and calibrates under the approved storage values
+//! (`TradeParams::with_storage`): the tables' static digest records it, and a run of a pack
+//! holding them has storage on (RFC 0286 screen). `export --pack DIR --storage` writes the
+//! export such a calibration is solved from, the V1 reference's inputs.
 //! `--inputs DIR` calibrates an export directory at its own u* and border friction, its
 //! provinces serving as their own pack provinces, and needs `--out` (not `--no-border-fit`).
 //!
@@ -87,7 +93,7 @@ use std::sync::Arc;
 use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
-use ceteris_calibrate::{border, gravity};
+use ceteris_calibrate::{benchmark, border, gravity};
 use ceteris_core::invariant::Violation;
 use ceteris_core::rng::Seed;
 use ceteris_core::sim::Sim;
@@ -107,7 +113,7 @@ use ceteris_pack::json::Json;
 use ceteris_pack::sources::{self, Profile};
 use ceteris_reference::model::Model;
 use ceteris_reference::{io as reference_io, output, solve};
-use ceteris_trade::{Kernel, TradeParams};
+use ceteris_trade::{Kernel, PriceAnchor, TradeParams};
 
 const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
@@ -118,18 +124,18 @@ const USAGE: &str = "usage:
   ceteris pack build [--out DIR]
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
-  ceteris calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]
+  ceteris calibrate --pack DIR [--no-border-fit] [--storage] | --inputs DIR [--out DIR]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
     [--base YEAR] [--shock YEAR]
   ceteris gravity [--pack DIR] [--write] [--out FILE]
   ceteris air-share [--pack DIR] [--data DIR] [--set pooled|us|eu] [--profile]
-  ceteris export --fixture|--pack DIR --out DIR
+  ceteris export --fixture|--pack DIR [--storage] --out DIR
   ceteris ensemble FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR
   ceteris effects FILE --branch B [--baseline A] --ticks N --fixture|--pack DIR --out DIR
   ceteris run --fixture|--pack DIR --ticks N [--frictionless] [--no-drift] [--from-equilibrium DIR]
     [--data-state] [--perturb SEED] [--history [--history-every N] [--history-format arrow|csv]]
-    [--timing] [--inject-halt TICK] --out DIR
+    [--timing] [--inject-halt TICK] [--price-anchor off|e1|e3] --out DIR
   ceteris replay BUNDLE [--out DIR]";
 
 /// Size of the `--perturb` draw: the 10% of ADR 0089's V1 test.
@@ -175,6 +181,8 @@ struct Args {
     history_format: Option<Format>,
     timing: bool,
     inject_halt: Option<u32>,
+    anchor: Option<PriceAnchor>,
+    storage: bool,
     /// The arguments without `--out`, as a bundle records them.
     argv: Vec<String>,
 }
@@ -197,6 +205,8 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let (mut data_state, mut perturb) = (false, None);
     let (mut history, mut history_every, mut history_format) = (false, None, None);
     let mut timing = false;
+    let mut anchor = None;
+    let mut storage = false;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fixture" => source = Some(Source::Fixture),
@@ -215,6 +225,11 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
                 let n = args.next().ok_or("--perturb needs a seed")?;
                 perturb = Some(n.parse().map_err(|_| format!("bad seed '{n}'"))?);
             }
+            "--price-anchor" => {
+                let name = args.next().ok_or("--price-anchor needs off, e1 or e3")?;
+                anchor = benchmark::price_anchor(&name)?;
+            }
+            "--storage" => storage = true,
             "--history" => history = true,
             "--timing" => timing = true,
             "--inject-halt" => {
@@ -257,6 +272,8 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
         history_format,
         timing,
         inject_halt,
+        anchor,
+        storage,
         argv,
     })
 }
@@ -273,15 +290,19 @@ fn export(args: &Args) -> Result<(), String> {
         || args.history_format.is_some()
         || args.timing
         || args.inject_halt.is_some()
+        || args.anchor.is_some()
     {
         return Err(
             "--ticks, --frictionless, --no-drift, --from-equilibrium, --data-state, --perturb, --history, \
-             --history-every, --history-format, --timing and --inject-halt belong to run"
+             --history-every, --history-format, --timing, --inject-halt and --price-anchor belong to run"
                 .into(),
         );
     }
     if let Source::Pack(dir) = &args.source {
-        return ceteris_calibrate::export_pack(dir, &args.out);
+        return ceteris_calibrate::export_pack(dir, &args.out, args.storage);
+    }
+    if args.storage {
+        return Err("--storage needs --pack".into());
     }
     let inputs = args.source.load(false)?;
     let (params, trade) = (EconParams::default(), TradeParams::default());
@@ -404,6 +425,11 @@ fn replay(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
 
 fn run_core(args: &Args) -> Result<(), RunFailure> {
     let ticks = args.ticks.ok_or("--ticks is required")?;
+    if args.storage {
+        return Err(
+            "--storage belongs to export: a run takes storage from the pack's calibration".into(),
+        );
+    }
     if args.history_every.is_some() && !args.history {
         return Err("--history-every needs --history".into());
     }
@@ -432,7 +458,10 @@ fn run_core(args: &Args) -> Result<(), RunFailure> {
                 .into(),
         );
     }
-    let trade = inputs.trade_params();
+    let trade = TradeParams {
+        anchor: args.anchor,
+        ..inputs.trade_params()
+    };
     let inputs = Arc::new(inputs);
     let mut world = match &args.equilibrium {
         Some(dir) => {
@@ -960,9 +989,11 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         return rho(args);
     }
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
+    let mut storage = false;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--no-border-fit" => fit_border = false,
+            "--storage" => storage = true,
             "--pack" => {
                 pack = Some(PathBuf::from(
                     args.next().ok_or("--pack needs a directory")?,
@@ -998,13 +1029,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                 );
             }
             let tmp = tempfile::tempdir().map_err(|e| format!("temporary directory: {e}"))?;
-            ceteris_calibrate::export_pack(&pack, tmp.path())?;
+            ceteris_calibrate::export_pack(&pack, tmp.path(), storage)?;
             let pack_province = calibration::read_pack_provinces(tmp.path())?;
             let u_star = calibration::read_u_star(&pack)?;
             let dir = export.insert(tmp).path().to_owned();
             (dir, Some(u_star), Some(pack_province), out, Some(pack))
         }
         (None, Some(_)) if !fit_border => return Err("--no-border-fit needs --pack".into()),
+        (None, Some(_)) if storage => return Err("--storage needs --pack".into()),
         (None, Some(inputs)) => (inputs, None, None, out.ok_or("--inputs needs --out")?, None),
         _ => return Err("choose one input with --pack or --inputs".into()),
     };

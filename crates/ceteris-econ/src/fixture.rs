@@ -283,6 +283,7 @@ fn generate(balance: &[f64; N_GOODS]) -> EconInputs {
         enterprises: ent,
         steady: None,
         border_nu: None,
+        storage: false,
         market_elasticity: None,
     };
     inputs.set_base_prices(&TradeParams::default());

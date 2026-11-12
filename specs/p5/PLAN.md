@@ -55,6 +55,7 @@ P3's and P4's constraints carry over (determinism at 1, 3 and all threads with `
 ### Task E2: Storage-on frictionless fix (RFC 0286)
 
 - [ ] Fix the storage-on misses on all 16 V1 starts and the fixture tests, as RFC 0286 records the screen and the tests any fix must pass. Failing test first: the recorded screen. Commit.
+- [x] Screen harness: `rfc0286_screen_is_reported` (`p2_gate.rs`, ignored) runs the eight starts of a pack for 6,000 ticks under `CETERIS_PRICE_ANCHOR` (`off`, `e1`, `e3`; `ceteris run --price-anchor`); a storage-on calibration (ADR 0356, `ceteris calibrate --storage`) gives the other eight. The free-moment tests of `benchmark.rs` and `p2_gate.rs` read the same variable. Runbook `docs/free-moment-rerun.md`.
 - [x] Bounded origin gap of the anchored rule (ADR 0340, RFC 0339): l_o = 2 (D + b - Q) / (D + b + Q). Test `x10_border_shock_keeps_the_index_off_the_bound` (fails with the Q-floor gap). The RFC 0286 screen with the anchor and this gap runs on the Mac (pending).
 
 ### Task E3: Zero-output production trap (ADR 0341)
