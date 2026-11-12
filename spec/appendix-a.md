@@ -346,4 +346,9 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0356 | [A calibration solved under the approved storage values loads and runs with storage on (RFC 0286 screen)](../rfcs/0346-storage-on-calibration-for-the-rfc-0286-screen.md) | 8.2 |
 | 0357 | [EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0347-eia-calibrates-energy-iea-held-out.md) | 7.7, 15.4 |
 | 0358 | [EIA International Energy Statistics electricity series calibrate power generation and capacity by fuel; Ember rejected](../rfcs/0348-electricity-source-after-ember.md) | 7.7, 15.4 |
+| 0359 | [One wide government ledger account per country, opened in every world after the foreign account; zero and untouched with the fiscal system off](../rfcs/0349-government-ledger-account.md) | 9.6 |
+| 0360 | [Fiscal journal Flows TAX, GOV_TRANSFER and GOV_INTEREST, one per SFC flow row; excises use TAX, state-cell profits use DIVIDEND](../rfcs/0349-government-ledger-account.md) | 9.6 |
+| 0361 | [Government spending is paid to pops as transfers by population, pops keep the ADR 0099 government share; the government as a buyer waits for P6 budgets](../rfcs/0349-government-ledger-account.md) | 9.6 |
+| 0362 | [Taxes are collected once per tick in system 232 after E4: income and payroll from pops by wage income, VAT from pops by spending, corporate from the profit pool](../rfcs/0349-government-ledger-account.md) | 9.6 |
+| 0363 | [The deficit is financed by borrowing: the government account may go negative, its balance minus the debt; no monetary financing until the central bank balance sheet](../rfcs/0349-government-ledger-account.md) | 9.6 |
 <!-- rows:end -->
