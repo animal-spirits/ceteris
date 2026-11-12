@@ -1,12 +1,12 @@
 # Flatness report (pack, 100 years)
 
-Median CPU per tick years 1 to 5: 180.00 ms; last five years: 195.00 ms; ratio 1.083 (gate).
+Median CPU per tick years 1 to 5: 161.67 ms; last five years: 160.83 ms; ratio 0.995 (gate).
 
-Median wall tick years 1 to 5: 186.55 ms; last five years: 203.66 ms; ratio 1.092.
+Median wall tick years 1 to 5: 159.12 ms; last five years: 158.12 ms; ratio 0.994.
 
-Host load average during the run: 10.2 to 140.6.
+Host load average during the run: 4.2 to 6.3.
 
-Peak resident memory: not available in-process on macOS; 3403 MiB maximum RSS from `/usr/bin/time -l`.
+Peak resident memory: not available on this platform.
 
 | Year | ledger_accounts | snapshots |
 |---|---|---|

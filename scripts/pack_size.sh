@@ -21,6 +21,6 @@ for p in "${packs[@]}"; do
   files=$(find "$p" -type f | wc -l | tr -d ' ')
   raw=$(find "$p" -type f -exec wc -c {} + | awk '$2 != "total" { s += $1 } END { print s + 0 }')
   # tar in sorted order so the figure is reproducible
-  comp=$(tar -C "$p" -cf - --sort=name . 2>/dev/null | $compress | wc -c | tr -d ' ')
+  comp=$((cd "$p" && find . -type f | LC_ALL=C sort | tar -cf - -T -) | $compress | wc -c | tr -d ' ')
   echo "| $(basename "$p") | $files | $(mib "$raw") | $(mib "$comp") | $(awk -v c="$comp" -v r="$raw" 'BEGIN { printf "%.2f", r ? c / r : 0 }') |"
 done
