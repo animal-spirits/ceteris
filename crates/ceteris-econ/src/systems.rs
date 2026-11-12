@@ -104,6 +104,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(229, "settlement", |w, _| settlement(w)),
         def(230, "monetary", monetary),
         def(232, "fiscal", |w, _| fiscal(w)),
+        def(233, "energy_policy", |w, _| energy_policy(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -769,13 +770,26 @@ pub fn demand(w: &mut EconWorld) {
     let acc = &lay.accounts;
     let n_pops = inp.n_pops();
     let r = rho(w.params.sigma_fl);
+    // households choose at the buyer price, market price plus the energy wedge (system 233)
+    let buyer_index = w.energy.as_ref().map(|p| {
+        let mut v = w.price_index.clone();
+        for i in 0..inp.n_provinces() {
+            let wedges = &p.countries[inp.country_of(i)];
+            for (&g, &wedge) in p.goods.iter().zip(&wedges.wedge) {
+                v[i * ng + g] += to_numeraire(wedge as i64);
+            }
+        }
+        v
+    });
     let sc = &mut w.scratch;
     let (ledger, params, index) = (&w.ledger, &w.params, &w.price_index);
     let row = |i: usize| &index[i * ng..(i + 1) * ng];
+    let buyer = buyer_index.as_deref().unwrap_or(index);
+    let buyer_row = |i: usize| &buyer[i * ng..(i + 1) * ng];
     // the price-only part of PIGL once per province, for all its pops
     let at: Vec<PiglAt> = (0..inp.n_provinces())
         .into_par_iter()
-        .map(|i| lay.pigl_at(inp, params, i, row(i)))
+        .map(|i| lay.pigl_at(inp, params, i, buyer_row(i)))
         .collect();
     sc.pop_demand
         .par_chunks_mut(ng)
@@ -785,7 +799,7 @@ pub fn demand(w: &mut EconWorld) {
             let i = inp.pops.province[k] as usize;
             let prices = row(i);
             let money = to_numeraire(ledger.money(acc.pop[k]));
-            lay.pop_demand_at(inp, params, k, &at[i], prices, money, x);
+            lay.pop_demand_at(inp, params, k, &at[i], buyer_row(i), money, x);
             for g in 0..ng {
                 spend[g] = if g < nt && x[g] > 0.0 {
                     x[g] * prices[g]
@@ -2168,6 +2182,59 @@ pub fn fiscal(w: &mut EconWorld) {
         split(b.interest, wealth, &mut parts);
         for (&k, &part) in pops.iter().zip(&parts) {
             pay(&mut w.ledger, GOV_INTEREST, gov, acc.pop[k as usize], part);
+        }
+    }
+}
+
+/// System 233 (`specs/money/SPEC.md`, P5 C3; ADR 0278): the energy wedges held at their t0 rates.
+/// For each country and wedge good the quantity is the units its province markets sold this
+/// tick (`Markets::sales`, origin basis, #532); an excise is paid to the country's government
+/// account and a subsidy paid from it, under TAX and GOV_TRANSFER (ADR 0360), by the buyers of
+/// the good in the country (households and enterprises) by their planned units
+/// ([`split`]). Households chose at the buyer price in
+/// [`demand`]. A no-op when the energy policy is off.
+pub fn energy_policy(w: &mut EconWorld) {
+    let Some(policy) = &w.energy else {
+        return;
+    };
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let (ng, acc) = (inp.n_goods(), &lay.accounts);
+    let mut parts = Vec::new();
+    for (c, wedges) in policy.countries.iter().enumerate() {
+        let gov = acc.government[c];
+        for (&g, &wedge) in policy.goods.iter().zip(&wedges.wedge) {
+            if wedge == 0 {
+                continue;
+            }
+            let units: f64 = (0..inp.n_provinces())
+                .filter(|&i| inp.country_of(i) == c)
+                .map(|i| w.markets.sales[i * ng + g])
+                .sum();
+            let amount = (wedge.abs() as f64 * units).round() as i128;
+            let buyers: Vec<(AccountId, f64)> = (0..inp.n_provinces())
+                .filter(|&i| inp.country_of(i) == c)
+                .flat_map(|i| {
+                    let pops = lay
+                        .pops(i)
+                        .map(|k| (acc.pop[k], w.scratch.pop_demand[k * ng + g]));
+                    let ents = lay
+                        .enterprises(i)
+                        .map(|e| (acc.enterprise[e], w.scratch.ent_order[e * ng + g]));
+                    pops.chain(ents)
+                })
+                .map(|(a, x)| (a, x.max(0.0)))
+                .collect();
+            if buyers.iter().all(|b| b.1 == 0.0) {
+                continue;
+            }
+            split(amount, buyers.iter().map(|b| b.1), &mut parts);
+            for (&(account, _), &part) in buyers.iter().zip(&parts) {
+                if wedge > 0 {
+                    pay(&mut w.ledger, TAX, account, gov, part);
+                } else {
+                    pay(&mut w.ledger, GOV_TRANSFER, gov, account, part);
+                }
+            }
         }
     }
 }

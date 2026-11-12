@@ -725,6 +725,8 @@ pub struct EconWorld {
     /// Government accounts of system 232; `None` is off. Its section is tagged and after the
     /// monetary one.
     pub fiscal: Option<crate::fiscal::Government>,
+    /// Energy wedges of system 233; `None` is off. Its section is tagged and after the fiscal one.
+    pub energy: Option<crate::energy_policy::EnergyPolicy>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1411,6 +1413,14 @@ impl EconWorld {
         self
     }
 
+    /// Switches the energy wedges (system 233) on, one set per country.
+    pub fn with_energy_policy(mut self, policy: crate::energy_policy::EnergyPolicy) -> EconWorld {
+        assert_eq!(policy.countries.len(), self.inputs.n_countries());
+        assert!(policy.goods.iter().all(|&g| g < self.inputs.n_goods()));
+        self.energy = Some(policy);
+        self
+    }
+
     /// Switches the government accounts (system 232) on, one per country.
     pub fn with_fiscal(mut self, government: crate::fiscal::Government) -> EconWorld {
         assert_eq!(government.fiscal.len(), self.inputs.n_countries());
@@ -1510,6 +1520,7 @@ impl EconWorld {
             wage_grid: None,
             monetary: None,
             fiscal: None,
+            energy: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2448,6 +2459,9 @@ impl Encode for EconWorld {
         if let Some(g) = &self.fiscal {
             g.encode(e);
         }
+        if let Some(p) = &self.energy {
+            p.encode(e);
+        }
     }
 }
 
@@ -2457,9 +2471,15 @@ fn monetary_next(d: &Decoder) -> bool {
 
 /// Whether one of the tagged sections that close the snapshot comes next.
 fn tagged_next(d: &Decoder) -> bool {
-    wage_grid_next(d)
-        || monetary_next(d)
-        || d.peek_count() == Ok(crate::fiscal::SNAPSHOT_TAG as usize)
+    wage_grid_next(d) || monetary_next(d) || fiscal_next(d) || energy_next(d)
+}
+
+fn fiscal_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::fiscal::SNAPSHOT_TAG as usize)
+}
+
+fn energy_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::energy_policy::SNAPSHOT_TAG as usize)
 }
 
 fn wage_grid_next(d: &Decoder) -> bool {
@@ -2840,7 +2860,7 @@ impl State for EconWorld {
         } else {
             None
         };
-        let fiscal = if d.at_end() {
+        let fiscal = if !fiscal_next(d) {
             None
         } else {
             let g = crate::fiscal::Government::decode(d)?;
@@ -2850,6 +2870,17 @@ impl State for EconWorld {
                 self.inputs.n_countries(),
             )?;
             Some(g)
+        };
+        let energy = if energy_next(d) {
+            let p = crate::energy_policy::EnergyPolicy::decode(d)?;
+            expect_len(
+                "energy countries",
+                p.countries.len(),
+                self.inputs.n_countries(),
+            )?;
+            Some(p)
+        } else {
+            None
         };
 
         let inp = &*self.inputs;
@@ -2917,6 +2948,7 @@ impl State for EconWorld {
             wage_grid,
             monetary,
             fiscal,
+            energy,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -3799,6 +3831,69 @@ mod tests {
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.fiscal.as_ref(), Some(g));
         assert_eq!(back.monetary, w.monetary);
+    }
+
+    /// With the energy policy off the government accounts stay at zero and the snapshot is the
+    /// status quo's; on, an excise books revenue to each government account from the buyers, a
+    /// subsidy books a cost, households' demand moves with the buyer price, and the section
+    /// survives a snapshot.
+    #[test]
+    fn energy_wedges_off_equals_status_quo_and_on_books_the_government_account() {
+        use crate::energy_policy::{EnergyPolicy, EnergyWedges};
+        let nc = world().inputs().n_countries();
+        let run = |wedge: [i128; 3]| {
+            let policy = EnergyPolicy {
+                goods: [1, 2, 7],
+                countries: vec![EnergyWedges { wedge }; nc],
+            };
+            let mut sim = Sim::new(
+                world().with_energy_policy(policy),
+                crate::systems::schedule(),
+                crate::systems::SEED,
+            );
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            sim
+        };
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let unit = MINOR_PER_UNIT as i128 / 20;
+        let excise = run([unit, 0, unit]);
+        let subsidy = run([-unit, -unit, 0]);
+        let gov = |w: &EconWorld| -> Vec<i128> {
+            w.layout
+                .accounts
+                .government
+                .iter()
+                .map(|&a| w.ledger.money_wide(a))
+                .collect()
+        };
+        assert!(gov(off.world()).iter().all(|&m| m == 0));
+        assert!(gov(excise.world()).iter().sum::<i128>() > 0);
+        assert!(gov(subsidy.world()).iter().sum::<i128>() < 0);
+        let pops = |w: &EconWorld| -> Vec<i64> {
+            w.layout
+                .accounts
+                .pop
+                .iter()
+                .map(|&a| w.ledger.money(a))
+                .collect()
+        };
+        assert_ne!(pops(excise.world()), pops(off.world()));
+        assert_ne!(
+            excise.world().scratch.pop_demand,
+            off.world().scratch.pop_demand
+        );
+        let (bytes, back) = round_trip(excise.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.energy, excise.world().energy);
+    }
+
+    #[test]
+    fn energy_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.energy = None;
+        assert_eq!(canonical(12, &w), a);
     }
 
     #[test]
