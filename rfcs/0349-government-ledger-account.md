@@ -35,7 +35,9 @@ Options:
 
 Recommendation: A, because it follows the ADR 0100 precedent and keeps the off switch free.
 
-Decision: pending.
+Decision: B, Antonio, 2026-11-12. Every world opens the accounts; the goldens move once, in a
+reviewed re-bless commit of the wiring PR. With the fiscal system off the accounts stay at zero
+and nothing posts to them, so off equals the re-blessed status quo.
 Row: pending
 
 ### D2. Which new Flows does the journal get?
