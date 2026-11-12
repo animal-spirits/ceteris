@@ -1,7 +1,8 @@
 //! Endogenous neutral rate (P5 Branch B3, spec/09 9.3, ADR 0176): annual one-sided
 //! Holston-Laubach-Williams (2017) Kalman filter. Each year the central bank updates its estimate
 //! of r* from published output, inflation and the real policy rate. Variances are inputs fixed at
-//! published values; none is estimated here. The kernel is not yet in the tick.
+//! published values; none is estimated here. Wired into the monetary system 230 (`monetary::Policy::with_hlw`), off by
+//! default.
 //!
 //! Annual form of the model (lags in years; the quarterly inflation lag average of 2 to 4 becomes
 //! the second lag):
@@ -89,6 +90,64 @@ impl NeutralRateFilter {
         let mut f = Self::new(params, r_star0, 0.0, flat, flat);
         f.frozen = true;
         f
+    }
+
+    /// Flat snapshot form: params, state, covariance, lags, frozen flag.
+    pub fn encode(&self) -> Vec<f64> {
+        let p = &self.params;
+        let mut v = vec![
+            p.a1,
+            p.a2,
+            p.a_r,
+            p.b_pi,
+            p.b_y,
+            p.c,
+            p.sigma_y_gap,
+            p.sigma_pi,
+            p.sigma_y_star,
+            p.sigma_g,
+            p.sigma_z,
+        ];
+        v.extend(self.state);
+        v.extend(self.cov.iter().flatten());
+        for o in self.lags {
+            v.extend([o.y, o.pi, o.r]);
+        }
+        v.push(f64::from(u8::from(self.frozen)));
+        v
+    }
+
+    pub const ENCODED_LEN: usize = 11 + N + N * N + 6 + 1;
+
+    pub fn decode(v: &[f64]) -> Self {
+        let params = HlwParams {
+            a1: v[0],
+            a2: v[1],
+            a_r: v[2],
+            b_pi: v[3],
+            b_y: v[4],
+            c: v[5],
+            sigma_y_gap: v[6],
+            sigma_pi: v[7],
+            sigma_y_star: v[8],
+            sigma_g: v[9],
+            sigma_z: v[10],
+        };
+        let state = std::array::from_fn(|i| v[11 + i]);
+        let cov = std::array::from_fn(|i| std::array::from_fn(|j| v[11 + N + i * N + j]));
+        let o = 11 + N + N * N;
+        let lag = |k: usize| Observation {
+            y: v[o + 3 * k],
+            pi: v[o + 3 * k + 1],
+            r: v[o + 3 * k + 2],
+        };
+        Self {
+            params,
+            state,
+            cov,
+            lags: [lag(0), lag(1)],
+            frozen: v[o + 6] != 0.0,
+        }
     }
 
     /// Current estimate of r* (the rule's intercept).
