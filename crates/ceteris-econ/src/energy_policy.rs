@@ -1,7 +1,13 @@
 //! Energy policy held at t0 (P5 Branch C3, ADR 0278, `specs/money/SPEC.md`). Fuel excises and
 //! subsidies are per-unit wedges on goods B06, C19 and D at their 2000 rates per state, held for
 //! the run like trade policy. A positive wedge is an excise paid to the government, a negative one
-//! a subsidy that is a fiscal cost at wedge times quantity. The kernel is not yet in the tick.
+//! a subsidy that is a fiscal cost at wedge times quantity. In the tick as system 233, off by
+//! default (`EconWorld::with_energy_policy`).
+
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+/// Opens the energy policy section of a snapshot, which follows the fiscal one.
+pub const SNAPSHOT_TAG: u32 = 0x3A6E_6F02;
 
 /// Crude oil and gas extraction (B06), refined fuels (C19), electricity (D).
 pub const N_ENERGY_GOODS: usize = 3;
@@ -34,6 +40,48 @@ impl EnergyWedges {
             .zip(quantity)
             .map(|(&w, &q)| ((part(w) as f64) * q).round() as i128)
             .sum()
+    }
+}
+
+/// The wedges of every country and the goods they apply to, in the order B06, C19, D.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnergyPolicy {
+    pub goods: [usize; N_ENERGY_GOODS],
+    pub countries: Vec<EnergyWedges>,
+}
+
+impl EnergyPolicy {
+    pub fn encode(&self, e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        for g in self.goods {
+            e.count(g);
+        }
+        e.count(self.countries.len());
+        for c in &self.countries {
+            for w in c.wedge {
+                e.i128(w);
+            }
+        }
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("energy policy section tag".into()));
+        }
+        let mut goods = [0; N_ENERGY_GOODS];
+        for g in &mut goods {
+            *g = d.count()?;
+        }
+        let n = d.count()?;
+        let mut countries = Vec::with_capacity(n);
+        for _ in 0..n {
+            let mut wedge = [0; N_ENERGY_GOODS];
+            for w in &mut wedge {
+                *w = d.i128()?;
+            }
+            countries.push(EnergyWedges { wedge });
+        }
+        Ok(EnergyPolicy { goods, countries })
     }
 }
 

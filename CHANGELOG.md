@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Energy policy wedges in the tick as system 233 (ADR 0278, #532)
+
+- `EconWorld::with_energy_policy`, off by default: per-unit wedges on B06, C19 and D held for the
+  run. Households choose at market price plus wedge; excise and subsidy settle between buyers
+  (by planned units) and the government account under TAX and GOV_TRANSFER, on units sold at
+  province markets (origin basis). Tagged snapshot section after the fiscal one; goldens
+  unchanged with the switch off. Shortcuts in #546.
+
 ### BEHAVIOUR: government ledger accounts and the fiscal system 232 (ADRs 0359 to 0363, RFC 0349)
 
 - Every world opens one wide government account per country after the foreign account (ADR
