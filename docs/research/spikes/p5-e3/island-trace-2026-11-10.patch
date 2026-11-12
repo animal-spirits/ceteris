@@ -1,0 +1,210 @@
+diff --git a/crates/ceteris-econ/src/systems.rs b/crates/ceteris-econ/src/systems.rs
+index a97d2fd..3080412 100644
+--- a/crates/ceteris-econ/src/systems.rs
++++ b/crates/ceteris-econ/src/systems.rs
+@@ -84,16 +84,16 @@ pub fn schedule() -> Schedule<EconWorld> {
+             labour(w);
+             crate::channels::after_labour(w, ctx.tick)
+         }),
+-        def(203, "produce", |w, _| produce(w)),
++        def(203, "produce", |w, _| { produce(w); e3p(w, "produce") }),
+         def(204, "demand", |w, _| demand(w)),
+         def(205, "source", |w, _| source(w)),
+-        def(206, "clear", |w, _| clear(w)),
+-        def(207, "dispatch", |w, _| dispatch(w)),
++        def(206, "clear", |w, _| { clear(w); e3p(w, "clear") }),
++        def(207, "dispatch", |w, _| { dispatch(w); e3p(w, "dispatch") }),
+         def(208, "reprice", |w, ctx| {
+             reprice(w);
+             crate::channels::after_reprice(w, ctx.tick)
+         }),
+-        def(209, "distribute", |w, ctx| distribute(w, ctx.tick)),
++        def(209, "distribute", |w, ctx| { e3p(w, "pre-dist"); distribute(w, ctx.tick) }),
+         def(220, "demography", |w, ctx| demography(w, ctx.tick)),
+         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
+         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
+@@ -326,6 +326,10 @@ pub fn labour(w: &mut EconWorld) {
+                     value_added_price(p[g], |k| lay.coef[e][k], p_in, lay.a_va[e])
+                 })
+                 .collect();
++            if std::env::var("E3P").map(|v| v.parse::<usize>().unwrap() == i).unwrap_or(false) {
++                let caps: Vec<String> = ents.clone().map(|e| format!("{:.2e}", input_output(world, e))).collect();
++                eprintln!("E3L pva {:?} p {:?} pin {:?} io {:?}", p_va.iter().map(|x| format!("{x:.3}")).collect::<Vec<_>>(), p.iter().map(|x| format!("{x:.3}")).collect::<Vec<_>>(), p_in.iter().map(|x| format!("{x:.3}")).collect::<Vec<_>>(), caps);
++            }
+             let ent = &inp.enterprises;
+             let equipped: Vec<f64> = ents
+                 .clone()
+@@ -718,8 +722,24 @@ pub fn demand(w: &mut EconWorld) {
+                 };
+             }
+         });
++    if std::env::var("E3DBG").is_ok() {
++        let mut sp = 0.0; let mut mo = 0.0; let mut loc = 0.0;
++        for k in 0..inp.n_pops() { let i = inp.pops.province[k] as usize; mo += to_numeraire(ledger.money(acc.pop[k])); for g in 0..ng { let x = sc.pop_demand[k*ng+g]; if x > 0.0 { sp += x * index[i*ng+g]; if g >= nt { loc += x * index[i*ng+g]; } } } }
++        eprintln!("DBG spend {sp:.4e} money {mo:.4e} local {loc:.4e}");
++        let mut worst = (0.0, 0usize);
++        for k in 0..inp.n_pops() { let i = inp.pops.province[k] as usize; let m = to_numeraire(ledger.money(acc.pop[k])); if m <= 0.0 { continue; } let s: f64 = (0..ng).filter(|&g| sc.pop_demand[k*ng+g] > 0.0).map(|g| sc.pop_demand[k*ng+g] * index[i*ng+g]).sum(); if s / m > worst.0 { worst = (s / m, k); } }
++        let (mut pos, mut neg, mut worstneg) = (0.0, 0.0, (0.0, 0usize));
++        for k in 0..inp.n_pops() { let m = to_numeraire(ledger.money(acc.pop[k])); if m > 0.0 { pos += m } else { neg += m; if m < worstneg.0 { worstneg = (m, k); } } }
++        eprintln!("DBGN pos {pos:.3e} neg {neg:.3e} worst {:.3e} pop {} prov {}", worstneg.0, worstneg.1, inp.pops.province[worstneg.1]);
++        let mk: Vec<String> = acc.market.iter().map(|&a| format!("{:.1e}", to_numeraire(ledger.money(a)))).collect();
++        eprintln!("DBGM {mk:?}");
++        let k = worst.1; let i = inp.pops.province[k] as usize;
++        eprintln!("DBGW ratio {:.3} pop {k} prov {i} x {:?} p {:?}", worst.0, &sc.pop_demand[k*ng..k*ng+ng], &index[i*ng..i*ng+ng]);
++    }
+     let (pipeline, lead) = (&w.pipeline, &sc.lead);
+     let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
++    let budget_gain = w.trade.anchor.map(|a| a.kappa_o);
++    let own_price = &w.markets.price;
+     sc.ent_order
+         .par_chunks_mut(ng)
+         .zip(sc.ent_spend.par_chunks_mut(ng))
+@@ -751,6 +771,22 @@ pub fn demand(w: &mut EconWorld) {
+                     0.0
+                 };
+                 orders[k] = order;
++            }
++            if let Some(ko) = budget_gain.filter(|&g| g > 0.0) {
++                let cost: f64 = (0..ng)
++                    .filter(|&k| orders[k] > 0.0 && prices[k].is_finite())
++                    .map(|k| orders[k] * prices[k])
++                    .sum();
++                let cash = to_numeraire(ledger.money(acc.enterprise[e])).max(0.0);
++                let revenue = own_price[i * ng + ent.good[e] as usize] * capacity;
++                let budget = cash + ko * revenue;
++                if cost > budget {
++                    let s = budget / cost;
++                    orders.iter_mut().for_each(|o| *o *= s);
++                }
++            }
++            for k in 0..ng {
++                let order = orders[k];
+                 spend[k] = if k < nt && order > 0.0 && prices[k].is_finite() {
+                     order * prices[k]
+                 } else {
+@@ -1549,6 +1585,7 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
+         }
+         let cash = i64::try_from(w.ledger.money_wide(acc.market[i]))
+             .expect("ledger overflow: a market's cash beyond one payment");
++        let cash = if std::env::var("E3MKT").is_ok() { cash.max(0) } else { cash };
+         pay(&mut w.ledger, DIVIDEND, acc.market[i], pool, cash);
+     }
+     if let Some(account) = acc.foreign {
+@@ -2249,3 +2286,31 @@ mod tests {
+         assert_eq!(largest([0.0, -1.0].into_iter()), None);
+     }
+ }
++
++pub fn e3p(w: &EconWorld, tag: &str) {
++    let Ok(p) = std::env::var("E3P") else { return };
++    if tag != "pre-dist" { return; }
++    let i: usize = p.parse().unwrap();
++    let (ng, nt) = (w.inputs.n_goods(), w.inputs.goods.traded);
++    let acc = &w.layout.accounts;
++    let lay = &w.layout;
++    let mn = |a| to_numeraire(w.ledger.money(a));
++    let m = &w.markets;
++    let cash = mn(acc.market[i]);
++    let pm: f64 = lay.pops(i).map(|k| mn(acc.pop[k])).sum();
++    let em: f64 = lay.enterprises(i).map(|e| mn(acc.enterprise[e])).sum();
++    let (mut imp, mut exp, mut qv, mut sv, mut dsv) = ([0.0; 2], 0.0, 0.0, 0.0, 0.0);
++    for g in 0..nt {
++        let r = &w.scratch.sourced[g];
++        for c in 0..2 { imp[c] += r.paid_by_class[i][c]; }
++        exp += r.received[i];
++        let c = i * ng + g;
++        qv += m.price[c] * m.supply[c];
++        sv += m.price[c] * m.inventory[c];
++        dsv += m.price[c] * (m.supply[c] - m.sales[c]);
++    }
++    let lq: f64 = (nt..ng).map(|g| m.price[i * ng + g] * m.supply[i * ng + g]).sum();
++    let y: f64 = lay.enterprises(i).map(|e| w.output[e]).sum();
++    let wb: f64 = lay.enterprises(i).map(|e| w.wage[i] * w.employment[e]).sum();
++    eprintln!("E3P mkt {cash:.2e} pop {pm:.2e} ent {em:.2e} | paid_int {:.2e} paid_hh {:.2e} recv {exp:.2e} pQtr {qv:.2e} pQloc {lq:.2e} p(Q-sold) {dsv:.2e} pS {sv:.2e} | Y {y:.2e} wage {:.2} bill {wb:.2e}", imp[0], imp[1], w.wage[i]);
++}
+diff --git a/crates/ceteris-econ/src/world.rs b/crates/ceteris-econ/src/world.rs
+index 7f4d1a6..915286b 100644
+--- a/crates/ceteris-econ/src/world.rs
++++ b/crates/ceteris-econ/src/world.rs
+@@ -806,7 +806,7 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
+     e.f64(*storage_gain);
+     // off, the status quo's digest
+     if let Some(a) = anchor {
+-        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
++        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m, a.kappa_l, a.kappa_o]);
+     }
+     // instant adjustment is the same dynamics at any class rate
+     if trade.partial_adjustment() {
+@@ -2169,7 +2169,7 @@ fn encode_trade(e: &mut Encoder, trade: &TradeParams) {
+     e.f64s(rho);
+     // the snapshot is restored into a world with the same setting, so off writes nothing
+     if let Some(a) = anchor {
+-        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m]);
++        e.f64s(&[a.kappa_r_traded, a.kappa_r_local, a.kappa_b, a.kappa_m, a.kappa_l, a.kappa_o]);
+     }
+ }
+ 
+@@ -2228,13 +2228,15 @@ fn decode_trade(
+         convenience,
+         storage_gain,
+         anchor: if anchored {
+-            let [kappa_r_traded, kappa_r_local, kappa_b, kappa_m] =
++            let [kappa_r_traded, kappa_r_local, kappa_b, kappa_m, kappa_l, kappa_o] =
+                 decode_array(d, "price anchor")?;
+             Some(PriceAnchor {
+                 kappa_r_traded,
+                 kappa_r_local,
+                 kappa_b,
+                 kappa_m,
++                kappa_l,
++                kappa_o,
+             })
+         } else {
+             None
+diff --git a/crates/ceteris-trade/src/market.rs b/crates/ceteris-trade/src/market.rs
+index 156eeba..d9df82f 100644
+--- a/crates/ceteris-trade/src/market.rs
++++ b/crates/ceteris-trade/src/market.rs
+@@ -289,12 +289,17 @@ impl Markets {
+             } else {
+                 a.kappa_r_local
+             };
+-            let mut gap = rel * (l - lg[g]) + a.kappa_b * (lg[g] - lbar) - nominal;
++            let mut gap = rel * (l - lg[g]) + a.kappa_b * (lg[g] - lbar) + a.kappa_l * lbar - nominal;
+             if p.coverage[g] > 0.0 && !p.stores(g) {
+                 let target = p.coverage[g] * self.demand[i];
+                 gap -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
+             }
+             let c_max = p.price_clip(g);
++            if let Ok(pv) = std::env::var("E3P") {
++                if i / ng == pv.parse::<usize>().unwrap() {
++                    eprintln!("E3R g{g} l {l:.3} lg {:.3} lbar {lbar:.3} nom {nominal:.4} gap {gap:.4} cmax {c_max} b {:.3e} q {:.3e} d {:.3e} S {:.3e}", lg[g], self.storage[i], self.supply[i], self.demand[i], self.inventory[i]);
++                }
++            }
+             if gap.abs() > c_max {
+                 self.clip_ticks[i] += 1;
+             }
+diff --git a/crates/ceteris-trade/src/params.rs b/crates/ceteris-trade/src/params.rs
+index 3048468..ad7e95d 100644
+--- a/crates/ceteris-trade/src/params.rs
++++ b/crates/ceteris-trade/src/params.rs
+@@ -358,6 +358,10 @@ pub struct PriceAnchor {
+     pub kappa_b: f64,
+     /// P177 money-anchor gain kappa_m.
+     pub kappa_m: f64,
++    /// SPIKE level gain kappa_l on lbar.
++    pub kappa_l: f64,
++    /// SPIKE order budget gain kappa_o; 0 is off.
++    pub kappa_o: f64,
+ }
+ 
+ impl Default for PriceAnchor {
+@@ -367,6 +371,8 @@ impl Default for PriceAnchor {
+             kappa_r_local: 0.05,
+             kappa_b: 0.3,
+             kappa_m: 0.2,
++            kappa_l: 0.0,
++            kappa_o: 0.0,
+         }
+     }
+ }
