@@ -1,0 +1,167 @@
+<title>Ceteris Financial Markets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, wide tables scroll in place; status chips encode decided / gap / later */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1a1f2b; --muted: #5a6273; --line: #d9dde5;
+  --accent: #2c5aa0; --ok: #2f7a4a; --warn: #a2620b; --later: #6b5aa6; --chipbg: #eef1f6;
+  --sans: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151c; --surface: #1a1e27; --fg: #e5e8ef; --muted: #9aa3b5; --line: #2c3240;
+  --accent: #7ea6e6; --ok: #6cc28a; --warn: #e0a54a; --later: #b2a3ea; --chipbg: #232836; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151c; --surface: #1a1e27; --fg: #e5e8ef; --muted: #9aa3b5; --line: #2c3240;
+  --accent: #7ea6e6; --ok: #6cc28a; --warn: #e0a54a; --later: #b2a3ea; --chipbg: #232836; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+main { max-width: 980px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 36px; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.25rem; margin: 0 0 12px; text-wrap: balance; }
+p { margin: 0 0 10px; max-width: 70ch; }
+.eyebrow { font: 600 .75rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.05rem; max-width: 70ch; }
+code, .ref { font-family: var(--mono); font-size: .82em; }
+.ref { color: var(--muted); white-space: nowrap; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .9rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .72rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.chip { display: inline-block; font: 600 .7rem var(--mono); padding: 2px 7px; border-radius: 3px; background: var(--chipbg); white-space: nowrap; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .later { color: var(--later); } .muted { color: var(--muted); }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; counter-reset: s; padding: 0; margin: 0; list-style: none; }
+.flow li { flex: 1 1 140px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: .88rem; }
+.flow li::before { counter-increment: s; content: counter(s); display: block; font: 600 .72rem var(--mono); color: var(--accent); margin-bottom: 2px; }
+.flow li.loop { border-color: var(--accent); }
+.note { font-size: .88rem; color: var(--muted); max-width: 75ch; }
+.gaps { display: grid; gap: 10px; }
+.gap { display: grid; grid-template-columns: 3.2rem 1fr; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+.gap > div { min-width: 0; }
+.gap b.id { font: 600 .85rem var(--mono); color: var(--warn); }
+.gap p { margin: 0; }
+.cards { display: grid; gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.card h3 { margin: 0 0 8px; font-size: 1rem; }
+.card ol { margin: 0; padding-left: 1.3rem; display: grid; gap: 4px; font-size: .9rem; }
+.card li.rec::marker { color: var(--accent); font-weight: 700; }
+.card li.rec b { color: var(--accent); }
+ul.plain { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; max-width: 80ch; }
+footer { font-size: .8rem; color: var(--muted); }
+</style>
+
+<main>
+<header style="display:grid;gap:10px">
+  <div class="eyebrow">Ceteris design note · 28 Oct 2026 · DESIGN 9.7-9.14, ADRs 0025, 0040-0044, 0172, 0176, 0202, 0204, 0207, 0210</div>
+  <h1>How Ceteris models financial markets</h1>
+  <p class="lede">Most of it is already designed. Once a month, asset prices and exchange rates clear a portfolio demand system (Koijen-Yogo) of about ten investor classes against an exact who-to-whom matrix of claims. Losses then hit capital and margins, constrained holders sell, and prices clear again until no constraint binds. There are no order books, named banks or daily markets. Crises are never scripted; they emerge and are scored as frequencies. What is missing is the 1.0 cut of that design, a P5a exchange rate, rules for the crisis levers, and a few links to the real economy.</p>
+</header>
+
+<section>
+  <h2>One month of financial clearing</h2>
+  <ol class="flow">
+    <li>Real economy posts incomes, profits, deficits, current accounts into sector balance sheets <span class="ref">9.1</span></li>
+    <li>Policy rules set rates, primary balance, peg defence <span class="ref">0210</span></li>
+    <li>Demand system clears every bond, equity, credit and FX price jointly <span class="ref">9.9</span></li>
+    <li class="loop">Losses hit capital; runs, margin and eligibility limits force sales; back to step 3, fixed rounds <span class="ref">9.7, 9.11</span></li>
+    <li>Crisis levers fire (LOLR, guarantees, QE, IMF), default hazard drawn <span class="ref">9.4, 9.11</span></li>
+    <li>Month closes; SFC rows and columns sum to zero <span class="ref">4.6</span></li>
+  </ol>
+  <p class="note" style="margin-top:10px">Housing clears per province outside the demand system (0040). Investment is quarterly and reads the cost of capital from these prices (7.4, 0204).</p>
+</section>
+
+<section>
+  <h2>Market by market</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Market</th><th>Mechanism</th><th>Where decided</th><th>Phase</th><th>1.0</th></tr></thead>
+    <tbody>
+      <tr><td>Policy rates</td><td>Taylor rule with smoothing and ELB; r* from a one-sided HLW filter; pegs defended from reserves; unions run one rule</td><td class="ref">9.2, 0176, 0210</td><td>P5a</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>Sovereign bonds</td><td>Yield = expected policy path + term premium (Vayanos-Vila) + default spread; spread uses the same hazard as the default rule (Eaton-Gersovitz consistency)</td><td class="ref">9.4, 9.10, 0210</td><td>P5a / P5b</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>Default and restructuring</td><td>Hazard on debt service over revenue, reserves cover, market access; monthly bargaining with creditor classes (bondholders, banks, Paris Club, China, multilaterals); exclusion rises with haircut</td><td class="ref">0043, 0210</td><td>P5b</td><td><span class="chip ok">decided, lean</span></td></tr>
+      <tr><td>Equities</td><td>Per state and sector group; anchor = dividends from simulated operating surplus; discount rate rises as intermediary capital falls (He-Kelly-Manela)</td><td class="ref">9.10</td><td>P5b</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>Corporate credit</td><td>Merton default probability from sector leverage; excess bond premium tied to intermediary capital (Gilchrist-Zakrajsek)</td><td class="ref">9.10</td><td>P5b</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>FX</td><td>Cleared jointly in the demand system; Gabaix-Maggiori is its one-financier special case; dollar convenience yield</td><td class="ref">9.2, 9.9, 9.12</td><td>P5b</td><td><span class="chip warn">P5a gap</span></td></tr>
+      <tr><td>Banks</td><td>Up to five archetypes per state; capital, leverage, LCR; dollar funding via FX swaps; four contagion channels</td><td class="ref">9.11</td><td>P5b</td><td><span class="chip warn">1.0 cut open</span></td></tr>
+      <tr><td>Housing</td><td>Per province; Saiz supply elasticity from terrain; LTV, LTI, DSTI caps; buy-to-let investors with extrapolative expectations</td><td class="ref">0040</td><td>P5b</td><td><span class="chip ok">decided, lean</span></td></tr>
+      <tr><td>Capital flows</td><td>Gross flows emerge from rebalancing; reserve managers are one more investor; controls and sanctions are weight caps; replaces the 0100 CA transfers</td><td class="ref">9.5, 9.12, 0100</td><td>P5b</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>Global risk appetite</td><td>One VIX-like state, fat-tailed innovations on the shock tape, loads on US policy and intermediary losses</td><td class="ref">9.12</td><td>P5b</td><td><span class="chip ok">decided</span></td></tr>
+      <tr><td>Crisis levers</td><td>LOLR, deposit insurance, guarantees, recapitalization, bail-in, QE, swap lines, macroprudential caps, IMF lending</td><td class="ref">9.11, 9.4</td><td>P5b</td><td><span class="chip warn">no rule</span></td></tr>
+      <tr><td>Commodities</td><td>Competitive storage, small financial demand</td><td class="ref">0091, 0111</td><td>P2</td><td><span class="chip ok">built</span></td></tr>
+      <tr><td>Parallel FX, dollarization</td><td>Currency substitution with hysteresis, parallel premia under controls</td><td class="ref">0084</td><td>1.x</td><td><span class="chip later">deferred</span></td></tr>
+      <tr><td>Pensions, wealth returns</td><td>Funded pension funds as investors, two-type return process</td><td class="ref">0044</td><td>1.x</td><td><span class="chip later">deferred</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Gaps</h2>
+  <div class="gaps">
+    <div class="gap"><b class="id">G1</b><div><p><b>The P5a exchange rate has no mechanism.</b> The P5a gate asks a rate shock to move the exchange rate, but floating rates clear only in the demand system, which is P5b. Card 2.</p></div></div>
+    <div class="gap"><b class="id">G2</b><div><p><b>Crisis levers have no setter.</b> ADR 0210 rules cover the policy rate, primary balance, default and pegs. LOLR, guarantees, recapitalization, bail-in, QE size, swap lines, macroprudential caps and IMF lending have none. Taping them would be wrong: a branch where 2008 never happens would still get the 2008 rescues. Card 3.</p></div></div>
+    <div class="gap"><b class="id">G3</b><div><p><b>No 1.0 cut of DESIGN 9.7-9.14.</b> ADR 0207 trimmed the finance ADRs but not the core sections. The full design (about 2,000 assets, 2,000 investor classes, five bank archetypes, four contagion channels) sits inside P5b's 9 to 14 owner-weeks along with the Rust HANK reference. Card 1.</p></div></div>
+    <div class="gap"><b class="id">G4</b><div><p><b>How latent demand moves after 2000 is unset.</b> eta is backed out to reproduce 2000 holdings. Whether it stays fixed or evolves was left for "P5 design" in 0111. In Koijen-Yogo it drives most return variance, so this choice sets equity and FX volatility. Card 4.</p></div></div>
+    <div class="gap"><b class="id">G5</b><div><p><b>The cost of capital that investment responds to is unset.</b> DESIGN 7.4 says "Tobin-q style", financed four ways, with no rule for the mix or the price, and 0204's cash calls need credit. This is the main finance-to-real link. Card 5.</p></div></div>
+    <div class="gap"><b class="id">G6</b><div><p><b>2000 holdings data is thin.</b> National financial accounts cover mainly OECD members. ECB securities-holdings statistics start in 2013 and the Arslanalp-Tsuda investor base in 2004 (dates to confirm in the SPEC). "Exact initialization" therefore needs an imputation stage with reported fit, like 0089 for trade.</p></div></div>
+    <div class="gap"><b class="id">G7</b><div><p><b>Over the parameter cap.</b> DESIGN 9.14 allows 12 free finance parameters. Run thresholds, fire-sale impact, diagnostic weight, the risk-appetite process (4 to 5), 0040 P75, 0043 P79-P80, 0176 and latent-demand dynamics come to about 14. Some of them need to become literature priors.</p></div></div>
+    <div class="gap"><b class="id">G8</b><div><p><b>Unplaced pieces.</b> DESIGN 8.8's posted export-price layer (needed for dollar pass-through) is in no 0207 phase list. 0202 is kept but reads z_b from 0172, which is deferred, so 1.0 has no zombies. The 19.2 finance budget (8 ms) predates the demand system and inner loop and has never been measured.</p></div></div>
+    <div class="gap"><b class="id">G9</b><div><p><b>Crisis validation data ends early.</b> Laeven-Valencia (2018) runs to 2017, but the 2011-2024 holdout includes Sri Lanka 2022, Lebanon 2020 and the 2023 US bank runs. It needs an extension or a second source.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Scope by version</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Version</th><th>Finance content</th></tr></thead>
+    <tbody>
+      <tr><td><b>1.0 · P5a</b></td><td>Currencies and IRR regimes, Taylor rule with HLW r*, peg defence, taxes and budgets (0210 rules), public capital (0042), SFC matrices, sovereign yields from expected policy paths, interim FX rule (card 2), cost of capital for the investment step (card 5)</td></tr>
+      <tr><td><b>1.0 · P5b</b></td><td>Demand system and investor classes, equity, credit, FX clearing, province housing (0040), banks and contagion at the depth chosen on card 1, default hazard and restructuring (0043), IMF, crisis-lever rules (card 3), endogenous current accounts replacing 0100, global risk appetite, Rust HANK reference (0025)</td></tr>
+      <tr><td><b>1.0 · P9</b></td><td>Joint calibration; scorecard on spreads, defaults and banking-crisis frequencies (15.4); QE price effects; policy error measured as <code>tape</code> skill minus <code>rules</code> skill</td></tr>
+      <tr><td><b>1.x minors</b></td><td>0084 parallel FX and dollarization, 0044 pensions and wealth returns, 0172 forbearance and trade finance, 0041 profit shifting, 0070 development lenders, 0082 cohort expectations, 0201 ownership cells, any contagion channel cut on card 1; each behind a flag until it passes ablation</td></tr>
+      <tr><td><b>2.0</b></td><td>Default, bailouts, sanctions and capital controls chosen by the Tier 1a planner under coalition politics (P6), in place of the 1.0 rules; finance in wartime (P7)</td></tr>
+      <tr><td><b>Never</b> <span class="ref">0054, 15.7</span></td><td>Order books, daily markets, named banks or firms, derivatives as instruments, crypto as an asset class</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Open decisions</h2>
+  <p class="note">The same five are posted as cards in the thread. The recommended option is marked.</p>
+  <div class="cards">
+    <div class="card"><h3>1. How deep does finance go in 1.0?</h3><ol>
+      <li>Full DESIGN 9.7-9.14: all classes, five archetypes, four channels; about +6 to 10 owner-weeks</li>
+      <li class="rec"><b>Lean full chain:</b> all four build stages with about 6 investor classes and 3 bank archetypes; fire sales, funding runs and the sovereign-bank loop; the direct interbank network moves to 1.x, since measured direct contagion is small (Upper 2011)</li>
+      <li>Prices without crises: demand system plus banks with a capital constraint; runs, contagion and crisis validation in 1.1</li>
+      <li>Reduced form: spread function and UIP FX, with no demand system until 1.x</li></ol></div>
+    <div class="card"><h3>2. How do exchange rates clear in P5a?</h3><ol>
+      <li class="rec"><b>Gabaix-Maggiori:</b> net currency flows absorbed by financiers with limited risk-bearing capacity; it is 9.9's special case, so P5b gets a nesting test</li>
+      <li>UIP with a debt-elastic premium (Schmitt-Grohe-Uribe)</li>
+      <li>Move the demand system into P5a (about +3 to 5 weeks there)</li></ol></div>
+    <div class="card"><h3>3. Who pulls the crisis levers in 1.0?</h3><ol>
+      <li class="rec"><b>State-triggered rules:</b> each fires on simulated state (capital shortfall, ELB, reserve cover), with forms fitted to Laeven-Valencia policy responses; macroprudential caps from the iMaPP tape</li>
+      <li>Tape to 2024, then rules: the 0210 pattern, but rescues fire in branches without the crisis</li>
+      <li>Off in 1.0, except LOLR at a fixed haircut</li></ol></div>
+    <div class="card"><h3>4. How does latent demand move after 2000?</h3><ol>
+      <li>Fixed at 2000: no parameters, but volatility comes from fundamentals only and will likely run low</li>
+      <li class="rec"><b>Mean-reverting by asset group,</b> with shocks on the tape: 2 parameters, as 0111 suggested</li>
+      <li>Refit yearly to observed holdings until 2024 (conditional forecasts only), then mean-reverting</li></ol></div>
+    <div class="card"><h3>5. What cost of capital does investment respond to?</h3><ol>
+      <li class="rec"><b>Weighted cost from simulated prices:</b> loan rate plus credit spread on debt and required equity return on equity, weighted by each cell's 2000 financing mix, with a collateral cap on borrowing</li>
+      <li>Tobin's q from simulated equity prices</li>
+      <li>Loan rate only</li></ol></div>
+  </div>
+</section>
+
+<section>
+  <h2>Next</h2>
+  <ul class="plain">
+    <li>Once the cards are answered, write the choices up as proposed ADRs from 0227, after checking main and open PRs for the number.</li>
+    <li><code>specs/finance/SPEC.md</code> and <code>specs/policy/SPEC.md</code> need owner approval before any P5 code (21.2).</li>
+    <li>G6, G7 and G9 belong in the SPEC; G8 needs a phase for the 8.8 layer and a measured budget for 19.2.</li>
+  </ul>
+</section>
+
+<footer>Sources read: specs/DESIGN.md sections 7.4, 8.8, 9, 15.4, 19.2, 21.1 and ADRs 0025, 0040-0045, 0054, 0080, 0084, 0100, 0111, 0168, 0171, 0172, 0176, 0202, 0204, 0207 and 0210 on main (8f5075a).</footer>
+</main>

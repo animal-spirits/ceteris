@@ -1,0 +1,233 @@
+<title>Leadership Dossiers</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: control strip, then one document sheet styled as a printed leadership profile; mechanics notes below. */
+:root {
+  --paper: #EDEFEA; --paper-2: #E2E6DF; --ink: #1C292F; --ink-2: #4A585E; --rule: #C3CCC5; --proof: #AE2459; --branch: #5E45A3;
+  --sheet: #FBFBF8; --sheet-ink: #161616; --sheet-2: #555555; --sheet-rule: #9A9A9A; --bar: #111111; --model: #5E45A3;
+  --serif: "Source Serif 4", "Times New Roman", serif; --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --paper: #141B1F; --paper-2: #1B2429; --ink: #E3E7E1; --ink-2: #9CA9AD; --rule: #2F3C42; --proof: #E2729B; --branch: #A898E4; color-scheme: dark; } }
+:root[data-theme="dark"] { --paper: #141B1F; --paper-2: #1B2429; --ink: #E3E7E1; --ink-2: #9CA9AD; --rule: #2F3C42; --proof: #E2729B; --branch: #A898E4; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(28px, 4.5vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 600; font-size: 22px; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); font-weight: 500; }
+.head { display: grid; gap: 10px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: end; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 12px 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button, .seg button { font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid var(--ink-2); border-radius: 3px; padding: 5px 10px; cursor: pointer; }
+.tabs button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.seg { display: flex; gap: 0; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 3px 3px 0; }
+.grp { display: grid; gap: 4px; }
+.grp > span { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+label.tog { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--branch); width: 16px; height: 16px; }
+:focus-visible { outline: 2px solid var(--branch); outline-offset: 2px; }
+
+.sheet-wrap { overflow-x: auto; }
+.sheet { background: var(--sheet); color: var(--sheet-ink); font-family: var(--serif); font-size: 14.5px; line-height: 1.5; padding: 22px 48px 26px; box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 8px 24px rgba(0,0,0,.08); min-width: 600px; position: relative; }
+.banner { text-align: center; font-family: var(--sans); font-weight: 600; letter-spacing: .18em; font-size: 13px; }
+.ctrl { display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; font-family: var(--mono); font-size: 11.5px; color: var(--sheet-2); border-top: 1px solid var(--sheet-ink); border-bottom: 1px solid var(--sheet-ink); padding: 6px 0; margin: 12px 0 16px; }
+.ctrl b { color: var(--sheet-ink); font-weight: 500; }
+.title { font-family: var(--sans); font-weight: 600; font-size: 19px; letter-spacing: .02em; text-transform: uppercase; margin: 0 0 2px; }
+.subtitle { font-size: 14px; color: var(--sheet-2); margin-bottom: 14px; }
+.s { margin-top: 16px; }
+.s h3 { font-family: var(--sans); font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 6px; border-bottom: 1px solid var(--sheet-rule); padding-bottom: 2px; font-weight: 600; }
+.pm { font-family: var(--mono); font-size: 11px; color: var(--sheet-2); margin-right: 4px; }
+.para { margin: 0 0 7px; max-width: none; }
+table.bio { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.bio th { text-align: left; font-family: var(--sans); font-weight: 500; font-size: 12.5px; color: var(--sheet-2); padding: 3px 14px 3px 0; vertical-align: top; width: 150px; white-space: nowrap; }
+table.bio td { padding: 3px 0; vertical-align: top; }
+table.chron { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.chron td { padding: 2px 10px 2px 0; vertical-align: top; border-bottom: 1px dotted #C8C8C8; }
+table.chron td:first-child { font-family: var(--mono); font-size: 12px; white-space: nowrap; width: 92px; color: var(--sheet-2); padding-top: 4px; }
+.kj { counter-reset: kj; display: grid; gap: 8px; }
+.kj .j { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; }
+.kj .j::before { counter-increment: kj; content: counter(kj) "."; font-family: var(--sans); font-weight: 600; }
+.grade { font-family: var(--mono); font-size: 11px; border: 1px solid var(--sheet-2); padding: 0 4px; white-space: nowrap; color: var(--sheet-2); }
+.est { font-style: italic; }
+.model { display: none; font-family: var(--mono); font-size: 11px; color: var(--model); margin-left: 6px; white-space: nowrap; }
+.show-model .model { display: inline; }
+.changed { background: linear-gradient(transparent 62%, rgba(174, 36, 89, .16) 62%); }
+.new-tag { font-family: var(--sans); font-size: 10.5px; letter-spacing: .1em; color: #8E1D47; border: 1px solid #8E1D47; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
+.bar { display: inline-block; height: .95em; background: var(--bar); vertical-align: -.1em; border-radius: 1px; }
+.withheld { font-family: var(--mono); font-size: 11px; color: var(--sheet-2); }
+.net { border-collapse: collapse; width: 100%; font-size: 14px; }
+.net th { text-align: left; font-family: var(--sans); font-weight: 500; font-size: 12px; color: var(--sheet-2); border-bottom: 1px solid var(--sheet-rule); padding: 2px 10px 2px 0; }
+.net td { padding: 3px 10px 3px 0; vertical-align: top; border-bottom: 1px dotted #C8C8C8; }
+ol.src { margin: 0; padding-left: 22px; font-size: 13px; }
+.foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--sheet-2); margin-top: 18px; border-top: 1px solid var(--sheet-ink); padding-top: 6px; }
+.how { display: grid; gap: 10px; }
+.how ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 70ch; }
+.key { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; font-size: 14px; }
+.key div { border-top: 1px solid var(--rule); padding-top: 6px; }
+.key b { font-family: var(--mono); font-weight: 500; }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="eyebrow">Ceteris · characters · mock · 28 October 2026</div>
+    <h1>Leadership dossiers</h1>
+    <p>The character panel as a file your seat's intelligence service keeps. Facts come from the record; hidden traits appear only as judgments in estimative language, each with a source grade, and the parts your service cannot reach are withheld. Each file is reissued as the run goes on.</p>
+  </header>
+
+  <div class="controls">
+    <div class="grp"><span>Subject</span><div class="tabs" id="tabs"></div></div>
+    <div class="grp"><span>Issue</span><div class="seg" id="issue"><button type="button" data-v="2000" aria-pressed="true">January 2000</button><button type="button" data-v="2005" aria-pressed="false">June 2005</button></div></div>
+    <label class="tog"><input type="checkbox" id="model"> Show model values</label>
+  </div>
+
+  <div class="sheet-wrap"><article class="sheet" id="sheet" aria-live="polite"></article></div>
+
+  <section class="how">
+    <h2>What drives each part</h2>
+    <div class="key">
+      <div><b>Biographic data</b><br>The character record (ADR 0183): Wikidata and WhoGov for real people, the pop-cell biography for generated ones.</div>
+      <div><b>Formative experience</b><br>Lived history from the memory kernel and episodes (ADR 0185).</div>
+      <div><b>Key judgments</b><br>The seat's belief about a hidden trait (ADR 0153), worded by probability band: almost certainly, very likely, likely, about as likely as not, unlikely.</div>
+      <div><b>Source grade</b><br>Reliability A to F and credibility 1 to 6 of the evidence behind each line, set by the seat's intelligence capacity and the source type.</div>
+      <div><b>Withheld</b><br>Content beyond the seat's collection reach. Better intelligence, or a defector event, fills it in.</div>
+      <div><b>Reissue</b><br>A new issue on appointment, on a major event involving the subject, or yearly; changes since the last issue are marked.</div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+const BANDS = [[.05, 'almost no chance'], [.2, 'very unlikely'], [.45, 'unlikely'], [.55, 'about as likely as not'], [.8, 'likely'], [.95, 'very likely'], [1.01, 'almost certainly']];
+const est = p => BANDS.find(b => p < b[0])[1];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const bar = w => `<span class="bar" style="width:${w}em" aria-label="withheld"></span>`;
+
+// j: [portion, text with {p}, p, grade, modelNote]
+const D = {
+  cba: { tab: 'Brazil · finance', name: 'ALMEIDA, Cláudia Barbosa', file: 'LP-BR-0417',
+    2000: { cls: 'CONFIDENTIAL', date: '14 January 2000', reason: 'Periodic review', position: 'Executive Secretary, Ministry of Finance (since March 1999)',
+      bio: [['Born', '11 August 1957, Belo Horizonte, Minas Gerais'], ['Nationality', 'Brazilian'], ['Languages', 'Portuguese; English (fluent); Spanish (working)'], ['Education', 'BA Economics, Universidade de São Paulo (1979); PhD Economics, Unicamp (1986)'], ['Party', 'None declared; regarded as close to the PSDB economic team']],
+      chron: [['1983-1990', 'Analyst, then coordinator, National Treasury Secretariat'], ['1990-1994', 'Adviser to the Central Bank board during the Collor and Real stabilisation plans'], ['1995-1999', 'Secretary for Economic Policy, Ministry of Finance'], ['1999-', 'Executive Secretary, Ministry of Finance']],
+      form: [['C', 'Spent her twenties and thirties under high inflation (1980-1994) and worked inside the Treasury through the 1990 deposit freeze. She has said in interviews that the freeze taught her "never to promise what the cash flow cannot pay."']],
+      kj: [['C', 'Almeida is {p} to oppose any relaxation of the primary surplus target while she holds office.', .91, 'B2', 'fiscal hawkishness, posterior mean 0.78'], ['C', 'She is {p} to be appointed minister before the end of the current government.', .38, 'C3', 'appointment hazard, 2000-2002'], ['S', 'Her personal relationship with the President is {p} to be close enough to override the minister on budget questions.', .47, 'D4', 'loyalty edge strength'], ['C', 'Her technical competence is {p} above that of her predecessors.', .7, 'B3', 'competence, posterior mean 0.64']],
+      net: [['Minister of Finance', 'superior, patron', 'Recruited her in 1995'], ['Central Bank Governor', 'ally', 'Joint authors of the 1999 inflation-targeting design'], ['Budget rapporteur, Chamber of Deputies', 'rival', 'Public dispute over the 2000 budget']],
+      pos: [['22 Nov 1999', 'Told the Senate finance committee the surplus target is "not a ceiling but a floor."', 'Open source, Agência Senado'], ['7 Dec 1999', 'Opposed indexing the minimum wage to past inflation in cabinet discussion.', 'Liaison reporting']],
+      gaps: ['Views on capital controls', 'Health', 'Personal finances'], withheld: 2,
+      src: ['Open source: Agência Senado transcripts, Folha de S.Paulo, Valor Econômico (1995-1999)', 'Liaison reporting, economic channel (1999)', 'Embassy contact reports (4)'] },
+    2005: { cls: 'SECRET', date: '20 June 2005', reason: 'Event: cabinet reshuffle of 16 June 2005', position: 'Minister of Finance (since 1 January 2003)',
+      bio: null,
+      chron: [['2003-', 'Minister of Finance', 1]],
+      form: [['C', 'Led the response to the 2002 confidence crisis as minister-designate; the episode is now her most cited reference in speeches.', 1]],
+      kj: [['C', 'Almeida is {p} to resign rather than sign a waiver of the fiscal rule.', .83, 'B2', 'commitment-device trait, episode "2002 crisis" salience 0.9', 1], ['C', 'She is {p} to be replaced in the next reshuffle.', .22, 'B3', 'exit hazard, next 12 months', 1], ['S', 'Her relationship with the President has {p} cooled since the 2004 pension dispute.', .66, 'C3', 'loyalty edge 0.71 to 0.48', 1], ['C', 'Her technical competence is {p} above that of her predecessors.', .84, 'A2', 'competence, posterior mean 0.71, tighter after 2 years of record', 1]],
+      net: [['President', 'superior', 'Relationship strained after the 2004 pension dispute', 1], ['Central Bank Governor', 'ally', 'Unchanged'], ['Minister of Social Security', 'rival', 'Dismissed 16 June 2005 after the pension dispute', 1]],
+      pos: [['3 Mar 2005', 'Refused a request from governors to reschedule state debt.', 'Open source, Valor Econômico', 1]],
+      gaps: ['Plans after leaving office'], withheld: 1,
+      src: ['Open source (2000-2005)', 'Liaison reporting, economic channel', 'HUMINT, sub-source with access to the Planalto (new 2004)'] } },
+  mdj: { tab: 'Nigeria · army', name: 'DANJUMA, Musa', file: 'LP-NG-0092',
+    2000: { cls: 'SECRET', date: '10 January 2000', reason: 'Periodic review', position: 'Major General; General Officer Commanding, 1 Division, Kaduna (since 1998)',
+      bio: [['Born', '3 April 1948, Zaria, Kaduna State'], ['Nationality', 'Nigerian'], ['Languages', 'Hausa, English'], ['Education', 'Nigerian Defence Academy (commissioned 1967); Command and Staff College, Jaji (1979); overseas staff course (1985)'], ['Service', 'Nigerian Army, infantry']],
+      chron: [['1967-1970', 'Platoon and company commander during the civil war'], ['1984-1987', 'Brigade commander'], ['1990-1993', 'Director of Army Operations'], ['1993-1998', 'Defence adviser abroad; recalled 1998'], ['1998-', 'GOC 1 Division']],
+      form: [['S', 'Commissioned at 19 and fought through the civil war. Served under three military heads of state; was not among the officers retired after the 1999 transfer to civilian rule.']],
+      kj: [['S', 'Danjuma is {p} to have been involved in planning a coup.', .08, 'C3', 'coup participation propensity, prior from 0066 hazard'], ['S', 'He is {p} to be appointed Chief of Army Staff within three years.', .42, 'C3', 'appointment hazard'], ['C', 'His operational competence is {p} above the average of his peers.', .64, 'C2', 'operational skill, posterior mean 0.58'], ['S', 'His decoration record is {p} inflated relative to his combat record.', .73, 'B3', 'medal inflation from patronage index']],
+      net: [['Chief of Defence Staff', 'patron', 'Classmates at the Defence Academy'], ['Former head of state (retired)', 'former superior', 'Served as his Director of Operations'], ['GOC 3 Division', 'rival', 'Competing for the next appointment']],
+      pos: [['Oct 1999', 'Told visiting officers the army must "learn to live under a civilian budget."', 'Defence attaché report']],
+      gaps: ['Business interests', 'Ties to retired officers abroad', 'Health'], withheld: 3,
+      src: ['Defence attaché reporting (1996-1999)', 'Open source: Nigerian press', 'Liaison reporting, defence channel'] },
+    2005: { cls: 'SECRET', date: '2 June 2005', reason: 'Event: Niger Delta operation of May 2005', position: 'Lieutenant General; Chief of Army Staff (since August 2003)',
+      bio: null,
+      chron: [['2003-', 'Chief of Army Staff', 1]],
+      form: [['S', 'Commanded the May 2005 Niger Delta operation; his first operational command since 1987.', 1]],
+      kj: [['S', 'Danjuma is {p} to have been involved in planning a coup.', .05, 'B3', 'coup participation propensity, lowered by appointment', 1], ['C', 'His operational competence is {p} below the 2000 estimate; the May operation ran three weeks over plan.', .61, 'B2', 'operational skill posterior 0.58 to 0.47 after battle record', 1], ['S', 'He is {p} to resist further cuts to the army budget publicly.', .78, 'B2', 'risk aversion and institutional loyalty', 1], ['S', 'His decoration record is {p} inflated relative to his combat record.', .81, 'B2', 'medal inflation index', 1]],
+      net: [['President', 'superior', 'Appointed him in 2003'], ['Chief of Defence Staff', 'patron', 'Retired 2004; tie weakened', 1], ['Minister of Defence', 'rival', 'Dispute over the 2005 budget', 1]],
+      pos: [['12 May 2005', 'Asked for an emergency supplementary appropriation for operations in the Delta.', 'Open source, National Assembly record', 1]],
+      gaps: ['Business interests', 'Ties to retired officers abroad'], withheld: 2,
+      src: ['Defence attaché reporting', 'Open source', 'SIGINT summary (2005)'] } },
+  kni: { tab: 'Sweden · central bank', name: 'NILSSON, Karin', file: 'LP-SE-0133',
+    2000: { cls: 'CONFIDENTIAL', date: '18 January 2000', reason: 'Periodic review', position: 'First Deputy Governor, Sveriges Riksbank (since 1998)',
+      bio: [['Born', '27 February 1952, Uppsala'], ['Nationality', 'Swedish'], ['Languages', 'Swedish, English, German'], ['Education', 'Civilekonom, Stockholm School of Economics (1975); PhD Economics, Stockholm University (1981)'], ['Party', 'None; appointed by the General Council']],
+      chron: [['1979-1988', 'Economist, Riksbank research department'], ['1988-1994', 'Head of the monetary policy department'], ['1994-1998', 'Deputy Governor'], ['1998-', 'First Deputy Governor']],
+      form: [['C', 'Lived through double-digit inflation in her twenties (1975-1982). Was in the monetary policy department on 16 September 1992, when the overnight rate was raised to 500 percent to defend the krona.']],
+      kj: [['C', 'Nilsson is {p} to vote with the hawkish minority on the board.', .86, 'A2', 'hawkishness, posterior mean 0.81; lived inflation weight 0.34'], ['C', 'She is {p} to succeed the current Governor.', .52, 'B3', 'appointment hazard at end of term'], ['C', 'She would {p} accept a government request to delay a rate rise.', .04, 'B2', 'independence, posterior mean 0.9']],
+      net: [['Governor', 'superior', 'Cordial; differ on pace of easing'], ['Minister of Finance', 'counterpart', 'Formal'], ['Former colleague, now IMF', 'ally', 'Co-authored on inflation targeting']],
+      pos: [['Nov 1999', 'Dissented in favour of a 25 basis point rise.', 'Open source, board minutes']],
+      gaps: ['Private views on euro membership'], withheld: 0,
+      src: ['Open source: Riksbank board minutes and speeches', 'Embassy contact reports (2)'] },
+    2005: { cls: 'CONFIDENTIAL', date: '9 June 2005', reason: 'Periodic review', position: 'Governor, Sveriges Riksbank (since January 2003)',
+      bio: null,
+      chron: [['2003-', 'Governor', 1]],
+      form: [],
+      kj: [['C', 'Nilsson is {p} to raise rates before inflation reaches target, to protect credibility.', .74, 'A2', 'hawkishness posterior 0.81 to 0.77; board composition', 1], ['C', 'She is {p} to be reappointed at the end of her term.', .69, 'B2', 'reappointment hazard', 1], ['C', 'She would {p} accept a government request to delay a rate rise.', .04, 'A2', 'independence', 0]],
+      net: [['Minister of Finance', 'counterpart', 'Public disagreement over the 2004 krona appreciation', 1], ['Former colleague, now IMF', 'ally', 'Unchanged']],
+      pos: [['Feb 2005', 'Said the Riksbank "would rather be early and wrong than late and right."', 'Open source, speech to the Riksdag', 1]],
+      gaps: ['Private views on euro membership'], withheld: 0,
+      src: ['Open source: board minutes and speeches (2000-2005)'] } },
+  moz: { tab: 'Türkiye · opposition', name: 'ÖZTÜRK, Murat', file: 'LP-TR-0251',
+    2000: { cls: 'CONFIDENTIAL', date: '21 January 2000', reason: 'New file', position: 'Deputy Chairman, Halkçı Yenilik Partisi (HYP); Member of Parliament for İzmir (since 1995)',
+      bio: [['Born', '6 October 1961, Konak, İzmir'], ['Nationality', 'Turkish'], ['Languages', 'Turkish, English (good), French (basic)'], ['Education', 'Political Science, Ankara University (1984)'], ['Party', 'HYP, centre-left (party name fictional in this mock)']],
+      chron: [['1983-1991', 'Youth branch, then provincial chairman, İzmir'], ['1991-1995', 'Municipal councillor, İzmir'], ['1995-', 'Member of Parliament'], ['1999-', 'Deputy Chairman']],
+      form: [['C', 'Was 19 at the 1980 coup; detained for eleven days in 1981 as a student activist. Entered politics during chronic high inflation; the 1994 currency crisis cost his family business, which he cites often.']],
+      kj: [['C', 'Öztürk is {p} to challenge for the party chairmanship before the next election.', .63, 'C3', 'ambition, posterior mean 0.82; party leader exit hazard'], ['C', 'He would {p} join a coalition led by the centre-right if offered the economy ministry.', .55, 'C3', 'coalition bargaining weights'], ['S', 'He is {p} to hold a grudge against two serving generals over his 1981 detention.', .7, 'D3', 'relation "detained by", salience 0.6']],
+      net: [['Party Chairman', 'superior, rival', 'Chairman sees him as a successor and a threat'], ['Mayor of İzmir', 'ally', 'Shared provincial base'], ['Two serving generals', 'adversary', 'Linked to his 1981 detention; names withheld']],
+      pos: [['Dec 1999', 'Opposed the IMF standby agreement in a parliamentary speech: "Ask the bakers, not the bankers."', 'Open source, TBMM record']],
+      gaps: ['Sources of party funding', 'Contacts abroad'], withheld: 2,
+      src: ['Open source: Turkish press, parliamentary record', 'Embassy contact reports (3)'] },
+    2005: { cls: 'CONFIDENTIAL', date: '30 June 2005', reason: 'Event: party congress of 25 June 2005', position: 'Chairman, HYP; Leader of the Opposition (since November 2002)',
+      bio: null,
+      chron: [['2001', 'Led the party\'s response to the February 2001 crisis', 1], ['2002-', 'Chairman, HYP; Leader of the Opposition', 1]],
+      form: [['C', 'Won the chairmanship at the 2002 congress after the 2001 banking crisis discredited the old leadership.', 1]],
+      kj: [['C', 'Öztürk is {p} to lead the party into the next election.', .88, 'B2', 'leader exit hazard, low after congress win', 1], ['C', 'He would {p} join a coalition led by the centre-right if offered the economy ministry.', .31, 'B3', 'coalition weights; now leader, outside option higher', 1], ['S', 'He is {p} to hold a grudge against two serving generals over his 1981 detention.', .7, 'D3', 'unchanged', 0]],
+      net: [['Former Party Chairman', 'rival', 'Defeated at the 2002 congress; leads an internal faction', 1], ['Mayor of İzmir', 'ally', 'Unchanged']],
+      pos: [['25 Jun 2005', 'Promised to "end the bakers\' tax" in his congress speech.', 'Open source, party broadcast', 1]],
+      gaps: ['Sources of party funding'], withheld: 1,
+      src: ['Open source', 'Embassy contact reports (5)', 'HUMINT, party official (new 2003)'] } },
+};
+const order = ['cba', 'mdj', 'kni', 'moz'];
+let cur = 'cba', issue = '2000';
+
+function merge(f) {
+  const a = f[2000]; if (issue === '2000') return { ...a, chron: a.chron.map(r => [...r, 0]) };
+  const b = f[2005];
+  return { ...b, bio: a.bio, chron: [...a.chron.map(r => [...r, 0]), ...b.chron], form: [...a.form, ...b.form], pos: [...a.pos, ...b.pos] };
+}
+const mark = (ch, s) => ch ? `<span class="changed">${s}</span><span class="new-tag">NEW</span>` : s;
+function render() {
+  const f = D[cur], d = merge(f), cls = d.cls;
+  const kj = d.kj.map(([pm, t, p, g, m, ch]) => {
+    const txt = esc(t).replace('{p}', `<span class="est">${est(p)}</span>`);
+    return `<div class="j"><div><span class="pm">(${pm})</span>${ch ? `<span class="changed">${txt}</span>` : txt}<span class="model">p=${p.toFixed(2)} · ${esc(m)}</span></div><span class="grade" title="Source reliability and information credibility">${g}</span></div>`;
+  }).join('');
+  const withheld = d.withheld ? `<p class="para"><span class="pm">(S)</span>${bar(14)} ${bar(9)}<br>${bar(21)} ${bar(5)}</p><p class="withheld">${d.withheld} paragraph${d.withheld > 1 ? 's' : ''} withheld: compartment not available to this seat.</p>` : '';
+  document.getElementById('sheet').innerHTML = `
+    <div class="banner">${cls}</div>
+    <div class="ctrl"><span>FOREIGN ASSESSMENTS DIRECTORATE · LEADERSHIP PROFILES</span><span><b>${f.file}</b> · issue ${issue === '2000' ? '1' : '6'}</span>
+      <span>Date of report: <b>${d.date}</b> · Reason: ${esc(d.reason)}</span><span>Page 1 of 1</span></div>
+    <div class="title">${esc(f.name)}</div>
+    <div class="subtitle"><span class="pm">(U)</span>${esc(d.position)}</div>
+    <div class="s"><h3>Biographic data</h3><table class="bio">${d.bio.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>
+    <div class="s"><h3>Career</h3><table class="chron">${d.chron.map(([y, t, ch]) => `<tr><td>${y}</td><td>${mark(ch, esc(t))}</td></tr>`).join('')}</table></div>
+    <div class="s"><h3>Formative experience</h3>${d.form.map(([pm, t, ch]) => `<p class="para"><span class="pm">(${pm})</span>${mark(ch, esc(t))}</p>`).join('')}</div>
+    <div class="s"><h3>Key judgments</h3><div class="kj">${kj}</div></div>
+    <div class="s"><h3>Recorded positions</h3><table class="chron">${d.pos.map(([dt, t, s, ch]) => `<tr><td>${esc(dt)}</td><td>${mark(ch, esc(t))} <span class="withheld">${esc(s)}</span></td></tr>`).join('')}</table></div>
+    <div class="s"><h3>Associates</h3><table class="net"><tr><th>Person</th><th>Tie</th><th>Note</th></tr>${d.net.map(([n, t, x, ch]) => `<tr><td>${esc(n)}</td><td>${esc(t)}</td><td>${mark(ch, esc(x))}</td></tr>`).join('')}</table></div>
+    <div class="s"><h3>Intelligence gaps</h3><p class="para"><span class="pm">(C)</span>${d.gaps.map(esc).join('; ')}.</p>${withheld}</div>
+    <div class="s"><h3>Sources</h3><ol class="src">${d.src.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>
+    <div class="foot"><span>Grades: source reliability A-F, information credibility 1-6</span><span>Fictional person · generated in this run</span></div>
+    <div class="banner" style="margin-top:8px">${cls}</div>`;
+}
+const tabs = document.getElementById('tabs');
+tabs.innerHTML = order.map(k => `<button type="button" data-k="${k}" aria-pressed="${k === cur}">${esc(D[k].tab)}</button>`).join('');
+tabs.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; cur = b.dataset.k; tabs.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); render(); });
+const seg = document.getElementById('issue');
+seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; issue = b.dataset.v; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); render(); });
+document.getElementById('model').addEventListener('change', e => document.getElementById('sheet').classList.toggle('show-model', e.target.checked));
+render();
+})();
+</script>

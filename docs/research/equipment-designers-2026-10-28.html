@@ -1,0 +1,698 @@
+<title>Ceteris Arsenal Sketches</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: a defence-ministry file in Night Atlas (ADR 0137). Answer first, then four workbenches whose output is always an ADR 0146 catalog row, then the procurement and production-method mocks, then the fit table. Dark-first. */
+:root {
+  --ground: #11171B; --panel: #182026; --raised: #202A31; --line: #2B363C;
+  --ink: #E2E7E3; --ink-2: #A2B0AE; --sea: #1A2B36;
+  --proof: #E35E91; --branch: #A890E8; --warn: #D9AA4E; --ok: #6CB485; --crisis: #E36C63;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #EDEFEA; --panel: #F6F7F3; --raised: #E3E7E2; --line: #C9D0CC;
+    --ink: #1C292F; --ink-2: #4A5A61; --sea: #BCD1DB;
+    --proof: #AE2459; --branch: #5E45A3; --warn: #8A5A12; --ok: #2F6B4F; --crisis: #B23A32;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #EDEFEA; --panel: #F6F7F3; --raised: #E3E7E2; --line: #C9D0CC;
+  --ink: #1C292F; --ink-2: #4A5A61; --sea: #BCD1DB;
+  --proof: #AE2459; --branch: #5E45A3; --warn: #8A5A12; --ok: #2F6B4F; --crisis: #B23A32;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 72px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.01em; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 17px; line-height: 1.25; }
+p { margin: 0; max-width: 72ch; }
+a { color: var(--branch); }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.mono, code { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--ink-2); }
+header.top { display: grid; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+header.top .lede { font-family: var(--serif); font-size: 18px; line-height: 1.5; }
+header.top .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); }
+section { margin-top: 48px; display: grid; gap: 16px; }
+.rule-label { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px; flex-wrap: wrap; }
+.rule-label .eyebrow { margin-left: auto; }
+ul.tight { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 78ch; }
+.answer { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.answer div { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.answer b { font-family: var(--serif); font-size: 16px; font-weight: 600; }
+.answer span { font-size: 14px; color: var(--ink-2); }
+
+/* altitude ladder */
+.ladder { display: grid; gap: 0; border-top: 1px solid var(--ink); }
+.ladder > div { display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1.2fr); gap: 4px 18px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.ladder .k { font: 600 20px var(--serif); color: var(--proof); }
+.ladder .t { display: grid; gap: 2px; }
+.ladder .t b { font-family: var(--serif); font-size: 16px; }
+.ladder .t span { font-size: 13px; color: var(--ink-2); }
+.ladder .d { font-size: 14px; }
+@media (max-width: 680px) { .ladder > div { grid-template-columns: 40px minmax(0, 1fr); } .ladder .d { grid-column: 2; } }
+
+/* workbench */
+.tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line); }
+.tabs button { font: 600 13px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; background: none; color: var(--ink-2); border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--proof); }
+.tabs button:focus-visible, .seg label:focus-within, input:focus-visible, select:focus-visible { outline: 2px solid var(--branch); outline-offset: 2px; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 0; background: var(--panel); border: 1px solid var(--line); border-top: 0; }
+@media (max-width: 820px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.bench .ctl { padding: 16px; display: grid; gap: 14px; align-content: start; border-right: 1px solid var(--line); }
+@media (max-width: 820px) { .bench .ctl { border-right: 0; border-bottom: 1px solid var(--line); } }
+.bench .out { padding: 16px; display: grid; gap: 14px; align-content: start; background: var(--raised); min-width: 0; }
+.grp { display: grid; gap: 6px; }
+.grp > .lbl { font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg label { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--ground); padding: 5px 9px; font-size: 13.5px; cursor: pointer; }
+.seg label:has(input:checked) { border-color: var(--proof); color: var(--ink); box-shadow: inset 0 0 0 1px var(--proof); }
+.seg input { accent-color: var(--proof); margin: 0; }
+.seg label small { color: var(--ink-2); font-family: var(--mono); font-size: 11px; }
+.rng { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+.rng input { width: 100%; accent-color: var(--proof); }
+.rng output { font-family: var(--mono); font-size: 13px; text-align: right; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.stat { border-top: 1px solid var(--line); padding-top: 6px; display: grid; gap: 1px; }
+.stat span { font-size: 11.5px; color: var(--ink-2); letter-spacing: 0.04em; }
+.stat b { font: 500 18px var(--mono); font-variant-numeric: tabular-nums; }
+.stat i { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.bar { height: 6px; background: var(--ground); position: relative; }
+.bar > div { position: absolute; inset: 0 auto 0 0; background: var(--branch); }
+.row { font-family: var(--mono); font-size: 12px; line-height: 1.55; background: var(--ground); border: 1px solid var(--line); padding: 10px 12px; white-space: pre; overflow-x: auto; color: var(--ink); }
+.row .c { color: var(--ink-2); }
+.row .v { color: var(--proof); }
+.flags { display: grid; gap: 6px; }
+.flag { font-size: 13px; padding: 6px 10px; border-left: 3px solid var(--warn); background: var(--ground); }
+.flag.ok { border-left-color: var(--ok); }
+.flag.bad { border-left-color: var(--crisis); }
+.mix { display: flex; height: 14px; border: 1px solid var(--line); }
+.mix > div { height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+.c-steel { background: #7F8C93; } .c-mach { background: var(--warn); } .c-elec { background: var(--branch); } .c-chem { background: var(--ok); } .c-aero { background: var(--proof); } .c-lab { background: var(--sea); border: 1px solid var(--line); }
+
+/* salvo figure */
+.salvo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.salvo > div { border: 1px solid var(--line); background: var(--ground); padding: 10px; display: grid; gap: 4px; }
+.salvo b { font: 500 22px var(--mono); }
+
+/* tender */
+.tender { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr); gap: 0; background: var(--panel); border: 1px solid var(--line); }
+@media (max-width: 820px) { .tender { grid-template-columns: minmax(0, 1fr); } }
+.tender .ctl { padding: 16px; display: grid; gap: 10px; align-content: start; border-right: 1px solid var(--line); }
+@media (max-width: 820px) { .tender .ctl { border-right: 0; border-bottom: 1px solid var(--line); } }
+.tender .out { padding: 16px; display: grid; gap: 12px; align-content: start; background: var(--raised); min-width: 0; }
+.bid { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 4px 12px; padding: 10px 12px; border: 1px solid var(--line); background: var(--ground); }
+.bid.win { border-color: var(--proof); box-shadow: inset 3px 0 0 var(--proof); }
+.bid .nm { font-weight: 600; }
+.bid .nm small { font-weight: 400; color: var(--ink-2); display: block; font-size: 12.5px; }
+.bid .sc { font: 500 20px var(--mono); text-align: right; }
+.bid .bars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.bid .bars div { display: grid; gap: 2px; font-size: 10.5px; color: var(--ink-2); }
+
+/* production methods */
+.lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.line { background: var(--panel); border: 1px solid var(--line); padding: 14px; display: grid; gap: 12px; align-content: start; }
+.line h3 { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.line h3 small { font: 400 12px var(--mono); color: var(--ink-2); }
+
+/* tables */
+.tbl { overflow-x: auto; border-top: 1px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+td:first-child { font-weight: 600; }
+table.fit { min-width: 960px; }
+tr.rec td { background: var(--panel); }
+.tag { font: 500 11.5px var(--mono); padding: 1px 6px; border: 1px solid currentColor; white-space: nowrap; display: inline-block; }
+.t-ok { color: var(--ok); } .t-warn { color: var(--warn); } .t-bad { color: var(--crisis); } .t-br { color: var(--branch); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; }
+.two > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.tension { display: grid; gap: 0; }
+.tension > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 4px 18px; padding: 12px 0; border-top: 1px solid var(--line); }
+.tension b { font-family: var(--serif); font-size: 15.5px; }
+.tension span { font-size: 14px; color: var(--ink-2); }
+@media (max-width: 680px) { .tension > div { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { .bar > div, .bid { transition: width 160ms ease, border-color 160ms ease; } }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">Ceteris brainstorm · equipment and weapon design · 28 Oct 2026 · war is 2.0</span>
+  <h1>Ceteris arsenal sketches</h1>
+  <p class="lede">What Hearts of Iron's tank, ship and air designers and Victoria 3's production methods could look like in Ceteris, for small arms and munitions, land vehicles, ships and aircraft. Every workbench below writes the same thing: a row of the ADR 0146 equipment catalog. Nothing here is decided and nothing is an ADR.</p>
+  <div class="meta mono"><span>Reads: ADRs 0146 0149 0150 0151 0165 0166, 0200-0206</span><span>Country, firms and all figures are fictional and illustrative</span></div>
+</header>
+
+<section>
+  <div class="rule-label"><h2>Short answer</h2><span class="eyebrow">four points</span></div>
+  <div class="answer">
+    <div><b>A head of state doesn't pick turrets.</b><span>Your worry is right. In 2000-2040 governments write requirements, pick bidders, fund upgrades and choose where lines are built. Engineers at firms draw the vehicles. The HOI4 micro-designer belongs to a different seat.</span></div>
+    <div><b>Design at the altitude of the state.</b><span>The fit is a procurement layer: write a staff requirement, run a tender between design bureaus, choose production methods per line, and order mid-life upgrades. All of it writes orders through ADR 0165's production lines.</span></div>
+    <div><b>The economy bounds the drawing board.</b><span>Which modules you can fit depends on your own electronics, aerospace and chemicals sectors. Anything you can't make is imported, which creates spare-parts dependence. No HOI or Victoria designer has this.</span></div>
+    <div><b>Keep the full designer as an editor.</b><span>The HOI-style workbench is still useful: as the catalog editor that authors the 2000 inventory and data mods (ADR 0166), and as an optional quartermaster surface. It is never the main loop.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Five altitudes for equipment design</h2><span class="eyebrow">from closest to the bolt to closest to the treasury</span></div>
+  <div class="ladder">
+    <div><span class="k">A</span><div class="t"><b>Workbench</b><span>HOI4 tank, ship and air designers</span></div><p class="d">Chassis plus modules, live stats. The player is the engineer. Deepest toy, most min-maxable, furthest from the top-down seat.</p></div>
+    <div><span class="k">B</span><div class="t"><b>Requirement and tender</b><span>Rule the Waves, real ministries</span></div><p class="d">The player sets what matters (protection, cost, schedule, domestic content). Design bureaus at firms answer with bids; the sim draws the designs. The player picks a winner and lives with the overruns.</p></div>
+    <div><span class="k">C</span><div class="t"><b>Production methods per line</b><span>Victoria 3</span></div><p class="d">Each production line (0165) has method groups: how shells are filled, who owns the plant, whether drones are kit-assembled. Methods change the input vector, labour, output rate and learning.</p></div>
+    <div><span class="k">D</span><div class="t"><b>Upgrade programmes</b><span>T-72B3, F-16V, mid-life refits</span></div><p class="d">Most 2000 kit still serves in 2040. The common decision is to move a fleet up a vintage band for a share of new cost, using depot and yard capacity.</p></div>
+    <div><span class="k">E</span><div class="t"><b>R&amp;D portfolio</b><span>Industrial policy only</span></div><p class="d">Fund capability areas (sensors, propulsion, energetics, autonomy). Better rows appear in the catalog over time. No drawing at all.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>A. Workbenches</h2><span class="eyebrow">interactive · output is a catalog row</span></div>
+  <p>Pick modules on the left. The right side shows derived values, the input vector into the IO sectors, a capability check against the building country, and the catalog row the design would write. The builder is fictional Varnest, a mid-income state with a strong steel sector, middling electronics (capability 0.45) and no jet-engine industry.</p>
+  <div>
+    <div class="tabs" role="tablist" aria-label="Workbench">
+      <button role="tab" id="tab-land" aria-selected="true" aria-controls="p-land">Land vehicles</button>
+      <button role="tab" id="tab-sea" aria-selected="false" aria-controls="p-sea">Ships</button>
+      <button role="tab" id="tab-air" aria-selected="false" aria-controls="p-air">Aircraft</button>
+      <button role="tab" id="tab-arms" aria-selected="false" aria-controls="p-arms">Small arms</button>
+    </div>
+
+    <div class="bench" id="p-land" role="tabpanel" aria-labelledby="tab-land">
+      <div class="ctl" data-bench="land">
+        <div class="grp"><span class="lbl">Hull</span><div class="seg" id="l-hull"></div></div>
+        <div class="grp"><span class="lbl">Main armament</span><div class="seg" id="l-gun"></div></div>
+        <div class="grp"><span class="lbl">Protection (any)</span><div class="seg" id="l-prot"></div></div>
+        <div class="grp"><span class="lbl">Fire control and C2</span><div class="seg" id="l-fcs"></div></div>
+        <div class="grp"><span class="lbl">Powerpack</span><div class="seg" id="l-pow"></div></div>
+      </div>
+      <div class="out" id="l-out"></div>
+    </div>
+
+    <div class="bench" id="p-sea" role="tabpanel" aria-labelledby="tab-sea" hidden>
+      <div class="ctl" data-bench="sea">
+        <div class="grp"><span class="lbl">Hull</span><div class="seg" id="s-hull"></div></div>
+        <div class="grp"><span class="lbl">Vertical launch cells</span><div class="rng"><input type="range" id="s-vls" min="0" max="96" step="8" value="32"><output id="s-vls-o">32</output></div></div>
+        <div class="grp"><span class="lbl">Anti-ship missiles</span><div class="rng"><input type="range" id="s-ashm" min="0" max="16" step="2" value="8"><output id="s-ashm-o">8</output></div></div>
+        <div class="grp"><span class="lbl">Air-search radar</span><div class="seg" id="s-radar"></div></div>
+        <div class="grp"><span class="lbl">Sonar</span><div class="seg" id="s-sonar"></div></div>
+        <div class="grp"><span class="lbl">Propulsion</span><div class="seg" id="s-prop"></div></div>
+      </div>
+      <div class="out" id="s-out"></div>
+    </div>
+
+    <div class="bench" id="p-air" role="tabpanel" aria-labelledby="tab-air" hidden>
+      <div class="ctl" data-bench="air">
+        <div class="grp"><span class="lbl">Airframe</span><div class="seg" id="a-frame"></div></div>
+        <div class="grp"><span class="lbl">Radar</span><div class="seg" id="a-radar"></div></div>
+        <div class="grp"><span class="lbl">Engine source</span><div class="seg" id="a-eng"></div></div>
+        <div class="grp"><span class="lbl">Weapons integration (any)</span><div class="seg" id="a-wpn"></div></div>
+        <div class="grp"><span class="lbl">Programme route</span><div class="seg" id="a-route"></div></div>
+      </div>
+      <div class="out" id="a-out"></div>
+    </div>
+
+    <div class="bench" id="p-arms" role="tabpanel" aria-labelledby="tab-arms" hidden>
+      <div class="ctl" data-bench="arms">
+        <div class="grp"><span class="lbl">Weapon</span><div class="seg" id="r-type"></div></div>
+        <div class="grp"><span class="lbl">Calibre family</span><div class="seg" id="r-cal"></div></div>
+        <div class="grp"><span class="lbl">Optic standard</span><div class="seg" id="r-opt"></div></div>
+        <div class="grp"><span class="lbl">Source</span><div class="seg" id="r-src"></div></div>
+        <p class="note">Small arms barely move combat power in a brigade-level model (ADR 0149). What matters is ammunition commonality with allies, cost per soldier and whether you can supply yourself. The bench shows that honestly: the interesting outputs are logistics and dependence.</p>
+      </div>
+      <div class="out" id="r-out"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>B. Staff requirement and tender</h2><span class="eyebrow">interactive · the top-down version</span></div>
+  <p>Varnest needs 220 new main battle tanks. The player, as government or quartermaster, weights the requirement. Three bidders answer: a domestic design bureau with a new design, a licence build of a foreign tank, and an off-the-shelf import. The sim drew all three designs; the player only chooses what to value and who wins.</p>
+  <div class="tender">
+    <div class="ctl" id="t-ctl">
+      <span class="eyebrow">Staff requirement · weights 0-5</span>
+    </div>
+    <div class="out" id="t-out"></div>
+  </div>
+  <p class="note">Bidders are design bureaus attached to arms-sector enterprise cells (ADR 0201), named through ADR 0203's view. The losing domestic bid is a political event: the bureau's lobby (0189) and the province's jobs carry the cost. Overrun bands follow 0160's reference-class approach; the figures here are made up.</p>
+</section>
+
+<section>
+  <div class="rule-label"><h2>C. Production methods per line</h2><span class="eyebrow">interactive · Victoria 3 style</span></div>
+  <p>Each line is a putty-clay capacity from ADR 0165 with Wright's-law learning. A method group changes the input vector, labour and rate. Switching any method resets part of the learning, which is the real cost of changing your mind.</p>
+  <div class="lines" id="pm"></div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>D and E. Upgrades and R&amp;D</h2><span class="eyebrow">static sketch</span></div>
+  <div class="two">
+    <div>
+      <h3>Upgrade programmes</h3>
+      <ul class="tight">
+        <li>A fleet is counts by class and vintage band (0146). An upgrade moves N units up one band for 25-45% of new unit cost and 12-30 months per batch.</li>
+        <li>Capacity is depot and yard work: machinery and construction labour (0205), so upgrades compete with new builds and with civilian demand.</li>
+        <li>Upgrade kits name their modules, so the workbench's capability check applies: a thermal-sight kit Varnest can't make is imported, with spare-parts dependence.</li>
+        <li>Real anchors: T-72B3 (Russia, from 2011), F-16V upgrades, Leopard 2A4 to 2A7 conversions, ship mid-life refits.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>R&amp;D portfolio</h3>
+      <ul class="tight">
+        <li>Spending by area (sensors, propulsion, energetics, autonomy, armour) raises a country's capability index per area with long lags, coupled to the civilian sector's TFP (7.5) so a chip industry helps radars.</li>
+        <li>Capability gates which modules a bureau can offer in a tender and which kits a domestic line can make.</li>
+        <li>No tech tree and no focus tree (both rejected in the borrowed-mechanics survey). Areas are continuous, and spillovers are the point.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>How each option fits Ceteris</h2><span class="eyebrow">recommended combination shaded</span></div>
+  <div class="tbl">
+    <table class="fit">
+      <thead><tr><th>Option</th><th>Player does</th><th>Sim does</th><th>Top-down fit</th><th>Lab fit (15.7)</th><th>AI</th><th>Earliest</th></tr></thead>
+      <tbody>
+        <tr><td>A. Workbench as game loop</td><td>Draws every variant</td><td>Prices and builds it</td><td><span class="tag t-bad">poor</span></td><td><span class="tag t-bad">poor</span> no empirical anchor for invented designs</td><td>Needs a designer AI, the HOI4 weak spot</td><td>2.x minor, seat only</td></tr>
+        <tr><td>A'. Workbench as catalog editor</td><td>Edits rows ex ante or by data mod</td><td>Nothing new: it is the 0166 data mod with a UI</td><td><span class="tag t-ok">fine</span> it's an editor</td><td><span class="tag t-ok">good</span> edits are logged, hashed</td><td>None needed</td><td>W4 with the catalog</td></tr>
+        <tr class="rec"><td>B. Requirement and tender</td><td>Weights, quantity, picks winner</td><td>Bureaus draw bids from capability; overruns, delays</td><td><span class="tag t-ok">good</span></td><td><span class="tag t-warn">medium</span> calibrate overruns to programme history</td><td>Same rule as the player's default weights</td><td>W3-W4, quartermaster</td></tr>
+        <tr class="rec"><td>C. Production methods</td><td>Picks methods per line</td><td>Input vectors, learning resets</td><td><span class="tag t-ok">good</span></td><td><span class="tag t-ok">good</span> 155 mm ramp test in 0165</td><td>Cost-minimising default</td><td>W1 with lines</td></tr>
+        <tr class="rec"><td>D. Upgrades</td><td>Orders band moves for fleets</td><td>Depot capacity, kits, imports</td><td><span class="tag t-ok">good</span></td><td><span class="tag t-ok">good</span> fleets in 2000-2020 are observable</td><td>Budget rule by threat</td><td>W4</td></tr>
+        <tr><td>E. R&amp;D portfolio</td><td>Budget shares by area</td><td>Capability growth with spillovers</td><td><span class="tag t-ok">good</span></td><td><span class="tag t-warn">medium</span> spillover sizes are uncertain</td><td>Budget rule</td><td>2.x</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Tensions</h2><span class="eyebrow">stated plainly</span></div>
+  <div class="tension">
+    <div><b>Seat altitude</b><span>A head of government who designs turrets breaks the fantasy the rest of the game builds. Options B to E keep the player at the ministry; A only fits the quartermaster seat (0130) or an editor.</span></div>
+    <div><b>Catalog granularity</b><span>Forces are counts by class and vintage band, not per item (0146). Every player design would add rows. To keep the 45 classes fixed, a design must map to class plus band plus a few quality modifiers, which flattens what a designer can express.</span></div>
+    <div><b>Min-maxing</b><span>HOI4's designers produced "meta" templates within weeks. In a lab that is supposed to reproduce 2000-2040, free design gives the player an edge real states never had. Tenders with bureaus that draw the designs cap that.</span></div>
+    <div><b>Time scales</b><span>A new tank or fighter takes 10-20 years to service (Boxer, F-35, Armata). Inside a 40-year run, most of the player's equipment is what existed in 2000, upgraded. A designer that pays off by 2015 would be unrealistic.</span></div>
+    <div><b>Who owns a design</b><span>Real designs belong to firms. ADR 0203 keeps named firms as views that never add output or modifiers. Bureaus that bid need a thin owned object (a design with an owner cell) or the granular-firm profile, which is off by default.</span></div>
+    <div><b>Data</b><span>The 2000 catalog has to be built from open sources anyway (0146). The editor version of the workbench is a tool the owner needs regardless, which is the strongest argument for building A' early.</span></div>
+    <div><b>Exports</b><span>A domestic design becomes a product other states buy (23.6). That creates dependence and leverage through trade, which is a strength of Ceteris, and also a new trade-good dimension the econ core does not have.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>What a design is, in data</h2><span class="eyebrow">same for every option</span></div>
+  <p>Whichever altitude the player works at, the output is one structure. A tender, an upgrade kit and a workbench all write it; production lines and the war resolvers read it.</p>
+  <div class="row"><span class="c"># Design: one variant of a catalog class, owned by an enterprise cell</span>
+Design {
+  class: ClassId,           <span class="c"># one of ~45 (0146), fixed</span>
+  band: VintageBand,        <span class="c"># 1..5</span>
+  modules: [ModuleId],      <span class="c"># each gated by a capability area</span>
+  owner: OwnerId,           <span class="c"># bureau's enterprise cell (0201)</span>
+  derived: CatalogRow,      <span class="c"># firepower, protection, mobility, fuel, MTBF, signature</span>
+  inputs: SectorVector,     <span class="c"># into the ICIO sectors, locks at order (0204)</span>
+  import_share: f64,        <span class="c"># modules the owner's country can't make</span>
+  licence: Option&lt;Licence&gt;, <span class="c"># licensor, royalty, export veto</span>
+}</div>
+</section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const CAP = { elec: 0.45, aero: 0.30, chem: 0.60, steel: 0.80 };
+
+function seg(el, name, opts, type = "radio", checked = [0]) {
+  el.innerHTML = opts.map((o, i) =>
+    `<label title="${o.note || ""}"><input type="${type}" name="${name}" value="${i}" ${checked.includes(i) ? "checked" : ""}>${o.n}${o.tag ? ` <small>${o.tag}</small>` : ""}</label>`
+  ).join("");
+}
+const pick = name => +document.querySelector(`input[name="${name}"]:checked`).value;
+const picks = name => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => +i.value);
+const f = (x, d = 0) => x.toFixed(d);
+const stat = (label, val, unit = "", bar = null) =>
+  `<div class="stat"><span>${label}</span><b>${val}</b>${unit ? `<i>${unit}</i>` : ""}${bar !== null ? `<div class="bar"><div style="width:${Math.min(100, bar * 100)}%"></div></div>` : ""}</div>`;
+function mixbar(v) {
+  const keys = [["steel", "c-steel", "Steel"], ["mach", "c-mach", "Machinery"], ["elec", "c-elec", "Electronics"], ["chem", "c-chem", "Chemicals"], ["aero", "c-aero", "Aerospace"], ["lab", "c-lab", "Labour"]];
+  const tot = keys.reduce((s, [k]) => s + (v[k] || 0), 0);
+  const seg_ = keys.filter(([k]) => v[k]).map(([k, c]) => `<div class="${c}" style="width:${(v[k] / tot) * 100}%"></div>`).join("");
+  const leg = keys.filter(([k]) => v[k]).map(([k, c, n]) => `<span><i class="${c}"></i>${n} ${f((v[k] / tot) * 100)}%</span>`).join("");
+  return `<div class="grp"><span class="lbl">Input vector into IO sectors</span><div class="mix">${seg_}</div><div class="legend">${leg}</div></div>`;
+}
+const flags = list => `<div class="flags">${list.map(([k, t]) => `<div class="flag ${k}">${t}</div>`).join("")}</div>`;
+
+/* Land */
+const L = {
+  hull: [
+    { n: "Legacy MBT", tag: "41 t", w: 41, p: 3, c: 1.1, crew: 3, mtbf: 160, cls: "mbt", wheeled: 0, note: "T-72 class, autoloader" },
+    { n: "Western MBT", tag: "56 t", w: 56, p: 5, c: 3.2, crew: 4, mtbf: 220, cls: "mbt", wheeled: 0, note: "Leopard 2 / Abrams class" },
+    { n: "Tracked IFV", tag: "28 t", w: 28, p: 2, c: 2.0, crew: 3, mtbf: 260, cls: "ifv_tracked", wheeled: 0, note: "BMP / CV90 class, 7 dismounts" },
+    { n: "Wheeled 8x8", tag: "24 t", w: 24, p: 1.5, c: 1.6, crew: 3, mtbf: 420, cls: "apc_wheeled", wheeled: 1, note: "Boxer / BTR class, 8 dismounts" },
+  ],
+  gun: [
+    { n: "125 mm smoothbore", w: 2.5, fa: 8, fs: 5, c: 0.4 },
+    { n: "120 mm smoothbore", w: 3, fa: 9, fs: 5, c: 0.6 },
+    { n: "105 mm rifled", w: 2, fa: 6, fs: 5, c: 0.3 },
+    { n: "30 mm + ATGM", w: 1.5, fa: 6, fs: 6, c: 0.8 },
+    { n: "12.7 mm RWS", w: 0.3, fa: 1, fs: 3, c: 0.2 },
+  ],
+  prot: [
+    { n: "ERA", w: 2, p: 1.5, c: 0.15, elec: 0, need: null },
+    { n: "Composite add-on", w: 6, p: 2, c: 0.5, elec: 0, need: null },
+    { n: "Active protection", w: 1, p: 1.5, c: 0.6, elec: 0.6, need: ["elec", 0.7] },
+    { n: "Mine-blast floor", w: 2.5, p: 0.8, c: 0.2, elec: 0, need: null },
+  ],
+  fcs: [
+    { n: "Day sights", m: 0.8, c: 0.1, elec: 0.05, band: 1 },
+    { n: "2nd-gen thermal", m: 1.0, c: 0.4, elec: 0.3, band: 2, need: ["elec", 0.5] },
+    { n: "Networked + BMS", m: 1.15, c: 0.8, elec: 0.5, band: 3, need: ["elec", 0.6] },
+  ],
+  pow: [
+    { n: "Diesel 840 hp", hp: 840, fuel: 1, c: 0.2 },
+    { n: "Diesel 1100 hp", hp: 1100, fuel: 1.1, c: 0.35 },
+    { n: "Diesel 1500 hp", hp: 1500, fuel: 1.25, c: 0.55 },
+    { n: "Gas turbine 1500 hp", hp: 1500, fuel: 1.9, c: 0.7 },
+  ],
+};
+seg($("#l-hull"), "lh", L.hull); seg($("#l-gun"), "lg", L.gun); seg($("#l-prot"), "lp", L.prot, "checkbox", [0]);
+seg($("#l-fcs"), "lf", L.fcs, "radio", [1]); seg($("#l-pow"), "lw", L.pow);
+function land() {
+  const h = L.hull[pick("lh")], g = L.gun[pick("lg")], ps = picks("lp").map(i => L.prot[i]), fc = L.fcs[pick("lf")], pw = L.pow[pick("lw")];
+  const w = h.w + g.w + ps.reduce((s, p) => s + p.w, 0);
+  const pwr = pw.hp / w;
+  const road = Math.min(h.wheeled ? 100 : 72, (h.wheeled ? 40 : 28) + pwr * 1.6);
+  const off = road * (h.wheeled ? 0.42 : 0.6);
+  const prot = h.p + ps.reduce((s, p) => s + p.p, 0);
+  const fa = g.fa * fc.m, fs = g.fs * fc.m;
+  const fuel = w * 9 * pw.fuel;
+  const mtbf = h.mtbf * (1 - 0.08 * ps.length) * (pw.fuel > 1.5 ? 0.8 : 1) * (w > 62 ? 0.85 : 1);
+  const cost = h.c + g.c + ps.reduce((s, p) => s + p.c, 0) + fc.c + pw.c;
+  const elec = fc.elec + ps.reduce((s, p) => s + p.elec, 0);
+  const vec = { steel: 0.25 * w / 10, mach: 0.6 + pw.c * 2, elec: elec * 4, chem: 0.15 + (ps[0] && ps.some(p => p.n === "ERA") ? 0.4 : 0), lab: 1.2 };
+  const fl = [];
+  let imp = 0;
+  [fc, ...ps].forEach(m => { if (m.need && CAP[m.need[0]] < m.need[1]) { imp += m.c; fl.push(["bad", `${m.n}: needs electronics capability ${m.need[1]}, Varnest has ${CAP.elec}. Imported, ${f(m.c / cost * 100)}% of unit cost, spare parts from the supplier.`]); } });
+  if (w > 62) fl.push(["", `Combat weight ${f(w)} t exceeds class-60 bridges: mobility on the 0148 overlay drops off main roads.`]);
+  if (h.wheeled && g.fa >= 8) fl.push(["", "Large gun on a wheeled hull: recoil limits fire on the move, a design compromise the resolver would see as lower Q."]);
+  if (!fl.length) fl.push(["ok", "All modules made in Varnest. No import share."]);
+  const band = Math.min(5, fc.band + (ps.some(p => p.n === "Active protection") ? 1 : 0));
+  $("#l-out").innerHTML = `
+    <div class="stats">
+      ${stat("Combat weight", f(w, 1), "tonnes")}
+      ${stat("Power to weight", f(pwr, 1), "hp/t", pwr / 30)}
+      ${stat("Firepower vs armour", f(fa, 1), "index", fa / 11)}
+      ${stat("Firepower vs soft", f(fs, 1), "index", fs / 8)}
+      ${stat("Protection", f(prot, 1), "index", prot / 12)}
+      ${stat("Speed road / off", `${f(road)} / ${f(off)}`, "km/h")}
+      ${stat("Fuel, moving day", f(fuel), "litres")}
+      ${stat("MTBF", f(mtbf), "engine hours", mtbf / 450)}
+      ${stat("Unit cost", f(cost, 2), "$M (2000)")}
+    </div>
+    ${mixbar(vec)}
+    ${flags(fl)}
+    <div class="row"><span class="c"># catalog row written by this design</span>
+[[equipment]]
+id        = <span class="v">"vrn_${h.cls}_${String.fromCharCode(97 + pick("lg"))}${band}"</span>
+class     = <span class="v">"${h.cls}"</span>
+band      = <span class="v">${band}</span>
+fp        = { soft = <span class="v">${f(fs, 1)}</span>, armour = <span class="v">${f(fa, 1)}</span>, air = <span class="v">0.0</span> }
+protect   = <span class="v">${f(prot, 1)}</span>
+mobility  = { road = <span class="v">${f(road)}</span>, offroad = <span class="v">${f(off)}</span> }
+fuel_day  = <span class="v">${f(fuel)}</span>
+mtbf_h    = <span class="v">${f(mtbf)}</span>
+crew      = <span class="v">${h.crew}</span>
+unit_cost = <span class="v">${f(cost, 2)}</span>
+import    = <span class="v">${f(imp / cost, 2)}</span></div>`;
+}
+
+/* Sea */
+const S = {
+  hull: [
+    { n: "Corvette", tag: "2,500 t", d: 2500, vls: 16, ashm: 8, c: 250, mo: 36, crew: 70, yard: "medium" },
+    { n: "Frigate", tag: "6,000 t", d: 6000, vls: 48, ashm: 16, c: 700, mo: 54, crew: 150, yard: "large" },
+    { n: "Destroyer", tag: "9,500 t", d: 9500, vls: 96, ashm: 16, c: 1500, mo: 72, crew: 280, yard: "large" },
+  ],
+  radar: [
+    { n: "Rotating 2D", q: 0.55, ch: 3, c: 20, elec: 0.2 },
+    { n: "Rotating 3D", q: 0.7, ch: 6, c: 60, elec: 0.4 },
+    { n: "AESA fixed-face", q: 0.85, ch: 16, c: 180, elec: 1, need: ["elec", 0.65] },
+  ],
+  sonar: [
+    { n: "Hull sonar", W: 4, c: 10 },
+    { n: "Hull + towed array", W: 12, c: 50, need: ["elec", 0.5] },
+  ],
+  prop: [
+    { n: "Diesel", kn: 26, sig: 1, c: 30 },
+    { n: "CODAG", kn: 29, sig: 1.1, c: 60 },
+    { n: "Integrated electric", kn: 28, sig: 0.6, c: 110 },
+  ],
+};
+seg($("#s-hull"), "sh", S.hull, "radio", [1]); seg($("#s-radar"), "sr", S.radar, "radio", [1]);
+seg($("#s-sonar"), "ss", S.sonar); seg($("#s-prop"), "sp", S.prop, "radio", [1]);
+const salvoSide = (ashm, vls, radar, d) => ({ a: ashm * 0.7, b: 0.7 * Math.min(vls / 2, radar.ch), u: Math.max(1, Math.pow(d / 2500, 0.6)) });
+function sea() {
+  const h = S.hull[pick("sh")], r = S.radar[pick("sr")], so = S.sonar[pick("ss")], p = S.prop[pick("sp")];
+  const vEl = $("#s-vls"), aEl = $("#s-ashm");
+  vEl.max = h.vls; aEl.max = h.ashm;
+  const vls = Math.min(+vEl.value, h.vls), ashm = Math.min(+aEl.value, h.ashm);
+  vEl.value = vls; aEl.value = ashm;
+  $("#s-vls-o").textContent = vls; $("#s-ashm-o").textContent = ashm;
+  const you = salvoSide(ashm, vls, r, h.d), ref = salvoSide(8, 32, S.radar[1], 6000);
+  const onRef = Math.min(1, Math.max(0, you.a - ref.b) / ref.u), onYou = Math.min(1, Math.max(0, ref.a - you.b) / you.u);
+  const cost = h.c + vls * 3 + ashm * 2 + r.c + so.c + p.c;
+  const months = h.mo + (r.need ? 6 : 0) + (p.sig < 1 ? 6 : 0);
+  const fl = [];
+  let imp = 0;
+  [r, so].forEach(m => { if (m.need && CAP.elec < m.need[1]) { imp += m.c; fl.push(["bad", `${m.n}: needs electronics capability ${m.need[1]}. Imported, ${f(m.c / cost * 100)}% of ship cost; the supplier can embargo spares.`]); } });
+  fl.push(["", `Needs a ${h.yard} building dock for ${months} months. Varnest has one large dock: this hull blocks it.`]);
+  if (vls === 0) fl.push(["", "No VLS: no area air defence. The ship depends on others for cover in a contested zone (0150)."]);
+  $("#s-out").innerHTML = `
+    <div class="grp"><span class="lbl">One salvo exchange vs a reference frigate (Hughes, 0151)</span>
+      <div class="salvo">
+        <div><span class="note">Your design's salvo puts out of action</span><b>${f(onRef * 100)}%</b><span class="note">of the reference ship</span></div>
+        <div><span class="note">Reference salvo puts out of action</span><b>${f(onYou * 100)}%</b><span class="note">of your ship</span></div>
+      </div>
+      <span class="note mono">offensive a=${f(you.a, 1)} · defensive b=${f(you.b, 1)} · staying power u=${f(you.u, 2)} · reference a=5.6 b=4.2 u=1.68</span>
+    </div>
+    <div class="stats">
+      ${stat("Unit cost", f(cost), "$M (2000)")}
+      ${stat("Build time", f(months), "months")}
+      ${stat("Crew", h.crew, "specialists bind first")}
+      ${stat("Sweep width", f(so.W), "km, Koopman W", so.W / 12)}
+      ${stat("Signature", f(p.sig * h.d / 6000, 2), "relative", p.sig * h.d / 9500)}
+      ${stat("Speed", p.kn, "knots")}
+    </div>
+    ${mixbar({ steel: h.d / 2000, mach: 1 + p.c / 60, elec: r.elec * 3 + vls / 40, chem: ashm / 8, lab: 2 })}
+    ${flags(fl)}
+    <div class="row"><span class="c"># catalog row</span>
+[[equipment]]
+id       = <span class="v">"vrn_${["corvette", "frigate", "destroyer"][pick("sh")]}_${vls}v${ashm}a"</span>
+class    = <span class="v">"surface_combatant"</span>
+salvo    = { a = <span class="v">${f(you.a, 1)}</span>, b = <span class="v">${f(you.b, 1)}</span>, u = <span class="v">${f(you.u, 2)}</span> }
+magazine = { vls = <span class="v">${vls}</span>, ashm = <span class="v">${ashm}</span>, reload = <span class="v">"port"</span> }
+sweep_km = <span class="v">${so.W}</span>
+import   = <span class="v">${f(imp / cost, 2)}</span></div>`;
+}
+
+/* Air */
+const A = {
+  frame: [
+    { n: "Light 4th gen", c: 35, sr: 2.0, q: 0.55, rcs: 1, cph: 8, note: "Gripen / F-16 class" },
+    { n: "Heavy 4th gen", c: 60, sr: 1.5, q: 0.65, rcs: 1.4, cph: 18, note: "Su-27 / F-15 class" },
+    { n: "4.5 gen", c: 85, sr: 1.8, q: 0.75, rcs: 0.8, cph: 16, note: "Rafale / Typhoon class" },
+    { n: "5th gen stealth", c: 110, sr: 1.3, q: 0.9, rcs: 0.05, cph: 35, note: "F-35 / J-20 class" },
+  ],
+  radar: [
+    { n: "Mechanical", q: 0, c: 0, elec: 0.2 },
+    { n: "PESA", q: 0.06, c: 4, elec: 0.4, need: ["elec", 0.5] },
+    { n: "AESA", q: 0.12, c: 8, elec: 0.7, need: ["elec", 0.65] },
+  ],
+  eng: [
+    { n: "Domestic", c: 0, yrs: 5, need: ["aero", 0.7] },
+    { n: "Licensed", c: 3, yrs: 2, need: ["aero", 0.4] },
+    { n: "Imported", c: 5, yrs: 0 },
+  ],
+  wpn: [
+    { n: "BVR air-to-air", c: 2, m: "air superiority" },
+    { n: "Precision ground attack", c: 2, m: "interdiction, close support" },
+    { n: "Anti-ship", c: 2, m: "maritime strike" },
+    { n: "SEAD", c: 3, m: "suppression of air defences" },
+  ],
+  route: [
+    { n: "New domestic design", yrs: 12, ov: [1.3, 1.8], note: "Varnest's own bureau" },
+    { n: "Co-development", yrs: 10, ov: [1.25, 1.6], note: "shared with a partner state" },
+    { n: "Licence build", yrs: 5, ov: [1.1, 1.3] },
+    { n: "Off the shelf", yrs: 3, ov: [1.0, 1.15] },
+  ],
+};
+seg($("#a-frame"), "af", A.frame, "radio", [2]); seg($("#a-radar"), "ar", A.radar, "radio", [2]);
+seg($("#a-eng"), "ae", A.eng, "radio", [1]); seg($("#a-wpn"), "aw", A.wpn, "checkbox", [0, 1]); seg($("#a-route"), "ao", A.route, "radio", [2]);
+function air() {
+  const fr = A.frame[pick("af")], ra = A.radar[pick("ar")], en = A.eng[pick("ae")], ws = picks("aw").map(i => A.wpn[i]), ro = A.route[pick("ao")];
+  const cost = fr.c + ra.c + en.c + ws.reduce((s, w) => s + w.c, 0);
+  const q = Math.min(1, fr.q + ra.q + (ws.some(w => w.n.startsWith("BVR")) ? 0.05 : -0.15));
+  const yrs = ro.yrs + (ro.yrs >= 10 ? en.yrs : 0) + (fr.rcs < 0.1 && ro.yrs >= 10 ? 4 : 0);
+  const fl = [];
+  let imp = 0;
+  [ra, en].forEach(m => { if (m.need && CAP[m.need[0]] < m.need[1]) { imp += m.c || cost * 0.15; fl.push(["bad", `${m.n} ${m === en ? "engine" : "radar"}: needs ${m.need[0] === "aero" ? "aerospace" : "electronics"} capability ${m.need[1]}, Varnest has ${CAP[m.need[0]]}. Imported, with an export veto held by the supplier.`]); } });
+  if (en.n === "Imported") { imp += cost * 0.2; fl.push(["", "Imported engines: about 20% of unit cost abroad. The supplier controls overhaul cycles, so sortie rate falls under sanctions."]); }
+  if (ro.yrs >= 10 && fr.rcs < 0.1) fl.push(["bad", `A domestic 5th-gen programme from a 0.30 aerospace base: ${yrs} years to service, P90 cost ${f(cost * ro.ov[1])} $M. The run may end first.`]);
+  if (!ws.length) fl.push(["", "No weapons integrated: the airframe can fly ISR and airlift escort only."]);
+  $("#a-out").innerHTML = `
+    <div class="stats">
+      ${stat("Air-to-air quality", f(q, 2), "0150 quality table", q)}
+      ${stat("Sortie rate", f(fr.sr * (en.n === "Imported" ? 0.92 : 1), 2), "per airframe per day", fr.sr / 2.2)}
+      ${stat("Radar cross-section", f(fr.rcs, 2), "relative", fr.rcs / 1.4)}
+      ${stat("Unit cost", f(cost), "$M (2000)")}
+      ${stat("Cost per flight hour", f(fr.cph), "$k")}
+      ${stat("Pilot pipeline", fr.rcs < 0.1 ? "36" : "30", "months")}
+      ${stat("Years to service", yrs, `${ro.n.toLowerCase()}`)}
+      ${stat("Overrun band", `${f((ro.ov[0] - 1) * 100)}-${f((ro.ov[1] - 1) * 100)}%`, "P50-P90 (0160)")}
+      ${stat("Missions", ws.length, ws.map(w => w.m).join("; ") || "none")}
+    </div>
+    ${mixbar({ aero: 2 + (en.n === "Domestic" ? 1.5 : 0.5), elec: ra.elec * 3 + ws.length * 0.4, mach: 0.6, chem: 0.2 + ws.length * 0.1, steel: 0.1, lab: 1.5 })}
+    ${flags(fl.length ? fl : [["ok", "No import share beyond the licence royalty."]])}
+    <div class="row"><span class="c"># catalog row</span>
+[[equipment]]
+id        = <span class="v">"vrn_fighter_${pick("af")}${pick("ar")}"</span>
+class     = <span class="v">"multirole_fighter"</span>
+quality   = <span class="v">${f(q, 2)}</span>
+sorties   = <span class="v">${f(fr.sr, 2)}</span>
+rcs       = <span class="v">${f(fr.rcs, 2)}</span>
+missions  = <span class="v">[${ws.map(w => `"${w.m.split(",")[0]}"`).join(", ")}]</span>
+unit_cost = <span class="v">${f(cost)}</span>
+import    = <span class="v">${f(Math.min(1, imp / cost), 2)}</span></div>`;
+}
+
+/* Small arms */
+const R = {
+  type: [
+    { n: "Assault rifle", c: 0.8, w: 3.6, note: "per-soldier issue" },
+    { n: "Machine gun", c: 6, w: 10 },
+    { n: "Man-portable ATGM", c: 80, w: 22, note: "Javelin / Kornet class" },
+    { n: "MANPADS", c: 120, w: 17, note: "Stinger / Igla class" },
+  ],
+  cal: [
+    { n: "NATO 5.56 / 7.62", ally: "NATO", note: "interoperable with NATO stocks" },
+    { n: "Soviet 5.45 / 7.62x39", ally: "ex-Soviet", note: "interoperable with ex-Soviet stocks" },
+    { n: "National", ally: "none", note: "no ally can resupply" },
+  ],
+  opt: [
+    { n: "Iron sights", c: 0, elec: 0 },
+    { n: "Red-dot", c: 0.15, elec: 0.1 },
+    { n: "Thermal clip-on", c: 4, elec: 0.6, need: ["elec", 0.5] },
+  ],
+  src: [
+    { n: "Domestic design", c: 1.0, yrs: 4 },
+    { n: "Licence build", c: 1.1, yrs: 2 },
+    { n: "Import", c: 1.25, yrs: 0.5 },
+  ],
+};
+seg($("#r-type"), "rt", R.type); seg($("#r-cal"), "rc", R.cal); seg($("#r-opt"), "ro", R.opt, "radio", [1]); seg($("#r-src"), "rs", R.src, "radio", [1]);
+function arms() {
+  const t = R.type[pick("rt")], ca = R.cal[pick("rc")], o = R.opt[pick("ro")], s = R.src[pick("rs")];
+  const guided = pick("rt") >= 2;
+  const cost = (t.c + (guided ? 0 : o.c)) * s.c;
+  const brigade = guided ? (pick("rt") === 2 ? 54 : 36) : (pick("rt") === 0 ? 3200 : 160);
+  const fl = [];
+  if (!guided) fl.push([ca.ally === "none" ? "bad" : "ok", `Ammunition: ${ca.note}. ${ca.ally === "none" ? "In a long war every round must come from your own lines." : `Aid and imports in 0165 can draw on ${ca.ally} stocks.`}`]);
+  if (guided && CAP.elec < 0.55) fl.push(["bad", `Seeker electronics need capability 0.55, Varnest has ${CAP.elec}. Seekers imported; the supplier can cap production.`]);
+  if (!guided && o.need && CAP.elec < o.need[1]) fl.push(["bad", "Thermal optics imported."]);
+  if (s.n === "Import") fl.push(["", "Imported weapons: spare-parts dependence, but no line to build."]);
+  $("#r-out").innerHTML = `
+    <div class="stats">
+      ${stat("Unit cost", cost < 2 ? f(cost * 1000) : f(cost), cost < 2 ? "$ (2000) per weapon" : "$k (2000) per round or weapon")}
+      ${stat("Per brigade", f(brigade), "authorized in template")}
+      ${stat("Brigade fill cost", f(brigade * cost / (cost < 2 ? 1000 : 1), 2), cost < 2 ? "$M" : "$M equivalent")}
+      ${stat("Time to first lot", s.yrs, "years")}
+      ${stat("Carried weight", f(t.w, 1), "kg")}
+    </div>
+    ${mixbar(guided ? { elec: 2, chem: 0.8, mach: 0.6, lab: 0.8 } : { steel: 1.2, mach: 0.8, chem: 0.2, elec: o.elec * 2, lab: 1 })}
+    ${flags(fl)}
+    <p class="note">${guided ? "Guided weapons do move combat power: they enter 0149 as fires against armour or air with their own ammunition class, so their stock in days of fire matters more than the launcher." : "In a brigade model the rifle itself changes combat power by a few percent. The real decisions are calibre bloc, who resupplies you, and cost per soldier at mobilization scale."}</p>`;
+}
+
+/* tabs */
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach(x => { x.setAttribute("aria-selected", x === b); $("#" + x.getAttribute("aria-controls")).hidden = x !== b; });
+}));
+const benches = { land, sea, air, arms };
+document.querySelectorAll(".bench .ctl").forEach(c => { const fn = benches[c.dataset.bench]; c.addEventListener("input", fn); fn(); });
+
+/* Tender */
+const crit = [["Protection", "prot", 4], ["Firepower", "fire", 3], ["Mobility", "mob", 2], ["Unit cost", "cost", 3], ["Schedule", "sched", 2], ["Domestic content", "dom", 3]];
+const bids = [
+  { n: "Varnest Landsystems VL-9", d: "Domestic bureau, new design, networked FCS imported", prot: 7, fire: 7, mob: 6, cost: 4, sched: 2, dom: 8, uc: 6.1, yrs: 9, ov: [35, 90], jobs: 5200, imp: 0.22 },
+  { n: "Oster KF-2, licence build", d: "Proven foreign design, assembled in Varnest", prot: 8, fire: 8, mob: 7, cost: 5, sched: 6, dom: 5, uc: 5.2, yrs: 4, ov: [10, 30], jobs: 2600, imp: 0.45 },
+  { n: "Kordal T-series, off the shelf", d: "Cheap import, older band, quick", prot: 5, fire: 6, mob: 6, cost: 9, sched: 9, dom: 1, uc: 2.4, yrs: 1.5, ov: [0, 10], jobs: 150, imp: 0.95 },
+];
+$("#t-ctl").insertAdjacentHTML("beforeend", crit.map(([n, k, v]) => `<div class="grp"><span class="lbl">${n}</span><div class="rng"><input type="range" id="w-${k}" min="0" max="5" value="${v}"><output id="w-${k}-o">${v}</output></div></div>`).join("") +
+  `<div class="grp"><span class="lbl">Quantity</span><div class="rng"><input type="range" id="w-qty" min="40" max="400" step="20" value="220"><output id="w-qty-o">220</output></div></div>`);
+function tender() {
+  const w = Object.fromEntries(crit.map(([, k]) => [k, +$("#w-" + k).value]));
+  crit.forEach(([, k]) => $(`#w-${k}-o`).textContent = w[k]);
+  const qty = +$("#w-qty").value; $("#w-qty-o").textContent = qty;
+  const tw = Object.values(w).reduce((a, b) => a + b, 0) || 1;
+  const sc = bids.map(b => crit.reduce((s, [, k]) => s + w[k] * b[k], 0) / tw);
+  const win = sc.indexOf(Math.max(...sc)), b = bids[win];
+  $("#t-out").innerHTML = bids.map((x, i) => `
+    <div class="bid ${i === win ? "win" : ""}">
+      <div class="nm">${x.n}<small>${x.d}</small></div><div class="sc">${f(sc[i], 1)}</div>
+      <div class="bars">${crit.map(([n, k]) => `<div>${n.split(" ")[0]}<div class="bar"><div style="width:${x[k] * 10}%"></div></div></div>`).join("")}</div>
+    </div>`).join("") + `
+    <div class="stats">
+      ${stat("Programme cost", f(b.uc * qty / 1000, 2), "$bn (2000), P50")}
+      ${stat("P90 overrun", `+${b.ov[1]}%`, `P50 +${b.ov[0]}%`)}
+      ${stat("First unit", f(b.yrs, 1), "years after award")}
+      ${stat("Domestic jobs", b.jobs.toLocaleString("en"), "peak, arms-sector cell")}
+      ${stat("Import share", f(b.imp * 100) + "%", "of programme value")}
+    </div>
+    <p class="note">${win === 0 ? "Domestic win: the bureau's province gains jobs and learning, the army waits about nine years and carries the overrun risk." : win === 1 ? "Licence win: fast and proven, but the licensor holds an export veto on any tank Varnest later sells, and the domestic bureau's lobby is unhappy." : "Import win: tanks arrive in eighteen months at the lowest price. Varnest's line closes, its bureau loses its team, and spares depend on Kordal's goodwill."}</p>`;
+}
+$("#t-ctl").addEventListener("input", tender); tender();
+
+/* Production methods */
+const PM = [
+  { n: "155 mm shell line", unit: "shells / month", base: 6000, groups: [
+    { n: "Body forging", m: [{ n: "Legacy press", r: 1, lab: 1.0, v: { steel: 1, mach: 0.3 } }, { n: "Automated forging", r: 1.6, lab: 0.5, v: { steel: 1, mach: 0.9 }, cap: 1 }] },
+    { n: "Explosive fill", m: [{ n: "TNT", r: 1, lab: 1, v: { chem: 0.8 } }, { n: "RDX blend", r: 0.9, lab: 1, v: { chem: 1.4 }, note: "needs nitric acid and nitrocellulose" }, { n: "Imported fill", r: 1, lab: 0.6, v: { chem: 0.2 }, imp: 0.3 }] },
+    { n: "Ownership", m: [{ n: "State arsenal", r: 1, lab: 1, v: {} }, { n: "Private contractor", r: 1.1, lab: 0.9, v: {}, note: "faster ramp, needs firm orders" }] },
+  ]},
+  { n: "FPV drone line", unit: "drones / month", base: 4000, groups: [
+    { n: "Assembly", m: [{ n: "Volunteer workshops", r: 0.7, lab: 1.6, v: { elec: 0.6 } }, { n: "Serial factory", r: 1.5, lab: 0.6, v: { elec: 0.6, mach: 0.5 }, cap: 1 }] },
+    { n: "Components", m: [{ n: "Imported kits", r: 1.2, lab: 0.8, v: { elec: 0.3 }, imp: 0.7 }, { n: "Domestic motors and boards", r: 0.8, lab: 1.1, v: { elec: 1.2 }, note: "needs electronics capability 0.5" }] },
+    { n: "Control link", m: [{ n: "Analog radio", r: 1, lab: 1, v: {} }, { n: "Fibre-optic spool", r: 0.8, lab: 1.1, v: { chem: 0.3 }, note: "jam-proof, shorter range" }] },
+  ]},
+  { n: "IFV hull line", unit: "hulls / year", base: 60, groups: [
+    { n: "Hull fabrication", m: [{ n: "Manual welding", r: 1, lab: 1.2, v: { steel: 1.5, mach: 0.3 } }, { n: "Robotic welding", r: 1.4, lab: 0.6, v: { steel: 1.5, mach: 0.9 }, cap: 1 }] },
+    { n: "Armour steel", m: [{ n: "Domestic mill", r: 1, lab: 1, v: { steel: 0.6 } }, { n: "Imported plate", r: 1, lab: 0.9, v: { steel: 0.2 }, imp: 0.15 }] },
+    { n: "Subsystems", m: [{ n: "Domestic", r: 0.85, lab: 1.1, v: { elec: 0.5, mach: 0.5 } }, { n: "Licensed kits", r: 1, lab: 0.9, v: { elec: 0.2, mach: 0.3 }, imp: 0.3 }] },
+  ]},
+];
+$("#pm").innerHTML = PM.map((l, li) => `<div class="line" data-l="${li}"><h3>${l.n}<small id="pm-${li}-rate"></small></h3>${l.groups.map((g, gi) => `<div class="grp"><span class="lbl">${g.n}</span><div class="seg">${g.m.map((m, mi) => `<label title="${m.note || ""}"><input type="radio" name="pm-${li}-${gi}" value="${mi}" ${mi === 0 ? "checked" : ""}>${m.n}</label>`).join("")}</div></div>`).join("")}<div id="pm-${li}-out"></div></div>`).join("");
+const pmInit = PM.map((l, li) => l.groups.map((_, gi) => 0));
+function pm(li) {
+  const l = PM[li];
+  const sel = l.groups.map((g, gi) => g.m[pick(`pm-${li}-${gi}`)]);
+  const r = sel.reduce((a, m) => a * m.r, 1), lab = sel.reduce((a, m) => a * m.lab, 1);
+  const v = { lab: lab };
+  sel.forEach(m => Object.entries(m.v).forEach(([k, x]) => v[k] = (v[k] || 0) + x));
+  const imp = sel.reduce((a, m) => a + (m.imp || 0), 0);
+  const changed = sel.filter((_, gi) => pick(`pm-${li}-${gi}`) !== pmInit[li][gi]).length;
+  const learn = Math.pow(0.6, changed);
+  const capex = sel.some(m => m.cap);
+  $(`#pm-${li}-rate`).textContent = `${Math.round(l.base * r).toLocaleString("en")} ${l.unit}`;
+  const fl = [];
+  if (changed) fl.push(["", `Switching ${changed} method${changed > 1 ? "s" : ""}: learning falls to ${f(learn * 100)}% of the current level (Wright's law restarts).`]);
+  if (capex) fl.push(["", "Needs new machinery: a capital order through 0204, 9-18 months before the method runs."]);
+  if (imp) fl.push(["bad", `Import share ${f(imp * 100)}% of unit inputs; a supplier export ban stalls the line.`]);
+  sel.filter(m => m.note).forEach(m => fl.push(["", `${m.n}: ${m.note}.`]));
+  if (!fl.length) fl.push(["ok", "Running on its current methods at full learning."]);
+  $(`#pm-${li}-out`).innerHTML = `<div class="stats">${stat("Output", f(r * 100) + "%", "of base rate", r / 1.8)}${stat("Labour", f(lab * 100) + "%", "of base", lab / 1.6)}</div>${mixbar(v)}<div style="height:10px"></div>${flags(fl)}`;
+}
+document.querySelectorAll(".line").forEach(el => { const li = +el.dataset.l; el.addEventListener("input", () => pm(li)); pm(li); });
+</script>

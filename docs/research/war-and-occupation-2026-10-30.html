@@ -1,0 +1,131 @@
+<title>Ceteris War and Occupation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Narrow:wght@500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: single reading column, staff-briefing feel; one diagram band showing the cell layers */
+:root{
+  --bg:#f3f5f6; --panel:#e6eaec; --fg:#1d2428; --muted:#5a666d; --rule:#c7cfd3;
+  --blue:#2f5f8f; --red:#a8433a; --cut:#d9a441; --accent:#2f5f8f;
+  --display:"Archivo",system-ui,sans-serif; --label:"Archivo Narrow","Arial Narrow",sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#14191c;--panel:#1d2428;--fg:#e3e8ea;--muted:#97a3a9;--rule:#323c41;--blue:#6f9fd0;--red:#d9786d;--cut:#e0b45c;--accent:#6f9fd0;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14191c;--panel:#1d2428;--fg:#e3e8ea;--muted:#97a3a9;--rule:#323c41;--blue:#6f9fd0;--red:#d9786d;--cut:#e0b45c;--accent:#6f9fd0;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--display);font-size:15px;line-height:1.55}
+main{max-width:46rem;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+h1{font-size:1.9rem;line-height:1.15;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px;text-wrap:balance}
+.eyebrow{font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--muted)}
+p{margin:0 0 10px}
+ul{margin:0;padding-left:1.1rem;display:grid;gap:6px}
+code,.ref{font-family:var(--mono);font-size:.82em;color:var(--muted)}
+.lede{color:var(--muted)}
+.diagram{background:var(--panel);border-radius:6px;padding:16px;overflow-x:auto}
+.panels{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px;min-width:640px}
+.panels figure{margin:0}
+.panels figcaption{font-family:var(--label);font-size:.82rem;color:var(--muted);margin-top:6px;line-height:1.35}
+.panels figcaption b{color:var(--fg);display:block;font-size:.88rem}
+.key{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--label);font-size:.8rem;color:var(--muted);margin-top:12px}
+.key span::before{content:"";display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+.tablewrap{overflow-x:auto}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.75rem;color:var(--muted)}
+td:first-child{white-space:nowrap;font-weight:600}
+.gap{border-left:3px solid var(--cut);padding:4px 0 4px 12px}
+.gap b{display:block}
+</style>
+<main>
+<header>
+  <div class="eyebrow">Design summary · 30 Oct 2026 · 2.0-beta (P7)</div>
+  <h1>How war and occupation work in Ceteris</h1>
+  <p class="lede">Everything here is proposed design, not code: ADRs 0115, 0190, 0145 to 0154, 0165, 0166, 0209 and 0226. War arrives in 2.0-beta. 1.0 is economy only and keeps the 2000 de facto borders (0222).</p>
+</header>
+
+<section>
+  <h2>Territory is labels on a fixed grid</h2>
+  <p>The atom is an H3 resolution 6 cell, about 36 km², roughly 4 million on land. Countries, provinces, admin tiers, counties and control are partitions: one label per cell. Territorial change rewrites labels and never moves geometry. Two labels matter for war, and they change at very different speeds.</p>
+  <div class="diagram" role="img" aria-label="Four panels of one province drawn as hex cells: owner, control during an offensive, what the economy sees, and after a treaty transfer">
+    <div class="panels" id="panels"></div>
+    <div class="key">
+      <span style="--c:var(--blue)">Country A</span>
+      <span style="--c:var(--red)">Country B</span>
+      <span style="--c:var(--cut)">Cut off from the province market</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Control: changes by the hour, never splits a market</h2>
+  <ul>
+    <li>Combat and occupation write the <b>controller</b> label at any hour of the war phase (0209).</li>
+    <li>The economy stays on the province. It reads the share of cells each side controls and scales taxation, output, conscription and grievance by it (DESIGN 11.5).</li>
+    <li>Front lines cut transport. An edge with each end held by sides at war closes, and the enemy-held part of a province is cut off from that province's market.</li>
+    <li>The occupier taxes in proportion to its control share, pays for administration and garrisons, and faces resistance hazards that rise with repression, exclusion of the local group and duration (0154).</li>
+    <li>Inside contested cells, control is shared between the state, insurgents and criminal groups. Selective violence clusters where control is contested but leaning, indiscriminate violence where it is weak (Kalyvas).</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Ownership: changes only on a political event</h2>
+  <ul>
+    <li>The <b>owner</b> label moves only through peace terms, annexation, a breakaway state declaring, secession, or an intervention. There is no timer: a twenty-year occupation stays an occupation until someone annexes, declares or signs.</li>
+    <li>On a change, the province splits into overlay units, one per (province, country) pair, named <code>&lt;province&gt;/&lt;country&gt;</code>. Stocks are split by cell weights: pops by population (and GeoEPR for ethnicity), capital by gridded GDP, farms by crop area. Each changed unit gets its own market and transport edges.</li>
+    <li>A fragment under 50,000 people and under 2% of its province's output folds, for the economy only, into the neighbouring unit of the same country. It keeps its labels for the map and politics.</li>
+    <li>Peace terms trade counties, or cell clusters where there are none. Counties carry no state.</li>
+    <li>Since 0190, provinces themselves can also be redrawn mid-run through the same split and merge, so province geometry is no longer fixed during a run.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>War in general</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Part</th><th>How it works</th><th>ADR</th></tr></thead>
+    <tbody>
+      <tr><td>Onset</td><td>Lab: a fitted monthly hazard on income, democracy, exclusion, neighbours and peace years. Extended: Fearon bargaining on noisy estimates of winning (11.2). Nothing is scheduled; wars emerge.</td><td class="ref">0110 0241</td></tr>
+      <tr><td>Clocks</td><td>Monthly: mobilisation law, budgets, procurement, war finance, peace talks. Daily sub-tick only while a war runs: supply, planners, intelligence, snapshots. Inside each day, 24 sparse hourly slots for movement, contact, engaged fronts, sorties and naval interception.</td><td class="ref">0145 0209</td></tr>
+      <tr><td>Forces</td><td>Brigades (battalions for small states and armed groups) built from about 45 equipment classes and five personnel tiers. Forces of 2000 from open sources; about 30 militaries curated by hand. Wars running on 1 Jan 2000 start in contact.</td><td class="ref">0146</td></tr>
+      <tr><td>Combat</td><td>Per front segment of 5 to 20 km: power P = S·V·Q·E (firepower, terrain and posture, quality and force employment, air and ISR). The ratio sets losses on both sides, advance and a breakthrough hazard. Encirclement by flood fill.</td><td class="ref">0149</td></tr>
+      <tr><td>Logistics</td><td>Tonnes of fuel, ammunition, food, spares and medical by min-cost flow over a road and rail overlay built when a theatre opens. Military freight loads the same edges as civilian trade. Trucks reach about 100 to 150 km.</td><td class="ref">0148</td></tr>
+      <tr><td>Command</td><td>HQs with staff capacity and order latency. Delegation per HQ from L0 (brigade orders) to L4 (national war aims). Generals may amend orders they dislike, and say why.</td><td class="ref">0147</td></tr>
+      <tr><td>Air, sea, strike</td><td>Sortie generation and layered air defence per air zone; Hughes salvo and Koopman search at sea; strikes on targets with economic identity; nuclear ladder rungs 0 to 5 as prior lanes.</td><td class="ref">0150 0151 0152</td></tr>
+      <tr><td>Fog</td><td>Each side plans on a belief state whose error shrinks with contact and sensors. Deception is an order.</td><td class="ref">0153</td></tr>
+      <tr><td>War economy</td><td>Conscription from age cohorts, procurement as final demand in the IO table, production lines with learning, capital destroyed in contested cells, displacement.</td><td class="ref">0165</td></tr>
+      <tr><td>Atrocities</td><td>Orders open to player and AI, each with legal, sanction, legitimacy and recruitment costs. Nothing in the UI rewards them.</td><td class="ref">0154 0226</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Gaps closed by ADR 0245</h2>
+  <div class="gap"><b>Control per cell</b>One controller label per cell for fronts and occupation. A sparse share field (state, insurgents, criminal groups) exists only where irregular war runs; the label there is the largest share.</div>
+  <div class="gap" style="margin-top:12px"><b>How an advance relabels cells</b>Cells swept by a segment's advance take the attacker's label. A cell with no formation takes a side's label when only that side has a formation within the zone-of-control radius; contested gaps keep their label.</div>
+  <div class="gap" style="margin-top:12px"><b>Holding the rear (ADR 0246)</b>Each occupied province needs security troops in proportion to population, hostility and urban share. Below full coverage, insurgent shares grow, supply losses on the last leg rise and tax falls. Hold orders on cities, bridges, junctions, railheads, ports, airfields and depots keep those nodes and their edges. No garrison is placed per cell.</div>
+</section>
+</main>
+<script>
+(()=>{
+  const R=9, cols=11, rows=9, w=Math.sqrt(3)*R;
+  const cells=[];
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const x=w*c+(r%2?w/2:0)+R+2, y=1.5*R*r+R+2;
+    const dx=c-cols/2+.5, dy=r-rows/2+.5;
+    if(dx*dx/30+dy*dy/20>1) continue;
+    cells.push({x,y,c,r});
+  }
+  const front=c=>c.c+c.r*0.35>8.2;       // cells east of the front line
+  const ceded=c=>c.c+c.r*0.35>9.4;       // cells transferred by treaty
+  const hex=(x,y)=>Array.from({length:6},(_,i)=>{const a=Math.PI/180*(60*i-30);return (x+R*.95*Math.cos(a)).toFixed(1)+","+(y+R*.95*Math.sin(a)).toFixed(1)}).join(" ");
+  const W=w*cols+w/2+4, H=1.5*R*rows+R+4;
+  const panels=[
+    ["Owner, 1 Jan","Every cell owned by A. One province, one market.",c=>"var(--blue)"],
+    ["Control, day 40","B's offensive relabels cells east of the front. Owner is unchanged.",c=>front(c)?"var(--red)":"var(--blue)"],
+    ["What the economy sees","One market. B holds 30% of cells: A's tax and output scale down; that part is cut off.",c=>front(c)?"var(--cut)":"var(--blue)"],
+    ["After a treaty","Owner changes for the ceded cells. Two overlay units, each with its own market.",c=>ceded(c)?"var(--red)":"var(--blue)"]
+  ];
+  const host=document.getElementById("panels");
+  for(const [t,cap,fill] of panels){
+    const poly=cells.map(c=>`<polygon points="${hex(c.x,c.y)}" style="fill:${fill(c)};opacity:.85"/>`).join("");
+    host.insertAdjacentHTML("beforeend",`<figure><svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" width="100%" aria-hidden="true">${poly}</svg><figcaption><b>${t}</b>${cap}</figcaption></figure>`);
+  }
+})();
+</script>

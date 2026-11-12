@@ -1,0 +1,283 @@
+<title>Space in Ceteris</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column in the project's research-page style; orbit-shell diagram and log cost chart as the two figures; mocks framed as app panels */
+:root{
+  --bg:#f5f6f8; --fg:#1b2029; --muted:#5b6474; --rule:#d4d9e1; --accent:#2e4f8f;
+  --ok:#2f7a45; --warn:#9a6a10; --bad:#a3392f; --chip:#e6eaf1; --panel:#ffffff; --deep:#0f1626; --deepfg:#d9e2f2;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161d; --fg:#e2e7ef; --muted:#97a2b4; --rule:#2a313d; --accent:#8fb0ec;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#1f2632; --panel:#181d26; --deep:#0a0f1a; --deepfg:#d9e2f2; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161d; --fg:#e2e7ef; --muted:#97a2b4; --rule:#2a313d; --accent:#8fb0ec;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#1f2632; --panel:#181d26; --deep:#0a0f1a; --deepfg:#d9e2f2; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:880px;margin:0 auto;display:grid;gap:30px}
+h1{font-size:1.7rem;margin:0;text-wrap:balance}
+h2{font-size:1.1rem;margin:0 0 8px;text-wrap:balance;color:var(--accent)}
+h3{font-size:.95rem;margin:12px 0 4px}
+p{margin:0 0 8px;max-width:70ch}
+.meta{color:var(--muted);font-size:.85rem}
+.verdict{border-left:4px solid var(--accent);padding:4px 0 4px 14px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 8px;border-radius:3px;background:var(--chip);white-space:nowrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+ul{margin:0;padding-left:20px;display:grid;gap:4px}
+code,.eq{font-family:var(--mono);font-size:.85em}
+.eq{display:block;background:var(--chip);padding:10px 12px;border-radius:4px;white-space:pre;overflow-x:auto;line-height:1.6}
+figure{margin:8px 0 0}
+figcaption{color:var(--muted);font-size:.8rem;margin-top:6px;max-width:75ch}
+svg text{fill:var(--fg);font-family:var(--mono);font-size:11px}
+svg .mut{fill:var(--muted)}
+.mock{background:var(--deep);color:var(--deepfg);border-radius:6px;padding:14px 16px;font-size:.85rem}
+.mock .lbl{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;opacity:.65}
+.mock table{font-size:.82rem}
+.mock th,.mock td{border-bottom-color:#2a3550;color:var(--deepfg)}
+.mock th{opacity:.65}
+.mocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:14px}
+.mocks > *{min-width:0}
+.tag{font-family:var(--mono);font-size:.72rem;opacity:.7}
+.rows{display:grid;gap:10px}
+</style>
+<main>
+<header>
+  <h1>Space in Ceteris</h1>
+  <p class="meta">Brainstorm, 29 Oct 2026 · main e2cce80 · touches DESIGN 7.1, 23.7, 23.9; ADRs 0051, 0075, 0087, 0136, 0145, 0153, 0175, 0203, 0206. No ADRs written.</p>
+</header>
+
+<section class="verdict">
+  <h2>Verdict</h2>
+  <p>Space fits Ceteris as <b>infrastructure</b> and as a <b>very concentrated industry</b>, not as a frontier to settle. Within 2000-2100 almost all of its economic weight is on Earth: navigation timing, communications, imagery, and the launch and satellite firms that supply them. Those all have data and can be scored. Off-world economies cannot be scored against anything, so under ADR 0136 they never earn a major and stay as extended-profile scenarios.</p>
+  <p>Most of the hooks already exist: the telecom layer (0075), synthetic satellite observables (0087), satellites as an intelligence source (0153), space weather (0175), granular firms (0203), named projects (0206) and the 23.7 capability milestone "satellites and space launch". The plan below threads space through them in four steps, with one new mechanism that has no home yet: orbital debris as a commons.</p>
+</section>
+
+<section>
+  <h2>How big it is</h2>
+  <div class="wrap"><table>
+    <tr><th>Quantity</th><th>Value</th><th>Source</th></tr>
+    <tr><td>Global space economy, 2024</td><td class="n">$613 bn (78% commercial)</td><td>Space Foundation, The Space Report 2025 Q2</td></tr>
+    <tr><td>Government space budgets, 2024</td><td class="n">$132 bn (US $77 bn)</td><td>Same</td></tr>
+    <tr><td>Share of world GDP</td><td class="n">about 0.55%</td><td>Derived, world GDP about $110 tn</td></tr>
+    <tr><td>Successful orbital launches, 2025</td><td class="n">315 (US 192, China 90, Russia 17)</td><td>Ill-Defined Space 2025 summary, from McDowell's logs</td></tr>
+    <tr><td>Of which SpaceX</td><td class="n">165 (122 Starlink)</td><td>Same</td></tr>
+    <tr><td>Spacecraft deployed, 2025</td><td class="n">4,500+ (about 70% Starlink)</td><td>Same; 2024 was 2,800+</td></tr>
+    <tr><td>Orbital launch attempts, 2000</td><td class="n">about 85</td><td>GCAT launch log (to pull exactly)</td></tr>
+    <tr><td>US economic benefit of GPS</td><td class="n">about $1.4 tn since the 1980s; about $1 bn per day of outage</td><td>RTI International for NIST, 2019</td></tr>
+  </table></div>
+  <p style="margin-top:10px">The sector itself is small. Launch plus satellite manufacturing is a few tens of billions a year; most of the $613 bn is downstream (broadcast, ground equipment, GNSS devices). What space is worth to the economy is its role as an input to almost everything else, which is how Ceteris should carry it.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 250" width="100%" role="img" aria-label="Launch cost per kilogram to low Earth orbit, log scale">
+      <!-- log scale: y = 220 - 45*log10(cost/100) ; 100->220, 1000->175, 10000->130, 100000->85 -->
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="70" y1="220" x2="620" y2="220"/><line x1="70" y1="175" x2="620" y2="175"/>
+        <line x1="70" y1="130" x2="620" y2="130"/><line x1="70" y1="85" x2="620" y2="85"/>
+      </g>
+      <text x="62" y="224" text-anchor="end" class="mut">$100</text>
+      <text x="62" y="179" text-anchor="end" class="mut">$1k</text>
+      <text x="62" y="134" text-anchor="end" class="mut">$10k</text>
+      <text x="62" y="89" text-anchor="end" class="mut">$100k</text>
+      <!-- expendables range 4k-15k: y(4000)=147.9 y(15000)=122.1 -->
+      <rect x="90" y="122" width="110" height="26" fill="var(--chip)" stroke="var(--muted)" stroke-dasharray="3 3"/>
+      <text x="145" y="114" text-anchor="middle">Expendables, 1990s-2000s</text>
+      <text x="145" y="164" text-anchor="middle" class="mut">≈$4k-15k range</text>
+      <!-- shuttle 54500: y=220-45*2.736=96.9 -->
+      <circle cx="245" cy="97" r="6" fill="var(--bad)"/>
+      <text x="245" y="80" text-anchor="middle">Shuttle $54.5k</text>
+      <!-- F9 2600: y=220-45*1.415=156.3 -->
+      <circle cx="365" cy="156" r="6" fill="var(--accent)"/>
+      <text x="365" y="140" text-anchor="middle">Falcon 9 $2.6k</text>
+      <!-- FH 1500: y=220-45*1.176=167.1 -->
+      <circle cx="465" cy="167" r="6" fill="var(--accent)"/>
+      <text x="465" y="151" text-anchor="middle">Falcon Heavy $1.5k</text>
+      <!-- Starship target 200: y=220-45*0.301=206.5 -->
+      <circle cx="575" cy="206" r="6" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="3 2"/>
+      <text x="575" y="190" text-anchor="middle">Starship claim ~$200</text>
+      <text x="575" y="240" text-anchor="middle" class="mut">target, not data</text>
+      <text x="245" y="240" text-anchor="middle" class="mut">1981-2011</text>
+      <text x="365" y="240" text-anchor="middle" class="mut">2010-</text>
+      <text x="465" y="240" text-anchor="middle" class="mut">2018-</text>
+    </svg>
+    <figcaption>Cost per kg to LEO on a dedicated launch, constant 2021 US$, log scale. Shuttle, Falcon 9 and Falcon Heavy from CSIS Aerospace Security (2022) via Our World in Data; the expendables band is approximate and the per-vehicle values should be pulled from the OWID CSV. The 20-fold drop in one decade came from one firm, which is the granular-firm case ADR 0203 was written for.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Where it sits in the input-output tables</h2>
+  <p>The 45 OECD ICIO industries have no space sector. Space is split across four of them, and a space good would have to be carved out with outside shares:</p>
+  <div class="wrap"><table>
+    <tr><th>ICIO industry</th><th>Space content</th><th>Share source</th></tr>
+    <tr><td><code>C30</code> Other transport equipment</td><td>Launch vehicles, spacecraft (ISIC 3030, together with aircraft)</td><td>National supply-use tables; US BEA space economy satellite account (public domain)</td></tr>
+    <tr><td><code>J61</code> Telecommunications</td><td>Satellite telecom (ISIC 6130): broadcast, broadband, mobile</td><td>OECD Handbook on Measuring the Space Economy (2nd ed. 2022); BryceTech SIA reports</td></tr>
+    <tr><td><code>O84</code> Public administration and defence</td><td>Civil and military space programmes</td><td>NASA, ESA, ISRO budgets (public); OECD Space Economy in Figures</td></tr>
+    <tr><td><code>M72</code> Scientific R&amp;D</td><td>Space science, agency labs</td><td>Same</td></tr>
+  </table></div>
+  <p style="margin-top:10px">Recommendation: no new good in 1.0. Satellite-account shares enter the pack as a view table, so the inspector can say "space content of C30 in the US: x%". A real space good waits for 3.0, as an emerging sector (23.7) whose parent is <code>C30</code>, with a learning curve on cost.</p>
+</section>
+
+<section>
+  <h2>Satellites as infrastructure</h2>
+  <p>Three services matter. Each enters as a node in the 0075 telecom layer, owned by a state or a firm, with a capital stock that depreciates. LEO satellites last about five years, so a large constellation is a permanent source of launch demand, which gives the launch market its own dynamics.</p>
+  <div class="wrap"><table>
+    <tr><th>Service</th><th>Economic channel</th><th>Shock in the 2000-2025 window</th><th>Data</th></tr>
+    <tr><td>Positioning and timing (GPS, GLONASS, Galileo, BeiDou)</td><td>Productivity input to transport, agriculture, finance and grids; country dependence share</td><td>Selective availability off (May 2000); BeiDou global (2020); Baltic jamming of civil aviation (2023-25)</td><td>RTI/NIST 2019, London Economics 2017 (UK outage cost), EUSPA market report</td></tr>
+    <tr><td>Communications (GEO broadcast, LEO broadband)</td><td>Lowers the communication part of trade cost (5.4) and services frictions in remote provinces</td><td>Starlink service from 2020; KA-SAT modem wipe (24 Feb 2022)</td><td>ITU; Ookla open data (CC BY-NC-SA, fine under the NC decision); national licensing records</td></tr>
+    <tr><td>Earth observation</td><td>Statistical capacity, crop insurance, disaster response lag; feeds 0087 and 0153</td><td>Landsat archive free (2008); Sentinel free (2014); commercial imagery in Ukraine (2022)</td><td>GCAT payload records; Copernicus open data</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Mocks</h2>
+  <div class="mocks">
+    <div class="mock">
+      <div class="lbl">Map mode · Orbit · Jan 2025</div>
+      <svg viewBox="0 0 360 230" width="100%" role="img" aria-label="Orbit shells with satellite and debris counts">
+        <circle cx="40" cy="200" r="34" fill="#1d4f8f"/>
+        <text x="40" y="204" text-anchor="middle" style="fill:#d9e2f2">Earth</text>
+        <g fill="none" stroke="#3a4a6b">
+          <path d="M40 150 A50 50 0 0 1 90 200"/><path d="M40 130 A70 70 0 0 1 110 200"/>
+          <path d="M40 80 A120 120 0 0 1 160 200"/><path d="M40 30 A170 170 0 0 1 210 200"/>
+        </g>
+        <g style="fill:#d9e2f2">
+          <text x="180" y="44">LEO 300-600 km</text><text x="180" y="58" style="fill:#8fb0ec">active 9,800 · debris med</text>
+          <text x="180" y="88">LEO 600-2,000 km</text><text x="180" y="102" style="fill:#ec8a7f">active 1,600 · debris high</text>
+          <text x="180" y="132">MEO ~20,200 km</text><text x="180" y="146" style="fill:#8fb0ec">GNSS 4 systems · 130</text>
+          <text x="180" y="176">GEO 35,786 km</text><text x="180" y="190" style="fill:#8fb0ec">active 560 · slots 180°</text>
+        </g>
+        <text x="180" y="220" style="fill:#97a2b4;font-size:10px">counts illustrative; from GCAT in the pack</text>
+      </svg>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Inspector · Firm (granular, extended profile)</div>
+      <h3 style="margin-top:6px">SpaceX</h3>
+      <div class="tag">Hawthorne, California · C30 + J61 · Wikidata Q193701</div>
+      <table style="margin-top:8px">
+        <tr><th>2025</th><th>Value</th></tr>
+        <tr><td>World orbital launches</td><td class="n">165 / 315 (52%)</td></tr>
+        <tr><td>Cost per kg, Falcon 9</td><td class="n">≈$2.6k</td></tr>
+        <tr><td>Own constellation launches</td><td class="n">122</td></tr>
+        <tr><td>Productivity draw vs cell tail</td><td class="n">+3.1 σ</td></tr>
+      </table>
+      <p style="margin-top:8px;opacity:.75;font-size:.8rem">Firm stays inside its cell (0203): the draw moves the cell's output and the world launch price, never adds a bonus.</p>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Chronicle · 24 Feb 2022 · cascade (0075)</div>
+      <h3 style="margin-top:6px">KA-SAT terminals wiped at the start of the invasion</h3>
+      <p>Cyberattack on Viasat's ground network disables tens of thousands of modems across Europe. In Germany, about 5,800 Enercon wind turbines lose remote monitoring. Telecom edge to grid edge, one hop.</p>
+      <div class="tag">source: event tape · J61 → D35 dependency</div>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Projects tape (0206) · space</div>
+      <table>
+        <tr><th>Project</th><th>Plan</th><th>Actual</th></tr>
+        <tr><td>ISS assembly</td><td class="n">1998-2004</td><td class="n">1998-2011</td></tr>
+        <tr><td>JWST</td><td class="n">$1 bn, 2007</td><td class="n">≈$10 bn, 2021</td></tr>
+        <tr><td>Galileo full service</td><td class="n">2008</td><td class="n">2016 (initial)</td></tr>
+        <tr><td>Tiangong</td><td class="n">2022</td><td class="n">2022</td></tr>
+        <tr><td>Artemis crewed landing</td><td class="n">2024</td><td class="n">open</td></tr>
+      </table>
+      <p style="margin-top:8px;opacity:.75;font-size:.8rem">Space megaprojects are the cleanest overrun data there is; good calibration for the 0206 overrun distribution.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Launch industry</h2>
+  <ul>
+    <li><b>Structure.</b> In 2000 the commercial GEO market was split among Arianespace, ILS (Proton), Sea Launch, Boeing and Lockheed. By 2025 one firm flew about half the world's launches and most of the mass. This is the clearest granular-firm case in the economy: Falcon 9 reuse (first reflight 2017) was one firm's productivity shock that moved a world price.</li>
+    <li><b>Cost model.</b> Wright's law on cumulative flights per vehicle family, plus a discrete reuse step. Demand comes from constellation replacement, government programmes and crewed flights. Two to four parameters.</li>
+    <li><b>Launch sites are provinces.</b> Kourou, Cape Canaveral, Vandenberg, Starbase, Jiuquan, Wenchang, Sriharikota, Tanegashima, Plesetsk, Vostochny, Mahia. Baikonur is Kazakh territory leased to Russia, which is a ready test case for 0115 territory partitions.</li>
+    <li><b>Trade policy shocks in the window.</b> The US moved commercial satellites onto the ITAR munitions list in 1999 and back out in 2014, and its share of the commercial satellite market fell in between. After February 2022 Russia lost the Western launch market (OneWeb moved off Soyuz). Both are tariff-like wedges the 8.5 trade-policy block can already carry.</li>
+    <li><b>Monopoly prices.</b> NASA paid Russia per seat to the ISS between the Shuttle's retirement (2011) and Crew Dragon (2020), and the price rose several-fold over that time. That series is bilateral-monopoly bargaining with data.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>State programmes and prestige</h2>
+  <p>Budgets are data (NASA historical tables are public domain; ESA, ISRO and JAXA publish; CNSA and Roscosmos are estimates). In 1.0 they are government spending lines in <code>O84</code> and <code>M72</code> from the policy tape, nothing more.</p>
+  <p>Prestige is tempting and weakly evidenced. There is no solid estimate of what a crewed launch or a lunar landing does to approval or international standing. Recommendation: milestones (Shenzhou 5 in 2003, Chandrayaan-3 in 2023, Chang'e 6 far-side samples in 2024) become chronicle events and objectives in the game layer from 2.0, with no causal prestige term in the lab. One diplomacy signal does have data: the Artemis Accords (from 2020) against the China-Russia lunar station partners. Signatory lists are a bloc-alignment observable for 2.0 diplomacy.</p>
+</section>
+
+<section>
+  <h2>Military space (2.0, with the war ADRs)</h2>
+  <ul>
+    <li><b>Intelligence.</b> Imagery and signals satellites raise intelligence quality in 0153. Coverage is a theatre state updated daily, not an hourly unit (0145, 0209).</li>
+    <li><b>Dependencies.</b> Precision munitions and drones (23.7 milestone) need positioning and satellite comms. Jamming or loss lowers their Lanchester modifier. Ukraine since 2022 is the reference case for jamming, spoofing and commercial constellations at war.</li>
+    <li><b>Counterspace.</b> Kinetic anti-satellite tests: China 2007, US 2008, India 2019, Russia 2021. Each made debris that threatens the tester's own satellites too, which is a built-in deterrent the debris model below captures for free. Non-kinetic options (jamming, cyber, dazzling) carry no debris and are the common ones.</li>
+    <li><b>Firms at war.</b> Starlink terminals and commercial imagery in Ukraine make a private firm a strategic actor. That is 0203's political-actor role, at 2.0.</li>
+    <li><b>Data.</b> Secure World Foundation, Global Counterspace Capabilities (annual, free); CSIS Space Threat Assessment.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Orbital debris as a commons</h2>
+  <p>This is the one genuinely new mechanism. It is a renewable-resource problem with open access, which economists have modelled well (Adilov, Alexander and Cunningham 2015, 2018; Rao, Burgess and Kaffine 2020 in PNAS, who estimate that an orbital-use fee could raise the long-run value of the industry several-fold). Per altitude shell <i>k</i> (four to six shells), each month:</p>
+  <span class="eq">S'  = launches − retirements − α·S·(S+D)            active satellites
+D'  = retirements·(1 − disposal) + β·S·(S+D)
+        + γ·D² + ASAT fragments − drag_k·D          debris
+fee = policy lever per satellite-year (8.5-style wedge on launch demand)</span>
+  <p style="margin-top:8px">Cost is a few multiplies per shell per tick. Parameters: collision rates α, β, γ and drag per shell, from the ESA Space Environment Report and published fits. Kessler syndrome is the case where γ·D² outruns drag; in a 100-year run it is a tail outcome. The model can produce it but no data can confirm it, so it runs as a scenario with an uncertainty band, never as a forecast. Recorded events to replay: Fengyun-1C (2007), Iridium-Cosmos (2009), Cosmos 1408 (2021).</p>
+</section>
+
+<section>
+  <h2>Plausible by 2100, and not</h2>
+  <div class="wrap"><table>
+    <tr><th>Tier</th><th>Examples</th><th>In Ceteris</th></tr>
+    <tr><td><span class="chip ok">Observed 2000-2025</span></td><td>Reusable boosters, mega-constellations, Chinese station, robotic far-side sample return, kinetic ASAT tests, GNSS jamming</td><td>Data, scored, lab</td></tr>
+    <tr><td><span class="chip ok">Likely by 2050</span></td><td>Fully reusable heavy lift at a few hundred $/kg, 50-100k active satellites, commercial LEO stations after the ISS deorbits (about 2030), crewed lunar landings, satellite servicing and debris removal</td><td>Learning curve and milestones, lab at 3.0 if the hindcast fits</td></tr>
+    <tr><td><span class="chip warn">Plausible by 2100</span></td><td>Permanent lunar base making propellant from ice, crewed Mars landings and a small outpost, space solar power pilots, niche in-orbit manufacturing</td><td>Extended profile: named projects and milestones with no Earth-side scorecard</td></tr>
+    <tr><td><span class="chip bad">Beyond the horizon</span></td><td>Self-sustaining colonies with their own economy, asteroid mining large enough to move Earth metal prices, space elevators, terraforming</td><td>Mods and scenario packs only</td></tr>
+  </table></div>
+  <p style="margin-top:10px">Under 0136 a major must have its own scorecard. An off-world economy has no observations to score, so "Earth stops being closed" is not a major. Space never gets its own version; it rides on the majors whose scorecards it can join.</p>
+</section>
+
+<section>
+  <h2>Where it would slot</h2>
+  <div class="wrap"><table>
+    <tr><th>Release</th><th>What</th><th>Profile</th><th>Hooks</th></tr>
+    <tr><td>1.0 / 1.x</td><td>Nothing space-specific. Space stays inside <code>C30</code>, <code>J61</code>, <code>O84</code>, <code>M72</code> as data; 0075 and 0175 are unchanged</td><td>Pure economic simulator</td><td>None</td></tr>
+    <tr><td>2.0</td><td>Satellite services as telecom-layer nodes; GNSS outage as a hazard; orbit map mode and object counts from GCAT; named space firms; space projects on the tape; satellite-account shares in the inspector</td><td>Extended; views</td><td>0051, 0075, 0175, 0203, 0206</td></tr>
+    <tr><td>2.0</td><td>Intelligence from satellites, positioning and comms dependencies, counterspace actions, debris model, firms as war actors, Artemis Accords alignment</td><td>Extended; intelligence in the lab if H7-H9 hold</td><td>0145, 0153, 0203</td></tr>
+    <tr><td>3.0</td><td>Launch as a capability milestone; space services as an emerging sector under <code>C30</code> with Wright's-law cost; orbital-use fee as a lever</td><td>Lab if the 2000-2025 hindcast of launches and satellite counts by country fits</td><td>23.7</td></tr>
+    <tr><td>Never lab</td><td>Lunar and Mars settlements, asteroid mining, colonies</td><td>Scenario packs, mods</td><td>23.3</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Data</h2>
+  <div class="wrap"><table>
+    <tr><th>Source</th><th>Covers</th><th>Licence</th></tr>
+    <tr><td>GCAT, Jonathan McDowell</td><td>Every launch and orbital object since 1957, owner, orbit, status</td><td class="ok">CC BY 4.0</td></tr>
+    <tr><td>CSIS launch cost series (via OWID)</td><td>$/kg to LEO by vehicle, 1962-2019</td><td class="warn">OWID CC BY; CSIS terms to check</td></tr>
+    <tr><td>ESA Space Environment Report</td><td>Debris counts by shell, fragmentation events</td><td class="warn">ESA terms; numbers for calibration only</td></tr>
+    <tr><td>Space-Track, CelesTrak</td><td>Orbital elements</td><td class="bad">Space-Track forbids redistribution; first-run user fetch (0215) only</td></tr>
+    <tr><td>US BEA space economy account</td><td>US gross output and value added by space sub-industry</td><td class="ok">Public domain</td></tr>
+    <tr><td>NASA budget tables</td><td>US civil space spending series</td><td class="ok">Public domain</td></tr>
+    <tr><td>Space Foundation, BryceTech, Euroconsult</td><td>Global space economy totals, budgets</td><td class="bad">Proprietary; checks only</td></tr>
+    <tr><td>Secure World Foundation counterspace report</td><td>ASAT tests, jamming, capabilities by country</td><td class="warn">Free report; terms to check</td></tr>
+    <tr><td>Wikidata</td><td>Space firms, agencies, launch sites</td><td class="ok">CC0</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Decisions (Antonio, 29 Oct 2026)</h2>
+  <ul>
+    <li>No space major. Space is a 2.0+ feature, threaded through 2.0 and 3.0 as in the slotting table; 1.0 stays a pure economic simulator. Settlements stay mods.</li>
+    <li>Space becomes its own good at 3.0, as an emerging sector under <code>C30</code>. Before that the inspector shows satellite-account shares.</li>
+    <li>The debris model enters at 2.0 in the extended profile, together with counterspace. It reaches the lab at 3.0 only if the hindcast fits.</li>
+  </ul>
+  <p class="meta">Sources: <a href="https://ourworldindata.org/grapher/cost-space-launches-low-earth-orbit">OWID / CSIS launch costs</a> · <a href="https://www.spacefoundation.org/2025/07/22/the-space-report-2025-q2/">Space Foundation 2025 Q2</a> · <a href="https://illdefinedspace.substack.com/p/the-ill-defined-space-global-orbital-e67">2025 launch summary</a> · <a href="https://planet4589.org/space/gcat/">GCAT</a></p>
+</section>
+</main>

@@ -1,0 +1,486 @@
+<title>Brigade Fight Companion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of staff-paper sections, a wide map-table for the mock, tables in their own scroll boxes. */
+:root{
+  --paper:#eeece4; --sheet:#f8f7f2; --ink:#1d2321; --muted:#5d645f; --rule:#cfcbbd;
+  --friend:#2f7fb8; --hostile:#c2423b; --accent:#9a6a12; --good:#3f7a3a; --warn:#a8701a;
+  --display:"Saira Condensed","Arial Narrow",sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#171b1a; --sheet:#1f2423; --ink:#e4e6e0; --muted:#9aa29c; --rule:#353c39;
+  --friend:#6fb6e8; --hostile:#ec7a72; --accent:#d9a548; --good:#7cbf72; --warn:#e0a54a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#171b1a; --sheet:#1f2423; --ink:#e4e6e0; --muted:#9aa29c; --rule:#353c39;
+  --friend:#6fb6e8; --hostile:#ec7a72; --accent:#d9a548; --good:#7cbf72; --warn:#e0a54a; color-scheme:dark}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1020px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:34px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:2.6rem}
+h2{font-size:1.65rem;border-top:2px solid var(--ink);padding-top:10px}
+h3{font-size:1.2rem;margin-top:6px}
+p{margin:0;max-width:68ch}
+section{display:flex;flex-direction:column;gap:12px}
+.eyebrow{font-family:var(--mono);font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.08rem;max-width:66ch}
+.verdict{background:var(--sheet);border:1px solid var(--rule);border-left:4px solid var(--accent);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.verdict b{font-weight:600}
+ul{margin:0;padding-left:1.2em;max-width:68ch;display:flex;flex-direction:column;gap:4px}
+.tbl{overflow-x:auto;border:1px solid var(--rule);background:var(--sheet)}
+table{border-collapse:collapse;width:100%;font-size:.88rem;min-width:760px}
+th,td{text-align:left;vertical-align:top;padding:7px 10px;border-bottom:1px solid var(--rule)}
+th{font-family:var(--mono);font-weight:500;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--paper)}
+tr.fam td{font-family:var(--display);font-weight:700;font-size:1rem;background:var(--paper);color:var(--accent)}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pick{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 6px;border:1px solid var(--accent);color:var(--accent);margin-left:6px;vertical-align:1px}
+.fit-good{color:var(--good);font-weight:600}.fit-mid{color:var(--warn);font-weight:600}.fit-bad{color:var(--hostile);font-weight:600}
+/* mock */
+.mock{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:0;border:1px solid var(--ink);background:var(--sheet)}
+.mapbox{position:relative;min-width:0;border-right:1px solid var(--ink)}
+canvas{display:block;width:100%;height:auto;touch-action:manipulation;cursor:crosshair}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--ink);font-family:var(--mono);font-size:.8rem}
+.bar .clock{font-size:1rem;font-weight:500;margin-right:auto;font-variant-numeric:tabular-nums}
+button{font:inherit;font-family:var(--mono);font-size:.78rem;background:var(--paper);color:var(--ink);border:1px solid var(--ink);padding:4px 9px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.side{display:flex;flex-direction:column;font-size:.82rem;min-width:0}
+.side>div{padding:10px 12px;border-bottom:1px solid var(--rule);display:flex;flex-direction:column;gap:4px}
+.side h4{margin:0;font-family:var(--mono);font-weight:500;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-family:var(--mono);font-size:.76rem;font-variant-numeric:tabular-nums}
+.kv span:nth-child(odd){color:var(--muted)}
+#log{font-family:var(--mono);font-size:.72rem;max-height:120px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.hint{font-size:.78rem;color:var(--muted)}
+.caption{font-size:.82rem;color:var(--muted);max-width:none}
+.same{color:var(--good)}.diff{color:var(--hostile)}
+pre.code{font-family:var(--mono);font-size:.76rem;background:var(--sheet);border:1px solid var(--rule);padding:10px 12px;overflow-x:auto;margin:0;line-height:1.45}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.cols>div{min-width:0;display:flex;flex-direction:column;gap:6px}
+.future{border:1px dashed var(--muted);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.future .tag{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+@media (max-width:760px){.mock{grid-template-columns:1fr}.mapbox{border-right:0;border-bottom:1px solid var(--ink)}h1{font-size:2.1rem}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:10px">
+  <span class="eyebrow">Ceteris feasibility note · 29 Oct 2026 · 2.0+ war companion</span>
+  <h1>Brigade Fight Companion</h1>
+  <p class="lede">Can one owner, no artists, with AI writing the code, build a battle game in the line of Total War and its relatives, plugged into Ceteris war? Short answer: yes for a 2D operational-tactical game on real terrain with NATO symbols, no for a 3D Total War or Combat Mission class game.</p>
+</header>
+
+<section>
+  <div class="verdict">
+    <span class="eyebrow">Verdict, assuming today's models</span>
+    <p><b>Feasible:</b> a separate program that takes one Ceteris front segment for a few hours to a day, breaks the engaged brigades into companies and batteries, and lets you fight it on a 2D map generated from real elevation, land cover and roads, in pausable real time with order latency through HQs. Close in spirit to Command Ops 2, Armored Brigade and Flashpoint Campaigns, all of which were built by very small teams. About <b>8 to 12 owner FTE-months</b> for a playable version; a watch-only replay of Ceteris battles comes first at 1.5 to 2.5.</p>
+    <p><b>Not feasible:</b> 3D battles with individual soldiers and vehicles (Total War, Combat Mission, WARNO, Gates of Hell). Infantry animation, vehicle models and effects are what studios spend their artists on; procedural generation does not replace them today. Studio scale, 150 to 500+ person-months.</p>
+    <p><b>Hard part:</b> the AI opponent, not the graphics. It is the weak point of every game on the list, including the large ones.</p>
+    <p><b>When:</b> after war stage W5 (theatre view and battle planner, ADR 0166), so 2.0-beta or later. Nothing needs doing now.</p>
+    <p><b>Decided (Antonio, 29 Oct 2026), then parked:</b> Command Ops / Armored Brigade family; 2.5D diorama with tokens carrying NATO symbols (adds 3 to 5 FTE-months, so a playable version is about 11 to 17); results enter Ceteris as a quantile of the resolver, clamped 5 to 95 per cent.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Inspirations</h2>
+  <p>Grouped by what the player does. Team size is coarse (solo, small, studio) and matters here because it shows what one person can reach. Ceteris starts in 2000, so line-and-column games fit the era poorly, though their campaign loop and morale model still teach something.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Game</th><th>Scale and clock</th><th>View</th><th>Team</th><th>What to borrow</th><th>Fit</th></tr></thead>
+    <tbody>
+      <tr class="fam"><td colspan="6">A. Command through a staff: operational-tactical, 2D map</td></tr>
+      <tr><td>Command Ops 2 <span class="pick">recommended core</span></td><td>Battalion to corps, continuous time with pause</td><td>2D map, unit symbols</td><td>Small</td><td>HQ AI that plans for subordinates, order delays that scale with echelon, the player as a commander, not a puppeteer. Maps directly onto ADR 0147 delegation levels and latency.</td><td class="fit-good">High</td></tr>
+      <tr><td>Armored Brigade</td><td>Platoon to battalion, real time with pause, Cold War to 2000s</td><td>2D top-down, NATO symbols</td><td>Small</td><td>Maps built from real elevation data, modern weapon ranges, command delay, suppression. Closest to what one person can build.</td><td class="fit-good">High</td></tr>
+      <tr><td>Flashpoint Campaigns</td><td>Company to brigade, WEGO turns</td><td>2D hex over a map, NATO symbols</td><td>Small</td><td>Turns of 15 to 60 minutes resolved simultaneously, command-and-control rating that sets how often you can issue orders, electronic warfare.</td><td class="fit-good">High</td></tr>
+      <tr><td>Command: Modern Operations</td><td>Single platforms, air and sea, real time</td><td>2D world map</td><td>Small</td><td>Sensors, emissions control, weapon envelopes, real-world database; a model for air and drone layers.</td><td class="fit-mid">Air/naval add-on</td></tr>
+      <tr><td>Radio Commander</td><td>Platoon to company, real time</td><td>Paper map, radio voice reports</td><td>Small</td><td>You only know what units report; you move markers yourself. Fog by design, almost no art.</td><td class="fit-mid">Presentation idea</td></tr>
+      <tr><td>Kriegsspiel (1824)</td><td>Any, umpired turns</td><td>Map and blocks</td><td>Board game</td><td>The umpire as an engine: the sim is the umpire, the player gets messages, not a god's view.</td><td class="fit-mid">Presentation idea</td></tr>
+      <tr class="fam"><td colspan="6">B. Operational hex games</td></tr>
+      <tr><td>Unity of Command</td><td>Division to corps, turns</td><td>Stylised hex map</td><td>Small</td><td>Supply as the core puzzle, very readable abstract art.</td><td class="fit-mid">Ceteris already covers this layer</td></tr>
+      <tr><td>Shadow Empire</td><td>Operational, turns, procedural world</td><td>Hex map, counters</td><td>Solo</td><td>Proof that one developer can ship deep logistics and generated worlds without art budget.</td><td class="fit-mid">Same layer as Ceteris</td></tr>
+      <tr class="fam"><td colspan="6">C. Real-time grand tactics, 3D</td></tr>
+      <tr><td>WARNO, Steel Division, Wargame</td><td>Platoon to battlegroup, real time</td><td>3D on large maps; NATO icons when zoomed out</td><td>Studio</td><td>Icons at distance, realistic ranges, recon and line of sight, deck as order of battle.</td><td class="fit-mid">Borrow the zoomed-out view only</td></tr>
+      <tr><td>Regiments, Broken Arrow</td><td>Company to brigade, real time, Cold War and modern</td><td>3D</td><td>Small to mid</td><td>Regiments shows a small team reaching 3D, with heavy use of bought assets.</td><td class="fit-bad">Needs assets</td></tr>
+      <tr class="fam"><td colspan="6">D. Detailed tactics, 3D</td></tr>
+      <tr><td>Combat Mission</td><td>Squad to battalion, WEGO 60 s turns</td><td>3D, individual soldiers</td><td>Small, long-lived engine</td><td>WEGO with replay of each minute, ballistics by line of fire, morale states.</td><td class="fit-bad">Art and animation bound</td></tr>
+      <tr><td>Graviteam Tactics</td><td>Platoon to battalion; operational campaign map with generated 3D battles</td><td>3D</td><td>Small</td><td>The closest architecture: the operational layer creates each battle, the battle result returns to it.</td><td class="fit-mid">Architecture yes, 3D no</td></tr>
+      <tr><td>Close Combat</td><td>Squad, real time</td><td>2D top-down sprites</td><td>Small (1990s)</td><td>Morale and refusal to obey; campaign that carries losses forward.</td><td class="fit-mid">Morale model</td></tr>
+      <tr><td>Gates of Hell, Men of War</td><td>Squad, real time, direct control</td><td>3D, physics</td><td>Mid</td><td>Direct control of a single unit; destructible cover.</td><td class="fit-bad">Wrong scale</td></tr>
+      <tr class="fam"><td colspan="6">E. Line battles with a campaign map</td></tr>
+      <tr><td>Total War</td><td>Regiments in formation, real time</td><td>3D, thousands of soldiers</td><td>Studio, hundreds</td><td>The loop: fight the battle or auto-resolve it, result goes back to the campaign map. Morale and rout.</td><td class="fit-bad">Era and art both wrong; keep the loop</td></tr>
+      <tr><td>Ultimate General</td><td>Brigades in line, real time</td><td>Painted 2D map, stylised blocks</td><td>Small</td><td>Brigade blocks on a painted map read well without soldiers.</td><td class="fit-mid">Look only</td></tr>
+      <tr class="fam"><td colspan="6">F. First person</td></tr>
+      <tr><td>Arma, Squad</td><td>Individual soldier</td><td>3D first person</td><td>Studio</td><td>Nothing at Ceteris's grain.</td><td class="fit-bad">Out of scope</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">Recommended blend: Command Ops for command and AI, Armored Brigade for real-terrain maps and modern ranges, Flashpoint for an optional WEGO mode, Total War for the fight-or-auto-resolve loop, Radio Commander as a later "reports only" difficulty.</p>
+</section>
+
+<section>
+  <h2>Mock: one segment, about two hours</h2>
+  <p>Playable sketch of the recommended shape. Blue is an armoured battalion group from a Ceteris brigade, broken into companies; the objective is the town across the river. Click a blue unit, then click the map to order it. Orders take minutes to arrive, as they would through a battalion HQ. Red units appear only when your units detect them; dashed frames are last known positions. Terrain is generated here as a stand-in for Copernicus GLO-30 elevation, ESA WorldCover and OpenStreetMap.</p>
+  <div class="mock">
+    <div class="mapbox">
+      <div class="bar">
+        <span class="clock" id="clock">06:00</span>
+        <button id="bPause" aria-pressed="true">Pause</button>
+        <button id="b1" aria-pressed="false">1 min/s</button>
+        <button id="b4" aria-pressed="false">4 min/s</button>
+        <button id="bReplay">Replay from log</button>
+        <button id="bEnd">End battle</button>
+        <button id="bReset">Reset</button>
+      </div>
+      <canvas id="map" width="960" height="600" aria-label="Tactical map with NATO unit symbols"></canvas>
+    </div>
+    <div class="side">
+      <div>
+        <h4>Context from Ceteris</h4>
+        <div class="kv">
+          <span>segment</span><span>S-14, day 2031-04-12</span>
+          <span>frontage</span><span>8 km x 5 km box</span>
+          <span>blue</span><span>2 armd coy, 1 mech coy, recon pl, 1 bty</span>
+          <span>red</span><span>est. 2 mech coy + reserve</span>
+          <span>supply</span><span>3.1 days fuel, 2.4 ammo</span>
+          <span>forecast</span><span>resolver: hold 61%</span>
+        </div>
+      </div>
+      <div>
+        <h4>Selected</h4>
+        <div id="sel" class="kv"><span>none</span><span>click a blue unit</span></div>
+      </div>
+      <div>
+        <h4>Order log (the only input)</h4>
+        <div id="log"><span class="hint">No orders yet.</span></div>
+      </div>
+      <div>
+        <h4>State hash</h4>
+        <div class="kv"><span>now</span><span id="hash">-</span><span>replay</span><span id="rhash">-</span></div>
+        <span class="hint">Replay rebuilds the battle from the seed and the order log alone. Matching hashes are what lets Ceteris verify a result.</span>
+      </div>
+      <div id="result" hidden>
+        <h4>Result to Ceteris</h4>
+        <div class="kv" id="resKv"></div>
+        <span class="hint" id="resHint"></span>
+      </div>
+    </div>
+  </div>
+  <p class="caption">The mock's combat and AI are a few dozen lines each and only show the interface. The red AI holds the town, pulls its screen back when contacted, and commits its reserve once a defender is hurt or the town is threatened.</p>
+</section>
+
+<section>
+  <h2>How it plugs into Ceteris</h2>
+  <p>Same architecture as the city companion: a separate program, two versioned files, no battle code at Ceteris runtime. ADR 0149's "no continuous battle view" stays true for Ceteris itself; the companion is outside it and runs in the extended profile.</p>
+  <pre class="mermaid">
+flowchart LR
+  A[Ceteris daily tick: segment engages] --> B{Player choice}
+  B -- auto-resolve --> C[0149 resolver, hourly 0209]
+  B -- fight --> D[battle context file]
+  D --> E[Companion: generate map and units, play]
+  E --> F[battle result file + order log]
+  F --> G{Coupling mode}
+  G -- quantile --> H[Resolver outcome at player's quantile]
+  G -- raw --> I[Companion outcome as is, run flagged]
+  H --> J[Ceteris continues the day]
+  I --> J
+  C --> J
+  </pre>
+  <div class="cols">
+    <div>
+      <h3>Battle context (Ceteris to companion)</h3>
+      <pre class="code">segment, cells, day, hour window
+weather, daylight, season
+forces per side: formation, template,
+  counts by equipment class and vintage,
+  fill, readiness, cohesion, morale
+supply days by type, resupply rate
+fortification and mine fields per cell
+air superiority, ISR, EW terms (E)
+doctrine family, commander traits
+delegation level and order latency
+rng key, pack hash, context hash</pre>
+    </div>
+    <div>
+      <h3>Battle result (companion to Ceteris)</h3>
+      <pre class="code">losses by class, vintage and tier
+cell control changes, advance
+cohesion and morale after
+consumption: fuel, ammo tonnes
+duration, breakthrough flag
+order log, companion version
+context hash, result hash</pre>
+      <p class="caption">Anyone can rerun the order log against the context headless and get the same result hash, so a result is checkable, not trusted.</p>
+    </div>
+  </div>
+  <h3>Coupling modes</h3>
+  <ul>
+    <li><b>Quantile (recommended default).</b> The resolver already has a distribution for that segment-day (its keyed lognormal noise). Your result is scored and mapped to a quantile of that distribution, clamped to 5 to 95 per cent, and Ceteris applies the resolver's outcome at that quantile. Skill moves you within the plausible range; it cannot make a company of tanks beat a corps. The world's statistics and the nesting test stay intact.</li>
+    <li><b>Raw import.</b> The companion's losses and control replace the resolver's. Truer to play, but a good player beats the resolver every time, so the run leaves the lab profile and carries a flag in its hash.</li>
+    <li><b>Replay only.</b> The companion renders Ceteris's own hourly log (0209) at company grain. No influence on the sim; cheapest, and the first thing to build either way.</li>
+  </ul>
+  <h3>Grain and time</h3>
+  <p>A Ceteris segment is 5 to 20 km and fights for days. A companion battle covers one segment for a window of hours inside a day, at company and battery grain, disaggregated from the brigade by its 0146 template. To avoid a prompt every day of a war, offer "fight" only for operations planned in the battle planner (0166, L1 to L2) or when the player asks.</p>
+</section>
+
+<section>
+  <h2>Generation from real data</h2>
+  <div class="cols">
+    <div>
+      <h3>Terrain</h3>
+      <ul>
+        <li>Elevation: Copernicus GLO-30 (30 m). Line of sight and slope at company scale need nothing finer.</li>
+        <li>Land cover: ESA WorldCover (10 m) for forest, crops, built-up, water.</li>
+        <li>Roads, rivers, bridges, rail: OpenStreetMap (ODbL, fine for an open project).</li>
+        <li>Built-up blocks: Overture or OSM footprints where present, GHSL density otherwise, rolled back toward 2000 with GHSL epochs.</li>
+        <li>From Ceteris: fortification and mine fields per cell, season, weather.</li>
+        <li>All the same sources the city companion uses; one terrain pipeline serves both.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Units</h3>
+      <ul>
+        <li>The brigade's template (0146) splits into companies and batteries by authorised counts and fill.</li>
+        <li>Each of the ~45 equipment classes becomes a weapon system: range bands, firepower against soft, armoured and air, protection, mobility, signature.</li>
+        <li>Vintage band sets sensors and protection; readiness, cohesion and supply carry over as starting state.</li>
+        <li>Names from the 0166 naming grammars; symbols from the 0166 NATO set with Ceteris amplifiers.</li>
+        <li>No per-soldier data is needed at this grain, which is why open sources are enough.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>AI opponents</h2>
+  <p>The biggest risk. Every game in the table above gets criticised for its AI, and attackers are much harder to write than defenders. Proposed layers:</p>
+  <ul>
+    <li><b>HQ planner.</b> Reuse the 0147 delegated planner one echelon down: pick objectives from influence maps (terrain value, threat, cover, routes), assign companies, set phase lines. Re-plans on events, not every tick.</li>
+    <li><b>Company behaviour.</b> Small state machines per posture (attack, defend, delay, screen, withdraw) with utility scores for firing positions and routes. Suppression and cohesion can override orders, as in Close Combat.</li>
+    <li><b>Search where it pays.</b> In WEGO mode, a shallow search over a handful of candidate plans per turn, scored by fast rollouts of the battle core. Too slow for real time at every level.</li>
+    <li><b>Tuning by self-play.</b> Headless AI-versus-AI batches give win rates per scenario and expose degenerate plans. This is also the owner's playtest substitute.</li>
+  </ul>
+  <p>Expect the defender AI to be decent within the first playable version and the attacker AI to take most of the second tier.</p>
+</section>
+
+<section>
+  <h2>Determinism</h2>
+  <ul>
+    <li>Fixed step in integer seconds (10 s in the mock); every draw keyed by (context rng key, entity, step, purpose), as in 0145 and 0209.</li>
+    <li>The order log is the only input; real-time play only decides at which step an order enters. Replays and verification follow.</li>
+    <li>Pathfinding and planners with fixed iteration counts and ID tie-breaks; transcendental maths through a pure Rust libm so results match across platforms.</li>
+    <li>Battle core as a Rust crate that no Ceteris sim crate depends on; Ceteris ships only the context exporter, result importer and verifier.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Rendering</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Option</th><th>Looks like</th><th>Art needed</th><th>Owner cost</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>2D map with NATO symbols <span class="pick">recommended</span></td><td>Command Ops, Armored Brigade, the mock above, the Ceteris theatre view at close zoom</td><td>None: hillshade, contours, land cover and symbols are all generated</td><td class="n">in the tiers below</td><td class="fit-good">Feasible</td></tr>
+      <tr><td>Stylised 2.5D diorama with tokens</td><td>Wooden blocks or simple miniatures on a relief model, tilt-shift; same look as the city companion's relief atlas</td><td>Procedural low-poly tokens, no animation</td><td class="n">+3 to 5 FTE-months</td><td class="fit-mid">Feasible later, shares the city Bevy work</td></tr>
+      <tr><td>Realistic 3D</td><td>Total War, Combat Mission, WARNO</td><td>Vehicle and soldier models, rigs, animation, effects, audio</td><td class="n">studio scale</td><td class="fit-bad">Not feasible</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Owner-time</h2>
+  <p>Owner FTE-months with AI writing the code, today's models. At a third of full time, multiply calendar time by three.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Tier</th><th>Contents</th><th>FTE-months</th></tr></thead>
+    <tbody>
+      <tr><td>T0 Replay</td><td>Terrain pipeline, company disaggregation, 2D renderer with 0166 symbols, playback of 0209 hourly logs</td><td class="n">1.5 to 2.5</td></tr>
+      <tr><td>T1 Playable fight</td><td>T0 plus battle core (movement, line of sight, detection, fires, suppression, cohesion), order latency, defender and basic attacker AI, context and result files, quantile import, verifier</td><td class="n">8 to 12 total</td></tr>
+      <tr><td>T2 Fuller game</td><td>Artillery and counter-battery, air and drones, EW, engineers and mines, WEGO mode, losses carried across days, better attacker AI, scenario editor, optional 2.5D diorama</td><td class="n">+8 to 14 (16 to 26 total)</td></tr>
+      <tr><td>T3 Total War class</td><td>3D soldiers and vehicles, animation, physics, audio</td><td class="n">150 to 500+ person-months</td></tr>
+    </tbody>
+  </table></div>
+  <p>For scale: the whole war build (W0 to W10) is already 45 to 70 part-time months, and 1.0 lands between late 2029 and 2031. T1 competes with the war stages it depends on, which is why it belongs after W5.</p>
+</section>
+
+<section>
+  <div class="future">
+    <span class="tag">Separate note: if models are much better in a few years (not assumed above)</span>
+    <ul>
+      <li><b>Art.</b> Mesh generation, automatic rigging and motion generation could make vehicles and infantry usable without artists. That is the one change that would move realistic 3D from studio scale toward something like 30 to 60 owner-months. Consistency, level of detail and performance with hundreds of units remain the open questions.</li>
+      <li><b>AI opponents.</b> A model acting as the enemy commander, issuing orders every few game minutes into the same order log as the player. Determinism survives because its orders are logged like yours; replays never call the model again. Cost and latency per battle would have to fall a lot for real time.</li>
+      <li><b>Voice and reports.</b> Spoken orders and radio reports in the Radio Commander style become cheap, which makes the "reports only" mode a real difficulty setting.</li>
+      <li><b>Code throughput.</b> T1 and T2 shrink, but owner time shifts to design review and playtesting, which models help with only through headless self-play.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+const W=960,H=600,PXKM=120,STEP=10; // 8 km x 5 km box, 10 s steps
+const cv=document.getElementById('map'),ctx=cv.getContext('2d');
+let dpr=Math.min(window.devicePixelRatio||1,2);
+cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+
+function rngFrom(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function hash2(x,y,s){let h=(x*374761393+y*668265263+s*982451653)>>>0;h=Math.imul(h^(h>>>13),1274126177)>>>0;return((h^(h>>>16))>>>0)/4294967296}
+function vnoise(x,y,s){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi;const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash2(xi,yi,s),b=hash2(xi+1,yi,s),c=hash2(xi,yi+1,s),d=hash2(xi+1,yi+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
+function fbm(x,y,s){let t=0,amp=1,f=1,n=0;for(let i=0;i<5;i++){t+=amp*vnoise(x*f,y*f,s+i);n+=amp;amp*=.5;f*=2}return t/n}
+
+const riverX=y=>W*.52+40*Math.sin(y/70)+18*Math.sin(y/23+1);
+const town={x:W*.67,y:H*.46,r:72};
+const bridge={x:riverX(H*.47),y:H*.47};
+const roads=[[[0,H*.55],[W*.25,H*.52],[bridge.x,bridge.y],[town.x,town.y],[W,H*.38]],[[town.x,town.y],[W*.7,H],],[[W*.2,0],[W*.25,H*.52],[W*.3,H]]];
+function height(x,y){let h=fbm(x/180,y/180,7)*60;h+=38*Math.exp(-((x-W*.82)**2+(y-H*.74)**2)/(2*90*90));h+=22*Math.exp(-((x-W*.2)**2+(y-H*.2)**2)/(2*110*110));
+  const d=Math.abs(x-riverX(y));h-=18*Math.exp(-d*d/(2*40*40));return h}
+function isForest(x,y){if(Math.hypot(x-town.x,y-town.y)<town.r+20)return false;if(Math.abs(x-riverX(y))<14)return false;return fbm(x/90,y/90,31)>.58}
+function inTown(x,y){return Math.hypot(x-town.x,y-town.y)<town.r}
+function onRiver(x,y){return Math.abs(x-riverX(y))<7}
+
+const terrain=document.createElement('canvas');terrain.width=W*dpr;terrain.height=H*dpr;
+(function draw(){const t=terrain.getContext('2d');t.setTransform(dpr,0,0,dpr,0,0);const C=4,gw=W/C,gh=H/C;
+  const hs=[];for(let j=0;j<=gh;j++){hs[j]=[];for(let i=0;i<=gw;i++)hs[j][i]=height(i*C,j*C)}
+  for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){const x=i*C+2,y=j*C+2;const dx=hs[j][i+1]-hs[j][i],dy=hs[j+1][i]-hs[j][i];
+    let sh=Math.max(-1,Math.min(1,(-dx+dy)*.18));let r=233,g=228,b=207;
+    if(isForest(x,y)){r=185;g=207;b=154}
+    if(inTown(x,y)){r=214;g=208;b=196}
+    const k=1+sh*.16;t.fillStyle=`rgb(${r*k|0},${g*k|0},${b*k|0})`;t.fillRect(i*C,j*C,C,C);
+    const s=8;if(Math.floor(hs[j][i]/s)!==Math.floor(hs[j][i+1]/s)||Math.floor(hs[j][i]/s)!==Math.floor(hs[j+1][i]/s)){t.fillStyle='rgba(140,118,80,.35)';t.fillRect(i*C,j*C,C,1.2)}
+    if(isForest(x,y)&&hash2(i,j,5)>.7){t.fillStyle='rgba(70,110,60,.45)';t.beginPath();t.arc(x,y,1.3,0,7);t.fill()}}
+  const rr=rngFrom(11);t.fillStyle='#8c857a';for(let n=0;n<70;n++){const a=rr()*6.28,d=Math.sqrt(rr())*town.r*.9;t.fillRect(town.x+Math.cos(a)*d-4,town.y+Math.sin(a)*d-3,5+rr()*6,4+rr()*5)}
+  t.strokeStyle='#6fa6cc';t.lineWidth=9;t.beginPath();for(let y=0;y<=H;y+=4){const x=riverX(y);y?t.lineTo(x,y):t.moveTo(x,y)}t.stroke();
+  for(const rd of roads){t.lineCap='round';t.strokeStyle='#9c927a';t.lineWidth=5;t.beginPath();rd.forEach((p,i)=>i?t.lineTo(p[0],p[1]):t.moveTo(p[0],p[1]));t.stroke();
+    t.strokeStyle='#f7f2e1';t.lineWidth=3;t.stroke()}
+  t.fillStyle='#3a3a36';t.fillRect(bridge.x-9,bridge.y-5,18,10);t.fillStyle='#f7f2e1';t.fillRect(bridge.x-8,bridge.y-2,16,4);
+  t.strokeStyle='rgba(29,35,33,.18)';t.lineWidth=1;for(let x=0;x<=W;x+=PXKM){t.beginPath();t.moveTo(x,0);t.lineTo(x,H);t.stroke()}for(let y=0;y<=H;y+=PXKM){t.beginPath();t.moveTo(0,y);t.lineTo(W,y);t.stroke()}
+  t.font='500 11px "IBM Plex Mono",monospace';t.fillStyle='rgba(29,35,33,.6)';for(let i=0;i<8;i++)t.fillText(String(40+i),i*PXKM+3,12);
+  t.setLineDash([10,6]);t.strokeStyle='#1d2321';t.lineWidth=2;t.beginPath();t.arc(town.x,town.y,town.r+10,0,7);t.stroke();t.setLineDash([]);
+  t.font='700 15px "Saira Condensed",sans-serif';t.fillStyle='#1d2321';t.fillText('OBJ IRON',town.x-28,town.y-town.r-16);
+  t.strokeStyle='#1d2321';t.lineWidth=2;t.beginPath();t.moveTo(W*.36,0);t.lineTo(W*.36,H);t.stroke();t.fillText('PL AMBER',W*.36+4,H-10);
+})();
+
+const TYPES={
+  arm:{fp:1.0,range:2.0,speed:.42,prot:1.0,label:'armd'},
+  mech:{fp:.75,range:1.5,speed:.36,prot:.8,label:'mech'},
+  recon:{fp:.3,range:1.0,speed:.5,prot:.5,detect:3.5,label:'recon'},
+  art:{fp:.35,range:99,speed:.25,prot:.6,label:'arty'}};
+function initUnits(){return[
+  {id:1,side:'B',t:'arm',name:'A/1-12',x:W*.1,y:H*.45},
+  {id:2,side:'B',t:'arm',name:'B/1-12',x:W*.12,y:H*.62},
+  {id:3,side:'B',t:'mech',name:'C/1-12',x:W*.08,y:H*.54},
+  {id:4,side:'B',t:'recon',name:'Sct/1-12',x:W*.24,y:H*.4},
+  {id:5,side:'B',t:'art',name:'A/2-7 FA',x:W*.04,y:H*.75},
+  {id:11,side:'R',t:'mech',name:'1/2 MR',x:town.x-30,y:town.y-25},
+  {id:12,side:'R',t:'mech',name:'2/2 MR',x:town.x-10,y:town.y+35},
+  {id:13,side:'R',t:'recon',name:'Rcn/2',x:W*.43,y:H*.36},
+  {id:14,side:'R',t:'arm',name:'Tk/2',x:W*.88,y:H*.36},
+  {id:15,side:'R',t:'art',name:'Bty/2',x:W*.94,y:H*.84}
+].map(u=>Object.assign(u,{str:1,coh:1,order:null,pend:null,broken:false,underFire:0,lk:null}))}
+
+let S;
+function newState(){return{step:0,units:initUnits(),log:[],aiFlags:{reserve:false,recon:false},ended:false}}
+function U(s,id){return s.units.find(u=>u.id===id)}
+function terrainMult(x,y){return inTown(x,y)?.5:isForest(x,y)?.7:1}
+function speedMult(x,y){if(onRiver(x,y)&&Math.hypot(x-bridge.x,y-bridge.y)>22)return .12;return inTown(x,y)?.5:isForest(x,y)?.45:1}
+function latencyFor(u){return u.t==='art'?12:u.t==='recon'?12:18} // steps of 10 s
+function issue(s,id,x,y,src){const u=U(s,id);if(!u||u.str<=0)return;u.pend={x,y,at:s.step+latencyFor(u)};if(src)s.log.push({step:s.step,id,x:Math.round(x),y:Math.round(y)})}
+
+function detects(s,obs,tgt){if(obs.str<=0)return false;const d=Math.hypot(obs.x-tgt.x,obs.y-tgt.y)/PXKM;const base=TYPES[obs.t].detect||2.5;const conceal=(inTown(tgt.x,tgt.y)||isForest(tgt.x,tgt.y))&&!tgt.order?.45:1;return d<base*conceal}
+function seen(s,side){const out=new Set();for(const o of s.units)if(o.side===side&&o.str>0&&!o.broken)for(const t of s.units)if(t.side!==side&&t.str>0&&detects(s,o,t))out.add(t.id);return out}
+
+function step(s){
+  const R=rngFrom(0x5EED^Math.imul(s.step+1,2654435761));
+  for(const u of s.units)if(u.pend&&u.pend.at<=s.step){u.order={x:u.pend.x,y:u.pend.y};u.pend=null}
+  if(s.step%6===0)redAI(s);
+  const seenB=seen(s,'B'),seenR=seen(s,'R');
+  for(const t of s.units)if(t.side==='R'&&t.str>0&&seenB.has(t.id))t.lk={x:t.x,y:t.y};
+  const dmg=new Map();
+  for(const u of s.units){if(u.str<=0||u.broken)continue;const vis=u.side==='B'?seenB:seenR;const ty=TYPES[u.t];
+    let best=null,bd=1e9;for(const t of s.units){if(t.side===u.side||t.str<=0||!vis.has(t.id))continue;const d=Math.hypot(u.x-t.x,u.y-t.y)/PXKM;if(d<=ty.range&&d<bd){bd=d;best=t}}
+    if(!best)continue;const moving=best.order?1.2:1;
+    const d=ty.fp*u.str*(.5+.5*u.coh)*.012*terrainMult(best.x,best.y)*moving/TYPES[best.t].prot*(.6+.8*R());
+    dmg.set(best.id,(dmg.get(best.id)||0)+d)}
+  for(const u of s.units){const d=dmg.get(u.id)||0;if(d>0){u.str=Math.max(0,u.str-d);u.coh=Math.max(0,u.coh-d*1.6);u.underFire=6}else{u.underFire=Math.max(0,u.underFire-1);if(!u.underFire)u.coh=Math.min(u.str,u.coh+.002)}
+    if(!u.broken&&(u.str<.3||u.coh<.22)&&u.str>0){u.broken=true;u.order=null;u.pend=null}}
+  for(const u of s.units){if(u.str<=0)continue;let tx,ty_;
+    if(u.broken){const home=u.side==='B'?0:W;tx=home;ty_=u.y}else if(u.order){tx=u.order.x;ty_=u.order.y}else continue;
+    const dx=tx-u.x,dy=ty_-u.y,d=Math.hypot(dx,dy);const v=TYPES[u.t].speed*PXKM/6*speedMult(u.x,u.y)*(u.broken?.5:1)*(u.underFire?.6:1);
+    if(d<=v){u.x=tx;u.y=ty_;if(!u.broken)u.order=null}else{u.x+=dx/d*v;u.y+=dy/d*v}
+    u.x=Math.max(4,Math.min(W-4,u.x));u.y=Math.max(4,Math.min(H-4,u.y))}
+  s.step++;
+}
+function redAI(s){const blue=s.units.filter(u=>u.side==='B'&&u.str>0&&!u.broken);const rc=U(s,13),res=U(s,14);
+  if(!s.aiFlags.recon&&rc.str>0&&!rc.broken&&blue.some(b=>Math.hypot(b.x-rc.x,b.y-rc.y)/PXKM<1.6)){s.aiFlags.recon=true;issue(s,13,town.x+20,town.y-50)}
+  const hurt=[11,12].some(id=>U(s,id).str<.6);const threat=blue.some(b=>Math.hypot(b.x-town.x,b.y-town.y)/PXKM<.9);
+  if(res.str>0&&!res.broken&&(hurt||threat)&&(!s.aiFlags.reserve||s.step%18===0)&&blue.length){s.aiFlags.reserve=true;
+    let tgt=blue[0],bd=1e9;for(const b of blue){const d=Math.hypot(b.x-town.x,b.y-town.y);if(d<bd||(d===bd&&b.id<tgt.id)){bd=d;tgt=b}}
+    issue(s,14,(tgt.x+town.x)/2,(tgt.y+town.y)/2)}}
+function hashState(s){let h=2166136261;for(const u of s.units)for(const v of[u.x,u.y,u.str,u.coh])
+  {const k=Math.round(v*1000);h^=k&0xffff;h=Math.imul(h,16777619);h^=k>>>16;h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
+function objective(s){const b=s.units.some(u=>u.side==='B'&&u.str>0&&!u.broken&&inTown(u.x,u.y));const r=s.units.some(u=>u.side==='R'&&u.str>0&&!u.broken&&inTown(u.x,u.y));return b&&!r?'taken':b?'contested':'held by red'}
+
+function drawSym(u,ghost){const x=u.x,y=u.y,fr=u.side==='B';ctx.save();ctx.globalAlpha=ghost?.45:u.broken?.6:1;ctx.lineWidth=2;ctx.strokeStyle='#111';
+  ctx.setLineDash(ghost?[4,3]:[]);
+  if(fr){ctx.fillStyle='#80c8f0';ctx.fillRect(x-16,y-11,32,22);ctx.strokeRect(x-16,y-11,32,22)}
+  else{ctx.fillStyle='#f29a94';ctx.beginPath();ctx.moveTo(x,y-16);ctx.lineTo(x+16,y);ctx.lineTo(x,y+16);ctx.lineTo(x-16,y);ctx.closePath();ctx.fill();ctx.stroke()}
+  ctx.setLineDash([]);ctx.lineWidth=1.6;const w=fr?16:9,h=fr?11:9;
+  if(u.t==='mech'){ctx.beginPath();ctx.moveTo(x-w,y-h);ctx.lineTo(x+w,y+h);ctx.moveTo(x+w,y-h);ctx.lineTo(x-w,y+h);ctx.stroke()}
+  if(u.t==='arm'||u.t==='mech'){ctx.beginPath();ctx.ellipse(x,y,fr?10:6,fr?5:4,0,0,7);ctx.stroke()}
+  if(u.t==='recon'){ctx.beginPath();ctx.moveTo(x-w,y+h);ctx.lineTo(x+w,y-h);ctx.stroke()}
+  if(u.t==='art'){ctx.fillStyle='#111';ctx.beginPath();ctx.arc(x,y,3.5,0,7);ctx.fill()}
+  ctx.fillStyle='#111';ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='center';ctx.fillText('I',x,y-(fr?14:19));
+  if(!ghost){ctx.textAlign='left';ctx.font='500 10px "IBM Plex Mono",monospace';ctx.fillText(u.name,x+(fr?19:19),y+3);
+    const bw=32;ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(x-16,y+(fr?14:19),bw,3);ctx.fillRect(x-16,y+(fr?18:23),bw,3);
+    ctx.fillStyle=u.str>.6?'#3f7a3a':u.str>.3?'#c58a1c':'#c2423b';ctx.fillRect(x-16,y+(fr?14:19),bw*u.str,3);
+    ctx.fillStyle='#4a5a8a';ctx.fillRect(x-16,y+(fr?18:23),bw*u.coh,3);
+    if(u.broken){ctx.fillStyle='#c2423b';ctx.font='700 10px "IBM Plex Mono",monospace';ctx.fillText('BROKEN',x-16,y-(fr?16:21)-8)}}
+  ctx.restore()}
+let selId=null;
+function render(){ctx.drawImage(terrain,0,0,W,H);
+  const vis=seen(S,'B');
+  for(const u of S.units){if(u.side==='B'&&u.str>0){if(u.pend){ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='#2f6f9f';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(u.pend.x,u.pend.y);ctx.stroke();
+      const mins=Math.max(0,(u.pend.at-S.step)*STEP/60);ctx.fillStyle='#1d2321';ctx.fillRect(u.pend.x-22,u.pend.y-8,44,15);ctx.fillStyle='#f8f7f2';ctx.font='500 10px "IBM Plex Mono",monospace';ctx.textAlign='center';ctx.fillText('in '+mins.toFixed(1)+'m',u.pend.x,u.pend.y+3);ctx.restore()}
+    if(u.order){ctx.save();ctx.strokeStyle='#2f6f9f';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(u.order.x,u.order.y);ctx.stroke();ctx.restore()}}}
+  for(const u of S.units){if(u.str<=0)continue;if(u.side==='R'){if(vis.has(u.id))drawSym(u,false);else if(u.lk)drawSym(Object.assign({},u,u.lk),true)}else drawSym(u,false)}
+  const sel=selId&&U(S,selId);if(sel&&sel.str>0){ctx.save();ctx.strokeStyle='#9a6a12';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sel.x,sel.y,24,0,7);ctx.stroke();
+    ctx.setLineDash([2,4]);ctx.beginPath();ctx.arc(sel.x,sel.y,Math.min(TYPES[sel.t].range,6)*PXKM,0,7);ctx.stroke();ctx.restore()}
+  for(const u of S.units)if(u.side==='B'&&u.str<=0){ctx.save();ctx.strokeStyle='#c2423b';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(u.x-8,u.y-8);ctx.lineTo(u.x+8,u.y+8);ctx.moveTo(u.x+8,u.y-8);ctx.lineTo(u.x-8,u.y+8);ctx.stroke();ctx.restore()}
+  const t=6*3600+S.step*STEP,hh=Math.floor(t/3600),mm=Math.floor(t%3600/60);
+  document.getElementById('clock').textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+'  OBJ '+objective(S);
+  document.getElementById('hash').textContent=hashState(S);
+  const sk=document.getElementById('sel');if(sel){sk.innerHTML=`<span>unit</span><span>${sel.name} ${TYPES[sel.t].label}</span><span>strength</span><span>${(sel.str*100).toFixed(0)}%</span><span>cohesion</span><span>${(sel.coh*100).toFixed(0)}%</span><span>state</span><span>${sel.broken?'broken, falling back':sel.pend?'order in transit':sel.order?'moving':sel.underFire?'engaged':'holding'}</span><span>range</span><span>${TYPES[sel.t].range>50?'map (needs spotter)':TYPES[sel.t].range+' km'}</span>`}
+  else sk.innerHTML='<span>none</span><span>click a blue unit</span>';
+}
+function renderLog(){const el=document.getElementById('log');if(!S.log.length){el.innerHTML='<span class="hint">No orders yet.</span>';return}
+  el.innerHTML=S.log.map(o=>{const t=o.step*STEP;return`<span>t+${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')} ${U(S,o.id).name} to ${(o.x/PXKM).toFixed(2)},${(o.y/PXKM).toFixed(2)} km</span>`}).join('');el.scrollTop=el.scrollHeight}
+
+let speed=0,acc=0,last=performance.now();
+const btn={0:document.getElementById('bPause'),1:document.getElementById('b1'),4:document.getElementById('b4')};
+function setSpeed(v){speed=v;for(const k in btn)btn[k].setAttribute('aria-pressed',String(+k===v))}
+btn[0].onclick=()=>setSpeed(0);btn[1].onclick=()=>setSpeed(1);btn[4].onclick=()=>setSpeed(4);
+const MAXSTEP=720;
+function frame(now){const dt=Math.min(.25,(now-last)/1000);last=now;
+  if(speed&&!S.ended){acc+=dt*speed*6;while(acc>=1){acc-=1;if(S.step<MAXSTEP)step(S);else{endBattle();break}}}
+  render();requestAnimationFrame(frame)}
+function toMap(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+cv.addEventListener('pointerdown',e=>{if(S.ended)return;const p=toMap(e);
+  const hit=S.units.find(u=>u.side==='B'&&u.str>0&&Math.hypot(u.x-p.x,u.y-p.y)<20);
+  if(hit){selId=hit.id;return}
+  if(selId){const u=U(S,selId);if(u.broken)return;issue(S,selId,p.x,p.y,true);renderLog()}});
+document.getElementById('bReplay').onclick=()=>{const R=newState();const log=S.log.slice();let i=0;
+  while(R.step<S.step){while(i<log.length&&log[i].step===R.step){issue(R,log[i].id,log[i].x,log[i].y,true);i++}step(R)}
+  const h=hashState(R);const el=document.getElementById('rhash');el.textContent=h+(h===hashState(S)?' match':' differs');el.className=h===hashState(S)?'same':'diff'};
+document.getElementById('bReset').onclick=()=>{S=newState();selId=null;setSpeed(0);document.getElementById('result').hidden=true;document.getElementById('rhash').textContent='-';renderLog()};
+function endBattle(){if(S.ended)return;S.ended=true;setSpeed(0);
+  const loss=side=>S.units.filter(u=>u.side===side).reduce((a,u)=>a+(1-u.str),0);
+  const bl=loss('B'),rl=loss('R'),obj=objective(S);const score=rl-bl+(obj==='taken'?1.5:obj==='contested'?.5:0);
+  const q=Math.min(.95,Math.max(.05,1/(1+Math.exp(-1.2*score))));
+  document.getElementById('resKv').innerHTML=`<span>blue loss</span><span>${bl.toFixed(2)} coy-eq</span><span>red loss</span><span>${rl.toFixed(2)} coy-eq</span><span>objective</span><span>${obj}</span><span>quantile</span><span>${q.toFixed(2)}</span><span>hash</span><span>${hashState(S)}</span>`;
+  document.getElementById('resHint').textContent=`Quantile mode: Ceteris applies the resolver's outcome for S-14 at q=${q.toFixed(2)}. Raw mode would import the losses above and flag the run.`;
+  document.getElementById('result').hidden=false}
+document.getElementById('bEnd').onclick=endBattle;
+S=newState();
+// orders store integer positions so live play and replay take identical inputs
+const _issue=issue;issue=function(s,id,x,y,src){return _issue(s,id,src?Math.round(x):x,src?Math.round(y):y,src)};
+requestAnimationFrame(frame);
+})();
+</script>

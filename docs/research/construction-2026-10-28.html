@@ -1,0 +1,380 @@
+<title>Building Things in Ceteris</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: an engineer's project file in the Modern Atlas style (ADR 0137): a short answer, the pipeline drawing, then schedules (tables) for assets, effects, comparison and phasing. */
+:root {
+  --paper: #EDEFEA;
+  --sheet: #F6F7F3;
+  --ink: #1C292F;
+  --ink-2: #4A5A61;
+  --rule: #C9D0CC;
+  --sea: #BCD1DB;
+  --edit: #AE2459;
+  --fork: #5E45A3;
+  --ok: #2F6B4F;
+  --warn: #8A5A12;
+  --late: #5B6770;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+    --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+  --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+  color-scheme: dark;
+}
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.01em; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 18px; line-height: 1.25; }
+p { margin: 0; max-width: 70ch; }
+a { color: var(--fork); }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.mono, code { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+header.top { display: grid; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+header.top .lede { font-family: var(--serif); font-size: 18px; line-height: 1.5; }
+header.top .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); }
+section { margin-top: 44px; display: grid; gap: 16px; }
+.rule-label { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; flex-wrap: wrap; }
+.rule-label .eyebrow { margin-left: auto; }
+ul.tight { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 76ch; }
+.answer { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.answer div { background: var(--sheet); border: 1px solid var(--rule); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.answer b { font-family: var(--serif); font-size: 16px; font-weight: 600; }
+.answer span { font-size: 14px; color: var(--ink-2); }
+.tbl { overflow-x: auto; border-top: 1px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--rule); }
+th { font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+td:first-child { font-weight: 600; }
+table.cmp { min-width: 980px; }
+table.cmp td.ce { background: var(--sheet); }
+table.cmp th.ce { color: var(--edit); }
+.tag { font: 500 11.5px var(--mono); padding: 1px 6px; border: 1px solid currentColor; white-space: nowrap; display: inline-block; }
+.t10 { color: var(--ok); } .t1x { color: var(--fork); } .t20 { color: var(--warn); } .tno { color: var(--late); }
+.fig { background: var(--sheet); border: 1px solid var(--rule); padding: 16px; overflow-x: auto; }
+.fig svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.fig svg text { font-family: var(--sans); fill: var(--ink); }
+.fig svg .sm { font-size: 12px; fill: var(--ink-2); }
+.fig svg .lb { font-size: 14px; font-weight: 600; }
+.fig svg .box { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; }
+.fig svg .boxk { fill: var(--sea); stroke: var(--ink); stroke-width: 1.2; }
+.fig svg .ln { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+.fig svg .lnr { stroke: var(--edit); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+.fig svg .ar { fill: var(--ink); }
+.fig svg .arr { fill: var(--edit); }
+.fig svg .red { fill: var(--edit); }
+.eq { font-family: var(--mono); font-size: 13px; background: var(--sheet); border-left: 3px solid var(--fork); padding: 10px 14px; overflow-x: auto; white-space: pre; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; }
+.two > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.dec { display: grid; gap: 0; }
+.dec > div { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 4px 14px; padding: 14px 0; border-top: 1px solid var(--rule); }
+.dec .n { font-family: var(--mono); color: var(--edit); font-size: 14px; }
+.dec .q { font-family: var(--serif); font-weight: 600; font-size: 16px; }
+.dec .r { grid-column: 2; font-size: 14px; color: var(--ink-2); max-width: 76ch; }
+.note { font-size: 13px; color: var(--ink-2); }
+@media (max-width: 560px) { h2 { font-size: 21px; } }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">Ceteris design note · construction and capital formation · 28 Oct 2026</span>
+  <h1>Building things in Ceteris</h1>
+  <p class="lede">What can be built, at what grain, how a project goes from order to working capacity, what it changes, and how that compares with Victoria 3, Europa Universalis IV and V, and Hearts of Iron III and IV. A proposal: nothing here is an ADR yet.</p>
+  <div class="meta mono"><span>Inputs: DESIGN 4.4, 5.2-5.5, 7.2-7.4, 17</span><span>ADRs 0020 0034 0040 0042 0075 0086 0122 0160 0163 0165 0170 0171</span><span>Main at e7a754f</span></div>
+</header>
+
+<section>
+  <div class="rule-label"><h2>Short answer</h2><span class="eyebrow">five points</span></div>
+  <div class="answer">
+    <div><b>No buildings, capital stocks.</b><span>Ordinary capacity is a continuous stock per enterprise cell (province, sector, ownership), split by asset class. Only lumpy, map-visible things are named projects: corridors, ports, power plants, dams, pipelines, mines.</span></div>
+    <div><b>Construction is a real sector.</b><span>Every project buys a bundle of construction services, machinery and equipment from province markets. The construction sector's capacity, labour, cement and steel are the bottleneck, priced, as in the data. No construction points.</span></div>
+    <div><b>Time to build is staged.</b><span>Orders pass a permit lag, then spend over an Erlang-shaped schedule by asset class (machinery in quarters, structures in years, nuclear near a decade). Work in progress sits on the owner's balance sheet.</span></div>
+    <div><b>Coefficients lock at order.</b><span>A plant's input mix is chosen when it is ordered (putty-clay, ADR 0020). Change the technology and you build new capacity. Stranded assets and overruns follow.</span></div>
+    <div><b>Fits 1.0.</b><span>The pipeline lands with investment in P5, named projects and endogenous infrastructure in P8, validation in P9 against India's Golden Quadrilateral and China's 2009 stimulus. Seats and play verbs are 1.x minors; military building is 2.0.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>What the specs already have</h2><span class="eyebrow">the gaps this fills</span></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Where</th><th>What it says</th><th>What is missing</th></tr></thead>
+    <tbody>
+      <tr><td>DESIGN 4.4 step 11, 7.4</td><td>Quarterly "investment and construction": owners allocate new capital across (province, sector) by a logit on expected return against the cost of capital.</td><td>No time to build, no asset classes, no construction capacity. Capital appears the quarter it is paid for.</td></tr>
+      <tr><td>DESIGN 7.2, ADR 0020</td><td>Capacity vintages fix their input coefficients when built; one 2000 vintage in P2.</td><td>When the choice is made (order or completion) and what a vintage costs to build.</td></tr>
+      <tr><td>DESIGN 5.5, ADR 0160</td><td>States and enterprises propose highways, rail, ports, pipelines scored by market-access gain (Donaldson-Hornbeck, Fajgelbaum-Schaal); 0160 adds reference-class delay and overrun.</td><td>Who builds them physically, from what inputs, and what happens while they are half built.</td></tr>
+      <tr><td>ADR 0042</td><td>Public capital per province enters A with elasticity P77 near 0.08; PIMA efficiency P78 sets how much spending becomes capital.</td><td>The construction step itself; public and private projects compete for the same crews.</td></tr>
+      <tr><td>ADRs 0034, 0040</td><td>Power capacity is a vintage stock by class from the investment step; housing supply elasticity from Saiz land constraints.</td><td>Build lags by plant class; housing completions as a construction flow.</td></tr>
+      <tr><td>ADRs 0075, 0086</td><td>Repair and reconstruction are limited by construction capacity and crews (P128, P141); reconstruction gets priority.</td><td>The construction capacity they refer to is not defined anywhere.</td></tr>
+      <tr><td>ADR 0165</td><td>Defence production lines are putty-clay capacity; civilian conversion takes 12 to 24 months.</td><td>Shares the same pipeline; nothing extra in 1.0.</td></tr>
+      <tr><td>ADR 0122</td><td>Element ledgers for carbon, copper, lithium, nickel, phosphorus, embodied energy.</td><td>Cement and steel in structures are the biggest embodied-carbon stock; the ledger should see them.</td></tr>
+      <tr><td>Register P10</td><td>Depreciation 2 to 8% a year by asset.</td><td>Too narrow: PWT uses about 31.5% for computers and software and about 19% for transport equipment.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">So the pieces exist in seven ADRs and all of them assume a construction step that no ADR specifies. The proposal below is that step.</p>
+</section>
+
+<section>
+  <div class="rule-label"><h2>What can be built</h2><span class="eyebrow">two grains</span></div>
+  <p>Ordinary capital follows the national-accounts asset split, because that is how the data come (PWT, EU KLEMS, the ICIO investment column). Lumpy assets that change the map or the network are named projects with a location, a size and a schedule. The threshold between the two is a per-class size cutoff in the pack.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Asset</th><th>Grain</th><th>Built by</th><th>Lands in</th><th>Caps</th><th>Build time (prior)</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td>Machinery and equipment</td><td>Continuous, per enterprise cell</td><td>Machinery, electronics, vehicle sectors; little construction</td><td>K of the cell, new vintage</td><td>Finance only</td><td>1 to 3 quarters</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>Non-residential structures</td><td>Continuous, per enterprise cell</td><td>Construction sector (cement, steel, labour)</td><td>K of the cell, new vintage</td><td>Developable land (0040 land share)</td><td>4 to 12 quarters (Koeva 2000: about two years)</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>ICT and software</td><td>Continuous</td><td>IT, electronics</td><td>K of the cell</td><td>None</td><td>1 quarter</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>Dwellings</td><td>Continuous, per province and urban class (0074)</td><td>Construction sector</td><td>Housing stock (0040)</td><td>Saiz elasticity, regulation index</td><td>4 to 8 quarters</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>Public capital, core and other</td><td>Continuous, per province</td><td>Construction, state budgets</td><td>K_g in A (0042)</td><td>PIMA efficiency, leakage (0046)</td><td>6 to 16 quarters</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>Agricultural land conversion</td><td>Continuous, H3 cells</td><td>Construction, agriculture</td><td>T of agriculture</td><td>GAEZ suitability, protected land (0038)</td><td>1 to 4 quarters</td><td><span class="tag t10">P8</span></td></tr>
+      <tr><td>Transport links and nodes</td><td>Named project on a graph edge or node</td><td>Construction, state or concession</td><td>Edge cost, speed, capacity (5.3)</td><td>Terrain, ruggedness, rights of way</td><td>Reference class; rail 5 to 10 years</td><td><span class="tag t10">P8</span></td></tr>
+      <tr><td>Power plants by class</td><td>Named above a size cutoff, continuous below</td><td>Construction, machinery</td><td>RLDC capacity (0034)</td><td>Resource quality on the raster, sites</td><td>Solar about 1 year, CCGT 2 to 3, coal 4, nuclear 6 to 10</td><td><span class="tag t10">P8</span></td></tr>
+      <tr><td>Dams, pipelines, LNG, refineries</td><td>Named</td><td>Construction, machinery</td><td>Power, waterway, pipeline edges (5.3)</td><td>Hydrology (0076), transit states</td><td>4 to 10 years</td><td><span class="tag t10">P8</span></td></tr>
+      <tr><td>Mines and fields</td><td>Named deposit development</td><td>Mining, construction</td><td>T of mining (0178)</td><td>Deposits, exploration</td><td>5 to 15 years from discovery</td><td><span class="tag t10">P8</span></td></tr>
+      <tr><td>Telecom: cables, towers</td><td>Named (cables), continuous (coverage)</td><td>Electronics, construction</td><td>Telecom layer (0075)</td><td>None</td><td>2 to 3 years for a cable</td><td><span class="tag t1x">1.x</span></td></tr>
+      <tr><td>Military: bases, fortifications, defence lines</td><td>Named, on H3 cells</td><td>Construction, defence sectors</td><td>War model (0145-0154)</td><td>Territory control</td><td>Months to years</td><td><span class="tag t20">2.0</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">The grain stays at the enterprise cell in 1.0, as the companies thread proposes: every 1.0 order belongs to one (province, sector, ownership) cell. A named firm with plants in several provinces, if it ever arrives as an extended opt-in, emits one order per province.</p>
+</section>
+
+<section>
+  <div class="rule-label"><h2>How a project goes from order to capacity</h2><span class="eyebrow">quarterly step, monthly spend</span></div>
+  <div class="fig" role="img" aria-label="Pipeline: an investor order passes a permit lag, enters staged construction that buys from the construction sector and machinery markets, then becomes a new capacity vintage that depreciates. Financing cash calls go back to the owner; overruns, pauses and abandonment branch off.">
+    <svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ar"/></marker>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arr"/></marker>
+      </defs>
+      <rect x="10" y="40" width="150" height="74" class="box"/>
+      <text x="22" y="66" class="lb">Order</text>
+      <text x="22" y="86" class="sm">owner, province, asset,</text>
+      <text x="22" y="102" class="sm">size, coefficients</text>
+
+      <rect x="200" y="40" width="130" height="74" class="box"/>
+      <text x="212" y="66" class="lb">Permit lag</text>
+      <text x="212" y="86" class="sm">days to permit by</text>
+      <text x="212" y="102" class="sm">country (0083, 0067)</text>
+
+      <rect x="370" y="40" width="270" height="74" class="box"/>
+      <text x="382" y="66" class="lb">Construction, k stages</text>
+      <text x="382" y="86" class="sm">spend s(t) per month on the asset's bundle;</text>
+      <text x="382" y="102" class="sm">work in progress on the owner's books</text>
+
+      <rect x="680" y="40" width="150" height="74" class="boxk"/>
+      <text x="692" y="66" class="lb">New vintage</text>
+      <text x="692" y="86" class="sm">capacity at locked</text>
+      <text x="692" y="102" class="sm">coefficients (0020)</text>
+
+      <rect x="860" y="40" width="130" height="74" class="box"/>
+      <text x="872" y="66" class="lb">Depreciation</text>
+      <text x="872" y="86" class="sm">delta by asset,</text>
+      <text x="872" y="102" class="sm">war and disaster</text>
+
+      <path d="M160 77 H196" class="ln" marker-end="url(#a)"/>
+      <path d="M330 77 H366" class="ln" marker-end="url(#a)"/>
+      <path d="M640 77 H676" class="ln" marker-end="url(#a)"/>
+      <path d="M830 77 H856" class="ln" marker-end="url(#a)"/>
+
+      <rect x="370" y="190" width="270" height="62" class="box"/>
+      <text x="382" y="214" class="lb">Province markets</text>
+      <text x="382" y="234" class="sm">construction services, machinery, cement, steel</text>
+      <path d="M470 114 V186" class="ln" marker-end="url(#a)"/>
+      <text x="478" y="150" class="sm">demand</text>
+      <path d="M560 190 V118" class="ln" marker-end="url(#a)"/>
+      <text x="568" y="150" class="sm">rationed delivery slows the stage</text>
+
+      <rect x="10" y="190" width="300" height="62" class="box"/>
+      <text x="22" y="214" class="lb">Owner's balance sheet</text>
+      <text x="22" y="234" class="sm">cash calls each quarter; credit (P5)</text>
+      <path d="M366 221 H314" class="ln" marker-end="url(#a)"/>
+      <text x="318" y="210" class="sm">cash</text>
+
+      <rect x="680" y="190" width="310" height="62" class="box"/>
+      <text x="692" y="214" class="lb red">Overrun, pause, abandon</text>
+      <text x="692" y="234" class="sm">reference-class draws (0160); write-off (0112)</text>
+      <path d="M600 114 C 640 150, 700 160, 760 186" class="lnr" marker-end="url(#ar)"/>
+
+      <text x="10" y="290" class="sm">Priority on construction capacity when it binds: reconstruction backlog (0086) and repair (0075) first, then state, then private, each by willingness to pay.</text>
+      <text x="10" y="310" class="sm">The 2000 pipeline starts full: work in progress equals the steady-state flow times the remaining schedule, plus named projects under way in 2000 (Three Gorges, for one).</text>
+    </svg>
+  </div>
+
+  <div class="two">
+    <div>
+      <h3>Schedule</h3>
+      <p>Each asset class a has a mean build time T_a and a shape k_a. A linear chain of k_a stages gives an Erlang-distributed completion time with O(1) state per stage, the same trick DESIGN 19.4 uses for other lags.</p>
+      <div class="eq">W[s](t+1) = W[s](t) + flow[s-1](t) - flow[s](t)
+flow[s](t) = (k_a / T_a) * W[s](t) * min(1, delivered / ordered)
+K(t+1) = (1 - delta_a) K(t) + flow[k_a](t)</div>
+      <p>The min term is the link to rationing (ADR 0020): if the construction market cannot deliver, stages slow. Work in progress W counts in the goods invariant of 4.6 like the input stocks of 0170.</p>
+    </div>
+    <div>
+      <h3>Cost</h3>
+      <p>The bundle per asset class comes from the ICIO investment column by country (GFCF by product), so Chinese structures are cement-heavy and US ones are not. The construction sector is an ordinary ICIO sector, local in the gravity kernel with high frictions, and imports construction services only at P141 (0086).</p>
+      <p>Its own capacity grows through the same pipeline (machinery is quick to add) and through labour: construction labour is a skill-group market (0105), so a boom raises construction wages, pulls migrants (0174 Gulf workers) and slows everything else that needs crews.</p>
+    </div>
+    <div>
+      <h3>Failure modes</h3>
+      <ul class="tight">
+        <li>Overrun and delay drawn per named project from reference classes (Flyvbjerg et al.: rail about +45%, roads about +20% on average), keyed by the run seed (0160).</li>
+        <li>A cash call the owner cannot meet pauses the project. Paused work in progress decays at its depreciation rate.</li>
+        <li>Abandonment writes off the work in progress through 0112. Unfinished housing after 2008 in Spain and after 2021 in China are the test cases.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Cost per tick</h3>
+      <p>Two staged asset groups (structures, equipment) times three stages per active enterprise cell, plus housing and public capital per province. At roughly 300,000 active cells that is about 14 MB. The update is quarterly and linear; it is negligible next to the 30 ms trade step.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>What building changes</h2><span class="eyebrow">effects run through existing channels</span></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Effect</th><th>Channel</th><th>Where it is specified</th><th>Validation target</th></tr></thead>
+    <tbody>
+      <tr><td>Output and jobs</td><td>K in the CES value-added core; new vintages bring new input mixes, energy use and emissions</td><td>7.2, 0020, 7.7</td><td>Investment-to-GDP and capital-output paths by country (PWT)</td></tr>
+      <tr><td>Market access</td><td>A built link lowers edge cost; gravity reallocates trade and location; the main spatial loop of 5.5</td><td>5.3-5.5, 0017, 0180</td><td>India's Golden Quadrilateral, 2001-2012 (Ghani, Goswami and Kerr 2016); China's expressways (Faber 2014)</td></tr>
+      <tr><td>Electricity prices</td><td>Plant capacity by class enters the residual load curve</td><td>0034, 0035</td><td>Solar and wind build-out 2010-2024 by country</td></tr>
+      <tr><td>Housing, rents, slums</td><td>Completions against household formation; slum share when supply lags (0074)</td><td>0040, 0074</td><td>House-price momentum and reversion (Glaeser et al. 2014)</td></tr>
+      <tr><td>Public productivity</td><td>K_g in A with elasticity P77</td><td>0042</td><td>Ramey-Zubairy state-dependent multipliers</td></tr>
+      <tr><td>Demand and the cycle</td><td>Spending on in-flight projects is final demand; time to build gives investment its persistence and accelerator</td><td>8.6, P152</td><td>China 2009 stimulus via the SOE lever (0171); Spain and Ireland 2007-2012</td></tr>
+      <tr><td>Credit cycle</td><td>Construction loans and work in progress as collateral; busts leave unfinished stock</td><td>9.3, 9.13, 0040</td><td>Mortgage credit and crises (Jorda, Schularick and Taylor)</td></tr>
+      <tr><td>Materials and carbon</td><td>Cement and steel in structures; China poured more cement in 2011-13 than the US did in the whole 20th century (Smil)</td><td>0122</td><td>Cement and steel output by country (USGS)</td></tr>
+      <tr><td>Resilience</td><td>Service layers, repair crews, reconstruction priority</td><td>0075, 0086</td><td>Hurricane Maria grid recovery; Hsiang-Jina income paths</td></tr>
+      <tr><td>State reach</td><td>Roads raise reach, so taxes and implementation in remote provinces</td><td>0163</td><td>Night-lights distance gradient</td></tr>
+      <tr><td>Politics (2.0)</td><td>Leakage, patronage, white elephants (Robinson and Torvik 2005); projects as electoral goods</td><td>0046, P6</td><td>Pre-election spending cycles</td></tr>
+      <tr><td>War (2.0)</td><td>Damage, reconstruction backlog, fortifications, bases, military logistics overlay</td><td>0148, 0165, 0086</td><td>Post-war reconstruction episodes</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Who decides and how you play it</h2><span class="eyebrow">split with the companies thread</span></div>
+  <div class="two">
+    <div>
+      <h3>Who decides</h3>
+      <p>The companies thread owns the investor: its objective, the Tobin-q logit of 7.4, financing, SOE weights (0171), foreign owners (0104, 0041). This note owns what an order turns into. The interface is one record:</p>
+      <div class="eq">Order { owner: OwnerId, province, asset, size,
+        coefficients, schedule, soe_override: bool }</div>
+      <p>The queue returns cash calls, completed capacity, and delay or overrun outcomes to the owner. SOE orders can carry negative expected value when the state's investment lever overrides the return rule; the queue accepts them.</p>
+    </div>
+    <div>
+      <h3>Verbs</h3>
+      <ul class="tight">
+        <li><b>Lab, 1.0.</b> Edits ex ante or ex post: add or cancel a project anywhere, change its schedule, shock construction capacity, switch the historical project tape on or off.</li>
+        <li><b>Corridor planner seat, 1.x</b> (0160): build one link, scored on market access against realized cost.</li>
+        <li><b>Steward, 1.3.</b> Public investment budget by class and province, SOE investment, concessions and PPPs, permitting speed, investment tax credits. Private capacity is never placed by click; it responds to prices, credit and incentives.</li>
+        <li><b>Planned economy seat, 1.x.</b> Direct placement of state capacity in countries where the state owns it, which is what Victoria 3's command economy approximates.</li>
+        <li><b>Views.</b> A project map mode (named projects as pins with schedule bars), a construction-capacity heat map, and the bottleneck lens (0155) showing which project waits on which input.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Historical project tape: for the 2000-2024 hindcast, named projects that really happened (Three Gorges, Qinghai-Tibet railway, Golden Quadrilateral, Nord Stream) can come from a tape, like policy in 1.0 (ADR 0136), or be left endogenous. The scorecard reports both lanes.</p>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Comparison with Paradox games</h2><span class="eyebrow">scroll sideways on a phone</span></div>
+  <p class="note">Game descriptions are from my knowledge of the released games (Victoria 3 up to 1.14, EU4, EU5 at its November 2025 release, HOI3, HOI4) and were not re-checked against current patch notes for this note. Treat EU5 details as the least certain.</p>
+  <div class="tbl"><table class="cmp">
+    <thead><tr><th></th><th>Victoria 3</th><th>EU4</th><th>EU5</th><th>HOI3</th><th>HOI4</th><th class="ce">Ceteris (proposed)</th></tr></thead>
+    <tbody>
+      <tr><td>Unit of building</td><td>Building levels in a state</td><td>One building per slot type per province, manufactories, development clicks</td><td>Building levels per location</td><td>Province buildings in the production queue</td><td>Buildings in state slots</td><td class="ce">Capital stock by asset class per enterprise cell; named lumpy projects</td></tr>
+      <tr><td>What limits how much</td><td>Arable land, resource deposits</td><td>Slots from development</td><td>Location population and rank</td><td>Province levels (infrastructure 0-10)</td><td>Slots by state category; 15 factories per project</td><td class="ce">Land, deposits, housing elasticity, sites; money and crews</td></tr>
+      <tr><td>Cost</td><td>Fixed construction points per level</td><td>Fixed ducats</td><td>Gold plus goods from the market</td><td>IC times days</td><td>Fixed civilian industry cost</td><td class="ce">Priced bundle from the ICIO investment column</td></tr>
+      <tr><td>Who builds</td><td>Construction sector buildings make points from goods</td><td>Nobody; money is enough</td><td>Treasury buys goods</td><td>Industrial capacity</td><td>Civilian factories</td><td class="ce">Construction, machinery and IT sectors, with their own labour and capacity</td></tr>
+      <tr><td>Who pays and decides</td><td>Government queue; private queue from the investment pool</td><td>Player</td><td>Player and estates</td><td>Player</td><td>Player</td><td class="ce">Owners by return rule; state and SOEs by budget or lever; foreign owners and aid</td></tr>
+      <tr><td>Time</td><td>Points per week divided over the queue</td><td>Fixed months</td><td>Fixed time</td><td>Days, with serial-run gearing</td><td>Points per day, faster with infrastructure</td><td class="ce">Permit lag plus staged schedule by class, slowed by rationing</td></tr>
+      <tr><td>Half-built state</td><td>Progress bar</td><td>Progress bar</td><td>Progress bar</td><td>Progress bar</td><td>Progress bar</td><td class="ce">Work in progress on the balance sheet; can pause, decay, be written off</td></tr>
+      <tr><td>Overruns and failure</td><td>None</td><td>None</td><td>None</td><td>None</td><td>None</td><td class="ce">Reference-class overrun and delay; abandonment</td></tr>
+      <tr><td>Changing technology</td><td>Switch production method on the existing building</td><td>Flat modifiers</td><td>Modifiers</td><td>Upgrades and practicals</td><td>Modifiers</td><td class="ce">New vintage only; old capacity keeps its mix until it depreciates</td></tr>
+      <tr><td>Depreciation</td><td>None</td><td>None</td><td>Maintenance cost</td><td>None</td><td>None</td><td class="ce">Geometric by asset, PWT rates</td></tr>
+      <tr><td>Effects</td><td>Jobs, output, infrastructure, market access</td><td>Flat income, manpower, trade modifiers</td><td>Production, control via roads</td><td>IC, supply, defence</td><td>Factories, supply, defence</td><td class="ce">Through K, vintages, edge costs, housing, power, A, state reach</td></tr>
+      <tr><td>Destruction</td><td>Little</td><td>Devastation</td><td>Devastation, occupation</td><td>Bombing, repair from IC</td><td>Bombing, repair from civilian factories</td><td class="ce">War and disaster damage, cascades, reconstruction priority</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="two">
+    <div>
+      <h3>What we take</h3>
+      <ul class="tight">
+        <li><b>Victoria 3:</b> construction as a sector that consumes goods. Ceteris already has construction as an ICIO sector; making it the binding constraint is the borrow. Also the public and private queue split, as state budgets against private orders.</li>
+        <li><b>HOI4:</b> a per-project ceiling on parallel effort. Here it is the minimum build time T_a/k_a per stage: more money cannot build a dam in a year.</li>
+        <li><b>HOI3:</b> serial-run gearing, as Wright's-law learning on repeated named projects of one class in one country (Korea's reactor fleet, China's high-speed rail), lab-off until it passes ablation.</li>
+        <li><b>EU5:</b> roads raising control, which is ADR 0163 state reach.</li>
+        <li><b>EU4:</b> great projects, as named megaprojects in the pack with their real 2000 status.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What we leave</h3>
+      <ul class="tight">
+        <li>Building levels and slots as the unit of capital. The data are stocks by asset; levels would need an invented conversion and would make capital lumpy where it is not.</li>
+        <li>Fixed costs and fixed build times. Cost and speed are outcomes of the construction market.</li>
+        <li>Switching production methods in place. It contradicts putty-clay and removes stranded assets, one of the main transition questions.</li>
+        <li>Click-to-place private capacity. In the lab the player is not the investor; in seats only the state places what the state owns.</li>
+        <li>Monarch-point development. Development is the sum of what got built and what it does.</li>
+      </ul>
+    </div>
+  </div>
+  <p>The net difference: in every Paradox game a project is a progress bar with a fixed price. In Ceteris it is a claim on scarce crews and materials, financed by someone who can run out of money, locked into a technology at order, and late more often than not. That is where the interesting outcomes live: stimulus that hits a capacity wall, a boom that strands half-built towers, a transition slowed by turbine and grid lead times.</p>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Where it fits</h2><span class="eyebrow">ADR 0136 phasing</span></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Release</th><th>Phase</th><th>Content</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t10">1.0</span></td><td>P5</td><td>Asset classes, staged pipeline, coefficients at order, work in progress in the invariants, construction capacity and priority, housing completions, public capital, cash calls and abandonment through finance. P10 widened by asset.</td></tr>
+      <tr><td><span class="tag t10">1.0</span></td><td>P8</td><td>Named projects and the 2000 pipeline, endogenous infrastructure (5.5) with 0160 overruns, power plants by class with lead times, land conversion, mines from 0178, cement and steel in the 0122 ledgers.</td></tr>
+      <tr><td><span class="tag t10">1.0</span></td><td>P9</td><td>Validation: PWT investment and capital paths, Golden Quadrilateral, China expressways, China 2009, Spain and Ireland busts, renewables build-out. Project tape lane against the endogenous lane.</td></tr>
+      <tr><td><span class="tag t1x">1.x</span></td><td>P10 and seats</td><td>Corridor planner, Steward public investment and permitting levers, planned economy placement, telecom cables, construction learning (lab-off), project map mode.</td></tr>
+      <tr><td><span class="tag t20">2.0</span></td><td>P6, P7</td><td>Projects in politics (patronage, electoral timing), military construction and fortifications, war damage and reconstruction at scale.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div>
+      <h3>Tests the ADR would carry</h3>
+      <ul class="tight">
+        <li>With T_a at one quarter, k_a at one and no permit lag, results equal the current 7.4 rule bit for bit.</li>
+        <li>Work in progress and capital close the goods and money invariants every tick.</li>
+        <li>A toy stimulus at full construction capacity raises construction prices and delays completions; with slack it does not.</li>
+        <li>The steady-state 2000 pipeline holds still for 100 years with no shocks (0089).</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Data</h3>
+      <ul class="tight">
+        <li>PWT 10 capital by asset and depreciation (CC BY 4.0); EU KLEMS where finer.</li>
+        <li>ICIO investment column by product, already in the pack.</li>
+        <li>Global Energy Monitor trackers for plants under construction and their dates (CC BY 4.0).</li>
+        <li>World Bank Doing Business construction-permit days, 2004-2019 (CC BY 4.0), for the permit lag.</li>
+        <li>IAEA PRIS for reactor build times, and reference-class overrun data, both with licences to check under ADR 0005.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>Decisions for you</h2><span class="eyebrow">recommendation first</span></div>
+  <div class="dec">
+    <div><span class="n">1</span><span class="q">Grain: capital stocks plus named lumpy projects.</span><span class="r">Alternatives: Victoria-style building levels everywhere, or everything continuous with no named projects. Stocks match the data; named projects keep the map legible.</span></div>
+    <div><span class="n">2</span><span class="q">Staged time to build by asset class, slowed by rationing.</span><span class="r">Alternative: keep the instant 7.4 rule. Time to build is what makes stimulus, booms and the energy transition behave as observed.</span></div>
+    <div><span class="n">3</span><span class="q">Construction capacity is the construction sector's priced output.</span><span class="r">Alternative: a separate construction-points pool. Points would duplicate a sector that already exists in the IO table.</span></div>
+    <div><span class="n">4</span><span class="q">Coefficients lock at order.</span><span class="r">Alternative: at completion. Order is what firms commit to; completion-time choice would remove the stranded-asset risk of long projects.</span></div>
+    <div><span class="n">5</span><span class="q">The player places only state capacity; private capacity responds to incentives.</span><span class="r">Alternative: any capacity by click in seats. That would turn Steward into a planner of every economy.</span></div>
+  </div>
+  <p>If you agree, the write-up is three proposed ADRs, numbered from the next free number on main at push time: capital formation and time to build (P5), construction capacity and priority (P5), and named projects, the 2000 pipeline and the project tape (P8).</p>
+</section>
+</div>

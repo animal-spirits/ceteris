@@ -1,0 +1,965 @@
+<title>Ceteris Characters</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: one reading column of atlas plates; the demo breaks out to a two-pane bench (bench grid | inspector). */
+:root {
+  --paper: #EDEFEA;
+  --paper-2: #E3E7E0;
+  --plate: #DCE2DA;
+  --ink: #1C292F;
+  --ink-2: #4A585E;
+  --rule: #C3CCC5;
+  --sea: #BCD1DB;
+  --proof: #AE2459;
+  --branch: #5E45A3;
+  --ok: #2F6B4F;
+  --serif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #141B1F; --paper-2: #1B2429; --plate: #243036; --ink: #E3E7E1; --ink-2: #9CA9AD;
+    --rule: #2F3C42; --sea: #2B4350; --proof: #E2729B; --branch: #A898E4; --ok: #7FC3A0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #141B1F; --paper-2: #1B2429; --plate: #243036; --ink: #E3E7E1; --ink-2: #9CA9AD;
+  --rule: #2F3C42; --sea: #2B4350; --proof: #E2729B; --branch: #A898E4; --ok: #7FC3A0; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+.col { max-width: 760px; display: grid; gap: 16px; min-width: 0; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(32px, 5vw, 46px); line-height: 1.08; letter-spacing: -0.01em; }
+h2 { font-size: 28px; line-height: 1.2; }
+h3 { font-size: 19px; line-height: 1.3; margin-top: 12px; }
+p { margin: 0; max-width: 68ch; }
+.lead { font-family: var(--serif); font-size: 19px; line-height: 1.55; }
+.eyebrow { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); font-weight: 500; }
+.eyebrow b { color: var(--proof); font-weight: 600; }
+a { color: var(--branch); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 70ch; }
+li::marker { color: var(--ink-2); }
+section { display: grid; gap: 20px; }
+.sec-head { display: grid; gap: 6px; border-top: 1px solid var(--ink); padding-top: 12px; }
+.note { font-size: 14px; color: var(--ink-2); }
+.tablebox { overflow-x: auto; border-top: 1px solid var(--rule); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 500; }
+td.k { font-weight: 600; white-space: nowrap; }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.rec { color: var(--ok); } .pill.no { color: var(--proof); } .pill.opt { color: var(--branch); }
+
+/* Bench */
+.bench { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: 1fr; } }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; padding: 14px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.ctl { display: grid; gap: 4px; }
+.ctl label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+select, input[type="text"], textarea {
+  font: inherit; font-size: 15px; color: var(--ink); background: var(--paper-2); border: 1px solid var(--ink-2);
+  border-radius: 3px; padding: 6px 8px; min-width: 0;
+}
+input[type="text"] { width: 9.5em; font-family: var(--mono); font-size: 14px; }
+textarea { width: 100%; min-height: 72px; resize: vertical; }
+button {
+  font: inherit; font-size: 15px; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--ink);
+  border-radius: 3px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { background: var(--paper-2); }
+button.primary { border-color: var(--proof); color: var(--proof); }
+button:disabled { opacity: 0.5; cursor: default; }
+:focus-visible { outline: 2px solid var(--branch); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px 12px; margin-top: 16px; }
+.card { display: grid; gap: 4px; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; border-radius: 2px; }
+.card:hover { background: none; }
+.card svg { width: 100%; height: auto; display: block; border-radius: 2px; outline: 1px solid var(--rule); }
+.card[aria-pressed="true"] svg { outline: 2px solid var(--proof); }
+.card .nm { font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+.card .meta { font-size: 12px; color: var(--ink-2); font-family: var(--mono); }
+.inspector { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; border-left: 1px solid var(--rule); padding-left: 24px; min-width: 0; }
+@media (max-width: 860px) { .inspector { border-left: 0; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 16px; } }
+.big { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 420px) { .big { grid-template-columns: 1fr; } }
+.big svg { width: 100%; height: auto; outline: 1px solid var(--rule); border-radius: 2px; }
+.dossier { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
+.dossier .who { font-family: var(--serif); font-size: 21px; font-weight: 600; line-height: 1.15; }
+.dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+.dl dt { color: var(--ink-2); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 2px; }
+.dl dd { margin: 0; }
+.mem { list-style: none; padding: 0; gap: 4px; }
+.mem li { border-left: 2px solid var(--rule); padding-left: 8px; font-size: 13.5px; }
+.mem li.infl { border-left-color: var(--proof); }
+.bar { height: 6px; background: var(--paper-2); outline: 1px solid var(--rule); position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--proof); }
+.slider { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
+input[type="range"] { width: 100%; accent-color: var(--proof); }
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.strip figure { margin: 0; display: grid; gap: 2px; }
+.strip svg { width: 100%; height: auto; outline: 1px solid var(--rule); border-radius: 2px; }
+.strip figcaption { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: center; }
+pre.genome { margin: 0; min-width: 0; white-space: pre-wrap; word-break: break-all; font-family: var(--mono); font-size: 11.5px; line-height: 1.45; background: var(--paper-2); padding: 10px; overflow-x: auto; max-height: 180px; border-radius: 2px; }
+
+/* Cabinet strip */
+.cabinet { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+.cab-col { display: grid; gap: 10px; align-content: start; }
+.cab-h { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--ink); padding-bottom: 4px; }
+.seat { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; }
+.seat svg, .plate-real { width: 64px; height: 77px; border-radius: 2px; outline: 1px solid var(--rule); }
+.plate-real { background: var(--plate); display: grid; place-items: center; font-family: var(--serif); font-size: 21px; font-weight: 600; letter-spacing: 0.04em; position: relative; overflow: hidden; }
+.plate-real::after { content: ""; position: absolute; inset: 5px; border: 1px solid var(--ink-2); opacity: 0.5; }
+.seat .t { font-size: 13.5px; line-height: 1.3; }
+.seat .t b { display: block; font-size: 14px; }
+.seat .t span { color: var(--ink-2); font-size: 12.5px; }
+.tag { font-family: var(--mono); font-size: 11px; color: var(--proof); }
+.tag.gen { color: var(--branch); }
+
+/* Flow */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+@media (max-width: 760px) { .flow { grid-template-columns: 1fr; } .flow-row .arrow { transform: rotate(90deg); justify-self: center; } }
+.flow-row .box { border: 1px solid var(--ink); padding: 10px; display: grid; gap: 4px; align-content: start; background: var(--paper); }
+.flow-row .box b { font-family: var(--serif); font-size: 16px; }
+.flow-row .box span { font-size: 13px; color: var(--ink-2); }
+.flow-row .box.state { border-style: dashed; }
+.flow-row .arrow { display: grid; place-items: center; color: var(--ink-2); font-family: var(--mono); font-size: 18px; min-height: 26px; }
+.flow-wrap { display: grid; gap: 8px; }
+.flow-row { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+@media (max-width: 760px) { .flow-row { grid-template-columns: 1fr; } .flow-row .arrow { transform: rotate(90deg); } }
+
+/* AI */
+.ai { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 200px); gap: 20px; align-items: start; border: 1px solid var(--rule); padding: 16px; border-radius: 2px; }
+@media (max-width: 640px) { .ai { grid-template-columns: 1fr; } }
+.ai svg { width: 100%; max-width: 200px; height: auto; outline: 1px solid var(--rule); border-radius: 2px; }
+.ai-status { font-size: 13.5px; color: var(--ink-2); min-height: 1.5em; }
+.decide { border: 1px solid var(--proof); padding: 16px; border-radius: 2px; display: grid; gap: 10px; }
+.decide h3 { margin: 0; color: var(--proof); }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px 28px; }
+.cols2 > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.num { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) { .card svg { transition: outline-color 120ms; } }
+</style>
+
+<div class="wrap">
+
+<header class="col">
+  <div class="eyebrow">Ceteris · proposal · 28 October 2026 · <b>not an ADR yet</b></div>
+  <h1>People who remember, faces that age</h1>
+  <p class="lead">Yes, portraits can be generated procedurally. Every face here comes from about 30 numbers and 9 choices, composited from layered parts into a framed, lit bust in the manner of Crusader Kings II, aged by the game date, and stored as nothing more than a seed. The character system behind them can stay thin. People hold offices, carry traits read from public data and a short memory, and act only by choosing among actions their office already has, so the simulation gains a leader time scale without a single scripted event.</p>
+  <p>One choice is yours. DESIGN 23.5 and ADR 0066 say characters never carry real names. A start on 1 January 2000 reads far better with Cardoso, Schröder and Putin in office, and with their successors generated. My recommendation and its safeguards are in <a href="#real">Real people and generated successors</a>.</p>
+</header>
+
+<section id="bench">
+  <div class="col sec-head">
+    <div class="eyebrow">Working demo</div>
+    <h2>The portrait bench</h2>
+    <p>Twelve generated people for one office and country. Pick one to see the same face from 1 January 2000 to 2060, a strip at four ages, a dossier with what they remember from real history up to 2000, and the genome that draws them. Changing the seed changes the people; the same seed always gives the same faces.</p>
+  </div>
+  <div class="bench">
+    <div style="min-width:0">
+      <div class="controls">
+        <div class="ctl"><label for="c-country">Born in</label><select id="c-country"></select></div>
+        <div class="ctl"><label for="c-office">Office</label>
+          <select id="c-office">
+            <option value="hog">Head of government</option>
+            <option value="min">Minister</option>
+            <option value="cb">Central bank governor</option>
+            <option value="gen">General</option>
+            <option value="party">Party leader</option>
+            <option value="act">Protest leader</option>
+          </select></div>
+        <div class="ctl"><label for="c-sex">Sex</label>
+          <select id="c-sex">
+            <option value="data">From data</option>
+            <option value="f">Woman</option>
+            <option value="m">Man</option>
+          </select></div>
+        <div class="ctl"><label for="c-seed">Seed</label><input type="text" id="c-seed" value="ceteris-2000" spellcheck="false"></div>
+        <button id="c-new" type="button">New seed</button>
+      </div>
+      <div class="grid" id="grid" role="list"></div>
+      <p class="note" style="margin-top:14px"><b>These parts are drawn in code as placeholders.</b> CK2's look comes from hand-painted part sprites (heads, eyes, noses, mouths, hair, beards, clothes) composited by the same kind of genome. Shipping quality needs a painted library of about 150 parts in a few skin and age variants, commissioned or drafted by an image model and repainted by hand, never generated per character. The genome, ageing, determinism and storage below carry over unchanged. The framed, painted plate is a portrait-only exception to the flat Modern Atlas panels of ADR 0137.</p>
+      <p class="note">Country sets only skin tone, hair texture and colour, eye colour and names. Face shape is drawn from the same distribution for everyone. "From data" uses an illustrative 30% share of women; the real generator reads the share for the office, country and year (WhoGov, IPU). Pigment priors here are hand-set placeholders, not calibrated values.</p>
+    </div>
+    <aside class="inspector" aria-live="polite">
+      <div class="big">
+        <div id="big"></div>
+        <div class="dossier" id="dossier"></div>
+      </div>
+      <div class="slider">
+        <label for="c-date" class="eyebrow">Date</label>
+        <input type="range" id="c-date" min="2000" max="2060" value="2000" step="1">
+        <span class="mono num" id="c-date-out">2000</span>
+      </div>
+      <div class="strip" id="strip"></div>
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">Genome · <span class="mono" id="ghash"></span></div>
+        <pre class="genome" id="genome"></pre>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section id="real">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 1 of 6</div>
+    <h2>Real people and generated successors</h2>
+    <p>The 2000 world already has its people. The proposal is to start with them, let the simulation decide what happens to them, and generate everyone who enters public life afterwards.</p>
+  </div>
+  <div class="cabinet">
+    <div class="cab-col">
+      <div class="cab-h">Brazil · 1 January 2000</div>
+      <div class="seat"><div class="plate-real" aria-hidden="true">FHC</div><div class="t"><b>Fernando Henrique Cardoso</b><span>President · born 1931</span><br><span class="tag">real person · no generated likeness</span></div></div>
+      <div class="seat"><div class="plate-real" aria-hidden="true">PM</div><div class="t"><b>Pedro Malan</b><span>Minister of Finance · born 1943</span><br><span class="tag">real person</span></div></div>
+      <div class="seat"><div class="plate-real" aria-hidden="true">AF</div><div class="t"><b>Armínio Fraga</b><span>Governor, Central Bank · born 1957</span><br><span class="tag">real person</span></div></div>
+    </div>
+    <div class="cab-col">
+      <div class="cab-h">The same seats · 1 January 2011 · one run</div>
+      <div class="seat" id="seat-a"></div>
+      <div class="seat" id="seat-b"></div>
+      <div class="seat"><div class="plate-real" aria-hidden="true">AF</div><div class="t"><b>Armínio Fraga</b><span>Governor, Central Bank · aged 53</span><br><span class="tag">real person · still in office in this run; left in 2003 in history</span></div></div>
+    </div>
+  </div>
+  <div class="cols2">
+    <div>
+      <h3>Who starts real</h3>
+      <ul>
+        <li><b>Incumbents</b> on 1 January 2000: heads of state and government, cabinets, central bank governors, party leaders, service chiefs. Positions and dates from Wikidata (CC0, position held with start and end), cabinets from WhoGov, entry manner and earlier tenures from Archigos and REIGN.</li>
+        <li><b>The bench</b>: people in public life in 2000 who could plausibly rise, such as national legislators, governors, capital mayors and deputy ministers. Many real 2000s leaders were on such a bench in 2000.</li>
+        <li><b>Coverage is uneven</b>: Wikidata knows far more about Swedish deputies than about Chadian ones. Every state's bench is filled to the same size with generated people, so documentation does not become political advantage.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What the simulation owns</h3>
+      <ul>
+        <li><b>No real dates after 2000.</b> A real person ages under the life tables of 13.5 and leaves office by the hazards of ADR 0066. Their real death, defeat or scandal never fires by date. Real post-2000 careers are validation targets (0107), never inputs.</li>
+        <li><b>No hindsight in traits.</b> Latent traits of real people come only from priors on what was public before 2000: age, education, military record, party, earlier record in office. Nobody hand-sets "risk-loving" for a named leader; that would be both defamatory and a leak of the holdout.</li>
+        <li><b>Everyone later is generated</b>, materialised from the pop cells that would have produced them (see <a href="#careers">Careers</a>). Generated names are checked against Wikidata's living notable people and redrawn on a match.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="decide">
+    <h3>Decision needed: real names</h3>
+    <p>DESIGN 23.5 says characters are "generated people with generic names, never real ones". Three ways forward:</p>
+    <ul>
+      <li><span class="pill rec">recommended</span> <b>Real 2000 roster, generated after.</b> Real names and public facts for incumbents and the bench; generated everyone else. Extended profile shows names; the lab shows role labels ("Head of government, Brazil") so papers never cite a fictional Cardoso. A run-level "Real names" switch can turn every real person into a generated stand-in with the same public facts.</li>
+      <li><b>Real facts, generated names.</b> The current spec: 2000 offices are seeded from real records, but names and faces are invented.</li>
+      <li><b>Fully generated.</b> Real records only as validation data.</li>
+    </ul>
+    <p class="note">With real names, the simulation will show real living people doing things they never did, including orders under ADR 0154. Safeguards: chronicle exports and postcards carry a "counterfactual run" line; real people never get a generated face (next section); shared timelines (0132) keep the run's names setting so a viewer can switch it.</p>
+  </div>
+</section>
+
+<section id="traits">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 2 of 6</div>
+    <h2>Traits grounded in data</h2>
+    <p>Observables come from data and are visible. Latent traits are drawn from priors conditioned on those observables and stay hidden, seen only through the dossier signals of 23.5. Every effect is a bounded parameter in the register (17), and every one has a published estimate to hit.</p>
+  </div>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Trait</th><th>At t = 0 from</th><th>Enters the model as</th><th>Bounded by</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Age, sex, birthplace</td><td>Wikidata; PLAD for leaders' birth regions</td><td>Mortality (13.5); spending tilt toward the birth region</td><td>Hodler and Raschky (2014): night lights rise in leaders' birth regions</td></tr>
+        <tr><td class="k">Military and rebel past</td><td>LEAD (Ellis, Horowitz and Stam 2015), to 2004</td><td>Risk weight in war and crisis choices</td><td>Horowitz and Stam (2014): former rebels and non-combat veterans initiate more disputes</td></tr>
+        <tr><td class="k">Education and profession</td><td>Wikidata, LEAD</td><td>Implementation slippage; reform propensity</td><td>Besley, Montalvo and Reynal-Querol (2011); Dreher et al. (2009) on profession and reform</td></tr>
+        <tr><td class="k">Lived inflation</td><td>Country CPI history over the person's life</td><td>Hawkishness of a governor within the regime's Taylor band</td><td>Malmendier, Nagel and Yan (2021): FOMC members who lived high inflation vote hawkish</td></tr>
+        <tr><td class="k">Entry manner, tenure, fear of fate</td><td>Archigos, REIGN</td><td>Irregular-exit hazard, value of staying (ADR 0066)</td><td>Archigos tenure and exit distributions by regime</td></tr>
+        <tr><td class="k">Ideology</td><td>Party position (V-Party, ParlGov, Manifesto)</td><td>Planner weights in the policy space (10.5)</td><td>Party positions; individual offset small</td></tr>
+        <tr><td class="k">Competence, loyalty</td><td>Latent; prior shifted by selection (Egorov and Sonin 2011)</td><td>Planner noise (12.3); slippage on the minister's module</td><td>Jones and Olken (2005); Easterly and Pennings (2020) find most leader growth effects are noise</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Licences: Wikidata is CC0. Archigos states none, and REIGN, LEAD, WhoGov and PLAD are still to check. Under the 28 October decision that each user downloads their own data, these can be inputs either way.</p>
+</section>
+
+<section id="memory">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 3 of 6</div>
+    <h2>Memory</h2>
+    <p>This is the gap the Dwarf Fortress comparison named. A character's memory is small, typed and deterministic, and it acts only through parameters that already exist.</p>
+  </div>
+  <div class="cols2">
+    <div>
+      <h3>What a character holds</h3>
+      <ul>
+        <li><b>Lived macro experience</b>: the declining-weight kernel of Malmendier and Nagel over inflation, unemployment, war and crisis years. This is ADR 0139's experience kernel at the level of one person, so the bench demo's inflation bar is the same mechanism.</li>
+        <li><b>Episodes</b>: the 16 most salient events the person took part in (a coup survived, an election lost, a war commanded, a purge, an exile), each an event id from the log, a counterpart, a valence and a tick. Salience decays; new episodes push out the weakest.</li>
+        <li><b>Relations</b>: typed edges (patron, protégé, ally, rival, betrayed by, purged by), created only by logged events such as an appointment, a coalition break or a dismissal.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What memory may change</h3>
+      <ul>
+        <li>Expectations and hawkishness, through the experience kernel.</li>
+        <li>Coalition bargaining costs (10.5) between people with a grudge, and the chance of joining a coup against someone who purged you.</li>
+        <li>Risk aversion after a lost war or a near-miss crisis.</li>
+        <li>Nothing else. With memory weights at zero, the model reproduces ADR 0066 bit for bit, which is the nesting test.</li>
+      </ul>
+      <p class="note">Cost: about 200 bytes per person. With about 30 office holders and 150 bench members per state, roughly 36,000 people are live at once and about 150,000 over a 50-year run, around 30 MB.</p>
+    </div>
+  </div>
+</section>
+
+<section id="careers">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 4 of 6</div>
+    <h2>Careers</h2>
+    <p>Offices are slots in a graph per state; people move between them by actions and hazards, and new people enter from the population rather than from a random table.</p>
+  </div>
+  <div class="cols2">
+    <div>
+      <ul>
+        <li><b>Office graph</b> per state from the constitution (Comparative Constitutions Project, V-Dem): head of state, head of government, portfolios, central bank, party leaderships, service chiefs and HQ commanders (ADR 0147), governors.</li>
+        <li><b>Pools</b> feed the graph: party ranks, legislature, civil service, officer corps (ADR 0146), business owners, academia, protest leaders (10.8).</li>
+        <li><b>Moves</b>: an appointment is an action of the appointer, scored by the loyalty and competence trade-off; elections pick party leaders; officers rise by merit or patronage, and medals inflate with patronage (23.5); exits follow scandal, health, purge and defeat hazards.</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li><b>Lazy materialisation</b>: a 2035 prime minister was born around 1975 and exists in 2000 only as part of a pop cell. A person is instantiated when they first enter a pool, with a biography backdated from that cell's history (birth year, region, schooling, what they lived through).</li>
+        <li><b>Composition is emergent</b>: who reaches office depends on the pop cells that feed each pool and on the sim's selection (education, class, region, group access to power from EPR). The generator puts no ethnic or gender quota on offices; under-representation has to come from mechanisms and is checked against WhoGov and IPU shares.</li>
+        <li><b>Names</b> from Wikidata given-name and family-name frequencies by birth region, with Fluent grammars for order and form (family-first, patronymics, double surnames), reusing the ADR 0143 tooling.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="act">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 5 of 6</div>
+    <h2>Characters act only through interventions</h2>
+    <p>A character has no verbs of its own. Traits and memory set the parameters of the planner that already chooses for the office; the choice is written to the intervention list like any player action, with the character as author.</p>
+  </div>
+  <div class="flow-row" role="img" aria-label="Traits and memory set planner parameters, the office's planner picks an action, the action enters the intervention list, the simulation applies it, logged events update memory.">
+    <div class="box state"><b>Traits and memory</b><span>Observables, latent draws, experience kernel, relations</span></div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Planner parameters</b><span>Weights, noise, Taylor coefficients, slippage, risk</span></div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Office's action space</b><span>The same menu a player in that seat has</span></div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Intervention list</b><span>Action with author = character id, tick, seed stream</span></div>
+    <div class="arrow">→</div>
+    <div class="box state"><b>Simulation and event log</b><span>Consequences; events write episodes and relations back</span></div>
+  </div>
+  <ul class="col" style="max-width:70ch">
+    <li>A player in a seat replaces the planner, not the person. A minister you appoint still carries their slippage, so appointments matter to players too.</li>
+    <li>Appointments, dismissals and purges are actions as well; births, deaths and memory updates are logged events. Replays and forks need nothing new.</li>
+    <li>Character RNG streams are keyed by (entity id, purpose), following the entity-ID rule of 14.4, so two branches keep the same people until their histories differ. That is what the alternate-lives view of ADR 0132 needs.</li>
+    <li>Generals are characters on the same record. ADR 0147 already lists "P6 characters" as its dependency; dossiers, latency modifiers and order adjustment by risk aversion attach there.</li>
+  </ul>
+</section>
+
+<section id="gate">
+  <div class="col sec-head">
+    <div class="eyebrow">Character system · 6 of 6</div>
+    <h2>Lab and extended profile</h2>
+    <p>Per ADR 0136, characters ship in the extended profile with P6 (2.0-alpha) and become a lab default at 4.0 only if they pass ablation (15.7). The lab keeps the stochastic leader attributes until then, and the nesting test guarantees the two agree when traits sit at role means and memory weights are zero.</p>
+  </div>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Ablation test</th><th>Passes when</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Leader deaths</td><td>Simulated natural deaths in office change growth as in Jones and Olken (2005): clearly in autocracies, close to nothing in democracies.</td></tr>
+        <tr><td class="k">Leader value added</td><td>The spread of simulated leader effects stays within Easterly and Pennings (2020), who find most are indistinguishable from noise.</td></tr>
+        <tr><td class="k">Birth-region favouritism</td><td>Night lights in leaders' birth regions rise by about the Hodler and Raschky (2014) estimate during tenure.</td></tr>
+        <tr><td class="k">Military background</td><td>Dispute initiation by leaders' background has the sign and rough size of Horowitz and Stam (2014).</td></tr>
+        <tr><td class="k">Hawks and doves</td><td>Governors' policy-rate deviations rise with lived inflation as in Malmendier, Nagel and Yan (2021).</td></tr>
+        <tr><td class="k">Forecast cost</td><td>Out-of-sample macro scores with characters are no worse than without (the 15.7 rule).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="portraits">
+  <div class="col sec-head">
+    <div class="eyebrow">Portraits · 1 of 4</div>
+    <h2>Four ways to get a face</h2>
+    <p>Procedural SVG is the base. A connected model can write a genome for it; image generation is a hand-commissioned extra; real people get no face at all by default.</p>
+  </div>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Way</th><th>How</th><th>Good at</th><th>Weak at</th><th>Use for</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Procedural composite</td><td>Layered painted parts (head, ears, eyes, brows, nose, mouth, 13 hair styles, facial hair, glasses, dress by office) placed, tinted and aged by a genome, CK2's own method; rendered by <code>resvg</code> or as sprites in the app</td><td>Offline, free, identical on every machine, ages smoothly, any number of people</td><td>Only as good as the painted parts library, which is the real cost (about 150 parts)</td><td><span class="pill rec">default</span> every generated person</td></tr>
+        <tr><td class="k">Model writes the genome</td><td>"Describe them": a connected model returns genome values, the procedural renderer draws them. Same BYO-key adapter as ADR 0142; try it below</td><td>Cheap (one small call), keeps the style, still ages, still stored as numbers</td><td>Only as expressive as the parts library</td><td><span class="pill opt">opt-in</span> characters the player cares about</td></tr>
+        <tr><td class="k">Image model, BYO key</td><td>Raster portrait from a fixed style prompt plus a reference render of the genome, stored by content hash</td><td>Richer, painterly</td><td>Cost per image; drifts across ages and providers; known stereotyping biases; 100-300 KB each; style clashes with the atlas unless processed</td><td><span class="pill opt">opt-in</span> a commissioned portrait for a seat holder, never for the whole cast</td></tr>
+        <tr><td class="k">Real photographs</td><td>Wikimedia Commons, fetched on the user's machine, licence per file</td><td>Accurate for the 2000 record</td><td>A real face beside counterfactual acts; licences vary; many leaders lack a free photo</td><td><span class="pill no">off by default</span> dossier only, labelled with the photo's year</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="ai" id="ai">
+    <div style="display:grid;gap:10px;min-width:0">
+      <div class="eyebrow">Try it · model writes the genome</div>
+      <label for="ai-text" class="note">Describe a fictional person. The model returns only numbers for the generator; it is told to refuse real, identifiable people and to never set face shape from ancestry.</label>
+      <textarea id="ai-text">A gaunt finance minister in her late fifties, silver bob, heavy-rimmed glasses, a narrow face and a slight, guarded smile.</textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="primary" id="ai-go" type="button">Draft genome</button><button id="ai-stop" type="button" hidden>Stop</button></div>
+      <div class="ai-status" id="ai-status">Uses your Claude account; you will be asked to allow it on the first draft.</div>
+    </div>
+    <div id="ai-out"></div>
+  </div>
+</section>
+
+<section id="sensitivity">
+  <div class="col sec-head">
+    <div class="eyebrow">Portraits · 2 of 4</div>
+    <h2>Real leaders and plausibility without caricature</h2>
+  </div>
+  <div class="cols2">
+    <div>
+      <h3>Real people</h3>
+      <ul>
+        <li>No generated likeness of a real person, procedural or AI. A drawn "likeness" of a real leader is a caricature by construction, and an AI one is a deepfake of a public figure; most providers refuse them anyway.</li>
+        <li>Real people get a plate: monogram, name, office and dates, in the seat's letterhead style (ADR 0141), as in the Brazil columns above.</li>
+        <li>Optional Commons photo in the dossier only, never on event cards beside counterfactual acts, with author, licence and year.</li>
+        <li>The "Real names" switch replaces each real person with a generated stand-in, who then gets a procedural face.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Rules for generated faces</h3>
+      <ul>
+        <li>Geometry is independent of origin. Head, jaw, eyes, lids, nose and lips come from one distribution for everyone; no part exists only for one group.</li>
+        <li>Origin may set only skin tone, hair texture, hair colour and eye colour, each a broad overlapping distribution.</li>
+        <li>Pigment is a property of a person's ancestral cell, carried by migration (section 6), and never a lookup from an EPR group name, in line with ADR 0141's ban on ethnicity as a skin.</li>
+        <li>Dress by office and era, never by identity: suits, uniforms, open collars. No costume, and no religious dress unless the office's own protocol carries it (an open question for clerical offices).</li>
+        <li>Lint, as for flags: a contrast check, a cap on extreme parameter combinations, and a review of the parts library by people from the regions it draws.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="age">
+  <div class="col sec-head">
+    <div class="eyebrow">Portraits · 3 of 4</div>
+    <h2>Age progression</h2>
+    <p>Age is not stored in the face. The renderer takes the genome and the age on the game date, so one face covers a whole career. Each effect has its own onset and rate in the genome, which is why two people of the same age look different.</p>
+  </div>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Effect</th><th>Onset</th><th>Rule in the demo</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Greying</td><td>28 to 48</td><td>Hair, then brows and beard, blend toward grey, then white</td></tr>
+        <tr><td class="k">Hairline</td><td>25 to 50 if the person carries the trait</td><td>Recedes over 15 to 35 years, ending in a horseshoe pattern; slight for everyone else</td></tr>
+        <tr><td class="k">Lines</td><td>From about 30</td><td>Forehead lines, crow's feet, nasolabial folds and eye bags deepen together</td></tr>
+        <tr><td class="k">Jowls and weight</td><td>From 45; weight to 65</td><td>Jaw widens, chin lowers, face and neck fill out</td></tr>
+        <tr><td class="k">Nose and ears</td><td>From 30</td><td>Grow slowly through life</td></tr>
+        <tr><td class="k">Reading glasses</td><td>38 to 62, or always if short-sighted</td><td>Frame style fixed for life</td></tr>
+        <tr><td class="k">Lips</td><td>From 30</td><td>Thin with age</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Health events (ADR 0066, 13.5) could later add visible frailty. Kept out for now: showing an illness the player cannot verify would leak hidden state.</p>
+</section>
+
+<section id="determinism">
+  <div class="col sec-head">
+    <div class="eyebrow">Portraits · 4 of 4</div>
+    <h2>Determinism and storage</h2>
+  </div>
+  <div class="cols2">
+    <div>
+      <ul>
+        <li><b>Store the seed, not the image.</b> Face parameters derive from a hash of (character id, "face"), outside the simulation's RNG, so faces cost no state and changing the generator never moves a state hash.</li>
+        <li><b>Only four inputs are state</b>: birth date, sex, ancestral cell and office. The renderer is a pure function of those, the face hash and the date.</li>
+        <li><b>Versioned generator.</b> Faces can change between app versions (a better nose part). The app version is already in the run hash rule of ADR 0128, and the face hash is printed under every portrait.</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li><b>Edits are edits.</b> A player who adjusts a face or accepts a model's genome stores the changed numbers (about 100 bytes) as an edit in the run file (14.2), exactly like a chosen flag or name.</li>
+        <li><b>Raster portraits by hash.</b> A commissioned image goes to a side asset store under its content hash; the edit references the hash; shared runs (0128, 0132) carry the asset. Replays never call a model.</li>
+        <li><b>Cache</b> rendered textures by (face hash, age in years, generator version); a 200 by 240 portrait renders in well under a millisecond with <code>resvg</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="col sec-head">
+    <div class="eyebrow">Next</div>
+    <h2>Build order and proposed ADRs</h2>
+    <p>Everything lands with P6 (2.0-alpha), as DESIGN 23.9 places characters; the face crate has no dependencies and could be built earlier as a side project. Estimates are in part-time weeks.</p>
+  </div>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Step</th><th>Contents</th><th class="num">Weeks</th><th>ADR</th></tr></thead>
+      <tbody>
+        <tr><td class="k">C1 Record and roster</td><td>Character record, office graph, 2000 roster and bench import (Wikidata, WhoGov, Archigos, REIGN), succession wired to 0066</td><td class="num">5 to 7</td><td>0183</td></tr>
+        <tr><td class="k">C2 Traits</td><td>Observables, latent priors, dossier signals, register entries</td><td class="num">3 to 4</td><td>0184</td></tr>
+        <tr><td class="k">C3 Memory</td><td>Experience kernel per person, episodes, relations</td><td class="num">3 to 4</td><td>0185</td></tr>
+        <tr><td class="k">C4 Careers</td><td>Pools, lazy materialisation, name grammars, real-name collision check</td><td class="num">4 to 6</td><td>0186</td></tr>
+        <tr><td class="k">C5 Legends views</td><td>Dossiers, careers and episodes in the 0078 legends browser</td><td class="num">2 to 3</td><td>(0078)</td></tr>
+        <tr><td class="k">P1 Faces</td><td><code>ceteris-faces</code> crate: parts library, ageing, plates, lint</td><td class="num">4 to 6</td><td>0187</td></tr>
+        <tr><td class="k">P2 Model genome</td><td>"Describe them" on the 0142 provider adapter</td><td class="num">1</td><td>0187</td></tr>
+        <tr><td class="k">P3 Commissioned image</td><td>Optional raster portrait, asset store by hash</td><td class="num">2</td><td>0187</td></tr>
+        <tr><td class="k">G Ablation</td><td>The six tests above, for the 4.0 gate</td><td class="num">3 to 4</td><td>0184</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Total about 27 to 37 part-time weeks, of which the faces are 7 to 9. The ADRs would follow the names decision above.</p>
+</section>
+
+</div>
+
+<script>
+(() => {
+const INK = '#1C292F';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const L = (a, b, t) => a + (b - a) * t;
+function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
+function rng(key) { let a = fnv(key); return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const normal = r => { const u = Math.max(r(), 1e-9), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const pickW = (ws, x) => { const s = ws.reduce((a, b) => a + b, 0); let acc = 0; for (let i = 0; i < ws.length; i++) { acc += ws[i] / s; if (x < acc) return i; } return ws.length - 1; };
+const pick = (arr, r) => arr[Math.floor(r() * arr.length)];
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgb2hex(c) { return '#' + c.map(v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0')).join(''); }
+function mix(a, b, t) { const x = hex2rgb(a), y = hex2rgb(b); return rgb2hex(x.map((v, i) => L(v, y[i], t))); }
+const SKIN = ['#F7DFCF', '#F0D0BA', '#E7BFA0', '#DAA984', '#C99168', '#B47A52', '#9A6340', '#805033', '#673E27', '#4F2E1D'];
+function skinAt(t) { const x = clamp(t, 0, 1) * (SKIN.length - 1), i = Math.min(Math.floor(x), SKIN.length - 2); return mix(SKIN[i], SKIN[i + 1], x - i); }
+const HAIR = ['#1F1B1A', '#3A2A21', '#5A3F2C', '#86664A', '#C2A36B', '#8A4528'];
+const EYES = ['#3A2618', '#5A3A22', '#6B6A3C', '#5B7893', '#7B888D'];
+const GREY = '#BDBBB4', WHITE = '#ECEBE6';
+
+// Illustrative priors: mixture components of skin tone (mean, sd on the ramp), hair texture
+// [straight, wavy, curly, coily], hair colour weights over HAIR, and the chance of light eyes.
+const C = (w, m, sd, tex, hair, eyeLight) => ({ w, skin: [m, sd], tex, hair, eyeLight });
+const COUNTRIES = {
+  BR: { name: 'Brazil', comps: [C(.48, .2, .08, [.45, .4, .15, 0], [.25, .4, .25, .07, .02, .01], .2), C(.43, .45, .12, [.3, .35, .3, .05], [.7, .27, .03, 0, 0, 0], .03), C(.09, .76, .1, [0, .08, .35, .57], [.97, .03, 0, 0, 0, 0], 0)],
+    names: [{ m: ['João', 'Carlos', 'Paulo', 'Marcos', 'Luiz', 'Ricardo', 'Eduardo', 'Sérgio', 'Roberto', 'Antônio'], f: ['Maria', 'Ana', 'Cláudia', 'Fernanda', 'Patrícia', 'Luciana', 'Mariana', 'Renata', 'Beatriz', 'Sônia'], s: ['Silva', 'Santos', 'Oliveira', 'Souza', 'Pereira', 'Costa', 'Rodrigues', 'Almeida', 'Nascimento', 'Carvalho', 'Ferreira', 'Barbosa'] }], fmt: 'given s s',
+    ep: [[1964, 1985, 'military rule'], [1980, 1994, 'high inflation, hyperinflation from 1989', 1], [1990, 1990, 'the Collor deposit freeze'], [1999, 1999, 'the real devaluation']] },
+  DE: { name: 'Germany', comps: [C(.92, .1, .05, [.55, .38, .07, 0], [.08, .3, .32, .18, .1, .02], .55), C(.08, .3, .08, [.5, .35, .15, 0], [.6, .35, .05, 0, 0, 0], .05)],
+    names: [{ m: ['Thomas', 'Michael', 'Andreas', 'Stefan', 'Frank', 'Jürgen', 'Klaus', 'Wolfgang', 'Markus', 'Peter'], f: ['Sabine', 'Petra', 'Andrea', 'Claudia', 'Susanne', 'Birgit', 'Monika', 'Katrin', 'Ute', 'Heike'], s: ['Müller', 'Schmidt', 'Schneider', 'Fischer', 'Weber', 'Meyer', 'Wagner', 'Becker', 'Hoffmann', 'Schulz'] }], fmt: 'given s',
+    ep: [[1961, 1989, 'a divided Berlin'], [1973, 1974, 'the first oil shock'], [1990, 1990, 'reunification'], [1992, 1993, 'the ERM crisis']] },
+  NG: { name: 'Nigeria', comps: [C(1, .82, .08, [0, .02, .18, .8], [.97, .03, 0, 0, 0, 0], 0)],
+    names: [{ m: ['Adebayo', 'Oluwaseun', 'Tunde', 'Segun', 'Babatunde'], f: ['Funmilayo', 'Folake', 'Bisi', 'Yetunde', 'Titilayo'], s: ['Adeyemi', 'Ogunleye', 'Balogun', 'Adebanjo', 'Olawale'] },
+      { m: ['Chukwuemeka', 'Emeka', 'Obinna', 'Nnamdi', 'Ikenna'], f: ['Chiamaka', 'Adaeze', 'Ifeoma', 'Nkechi', 'Uchenna'], s: ['Okafor', 'Okonkwo', 'Eze', 'Nwosu', 'Obi'] },
+      { m: ['Ibrahim', 'Musa', 'Abdullahi', 'Usman', 'Aliyu'], f: ['Amina', 'Hauwa', 'Zainab', 'Fatima', 'Hadiza'], s: ['Bello', 'Abubakar', 'Danjuma', 'Garba', 'Sani'] }], fmt: 'given s',
+    ep: [[1966, 1979, 'military rule'], [1967, 1970, 'the civil war'], [1983, 1999, 'military rule'], [1993, 1995, 'high inflation', 1]] },
+  IN: { name: 'India', comps: [C(1, .52, .12, [.45, .4, .15, 0], [.88, .12, 0, 0, 0, 0], .02)],
+    names: [{ m: ['Rajesh', 'Sanjay', 'Anil', 'Vikram', 'Alok'], f: ['Sunita', 'Kavita', 'Rekha', 'Anjali', 'Neelam'], s: ['Sharma', 'Gupta', 'Verma', 'Mishra', 'Agarwal'] },
+      { m: ['Suresh', 'Ramesh', 'Venkatesh', 'Arun', 'Krishnan'], f: ['Lakshmi', 'Meena', 'Padma', 'Radha', 'Shanthi'], s: ['Reddy', 'Iyer', 'Nair', 'Pillai', 'Rao'] },
+      { m: ['Mohammed', 'Imran', 'Salim', 'Arif', 'Javed'], f: ['Farah', 'Ayesha', 'Nasreen', 'Shabana', 'Rukhsana'], s: ['Khan', 'Ansari', 'Qureshi', 'Siddiqui', 'Shaikh'] }], fmt: 'given s',
+    ep: [[1971, 1971, 'the war of 1971'], [1975, 1977, 'the Emergency'], [1991, 1991, 'the balance-of-payments crisis and liberalisation']] },
+  JP: { name: 'Japan', comps: [C(1, .17, .05, [.85, .13, .02, 0], [.92, .08, 0, 0, 0, 0], 0)],
+    names: [{ m: ['Hiroshi', 'Takeshi', 'Kenji', 'Makoto', 'Satoshi', 'Kazuo', 'Akira'], f: ['Keiko', 'Yoko', 'Naoko', 'Kumiko', 'Yumiko', 'Akiko', 'Emiko'], s: ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Nakamura'] }], fmt: 's given',
+    ep: [[1973, 1974, 'the oil shock and 20% inflation', 1], [1990, 1999, 'the bubble’s collapse and stagnation']] },
+  TR: { name: 'Türkiye', comps: [C(1, .25, .08, [.45, .4, .15, 0], [.45, .4, .12, .03, 0, 0], .12)],
+    names: [{ m: ['Mehmet', 'Mustafa', 'Ahmet', 'Ali', 'Hüseyin', 'Hasan', 'Murat'], f: ['Fatma', 'Ayşe', 'Emine', 'Hatice', 'Zeynep', 'Elif', 'Meryem'], s: ['Yılmaz', 'Kaya', 'Demir', 'Şahin', 'Çelik', 'Yıldız', 'Öztürk'] }], fmt: 'given s',
+    ep: [[1977, 1999, 'chronic high inflation', 1], [1980, 1983, 'military rule after the 1980 coup'], [1994, 1994, 'the currency crisis']] },
+  EG: { name: 'Egypt', comps: [C(1, .42, .1, [.25, .35, .35, .05], [.78, .2, .02, 0, 0, 0], .03)],
+    names: [{ m: ['Mohamed', 'Ahmed', 'Mahmoud', 'Mostafa', 'Hassan', 'Khaled', 'Tarek'], f: ['Mona', 'Hoda', 'Nadia', 'Amal', 'Rania', 'Dina', 'Heba'], s: ['El-Sayed', 'Abdel-Rahman', 'Mansour', 'Farouk', 'Gaber', 'Shalaby', 'Soliman'] }], fmt: 'given father s',
+    ep: [[1967, 1967, 'the Six-Day War'], [1973, 1973, 'the October War'], [1977, 1977, 'the bread riots'], [1986, 1992, 'high inflation and the IMF programme', 1]] },
+  ID: { name: 'Indonesia', comps: [C(1, .42, .08, [.6, .3, .1, 0], [.92, .08, 0, 0, 0, 0], 0)],
+    names: [{ m: ['Budi', 'Agus', 'Bambang', 'Hendra', 'Rudi', 'Wahyu', 'Dedi'], f: ['Sri', 'Dewi', 'Siti', 'Rina', 'Endang', 'Yuni', 'Ratna'], s: ['Santoso', 'Wijaya', 'Susanto', 'Hidayat', 'Kurniawan', 'Setiawan', 'Saputra'] }], fmt: 'given s',
+    ep: [[1965, 1966, 'the upheaval of 1965-66'], [1966, 1968, 'hyperinflation', 1], [1997, 1998, 'the Asian crisis and the fall of Suharto', 1]] },
+  MX: { name: 'Mexico', comps: [C(.6, .38, .1, [.6, .3, .1, 0], [.75, .22, .03, 0, 0, 0], .03), C(.35, .2, .08, [.5, .38, .12, 0], [.35, .4, .18, .05, .02, 0], .2), C(.05, .7, .1, [0, .1, .4, .5], [.95, .05, 0, 0, 0, 0], 0)],
+    names: [{ m: ['José', 'Juan', 'Luis', 'Jorge', 'Miguel', 'Francisco', 'Alejandro'], f: ['María', 'Guadalupe', 'Verónica', 'Patricia', 'Alejandra', 'Gabriela', 'Leticia'], s: ['Hernández', 'García', 'Martínez', 'López', 'González', 'Pérez', 'Ramírez', 'Flores', 'Sánchez'] }], fmt: 'given s s',
+    ep: [[1982, 1988, 'the debt crisis and high inflation', 1], [1994, 1995, 'the tequila crisis']] },
+  SE: { name: 'Sweden', comps: [C(1, .06, .04, [.6, .35, .05, 0], [.05, .15, .3, .25, .22, .03], .75)],
+    names: [{ m: ['Lars', 'Anders', 'Johan', 'Per', 'Erik', 'Mikael', 'Karl'], f: ['Anna', 'Eva', 'Karin', 'Kristina', 'Lena', 'Ingrid', 'Birgitta'], s: ['Andersson', 'Johansson', 'Karlsson', 'Nilsson', 'Eriksson', 'Larsson', 'Persson'] }], fmt: 'given s',
+    ep: [[1975, 1982, 'double-digit inflation', 1], [1990, 1994, 'the banking crisis'], [1992, 1992, 'the krona’s float after 500% overnight rates']] },
+  US: { name: 'United States', comps: [C(.69, .1, .06, [.5, .38, .12, 0], [.1, .3, .3, .15, .12, .03], .45), C(.125, .32, .12, [.5, .35, .15, 0], [.7, .25, .05, 0, 0, 0], .05), C(.123, .72, .12, [0, .05, .3, .65], [.97, .03, 0, 0, 0, 0], 0), C(.036, .2, .06, [.85, .13, .02, 0], [.92, .08, 0, 0, 0, 0], 0)],
+    names: [{ m: ['James', 'Robert', 'Michael', 'David', 'William', 'Richard', 'Mark'], f: ['Mary', 'Patricia', 'Linda', 'Barbara', 'Susan', 'Karen', 'Nancy'], s: ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Anderson'] }], fmt: 'given mi s',
+    ep: [[1965, 1973, 'the Vietnam draft years'], [1973, 1981, 'high inflation', 1], [1987, 1987, 'the 1987 crash']] },
+  CN: { name: 'China', comps: [C(1, .2, .06, [.85, .13, .02, 0], [.93, .07, 0, 0, 0, 0], 0)],
+    names: [{ m: ['Wei', 'Jun', 'Qiang', 'Lei', 'Jianguo', 'Ming', 'Gang'], f: ['Fang', 'Min', 'Jing', 'Xiuying', 'Yan', 'Hong', 'Juan'], s: ['Wang', 'Li', 'Zhang', 'Liu', 'Chen', 'Yang', 'Huang', 'Zhao'] }], fmt: 's given',
+    ep: [[1959, 1961, 'the Great Famine'], [1966, 1976, 'the Cultural Revolution'], [1988, 1989, 'high inflation', 1], [1993, 1995, 'high inflation', 1]] },
+};
+const OFFICES = { hog: 'Head of government', min: 'Minister', cb: 'Central bank governor', gen: 'General', party: 'Party leader', act: 'Protest leader' };
+const UKEYS = ['faceW', 'jaw', 'skull', 'chin', 'chinW', 'eyeY', 'eyeSep', 'eyeW', 'eyeH', 'eyeTilt', 'lid', 'browW', 'browArch', 'browTilt', 'noseLen', 'noseW', 'mouthW', 'lipT', 'mouthOff', 'smile', 'ear', 'weight', 'hairline', 'greyOnset', 'greyRate', 'baldOnset', 'baldRate', 'glassOn', 'suitCol', 'tieCol', 'neck'];
+const STYLES = {
+  m: [['crop', 'sidepart', 'swept', 'sidepart'], ['crop', 'sidepart', 'swept'], ['crop', 'curlytop'], ['closecrop', 'closecrop', 'shortafro']],
+  f: [['bob', 'long', 'bun', 'pixie', 'sidebob'], ['bob', 'long', 'bun', 'sidebob'], ['bob', 'curlylong', 'bun'], ['afro', 'bun', 'closecrop', 'bob']],
+};
+const ALL_STYLES = ['crop', 'closecrop', 'sidepart', 'swept', 'curlytop', 'shortafro', 'pixie', 'bob', 'sidebob', 'long', 'bun', 'curlylong', 'afro'];
+const FH = ['none', 'none', 'none', 'none', 'moustache', 'short', 'short', 'full', 'goatee'];
+
+function makeName(c, sex, r) {
+  const g = pick(c.names, r), given = pick(g[sex], r);
+  const s1 = pick(g.s, r); let s2 = pick(g.s, r); if (s2 === s1) s2 = g.s[(g.s.indexOf(s1) + 1) % g.s.length];
+  switch (c.fmt) {
+    case 'given s s': return `${given} ${s1} ${s2}`;
+    case 's given': return `${s1} ${given}`;
+    case 'given father s': return `${given} ${pick(g.m.filter(x => x !== given), r)} ${s1}`;
+    case 'given mi s': return `${given} ${String.fromCharCode(65 + Math.floor(r() * 26))}. ${s1}`;
+    default: return `${given} ${s1}`;
+  }
+}
+
+function makeGenome(seed, ctx) {
+  const c = COUNTRIES[ctx.country], d = rng(seed + '|demo'), r = rng(seed + '|face'), pg = rng(seed + '|pigment');
+  const sex = ctx.sex === 'data' ? (d() < 0.3 ? 'f' : 'm') : ctx.sex;
+  const born = ctx.office === 'gen' ? 1940 + Math.floor(d() * 16) : ctx.office === 'act' ? 1955 + Math.floor(d() * 25) : 1932 + Math.floor(d() * 38);
+  const u = {}; for (const k of UKEYS) u[k] = Math.round(r() * 1000) / 1000;
+  const comp = c.comps[pickW(c.comps.map(x => x.w), pg())];
+  u.skin = Math.round(clamp(comp.skin[0] + normal(pg) * comp.skin[1], 0, 1) * 1000) / 1000;
+  const tex = pickW(comp.tex, pg());
+  const cat = {
+    tex, hair: pickW(comp.hair, pg()), eye: pg() < comp.eyeLight ? 2 + Math.floor(pg() * 3) : Math.floor(pg() * 2),
+    style: pick(STYLES[sex][tex], r), fh: sex === 'm' ? pick(FH, r) : 'none',
+    bald: sex === 'm' ? r() < 0.5 : r() < 0.04, myopic: r() < 0.15, glass: Math.floor(r() * 3), rank: 1 + Math.floor(r() * 4), ribbons: 2 + Math.floor(r() * 10),
+  };
+  return { v: 1, seed, country: ctx.country, sex, born, office: ctx.office, name: makeName(c, sex, rng(seed + '|name')), u, cat };
+}
+
+function bz(p0, p1, p2, p3, t) { const m = 1 - t; return [m * m * m * p0[0] + 3 * m * m * t * p1[0] + 3 * m * t * t * p2[0] + t * t * t * p3[0], m * m * m * p0[1] + 3 * m * m * t * p1[1] + 3 * m * t * t * p2[1] + t * t * t * p3[1]]; }
+const f1 = n => Math.round(n * 10) / 10;
+let uid = 0;
+
+function render(g, age) {
+  const id = 'p' + (++uid), u = g.u, cat = g.cat, cx = 100, T = 0.2;
+  const grey = clamp((age - L(28, 48, u.greyOnset)) * L(0.02, 0.05, u.greyRate), 0, 1);
+  const recede = cat.bald ? clamp((age - L(25, 50, u.baldOnset)) / L(15, 35, u.baldRate), 0, 1) : clamp((age - 55) / 80, 0, 0.12);
+  const wr = clamp((age - 28) / 50, 0, 1), jowl = clamp((age - 45) / 35, 0, 1);
+  const wt = L(-1, 1.4, u.weight) + clamp(age - 30, 0, 35) * 0.025;
+  const hw = L(31, 35, u.faceW) + wt * 1.8;
+  const hwL = hw * 1.04, hwR = hw * 0.9;
+  const jf = L(0.72, 0.88, u.jaw);
+  const jwL = hwL * jf + jowl * 2.5 + wt * 1.1, jwR = hwR * jf + jowl * 2 + wt * .9;
+  const top = L(42, 47, u.skull);
+  const eyeY = L(97, 101, u.eyeY), cheekY = eyeY + 4;
+  const tipY = eyeY + L(19, 24, u.noseLen) + clamp(age - 30, 0, 50) * 0.035;
+  const my = tipY + L(10, 13, u.mouthOff);
+  const chinY = my + L(13, 17, u.chin) + jowl * 2;
+  const chinW = L(5, 10, u.chinW);
+  const xc = cx + T * hw * 0.45;
+  const skin = skinAt(u.skin), sL = mix(skin, '#FFF4E8', .4), sD = mix(skin, '#3A1D16', .5), sDD = mix(skin, '#1E0F0B', .7);
+  const lipC = mix(skin, '#9A3E3A', .35), lipD = mix(lipC, '#2A1210', .35);
+  const base = HAIR[cat.hair];
+  const greyMix = t => t < 0.85 ? mix(base, GREY, t / 0.85) : mix(GREY, WHITE, (t - 0.85) / 0.15);
+  const hair = greyMix(grey), hairL = mix(hair, '#FFF8EE', .28), hairD = mix(hair, '#000000', .45);
+  const brow = mix(greyMix(grey * 0.7), '#000000', 0.2);
+  const fhc = greyMix(clamp(grey * 1.2, 0, 1));
+  const nw = hw * 0.62 + wt * 1.3 + L(-1, 1, u.neck);
+  const es = L(12.5, 15, u.eyeSep), ew = L(9.5, 11.5, u.eyeW), eh = L(3, 4.2, u.eyeH);
+  const mw = L(14, 18, u.mouthW), lipT = L(2.2, 4, u.lipT) * (1 - 0.3 * wr);
+  const noseW = L(7, 10, u.noseW) + wr * 0.8;
+  const earS = L(0.85, 1.05, u.ear) + clamp(age - 30, 0, 60) * 0.0025;
+  const o = [];
+  const F = (n, sd) => `<filter id="${id}F${n}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${sd}"/></filter>`;
+  const B = n => `filter="url(#${id}F${n})"`;
+  const BG = { hog: ['#6A2C35', '#1A0B0E'], min: ['#2F5052', '#0C1617'], cb: ['#33405E', '#0E111B'], gen: ['#55542F', '#14140B'], party: ['#47355E', '#120D19'], act: ['#5E4A32', '#1A120B'] }[g.office] || ['#444', '#111'];
+  const c = (x, y) => `${f1(x)},${f1(y)}`;
+
+  const headD = `M${c(cx + T * 6, top)} C${c(cx + hwR * .95, top)} ${c(cx + hwR * 1.03, top + 22)} ${c(cx + hwR, cheekY - 10)} C${c(cx + hwR * 1.05, cheekY + 4)} ${c(cx + jwR, cheekY + 28)} ${c(cx + jwR * .7 + T * 6, chinY - 11)} C${c(cx + T * 9 + chinW * .7, chinY - 2)} ${c(cx + T * 8 + chinW * .3, chinY)} ${c(cx + T * 6, chinY)} C${c(cx + T * 4 - chinW, chinY)} ${c(cx - jwL * .4, chinY - 3)} ${c(cx - jwL * .66, chinY - 12)} C${c(cx - jwL, cheekY + 30)} ${c(cx - hwL, cheekY + 18)} ${c(cx - hwL, cheekY - 4)} C${c(cx - hwL, top + 22)} ${c(cx - hwL * .95, top)} ${c(cx + T * 6, top)} Z`;
+  const ncx = cx - 1;
+  const neckD = `M${c(ncx - nw, chinY - 24)} C${c(ncx - nw - 1, chinY + 10)} ${c(ncx - nw - 3, 196)} ${c(ncx - nw - 4, 204)} L${c(ncx + nw + 4, 204)} C${c(ncx + nw + 2, 196)} ${c(ncx + nw, chinY + 8)} ${c(ncx + nw - 1, chinY - 24)} Z`;
+
+  o.push(`<defs>${F('a', .45)}${F('b', 1.1)}${F('c', 2.4)}${F('d', 4.5)}${F('e', 8)}
+    <filter id="${id}g" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="${fnv(g.seed) % 997}"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .42  0 0 0 0 .32  0 0 0 .9 0"/></filter>
+    <radialGradient id="${id}bg" cx="38%" cy="32%" r="80%"><stop offset="0" stop-color="${BG[0]}"/><stop offset="1" stop-color="${BG[1]}"/></radialGradient>
+    <linearGradient id="${id}fl" x1="0" x2="1"><stop offset="0" stop-color="${sL}" stop-opacity=".35"/><stop offset=".42" stop-color="${skin}" stop-opacity="0"/><stop offset=".78" stop-color="${sD}" stop-opacity=".45"/><stop offset="1" stop-color="${sDD}" stop-opacity=".75"/></linearGradient>
+    <radialGradient id="${id}hr" cx="30%" cy="20%" r="85%"><stop offset="0" stop-color="${hairL}"/><stop offset=".45" stop-color="${hair}"/><stop offset="1" stop-color="${hairD}"/></radialGradient>
+    <radialGradient id="${id}ir" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="${mix(EYES[cat.eye], '#FFFFFF', .25)}"/><stop offset=".7" stop-color="${EYES[cat.eye]}"/><stop offset="1" stop-color="${mix(EYES[cat.eye], '#000000', .5)}"/></radialGradient>
+    <linearGradient id="${id}gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3DD9A"/><stop offset=".35" stop-color="#B8893A"/><stop offset=".6" stop-color="#E9C979"/><stop offset="1" stop-color="#6E4E1C"/></linearGradient>
+    <radialGradient id="${id}vig" cx="50%" cy="45%" r="70%"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
+    <clipPath id="${id}c"><path d="${headD}"/></clipPath><clipPath id="${id}n"><path d="${neckD}"/></clipPath><clipPath id="${id}f"><rect x="10" y="10" width="180" height="220"/></clipPath></defs>`);
+  o.push(`<rect width="200" height="240" fill="url(#${id}bg)"/>`);
+  o.push(`<g clip-path="url(#${id}f)">`);
+  o.push(`<ellipse cx="72" cy="70" rx="60" ry="50" fill="${BG[0]}" opacity=".5" ${B('e')}/>`);
+  o.push(`<g transform="translate(100 122) scale(1.22) translate(-100 ${f1(-(top + chinY) / 2 - 18)})">`);
+
+  // hair behind
+  const style = cat.style;
+  const vol = { crop: 3, closecrop: 2, sidepart: 6, swept: 7, curlytop: 8, shortafro: 7, pixie: 5, bob: 7, sidebob: 7, long: 6, bun: 4, curlylong: 9, afro: 15 }[style] || 5;
+  const curly = cat.tex >= 2 || ['afro', 'shortafro', 'curlytop', 'curlylong'].includes(style);
+  const hairBack = d => { o.push(`<path d="${d}" fill="${hairD}" ${B('b')}/>`); o.push(`<path d="${d}" fill="url(#${id}hr)" opacity=".85" ${B('a')}/>`); };
+  if (style === 'long' || style === 'curlylong') hairBack(`M${c(cx - hwL - vol * .8, top + 18)} C${c(cx - hwL - vol - 2, 150)} ${c(cx - hwL - 8, 190)} ${c(cx - hwL + 2, 206)} L${c(cx + hwR - 2, 206)} C${c(cx + hwR + 6, 190)} ${c(cx + hwR + vol, 150)} ${c(cx + hwR + vol * .8, top + 18)} Z`);
+  else if (style === 'bob' || style === 'sidebob') hairBack(`M${c(cx - hwL - vol * .7, top + 16)} C${c(cx - hwL - vol, chinY - 30)} ${c(cx - hwL - 4, chinY - 2)} ${c(cx - hwL + 4, chinY)} L${c(cx + hwR - 3, chinY - 2)} C${c(cx + hwR + 4, chinY - 6)} ${c(cx + hwR + vol, chinY - 30)} ${c(cx + hwR + vol * .7, top + 16)} Z`);
+  else if (style === 'afro') hairBack(`M${c(cx - hwL - vol, top + 30)} C${c(cx - hwL - vol, top - vol - 6)} ${c(cx + hwR + vol, top - vol - 6)} ${c(cx + hwR + vol, top + 30)} C${c(cx + hwR + vol, top + 62)} ${c(cx - hwL - vol, top + 62)} ${c(cx - hwL - vol, top + 30)} Z`);
+  else if (style === 'bun') hairBack(`M${c(cx - 4, top - vol - 18)} a11,10 0 1,0 0.1,0 Z`);
+
+  // dress
+  const yS = Math.round(chinY + 11);
+  const bodyD = `M-20,250 C-14,${yS + 18} 40,${yS + 1} ${c(ncx - nw - 5, yS - 2)} L${c(ncx + nw + 5, yS - 2)} C160,${yS + 1} 214,${yS + 18} 220,250 Z`;
+  const cloth = (col, extra = '') => {
+    o.push(`<linearGradient id="${id}cl" x1="0" x2="1"><stop offset="0" stop-color="${mix(col, '#FFFFFF', .14)}"/><stop offset=".45" stop-color="${col}"/><stop offset="1" stop-color="${mix(col, '#000000', .55)}"/></linearGradient>`);
+    o.push(`<path d="${bodyD}" fill="url(#${id}cl)"/>`);
+    o.push(`<path d="M30,${yS + 14} Q40,${yS + 30} 36,240" stroke="${mix(col, '#000', .5)}" stroke-width="6" fill="none" opacity=".5" ${B('c')}/><path d="M160,${yS + 12} Q156,${yS + 30} 166,240" stroke="${mix(col, '#000', .6)}" stroke-width="8" fill="none" opacity=".5" ${B('c')}/>`);
+  };
+  o.push(`<path d="${neckD}" fill="${skin}"/><path d="${neckD}" fill="url(#${id}fl)"/>`);
+  o.push(`<g clip-path="url(#${id}n)"><ellipse cx="${f1(cx + 2)}" cy="${f1(chinY - 2)}" rx="${f1(nw + 6)}" ry="14" fill="${sDD}" opacity=".7" ${B('c')}/></g>`);
+  const shirtW = '#E9E3D6', shirtS = '#A79F90';
+  const lapels = (col) => {
+    const hl = mix(col, '#FFFFFF', .22), dk = mix(col, '#000000', .5);
+    o.push(`<path d="M${c(ncx - nw - 5, yS - 1)} L${c(ncx - nw - 13, yS + 16)} L${c(ncx - 3, 238)}" stroke="${dk}" stroke-width="2.5" fill="none" opacity=".7" ${B('a')}/><path d="M${c(ncx - nw - 4, yS - 2)} L${c(ncx - nw - 12, yS + 15)} L${c(ncx - 3, 236)}" stroke="${hl}" stroke-width=".9" fill="none" opacity=".8"/>`);
+    o.push(`<path d="M${c(ncx + nw + 5, yS - 1)} L${c(ncx + nw + 12, yS + 16)} L${c(ncx + 3, 238)}" stroke="${dk}" stroke-width="2.5" fill="none" opacity=".8" ${B('a')}/>`);
+  };
+  if (g.office === 'gen') {
+    const ol = '#4D5733';
+    cloth(ol);
+    o.push(`<path d="M${c(ncx - nw, yS - 2)} L${c(ncx, 214)} L${c(ncx + nw, yS - 2)} Z" fill="#CBC3A0"/><path d="M${c(ncx - nw, yS - 2)} L${c(ncx, 214)} L${c(ncx + nw, yS - 2)}" fill="none" stroke="${shirtS}" stroke-width="2" opacity=".6" ${B('a')}/>`);
+    o.push(`<path d="M${c(ncx - 2.4, yS + 3)} L${c(ncx + 2.4, yS + 3)} L${c(ncx + 3.6, 214)} L${c(ncx, 220)} L${c(ncx - 3.6, 214)} Z" fill="#363E28"/>`);
+    lapels(ol);
+    for (const sd of [-1, 1]) {
+      const x0 = sd < 0 ? 26 : 140, rot = sd * -9;
+      o.push(`<g transform="rotate(${rot} ${x0 + 17} ${yS + 13})"><rect x="${x0}" y="${yS + 9}" width="34" height="8" rx="2" fill="#2A3020"/><rect x="${x0}" y="${yS + 9}" width="34" height="2" fill="#5A6640" opacity=".7"/>${Array.from({ length: cat.rank }, (_, k) => `<circle cx="${x0 + 7 + k * 6.5}" cy="${yS + 13}" r="1.9" fill="url(#${id}gold)"/>`).join('')}</g>`);
+    }
+    const ribC = ['#7A2335', '#24456E', '#C9A253', '#2F5E4E', '#E8E2D0', '#5E45A3'], rr = rng(g.seed + '|ribbons');
+    for (let k = 0; k < cat.ribbons; k++) { const row = Math.floor(k / 4), col = k % 4; o.push(`<rect x="${124 + col * 7}" y="${214 + row * 4.6}" width="6.6" height="4.1" fill="${pick(ribC, rr)}"/><rect x="${124 + col * 7}" y="${214 + row * 4.6}" width="6.6" height="1.2" fill="#fff" opacity=".25"/>`); }
+  } else if (g.office === 'act') {
+    const sh = ['#6F8FA6', '#B7B09C', '#7A6A5A', '#5E7A5E', '#8C6E7E'][Math.floor(u.suitCol * 5)];
+    cloth(sh);
+    o.push(`<path d="M${c(ncx - nw - 1, yS - 2)} L${c(ncx, 210)} L${c(ncx + nw + 1, yS - 2)} Z" fill="${skin}"/><path d="M${c(ncx - nw - 1, yS - 2)} L${c(ncx, 210)} L${c(ncx + nw + 1, yS - 2)} Z" fill="url(#${id}fl)"/>`);
+    o.push(`<path d="M${c(ncx - nw - 3, yS - 3)} L${c(ncx - 3, 211)} L${c(ncx - nw - 15, yS + 8)} Z" fill="${mix(sh, '#FFF', .18)}"/><path d="M${c(ncx + nw + 3, yS - 3)} L${c(ncx + 3, 211)} L${c(ncx + nw + 15, yS + 8)} Z" fill="${mix(sh, '#000', .2)}"/>`);
+  } else {
+    const jackets = g.sex === 'f' ? ['#2A3540', '#6A2836', '#284658', '#3A3E49', '#57503F'] : ['#252F38', '#383C46', '#1C2634', '#46443F', '#372F42'];
+    const jk = jackets[Math.floor(u.suitCol * 5)];
+    cloth(jk);
+    if (g.sex === 'f') {
+      o.push(`<path d="M${c(ncx - nw - 4, yS - 2)} Q${c(ncx, yS + 28)} ${c(ncx + nw + 4, yS - 2)} Z" fill="${shirtW}"/><path d="M${c(ncx - nw - 4, yS - 2)} Q${c(ncx, yS + 28)} ${c(ncx + nw + 4, yS - 2)}" fill="none" stroke="${shirtS}" stroke-width="3" opacity=".5" ${B('b')}/>`);
+      if (u.neck > .55) for (let k = 0; k < 13; k++) { const t = k / 12, x = L(ncx - nw + 1, ncx + nw - 1, t), y = yS + 2 + Math.sin(t * Math.PI) * 11; o.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="1.6" fill="#E8E1D2"/><circle cx="${f1(x - .5)}" cy="${f1(y - .5)}" r=".5" fill="#fff"/>`); }
+      lapels(jk);
+    } else {
+      const tie = ['#7A2335', '#24456E', '#4E3A8A', '#2F5E4E', '#8A6A2A', '#8E2048'][Math.floor(u.tieCol * 6)];
+      o.push(`<path d="M${c(ncx - nw - 1, yS - 2)} L${c(ncx, 226)} L${c(ncx + nw + 1, yS - 2)} Z" fill="${shirtW}"/>`);
+      o.push(`<path d="M${c(ncx - nw - 1, yS - 2)} L${c(ncx - 3, 204)} L${c(ncx - nw + 4, yS + 11)} Z" fill="#F4EFE6"/><path d="M${c(ncx + nw + 1, yS - 2)} L${c(ncx + 3, 204)} L${c(ncx + nw - 4, yS + 11)} Z" fill="#CFC8BA"/>`);
+      o.push(`<linearGradient id="${id}tie" x1="0" x2="1"><stop offset="0" stop-color="${mix(tie, '#fff', .2)}"/><stop offset="1" stop-color="${mix(tie, '#000', .45)}"/></linearGradient>`);
+      o.push(`<path d="M${c(ncx - 3.5, yS + 2)} L${c(ncx + 3.5, yS + 2)} L${c(ncx + 2.6, yS + 9)} L${c(ncx - 2.6, yS + 9)} Z" fill="url(#${id}tie)"/><path d="M${c(ncx - 2.6, yS + 9)} L${c(ncx + 2.6, yS + 9)} L${c(ncx + 5, 228)} L${c(ncx, 236)} L${c(ncx - 5, 228)} Z" fill="url(#${id}tie)"/>`);
+      lapels(jk);
+    }
+  }
+
+  // ear (near side)
+  const ex0 = cx - hwL + 1.5, ey0 = eyeY + 8;
+  o.push(`<ellipse cx="${f1(ex0)}" cy="${f1(ey0)}" rx="${f1(5.5 * earS)}" ry="${f1(11 * earS)}" fill="${mix(skin, '#B5524A', .12)}"/><path d="M${c(ex0 - 1, ey0 - 7 * earS)} Q${c(ex0 - 4.5, ey0)} ${c(ex0 - .5, ey0 + 7 * earS)}" stroke="${sD}" stroke-width="1.4" fill="none" opacity=".8" ${B('a')}/>`);
+
+  // head
+  o.push(`<path d="${headD}" fill="${skin}"/>`);
+  o.push(`<g clip-path="url(#${id}c)">`);
+  o.push(`<rect x="${f1(cx - hwL)}" y="0" width="${f1(hwL + hwR)}" height="240" fill="url(#${id}fl)"/>`);
+  o.push(`<path d="M${c(cx + hwR + 4, top + 10)} C${c(cx + hwR - 8, cheekY - 10)} ${c(cx + hwR - 6, cheekY + 22)} ${c(cx + jwR * .5, chinY + 4)} L${c(cx + hwR + 10, chinY + 4)} Z" fill="${sDD}" opacity=".55" ${B('d')}/>`);
+  o.push(`<ellipse cx="${f1(xc - 8)}" cy="${f1(top + 24)}" rx="16" ry="9" fill="${sL}" opacity=".5" ${B('d')}/>`);
+  o.push(`<ellipse cx="${f1(xc - es - 3)}" cy="${f1(tipY - 3)}" rx="8" ry="6" fill="#C2554C" opacity="${f1(.16 - wr * .05)}" ${B('d')}/>`);
+  o.push(`<ellipse cx="${f1(xc - es - 4)}" cy="${f1(eyeY + 9)}" rx="7" ry="3" fill="${sL}" opacity=".4" ${B('c')}/>`);
+  o.push(`<ellipse cx="${f1(cx + T * 6)}" cy="${f1(chinY - 3)}" rx="${f1(chinW + 4)}" ry="4" fill="${sL}" opacity=".25" ${B('c')}/>`);
+  for (const sd of [-1, 1]) {
+    const ex = sd < 0 ? xc - es * 1.08 : xc + es * .86;
+    o.push(`<ellipse cx="${f1(ex)}" cy="${f1(eyeY - 1.5)}" rx="${f1(ew * .95)}" ry="${f1(eh * 2.5)}" fill="${sD}" opacity="${f1(.32 + wr * .15)}" ${B('c')}/>`);
+  }
+  // beard below features
+  if (cat.fh === 'short' || cat.fh === 'full') {
+    const bd = `M${c(cx - hwL - 2, eyeY + 12)} Q${c(cx - hwL * .6, tipY + 6)} ${c(xc - mw * .9, my - 3)} Q${c(xc, my - 6)} ${c(xc + mw * .8, my - 3)} Q${c(cx + hwR * .6, tipY + 6)} ${c(cx + hwR + 2, eyeY + 12)} L${c(cx + hwR + 2, chinY + 14)} L${c(cx - hwL - 2, chinY + 14)} Z`;
+    o.push(`<path d="${bd}" fill="${fhc}" opacity="${cat.fh === 'short' ? .42 : .9}" ${B('b')}/>`);
+  }
+  o.push(`</g>`);
+  if (cat.fh === 'full') o.push(`<path d="M${c(cx - jwL * .7, chinY - 14)} Q${c(cx + T * 6, chinY + 16)} ${c(cx + jwR * .75, chinY - 14)} Z" fill="${fhc}" ${B('a')}/><path d="M${c(cx - jwL * .4, chinY - 2)} Q${c(cx + T * 6, chinY + 10)} ${c(cx + jwR * .5, chinY - 2)}" stroke="${mix(fhc, '#000', .3)}" stroke-width="1.5" fill="none" opacity=".5" ${B('a')}/>`);
+  o.push(`<path d="${headD}" fill="none" stroke="${sDD}" stroke-width="1.2" opacity=".55" ${B('a')}/>`);
+
+  // wrinkles
+  const wl = (d, a) => { o.push(`<path d="${d}" fill="none" stroke="${sD}" stroke-width="1.2" stroke-linecap="round" opacity="${f1(a)}" ${B('a')}/>`); o.push(`<path d="${d}" fill="none" stroke="${sL}" stroke-width=".7" stroke-linecap="round" opacity="${f1(a * .6)}" transform="translate(0.6,1.1)" ${B('a')}/>`); };
+  const hairlineY = top + L(12, 16, u.hairline) + recede * 26;
+  const nfl = Math.floor(wr * 3.6);
+  for (let k = 0; k < nfl; k++) { const y = eyeY - 17 - k * 4.5; if (y > hairlineY + 3) wl(`M${c(xc - hwL * .45, y)} Q${c(xc, y - 2.2)} ${c(xc + hwR * .45, y)}`, .2 + wr * .45); }
+  wl(`M${c(xc - noseW / 2 - 2, tipY - 1)} Q${c(xc - mw / 2 - 6, my - 2)} ${c(xc - mw * .55 - 2, my + 5)}`, .12 + wr * .55);
+  wl(`M${c(xc + noseW / 2 + 1, tipY)} Q${c(xc + mw / 2 + 4, my - 2)} ${c(xc + mw * .42 + 2, my + 5)}`, .1 + wr * .4);
+  if (wr > .35) { const ox = xc - es * 1.08 - ew * .55; wl(`M${c(ox, eyeY - 1.5)} l-3,-1.5 M${c(ox, eyeY + 1)} l-3.2,1.2`, wr * .5); }
+  if (jowl > .3) wl(`M${c(xc - mw / 2 - 8, my + 7)} q-2,4 -1,9`, jowl * .5);
+
+  // eyes and brows
+  const smile = L(-0.5, 1.2, u.smile);
+  for (const sd of [-1, 1]) {
+    const near = sd < 0, k = near ? 1.05 : .84, ex = near ? xc - es * 1.08 : xc + es * .86, ey = eyeY, w = ew * k, h = eh;
+    const rot = sd * L(-4, 4, u.eyeTilt);
+    const al = `M${c(ex - w / 2, ey)} Q${c(ex - w * .1, ey - h * 1.7)} ${c(ex + w / 2, ey - .3)} Q${c(ex + w * .05, ey + h * 1.1)} ${c(ex - w / 2, ey)} Z`;
+    o.push(`<g transform="rotate(${f1(rot)} ${f1(ex)} ${f1(ey)})">`);
+    o.push(`<path d="M${c(ex - w / 2, ey - h * 1.6 - 1.2 - u.lid * 1.3)} Q${c(ex, ey - h * 2.1 - 1.5 - u.lid * 1.3)} ${c(ex + w / 2, ey - h * 1.3 - 1.2 - u.lid * 1.3)}" stroke="${sD}" stroke-width="1.1" fill="none" opacity="${f1(.45 + u.lid * .35)}" ${B('a')}/>`);
+    o.push(`<clipPath id="${id}e${sd}"><path d="${al}"/></clipPath><path d="${al}" fill="#E4D9CB"/>`);
+    o.push(`<g clip-path="url(#${id}e${sd})"><circle cx="${f1(ex + (near ? .6 : 1.2))}" cy="${f1(ey - .3)}" r="${f1(h * 1.12)}" fill="url(#${id}ir)"/><circle cx="${f1(ex + (near ? .6 : 1.2))}" cy="${f1(ey - .3)}" r="${f1(h * .45)}" fill="#0E0A08"/><rect x="${f1(ex - w)}" y="${f1(ey - h * 2)}" width="${f1(w * 2)}" height="${f1(h * 1.3)}" fill="${sD}" opacity=".45" ${B('a')}/></g>`);
+    o.push(`<circle cx="${f1(ex + (near ? -.2 : .5))}" cy="${f1(ey - h * .7)}" r=".65" fill="#FFFFFF" opacity=".85"/>`);
+    o.push(`<path d="M${c(ex - w / 2 - .6, ey + .3)} Q${c(ex - w * .1, ey - h * 1.8)} ${c(ex + w / 2 + .4, ey)}" stroke="#24150F" stroke-width="1.6" fill="none" stroke-linecap="round" ${B('a')}/>`);
+    o.push(`<path d="M${c(ex - w / 2 + 1, ey + h * .6)} Q${c(ex, ey + h * 1.3)} ${c(ex + w / 2 - .5, ey + h * .5)}" stroke="${sD}" stroke-width=".9" fill="none" opacity=".6" ${B('a')}/>`);
+    o.push(`<path d="M${c(ex - w * .45, ey + h + 2.4)} Q${c(ex, ey + h + 4.2)} ${c(ex + w * .45, ey + h + 2.2)}" stroke="${sD}" stroke-width="1.2" fill="none" opacity="${f1(.08 + wr * .5)}" ${B('a')}/>`);
+    o.push(`</g>`);
+    const bi = near ? xc - es * .5 : xc + es * .4, bo = near ? xc - es * 1.08 - w * .85 : xc + es * .86 + w * .7, by = ey - 7.5 - L(0, 2.2, u.browArch);
+    const bw = L(1.8, 3.4, u.browW) * (1 - wr * .15) * (near ? 1 : .85);
+    const bd = `M${c(bi, by + L(-1, 1.5, u.browTilt))} Q${c((bi + bo) / 2, by - L(1, 3.2, u.browArch))} ${c(bo, by + 2)}`;
+    o.push(`<path d="${bd}" stroke="${brow}" stroke-width="${f1(bw + 1)}" fill="none" stroke-linecap="round" opacity=".7" ${B('b')}/><path d="${bd}" stroke="${mix(brow, '#000', .25)}" stroke-width="${f1(bw * .8)}" fill="none" stroke-linecap="round" opacity=".95" ${B('a')}/>`);
+  }
+
+  // nose
+  const nt = xc + T * 12;
+  o.push(`<path d="M${c(xc + 2.5, eyeY + 4)} Q${c(nt + 1.5, tipY - 8)} ${c(nt + 2, tipY - 1)} L${c(nt + 4.5, tipY - 1)} Q${c(nt + 4, tipY - 10)} ${c(xc + 4.5, eyeY + 3)} Z" fill="${sDD}" opacity=".3" ${B('b')}/>`);
+  o.push(`<path d="M${c(xc - es - 9, tipY - 4)} Q${c(xc - es - 2, tipY + 4)} ${c(xc - mw * .7, my - 2)}" stroke="${sD}" stroke-width="4" fill="none" opacity=".25" ${B('c')}/>`);
+  o.push(`<path d="M${c(xc - .5, eyeY + 3)} Q${c(nt - 2, tipY - 10)} ${c(nt - .5, tipY - 2)}" stroke="${sL}" stroke-width="2" fill="none" opacity=".55" ${B('b')}/>`);
+  o.push(`<path d="M${c(xc - 3.5, eyeY + 5)} Q${c(xc - 5, tipY - 8)} ${c(xc - noseW * .5, tipY - 1)}" stroke="${sD}" stroke-width="1.2" fill="none" opacity=".45" ${B('b')}/>`);
+  o.push(`<path d="M${c(nt - noseW * .55, tipY - .5)} Q${c(nt - noseW * .65, tipY + 3.5)} ${c(nt - noseW * .2, tipY + 3)} Q${c(nt + 1, tipY + 5)} ${c(nt + noseW * .3, tipY + 2.6)}" stroke="${sDD}" stroke-width="1.3" fill="none" opacity=".75" ${B('a')}/>`);
+  o.push(`<ellipse cx="${f1(nt - noseW * .22)}" cy="${f1(tipY + 2.4)}" rx="1.4" ry=".8" fill="#1A0D09" opacity=".7" ${B('a')}/><ellipse cx="${f1(nt)}" cy="${f1(tipY - 1)}" rx="2" ry="1.4" fill="${sL}" opacity=".6" ${B('a')}/><ellipse cx="${f1(nt - 1)}" cy="${f1(tipY + 6)}" rx="${f1(noseW * .45)}" ry="1.6" fill="${sD}" opacity=".45" ${B('b')}/>`);
+
+  // mouth
+  const mx = xc + T * 4, mL = mw * .56, mR = mw * .44, cy0 = my - smile;
+  if (cat.fh === 'goatee') o.push(`<ellipse cx="${f1(mx)}" cy="${f1(my + 9)}" rx="${f1(mw * .42)}" ry="7" fill="${fhc}" ${B('a')}/>`);
+  o.push(`<path d="M${c(mx - mL, cy0 + .3)} Q${c(mx, my + lipT * 2.4)} ${c(mx + mR, cy0 + .3)} Z" fill="${lipC}"/>`);
+  o.push(`<ellipse cx="${f1(mx - 1)}" cy="${f1(my + lipT * 1.1)}" rx="${f1(mw * .2)}" ry="${f1(lipT * .4)}" fill="#FFF0E8" opacity=".3" ${B('a')}/>`);
+  o.push(`<path d="M${c(mx - mL, cy0)} Q${c(mx - mL / 2, my - lipT * 1.2)} ${c(mx, my - lipT * .6)} Q${c(mx + mR / 2, my - lipT * 1.2)} ${c(mx + mR, cy0)} Q${c(mx, my + .3)} ${c(mx - mL, cy0)} Z" fill="${lipD}" opacity=".9"/>`);
+  o.push(`<path d="M${c(mx - mL, cy0)} Q${c(mx, my + .6)} ${c(mx + mR, cy0)}" stroke="#2A120E" stroke-width="1.1" fill="none" ${B('a')}/>`);
+  o.push(`<ellipse cx="${f1(mx)}" cy="${f1(my + lipT * 2.4 + 2.5)}" rx="${f1(mw * .35)}" ry="1.8" fill="${sD}" opacity=".45" ${B('b')}/>`);
+  if (cat.fh === 'moustache' || cat.fh === 'full' || cat.fh === 'goatee') o.push(`<path d="M${c(mx - mL - 1, my + .5)} Q${c(mx - mL * .5, my - 5.5)} ${c(mx, my - 4.2)} Q${c(mx + mR * .5, my - 5.5)} ${c(mx + mR + 1, my + .5)} Q${c(mx, my - 1.5)} ${c(mx - mL - 1, my + .5)} Z" fill="${fhc}" ${B('a')}/>`);
+
+  // front hair
+  const sideY = ['long', 'curlylong', 'bob', 'sidebob'].includes(style) ? eyeY + 14 : eyeY - 5;
+  const part = style === 'sidepart' || style === 'sidebob' ? -hwL * .38 : 0;
+  const v = style === 'afro' ? 8 : vol + 1;
+  const H = hairlineY, tm = recede * 10;
+  const capD = `M${c(cx - hwL - 1, sideY)} C${c(cx - hwL - 2 - v * .6, top + 8)} ${c(cx - hwL * .72, top - v)} ${c(cx + T * 5, top - v)} C${c(cx + hwR * .75, top - v)} ${c(cx + hwR + 2 + v * .5, top + 8)} ${c(cx + hwR + 1, sideY)} L${c(cx + hwR - 3, sideY)} C${c(cx + hwR - 2, H + 6 - tm)} ${c(xc + hwR * .45, H - tm * .3)} ${c(xc + part, H + 1)} C${c(xc - hwL * .45, H - tm * .3)} ${c(cx - hwL + 2, H + 6 - tm)} ${c(cx - hwL + 3, sideY)} Z`;
+  const capFill = (d, op = 1) => {
+    o.push(`<clipPath id="${id}hc"><path d="${d}"/></clipPath>`);
+    o.push(`<path d="${d}" fill="${hairD}" opacity="${op}" ${B('b')}/><path d="${d}" fill="url(#${id}hr)" opacity="${op}" ${B('a')}/>`);
+    const rs = rng(g.seed + '|strands'), strands = [];
+    if (curly) for (let i = 0; i < 70; i++) { const x = L(cx - hwL - 6, cx + hwR + 6, rs()), y = L(top - v - 6, H + 4, rs()); strands.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(L(1, 2.4, rs()))}" fill="none" stroke="${rs() < .5 ? hairL : hairD}" stroke-width=".8" opacity=".55"/>`); }
+    else for (let i = 0; i < 34; i++) { const x0 = xc + part + L(-hwL, hwR, rs()), dx = (x0 - xc - part) * .35 + (cat.tex === 1 ? 3 : 0); strands.push(`<path d="M${c(x0 - dx * .2, H + 2)} q${f1(dx * .5)},${f1(-(H - top + v) * .5)} ${f1(dx)},${f1(-(H - top + v) * .95)}" fill="none" stroke="${rs() < .55 ? hairL : hairD}" stroke-width="${f1(L(.6, 1.4, rs()))}" opacity=".3"/>`); }
+    o.push(`<g clip-path="url(#${id}hc)" opacity="${op}" ${B('a')}>${strands.join('')}</g>`);
+    o.push(`<g clip-path="url(#${id}hc)" opacity="${op}"><path d="M${c(cx - hwL * .8, top + 10)} Q${c(cx - hwL * .2, top - v - 2)} ${c(cx + hwR * .4, top - v + 2)}" stroke="${hairL}" stroke-width="5" fill="none" opacity=".45" ${B('c')}/></g>`);
+  };
+  if (cat.bald && recede > .62) {
+    for (const sd of [-1, 1]) { const hx = sd < 0 ? hwL : hwR; o.push(`<path d="M${c(cx + sd * (hx + 1.5), sideY + 5)} C${c(cx + sd * (hx + 2 + v * .3), top + 24)} ${c(cx + sd * (hx - 2), top + 20)} ${c(cx + sd * (hx - 9), top + 26)} L${c(cx + sd * (hx - 4), sideY + 5)} Z" fill="url(#${id}hr)" ${B('b')}/>`); }
+    if (recede < .88) capFill(capD, f1((.88 - recede) * 2));
+    o.push(`<ellipse cx="${f1(xc - 6)}" cy="${f1(top + 8)}" rx="12" ry="6" fill="#FFF6EC" opacity=".3" ${B('c')}/>`);
+  } else {
+    capFill(capD);
+  }
+
+  // glasses
+  if (cat.myopic || age >= L(38, 62, u.glassOn)) {
+    const rx = [5, 1.5, 3][cat.glass], fc = cat.glass === 1 ? '#1C1410' : '#6B5A3A';
+    const lens = [];
+    for (const sd of [-1, 1]) {
+      const near = sd < 0, ex = near ? xc - es * 1.08 : xc + es * .86, gw = ew * (near ? 1.95 : 1.6), gh = eh * 4.2;
+      lens.push([ex - gw / 2, ex + gw / 2]);
+      o.push(`<rect x="${f1(ex - gw / 2)}" y="${f1(eyeY - gh * .45)}" width="${f1(gw)}" height="${f1(gh)}" rx="${rx}" fill="#FFFFFF" fill-opacity=".08" stroke="${fc}" stroke-width="${cat.glass === 1 ? 2 : 1.1}"/>`);
+      o.push(`<path d="M${c(ex - gw * .3, eyeY - gh * .35)} l${f1(gw * .25)},${f1(gh * .5)}" stroke="#FFFFFF" stroke-width="1.4" opacity=".22" ${B('a')}/>`);
+    }
+    o.push(`<path d="M${c(lens[0][1], eyeY - 1)} Q${c(xc + 1, eyeY - 3.5)} ${c(lens[1][0], eyeY - 1)}" stroke="${fc}" stroke-width="1.2" fill="none"/><path d="M${c(lens[0][0], eyeY - 1)} L${c(cx - hwL + 2, eyeY + 2)}" stroke="${fc}" stroke-width="1.2"/>`);
+  }
+  o.push(`</g></g>`);
+
+  // vignette, grain, frame
+  o.push(`<rect width="200" height="240" fill="url(#${id}vig)"/>`);
+  o.push(`<rect width="200" height="240" filter="url(#${id}g)" opacity=".16" style="mix-blend-mode:multiply"/>`);
+  o.push(`<rect x="4.5" y="4.5" width="191" height="231" fill="none" stroke="url(#${id}gold)" stroke-width="9"/>`);
+  o.push(`<rect x="9.5" y="9.5" width="181" height="221" fill="none" stroke="#2A1C0A" stroke-width="1.2"/><rect x="1" y="1" width="198" height="238" fill="none" stroke="#3A2A10" stroke-width="1.5"/><rect x="7" y="7" width="186" height="226" fill="none" stroke="#FCEBB5" stroke-width=".6" opacity=".7"/>`);
+  for (const [x, y] of [[4.5, 4.5], [195.5, 4.5], [4.5, 235.5], [195.5, 235.5]]) o.push(`<circle cx="${x}" cy="${y}" r="5.5" fill="url(#${id}gold)" stroke="#3A2A10" stroke-width=".8"/><circle cx="${x}" cy="${y}" r="2" fill="${BG[0]}"/>`);
+  o.push(`<path d="M86,0 L114,0 L110,10 Q100,16 90,10 Z" fill="url(#${id}gold)" stroke="#3A2A10" stroke-width=".8"/><circle cx="100" cy="7" r="3.2" fill="${BG[0]}" stroke="#FCEBB5" stroke-width=".6"/>`);
+  return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(g.name)}, aged ${Math.round(age)}">${o.join('')}</svg>`;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// Malmendier-Nagel style weights: a year lived at age a carries weight a (linear, lambda = 1).
+function memoryAt2000(g) {
+  const c = COUNTRIES[g.country], ageAt = y => y - g.born, items = [];
+  let num = 0, den = 0;
+  for (let y = g.born; y < 2000; y++) den += Math.max(0, y - g.born);
+  for (const [a, b, label, infl] of c.ep) {
+    if (ageAt(b) < 6) continue;
+    const a0 = Math.max(ageAt(a), 0), b0 = ageAt(b);
+    items.push({ text: `Lived through ${label}, ${a === b ? a : a + ' to ' + b}, aged ${a0 === b0 ? b0 : a0 + ' to ' + b0}`, infl: !!infl });
+    if (infl) for (let y = Math.max(a, g.born); y <= Math.min(b, 1999); y++) num += y - g.born;
+  }
+  return { items, hawk: den ? num / den : 0 };
+}
+
+// UI
+const $ = s => document.querySelector(s);
+const sel = $('#c-country');
+for (const [k, c] of Object.entries(COUNTRIES)) sel.insertAdjacentHTML('beforeend', `<option value="${k}">${c.name}</option>`);
+sel.value = 'BR';
+let people = [], chosen = 0;
+const ctx = () => ({ country: sel.value, office: $('#c-office').value, sex: $('#c-sex').value });
+const genomeHash = g => fnv(JSON.stringify(g)).toString(16).padStart(8, '0');
+
+function drawGrid() {
+  const base = $('#c-seed').value.trim() || 'ceteris';
+  const c = ctx();
+  people = Array.from({ length: 12 }, (_, i) => makeGenome(`${base}/${c.country}/${c.office}/${c.sex}/${i}`, c));
+  chosen = Math.min(chosen, 11);
+  $('#grid').innerHTML = people.map((g, i) => `<button class="card" type="button" role="listitem" data-i="${i}" aria-pressed="${i === chosen}">${render(g, 2000 - g.born)}<span class="nm">${esc(g.name)}</span><span class="meta">b. ${g.born} · ${2000 - g.born} in 2000</span></button>`).join('');
+  drawInspector();
+}
+function drawInspector() {
+  const g = people[chosen], yr = +$('#c-date').value, age = yr - g.born;
+  $('#c-date-out').textContent = `${yr} · age ${age}`;
+  $('#big').innerHTML = render(g, age);
+  const m = memoryAt2000(g);
+  $('#dossier').innerHTML = `<div class="who">${esc(g.name)}</div>
+    <dl class="dl"><dt>Office</dt><dd>${OFFICES[g.office]}</dd><dt>Born</dt><dd>${g.born}, ${COUNTRIES[g.country].name}</dd><dt>Sex</dt><dd>${g.sex === 'f' ? 'Woman' : 'Man'}</dd></dl>
+    <div class="eyebrow">Memory on 1 January 2000</div>
+    <ul class="mem">${m.items.length ? m.items.map(x => `<li class="${x.infl ? 'infl' : ''}">${esc(x.text)}</li>`).join('') : '<li>Too young to remember any listed episode</li>'}</ul>
+    <div class="eyebrow">Inflation experience <span class="mono">${(m.hawk * 100).toFixed(0)}%</span></div>
+    <div class="bar" role="img" aria-label="Experience-weighted share of life in high inflation ${(m.hawk * 100).toFixed(0)} percent"><i style="width:${Math.min(100, m.hawk * 100).toFixed(1)}%"></i></div>
+    <p class="note">Experience-weighted share of life in high inflation (Malmendier-Nagel weights). For a governor it shifts the hawkishness prior. Competence and loyalty stay hidden.</p>`;
+  $('#strip').innerHTML = [35, 50, 65, 80].map(a => `<figure>${render(g, a)}<figcaption>${a} · ${g.born + a}</figcaption></figure>`).join('');
+  $('#genome').textContent = JSON.stringify({ seed: g.seed, born: g.born, sex: g.sex, office: g.office, cat: g.cat, u: g.u });
+  $('#ghash').textContent = genomeHash(g);
+}
+$('#grid').addEventListener('click', e => {
+  const b = e.target.closest('.card'); if (!b) return;
+  chosen = +b.dataset.i;
+  document.querySelectorAll('.card').forEach(x => x.setAttribute('aria-pressed', x === b));
+  const g = people[chosen]; $('#c-date').value = Math.max(2000, Math.min(2060, 2000)); drawInspector();
+});
+['#c-country', '#c-office', '#c-sex'].forEach(s => $(s).addEventListener('change', drawGrid));
+$('#c-seed').addEventListener('change', drawGrid);
+$('#c-new').addEventListener('click', () => { $('#c-seed').value = 'seed-' + Math.floor(Math.random() * 1e6).toString(36); drawGrid(); });
+$('#c-date').addEventListener('input', drawInspector);
+drawGrid();
+
+// 2011 seats
+const seatA = makeGenome('brazil-2011-president', { country: 'BR', office: 'hog', sex: 'data' });
+const seatB = makeGenome('brazil-2011-finance', { country: 'BR', office: 'min', sex: 'f' });
+$('#seat-a').innerHTML = `${render(seatA, 2011 - seatA.born)}<div class="t"><b>${esc(seatA.name)}</b><span>President · aged ${2011 - seatA.born}</span><br><span class="tag gen">generated · entered from the bench in 2002</span></div>`;
+$('#seat-b').innerHTML = `${render(seatB, 2011 - seatB.born)}<div class="t"><b>${esc(seatB.name)}</b><span>Minister of Finance · aged ${2011 - seatB.born}</span><br><span class="tag gen">generated · materialised in 2004</span></div>`;
+
+// Model writes the genome
+const aiOut = $('#ai-out'), aiStatus = $('#ai-status'), aiGo = $('#ai-go'), aiStop = $('#ai-stop');
+let aiBase = makeGenome('ai-base', { country: 'BR', office: 'min', sex: 'f' }), aiAge = 58;
+aiBase.name = 'Drafted character';
+aiOut.innerHTML = render(aiBase, aiAge);
+let sample = null, ctl = null;
+(async () => { try { sample = window.claude ? await window.claude.use('sample') : null; } catch { sample = null; } if (!sample) { aiGo.disabled = true; aiStatus.textContent = 'Drafting needs this page open in Claude. The renderer above works without it.'; } })();
+const keyHelp = 'faceW face width, jaw jaw width, skull head height, chin chin length, chinW chin width, eyeY eye height, eyeSep eye spacing, eyeW eye width, eyeH eye openness, eyeTilt, lid upper-lid crease, browW brow thickness, browArch, browTilt, noseLen nose length, noseW nose width, mouthW mouth width, lipT lip fullness, mouthOff nose-to-mouth gap, smile, ear ear size, weight build, hairline hairline height, greyOnset (0 early, 1 late), greyRate, baldOnset, baldRate, glassOn (0 early reading glasses), suitCol, tieCol, neck, skin (0 lightest to 1 deepest)';
+aiGo.addEventListener('click', async () => {
+  const desc = $('#ai-text').value.trim().slice(0, 1500); if (!desc || !sample) return;
+  ctl = new AbortController(); aiGo.disabled = true; aiStop.hidden = false; aiStatus.textContent = 'Thinking...';
+  const prompt = `You convert a description of a FICTIONAL person into parameters for a procedural SVG portrait generator.
+If the description names, or clearly describes, a real identifiable person, reply only {"refuse":"real person"}.
+Otherwise reply with only JSON: {"sex":"m"|"f","age":number 25-95,"u":{key:number 0..1},"cat":{"tex":0-3,"hair":0-5,"eye":0-4,"style":string,"fh":string,"bald":boolean,"myopic":boolean,"glass":0-2},"note":"one short sentence"}.
+u keys (0 = small/low, 1 = large/high): ${keyHelp}.
+cat: tex 0 straight 1 wavy 2 curly 3 coily; hair 0 black 1 dark brown 2 brown 3 light brown 4 blond 5 red (base colour before greying); eye 0 dark 1 brown 2 hazel 3 blue 4 grey; style one of ${ALL_STYLES.join(', ')}; fh one of none, moustache, short, full, goatee (only for m); glass 0 round 1 heavy rectangular 2 half-rim.
+Rules: set face geometry only from explicitly described features, never from ancestry or nationality; ancestry may only set skin, tex, hair and eye. Keep unmentioned values between 0.3 and 0.7. No caricature: stay between 0.1 and 0.9 even for strong descriptions. To show grey hair at the given age, set greyOnset low and greyRate high.
+Description: ${desc}`;
+  try {
+    const r = await sample.json(prompt, { signal: ctl.signal, modelTier: 'quick', onText: () => { aiStatus.textContent = 'Writing genome...'; } });
+    if (!r || typeof r !== 'object') throw { code: 'invalid_json' };
+    if (r.refuse) { aiStatus.textContent = 'Declined: the description points to a real person. Real people get a plate, not a face.'; return; }
+    const g = JSON.parse(JSON.stringify(aiBase));
+    g.sex = r.sex === 'm' ? 'm' : 'f';
+    for (const k of [...UKEYS, 'skin']) if (r.u && typeof r.u[k] === 'number') g.u[k] = clamp(r.u[k], 0.05, 0.95);
+    const rc = r.cat || {};
+    const int = (x, a, b, d) => Number.isInteger(x) ? clamp(x, a, b) : d;
+    g.cat.tex = int(rc.tex, 0, 3, g.cat.tex); g.cat.hair = int(rc.hair, 0, 5, g.cat.hair); g.cat.eye = int(rc.eye, 0, 4, g.cat.eye); g.cat.glass = int(rc.glass, 0, 2, g.cat.glass);
+    g.cat.style = ALL_STYLES.includes(rc.style) ? rc.style : STYLES[g.sex][g.cat.tex][0];
+    g.cat.fh = g.sex === 'm' && ['none', 'moustache', 'short', 'full', 'goatee'].includes(rc.fh) ? rc.fh : 'none';
+    g.cat.bald = !!rc.bald; g.cat.myopic = !!rc.myopic;
+    g.office = 'min';
+    aiAge = clamp(Number(r.age) || 50, 25, 95);
+    aiOut.innerHTML = render(g, aiAge);
+    aiStatus.textContent = `${r.note ? String(r.note).slice(0, 160) + ' ' : ''}Age ${Math.round(aiAge)}. Stored as genome ${genomeHash(g)}.`;
+  } catch (e) {
+    const code = e && e.code;
+    aiStatus.textContent = code === 'cancelled' ? 'Stopped.' : code === 'not_granted' || code === 'sampling_disabled' ? 'Drafting is not allowed for this page.' : code === 'rate_limited' ? 'Too many drafts just now; try again in a minute.' : code === 'refused' ? 'The model declined this description.' : code === 'invalid_json' ? 'The answer was not a genome. Try again or shorten the description.' : 'Drafting failed. Try again.';
+    if (code === 'not_granted' || code === 'sampling_disabled') aiGo.disabled = true;
+  } finally { if (!(aiStatus.textContent === 'Drafting is not allowed for this page.')) aiGo.disabled = false; aiStop.hidden = true; }
+});
+aiStop.addEventListener('click', () => ctl && ctl.abort());
+})();
+</script>

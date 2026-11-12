@@ -1,0 +1,176 @@
+<title>Initial Conditions Only</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, ledger tables, decision cards with the recommended option marked */
+:root{
+  --bg:#f6f7f5; --fg:#1d2320; --muted:#5d6862; --rule:#d5dbd7; --accent:#2f6b57;
+  --ok:#2f7a45; --warn:#9a6a10; --bad:#a3392f; --chip:#e7ece9; --card:#ffffff;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --fg:#e3e8e5; --muted:#9aa7a0; --rule:#2c3531; --accent:#7cc3a6;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#222a27; --card:#1a201d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --fg:#e3e8e5; --muted:#9aa7a0; --rule:#2c3531; --accent:#7cc3a6;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#222a27; --card:#1a201d; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:880px;margin:0 auto;display:grid;gap:30px}
+h1{font-size:1.7rem;margin:0;text-wrap:balance}
+h2{font-size:1.1rem;margin:0 0 8px;text-wrap:balance;color:var(--accent)}
+h3{font-size:.98rem;margin:0 0 6px;text-wrap:balance}
+p{margin:0 0 8px;max-width:70ch}
+.meta{color:var(--muted);font-size:.85rem}
+.verdict{border-left:4px solid var(--accent);padding:4px 0 4px 14px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+.chip{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 7px;border-radius:3px;background:var(--chip);white-space:nowrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+ul{margin:0;padding-left:20px;display:grid;gap:4px}
+code{font-family:var(--mono);font-size:.85em}
+pre{font-family:var(--mono);font-size:.82rem;background:var(--chip);padding:10px 12px;border-radius:4px;overflow-x:auto;margin:6px 0}
+.cards{display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:grid;gap:8px}
+.card .q{font-weight:600}
+.card .ctx{color:var(--muted);font-size:.88rem;margin:0}
+.opt{display:grid;grid-template-columns:2.2em 1fr;gap:2px 8px;padding:7px 0;border-top:1px solid var(--rule)}
+.opt b{font-family:var(--mono)}
+.opt.rec{background:linear-gradient(90deg,var(--chip),transparent)}
+.opt .rl{grid-column:2;font-size:.88rem;color:var(--muted)}
+.tag{font-size:.7rem;font-weight:600;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;margin-left:6px}
+</style>
+<main>
+<header>
+  <h1>Initial conditions only</h1>
+  <p class="meta">29 Oct 2026 · main 98d50b8 · DESIGN 13, 14.4, 15; ADRs 0051, 0052, 0103, 0107, 0206, 0210, 0229, 0230, 0233 · brainstorm, nothing decided</p>
+</header>
+
+<section class="verdict">
+  <h2>Answer</h2>
+  <p>Yes. The world is data on 1 January 2000 and a generator after it. The generator reads state, parameters and its own random streams, never the calendar, so the equations that run in 2001 are the ones that run in 2101. There is no "after the data runs out" because the data runs out on day one.</p>
+  <p>Real history 2000-2024 becomes one draw the model should find plausible, not the script. The shock tape survives only as a lab instrument, "replay history": a saved set of interventions (COVID seeded in Wuhan in December 2019, the observed policy rates, ERA5 weather) that calibration and natural-experiment tests apply on purpose and log as edits. A default run never sees it.</p>
+  <p>The design is mostly there already: 13.6 keeps crises and recessions endogenous, 0229 fires rescues on simulated stress, 0051 has a hazard library. What has to change is the default of 0210 (tape then rules), the "tape to 2024, held after" rows in 0210, 0229 and 0233, and the three tape modes of 13.1.</p>
+</section>
+
+<section>
+  <h2>The rule: calendar-blind</h2>
+  <p>After t0 a run may read only state, parameters and counter-keyed random draws. Nothing indexed by date. Three things look like dates but are state:</p>
+  <ul>
+    <li><b>Month of year</b> for seasons, harvests and weather.</li>
+    <li><b>Ages and durations</b> (pop cohorts, bond maturities, a peg's age).</li>
+    <li><b>Commitments in force at t0</b>, if D2 keeps them: schedules already adopted on 1 Jan 2000 (Uruguay Round phase-ins, the end of textile quotas in 2005, euro notes in 2002) and projects under construction. These are the world's state on that day; a 2024 start carries its own.</li>
+  </ul>
+  <p><b>Test.</b> Relabel the start year of the same pack (2000 to 2100) and the golden hash must not move, apart from labels. One CI test catches any date-keyed input that slips in.</p>
+</section>
+
+<section>
+  <h2>What emerges, and how</h2>
+  <p>Every event comes from a hazard whose rate depends on simulated state. Parameters are fitted on long historical catalogues, not on the dates of 2000-2024 events.</p>
+  <div class="wrap"><table>
+    <tr><th>Event</th><th>Rate depends on</th><th>Size and spread</th><th>Fitted to</th><th>Scope</th></tr>
+    <tr><td>Pandemic</td><td>Per-province spillover: livestock density, forest-edge land use, population density, wildlife trade (Jones et al. 2008; Allen et al. 2017)</td><td>Pathogen traits drawn from a prior over past pathogens; most spillovers fizzle (R &lt; 1); the rest spread by SEIR on the simulated air, trade and migration network (13.3). Distancing endogenous (0051); lockdowns and vaccine rollout are rules fitted to OxCGRT</td><td>Marani et al. (2021) intensity distribution, 1600-1945 plus modern catalogues</td><td><span class="chip">1.0, P8</span></td></tr>
+    <tr><td>Earthquake, eruption</td><td>Stationary by zone</td><td>Gutenberg-Richter, VEI; capital loss (13.4)</td><td>USGS, Smithsonian GVP (0051)</td><td><span class="chip">1.0, P8</span></td></tr>
+    <tr><td>Weather, drought, cyclone, flood</td><td>Weather generator around 2000 climatology; climate-scaled once the emulator ships</td><td>Yields, capital, labour days</td><td>ERA5, IBTrACS, flood catalogue</td><td><span class="chip">1.0 stationary; 1.1 climate-scaled</span></td></tr>
+    <tr><td>Chokepoint closure</td><td>Stationary per chokepoint; piracy scaled by coastal poverty</td><td>Capacity cut and duration on the transport graph</td><td>Suez 2021, Red Sea 2023-24, piracy records</td><td><span class="chip">1.0, P8</span></td></tr>
+    <tr><td>Technology jump</td><td>7.5 frontier growth already rises with research effort; D6 splits part of it into fat-tailed sector jumps</td><td>Pareto jump sizes per sector; catch-up spreads them</td><td>Sector TFP accounts (KLEMS) 1970-2010</td><td><span class="chip">1.0 if D6 A</span></td></tr>
+    <tr><td>Resource discovery</td><td>Prices and drilling cost (0178)</td><td>Reserves, extraction cost</td><td>Discovery records</td><td><span class="chip">1.0, already endogenous</span></td></tr>
+    <tr><td>Financial crisis, sudden stop</td><td>Leverage, spreads, reserves (9.13); latent demand and risk appetite noise from the run's streams (0230, 9.12)</td><td>Through balance sheets</td><td>Laeven-Valencia 1970-2017 frequencies</td><td><span class="chip">1.0, already endogenous</span></td></tr>
+    <tr><td>Rescue, IMF programme</td><td>Simulated stress (0229)</td><td>Logit on fiscal space, bank size</td><td>Laeven-Valencia responses</td><td><span class="chip">1.0, already endogenous</span></td></tr>
+    <tr><td>Monetary regime switch, post-crisis regulation</td><td>Inflation history, reserve losses, a recent crisis of that type (D4)</td><td>Peg exit, IT adoption; tighter CCyB, LTV, resolution regime, LDI buffers</td><td>Ilzetzki-Reinhart-Rogoff 1940-, iMaPP 1990-</td><td><span class="chip">1.0 if D4 B</span></td></tr>
+    <tr><td>Elections, leader death, coups, wars, sanctions</td><td>Politics (P6) and war (P7)</td><td>Election calendars are state at t0 (term lengths, last vote); outcomes simulated</td><td>V-Dem, COW, UCDP</td><td><span class="chip">2.0</span></td></tr>
+  </table></div>
+  <p><b>Branches stay comparable.</b> State-dependent hazards are drawn by thinning: one uniform per (hazard, cell, tick) from the counter RNG, and the event fires if it falls below the rate. Two branches share the uniforms, so an event happens in both unless an intervention moved its rate across the draw (maximal coupling; keeps 14.4 common random numbers). "No pandemic" becomes an edit of the run's own event, not of history.</p>
+</section>
+
+<section>
+  <h2>Calibrating and validating without a tape</h2>
+  <p>Three jobs, three methods. Only the second uses replay, and only as a measuring instrument.</p>
+  <div class="wrap"><table>
+    <tr><th>Job</th><th>Method</th><th>Data</th></tr>
+    <tr><td>Hazard rates and severities</td><td>Fitted directly, outside the simulation (as 0022 does for gravity): frequency by state covariates, generalized Pareto tails, tail index uncertain per ensemble member (0051)</td><td>Long catalogues, mostly pre-2000; 2011-2024 frequencies held out</td></tr>
+    <tr><td>Mechanism parameters</td><td>Estimated in replay mode on 2000-2010: given the shocks that happened, does the economy respond right? Without conditioning, the 2008 bust and the mechanism that propagates it are not separately identified</td><td>2000-2010, as 15.2</td></tr>
+    <tr><td>Validation 2011-2024</td><td>
+      <b>Unconditional</b>: runs from 2000, 2005 and 2010 origins with no replay. Score history's place in the ensemble: CRPS, PIT and interval coverage on paths; counts and severities of recessions, crises, pandemics and disasters per decade against catalogues; history's percentile (0118).<br>
+      <b>Conditional</b>: the same origins with replay; 15.5 natural experiments run as interventions.<br>
+      The gap between them is shock luck; replay with and without observed policy gives the policy error 0210 asks for.</td><td>0107 split kept: select on 2011-2018, sealed 2019-2024</td></tr>
+  </table></div>
+  <p><b>What to expect.</b> Unconditional bands will be wide by 2009 and 2020, as they should be: the model did not know about Lehman or COVID, and neither did the WEO forecasts it is benchmarked against (0052), so the short-horizon comparison is fair. Rare-event frequencies need large ensembles; 0107 already sends events below 10% to the lab profile with K of 256 or more.</p>
+  <p><b>2024 is just another origin.</b> 15.4 already builds packs for 2000, 2005, 2010 and 2015 from one pipeline. A run from 2000 past 2024 and a run from a 2024 pack use identical code; only initial conditions differ. 0103's drift is the pre-origin trend, so it is state too (a 2024 origin needs a trend window that skips 2020-21).</p>
+</section>
+
+<section>
+  <h2>What it breaks</h2>
+  <div class="wrap"><table>
+    <tr><th>Where</th><th>Today</th><th>Change</th></tr>
+    <tr><td>DESIGN 13 intro, 13.1, S07</td><td>Historical, stochastic and scripted tape modes; historical for validation, "climate-shifted weather after 2024"</td><td>One default: state-dependent hazards from t0. Replay is an intervention set. Scripted is ordinary interventions. No seam at 2024</td></tr>
+    <tr><td>DESIGN 13.4</td><td>Discoveries are tape shocks</td><td>0178 already makes them endogenous; tape becomes replay</td></tr>
+    <tr><td>DESIGN 14.1, 15.5, 15.7, 22</td><td>Scenario includes a shock tape; policy tape in validation; "historical shocks only as tape items"</td><td>Replay set optional in the scenario; natural experiments and policy tape live in replay</td></tr>
+    <tr><td>0210</td><td>Default <code>tape-then-rules</code>; tariffs, capital controls and regime changes taped to 2024 and held after</td><td>Default <code>rules</code> from t0; those levers held at t0 values (D4). The default 2000 run has no China WTO accession (signed Dec 2001) unless D2 C. The China shock still comes from Chinese productivity and capital deepening (7.5, 0103)</td></tr>
+    <tr><td>0229</td><td>CCyB, LTV/DTI, deposit-insurance limit, BRRD, swap-line list on tape to 2024</td><td>t0 values plus rules: Basel gap guide for CCyB from t0; post-crisis tightening (D4 B) for the rest</td></tr>
+    <tr><td>0230</td><td>Latent demand shocks "on the shock tape"</td><td>Wording: drawn from the run's streams. In replay, eta is filtered from observed holdings</td></tr>
+    <tr><td>0233</td><td>Post-2022 LDI buffers on tape</td><td>Held at t0, or raised by the post-crisis rule after a simulated spiral (D4 B)</td></tr>
+    <tr><td>0206</td><td>Project tape for the hindcast</td><td>Projects under construction at t0 are state (D2); new ones from the proposer; tape only in replay</td></tr>
+    <tr><td>0051, 0035, 0062</td><td>Draws "recorded on the tape"</td><td>Wording: the run's event log</td></tr>
+    <tr><td>0039</td><td>AI automation as a tape scenario shock</td><td>Stays a scenario intervention, off by default</td></tr>
+    <tr><td>0052</td><td>Conditional-forecast mode</td><td>Is replay mode. Vintages still needed to build origin packs</td></tr>
+    <tr><td>0028 tests</td><td>Oil price path 2000-2010 under the historical tape</td><td>Run in replay; add a distributional test of oil price volatility unconditionally</td></tr>
+  </table></div>
+  <p><b>Costs.</b> One CI test (year relabel), a hazard registry with thinning (most of it is 0051), a pandemic spillover map, a replay loader that turns the tape tables into logged interventions (the existing tape reader, reused), and DESIGN 13 and 15 rewrites. No new free behavioural parameters: hazard parameters are fitted on catalogues and go in the register as data-estimated. Unconditional hindcast scores will look worse than conditional ones; that gap is reported, not hidden.</p>
+</section>
+
+<section>
+  <h2>Decisions</h2>
+  <div class="cards">
+
+  <div class="card"><div class="q">D1. What does a default run read after 1 Jan 2000?</div>
+  <p class="ctx">The whole proposal rests on this.</p>
+  <div class="opt rec"><b>A</b><span>Calendar-blind; history only as an optional replay set<span class="tag">recommended</span></span><span class="rl">Default = state, parameters, random streams. Replay is logged interventions for calibration and tests. Year-relabel CI test.</span></div>
+  <div class="opt"><b>B</b><span>Keep tape-then-rules to 2024</span><span class="rl">Today's design. Hindcast looks like history; the 2024 seam stays.</span></div>
+  <div class="opt"><b>C</b><span>Calendar-blind, no replay at all</span><span class="rl">Purest, but mechanism parameters lose identification and 15.5 natural experiments go.</span></div>
+  </div>
+
+  <div class="card"><div class="q">D2. What counts as initial state beyond levels?</div>
+  <p class="ctx">Decides whether China's WTO accession, EU 2004 enlargement and projects under way happen in the default run.</p>
+  <div class="opt rec"><b>A</b><span>Levels plus commitments in force at t0, each with a completion hazard<span class="tag">recommended</span></span><span class="rl">Adopted schedules and projects under construction on 1 Jan 2000. Nothing still under negotiation.</span></div>
+  <div class="opt"><b>B</b><span>Levels only</span><span class="rl">Simplest. Uruguay phase-ins and quota expiry in 2005 do not happen.</span></div>
+  <div class="opt"><b>C</b><span>A plus items under negotiation, with hazards</span><span class="rl">China WTO and EU 2004 become likely draws. Someone picks the list, which is soft railroading.</span></div>
+  </div>
+
+  <div class="card"><div class="q">D3. How are parameters calibrated and validated?</div>
+  <div class="opt rec"><b>A</b><span>Hazards on long catalogues; mechanisms in replay; validate both ways<span class="tag">recommended</span></span><span class="rl">Unconditional scores (PIT, CRPS, event frequencies) plus conditional replay scores; report the gap.</span></div>
+  <div class="opt"><b>B</b><span>Unconditional only</span><span class="rl">SBI on distributional moments. Clean, but weak identification of propagation.</span></div>
+  <div class="opt"><b>C</b><span>Replay only</span><span class="rl">Today's design. Never tests whether the model's own shocks look like the world's.</span></div>
+  </div>
+
+  <div class="card"><div class="q">D4. How do policy regimes change after t0 in 1.0?</div>
+  <p class="ctx">0210 and 0229 rules cover rates, budgets, default and rescues. This is about the rest: trade policy, exchange-rate regimes, prudential rules. Politics stays 2.0.</p>
+  <div class="opt"><b>A</b><span>Held at t0 values</span><span class="rl">Minimal. Tariffs, pegs and prudential rules never move without an edit.</span></div>
+  <div class="opt rec"><b>B</b><span>A plus regime-switch and post-crisis tightening hazards<span class="tag">recommended</span></span><span class="rl">Peg exits, inflation-targeting adoption, regulation that tightens after a simulated crisis. Trade policy held until 2.0.</span></div>
+  <div class="opt"><b>C</b><span>B plus trade-policy hazards</span><span class="rl">Protection after import surges, slow liberalization. Closer to politics, which 2.0 owns.</span></div>
+  </div>
+
+  <div class="card"><div class="q">D5. How do pandemics start?</div>
+  <div class="opt rec"><b>A</b><span>Province spillover hazard, pathogen traits from a historical prior<span class="tag">recommended</span></span><span class="rl">Where land use, livestock and density make spillover likely; lockdowns and vaccines as fitted rules.</span></div>
+  <div class="opt"><b>B</b><span>Global arrivals, seeded by population</span><span class="rl">Simpler; origin ignores ecology, so land-use counterfactuals cannot change pandemic risk.</span></div>
+  <div class="opt"><b>C</b><span>Replay only in 1.0</span><span class="rl">No emergent pandemics until a later version.</span></div>
+  </div>
+
+  <div class="card"><div class="q">D6. How do technology shocks arrive?</div>
+  <p class="ctx">7.5 frontier growth already depends on research effort (semi-endogenous). Directed research is 0179, part of the 3.0 technology major.</p>
+  <div class="opt rec"><b>A</b><span>Split part of frontier growth into fat-tailed sector jumps<span class="tag">recommended</span></span><span class="rl">Same mean growth, lumpy arrivals, rates fitted to sector TFP accounts. Shale-type gains come from 0178.</span></div>
+  <div class="opt"><b>B</b><span>Smooth frontier growth only</span><span class="rl">Today's design. No technology surprises.</span></div>
+  <div class="opt"><b>C</b><span>Research-driven arrival rates now</span><span class="rl">Pulls part of 0179 and the 3.0 major into 1.0.</span></div>
+  </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>After the picks</h2>
+  <p>One ADR for the calendar-blind rule and replay (D1-D3), one for hazards (D4-D6), numbered from 0241 after re-checking main, plus amendments to 0210, 0229, 0230, 0233 and 0206 and the DESIGN 13 and 15 rewrites in the same PR. A present-day origin (a 2024 pack) is a follow-up once the pipeline builds rolling origins.</p>
+</section>
+</main>

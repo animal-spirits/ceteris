@@ -1,0 +1,257 @@
+<title>Ceteris Blind Spots</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column of panels on the app ground; the ranked table is the summary, flags below are the detail. Single dark theme from the Ceteris design system. */
+:root{
+  --ground:#0f1720;--panel:#161f2a;--raised:#1c2734;--hover:#223041;
+  --line:#2a3644;--line-strong:#3a4757;--ink:#ece8e0;--muted:#a3a9b0;
+  --gold:#c9a253;--gold-bright:#e2c27a;--on-gold:#14100a;
+  --good:#9fd3a0;--rise:#e7a86a;--fall:#8db6e3;--danger:#f0907f;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+body{background:var(--ground);color:var(--ink);font:13px/1.55 var(--sans);}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px;display:grid;gap:16px}
+h1{font-size:24px;line-height:28px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h2{font-size:15px;line-height:20px;font-weight:600;margin:0;text-wrap:balance}
+h3{font-size:13px;font-weight:600;margin:0}
+p{margin:0;max-width:72ch}
+.eyebrow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:500}
+.muted{color:var(--muted)}
+.mono,td.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.panel{background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;padding:16px;display:grid;gap:12px;min-width:0}
+.panel>header{display:grid;gap:4px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.lede{font-size:15px;line-height:1.55;max-width:72ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.tile{background:var(--raised);border-radius:4px;padding:12px;display:grid;gap:4px;align-content:start}
+.tile .lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tile .val{font:500 20px/24px var(--mono)}
+.tile .sub{font-size:12px;color:var(--muted)}
+ul{margin:0;padding-left:18px;display:grid;gap:6px}
+li{max-width:75ch}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{text-align:right;white-space:nowrap;color:var(--muted)}
+tr:hover td{background:var(--hover)}
+.chip{display:inline-block;font:11px/14px var(--mono);padding:1px 6px;border-radius:2px;background:var(--raised);border:1px solid var(--line-strong);white-space:nowrap}
+.chip.a{color:var(--danger);border-color:#6a3a33}
+.chip.b{color:var(--rise);border-color:#6a4d33}
+.chip.c{color:var(--fall);border-color:#34506e}
+.sev{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:1px}
+.sev.a{background:var(--danger)}.sev.b{background:var(--rise)}.sev.c{background:var(--fall)}
+.flag{display:grid;grid-template-columns:28px 1fr;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.flag:last-child{border-bottom:0}
+.flag .no{font:500 12px/20px var(--mono);color:var(--muted)}
+.flag .t{font-weight:600;font-size:13.5px}
+.flag .row{grid-column:2;display:grid;grid-template-columns:72px 1fr;gap:8px}
+.flag .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:1px}
+.flag .fix{color:var(--ink)}
+.flag .fix b{color:var(--gold-bright);font-weight:500}
+.decision{display:grid;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
+.decision:last-child{border-bottom:0}
+.decision .rec{color:var(--gold-bright);font-size:12.5px}
+a{color:var(--gold-bright)}
+a:focus-visible{outline:2px solid var(--gold-bright);outline-offset:1px}
+footer{font-size:12px;color:var(--muted);display:grid;gap:6px}
+@media (max-width:560px){.flag .row{grid-template-columns:1fr;gap:2px}}
+</style>
+
+<div class="wrap">
+
+<section class="panel">
+  <header>
+    <span class="eyebrow">Blind-spot audit · main at 960e242 · 28 Oct 2026</span>
+    <h1>What Ceteris should have designed by now</h1>
+  </header>
+  <p class="lede">Read against DESIGN.md, the module specs and plans, and ADRs 0001 to 0207, with the lean 1.0 plan of ADR 0207 as the yardstick. Economics and data gaps were covered by ADRs 0167 to 0182 and are left out here. Eighteen gaps remain. Six of them block a gate on the 1.0 path, and the largest is economic in effect though not in the gap audit: nothing says who sets policy in 1.0.</p>
+  <div class="tiles">
+    <div class="tile"><span class="lab"><span class="sev a"></span>Blocks a 1.0 gate</span><span class="val">6</span><span class="sub">Needed at App shell, P3 or P5a</span></div>
+    <div class="tile"><span class="lab"><span class="sev b"></span>Needed before R</span><span class="val">9</span><span class="sub">Release, docs, licences, onboarding</span></div>
+    <div class="tile"><span class="lab"><span class="sev c"></span>Stance only</span><span class="val">3</span><span class="sub">One paragraph each, no build work in 1.0</span></div>
+    <div class="tile"><span class="lab">Next free ADR</span><span class="val">0210</span><span class="sub">0208-0209 held by open PR #59; recheck before any push</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow">Ranked</span>
+    <h2>Gaps by how much they block the lean 1.0 path</h2>
+  </header>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>#</th><th>Gap</th><th>Blocks</th><th>Partly covered by</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>Who sets policy in 1.0: reaction rules and the policy tape</td><td><span class="chip a">P5a, P5b, P8, P9</span></td><td>2.4, 9.2, 15.7 (one line on the tape)</td><td>ADR + spec</td></tr>
+      <tr><td class="n">2</td><td>Run files, saves and compatibility across versions</td><td><span class="chip a">P3</span></td><td>0002, 0128, 0136, 0197, pre-P3 B5</td><td>ADR</td></tr>
+      <tr><td class="n">3</td><td>History retention and the disk budget</td><td><span class="chip a">P3, P8</span></td><td>19.1 run store, 19.2 memory</td><td>ADR</td></tr>
+      <tr><td class="n">4</td><td>Data licences inside shared runs and exports</td><td><span class="chip a">P3</span></td><td>0005, 0050 (pack only)</td><td>ADR</td></tr>
+      <tr><td class="n">5</td><td>Failure handling: halts, panics, repro bundles</td><td><span class="chip a">App shell, P3</span></td><td>4.6 "a violation halts"</td><td>ADR</td></tr>
+      <tr><td class="n">6</td><td>Slint licence in CI and the About screen</td><td><span class="chip a">App shell</span></td><td>0088 Licence</td><td>Small fix</td></tr>
+      <tr><td class="n">7</td><td>First-run data fetch and source durability</td><td><span class="chip b">R gate</span></td><td>0113, fetch.toml pins</td><td>ADR</td></tr>
+      <tr><td class="n">8</td><td>Platforms, signing, updates, minimum Mac</td><td><span class="chip b">R gate</span></td><td>0207 R, 0128</td><td>ADR</td></tr>
+      <tr><td class="n">9</td><td>Attribution UI and the meaning of "release profile"</td><td><span class="chip b">R</span></td><td>0050, sources.toml notes</td><td>ADR amendment</td></tr>
+      <tr><td class="n">10</td><td>Telemetry and crash-report stance</td><td><span class="chip b">R</span></td><td>None</td><td>Stance</td></tr>
+      <tr><td class="n">11</td><td>Opening the repo and taking contributions</td><td><span class="chip b">R, or earlier</span></td><td>0001, CLAUDE.md</td><td>ADR + files</td></tr>
+      <tr><td class="n">12</td><td>Documentation set, including the ODD description</td><td><span class="chip b">P9, R</span></td><td>15.7, 0158</td><td>ADR</td></tr>
+      <tr><td class="n">13</td><td>Localization pipeline and 1.0 languages</td><td><span class="chip b">App shell (strings), R</span></td><td>0078, 0140, 0143, 0158</td><td>ADR</td></tr>
+      <tr><td class="n">14</td><td>Colour-vision-safe map modes and UI scale</td><td><span class="chip b">App shell, P3</span></td><td>0137, 0140, 0188</td><td>Amend 0137</td></tr>
+      <tr><td class="n">15</td><td>Disputed borders and sensitive-content stance</td><td><span class="chip b">R</span></td><td>0006, 22 risk table</td><td>ADR</td></tr>
+      <tr><td class="n">16</td><td>Long-horizon and app testing</td><td><span class="chip b">P8, R</span></td><td>21.2, pre-P3 D5, 0120, 0128</td><td>Plan tasks</td></tr>
+      <tr><td class="n">17</td><td>Multiplayer stance</td><td><span class="chip c">None</span></td><td>2.4, 0130, 0132</td><td>Stance</td></tr>
+      <tr><td class="n">18</td><td>AI opponents and the Steward baseline</td><td><span class="chip c">1.3</span></td><td>12, 23.8</td><td>Follows #1</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow"><span class="sev a"></span>Blocks a 1.0 gate</span>
+    <h2>Design these before the phase that first needs them</h2>
+  </header>
+
+  <div class="flag"><span class="no">1</span><span class="t">Who sets policy in 1.0</span>
+    <div class="row"><span class="k">Found</span><span>DESIGN 2.4 says that in 1.x "policy comes from estimated reaction functions or the historical policy tape". Neither is designed. 9.6 says budgets "are set by the state AI under institutional rules (Section 10)", and 9.4 makes default "a strategic choice of the state AI", but the Tier 1a planner (12.3) needs coalition weights from P6, which is 2.0. The tape gets one bullet in 15.7: no sources, no format, no lever list.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>P5a (who sets taxes and spending), P5b (who decides to default), P8 (runs to 2150 need policy after the tape ends in 2024), P9 (the hindcast feeds the tape to separate mechanism error from policy error). Steward mode in 1.3 scores the player against this agent.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>policy-agent ADR and a <code>policy</code> SPEC</b> written before P5a: one rule per lever (Taylor or peg defence from 9.2, a Bohn-type fiscal reaction on debt and the cycle, tariffs and trade wedges held at their last tape value, default as a hazard on debt service and reserves), each with country parameters estimated on 2000 to 2010. The tape lists levers, sources and licences, and the format it shares with the shock tape of 13.1. Card 1.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">2</span><span class="t">Run files, saves and compatibility across versions</span>
+    <div class="row"><span class="k">Found</span><span>Five words for overlapping things: scenario file (0113, 0188), run file (0142, 0143), session file (0132), run store (19.1), snapshot (0002). Replay is bit-exact only for the same engine build and pack hash, yet nothing says what happens when 1.1 opens a run made in 1.0. Pre-P3 B5 makes an old snapshot a <code>DecodeError</code>; 0136 and 0197 promise a <code>ceteris migrate</code> path; 0002 re-blesses everything when snapshots move to Arrow in P3. DESIGN 23.3 calls the pack, scenario and intervention formats "public API" under a versioning policy that lives only in the 23 October roadmap page, not in the repo.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>P3: run hashes and share (0128), the branch store and the Arrow move (0002), the read-only API schema (0197).</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">One <b>file-family ADR</b>: the scenario file (pack hash, engine version, parameters, edits, seeds) is the save and the stable public format; snapshots and the run store are caches keyed by engine version and can be thrown away. A newer engine opens an old run's stored results read-only and offers to re-simulate it as a new, labelled branch. The compatibility promise for 1.x is written into the repo. Card 2.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">3</span><span class="t">History retention and the disk budget</span>
+    <div class="row"><span class="k">Found</span><span>The econ SPEC measures 1.88 GB peak memory for 120 ticks with history, on 10 goods. 1.0 has 45 goods, runs to 2150 (about 1,800 ticks), and ensembles default to K = 32 (14.1). Taken linearly that is tens of GB per run and terabytes per ensemble. 19.2 budgets memory for one run (6 GB) and says nothing about disk.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>P3 ensembles and fan charts; the P8 run to 2150.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>retention ADR</b>: full history at the view interval for the live branch only, annual history after a horizon, ensemble members keep declared outcome metrics and snapshots, and anything else is re-simulated on demand (cheap, since replay is exact). A disk budget per run and per ensemble sits beside 19.2. Agent default unless you object.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">4</span><span class="t">Data licences inside shared runs and exports</span>
+    <div class="row"><span class="k">Found</span><span>Licence checks stop at the pack. Snapshots are derived from every source, including ones marked no-redistribution in sources.toml (for example the IFPRI SPAM terms and GADM). <code>ceteris fetch &lt;hash&gt;</code> pulls snapshot chunks "from any mirror or peer" (0128), and 0197 exports tables to Parquet and GeoPackage. Both redistribute derived data with no licence filter or notice.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>P3, where share, fetch and Arrow exports are built.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>licence-propagation ADR</b>: each pack table carries the set of sources it derives from; share sends the scenario file and hashes only, and the recipient rebuilds from their own pack; exports embed the attribution text and refuse no-redistribution tables. Card 3.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">5</span><span class="t">Failure handling: halts, panics, repro bundles</span>
+    <div class="row"><span class="k">Found</span><span>4.6 says an invariant violation halts the run, and the core panics on bad inputs (geo SPEC radius check, ledger overflow). Nothing says what the app does then: lose the session, show the tick and invariant, offer to fork back? Nothing defines a panic-versus-Result boundary between core and app, logging levels, or where logs go.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>App shell (the first build a non-developer opens) and P3 (fuzzing in 0120 already shrinks failures to a minimal manifest).</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>failure ADR</b>: the core returns a typed halt (tick, system, invariant, values) and the app keeps the last snapshot, shows the halt, and writes a <b>repro bundle</b> (scenario file, pack hash, engine version, tick) that replays the failure exactly on any machine. Determinism makes this unusually strong; most games cannot reproduce a crash at all.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">6</span><span class="t">Slint licence in CI and the About screen</span>
+    <div class="row"><span class="k">Found</span><span><code>deny.toml</code> allows only permissive licences and the migration plan says "No GPL/AGPL". Slint is published as GPL-3.0 or its royalty-free licence or commercial; the royalty-free one is a <code>LicenseRef</code> that the allowlist does not name, so <code>cargo deny check licenses</code> should fail the day Slint enters the workspace. 0088 also requires the <code>AboutSlint</code> widget in an About screen, which no ADR places.</span></div>
+    <div class="row"><span class="k">Blocks</span><span>App shell CI.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Add a <code>deny.toml</code> exception for Slint's royalty-free licence in the App shell's first PR, and put the About screen into #9. No ADR needed.</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow"><span class="sev b"></span>Needed before R</span>
+    <h2>Design during P3 to P9; build in R</h2>
+  </header>
+
+  <div class="flag"><span class="no">7</span><span class="t">First-run data fetch and source durability</span>
+    <div class="row"><span class="k">Found</span><span>fetch.toml pins 50 files, about 6 GB, by sha256; 13 are manual downloads from three providers (OECD ICIO, Global Energy Monitor, Kummu GDP). The README still says 920 MB. When a provider revises or removes a pinned file, every new user is blocked and the R gate ("a clean machine reproduces the published hashes") fails. There is no mirror policy, no design for guiding a manual download, resuming, disk checks, or rebuilding the pack when an app update changes the schema.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>first-run ADR</b>: an in-app fetch screen per source (size, licence, status, a drop zone for manual files checked by hash), resumable downloads, and an archive of each release's redistributable sources on Zenodo, with upstream used for the rest. Card 4.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">8</span><span class="t">Platforms, signing, updates, minimum Mac</span>
+    <div class="row"><span class="k">Found</span><span>R says "a signed macOS build". 0128 wants the golden hash on macOS, Linux and Windows. Undecided: whether 1.0 ships a Linux CLI, the Apple Developer account (99 USD a year on a non-commercial project), the channel (GitHub Releases, Homebrew cask), how updates reach users, and what happens on a 16 GB Mac when 19.2 assumes 18 to 36 GB.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>distribution ADR</b>. Suggested defaults: macOS app plus a headless CLI for macOS and Linux (CI already runs Linux), GitHub Releases and a Homebrew cask, an update check that only notifies, and a 16 GB minimum with fewer lanes and a longer history interval.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">9</span><span class="t">Attribution UI and the meaning of "release profile"</span>
+    <div class="row"><span class="k">Found</span><span>CC BY sources need credit where the data is shown; IFPRI asks for a set sentence on adaptations; ODbL needs a notice; Slint needs its About widget. No screen holds these. ADR 0050 still builds the release profile on <code>commercial_use</code> and cites a Steam plan, both overtaken by the 28 October decision: with user-side fetch the real split is what may ship prebuilt (tiles, from redistributable sources) and what each user fetches.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Amend 0050 so the profiles mean <b>prebuilt</b> and <b>user-fetched</b>, and generate a Credits and licences screen and the export notices from sources.toml.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">10</span><span class="t">Telemetry and crash reports</span>
+    <div class="row"><span class="k">Found</span><span>No mention anywhere.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">State a stance in the failure ADR (#5). Card 5.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">11</span><span class="t">Opening the repo and taking contributions</span>
+    <div class="row"><span class="k">Found</span><span>The project is "open source", but the repo has no CONTRIBUTING, code of conduct, security policy, issue templates, or rule on DCO versus CLA; 0088 speaks of "when the code opens" without a date. 22.1 asks for a name check on crates.io and GitHub that nothing records as done. With one part-time maintainer from February 2027, review load is the binding cost.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">A <b>governance ADR</b> with the files it implies. Card 6.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">12</span><span class="t">Documentation set</span>
+    <div class="row"><span class="k">Found</span><span>15.7 requires an ODD-protocol model description "so outsiders can review it"; no phase owns it. R ships a minimum pedia (0158). There is no user manual, no methods page behind the scorecard, and no developer guide beyond CLAUDE.md.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Put the ODD description into P9 next to the scorecard, generated in part from SPEC files and the register (17); the user guide grows from 0158's pedia in R. Agent default.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">13</span><span class="t">Localization pipeline and 1.0 languages</span>
+    <div class="row"><span class="k">Found</span><span>0078, 0140, 0143 and 0158 assume Fluent files and refer to "every game language", which no ADR defines. Number, date and currency formats, CJK and right-to-left fonts in Slint, and the translation workflow are open.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">English only in 1.0, with every user-facing string in Fluent from the App shell on, so adding a language later is translation work, not refactoring. Agent default unless you object.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">14</span><span class="t">Colour-vision-safe map modes and UI scale</span>
+    <div class="row"><span class="k">Found</span><span>Covered: keyboard-only use and screen-reader names through AccessKit (0188), reduced motion (0137), WCAG AA chrome (0140). Missing: palettes for the map modes that read under the common colour-vision deficiencies, difference maps whose robustness mask (14.5) is not carried by colour alone, and a UI scale setting.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Amend 0137: every ramp passes a CVD simulation check in CI, the mask uses hatching, and a UI scale from 85% to 150%.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">15</span><span class="t">Disputed borders and sensitive-content stance</span>
+    <div class="row"><span class="k">Found</span><span>0006 keeps Natural Earth's de facto assignment for everything not listed in borders_2000.toml (Kashmir, Western Sahara, Taiwan's status, Abkhazia and others). The choice is reasonable but undocumented to users, and Natural Earth also ships per-country point-of-view layers. 22's risk table promises neutral modelling and no editorial text, with no policy behind it.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">An ADR that states the de facto rule, lists disputed areas in the pedia with each claimant's view, and leaves worldview switching to a data mod.</span></div>
+  </div>
+
+  <div class="flag"><span class="no">16</span><span class="t">Long-horizon and app testing</span>
+    <div class="row"><span class="k">Found</span><span>Well covered: goldens, proptest, the nightly self-hosted pack gate (pre-P3 D5), fuzzing (0120), cross-platform hashes (0128). Open: where the 100-year and 2150 runs on the full pack execute and how long they may take, any test of the Slint app (screenshot or interaction), and a CI job that builds the pack the way a user does.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Tasks in the App shell and R plans; no ADR.</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow"><span class="sev c"></span>Stance only</span>
+    <h2>Write one paragraph and move on</h2>
+  </header>
+  <div class="flag"><span class="no">17</span><span class="t">Multiplayer</span>
+    <div class="row"><span class="k">Found</span><span>2.4 rules out multiplayer for version 1; 0130 plans lockstep seats in 2.0; 0132 has asynchronous relay through session files. No single stance says whether networked play is ever in scope.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">No networked play in 1.x; shared play is asynchronous through scenario files and hashes; lockstep seats are reconsidered with 2.0. Folds into the file-family ADR.</span></div>
+  </div>
+  <div class="flag"><span class="no">18</span><span class="t">AI opponents and the Steward baseline</span>
+    <div class="row"><span class="k">Found</span><span>23.8 designs the strategic AI for 2.0. The 1.3 player score (23.4) is measured against "the AI", which in 1.x is the policy agent of #1.</span></div>
+    <div class="row"><span class="k">Proposed</span><span class="fix">Nothing new: #1 names its rules as the 1.3 baseline.</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow">Found along the way</span>
+    <h2>Inconsistencies in what is already written</h2>
+  </header>
+  <ul>
+    <li>15.7 runs data assimilation through the consistency solver of 23.2, which is scheduled for 1.4. P9 either needs a lean solver or assimilation without the projection step.</li>
+    <li>README.md says P1 is the current phase, that there is no economics, and gives Python build steps and a 920 MB download.</li>
+    <li>ADR 0050 and 0088 still cite the Steam plan and commercial use.</li>
+    <li>DESIGN 1, 14.8, 19.1 and 19.3 still describe Python and PyO3; ADR 0207 leaves them to migration step 5.</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <header>
+    <span class="eyebrow">Decisions</span>
+    <h2>Posed as cards in the thread</h2>
+  </header>
+  <div class="decision"><h3>1. Who sets policy in 1.0, after the tape ends?</h3><span class="rec">Recommended: estimated rules per lever, fed by the tape to 2024</span></div>
+  <div class="decision"><h3>2. What happens when a new version opens an old run?</h3><span class="rec">Recommended: stored results read-only, re-simulate as a labelled branch</span></div>
+  <div class="decision"><h3>3. What does sharing a run send?</h3><span class="rec">Recommended: the scenario file and hashes only</span></div>
+  <div class="decision"><h3>4. How do pinned sources survive provider changes?</h3><span class="rec">Recommended: archive redistributable sources on Zenodo each release</span></div>
+  <div class="decision"><h3>5. Telemetry and crash reports</h3><span class="rec">Recommended: none; a local repro bundle the user can attach to an issue</span></div>
+  <div class="decision"><h3>6. When does the repo open, and on what terms?</h3><span class="rec">Recommended: public now, issues open, code contributions after 1.0 under DCO</span></div>
+  <div class="decision"><h3>7. Which gaps become ADRs now?</h3><span class="rec">Recommended: the five gate blockers, as 0210 onward</span></div>
+</section>
+
+<footer>
+  <p>Method: grep and read of DESIGN.md sections 1 to 2, 4, 9, 12 to 15, 19 to 23; specs/core, econ, geo, trade, pre-p3 and rust-migration; every ADR title and status, with full reads of 0002, 0005, 0050, 0088, 0113, 0128, 0134, 0136, 0197 and 0207 and targeted reads of 0024, 0116, 0120, 0127, 0130, 0132, 0137, 0140, 0143, 0144, 0158, 0166 and 0188; deny.toml, ci.yml, fetch.toml, sources.toml and README on main at 960e242.</p>
+  <p>Excluded on purpose: unmodelled economics and data (ADRs 0167 to 0182), and items already in the brainstorm and borrowed-mechanics ADRs (0116 to 0135, 0155 to 0164).</p>
+</footer>
+
+</div>
