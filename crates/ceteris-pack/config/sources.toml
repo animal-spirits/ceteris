@@ -1538,7 +1538,7 @@ id = "eia"
 name = "US EIA energy data (EIA-collected series)"
 provider = "US Energy Information Administration"
 version = "Current"
-role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces; International Energy Statistics (country coal, oil and gas production and use, 2000) calibrates the spec 07 energy rows in all packs; IEA balances stay held-out (#499)"
+role = "Energy prices and quantities (7.7, 15.4); SEDS 2000 crude oil and marketed gas production by state places US oil and gas VA in provinces; International Energy Statistics (country coal, oil and gas production and use, 2000) calibrates the spec 07 energy rows in all packs; its electricity series (generation and capacity by fuel, consumption, trade, losses) calibrate the power mix (ADR 0358, replaces Ember); IEA balances stay held-out (#499)"
 licence = "LicenseRef-USGov-PublicDomain"
 licence_url = "https://www.eia.gov/about/copyrights_reuse.php"
 attribution = "Source: U.S. Energy Information Administration"
@@ -2329,22 +2329,40 @@ confidence = "medium"
 notes = "Excludes international aviation and shipping; LULUCF only in the no-rounding file. Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the record: cloud host cannot reach zenodo.org. Fetch file name and hash pinned 2026-11-11 by `pack fetch --record` (Zenodo MD5 a9d2d3958211b90885d149a89c27f10e matched)."
 
 [[source]]
+id = "eurostat-nrg-bal-peh"
+name = "Eurostat gross and net production of electricity and derived heat by type of plant and operator (nrg_bal_peh)"
+provider = "Eurostat"
+version = "Current release (unpinned)"
+role = "European cross-check of EIA electricity generation by fuel (7.7, ADR 0358)"
+licence = "CC-BY-4.0"
+licence_url = "https://ec.europa.eu/eurostat/help/copyright-notice"
+attribution = "Eurostat, nrg_bal_peh"
+commercial_use = true
+share_alike = false
+use = "validation"
+policy = "fetch"
+reason = "Eurostat data reusable for any purpose with attribution, for EU, EFTA and candidate countries"
+checked = 2026-11-12
+confidence = "medium"
+notes = "Gross generation (EIA reports net). Non-EU country data in Eurostat is non-commercial; use EU, EFTA and candidate rows only. Fetch URL and hash unpinned: pin with `pack fetch --record` when the cross-check is wired."
+
+[[source]]
 id = "ember-yearly"
 name = "Ember yearly electricity data (full release, long format)"
 provider = "Ember"
 version = "Current release (unpinned)"
-role = "Electricity generation by fuel, capacity, demand and power-sector emissions by country, 2000 onward; power generation mix (07, P8 energy rows); EIA is the cross-check"
+role = "Was: electricity generation by fuel, capacity, demand and power-sector emissions by country (07, P8 energy rows); replaced by EIA electricity series (ADR 0358)"
 licence = "CC-BY-4.0"
 licence_url = "https://ember-energy.org/data/yearly-electricity-data/"
-attribution = "Ember, Yearly Electricity Data, https://ember-energy.org/data/yearly-electricity-data/. Licence: CC BY 4.0"
+attribution = "n/a"
 commercial_use = true
 share_alike = false
-use = "primary"
-policy = "fetch"
-reason = "Ember states all content is released under CC BY 4.0; Ember compiles EIA, Eurostat, UN and national data and the CC BY statement is Ember's own (#505)"
-checked = 2026-11-11
+use = "rejected"
+policy = "exclude"
+reason = "Ruled out by Antonio 2026-11-12 (#505): Ember's CC BY 4.0 covers its compilation, but most large power sectors come from the Energy Institute Statistical Review, which publishes no open licence"
+checked = 2026-11-12
 confidence = "medium"
-notes = "Licence read from the study (reports/data-sources-research-2026-11-11.md), not re-checked on the provider page: cloud host cannot reach ember-energy.org. Fetch URL, size and hash unpinned; confirm at pack build with `pack fetch --record`."
+notes = "Study: docs/research/electricity-source-after-ember-2026-11-12.md. Fetch entry removed."
 
 [[source]]
 id = "icp-basic-headings"

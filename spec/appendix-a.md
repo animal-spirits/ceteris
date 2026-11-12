@@ -345,4 +345,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0355 | [Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
 | 0356 | [A calibration solved under the approved storage values loads and runs with storage on (RFC 0286 screen)](../rfcs/0346-storage-on-calibration-for-the-rfc-0286-screen.md) | 8.2 |
 | 0357 | [EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0347-eia-calibrates-energy-iea-held-out.md) | 7.7, 15.4 |
+| 0358 | [EIA International Energy Statistics electricity series calibrate power generation and capacity by fuel; Ember rejected](../rfcs/0348-electricity-source-after-ember.md) | 7.7, 15.4 |
 <!-- rows:end -->
