@@ -72,7 +72,7 @@ Options:
 Recommendation: C, because A is small and correct in money, and the government as a buyer
 belongs with budgets set by the state AI (Section 10, P6).
 
-Decision: pending.
+Decision: C, Antonio, 2026-11-12.
 Row: pending
 
 ### D4. Where are taxes collected?
