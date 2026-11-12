@@ -1669,7 +1669,18 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
         for e in lay.enterprises(i) {
             let cash = w.ledger.money(acc.enterprise[e]);
             w.profit[e] = to_numeraire(cash);
-            let paid = cash.max(0);
+            let mut paid = cash.max(0);
+            if let Some(cells) = &w.state_cells {
+                let state = cells.state_part(e, paid);
+                pay(
+                    &mut w.ledger,
+                    DIVIDEND,
+                    acc.enterprise[e],
+                    acc.government[c],
+                    state,
+                );
+                paid -= state;
+            }
             let f = inp.ent_foreign(e);
             match acc.foreign {
                 Some(account) if paid > 0 && f > 0.0 => {

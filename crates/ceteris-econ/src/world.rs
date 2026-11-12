@@ -727,6 +727,9 @@ pub struct EconWorld {
     pub fiscal: Option<crate::fiscal::Government>,
     /// Energy wedges of system 233; `None` is off. Its section is tagged and after the fiscal one.
     pub energy: Option<crate::energy_policy::EnergyPolicy>,
+    /// State energy cells paid to the government account in `distribute`; `None` is off. Its
+    /// section is tagged and after the energy one.
+    pub state_cells: Option<crate::state_cells::StateCells>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1421,6 +1424,14 @@ impl EconWorld {
         self
     }
 
+    /// Switches the state energy cells on: each enterprise's state share of its payout goes to
+    /// its country's government account.
+    pub fn with_state_cells(mut self, cells: crate::state_cells::StateCells) -> EconWorld {
+        assert_eq!(cells.share.len(), self.inputs.n_enterprises());
+        self.state_cells = Some(cells);
+        self
+    }
+
     /// Switches the government accounts (system 232) on, one per country.
     pub fn with_fiscal(mut self, government: crate::fiscal::Government) -> EconWorld {
         assert_eq!(government.fiscal.len(), self.inputs.n_countries());
@@ -1521,6 +1532,7 @@ impl EconWorld {
             monetary: None,
             fiscal: None,
             energy: None,
+            state_cells: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2462,6 +2474,9 @@ impl Encode for EconWorld {
         if let Some(p) = &self.energy {
             p.encode(e);
         }
+        if let Some(c) = &self.state_cells {
+            c.encode(e);
+        }
     }
 }
 
@@ -2471,7 +2486,7 @@ fn monetary_next(d: &Decoder) -> bool {
 
 /// Whether one of the tagged sections that close the snapshot comes next.
 fn tagged_next(d: &Decoder) -> bool {
-    wage_grid_next(d) || monetary_next(d) || fiscal_next(d) || energy_next(d)
+    wage_grid_next(d) || monetary_next(d) || fiscal_next(d) || energy_next(d) || state_cells_next(d)
 }
 
 fn fiscal_next(d: &Decoder) -> bool {
@@ -2480,6 +2495,10 @@ fn fiscal_next(d: &Decoder) -> bool {
 
 fn energy_next(d: &Decoder) -> bool {
     d.peek_count() == Ok(crate::energy_policy::SNAPSHOT_TAG as usize)
+}
+
+fn state_cells_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::state_cells::SNAPSHOT_TAG as usize)
 }
 
 fn wage_grid_next(d: &Decoder) -> bool {
@@ -2882,6 +2901,13 @@ impl State for EconWorld {
         } else {
             None
         };
+        let state_cells = if state_cells_next(d) {
+            let c = crate::state_cells::StateCells::decode(d)?;
+            expect_len("state cells", c.share.len(), self.inputs.n_enterprises())?;
+            Some(c)
+        } else {
+            None
+        };
 
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
@@ -2949,6 +2975,7 @@ impl State for EconWorld {
             monetary,
             fiscal,
             energy,
+            state_cells,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -3886,6 +3913,63 @@ mod tests {
         let (bytes, back) = round_trip(excise.world());
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.energy, excise.world().energy);
+    }
+
+    /// With state cells off the government accounts stay at zero; on, the state share of each
+    /// enterprise's payout books to its government account instead of the pops, and the section
+    /// survives a snapshot.
+    #[test]
+    fn state_cells_off_equals_status_quo_and_on_posts_profits_to_the_government_account() {
+        use crate::state_cells::StateCells;
+        let n_ent = world().inputs().n_enterprises();
+        let run = |share: f64| {
+            let cells = StateCells {
+                share: vec![share; n_ent],
+            };
+            let mut sim = Sim::new(
+                world().with_state_cells(cells),
+                crate::systems::schedule(),
+                crate::systems::SEED,
+            );
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            sim
+        };
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let below = run(0.04);
+        let on = run(0.5);
+        let gov = |w: &EconWorld| -> i128 {
+            w.layout
+                .accounts
+                .government
+                .iter()
+                .map(|&a| w.ledger.money_wide(a))
+                .sum()
+        };
+        assert_eq!(gov(off.world()), 0);
+        assert!(gov(on.world()) > 0);
+        assert_eq!(gov(below.world()), 0);
+        let pops = |w: &EconWorld| -> Vec<i64> {
+            w.layout
+                .accounts
+                .pop
+                .iter()
+                .map(|&a| w.ledger.money(a))
+                .collect()
+        };
+        assert_eq!(pops(below.world()), pops(off.world()));
+        assert_ne!(pops(on.world()), pops(off.world()));
+        let (bytes, back) = round_trip(on.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.state_cells, on.world().state_cells);
+    }
+
+    #[test]
+    fn state_cells_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.state_cells = None;
+        assert_eq!(canonical(12, &w), a);
     }
 
     #[test]

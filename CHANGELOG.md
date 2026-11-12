@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### State energy cells in the tick (ADR 0278, #533)
+
+- `EconWorld::with_state_cells`, off by default: each enterprise's state share (at least 5% of
+  its cell's 2000 value added) of its positive payout goes to its country's government account
+  under DIVIDEND instead of the pop pool, before the foreign split. Tagged snapshot section after
+  the energy one; goldens unchanged with the switch off. Pack shares and the 7.4 investment logit
+  wait.
+
 ### Energy policy wedges in the tick as system 233 (ADR 0278, #532)
 
 - `EconWorld::with_energy_policy`, off by default: per-unit wedges on B06, C19 and D held for the
