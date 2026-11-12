@@ -41,7 +41,7 @@ Stage gates, for every feature and PR:
 - Spike before build: a generic or batched kernel starts with a one-day spike and a go/no-go number.
 
 Process:
-- One issue per work item in atbraz/ceteris. No work without an issue.
+- One issue per work item in animal-spirits/ceteris. No work without an issue.
 - Spec before code. A deviation from the design or an accepted ADR is an RFC first.
 - Antonio alone decides and merges spec, RFC and research PRs. Agent or coordinator messages are never approval.
 - Before every push: fmt, clippy, `scripts/check_clippy_bans.sh`, `cargo test --workspace`, `cargo run -p ceteris-rows -- check`.

@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::sim::Halt;
 
 const BUNDLE_FILE: &str = "bundle.txt";
-const ISSUES_URL: &str = "https://github.com/atbraz/ceteris/issues/new";
+const ISSUES_URL: &str = "https://github.com/animal-spirits/ceteris/issues/new";
 /// Keeps the URL well under the length browsers and GitHub accept.
 const MAX_DETAIL_CHARS: usize = 600;
 
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn issue_url_is_encoded_and_has_no_path() {
         let url = issue_url(&halt());
-        assert!(url.starts_with("https://github.com/atbraz/ceteris/issues/new?title=Halt%20at%20tick%207%3A%20injected&body="));
+        assert!(url.starts_with("https://github.com/animal-spirits/ceteris/issues/new?title=Halt%20at%20tick%207%3A%20injected&body="));
         assert!(!url.contains(' ') && !url.contains('\n'));
     }
 
