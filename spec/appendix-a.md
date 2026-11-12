@@ -340,4 +340,7 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0350 | [`CLA.md` has individual and corporate forms; the owner is named by GitHub account only](../rfcs/0344-game-licence-and-cla-process.md) | 19.3, 22.1 |
 | 0351 | [Contributors sign the CLA by pull request comment, checked by the owner; no `.github/` workflow](../rfcs/0344-game-licence-and-cla-process.md) | 19.3 |
 | 0352 | [Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
+| 0353 | [Wire-or-park: no new P4/P5 kernel until each unwired kernel has a wiring issue; at most three kernels unwired at a time](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0354 | [At each phase gate every off-by-default switch becomes the default, gets a dated issue, or is deleted](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0355 | [Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
 <!-- rows:end -->

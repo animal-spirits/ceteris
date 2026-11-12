@@ -1675,3 +1675,18 @@ sections = "19.3"
 rows = "0352"
 topic = "[Game licence BUSL parameters: Change Date four years after each release; Additional Use Grant covers non-production use, mods and streaming](../rfcs/0344-game-licence-and-cla-process.md)"
 sections = "19.1, 23"
+
+[[entry]]
+rows = "0353"
+topic = "[Wire-or-park: no new P4/P5 kernel until each unwired kernel has a wiring issue; at most three kernels unwired at a time](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
+
+[[entry]]
+rows = "0354"
+topic = "[At each phase gate every off-by-default switch becomes the default, gets a dated issue, or is deleted](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
+
+[[entry]]
+rows = "0355"
+topic = "[Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md)"
+sections = "21.2"
