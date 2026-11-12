@@ -1,6 +1,6 @@
 # RFC 0350. Pass bands for the free moments at the P4 and P5 gates
 
-Status: proposed
+Status: accepted
 Date: 2026-11-12
 Design sections: 15.3, 15.7, 21.1; ADRs 0200, 0257, 0264, 0268
 Release: 1.0 (P4 and P5 gates)
@@ -32,7 +32,7 @@ Options:
 Recommendation: A.
 
 Decision: A, Antonio, 2026-11-12 (question card, economy assessment thread).
-Row: to be filled when accepted.
+Row: ADR 0364
 
 ### D2. Which bands?
 
@@ -46,8 +46,8 @@ Options:
 Recommendation: A, because the bands are the literature ranges or the existing graded bars, not
 tuned to the model.
 
-Decision: pending, Antonio.
-Row: to be filled when accepted.
+Decision: A, Antonio, 2026-11-12.
+Row: ADR 0364
 
 | Moment | Source | Pass band |
 |---|---|---|
@@ -73,12 +73,12 @@ Options:
 
 Recommendation: A, because P4 changes population and the wage grid, which move trade results.
 
-Decision: pending, Antonio.
-Row: to be filled when accepted.
+Decision: A, Antonio, 2026-11-12.
+Row: ADR 0365
 
 ## Spec changes
 
-- Section 15.7 (phase-gate benchmark): the table above replaces "reported" for the listed moments.
-- Section 21.1 gate list: a miss outside a band blocks the gate as tier 1 or tier 2 per ADR 0257.
+- Section 15.7 (phase-gate benchmark; ADR 0364): the table above replaces "reported" for the listed moments.
+- Section 21.1 gate list (ADR 0365): a miss outside a band blocks the gate as tier 1 or tier 2 per ADR 0257.
 - `docs/free-moment-rerun.md`: pass numbers refer to this table, not to ADR 0257.
 - Test code: assertions of the bands in `benchmark.rs` and `p2_gate.rs` follow in a separate PR.

@@ -72,6 +72,8 @@ Targets, holdout periods and natural experiments are fixed in a pre-registration
 
 Accuracy comes first from how the model is fed and judged, second from targeted additions, and never from mechanisms that cannot prove their value out of sample.
 
+**Free-moment gates.** From the P4 gate, the free moments of RFC 0350 are hard gates with fixed pass bands (ADRs 0364, 0365): H2 distance in [-1.1, -0.7]; UK welfare under hard and soft Brexit within 0.5x to 1.5x of Dhingra et al. (2017); Japan and EU27 welfare negative under costlier borders; ACR-IO with no wrong sign, median in [0.8, 1.25] and correlation at least 0.9; openness per class within 1.5x of ICIO; border x10 survives 1,500 ticks with index at most 1.07 and welfare within 0.5x to 2x of the ACR prediction; US-China 2018 pass-through in [0.8, 1.2] and welfare in [-0.1%, -0.02%]; PPML theta class spread at least 3; short-run trade elasticity in [0.5, 1.5] with long-run over short-run at least 1.5, from the gate after #200. A band moves only by RFC.
+
 **Methods (no new mechanisms)**
 
 - **Data assimilation.** During the calibration window and at every rolling origin, the simulated state is nudged toward observed data with an ensemble Kalman or particle filter (sequential Monte Carlo for ABMs, as in Lux 2018), so forecasts start from data-consistent states. Each analysis step is followed by a projection through the consistency solver (23.2), so assimilated states satisfy the invariants of 4.6.
