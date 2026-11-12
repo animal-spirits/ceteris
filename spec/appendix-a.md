@@ -336,4 +336,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0346 | [Simulator code under AGPL-3.0-or-later, with commercial licences from the owner (supersedes MIT OR Apache-2.0)](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 22.1 |
 | 0347 | [2.0 game in a separate repository, source-available under a non-commercial licence; art all rights reserved](../rfcs/0343-licences-for-simulator-and-game.md) | 19.1, 23 |
 | 0348 | [Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md) | 19.3, 22.1 |
+| 0349 | [The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md) | 19.1, 23 |
 <!-- rows:end -->

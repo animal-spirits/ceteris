@@ -1655,3 +1655,8 @@ sections = "19.1, 23"
 rows = "0348"
 topic = "[Outside contributions require a CLA granting the owner relicensing rights](../rfcs/0343-licences-for-simulator-and-game.md)"
 sections = "19.3, 22.1"
+
+[[entry]]
+rows = "0349"
+topic = "[The 2.0 game's source-available licence is BUSL-style, not non-commercial (amends the licence text of ADR 0347)](../rfcs/0344-game-licence-and-cla-process.md)"
+sections = "19.1, 23"
