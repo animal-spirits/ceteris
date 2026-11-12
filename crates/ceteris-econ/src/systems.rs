@@ -101,6 +101,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(225, "wage_grid", |w, _| wage_grid(w)),
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(229, "settlement", |w, _| settlement(w)),
+        def(230, "monetary", |w, _| monetary(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -2005,6 +2006,41 @@ pub fn settlement(w: &mut EconWorld) {
         .flat_map(|&x| [x; crate::settlement::N_CLASS])
         .collect();
     s.step(&wage);
+}
+
+/// System 230 (`specs/money/SPEC.md`, P5 B1): monthly policy rate of each country's bank from
+/// its price level and employment. Reads the world, changes only the policy state. A no-op when
+/// monetary policy is off.
+pub fn monetary(w: &mut EconWorld) {
+    let Some(policy) = &w.monetary else {
+        return;
+    };
+    let nc = policy.banks.len();
+    let ng = w.inputs.n_goods();
+    let (mut num, mut den) = (vec![0.0; nc], vec![0.0; nc]);
+    for (c, (&a, &p)) in w
+        .layout
+        .index_weights
+        .iter()
+        .zip(&w.price_index)
+        .enumerate()
+    {
+        if p.is_finite() {
+            let country = w.inputs.country_of(c / ng);
+            num[country] += a * p;
+            den[country] += a;
+        }
+    }
+    let level: Vec<f64> = num.iter().zip(&den).map(|(n, d)| n / d).collect();
+    let mut employment = vec![0.0; nc];
+    for (e, &l) in w.employment.iter().enumerate() {
+        employment[w
+            .inputs
+            .country_of(w.inputs.enterprises.province[e] as usize)] += l;
+    }
+    if let Some(policy) = &mut w.monetary {
+        policy.step(&level, &employment);
+    }
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also
