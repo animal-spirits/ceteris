@@ -105,6 +105,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(230, "monetary", monetary),
         def(232, "fiscal", |w, _| fiscal(w)),
         def(233, "energy_policy", |w, _| energy_policy(w)),
+        def(234, "investment", |w, _| investment(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -2194,6 +2195,14 @@ pub fn fiscal(w: &mut EconWorld) {
         for (&k, &part) in pops.iter().zip(&parts) {
             pay(&mut w.ledger, GOV_INTEREST, gov, acc.pop[k as usize], part);
         }
+    }
+}
+
+/// System 234 (P5 D1, ADR 0204, #534): advances the capital pipelines a tick. A no-op when capital
+/// is off.
+pub fn investment(w: &mut EconWorld) {
+    if let Some(c) = &mut w.capital {
+        c.step();
     }
 }
 

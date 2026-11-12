@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Capital pipelines in the tick (ADR 0204, #534)
+
+- `EconWorld::with_capital`, off by default: system 234 steps one `investment::Pipeline` per
+  enterprise each tick, fully filled, from a fixed order per tick (a stand-in for the 7.4 logit).
+  Nothing reads the capital yet, so the real economy is unchanged on or off. Tagged snapshot
+  section after the state cells one; goldens unchanged with the switch off.
+
 ### Calibration stops at its rounding floors (#552)
 
 - PIGL inversion: each split's secant meets the smaller of its two categories' aggregates, so the
