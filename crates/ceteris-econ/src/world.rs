@@ -3540,6 +3540,59 @@ mod tests {
         assert_eq!(back.monetary.as_ref(), Some(m));
     }
 
+    /// With the filter on, r* is re-estimated each year, so the policy rates differ from the
+    /// fixed-intercept run while the real economy is untouched; replay and snapshot are exact.
+    #[test]
+    fn hlw_on_updates_r_star_annually_and_off_changes_nothing() {
+        use crate::hlw::HlwParams;
+        let sim = |hlw: bool| {
+            let mut s = monetary_sim();
+            if hlw {
+                let w = s.world().clone();
+                let m = w.monetary.clone().unwrap().with_hlw(
+                    HlwParams {
+                        a1: 1.0,
+                        a2: -0.2,
+                        a_r: -0.3,
+                        b_pi: 0.7,
+                        b_y: 0.1,
+                        c: 1.0,
+                        sigma_y_gap: 0.005,
+                        sigma_pi: 0.005,
+                        sigma_y_star: 0.004,
+                        sigma_g: 0.0005,
+                        sigma_z: 0.0015,
+                    },
+                    0.02,
+                );
+                s = Sim::new(
+                    w.with_monetary(m),
+                    crate::systems::schedule(),
+                    crate::systems::SEED,
+                );
+            }
+            s.run_until(26).unwrap_or_else(|v| panic!("{v}"));
+            s
+        };
+        let (off, on, again) = (sim(false), sim(true), sim(true));
+        let (m0, m1) = (
+            off.world().monetary.as_ref().unwrap(),
+            on.world().monetary.as_ref().unwrap(),
+        );
+        assert_eq!(on.world().wage, off.world().wage);
+        let star = |m: &crate::monetary::Policy| match m.banks[0].regime {
+            crate::monetary::Regime::Float(r) => r.r_star,
+            _ => unreachable!(),
+        };
+        assert_eq!(star(m0), 0.02);
+        assert_ne!(star(m1), 0.02);
+        assert_ne!(m1.rates, m0.rates);
+        assert_eq!(on.world().monetary, again.world().monetary);
+        let (bytes, back) = round_trip(on.world());
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.monetary.as_ref(), Some(m1));
+    }
+
     #[test]
     fn monetary_off_adds_nothing_to_the_snapshot() {
         let a = canonical(12, &world());

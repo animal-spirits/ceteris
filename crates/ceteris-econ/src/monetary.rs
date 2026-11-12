@@ -1,8 +1,10 @@
 //! Monetary regimes and policy rules of one central bank (P5 Branch B1, spec/09 9.2, ADR 0176,
 //! `specs/money/SPEC.md`). Floating rule `i = max(lb, r* + pi + a_pi (pi - pi*) + a_y y)`, asset
 //! purchases at the bound, hard-peg defence from reserves, union and dollarized members taking the
-//! anchor's rate. The kernel is not yet in the tick.
+//! anchor's rate. Wired into the tick as system 230; the optional HLW neutral-rate filter (B3)
+//! updates each floating bank's r* once a year.
 
+use crate::hlw::{HlwParams, NeutralRateFilter, Observation};
 use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 pub const SNAPSHOT_TAG: u32 = 0x3A6E_6D01;
@@ -120,6 +122,14 @@ pub struct Policy {
     /// Price level and employment at the previous step; empty before the first.
     pub level: Vec<f64>,
     pub base_employment: Vec<f64>,
+    /// Steps taken after the baseline step.
+    pub months: u32,
+    /// One HLW filter per country (B3), empty when off. Every 12th step it re-estimates r* from
+    /// the year's log employment (the output proxy above), inflation and real policy rate, and
+    /// writes it into a floating bank's rule.
+    pub hlw: Vec<NeutralRateFilter>,
+    /// Price level a year ago, for annual inflation; empty before the first step.
+    pub year_level: Vec<f64>,
 }
 
 impl Policy {
@@ -135,7 +145,31 @@ impl Policy {
             purchases: vec![0.0; n_countries],
             level: Vec::new(),
             base_employment: Vec::new(),
+            months: 0,
+            hlw: Vec::new(),
+            year_level: Vec::new(),
         }
+    }
+
+    /// Switches the annual HLW neutral-rate update on for floating banks; others keep a frozen
+    /// filter. `g0` is the starting trend growth.
+    pub fn with_hlw(mut self, params: HlwParams, g0: f64) -> Self {
+        self.hlw = self
+            .banks
+            .iter()
+            .map(|b| match b.regime {
+                Regime::Float(rule) => {
+                    let flat = Observation {
+                        y: 0.0,
+                        pi: rule.pi_star,
+                        r: rule.r_star,
+                    };
+                    NeutralRateFilter::new(params, rule.r_star, g0, flat, flat)
+                }
+                _ => NeutralRateFilter::frozen(params, 0.0),
+            })
+            .collect();
+        self
     }
 
     /// One month: sets every bank's rate from `price_level` and `employment` per country.
@@ -144,6 +178,7 @@ impl Policy {
         if self.level.is_empty() {
             self.level = price_level.to_vec();
             self.base_employment = employment.to_vec();
+            self.year_level = price_level.to_vec();
             return;
         }
         let pi: Vec<f64> = (0..n)
@@ -160,6 +195,22 @@ impl Policy {
             })
             .collect();
         self.level = price_level.to_vec();
+        self.months += 1;
+        if !self.hlw.is_empty() && self.months.is_multiple_of(12) {
+            for c in 0..n {
+                let pi = libm::log(price_level[c] / self.year_level[c]);
+                let obs = Observation {
+                    y: libm::log(employment[c] / self.base_employment[c]),
+                    pi,
+                    r: self.rates[c] - pi,
+                };
+                let r_star = self.hlw[c].update(obs);
+                if let Regime::Float(rule) = &mut self.banks[c].regime {
+                    rule.r_star = r_star;
+                }
+            }
+            self.year_level = price_level.to_vec();
+        }
     }
 
     pub fn encode(&self, e: &mut Encoder) {
@@ -186,6 +237,9 @@ impl Policy {
         e.f64s(&self.purchases);
         e.f64s(&self.level);
         e.f64s(&self.base_employment);
+        e.u32(self.months);
+        e.f64s(&self.year_level);
+        e.f64s(&self.hlw.iter().flat_map(|f| f.encode()).collect::<Vec<_>>());
     }
 
     pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
@@ -220,12 +274,28 @@ impl Policy {
                 short_term_external_debt: b[14],
             })
             .collect();
+        let rates = d.f64s()?;
+        let purchases = d.f64s()?;
+        let level = d.f64s()?;
+        let base_employment = d.f64s()?;
+        let months = d.u32()?;
+        let year_level = d.f64s()?;
+        let hlw = d
+            .f64s()?
+            .as_chunks::<{ NeutralRateFilter::ENCODED_LEN }>()
+            .0
+            .iter()
+            .map(|c| NeutralRateFilter::decode(c))
+            .collect();
         Ok(Self {
             banks,
-            rates: d.f64s()?,
-            purchases: d.f64s()?,
-            level: d.f64s()?,
-            base_employment: d.f64s()?,
+            rates,
+            purchases,
+            level,
+            base_employment,
+            months,
+            hlw,
+            year_level,
         })
     }
 }
