@@ -1,6 +1,6 @@
 # RFC 0344. Game licence and CLA process
 
-Status: proposed
+Status: accepted
 Date: 2026-11-12
 Design sections: 19.1, 19.3, 22.1, 23
 Release: 1.0 (CLA, before the repository goes public); 2.0 for the game
@@ -36,15 +36,15 @@ Decision: A, Antonio, 2026-11-12 (supersedes the licence text named in ADR 0347;
 split, the art terms and the crate dependency direction stand).
 Row: ADR 0349
 
-The game repository's `LICENSE` fills in these parameters. Each is a placeholder until the owner
-sets it; nothing here is a default:
+The game repository's `LICENSE` fills in these parameters. Rows marked OWNER TO SET are
+placeholders until the owner sets them; nothing there is a default:
 
 | Parameter | Value |
 | --- | --- |
 | Licensor | OWNER TO SET (legal name or entity) |
 | Licensed Work | OWNER TO SET (game name and version) |
-| Additional Use Grant | OWNER TO SET (for example non-production use; whether modding and streaming are allowed) |
-| Change Date | OWNER TO SET (BUSL allows at most four years after each release) |
+| Additional Use Grant | Non-production use, mods, and streamed or recorded play, free of charge (D4) |
+| Change Date | Four years after each release (D4) |
 | Change License | OWNER TO SET (must be GPL-compatible under BUSL; for example AGPL-3.0-or-later or Apache-2.0) |
 
 Art, music and logos stay all rights reserved and outside the BUSL grant (ADR 0347).
@@ -62,8 +62,8 @@ Options:
 Recommendation: A, because employed contributors are the likely outside contributors and an
 individual-only form leaves the employer's rights unlicensed.
 
-Decision: pending, Antonio.
-Row: none until decided
+Decision: A, Antonio, 2026-11-12.
+Row: ADR 0350
 
 `CLA.md` in this PR is the text of A. It stays a draft pending lawyer review.
 
@@ -82,13 +82,26 @@ Recommendation: A now, B when outside PRs become frequent, because A is what RFC
 describes and costs nothing. C adds a commit per signer and holds GitHub account names in history
 that cannot be purged.
 
-Decision: pending, Antonio.
-Row: none until decided
+Decision: A, Antonio, 2026-11-12.
+Row: ADR 0351
 
 If B is chosen later, the workflow is `contributor-assistant/github-action` (pinned by commit)
 with `path-to-document` set to `CLA.md`, signatures stored in a branch other than `main`, and the
 signing sentence from `CLA.md` as `custom-pr-sign-comment`. That workflow is listed in the PR
 description for the owner; this RFC does not add it.
+
+### D4. Which BUSL Change Date and Additional Use Grant?
+
+Change Date options: A. four years after each release (BUSL maximum); B. three years; C. two years.
+Recommendation: A, because it protects paid sales longest.
+
+Additional Use Grant options: A. non-production use only; B. non-production use plus mods and
+streamed or recorded play, free of charge; C. no additional grant.
+Recommendation: B, because mods and streaming grow the game and do not compete with sales.
+
+Decision: Change Date A, Additional Use Grant B, Antonio, 2026-11-12. Licensor, Licensed Work and
+Change License remain OWNER TO SET.
+Row: ADR 0352
 
 ## Spec changes
 

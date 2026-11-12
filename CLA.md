@@ -1,6 +1,6 @@
 # Contributor Licence Agreement
 
-Draft pending legal review (RFC 0343, RFC 0344, ADR 0348).
+Draft pending legal review (RFC 0343, RFC 0344, ADR 0348, ADR 0350).
 
 "Owner" means the project owner, GitHub account `atbraz`, and the owner's successors and assigns.
 "Contribution" means code, documentation, data or any other material you submit to Ceteris
