@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Calibration stops at its rounding floors (#552)
+
+- PIGL inversion: each split's secant meets the smaller of its two categories' aggregates, so the
+  sum-over-pops rounding lands on the large one. `--no-border-fit` stopped on country 222, whose
+  services share missed by up to 1e-11 and never settled.
+- Sinkhorn: a residual stalled for the 20-sweep window within every good's rounding bound,
+  1e-13 + eps (2L + 2T + D_g + 4.5) (`steady::summation_depth`), also ends the scaling. Storage-on
+  calibration held at 1.599e-13 to the 100,000-sweep cap. Goldens unchanged.
+
 ### State energy cells in the tick (ADR 0278, #533)
 
 - `EconWorld::with_state_cells`, off by default: each enterprise's state share (at least 5% of

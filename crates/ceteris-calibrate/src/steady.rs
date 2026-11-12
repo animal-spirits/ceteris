@@ -448,7 +448,9 @@ pub fn sinkhorn_limited(
         acc: &acc.k,
         cro: &net,
     };
-    let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64) {
+    let depth: Vec<f64> = (0..n_g).map(|g| summation_depth(inp, g)).collect();
+    // the map at lw, r, the largest |gap| and whether every good's gap is within its rounding
+    let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64, bool) {
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for i in (0..n).filter(|&i| origin[i]) {
             top[good[i]] = np_max(top[good[i]], lw[i]);
@@ -495,7 +497,16 @@ pub fn sinkhorn_limited(
                 }
             })
             .collect();
-        (new, r, max_abs(&gap))
+        let mut worst = vec![0.0f64; n_g];
+        let mut big = vec![0.0f64; n_g];
+        for i in (0..n).filter(|&i| origin[i]) {
+            worst[good[i]] = worst[good[i]].max(gap[i].abs());
+            big[good[i]] =
+                big[good[i]].max(2.0 * (lw[i] - top[good[i]]).abs() + 2.0 * target[i].abs());
+        }
+        let within =
+            (0..n_g).all(|g| worst[g] <= SINKHORN_TOL + f64::EPSILON * (big[g] + depth[g] + 4.5));
+        (new, r, max_abs(&gap), within)
     };
 
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
@@ -504,9 +515,11 @@ pub fn sinkhorn_limited(
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
     for sweep in 1..=max_sweeps {
-        let (fx, r, e) = step(&lw);
+        let (fx, r, e, within) = step(&lw);
         err = e;
-        if err <= SINKHORN_TOL {
+        // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
+        // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
+        if err <= SINKHORN_TOL || (within && since >= ANDERSON_STALL) {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
@@ -571,6 +584,27 @@ pub fn sinkhorn_limited(
         sci(err)
     )
     .into())
+}
+
+/// The longest chain of additions in one of `Model::origin_sums` or `Model::destination_sums`
+/// for traded good g: a cell's sum is its own term plus the domestic legs into it plus the
+/// access legs into it of the gateway sums, each of which sums crossings of access sums, so
+/// D_g = max(m_dom, m_gate + m_cross + m_prov) + 2, each m the most legs of good g in one bucket
+/// of that sum (by origin or by destination, whichever is larger). The Sinkhorn gap rounds by
+/// up to eps (2L + 2T + D_g + 4.5), derived at `sinkhorn_is_unique_up_to_scale`.
+pub fn summation_depth(inp: &Inputs, g: usize) -> f64 {
+    let most = |good: &[usize], key: &[usize]| -> usize {
+        let mut count = std::collections::BTreeMap::new();
+        for (_, &k) in good.iter().zip(key).filter(|&(&h, _)| h == g) {
+            *count.entry(k).or_insert(0usize) += 1;
+        }
+        count.into_values().max().unwrap_or(0)
+    };
+    let (d, a, c) = (&inp.domestic, &inp.access, &inp.crossing);
+    let dom = most(&d.good, &d.row).max(most(&d.good, &d.col));
+    let cross = most(&c.good, &c.row).max(most(&c.good, &c.col));
+    let chain = most(&a.good, &a.col) + cross + most(&a.good, &a.row);
+    (dom.max(chain) + 2) as f64
 }
 
 /// SLOTS + 1 matrices (P, G): units arriving at each destination per unit spent, by arrival
