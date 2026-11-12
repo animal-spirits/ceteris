@@ -1,0 +1,124 @@
+diff --git a/crates/ceteris-trade/src/market.rs b/crates/ceteris-trade/src/market.rs
+index 475b74b..dc4692e 100644
+--- a/crates/ceteris-trade/src/market.rs
++++ b/crates/ceteris-trade/src/market.rs
+@@ -18,6 +18,11 @@ use crate::params::{PriceAnchor, TradeParams};
+ /// Q_floor as a fraction of the good's world mean Q over active cells.
+ const Q_FLOOR_FRACTION: f64 = 1e-9;
+ 
++fn spike_gap() -> u8 {
++    static G: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
++    *G.get_or_init(|| std::env::var("GAP").map_or(0, |v| v.parse().unwrap()))
++}
++
+ /// S11: how a shortfall is shared between the two buyer classes (`specs/trade/SPEC.md`,
+ /// Deviations, rationing row). Index 0 of a fill pair is intermediate users, index 1
+ /// households.
+@@ -264,7 +269,11 @@ impl Markets {
+             }
+             let (q, d) = (self.supply[i], self.demand[i]);
+             let b = if p.stores(g) { self.storage[i] } else { 0.0 };
+-            *l = (d + b - q) / q.max(floor[g]);
++            *l = match spike_gap() {
++                1 => if d + b + q > 0.0 { 2.0 * (d + b - q) / (d + b + q) } else { 0.0 },
++                2 => (d + b - q) / q.max(d + b).max(floor[g]),
++                _ => (d + b - q) / q.max(floor[g]),
++            };
+             let v = self.price[i] * 0.5 * (q + d);
+             num[g] += v * *l;
+             den[g] += v;
+diff --git a/crates/ceteris-econ/tests/e2_spike.rs b/crates/ceteris-econ/tests/e2_spike.rs
+new file mode 100644
+index 0000000..8ab6a9b
+--- /dev/null
++++ b/crates/ceteris-econ/tests/e2_spike.rs
+@@ -0,0 +1,89 @@
++//! E2 spike harness (not for merge).
++use std::panic::{AssertUnwindSafe, catch_unwind};
++use std::path::Path;
++use std::sync::Arc;
++
++use ceteris_core::sim::Sim;
++use ceteris_econ::equilibrium::Equilibrium;
++use ceteris_econ::fixture::small_world;
++use ceteris_econ::systems::{SEED, schedule};
++use ceteris_econ::{EconParams, EconWorld};
++use ceteris_trade::{PriceAnchor, TradeParams};
++
++fn params() -> EconParams {
++    if std::env::var_os("DEFAULT").is_some() { EconParams::default() } else { EconParams::frictionless() }
++}
++
++fn trade() -> TradeParams {
++    TradeParams { anchor: if std::env::var_os("ASBUILT").is_some() { None } else { Some(PriceAnchor::default()) }, ..TradeParams::default() }
++}
++
++#[test]
++#[ignore = "spike"]
++fn x10_diag() {
++    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
++    let s = Equilibrium::read(&dir).unwrap();
++    let mut w = EconWorld::new(Arc::new(small_world()), params(), trade());
++    if std::env::var_os("NOSETTLE").is_none() { w.settle(&s); }
++    let ng = w.inputs().goods.n();
++    let q0: Vec<f64> = {
++        let mut b = EconWorld::new(Arc::new(small_world()), params(), trade());
++        b.settle(&s);
++        let mut bs = Sim::new(b, schedule(), SEED);
++        bs.run_until(1).unwrap();
++        bs.world().markets.supply.clone()
++    };
++    let nc = w.inputs().n_countries();
++    let mut wedges = ceteris_trade::network::Wedges::none(nc);
++    wedges.ntb = vec![std::env::var("NTB").map_or(10.0, |v| v.parse().unwrap()); wedges.tariff.len()];
++    w.set_wedges(wedges);
++    let mut sim = Sim::new(w, schedule(), SEED);
++    let n = std::env::var("TICKS").map_or(300, |v| v.parse().unwrap());
++    let mut prev: Vec<f64> = sim.world().markets.price.clone();
++    for t in 1..=n {
++        if let Err(e) = catch_unwind(AssertUnwindSafe(|| sim.run_until(t).unwrap())) {
++            eprintln!("STOP at {t}: {:?}", e.downcast_ref::<String>().map(|s| &s[..s.len().min(200)]));
++            break;
++        }
++        let w = sim.world();
++        let m = &w.markets;
++        let act: Vec<usize> = (0..m.price.len()).filter(|&i| m.active[i]).collect();
++        let zero = act.iter().filter(|&&i| m.supply[i] < 1e-6 * q0[i].max(1e-300)).count();
++        let qrat: f64 = act.iter().map(|&i| m.supply[i]).sum::<f64>() / act.iter().map(|&i| q0[i]).sum::<f64>();
++        let mut per_g = vec![0.0; ng];
++        let mut per_g0 = vec![0.0; ng];
++        for &i in &act { per_g[i % ng] += m.supply[i]; per_g0[i % ng] += q0[i]; }
++        let pmin = act.iter().map(|&i| m.price[i]).fold(f64::MAX, f64::min);
++        let pmax = act.iter().map(|&i| m.price[i]).fold(0.0, f64::max);
++        let dmax = act.iter().map(|&i| (m.price[i] / prev[i]).ln().abs()).fold(0.0, f64::max);
++        if std::env::var("WATCH").map_or(false, |f| (t as i64) >= f.parse::<i64>().unwrap()) {
++            let mut v: Vec<usize> = act.clone();
++            v.sort_by(|&a, &b| (m.price[b] / prev[b]).ln().abs().partial_cmp(&(m.price[a] / prev[a]).ln().abs()).unwrap());
++            for &i in v.iter().take(4) {
++                eprintln!("  W t{t} cell {i} prov {} g {} dlnp {:+.3} p {:.3e} Q {:.3e} D {:.3e} Q0 {:.3e} wage {:.3e}", i / ng, i % ng, (m.price[i] / prev[i]).ln(), m.price[i], m.supply[i], m.demand[i], q0[i], w.wage[i / ng]);
++            }
++        }
++        prev = m.price.clone();
++        if t <= 20 || t % 10 == 0 || t == n || (std::env::var("FROM").map_or(false, |f| (t as i64) >= f.parse::<i64>().unwrap()) && t % 2 == 0) {
++            let g: Vec<String> = (0..ng).map(|g| format!("{:.2}", per_g[g] / per_g0[g])).collect();
++            let (mut nm, mut dn) = (0.0, 0.0);
++            let mut ng_num = vec![0.0; ng]; let mut ng_den = vec![0.0; ng];
++            for &i in &act { let q = m.supply[i]; let d = m.demand[i] + m.storage[i]; let fl = 1e-9 * per_g[i % ng] / act.iter().filter(|&&j| j % ng == i % ng).count() as f64; let l = (d - q) / q.max(fl); let v = m.price[i] * 0.5 * (q + m.demand[i]); nm += v * l; dn += v; ng_num[i % ng] += v * l; ng_den[i % ng] += v; }
++            let lg: Vec<String> = (0..ng).map(|g| format!("{:.2}", ng_num[g] / ng_den[g])).collect();
++            let e: f64 = w.employment.iter().sum();
++            let inc: f64 = w.income.iter().sum();
++            let wmin = w.wage.iter().cloned().fold(f64::MAX, f64::min);
++            let wmax = w.wage.iter().cloned().fold(0.0, f64::max);
++            let eact = w.employment.iter().filter(|&&x| x > 0.0).count();
++            eprintln!("  L {e:.3e} ent>0 {eact}/{} inc {inc:.3e} w[{wmin:.2e},{wmax:.2e}]", w.employment.len());
++            eprintln!("  lbar {:.3} M/M0 {:.4} lg [{}]", nm / dn, w.money_issued(), lg.join(" "));
++            eprintln!("t{t} I {:.4} Q/Q0 {qrat:.3} zero {zero}/{} p[{pmin:.2e},{pmax:.2e}] dmax {dmax:.1e} g [{}]",
++                w.world_price_index(), act.len(), g.join(" "));
++        }
++    }
++    let w = sim.world();
++    let ix = w.world_price_index();
++    let v1p = (0..w.markets.price.len()).filter(|&c| w.markets.active[c]).map(|c| (w.markets.price[c] / ix / s.price[c] - 1.0).abs()).fold(0.0, f64::max);
++    let v1w = (0..w.wage.len()).map(|i| (w.wage[i] / ix / s.wage[i] - 1.0).abs()).fold(0.0, f64::max);
++    eprintln!("V1 price {v1p:.2e} wage {v1w:.2e} I {ix:.4}");
++}

@@ -72,7 +72,7 @@ Source: project memory, not checked against GitHub issues or PRs in this report.
 
 ## 5. Mac batch
 
-Waits on J2 (#205). Commands for S0 and S4 are in `/mnt/project-files/rfc0319/mac-s0-s4-commands.md`.
+Waits on J2 (#205). Commands for S0 and S4 are in `docs/research/spikes/rfc0319/mac-s0-s4-commands.md`.
 Also owed: ADR 0294 hash check, pack trend columns, `pack fetch --record` for SEA and AAMNE, and
 the #409 pack-hash pin, border checks and pre-registered checks. Mac timings are not comparable to
 the cloud runners.

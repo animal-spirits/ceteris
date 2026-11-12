@@ -2,7 +2,7 @@
 
 Fixture (`small_world`), frictionless, anchor on (ADRs 0338, 0340), ntb 10 on every border, from
 the blessed reference state. Single-run fixture numbers; estimates, not calibration. Trace patch
-and harness: `/mnt/project-files/p5-e3/island-trace-2026-11-10.patch` (E3P/E3L/E3R hooks in
+and harness: `docs/research/spikes/p5-e3/island-trace-2026-11-10.patch` (E3P/E3L/E3R hooks in
 `labour`, the schedule and `reprice_anchored`) and `p5_e3_spike_k2.rs` (env K2 sets P03b kappa2).
 
 ## Question

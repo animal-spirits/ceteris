@@ -1,0 +1,336 @@
+diff --git a/crates/ceteris-econ/src/params.rs b/crates/ceteris-econ/src/params.rs
+index caf3a69..b87d059 100644
+--- a/crates/ceteris-econ/src/params.rs
++++ b/crates/ceteris-econ/src/params.rs
+@@ -103,6 +103,10 @@ pub struct EconParams {
+     pub drift: bool,
+     /// P153 half-life h of the initial drift, years, prior 3 to 15 (ADR 0103).
+     pub drift_half_life: f64,
++    /// SPIKE RFC 0341 D2: markets pay producers only for units sold.
++    pub pay_on_sales: bool,
++    /// SPIKE: credit line of traded input orders, in loss caps; None is unbounded.
++    pub credit_line: Option<f64>,
+ }
+ 
+ impl Default for EconParams {
+@@ -122,6 +126,8 @@ impl Default for EconParams {
+             transfers: Transfers::FixedShares,
+             drift: true,
+             drift_half_life: 7.0,
++            pay_on_sales: false,
++            credit_line: None,
+         }
+     }
+ }
+diff --git a/crates/ceteris-econ/src/systems.rs b/crates/ceteris-econ/src/systems.rs
+index a97d2fd..7e1b7d9 100644
+--- a/crates/ceteris-econ/src/systems.rs
++++ b/crates/ceteris-econ/src/systems.rs
+@@ -88,7 +88,10 @@ pub fn schedule() -> Schedule<EconWorld> {
+         def(204, "demand", |w, _| demand(w)),
+         def(205, "source", |w, _| source(w)),
+         def(206, "clear", |w, _| clear(w)),
+-        def(207, "dispatch", |w, _| dispatch(w)),
++        def(207, "dispatch", |w, _| {
++            dispatch(w);
++            pay_sales(w)
++        }),
+         def(208, "reprice", |w, ctx| {
+             reprice(w);
+             crate::channels::after_reprice(w, ctx.tick)
+@@ -520,6 +523,7 @@ pub fn produce(w: &mut EconWorld) {
+     };
+     let (price, wage, employment, employed) =
+         (&w.markets.price, &w.wage, &w.employment, &w.employed);
++    let on_sales = w.params.pay_on_sales;
+     drop(setup);
+     let run = timing::span("e2.run", NONE);
+     tasks.par_iter_mut().for_each(|t| {
+@@ -548,9 +552,11 @@ pub fn produce(w: &mut EconWorld) {
+                 t.ledger.create(account, g, y);
+                 t.ledger.ship(account, acc.market[i], g, y);
+             }
+-            let sale = price[cell] * y;
+-            t.sales[le] = sale;
+-            pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
++            if !on_sales {
++                let sale = price[cell] * y;
++                t.sales[le] = sale;
++                pay_in(&mut t.ledger, SALE, acc.market[i], account, to_minor(sale));
++            }
+             t.supply[g] += y;
+ 
+             let bill = to_minor(wage[i] * employment[e]);
+@@ -588,6 +594,58 @@ pub fn produce(w: &mut EconWorld) {
+     let _put = timing::span("e2.put", NONE);
+     let done = tasks.into_iter().map(|t| t.ledger.finish()).collect();
+     w.ledger.put_province_slices(done);
++    if on_sales {
++        for (c, &y) in w.consigned.iter_mut().zip(&w.output) {
++            *c += y;
++        }
++    }
++}
++
++/// SPIKE RFC 0341 D2: after clearing, each market pays its producers p for the units it sold,
++/// this tick's output first (pro rata), then the unpaid backlog (pro rata); unsold traded units
++/// stay owed up to the market's stock, unsold local units perish.
++pub fn pay_sales(w: &mut EconWorld) {
++    if !w.params.pay_on_sales {
++        return;
++    }
++    let (inp, lay) = (&*w.inputs, &*w.layout);
++    let acc = &lay.accounts;
++    let ng = inp.n_goods();
++    let m = &w.markets;
++    for i in 0..inp.n_provinces() {
++        for g in 0..ng {
++            let cell = i * ng + g;
++            let ents: Vec<usize> = lay
++                .enterprises(i)
++                .filter(|&e| usize::from(inp.enterprises.good[e]) == g)
++                .collect();
++            if ents.is_empty() {
++                continue;
++            }
++            let fresh: f64 = ents.iter().map(|&e| w.output[e]).sum();
++            let back: f64 = ents.iter().map(|&e| w.consigned[e] - w.output[e]).sum();
++            let sold = m.sales[cell];
++            let f = sold.min(fresh);
++            let b = (sold - f).min(back).max(0.0);
++            for &e in &ents {
++                let prior = w.consigned[e] - w.output[e];
++                let units = if fresh > 0.0 { w.output[e] / fresh * f } else { 0.0 }
++                    + if back > 0.0 { prior / back * b } else { 0.0 };
++                w.consigned[e] = (w.consigned[e] - units).max(0.0);
++                let sale = m.price[cell] * units;
++                w.sales[e] = sale;
++                pay(&mut w.ledger, SALE, acc.market[i], acc.enterprise[e], to_minor(sale));
++            }
++            let owed: f64 = ents.iter().map(|&e| w.consigned[e]).sum();
++            let cap = if m.is_traded(cell) { m.inventory[cell] } else { 0.0 };
++            if owed > cap {
++                let r = if owed > 0.0 { cap / owed } else { 0.0 };
++                for &e in &ents {
++                    w.consigned[e] *= r;
++                }
++            }
++        }
++    }
+ }
+ 
+ /// One province's slices of E2's tables and its accounts.
+@@ -720,6 +778,7 @@ pub fn demand(w: &mut EconWorld) {
+         });
+     let (pipeline, lead) = (&w.pipeline, &sc.lead);
+     let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
++    let credit = w.params.credit_line;
+     sc.ent_order
+         .par_chunks_mut(ng)
+         .zip(sc.ent_spend.par_chunks_mut(ng))
+@@ -757,6 +816,18 @@ pub fn demand(w: &mut EconWorld) {
+                     0.0
+                 };
+             }
++            // SPIKE: traded input spending within cash plus a credit line of c loss caps
++            if let Some(c) = credit {
++                let cost: f64 = spend[..nt].iter().sum();
++                let budget = (to_numeraire(ledger.money(acc.enterprise[e]))
++                    + c * to_numeraire(lay.ent_loss_cap[e]))
++                .max(0.0);
++                if cost > budget {
++                    let s = budget / cost;
++                    orders[..nt].iter_mut().for_each(|o| *o *= s);
++                    spend[..nt].iter_mut().for_each(|x| *x *= s);
++                }
++            }
+         });
+     // local goods: demand at the province market, in pop then enterprise order
+     w.markets.demand.copy_from_slice(&sc.drawn);
+diff --git a/crates/ceteris-econ/src/world.rs b/crates/ceteris-econ/src/world.rs
+index 7f4d1a6..784c058 100644
+--- a/crates/ceteris-econ/src/world.rs
++++ b/crates/ceteris-econ/src/world.rs
+@@ -691,6 +691,8 @@ pub struct EconWorld {
+     pub output: Vec<f64>,
+     pub sales: Vec<f64>,
+     pub profit: Vec<f64>,
++    /// SPIKE RFC 0341 D2: units an enterprise has consigned to its market and not been paid for.
++    pub consigned: Vec<f64>,
+     /// Population on the monthly clock (P4, system 220): the mechanisms and the cohort cells.
+     /// `None` is the status quo; the snapshot then has no population section.
+     pub pop: Option<(Demography, Cohorts)>,
+@@ -726,6 +728,8 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
+         transfers,
+         drift,
+         drift_half_life,
++        pay_on_sales: _,
++        credit_line: _,
+     } = params;
+     let TradeParams {
+         // the inputs' goods (`EconWorld::new`), in their digest
+@@ -1405,6 +1409,7 @@ impl EconWorld {
+             output: vec![0.0; n_ent],
+             sales: vec![0.0; n_ent],
+             profit: vec![0.0; n_ent],
++            consigned: vec![0.0; n_ent],
+             pop: None,
+             migration: None,
+             pop_drift: 0,
+@@ -2004,6 +2009,8 @@ fn encode_params(
+         transfers,
+         drift,
+         drift_half_life,
++        pay_on_sales: _,
++        credit_line: _,
+     } = params;
+     let Pigl {
+         sigma_b,
+@@ -2101,6 +2108,8 @@ fn decode_params(
+             drift.0
+         },
+         drift_half_life: if has_drift { d.f64()? } else { drift.1 },
++        pay_on_sales: false,
++        credit_line: None,
+     })
+ }
+ 
+@@ -2235,6 +2244,7 @@ fn decode_trade(
+                 kappa_r_local,
+                 kappa_b,
+                 kappa_m,
++                kappa_s: 0.0,
+             })
+         } else {
+             None
+@@ -2697,6 +2707,7 @@ impl State for EconWorld {
+             employed,
+             income,
+             output,
++            consigned: vec![0.0; sales.len()],
+             sales,
+             profit,
+             pop,
+diff --git a/crates/ceteris-econ/tests/p5_e3_d1d2.rs b/crates/ceteris-econ/tests/p5_e3_d1d2.rs
+new file mode 100644
+index 0000000..437b1bd
+--- /dev/null
++++ b/crates/ceteris-econ/tests/p5_e3_d1d2.rs
+@@ -0,0 +1,83 @@
++// SPIKE RFC 0341: D1 anchored stock term (KS) and D2 pay on sales (PS). Not for merge.
++use std::path::Path;
++use std::sync::Arc;
++use ceteris_core::sim::Sim;
++use ceteris_econ::equilibrium::Equilibrium;
++use ceteris_econ::fixture::small_world;
++use ceteris_econ::systems::{SEED, schedule};
++use ceteris_econ::{EconParams, EconWorld};
++use ceteris_trade::{PriceAnchor, TradeParams};
++
++fn env(k: &str, d: f64) -> f64 { std::env::var(k).ok().map(|s| s.parse().unwrap()).unwrap_or(d) }
++
++#[test]
++#[ignore]
++fn spike() {
++    let (ks, ps, ntb, ticks) = (env("KS", 0.0), env("PS", 0.0) > 0.0, env("NTB", 10.0), env("T", 700.0) as u32);
++    let anchor = PriceAnchor { kappa_s: ks, ..PriceAnchor::default() };
++    let trade = TradeParams { anchor: Some(anchor), ..TradeParams::default() };
++    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
++    let cl = env("CL", -1.0);
++    let params = EconParams { pay_on_sales: ps, credit_line: (cl >= 0.0).then_some(cl), ..EconParams::frictionless() };
++    let mut w = EconWorld::new(Arc::new(small_world()), params, trade);
++    w.settle(&Equilibrium::read(&dir).unwrap());
++    let y0: f64 = w.output.iter().sum();
++    let i0 = w.world_price_index();
++    if ntb != 1.0 {
++        let mut wedges = ceteris_trade::network::Wedges::none(w.inputs().n_countries());
++        wedges.ntb = vec![ntb as f32; wedges.tariff.len()];
++        w.set_wedges(wedges);
++    }
++    let y0e = w.output.clone();
++    if env("WHO", 0.0) > 0.0 {
++        let inp = w.inputs(); let ng = inp.n_goods();
++        for g in 0..ng {
++            let mut by: Vec<(usize, f64)> = Vec::new();
++            for e in 0..inp.n_enterprises() { if inp.enterprises.good[e] as usize == g { let i = inp.enterprises.province[e] as usize; by.push((i, w.output[e])); } }
++            let tot: f64 = by.iter().map(|x| x.1).sum();
++            let isl: f64 = by.iter().filter(|x| x.0 == 24).map(|x| x.1).sum();
++            println!("WHO good {g} traded {} producers {} island share {:.3}", g < inp.goods.traded, by.len(), isl / tot.max(1e-300));
++        }
++        return;
++    }
++    let mut sim = Sim::new(w, schedule(), SEED);
++    let (mut imax, mut imin, mut ymin) = (1.0f64, 1.0f64, f64::INFINITY);
++    let mut line = String::new();
++    for t in 1..=ticks {
++        sim.run_until(t).unwrap();
++        let w = sim.world();
++        let m = &w.markets;
++        let (mut pd, mut pq) = (0.0, 0.0);
++        for i in 0..m.price.len() { if m.active[i] { pd += m.price[i] * m.demand[i]; pq += m.price[i] * m.supply[i]; } }
++        let idx = w.world_price_index() / i0;
++        let y = w.output.iter().sum::<f64>() / y0;
++        if t > 20 { imax = imax.max(idx); imin = imin.min(idx); ymin = ymin.min(y); }
++        if env("TR", 0.0) > 0.0 && t % 10 == 0 && t <= 200 {
++            let inp = w.inputs(); let lay = w.layout(); let acc = &lay.accounts;
++            let nc = inp.n_countries();
++            let (mut yc, mut y0c, mut bound, mut n) = (vec![0.0; nc], vec![0.0; nc], vec![0usize; nc], vec![0usize; nc]);
++            for e in 0..inp.n_enterprises() {
++                let c = inp.country_of(inp.enterprises.province[e] as usize);
++                yc[c] += w.output[e]; y0c[c] += y0e[e]; n[c] += 1;
++                if w.ledger.money(acc.enterprise[e]) + lay.ent_loss_cap[e] < lay.ent_loss_cap[e] / 20 { bound[c] += 1; }
++            }
++            let row: Vec<String> = (0..nc).map(|c| format!("{:.2}/{}of{}", yc[c] / y0c[c].max(1e-300), bound[c], n[c])).collect();
++            println!("TR t{t} I{:.3} {}", w.world_price_index() / i0, row.join(" "));
++        }
++        if t % 100 == 0 || t == 1 {
++            let inp = w.inputs(); let lay = w.layout(); let acc = &lay.accounts;
++            let ng = inp.n_goods();
++            // island p24: pops, enterprises, market money; its country's other provinces
++            let c24 = inp.country_of(24);
++            let pm = |i: usize| lay.pops(i).map(|k| w.ledger.money(acc.pop[k]) as f64 * 1e-4).sum::<f64>();
++            let em = |i: usize| lay.enterprises(i).map(|e| w.ledger.money(acc.enterprise[e]) as f64 * 1e-4).sum::<f64>();
++            let others: Vec<usize> = (0..inp.n_provinces()).filter(|&i| i != 24 && inp.country_of(i) == c24).collect();
++            let y24: f64 = lay.enterprises(24).map(|e| w.output[e]).sum();
++            let s24: f64 = (0..ng).map(|g| m.inventory[24 * ng + g]).sum();
++            let pos: f64 = acc.pop.iter().chain(acc.enterprise.iter()).map(|&a| (w.ledger.money(a).max(0)) as f64 * 1e-4).sum();
++            line += &format!("\n t{t}: I{idx:.3} Y{y:.3} D/Q{:.2} p24pop {:.3e} p24ent {:.3e} p24mkt {:.3e} y24 {y24:.3e} S24 {s24:.3e} others{:?} pos {pos:.3e}",
++                pd / pq, pm(24), em(24), w.ledger.money(acc.market[24]) as f64 * 1e-4, others.len());
++        }
++    }
++    println!("CL {cl} KS {ks} PS {ps} NTB {ntb} | I[{imin:.3},{imax:.3}] Ymin {ymin:.3} |{line}");
++}
+diff --git a/crates/ceteris-trade/src/market.rs b/crates/ceteris-trade/src/market.rs
+index 156eeba..6fe58eb 100644
+--- a/crates/ceteris-trade/src/market.rs
++++ b/crates/ceteris-trade/src/market.rs
+@@ -292,7 +292,7 @@ impl Markets {
+             let mut gap = rel * (l - lg[g]) + a.kappa_b * (lg[g] - lbar) - nominal;
+             if p.coverage[g] > 0.0 && !p.stores(g) {
+                 let target = p.coverage[g] * self.demand[i];
+-                gap -= p.kappa2 * (self.inventory[i] - target) / target.max(floor[g]);
++                gap -= (p.kappa2 + a.kappa_s) * (self.inventory[i] - target) / target.max(floor[g]);
+             }
+             let c_max = p.price_clip(g);
+             if gap.abs() > c_max {
+diff --git a/crates/ceteris-trade/src/params.rs b/crates/ceteris-trade/src/params.rs
+index 3048468..abb7fbf 100644
+--- a/crates/ceteris-trade/src/params.rs
++++ b/crates/ceteris-trade/src/params.rs
+@@ -358,6 +358,8 @@ pub struct PriceAnchor {
+     pub kappa_b: f64,
+     /// P177 money-anchor gain kappa_m.
+     pub kappa_m: f64,
++    /// SPIKE RFC 0341 D1: anchored stock-term gain kappa_s.
++    pub kappa_s: f64,
+ }
+ 
+ impl Default for PriceAnchor {
+@@ -367,6 +369,7 @@ impl Default for PriceAnchor {
+             kappa_r_local: 0.05,
+             kappa_b: 0.3,
+             kappa_m: 0.2,
++            kappa_s: 0.0,
+         }
+     }
+ }
