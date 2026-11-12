@@ -444,6 +444,9 @@ pub struct Scratch {
     /// Per country, this tick's multipliers of A and of L0 from the initial drift
     /// (`systems::drift`, ADR 0103), set at E0; 1 until then.
     pub drift: Vec<[f64; 2]>,
+    /// Per enterprise, this tick's capital factor on A (`Capital::factor`, set at E0); empty
+    /// with capital off.
+    pub cap: Vec<f64>,
 }
 
 impl Scratch {
@@ -490,6 +493,7 @@ impl Scratch {
             short: vec![0; n_ent],
             notional: vec![0.0; n_ent],
             drift: vec![[1.0; 2]; nc],
+            cap: Vec::new(),
         }
     }
 }
@@ -4002,10 +4006,10 @@ mod tests {
     fn capital_off_equals_status_quo_and_on_accumulates_through_the_pipeline() {
         use crate::investment::{Capital, Pipeline};
         let n_ent = world().inputs().n_enterprises();
-        let capital = Capital {
-            pipelines: vec![Pipeline::new(2, 4.0, 0.01, 1, 0.0, 0); n_ent],
-            order: vec![3.0; n_ent],
-        };
+        let capital = Capital::new(
+            vec![Pipeline::new(2, 4.0, 0.01, 1, 0.0, 0); n_ent],
+            vec![3.0; n_ent],
+        );
         let run = |w: EconWorld| {
             let mut sim = Sim::new(w, crate::systems::schedule(), crate::systems::SEED);
             sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
@@ -4027,6 +4031,30 @@ mod tests {
         let (bytes, back) = round_trip(on.world());
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.capital, on.world().capital);
+    }
+
+    /// On, capital changes output: orders above the steady-state ones grow the stock and so
+    /// output; orders at the steady state leave output where it is without capital.
+    #[test]
+    fn capital_on_changes_output_through_production() {
+        use crate::investment::{Capital, Pipeline};
+        let n_ent = world().inputs().n_enterprises();
+        let build = |order: f64| {
+            Capital::new(
+                vec![Pipeline::steady_state(2, 4.0, 0.01, 1, 5.0, &[]); n_ent],
+                vec![order; n_ent],
+            )
+        };
+        let total = |w: EconWorld| {
+            let mut sim = Sim::new(w, crate::systems::schedule(), crate::systems::SEED);
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            sim.world().output.iter().sum::<f64>()
+        };
+        let off = total(world());
+        let steady = total(world().with_capital(build(5.0)));
+        let boosted = total(world().with_capital(build(50.0)));
+        assert!((steady - off).abs() <= 1e-9 * off, "{steady} vs {off}");
+        assert!(boosted > off * (1.0 + 1e-6), "{boosted} vs {off}");
     }
 
     #[test]

@@ -42,6 +42,8 @@ L is effective labour by education level; T is land (agriculture) or resource de
 
 Owners (households via wealth, states, banks, foreign investors) allocate new capital across (province, sector) options by a logit over expected return net of risk, compared to the cost of capital (a Tobin-q style rule), financed from retained earnings, bank credit, bonds and equity. Persistent losses with negative equity trigger exit. Foreign ownership is simply foreign-owned capital, so FDI and profit repatriation are ordinary flows.
 
+Until the logit exists (ADR 0366), each enterprise orders its good's GFCF share of final demand in its country times its value added every tick, and production reads the capital stock: A is scaled by `(K/K0)^(1-s_L)`, K0 the stock at switch-on. The switch is off by default.
+
 ### 7.5 Technology as sector productivity
 
 Technology has three parts, all at the sector level:

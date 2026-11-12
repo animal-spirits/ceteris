@@ -136,12 +136,20 @@ pub fn drift_factors(inp: &EconInputs, params: &EconParams, tick: u32) -> Vec<[f
 /// E0: this tick's drift multipliers into `Scratch::drift`.
 pub fn drift(w: &mut EconWorld, tick: u32) {
     w.scratch.drift = drift_factors(&w.inputs, &w.params, tick);
+    w.scratch.cap = match &w.capital {
+        Some(c) => (0..w.inputs.n_enterprises())
+            .map(|e| c.factor(e, w.inputs.ent_s_l(e)))
+            .collect(),
+        None => Vec::new(),
+    };
 }
 
-/// Enterprise `e`'s A and L0 under this tick's drift multipliers.
-fn tech(inp: &EconInputs, drift: &[[f64; 2]], e: usize) -> (f64, f64) {
+/// Enterprise `e`'s A and L0 under this tick's drift multipliers; `cap` is its capital factor
+/// (empty with capital off, ADR 0204 link).
+fn tech(inp: &EconInputs, drift: &[[f64; 2]], cap: &[f64], e: usize) -> (f64, f64) {
     let [a, l0] = drift[inp.country_of(inp.enterprises.province[e] as usize)];
-    (inp.enterprises.a[e] * a, inp.enterprises.l0[e] * l0)
+    let k = cap.get(e).copied().unwrap_or(1.0);
+    (inp.enterprises.a[e] * a * k, inp.enterprises.l0[e] * l0)
 }
 
 fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: i64) {
@@ -318,7 +326,7 @@ pub fn labour(w: &mut EconWorld) {
     let r = rho(params.sigma_fl);
     let (price, wage, prev) = (&w.markets.price, &w.wage, &w.employment);
     let (index, pi) = (&w.price_index, w.expected_inflation);
-    let drift = &w.scratch.drift;
+    let (drift, kfac) = (&w.scratch.drift, &w.scratch.cap);
     type PerProvince = (f64, Vec<f64>, bool, Vec<f64>, Vec<u64>);
     let results: Vec<PerProvince> = (0..inp.n_provinces())
         .into_par_iter()
@@ -341,7 +349,7 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .map(|e| {
                     let va = lay.a_va[e] * input_output(world, e);
-                    let (a, l0) = tech(inp, drift, e);
+                    let (a, l0) = tech(inp, drift, kfac, e);
                     labour_for_value_added(va, a, ent.va0[e], l0, inp.ent_s_l(e), r)
                 })
                 .collect();
@@ -349,7 +357,7 @@ pub fn labour(w: &mut EconWorld) {
                 ents.clone()
                     .zip(p_va.iter().zip(&equipped))
                     .map(|(e, (&pv, &cap))| {
-                        let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                        let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, kfac, e));
                         labour_target(pv, w, a, ent.va0[e], l0, s_l, r, supply).min(cap)
                     })
                     .collect()
@@ -358,7 +366,7 @@ pub fn labour(w: &mut EconWorld) {
             let (w1, t, clipped) = if params.frictionless {
                 let natural = (1.0 - u_star) * supply;
                 let free = |e: usize, pv: f64, w: f64| {
-                    let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, e));
+                    let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, drift, kfac, e));
                     labour_target_uncapped(pv, w, a, ent.va0[e], l0, s_l, r)
                 };
                 let hiring = || {
@@ -395,7 +403,7 @@ pub fn labour(w: &mut EconWorld) {
                         .any(|(e, (&pv, &cap))| cap == f64::INFINITY || free(e, pv, w1) < cap);
                     let top = hiring()
                         .map(|(e, (&pv, &cap))| {
-                            let (a, l0) = tech(inp, drift, e);
+                            let (a, l0) = tech(inp, drift, kfac, e);
                             pv * marginal_value_added(a, ent.va0[e], l0, inp.ent_s_l(e), r, cap)
                         })
                         .reduce(f64::min);
@@ -419,7 +427,7 @@ pub fn labour(w: &mut EconWorld) {
                 .clone()
                 .zip(&p_va)
                 .map(|(e, &pv)| {
-                    let (a, l0) = tech(inp, drift, e);
+                    let (a, l0) = tech(inp, drift, kfac, e);
                     labour_target(pv, wt, a, ent.va0[e], l0, inp.ent_s_l(e), r, supply)
                 })
                 .collect();
@@ -733,7 +741,10 @@ pub fn cap_output(w: &mut EconWorld) {
         .into_par_iter()
         .map(|e| {
             let ent = &inp.enterprises;
-            let (s_l, (a, l0)) = (inp.ent_s_l(e), tech(inp, &w.scratch.drift, e));
+            let (s_l, (a, l0)) = (
+                inp.ent_s_l(e),
+                tech(inp, &w.scratch.drift, &w.scratch.cap, e),
+            );
             let va = value_added(a, ent.va0[e], l0, s_l, r, employment[e]);
             let mut y = va / lay.a_va[e];
             for k in 0..nt {
@@ -810,7 +821,7 @@ pub fn demand(w: &mut EconWorld) {
             }
         });
     let (pipeline, lead) = (&w.pipeline, &sc.lead);
-    let (short, notional, drift) = (&sc.short, &sc.notional, &sc.drift);
+    let (short, notional, drift, kfac) = (&sc.short, &sc.notional, &sc.drift, &sc.cap);
     let credit = w.trade.anchor.is_some_and(|a| a.e3);
     sc.ent_order
         .par_chunks_mut(ng)
@@ -819,7 +830,7 @@ pub fn demand(w: &mut EconWorld) {
         .for_each(|(e, (orders, spend))| {
             let ent = &inp.enterprises;
             let i = ent.province[e] as usize;
-            let (prices, s_l, (a, l0)) = (row(i), inp.ent_s_l(e), tech(inp, drift, e));
+            let (prices, s_l, (a, l0)) = (row(i), inp.ent_s_l(e), tech(inp, drift, kfac, e));
             let output = |l: f64| value_added(a, ent.va0[e], l0, s_l, r, l) / lay.a_va[e];
             let capacity = output(w.employment[e]);
             let free = if short[e] != 0 {

@@ -1740,3 +1740,8 @@ sections = "15.7"
 rows = "0365"
 topic = "[The bands apply from the P4 gate on; the short-run elasticity band from the gate after #200 lands](../rfcs/0350-free-moment-pass-bands.md)"
 sections = "15.7, 21.1"
+
+[[entry]]
+rows = "0366"
+topic = "[Capital enters production as A scaled by (K/K0)^(1-s_L); investment orders use the calibrated GFCF share of final demand times value added per enterprise until the 7.4 logit exists](../rfcs/0351-capital-stock-in-production.md)"
+sections = "7.4"
