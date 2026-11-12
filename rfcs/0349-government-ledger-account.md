@@ -54,7 +54,7 @@ Options:
 Recommendation: A, because the transactions-flow matrix is built from journal postings
 (`specs/money/SPEC.md`) and one Flow per row keeps that build mechanical.
 
-Decision: pending.
+Decision: A, Antonio, 2026-11-12.
 Row: pending
 
 ### D3. Where does government spending go, given that ADR 0099 already puts government demand in pops' spending?
