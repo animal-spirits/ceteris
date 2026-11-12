@@ -1700,3 +1700,8 @@ sections = "8.2"
 rows = "0357"
 topic = "[EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0347-eia-calibrates-energy-iea-held-out.md)"
 sections = "7.7, 15.4"
+
+[[entry]]
+rows = "0358"
+topic = "[EIA International Energy Statistics electricity series calibrate power generation and capacity by fuel; Ember rejected](../rfcs/0348-electricity-source-after-ember.md)"
+sections = "7.7, 15.4"

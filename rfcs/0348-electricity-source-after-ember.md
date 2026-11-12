@@ -1,6 +1,6 @@
 # RFC 0348. EIA electricity series replace Ember
 
-Status: proposed
+Status: accepted
 Date: 2026-11-12
 Design sections: 7.7, 15.4
 Release: 1.0 (P2 data; P8 energy rows)
@@ -31,12 +31,12 @@ Options:
   inputs only.
 
 Recommendation: A, because it is public domain, already accepted for all packs, needs no new
-licence or fetch entry, and covers every Ember series except power-sector emissions.
+licence or fetch entry (`INTL.zip` pinned by #537), and covers every Ember series except power-sector emissions.
 
-Decision: pending, Antonio.
-Row: none until accepted
+Decision: A, Antonio, 2026-11-12 (question card, #505).
+Row: ADR 0358
 
 ## Spec changes
 
 - 7.7: power generation by fuel and capacity are calibrated to EIA International Energy
-  Statistics electricity series (row taken once D1 is decided).
+  Statistics electricity series; Eurostat `nrg_bal_peh` is the European cross-check (ADR 0358).

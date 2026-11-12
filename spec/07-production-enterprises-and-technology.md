@@ -70,5 +70,5 @@ Non-homothetic demand (Section 8.6) and unequal sector productivity growth (Baum
 
 ### 7.7 Energy and emissions
 
-Energy sectors produce physical energy; fossil inputs carry emission factors, so CO2 and other greenhouse-gas emissions are computed from the input-output flows every month and passed to the climate module (Section 13). Carbon prices and fuel taxes are policy wedges on those inputs. Country energy production and use are calibrated to EIA International Energy Statistics; IEA World Energy Balances are held out for validation only (ADR 0357).
+Energy sectors produce physical energy; fossil inputs carry emission factors, so CO2 and other greenhouse-gas emissions are computed from the input-output flows every month and passed to the climate module (Section 13). Carbon prices and fuel taxes are policy wedges on those inputs. Country energy production and use are calibrated to EIA International Energy Statistics; IEA World Energy Balances are held out for validation only (ADR 0357). Power generation and capacity by fuel are calibrated to the EIA International Energy Statistics electricity series, with Eurostat gross production by fuel as the European cross-check; power-sector emissions are an output checked against PRIMAP-hist fuel combustion (ADR 0358).
 

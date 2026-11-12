@@ -11,7 +11,7 @@ superset of what the study decided.
 
 | Date | Study | Outcome |
 | --- | --- | --- |
-| 2026-11-12 | [Electricity generation by country after Ember](electricity-source-after-ember-2026-11-12.md) | RFC 0348 (proposed) |
+| 2026-11-12 | [Electricity generation by country after Ember](electricity-source-after-ember-2026-11-12.md) | RFC 0348 (accepted); ADR 0358 |
 | 2026-11-10 | [P5 E3: island money sink at x10](p5-e3-island-money-sink-2026-11-10.md) | RFC 0341 (accepted, spike no-go) |
 | 2026-11-10 | [P5 E3: spike of RFC 0341 D1 and D2](p5-e3-d1d2-spike-2026-11-10.md) | no-go; RFC 0341 not built |
 | 2026-11-10 | [P5 E3: why the mainland dies at x10 under the credit limit](p5-e3-mainland-deflation-2026-11-10.md) | root cause: anchor index; fix go; RFC 0342 (accepted) |

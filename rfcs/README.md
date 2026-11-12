@@ -338,4 +338,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0345 | [Process laws from the 12 November retrospective](0345-retrospective-process-laws.md) | accepted | ADR 0353, ADR 0354, ADR 0355 |
 | 0346 | [Storage-on calibration of a pack for the RFC 0286 screen](0346-storage-on-calibration-for-the-rfc-0286-screen.md) | accepted | ADR 0356 |
 | 0347 | [EIA calibrates the energy rows; IEA balances stay held out](0347-eia-calibrates-energy-iea-held-out.md) | accepted | ADR 0357 |
-| 0348 | [EIA electricity series replace Ember](0348-electricity-source-after-ember.md) | proposed | |
+| 0348 | [EIA electricity series replace Ember](0348-electricity-source-after-ember.md) | accepted | ADR 0358 |
