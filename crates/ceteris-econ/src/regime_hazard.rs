@@ -2,7 +2,13 @@
 //! one coarse Ilzetzki-Reinhart-Rogoff class; the hazard of moving to class k is
 //! `scale * exp(beta_k . x)` on inflation over 24 months, reserve cover, a recent peg break,
 //! log income and trade share with the anchor. A switch is decided by thinning on one shared
-//! uniform. The kernel is not yet in the tick; coefficients are inputs (fitted on IRR in P9).
+//! uniform. Wired into the monetary system (230) when hazards are switched on; coefficients are
+//! inputs (fitted on IRR in P9).
+
+use ceteris_core::entity::Kind;
+
+/// RNG stream kind of the monthly regime draw, one entity per country.
+pub const KIND: Kind = Kind(0x5201);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RegimeClass {

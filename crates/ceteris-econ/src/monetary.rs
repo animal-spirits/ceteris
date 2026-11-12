@@ -5,9 +5,12 @@
 //! updates each floating bank's r* once a year.
 
 use crate::hlw::{HlwParams, NeutralRateFilter, Observation};
+use crate::regime_hazard::{Covariates, RegimeClass, TransitionHazards};
 use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 pub const SNAPSHOT_TAG: u32 = 0x3A6E_6D01;
+const HAZARD_TAG: u32 = 0x3A6E_6D02;
+const NO_BREAK: u32 = u32::MAX;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rule {
@@ -130,6 +133,20 @@ pub struct Policy {
     pub hlw: Vec<NeutralRateFilter>,
     /// Price level a year ago, for annual inflation; empty before the first step.
     pub year_level: Vec<f64>,
+    /// Regime transition hazards (P5 B2), `None` when off.
+    pub hazards: Option<RegimeHazards>,
+    /// Step index of each bank's last peg break, `u32::MAX` if none; empty when hazards are off.
+    pub peg_break_month: Vec<u32>,
+}
+
+/// Monthly regime switching between a hard peg and a free float (ADR 0242 D4). Banks sit in the
+/// classes `HardPeg` and `FreeFloat`; the hazards towards the other classes are ignored because
+/// the bank has no such regime yet, and followers never switch. A new peg pegs to `anchor`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RegimeHazards {
+    pub model: TransitionHazards,
+    pub anchor: usize,
+    pub defence_premium: f64,
 }
 
 impl Policy {
@@ -148,6 +165,64 @@ impl Policy {
             months: 0,
             hlw: Vec::new(),
             year_level: Vec::new(),
+            hazards: None,
+            peg_break_month: Vec::new(),
+        }
+    }
+
+    /// Switches the monthly regime hazards on.
+    pub fn with_hazards(mut self, hazards: RegimeHazards) -> Self {
+        self.peg_break_month = vec![NO_BREAK; self.banks.len()];
+        self.hazards = Some(hazards);
+        self
+    }
+
+    /// One month of regime hazards after [`Policy::step`], with `u[c]` the uniform draw of country
+    /// c. Covariates are inflation over the last year (not 24 months), reserve cover and a peg
+    /// break within 24 months; log income and the anchor trade share enter as zero until the pack
+    /// supplies them. Does nothing before the baseline step.
+    pub fn switch_regimes(&mut self, u: &[f64]) {
+        let Some(h) = self.hazards else {
+            return;
+        };
+        if self.level.is_empty() || self.year_level.is_empty() {
+            return;
+        }
+        for (c, &u) in u.iter().enumerate() {
+            let bank = self.banks[c];
+            let from = match bank.regime {
+                Regime::HardPeg { .. } => RegimeClass::HardPeg,
+                Regime::Float(_) => RegimeClass::FreeFloat,
+                Regime::Follower { .. } => continue,
+            };
+            let broke = self.peg_break_month[c];
+            let cov = Covariates {
+                inflation_24m: libm::log(self.level[c] / self.year_level[c]),
+                reserve_cover: bank.cover(),
+                recent_peg_break: f64::from(broke != NO_BREAK && self.months - broke < 24),
+                log_income: 0.0,
+                anchor_trade_share: 0.0,
+            };
+            match (from, h.model.step(from, &cov, u)) {
+                (RegimeClass::HardPeg, RegimeClass::FreeFloat) => {
+                    if let Regime::HardPeg { fallback, .. } = bank.regime {
+                        self.banks[c].regime = Regime::Float(fallback);
+                        self.peg_break_month[c] = self.months;
+                    }
+                }
+                (RegimeClass::FreeFloat, RegimeClass::HardPeg)
+                    if c != h.anchor && matches!(self.banks[h.anchor].regime, Regime::Float(_)) =>
+                {
+                    if let Regime::Float(rule) = bank.regime {
+                        self.banks[c].regime = Regime::HardPeg {
+                            anchor: h.anchor,
+                            fallback: rule,
+                            defence_premium: h.defence_premium,
+                        };
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -240,6 +315,13 @@ impl Policy {
         e.u32(self.months);
         e.f64s(&self.year_level);
         e.f64s(&self.hlw.iter().flat_map(|f| f.encode()).collect::<Vec<_>>());
+        if let Some(h) = &self.hazards {
+            e.u32(HAZARD_TAG);
+            let mut v = vec![h.model.scale, h.anchor as f64, h.defence_premium];
+            v.extend(h.model.beta.iter().flatten());
+            e.f64s(&v);
+            e.u32s(&self.peg_break_month);
+        }
     }
 
     pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
@@ -287,6 +369,24 @@ impl Policy {
             .iter()
             .map(|c| NeutralRateFilter::decode(c))
             .collect();
+        let (hazards, peg_break_month) = if d.at_end() {
+            (None, Vec::new())
+        } else {
+            if d.u32()? != HAZARD_TAG {
+                return Err(DecodeError("monetary hazard tag".into()));
+            }
+            let v = d.f64s()?;
+            let mut beta = [[0.0; 6]; 4];
+            for (row, c) in beta.iter_mut().zip(v[3..].chunks(6)) {
+                row.copy_from_slice(c);
+            }
+            let h = RegimeHazards {
+                model: TransitionHazards { scale: v[0], beta },
+                anchor: v[1] as usize,
+                defence_premium: v[2],
+            };
+            (Some(h), d.u32s()?)
+        };
         Ok(Self {
             banks,
             rates,
@@ -296,6 +396,8 @@ impl Policy {
             months,
             hlw,
             year_level,
+            hazards,
+            peg_break_month,
         })
     }
 }

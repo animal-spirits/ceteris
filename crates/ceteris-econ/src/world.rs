@@ -3593,6 +3593,68 @@ mod tests {
         assert_eq!(back.monetary.as_ref(), Some(m1));
     }
 
+    fn hazard_sim(scale: f64) -> Sim<EconWorld> {
+        use crate::monetary::{Policy, Regime, RegimeHazards, Rule};
+        use crate::regime_hazard::TransitionHazards;
+        let w = world();
+        let rule = Rule {
+            r_star: 0.02,
+            a_pi: 0.5,
+            a_y: 0.5,
+            pi_star: 0.02,
+            lower_bound: 0.0,
+        };
+        let nc = w.inputs().n_countries();
+        let mut policy = Policy::floating(nc, rule);
+        for b in policy.banks.iter_mut().skip(1) {
+            b.regime = Regime::HardPeg {
+                anchor: 0,
+                fallback: rule,
+                defence_premium: 0.0,
+            };
+            b.reserves = 1.0;
+        }
+        // Only the move to a free float has a large intercept: every peg breaks within a few months.
+        let mut beta = [[-20.0, 0.0, 0.0, 0.0, 0.0, 0.0]; 4];
+        beta[3][0] = 2.0;
+        let policy = policy.with_hazards(RegimeHazards {
+            model: TransitionHazards { scale, beta },
+            anchor: 0,
+            defence_premium: 0.0,
+        });
+        Sim::new(
+            w.with_monetary(policy),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    /// Hazards at zero keep every peg; switched on, pegs break to floats, the break is recorded,
+    /// the real economy is untouched, and the section survives a snapshot.
+    #[test]
+    fn regime_hazards_off_keep_pegs_and_on_break_them() {
+        use crate::monetary::Regime;
+        let mut off = hazard_sim(0.0);
+        let mut on = hazard_sim(1.0);
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let pegs = |s: &Sim<EconWorld>| {
+            s.world().monetary.as_ref().unwrap().banks[1..]
+                .iter()
+                .filter(|b| matches!(b.regime, Regime::HardPeg { .. }))
+                .count()
+        };
+        assert!(pegs(&off) > 0);
+        assert_eq!(pegs(&on), 0);
+        let m = on.world().monetary.as_ref().unwrap();
+        assert!(m.peg_break_month[1] != u32::MAX);
+        assert_eq!(on.world().wage, off.world().wage);
+        let w = on.world();
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.monetary, w.monetary);
+    }
+
     #[test]
     fn monetary_off_adds_nothing_to_the_snapshot() {
         let a = canonical(12, &world());

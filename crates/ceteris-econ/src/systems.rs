@@ -18,10 +18,11 @@
 
 use rayon::prelude::*;
 
+use ceteris_core::entity::EntityId;
 use ceteris_core::ledger::{AccountId, Entry, Flow, GoodColumn, Ledger};
 use ceteris_core::reduce::fixed_sum;
 use ceteris_core::rng::Seed;
-use ceteris_core::schedule::{Cadence, Schedule, SystemDef, SystemId};
+use ceteris_core::schedule::{Cadence, Ctx, Schedule, SystemDef, SystemId};
 use ceteris_core::sim::State;
 use ceteris_core::timing::{self, NONE};
 use ceteris_trade::pipeline::Push;
@@ -101,7 +102,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(225, "wage_grid", |w, _| wage_grid(w)),
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(229, "settlement", |w, _| settlement(w)),
-        def(230, "monetary", |w, _| monetary(w)),
+        def(230, "monetary", monetary),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -2011,7 +2012,7 @@ pub fn settlement(w: &mut EconWorld) {
 /// System 230 (`specs/money/SPEC.md`, P5 B1): monthly policy rate of each country's bank from
 /// its price level and employment. Reads the world, changes only the policy state. A no-op when
 /// monetary policy is off.
-pub fn monetary(w: &mut EconWorld) {
+pub fn monetary(w: &mut EconWorld, ctx: &Ctx) {
     let Some(policy) = &w.monetary else {
         return;
     };
@@ -2040,6 +2041,15 @@ pub fn monetary(w: &mut EconWorld) {
     }
     if let Some(policy) = &mut w.monetary {
         policy.step(&level, &employment);
+        if policy.hazards.is_some() {
+            let u: Vec<f64> = (0..nc)
+                .map(|c| {
+                    ctx.stream(crate::regime_hazard::KIND, EntityId(c as u32))
+                        .uniform()
+                })
+                .collect();
+            policy.switch_regimes(&u);
+        }
     }
 }
 
