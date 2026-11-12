@@ -351,4 +351,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0361 | [Government spending is paid to pops as transfers by population, pops keep the ADR 0099 government share; the government as a buyer waits for P6 budgets](../rfcs/0349-government-ledger-account.md) | 9.6 |
 | 0362 | [Taxes are collected once per tick in system 232 after E4: income and payroll from pops by wage income, VAT from pops by spending, corporate from the profit pool](../rfcs/0349-government-ledger-account.md) | 9.6 |
 | 0363 | [The deficit is financed by borrowing: the government account may go negative, its balance minus the debt; no monetary financing until the central bank balance sheet](../rfcs/0349-government-ledger-account.md) | 9.6 |
+| 0364 | [Free moments are hard gates with fixed pass bands (H2, Brexit, ACR-IO, openness, x10, US-China, PPML theta, short-run elasticity); a miss blocks the gate unless an ADR traces it to an unbuilt mechanism](../rfcs/0350-free-moment-pass-bands.md) | 15.7 |
+| 0365 | [The bands apply from the P4 gate on; the short-run elasticity band from the gate after #200 lands](../rfcs/0350-free-moment-pass-bands.md) | 15.7, 21.1 |
 <!-- rows:end -->

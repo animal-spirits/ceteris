@@ -340,3 +340,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0347 | [EIA calibrates the energy rows; IEA balances stay held out](0347-eia-calibrates-energy-iea-held-out.md) | accepted | ADR 0357 |
 | 0348 | [EIA electricity series replace Ember](0348-electricity-source-after-ember.md) | accepted | ADR 0358 |
 | 0349 | [Government ledger account for the fiscal system](0349-government-ledger-account.md) | accepted | ADR 0359, ADR 0360, ADR 0361, ADR 0362, ADR 0363 |
+| 0350 | [Pass bands for the free moments at the P4 and P5 gates](0350-free-moment-pass-bands.md) | accepted | ADR 0364, ADR 0365 |
